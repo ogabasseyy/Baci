@@ -47,8 +47,13 @@ export const eventPipelineFrozenRoutes = {
   // into the negotiation catalog and VAT basis; authority unchanged.
   // Re-pinned a fourth time: fee recompute moved after the negotiation
   // preflight onto the validated charged basis; authority unchanged.
+  // Re-pinned a fifth time: offer lines bind the live offer condition
+  // (persist it, reject mismatches) and the canonical subtotal prices
+  // offer lines from verified live offer economics for discount and
+  // shipping-rate eligibility; notification and payment authority are
+  // unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '13b66281a7d90645d7d80b036fd3d3ecac1f5c43f1671f4b885fa7448fe4fb69',
+    '6852a8252da16ef8264143add0b9608b59dd3e3dbe8bd0d73d4ce4cc8093910a',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

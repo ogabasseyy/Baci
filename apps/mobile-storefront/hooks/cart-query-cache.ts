@@ -1,29 +1,65 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { Product } from '@/types/product';
 
-interface CachedProductStock {
-  id: string;
-  stock_quantity?: number;
+function finiteOrUndefined(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function isProductLike(value: unknown): value is Product {
+  return (
+    typeof value === 'object' && value !== null && (value as Product).id != null
+  );
+}
+
+function findProductInList(
+  value: unknown,
+  productId: string
+): Product | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.find(
+    (item): item is Product =>
+      isProductLike(item) && String(item.id) === productId
+  );
 }
 
 function findCachedProduct(
   queryClient: QueryClient,
   productId: string
 ): Product | undefined {
-  const queries = queryClient.getQueriesData<unknown[]>({
+  // List queries are infinite: ['products', merchantId, options] holds
+  // { pages: [{ products }] }, not a top-level array.
+  const listQueries = queryClient.getQueriesData<unknown>({
     queryKey: ['products'],
   });
+  for (const [, data] of listQueries) {
+    const pages =
+      typeof data === 'object' && data !== null
+        ? (data as { pages?: unknown }).pages
+        : undefined;
+    if (Array.isArray(pages)) {
+      for (const page of pages) {
+        const found = findProductInList(
+          (page as { products?: unknown } | null)?.products,
+          productId
+        );
+        if (found) return found;
+      }
+    }
+    // Flat arrays: the launch-carousel pins writer
+    // (['products', merchantId, 'launch-by-slugs', slugs]).
+    const flat = findProductInList(data, productId);
+    if (flat) return flat;
+  }
 
-  for (const [, data] of queries) {
-    if (!Array.isArray(data)) continue;
-    const product = data.find(
-      (item): item is Product =>
-        typeof item === 'object' &&
-        item !== null &&
-        (item as Product).id != null &&
-        String((item as Product).id) === productId
-    );
-    if (product) return product;
+  // Detail queries hold one augmented product:
+  // ['product', version, slug, merchantId].
+  const detailQueries = queryClient.getQueriesData<unknown>({
+    queryKey: ['product'],
+  });
+  for (const [, data] of detailQueries) {
+    if (isProductLike(data) && String(data.id) === productId) return data;
   }
 
   return undefined;
@@ -33,26 +69,8 @@ export function getCachedProductStock(
   queryClient: QueryClient,
   productId: string
 ): number | undefined {
-  const queries = queryClient.getQueriesData<CachedProductStock[]>({
-    queryKey: ['products'],
-  });
-
-  for (const [, data] of queries) {
-    if (!Array.isArray(data)) continue;
-    const product = data.find(
-      (item): item is CachedProductStock =>
-        item?.id === productId && item.stock_quantity != null
-    );
-    if (product) return product.stock_quantity;
-  }
-
-  return undefined;
-}
-
-function finiteOrUndefined(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  const product = findCachedProduct(queryClient, productId);
+  return finiteOrUndefined(product?.stock_quantity);
 }
 
 /**

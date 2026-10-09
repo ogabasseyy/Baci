@@ -5,6 +5,7 @@ import type {
 import { calculateRedvaultPricing } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
+import { resolveRedvaultQuoteOffer } from './resolve-redvault-quote-offer';
 
 type CheckoutItem = {
   condition?: string | null;
@@ -34,44 +35,9 @@ type VariantPrice = {
   product_id: string;
 };
 
-export type RedvaultOrderQuote = {
-  discountKobo: number;
-  eligibleSubtotalKobo: number;
-  groups: Array<{
-    condition: string | null;
-    discountKobo: number;
-    key: string;
-    lineSubtotalKobo: number;
-    members: Array<{
-      allocationKobo: number;
-      lineId: number;
-      quantity: number;
-    }>;
-    productId: string;
-    taxInclusive: false;
-    unitPriceKobo: number;
-    variantAttributes: Record<string, string>;
-    variantId: string | null;
-    vatCategoryCode: string;
-    vatRateBp: number;
-  }>;
-  lines: Array<{
-    brand: string | null;
-    name: string | null;
-    unitPriceKobo: number;
-    variantAttributes: Record<string, string> | null;
-    variantId: string | null;
-    vatCategoryCode: string;
-    vatRateBp: number;
-    condition: string | null;
-    discountKobo: number;
-    lineId: number;
-    productId: string;
-    quantity: number;
-    unitDiscountsKobo: number[];
-  }>;
-  productSubtotalKobo: number;
-};
+export type { RedvaultOrderQuote } from './redvault-order-quote-shape';
+
+import type { RedvaultOrderQuote } from './redvault-order-quote-shape';
 
 function asKobo(value: number | string | null): number {
   if (value === null || (typeof value === 'string' && !value.trim())) {
@@ -203,25 +169,10 @@ export async function computeRedvaultOrderQuote({
         throw new CanonicalOrderSubtotalLoadError(
           'Variant does not belong to requested product'
         );
-      // Offer lines persist the live offer price and condition (the order
-      // RPC resolves variant → offer → parent), so the quote must price
-      // from the same verified basis or the snapshot binding rejects the
-      // order. Variant and offer never coexist on one line.
-      const offerKey =
-        !item.variant_id && item.offer_id && item.product_id
-          ? `${item.product_id}::${item.offer_id}`
-          : null;
-      const offerPrice =
-        offerKey !== null ? offerPrices?.get(offerKey) : undefined;
-      const offerCondition =
-        offerKey !== null ? offerConditions?.get(offerKey) : undefined;
-      if (
-        offerKey !== null &&
-        (offerPrice === undefined || offerCondition === undefined)
-      )
-        throw new CanonicalOrderSubtotalLoadError(
-          'Offer line is missing verified live offer economics'
-        );
+      const { offerCondition, offerPrice } = resolveRedvaultQuoteOffer(item, {
+        offerConditions,
+        offerPrices,
+      });
       return {
         brand: snapshotCatalogText(product.brand),
         condition: variant?.condition ?? offerCondition ?? product.condition,

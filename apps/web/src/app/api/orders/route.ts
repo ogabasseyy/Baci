@@ -1763,6 +1763,7 @@ export async function POST(request: NextRequest) {
         canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
           items: orderItemsPayload,
           merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
           supabase,
         });
       } catch (subtotalError) {
@@ -1856,6 +1857,7 @@ export async function POST(request: NextRequest) {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
             items: orderItemsPayload,
             merchantId: merchant_id,
+            offerPrices: liveOfferPrices,
             supabase,
           });
         } catch (subtotalError) {

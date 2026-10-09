@@ -4,6 +4,27 @@ import {
   getCachedProductStock,
 } from './cart-query-cache';
 
+function seedListPages(
+  queryClient: QueryClient,
+  pages: Array<{ products: unknown[] }>
+) {
+  queryClient.setQueryData(['products', 'merchant-1', {}], {
+    pages: pages.map((page, index) => ({ ...page, nextOffset: index + 1 })),
+    pageParams: pages.map((_, index) => index),
+  });
+}
+
+function seedProductDetail(
+  queryClient: QueryClient,
+  slug: string,
+  product: unknown
+) {
+  queryClient.setQueryData(
+    ['product', 'variant-media-v2', slug, 'merchant-1'],
+    product
+  );
+}
+
 describe('cart query cache helpers', () => {
   let queryClient: QueryClient;
 
@@ -16,16 +37,32 @@ describe('cart query cache helpers', () => {
     queryClient.clear();
   });
 
-  it('returns the cached stock quantity for a product', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [
-        { id: 'product-1', stock_quantity: 4 },
-        { id: 'product-2', stock_quantity: 9 },
-      ]
-    );
+  it('returns the cached stock quantity from a later infinite-query page', () => {
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 4 }] },
+      { products: [{ id: 'product-2', stock_quantity: 9 }] },
+    ]);
 
     expect(getCachedProductStock(queryClient, 'product-2')).toBe(9);
+  });
+
+  it('returns the cached stock quantity from a product-detail entry', () => {
+    seedProductDetail(queryClient, 'gaming-beast', {
+      id: 'product-2',
+      slug: 'gaming-beast',
+      stock_quantity: 7,
+    });
+
+    expect(getCachedProductStock(queryClient, 'product-2')).toBe(7);
+  });
+
+  it('returns the cached stock quantity from the flat launch-pins writer', () => {
+    queryClient.setQueryData(
+      ['products', 'merchant-1', 'launch-by-slugs', ['gaming-beast']],
+      [{ id: 'product-2', stock_quantity: 5 }]
+    );
+
+    expect(getCachedProductStock(queryClient, 'product-2')).toBe(5);
   });
 
   it('returns undefined when cached products are missing', () => {
@@ -33,19 +70,17 @@ describe('cart query cache helpers', () => {
   });
 
   it('returns undefined when the cached products do not include the product', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [{ id: 'product-1', stock_quantity: 4 }]
-    );
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 4 }] },
+    ]);
 
     expect(getCachedProductStock(queryClient, 'product-999')).toBeUndefined();
   });
 
   it('falls back to the parent cached stock when no option is named', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [{ id: 'product-1', stock_quantity: 4 }]
-    );
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 4 }] },
+    ]);
 
     expect(getCachedOptionStock(queryClient, 'product-1')).toBe(4);
     expect(
@@ -57,34 +92,49 @@ describe('cart query cache helpers', () => {
   });
 
   it('resolves the cached variant quantity instead of the parent total', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [
-        {
-          id: 'product-1',
-          stock_quantity: 0,
-          variants: [{ id: 'variant-2', stock_quantity: 3 }],
-        },
-      ]
-    );
+    seedListPages(queryClient, [
+      {
+        products: [
+          {
+            id: 'product-1',
+            stock_quantity: 0,
+            variants: [{ id: 'variant-2', stock_quantity: 3 }],
+          },
+        ],
+      },
+    ]);
 
     expect(
       getCachedOptionStock(queryClient, 'product-1', { variantId: 'variant-2' })
     ).toBe(3);
   });
 
+  it('resolves the cached variant quantity from a product-detail entry', () => {
+    seedProductDetail(queryClient, 'gaming-beast', {
+      id: 'product-1',
+      slug: 'gaming-beast',
+      stock_quantity: 0,
+      variants: [{ id: 'variant-2', stock_quantity: 6 }],
+    });
+
+    expect(
+      getCachedOptionStock(queryClient, 'product-1', { variantId: 'variant-2' })
+    ).toBe(6);
+  });
+
   it('prefers the variant identity when both option ids are present', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [
-        {
-          id: 'product-1',
-          stock_quantity: 0,
-          variants: [{ id: 'variant-2', stock_quantity: 3 }],
-          offers: [{ id: 'offer-7', stock_quantity: 9 }],
-        },
-      ]
-    );
+    seedListPages(queryClient, [
+      {
+        products: [
+          {
+            id: 'product-1',
+            stock_quantity: 0,
+            variants: [{ id: 'variant-2', stock_quantity: 3 }],
+            offers: [{ id: 'offer-7', stock_quantity: 9 }],
+          },
+        ],
+      },
+    ]);
 
     expect(
       getCachedOptionStock(queryClient, 'product-1', {
@@ -95,18 +145,19 @@ describe('cart query cache helpers', () => {
   });
 
   it('caps the cached offer quantity at strict serialized base units', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [
-        {
-          id: 'product-1',
-          stock_quantity: 10,
-          base_effective_policy: 'serialized_strict',
-          base_available_units: 2,
-          offers: [{ id: 'offer-7', stock_quantity: 5 }],
-        },
-      ]
-    );
+    seedListPages(queryClient, [
+      {
+        products: [
+          {
+            id: 'product-1',
+            stock_quantity: 10,
+            base_effective_policy: 'serialized_strict',
+            base_available_units: 2,
+            offers: [{ id: 'offer-7', stock_quantity: 5 }],
+          },
+        ],
+      },
+    ]);
 
     expect(
       getCachedOptionStock(queryClient, 'product-1', { offerId: 'offer-7' })
@@ -114,17 +165,18 @@ describe('cart query cache helpers', () => {
   });
 
   it('fails closed when the cached option is missing', () => {
-    queryClient.setQueryData(
-      ['products', 'featured'],
-      [
-        {
-          id: 'product-1',
-          stock_quantity: 10,
-          variants: [{ id: 'variant-2', stock_quantity: 3 }],
-          offers: [],
-        },
-      ]
-    );
+    seedListPages(queryClient, [
+      {
+        products: [
+          {
+            id: 'product-1',
+            stock_quantity: 10,
+            variants: [{ id: 'variant-2', stock_quantity: 3 }],
+            offers: [],
+          },
+        ],
+      },
+    ]);
 
     expect(
       getCachedOptionStock(queryClient, 'product-1', { variantId: 'variant-9' })

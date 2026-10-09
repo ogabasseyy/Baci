@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 type CanonicalSubtotalItem = {
   product_id?: string;
   variant_id?: string | null;
+  offer_id?: string | null;
   quantity: number;
   assurance_fee: number;
 };
@@ -46,10 +47,13 @@ function roundMoney(value: number): number {
 export async function computeCanonicalOrderSubtotal({
   items,
   merchantId,
+  offerPrices,
   supabase,
 }: {
   items: CanonicalSubtotalItem[];
   merchantId: string;
+  /** `${product_id}::${offer_id}` → live offer price, when verified. */
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
 }): Promise<number | null> {
   const productIds = Array.from(
@@ -137,7 +141,25 @@ export async function computeCanonicalOrderSubtotal({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
-    const unitPrice = Number(variant?.price_override ?? product.price ?? 0);
+    // Offer lines persist the live offer price (the order RPC resolves
+    // variant → offer → parent), so the canonical subtotal must price from
+    // the same verified basis or discount and shipping-rate eligibility
+    // diverge from the persisted order. Variant and offer never coexist on
+    // one line. A missing map entry is impossible after route verification
+    // and throws rather than silently pricing the parent.
+    const offerKey =
+      !item.variant_id && item.offer_id && item.product_id
+        ? `${item.product_id}::${item.offer_id}`
+        : null;
+    const offerPrice =
+      offerKey !== null ? offerPrices?.get(offerKey) : undefined;
+    if (offerKey !== null && offerPrice === undefined)
+      throw new CanonicalOrderSubtotalLoadError(
+        'Offer line is missing verified live offer economics'
+      );
+    const unitPrice = Number(
+      variant?.price_override ?? offerPrice ?? product.price ?? 0
+    );
     const quantity = Number(item.quantity);
     const assuranceFee = Number(item.assurance_fee ?? 0);
 

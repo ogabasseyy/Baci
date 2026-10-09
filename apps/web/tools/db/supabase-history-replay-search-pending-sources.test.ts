@@ -48,6 +48,8 @@ describe('search pending replay sources', () => {
       '20261008300000_storefront_order_item_offer.sql',
       '20261008310000_storefront_order_offer_economics.sql',
       '20261008320000_storefront_order_item_offer_delete_rule.sql',
+      '20261008330000_storefront_restock_offer_serialized_policy.sql',
+      '20261008340000_storefront_search_offer_serialized_unit_gate.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

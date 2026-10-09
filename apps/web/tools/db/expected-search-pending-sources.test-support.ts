@@ -189,4 +189,14 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008320000_storefront_order_item_offer_delete_rule.sql',
     sha256: 'c1b37261b0623dfa7b7cbce16288987a6183c843ddd942e088ad1e9d39727162',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008330000_storefront_restock_offer_serialized_policy.sql',
+    sha256: '0f6211984231189106afa336f2b07a9cc6f5844c21222215c295406f7604139d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008340000_storefront_search_offer_serialized_unit_gate.sql',
+    sha256: '579b8899271749079fcaa5f82a6fdeb7005cc612e41e4d67c5b288e0403accd7',
+  },
 ] as const;

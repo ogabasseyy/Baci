@@ -397,6 +397,9 @@ describe('cart-stock helpers', () => {
   it('validates the offer stock instead of a zero parent total', async () => {
     mockProductAndRpc(parent(), {
       get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 2 }],
+      get_storefront_product_base_inventory: [
+        { product_id: 'product-1', effective_policy: 'legacy' },
+      ],
     });
 
     await expect(
@@ -418,6 +421,9 @@ describe('cart-stock helpers', () => {
   it('lets a null offer quantity inherit the parent stock', async () => {
     mockProductAndRpc(parent({ stock_quantity: 5 }), {
       get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
+      get_storefront_product_base_inventory: [
+        { product_id: 'product-1', effective_policy: 'legacy' },
+      ],
     });
 
     await expect(
@@ -446,6 +452,119 @@ describe('cart-stock helpers', () => {
   it('throws when the offer lookup fails', async () => {
     mockProductAndRpc(parent(), {
       get_product_offers: { error: { message: 'boom' } },
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
+    ).rejects.toThrow('Cannot verify stock availability');
+  });
+
+  it('caps the offer stock at strict serialized base units', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 2,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 2, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 2,
+      requestedQuantity: 2,
+    });
+    await expect(
+      checkStock('product-1', 3, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+  });
+
+  it('lets a null offer quantity inherit strict serialized units', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 3, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 3,
+      requestedQuantity: 3,
+    });
+  });
+
+  it('throws when a strict offer has no unit count', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: null,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
+    ).rejects.toThrow('Cannot verify stock availability');
+  });
+
+  it('lets unlimited offers bypass the unit cap', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_then_unlimited',
+          available_units: 0,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 4, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 4,
+    });
+  });
+
+  it('reports zero when the offer base inventory row is missing', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: [],
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('throws when the offer base inventory lookup fails', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: { error: { message: 'boom' } },
     });
 
     await expect(

@@ -59,13 +59,25 @@ export function useProductDetailPurchaseState(
                 : selectedVariant?.in_stock !== false
         : false
       : false;
+  // An offer scalar never exceeds strict serialized base units (effective
+  // minimum shared with the cart guard and the price-options offer
+  // branch); other policies leave the scalar uncapped.
+  const baseStrictUnitCap =
+    routeData.product?.base_effective_policy === 'serialized_strict'
+      ? typeof routeData.product.base_available_units === 'number'
+        ? routeData.product.base_available_units
+        : 0
+      : Number.POSITIVE_INFINITY;
   const canPurchase =
     routeData.product?.has_variants === true
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
         ? routeData.product.manage_stock === false ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
-            ? selectedConditionOffer.stock_quantity > quantityInCart
+            ? Math.min(
+                selectedConditionOffer.stock_quantity,
+                baseStrictUnitCap
+              ) > quantityInCart
             : routeData.product.base_effective_policy ===
                 'serialized_then_unlimited'
               ? true

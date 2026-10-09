@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   hydrateRowsNeedingBaseInventory,
+  hydrateRowsNeedingConditionOffers,
   hydrateRowsNeedingStorefrontVariants,
   needsBaseInventoryHydration,
+  needsConditionOffersHydration,
   needsVariantHydration,
 } from './product-hydration';
 
 const mockHydrateProductRowsWithStorefrontVariants: jest.Mock = jest.fn();
 const mockHydrateProductRowsWithBaseInventory: jest.Mock = jest.fn();
+const mockHydrateProductRowsWithConditionOffers: jest.Mock = jest.fn();
 const mockLoggerWarn = jest.fn();
 
 jest.mock('@/lib/logger', () => ({
@@ -24,6 +27,8 @@ jest.mock('@/lib/storefront-product-variants', () => ({
     mockHydrateProductRowsWithStorefrontVariants(...args),
   hydrateProductRowsWithBaseInventory: (...args: unknown[]) =>
     mockHydrateProductRowsWithBaseInventory(...args),
+  hydrateProductRowsWithConditionOffers: (...args: unknown[]) =>
+    mockHydrateProductRowsWithConditionOffers(...args),
 }));
 
 describe('product-hydration', () => {
@@ -226,5 +231,75 @@ describe('product-hydration', () => {
     expect(mockHydrateProductRowsWithBaseInventory).toHaveBeenCalledTimes(1);
     expect(result).toEqual([hydratedRow, rows[1]]);
     expect(result[1]).toBe(rows[1]);
+  });
+
+  it('identifies only flagged rows as condition-offer candidates', () => {
+    expect(needsConditionOffersHydration({ has_condition_offers: true })).toBe(
+      true
+    );
+    expect(needsConditionOffersHydration({ has_condition_offers: false })).toBe(
+      false
+    );
+    expect(needsConditionOffersHydration({})).toBe(false);
+  });
+
+  it('returns empty hydration input without calling the offer hydrator', async () => {
+    await expect(hydrateRowsNeedingConditionOffers([])).resolves.toEqual([]);
+
+    expect(mockHydrateProductRowsWithConditionOffers).not.toHaveBeenCalled();
+  });
+
+  it('hydrates only flagged rows with condition offers in one batch', async () => {
+    const rows = [
+      {
+        id: 'offer-product',
+        has_condition_offers: true,
+        offers: [],
+      },
+      {
+        id: 'plain-product',
+        has_condition_offers: false,
+        offers: [],
+      },
+    ];
+    const hydratedRow = {
+      ...rows[0],
+      offers: [{ id: 'offer-7' }],
+    };
+    mockHydrateProductRowsWithConditionOffers.mockImplementationOnce(
+      async () => [hydratedRow]
+    );
+
+    const result = await hydrateRowsNeedingConditionOffers(rows);
+
+    expect(mockHydrateProductRowsWithConditionOffers).toHaveBeenCalledWith([
+      rows[0],
+    ]);
+    expect(mockHydrateProductRowsWithConditionOffers).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([hydratedRow, rows[1]]);
+    expect(result[1]).toBe(rows[1]);
+  });
+
+  it('falls back to original rows when offer hydration fails', async () => {
+    const rows = [
+      {
+        id: 'offer-product',
+        has_condition_offers: true,
+        offers: [],
+      },
+    ];
+    mockHydrateProductRowsWithConditionOffers.mockImplementationOnce(() =>
+      Promise.reject(new Error('RPC failed'))
+    );
+
+    const result = await hydrateRowsNeedingConditionOffers(rows);
+
+    expect(result).toBe(rows);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Failed to hydrate condition offers; using original rows',
+      expect.objectContaining({
+        error: expect.any(Error),
+      })
+    );
   });
 });

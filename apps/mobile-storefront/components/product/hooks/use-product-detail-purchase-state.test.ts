@@ -146,6 +146,62 @@ it.each([
   expect(result.current.canPurchase).toBe(expected);
 });
 
+it.each([
+  {
+    name: 'strict base caps the offer scalar at available units',
+    offer: { id: 'o1', stock_quantity: 5 },
+    product: {
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 2,
+    },
+    quantityInCart: 2,
+    expected: false,
+  },
+  {
+    name: 'strict base keeps the offer purchasable under the unit cap',
+    offer: { id: 'o1', stock_quantity: 5 },
+    product: {
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 2,
+    },
+    quantityInCart: 1,
+    expected: true,
+  },
+  {
+    name: 'strict base without a unit count refuses the offer',
+    offer: { id: 'o1', stock_quantity: 5 },
+    product: { base_effective_policy: 'serialized_strict' },
+    quantityInCart: 0,
+    expected: false,
+  },
+  {
+    name: 'unlimited base leaves the offer scalar uncapped',
+    offer: { id: 'o1', stock_quantity: 2 },
+    product: { base_effective_policy: 'serialized_then_unlimited' },
+    quantityInCart: 1,
+    expected: true,
+  },
+  {
+    name: 'legacy base leaves the offer scalar uncapped',
+    offer: { id: 'o1', stock_quantity: 2 },
+    product: { base_effective_policy: 'legacy' },
+    quantityInCart: 1,
+    expected: true,
+  },
+])('$name', ({ offer, product, quantityInCart, expected }) => {
+  mockFindMatchingConditionOffer.mockReturnValue(offer as never);
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: { id: 'p1', price: 100, ...product } as Product,
+      }),
+      quantityInCart,
+      null
+    )
+  );
+  expect(result.current.canPurchase).toBe(expected);
+});
+
 it('forwards an exact offer id into price resolution and offer selection', () => {
   renderHook(() =>
     useProductDetailPurchaseState(

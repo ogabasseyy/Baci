@@ -8,13 +8,23 @@ describe('explicit signed custody intake capability deployment', () => {
       readPrimaryCardCustodyInboxRuntime(fixture.environment, fixture.now)
     ).toEqual({ ...fixture.configuration, retainedWebhookSecrets: [] });
   });
+  it('loads past expiry so the worker drains acknowledged receipts instead of stranding them', () => {
+    const parsed = readPrimaryCardCustodyInboxRuntime(
+      {
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-10-01T00:00:00Z',
+      },
+      fixture.now
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.expiresAt).toBe('2026-10-01T00:00:00Z');
+  });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined },
     { PIGGYVEST_PRIMARY_CARD_SIGNED_PAYLOAD_CONTRACT: 'guessed' },
     { PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT: undefined },
     { PIGGYVEST_PRIMARY_CARD_SIGNED_BATCH_SIZE: '11' },
     { PIGGYVEST_PRIMARY_CARD_CROSSWALK_ISSUER: undefined },
-    { PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-10-01T00:00:00Z' },
   ])('reports unavailable configuration %# without any network or storage', (change) => {
     expect(
       readPrimaryCardCustodyInboxRuntime(

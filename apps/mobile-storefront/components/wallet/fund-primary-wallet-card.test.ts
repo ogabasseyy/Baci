@@ -159,6 +159,31 @@ it('opens the adopted checkout only after explicit resume confirmation', async (
     }),
   });
 });
+it('rechecks the account after resume confirmation before opening checkout', async () => {
+  mockStart.mockResolvedValue({ ...response, adopted: true });
+  alert.mockImplementation((title, _message, buttons) => {
+    const resume = buttons?.find((button) =>
+      String(button.text).startsWith('Resume')
+    );
+    if (title === 'Resume pending funding' && resume) {
+      // Switch accounts while the resume prompt is open, then confirm:
+      // the recheck must stop navigation to the previous account's URL.
+      mockActiveUserId = '22222222-2222-4222-8222-222222222222';
+      resume.onPress?.();
+      return;
+    }
+    buttons
+      ?.find((button) => button.text === 'Authorize one-time charge')
+      ?.onPress?.();
+  });
+  await fundPrimaryWalletCard(input);
+  expect(alert).toHaveBeenCalledWith(
+    'Signed-in account changed',
+    expect.stringContaining('switched accounts')
+  );
+  expect(router.push).not.toHaveBeenCalled();
+  expect(input.resetFundPanel).toHaveBeenCalled();
+});
 it('derives the gateway amount from integer kobo without float drift', async () => {
   mockStart.mockResolvedValue({ ...response, amountKobo: 9999999999 });
   await fundPrimaryWalletCard({ ...input, fundAmount: '99999999.99' });

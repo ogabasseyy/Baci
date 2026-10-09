@@ -58,11 +58,13 @@ export function readPrimaryCardCustodyRuntime(
       password: env.PIGGYVEST_PRIMARY_CARD_CUSTODY_PASSWORD,
     },
   });
-  if (
-    !parsed.success ||
-    !Number.isFinite(now) ||
-    now >= Date.parse(parsed.data.expiresAt)
-  )
-    return null;
+  // No integration-deadline check (see the intake runtime reader): the worker
+  // drains already-acknowledged inbox receipts, so a post-expiry run settles
+  // in-flight custody instead of stranding charged checkouts in
+  // custody_pending with no path to credit. expiresAt stays in the scope so
+  // the database still pins callers to the exact authority row, and flags,
+  // environment binding, credentials, and finite DB role validity still
+  // fail closed.
+  if (!parsed.success || !Number.isFinite(now)) return null;
   return parsed.data;
 }

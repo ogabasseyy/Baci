@@ -21,6 +21,27 @@
 
 -- Referral codes are matched case-insensitively, so uniqueness must be
 -- case-insensitive too. The mint loop retries on this constraint.
+-- Pre-deploy: confirm no merchant has case-variant duplicates, or index
+-- creation aborts:
+--   SELECT merchant_id, upper(referral_code), count(*)
+--   FROM public.customer_loyalty WHERE referral_code IS NOT NULL
+--   GROUP BY 1, 2 HAVING count(*) > 1;
+-- customer_loyalty is small (the enroll path never worked; rows come from
+-- the purchase-accrual path with random codes), so a plain index build is
+-- used instead of CONCURRENTLY.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.customer_loyalty
+    WHERE referral_code IS NOT NULL
+    GROUP BY merchant_id, upper(referral_code)
+    HAVING count(*) > 1
+  ) THEN
+    RAISE WARNING 'customer_loyalty has case-variant duplicate referral codes; unique index creation will fail';
+  END IF;
+END;
+$$;
 CREATE UNIQUE INDEX IF NOT EXISTS customer_loyalty_merchant_referral_code_key
   ON public.customer_loyalty (merchant_id, upper(referral_code));
 
@@ -95,8 +116,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
   END IF;
 
-  -- Resolve the referrer. Unknown or self-referral codes are ignored so a bad
-  -- code never blocks enrollment (matches previous route behavior).
+  -- Resolve the referrer. Unknown codes are ignored so a bad code never
+  -- blocks enrollment (matches previous route behavior). A self-referral
+  -- cannot match: the enrolling customer has no loyalty row yet (double
+  -- enrollment is rejected above), so no self-row exists to resolve.
   IF p_referral_code IS NOT NULL AND pg_catalog.btrim(p_referral_code) <> '' THEN
     SELECT referrer.customer_id, referrer.points_balance
     INTO v_referrer_customer_id, v_referrer_balance
@@ -106,9 +129,6 @@ BEGIN
         = pg_catalog.upper(pg_catalog.btrim(p_referral_code))
     FOR UPDATE;
 
-    IF v_referrer_customer_id IS NOT DISTINCT FROM p_customer_id THEN
-      v_referrer_customer_id := NULL;
-    END IF;
     v_referrer_balance := COALESCE(v_referrer_balance, 0);
   END IF;
 

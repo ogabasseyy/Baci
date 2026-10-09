@@ -68,9 +68,32 @@ describe('useCurrentDate', () => {
     expect(result.current).toEqual(new Date(2026, 9, 8, 12, 0, 0));
   });
 
-  it('clears the timer and listener on unmount', () => {
+  it('refreshes after a manual clock jump while foregrounded', () => {
+    const { result } = renderHook(() => useCurrentDate());
+    vi.setSystemTime(new Date(2026, 9, 9, 12, 0, 0));
+
+    act(() => {
+      vi.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(result.current).toEqual(new Date(2026, 9, 9, 12, 1, 0));
+  });
+
+  it('renders nothing on minute ticks when the day is unchanged', () => {
+    const { result } = renderHook(() => useCurrentDate());
+    const initial = result.current;
+    vi.setSystemTime(new Date(2026, 9, 8, 12, 1, 0));
+
+    act(() => {
+      vi.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(result.current).toBe(initial);
+  });
+
+  it('clears the timers and listener on unmount', () => {
     const { unmount } = renderHook(() => useCurrentDate());
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     unmount();
 

@@ -1,6 +1,7 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { getPiggyvestPrimaryCapabilitySnapshot } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   parseProjectWalletFundingAccount,
   projectWalletFundingAccount,
@@ -13,6 +14,27 @@ export type SettledPrimaryFundingAccount =
   | { status: 'ready'; account: PrimarySnapshot['account'] }
   | { status: 'unavailable' };
 
+// The funding-account snapshot belongs to whoever the session
+// authenticates when the fetch completes — not to the caller that
+// started it. The in-flight scope key only partitions the promise map;
+// without an identity bind, an account switch mid-flight caches user
+// B's bank account under user A's wallet query key.
+function readActiveAuthUserId(): string | undefined {
+  return useAuthStore.getState().user?.id;
+}
+
+function settleBoundAccount(
+  expectedUserId: string,
+  account: PrimarySnapshot['account'] | undefined
+): SettledPrimaryFundingAccount {
+  // Post-fetch bind: reject a snapshot that landed after an account
+  // switch, even when the session matched at fetch start. Unavailable
+  // is non-fatal: the wallet still loads and refetches.
+  if (account === undefined || readActiveAuthUserId() !== expectedUserId)
+    return { status: 'unavailable' };
+  return { status: 'ready', account };
+}
+
 /**
  * Starts the primary funding-account lookup. Never throws: callers run it
  * inside the wallet load's Promise.all so a slow provider never serializes
@@ -22,6 +44,12 @@ export async function readPrimaryFundingAccount(
   merchantId: string,
   userId: string
 ): Promise<SettledPrimaryFundingAccount> {
+  // Pre-fetch bind: refuse to start when the session already disagrees
+  // with the expected user (stale closure after a switch, signed out,
+  // or a customer-id fallback that is not the auth identity). The
+  // wallet load treats unavailable as non-fatal and refetches once the
+  // session settles.
+  if (readActiveAuthUserId() !== userId) return { status: 'unavailable' };
   if (!isPiggyvestPrimaryMerchant(merchantId)) {
     // Unknown verdict: probe once so a server-enabled merchant resolves
     // its primary account on first load instead of projecting legacy
@@ -38,14 +66,14 @@ export async function readPrimaryFundingAccount(
       );
       if (!snapshot.available) return { status: 'unavailable' };
       if (snapshot.account !== undefined)
-        return { status: 'ready', account: snapshot.account };
+        return settleBoundAccount(userId, snapshot.account);
     } catch {
       return { status: 'unavailable' };
     }
   }
   try {
     const { account } = await piggyvestPrimaryWalletApi.read(merchantId);
-    return { status: 'ready', account };
+    return settleBoundAccount(userId, account);
   } catch {
     return { status: 'unavailable' };
   }

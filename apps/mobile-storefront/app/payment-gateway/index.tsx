@@ -129,6 +129,11 @@ export default function PaymentGatewayScreen() {
         authorizationUrl={controller.authorizationUrl}
         colors={colors}
         gatewayName={controller.gatewayName}
+        missingUrlMessage={
+          controller.paymentKind === 'primary_wallet_card'
+            ? 'Your funding is saved. Go back and check its status — do not start another charge.'
+            : undefined
+        }
         onClose={controller.handleClose}
         onError={controller.handleWebViewError}
         onLoadEnd={controller.handleLoadEnd}

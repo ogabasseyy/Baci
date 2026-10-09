@@ -29,3 +29,16 @@ export function alertPrimaryWalletCardFundingFailure(error: unknown): void {
     'Any pending operation is retained. Check again before attempting another charge.'
   );
 }
+
+/**
+ * Nudge shown when an unverified customer falls back to the legacy
+ * top-up (which has no email gate). Unlike the retained-operation copy
+ * above, this must not say "do not start another charge" — the legacy
+ * top-up starts immediately after this alert.
+ */
+export function alertPrimaryWalletCardEmailFallback(): void {
+  Alert.alert(
+    'Verify your email for card funding',
+    'Card funding needs a verified email address. Continuing with standard top-up instead — verify your email to unlock card funding next time.'
+  );
+}

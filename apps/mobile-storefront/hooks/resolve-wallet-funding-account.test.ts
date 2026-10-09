@@ -9,6 +9,13 @@ jest.mock('@/lib/piggyvest-primary-wallet', () => ({
   piggyvestPrimaryWalletApi: { read: jest.fn() },
 }));
 
+let mockUserId: string | undefined;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({ user: mockUserId ? { id: mockUserId } : undefined }),
+  },
+}));
+
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const userId = '11111111-1111-4111-8111-111111111111';
 const legacy = {
@@ -28,6 +35,7 @@ const read = jest.mocked(piggyvestPrimaryWalletApi.read);
 beforeEach(() => {
   jest.resetAllMocks();
   clearPiggyvestPrimaryCapabilityCache();
+  mockUserId = userId;
 });
 
 it('displays the confirmed PiggyVest account rather than the legacy account', async () => {
@@ -140,6 +148,7 @@ it('never shows the previous users account after an account switch', async () =>
     requiresConsent: false,
     provisioningStatus: 'ready',
   });
+  mockUserId = 'user-a';
   const first = await readPrimaryFundingAccount(merchant, 'user-a');
   expect(first).toEqual({ status: 'ready', account: primaryAccount });
   // User B loads after the switch: the cached verdict carries no snapshot,
@@ -149,6 +158,7 @@ it('never shows the previous users account after an account switch', async () =>
     requiresConsent: false,
     provisioningStatus: 'ready',
   });
+  mockUserId = 'user-b';
   const second = await readPrimaryFundingAccount(merchant, 'user-b');
   expect(second).toEqual({ status: 'ready', account: accountB });
   expect(resolveWalletFundingAccount(legacy, merchant, second)).toEqual({
@@ -158,4 +168,41 @@ it('never shows the previous users account after an account switch', async () =>
     provider: 'piggyvest',
   });
   expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('refuses to fetch when the session already disagrees with the caller', async () => {
+  mockUserId = 'user-b';
+  await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
+    status: 'unavailable',
+  });
+  expect(read).not.toHaveBeenCalled();
+});
+
+it('rejects a direct-read snapshot that lands after a mid-flight switch', async () => {
+  read.mockImplementation(async () => {
+    mockUserId = 'user-b';
+    return {
+      account: primaryAccount,
+      requiresConsent: false,
+      provisioningStatus: 'ready',
+    };
+  });
+  await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
+    status: 'unavailable',
+  });
+});
+
+it('rejects a probe snapshot that lands after a mid-flight switch', async () => {
+  const merchant = '00000000-0000-4000-8000-000000000003';
+  read.mockImplementation(async () => {
+    mockUserId = 'user-b';
+    return {
+      account: primaryAccount,
+      requiresConsent: false,
+      provisioningStatus: 'ready',
+    };
+  });
+  await expect(readPrimaryFundingAccount(merchant, userId)).resolves.toEqual({
+    status: 'unavailable',
+  });
 });

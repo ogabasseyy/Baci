@@ -5,6 +5,7 @@ import {
   getPiggyvestPrimaryCapability,
   rollbackObservedCapabilityOnNotReady,
 } from './piggyvest-primary-capability';
+import { readObservedPiggyvestPrimaryCapability } from './piggyvest-primary-capability-cache';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 export type { WalletFundingAccount } from '@/schemas/wallet-funding-account';
@@ -80,7 +81,16 @@ export async function createWalletFundingAccount({
   bvn?: string;
   consent?: boolean;
 }) {
-  if (isPiggyvestPrimaryMerchant(merchantId)) {
+  // Probe-first routing: an unobserved (never-probed) merchant must not
+  // fall straight through to the legacy DVA creation below. The checkout
+  // bank-transfer path calls this directly after consent — bypassing the
+  // wallet screen's pending-verdict guard — so a cold-start server-enabled
+  // merchant would mint a legacy DVA that a primary verdict orphans.
+  // Only an authoritative cached negative skips the probe; an ambiguous
+  // probe failure throws instead of minting legacy on a guess.
+  const unobserved =
+    !!merchantId && readObservedPiggyvestPrimaryCapability(merchantId) === null;
+  if (isPiggyvestPrimaryMerchant(merchantId) || unobserved) {
     // Defer the BVN demand until primary is confirmed: when the server is
     // unconfigured, callers without BVN must still reach the legacy DVA
     // creation below instead of failing the preflight.

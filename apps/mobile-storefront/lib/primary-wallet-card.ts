@@ -3,7 +3,10 @@ import * as Crypto from 'expo-crypto';
 import type { z } from 'zod';
 import { primaryWalletCardSchemas as schemas } from '@/schemas/primary-wallet-card';
 import { createLogger } from './logger';
-import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
+import {
+  isVerifiedEmailRequired,
+  rollbackObservedCapabilityOnNotReady,
+} from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 import { supabase } from './supabase';
 
@@ -147,12 +150,18 @@ export function createPrimaryWalletCardFundingClient() {
         ? { ...response, returnTo: record.returnTo, adopted: true as const }
         : { ...response, returnTo: record.returnTo };
     } catch (requestError) {
-      // Authoritative not-ready means the server reserved nothing, so a
-      // null-operation placeholder is safe to drop: keeping it would let a
-      // later readPending initialize a stale amount without fresh consent.
-      // Ambiguous failures keep the record for recovery.
+      // Authoritative not-ready — or the pre-reservation email 409 — means
+      // the server reserved nothing, so a null-operation placeholder is
+      // safe to drop: keeping it would let a later readPending initialize
+      // a stale amount without fresh consent, or block the legacy
+      // fallback by looking retained. Ambiguous failures keep the record
+      // for recovery.
       if (
-        rollbackObservedCapabilityOnNotReady(record.merchantId, requestError) &&
+        (rollbackObservedCapabilityOnNotReady(
+          record.merchantId,
+          requestError
+        ) ||
+          isVerifiedEmailRequired(requestError)) &&
         record.operationId === null
       )
         await AsyncStorage.removeItem(key(record)).catch(() => undefined);

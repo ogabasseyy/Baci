@@ -31,6 +31,21 @@ export function isPrimaryWalletNotReady(error: unknown): boolean {
   );
 }
 
+/**
+ * Per-user eligibility fallback: the card-checkout server demands a
+ * verified email for primary funding, but the legacy top-up has no such
+ * gate. Unlike NOT_READY (merchant configuration), this must never
+ * touch the shared merchant verdict cache — one unverified customer
+ * must not reroute every other customer to legacy.
+ */
+export function isVerifiedEmailRequired(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'VERIFIED_EMAIL_REQUIRED'
+  );
+}
+
 function isBasePrimaryNotReady(error: unknown): boolean {
   return (
     typeof error === 'object' &&

@@ -4,6 +4,8 @@ import {
   submitProductRequest,
 } from '@baci/shared/lib';
 import { useRef, useState } from 'react';
+import { initializeCsrfToken } from '@/lib/api-client';
+import { getClientCsrfToken } from '@/lib/csrf';
 
 /**
  * Request idempotency id that survives non-secure contexts: randomUUID
@@ -61,12 +63,20 @@ export function ProductRequest({
       const key = JSON.stringify([product.trim(), contact.trim()]);
       if (key !== request.current.key)
         request.current = { key, id: createProductRequestId() };
-      await submitProductRequest('/api/storefront/product-requests', {
-        query: product,
-        contact,
-        merchantSlug,
-        requestId: request.current.id,
-      });
+      // Double-submit CSRF (the intake route requires it): reuse the
+      // cookie token, minting one first for cold sessions that never
+      // issued a state-changing call before this form.
+      const csrfToken = getClientCsrfToken() ?? (await initializeCsrfToken());
+      await submitProductRequest(
+        '/api/storefront/product-requests',
+        {
+          query: product,
+          contact,
+          merchantSlug,
+          requestId: request.current.id,
+        },
+        { csrfToken }
+      );
       setSent(true);
       setOpen(false);
     } catch (error) {

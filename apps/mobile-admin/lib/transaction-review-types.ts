@@ -43,6 +43,7 @@ export interface TransactionReviewOrderRow {
     id: string;
     line_id?: number | string | null;
     name: string | null;
+    offer_id?: string | null;
     order_item_unit_costs?: TransactionReviewUnitCostRow[] | null;
     price: number | null;
     product_id: string | null;
@@ -74,6 +75,7 @@ export interface TransactionReviewItem {
   costPrice: number | null;
   costSource: 'unit' | 'order_item' | 'variant' | 'product' | null;
   id: string;
+  offerId?: string | null;
   identifierType?: 'imei' | 'serial' | null;
   identifierValue?: string | null;
   imeiValues: string[];

@@ -57,6 +57,7 @@ interface AgenticTaxItem {
   // itself skips items with missing product_id defensively.
   product_id?: string;
   variant_id?: string | null;
+  offer_id?: string | null;
   quantity: number;
 }
 
@@ -112,10 +113,17 @@ function roundToCents(n: number): number {
 export async function computeAgenticOrderTax({
   items,
   merchantId,
+  offerPrices,
   supabase,
 }: {
   items: AgenticTaxItem[];
   merchantId: string;
+  // Live offer prices by `${product_id}::${offer_id}`, loaded once by the
+  // route alongside offer verification. The RPC taxes the resolved line
+  // price (variant override, then live offer, then parent), so this
+  // helper must tax the same basis or valid offer orders trip the
+  // `tax_amount_mismatch` guard.
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
 }): Promise<number> {
   if (items.length === 0 || !merchantId) {
@@ -253,7 +261,15 @@ export async function computeAgenticOrderTax({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
-    const priceRaw = variant?.price_override ?? product.price ?? 0;
+    // Mirror the RPC precedence: the key pins the offer to this line's
+    // product, so a cross-product offer_id falls through to the parent
+    // price (the route rejects the mismatch before the RPC runs).
+    const offerPrice =
+      item.offer_id && item.product_id
+        ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
+        : undefined;
+    const priceRaw =
+      variant?.price_override ?? offerPrice ?? product.price ?? 0;
     const price = Number(priceRaw);
     if (!Number.isFinite(price) || price <= 0) continue;
 

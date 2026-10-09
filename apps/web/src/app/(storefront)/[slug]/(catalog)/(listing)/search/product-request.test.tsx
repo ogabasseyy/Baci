@@ -10,8 +10,18 @@ vi.mock('@baci/shared/lib', async (original) => ({
   ...(await original<typeof import('@baci/shared/lib')>()),
   submitProductRequest: vi.fn(),
 }));
+vi.mock('@/lib/csrf', () => ({ getClientCsrfToken: vi.fn() }));
+vi.mock('@/lib/api-client', () => ({ initializeCsrfToken: vi.fn() }));
+
+import { initializeCsrfToken } from '@/lib/api-client';
+import { getClientCsrfToken } from '@/lib/csrf';
+
 beforeEach(() => {
   vi.mocked(submitProductRequest).mockReset();
+  vi.mocked(getClientCsrfToken)
+    .mockReset()
+    .mockReturnValue('csrf-cookie-token');
+  vi.mocked(initializeCsrfToken).mockReset().mockResolvedValue(null);
 });
 it('sends the searched product only when the customer submits contact details', async () => {
   vi.mocked(submitProductRequest).mockResolvedValue();
@@ -35,8 +45,10 @@ it('sends the searched product only when the customer submits contact details', 
       query: 'iPhone 20',
       contact: 'shopper@example.com',
       merchantSlug: 'ogabassey',
-    })
+    }),
+    { csrfToken: 'csrf-cookie-token' }
   );
+  expect(initializeCsrfToken).not.toHaveBeenCalled();
 });
 it('keeps failure visible without showing a sent confirmation', async () => {
   vi.mocked(submitProductRequest).mockRejectedValue(new Error('offline'));
@@ -108,7 +120,8 @@ it('falls back to getRandomValues ids in non-secure contexts', async () => {
         requestId: expect.stringMatching(
           /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
         ),
-      })
+      }),
+      { csrfToken: 'csrf-cookie-token' }
     );
   } finally {
     if (descriptor) Object.defineProperty(crypto, 'randomUUID', descriptor);
@@ -130,4 +143,24 @@ it('shows a retry signal instead of a validation error on idempotency conflict',
     )
   );
   expect(screen.queryByRole('status')).toBeNull();
+});
+it('mints a CSRF token for cold sessions before submitting', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  vi.mocked(getClientCsrfToken).mockReturnValue(null);
+  vi.mocked(initializeCsrfToken).mockResolvedValue('csrf-minted-token');
+  render(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status').textContent).toContain('Request sent')
+  );
+  expect(initializeCsrfToken).toHaveBeenCalledTimes(1);
+  expect(submitProductRequest).toHaveBeenCalledWith(
+    '/api/storefront/product-requests',
+    expect.anything(),
+    { csrfToken: 'csrf-minted-token' }
+  );
 });

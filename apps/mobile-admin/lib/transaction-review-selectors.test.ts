@@ -295,4 +295,10 @@ describe('transaction review selectors', () => {
     expect(selector).toContain('product_variants');
     expect(selector).not.toContain('assurance_fee');
   });
+
+  it('projects the exact condition offer id in every order-items projection', () => {
+    for (const selector of Object.values(TRANSACTION_REVIEW_SELECTORS)) {
+      expect(selector).toContain(', offer_id');
+    }
+  });
 });

@@ -1,11 +1,28 @@
 import { productRequestSchema } from '@baci/shared/lib';
+import { type NextRequest, NextResponse } from 'next/server';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
 
 // Public intake uses a restricted NOINHERIT/NOBYPASSRLS role with one RPC
 // grant. The proxy adds the IP gate; the RPC enforces durable contact and
 // merchant budgets. No session authority or service client is used.
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Double-submit CSRF only when the request carries cookies: CSRF exploits
+  // automatic cookie sending, so a cookie-less caller (the native app posts
+  // no cookies and holds no session) has no ambient authority to abuse.
+  // Browsers always attach cookies, so a cross-site page cannot deputize
+  // them past this gate. (Mirrors the Bearer carve-out rationale in csrf.ts.)
+  if (request.headers.get('cookie')) {
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+  }
   let input: unknown;
   try {
     input = await request.json();

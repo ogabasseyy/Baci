@@ -41,9 +41,12 @@ export const eventPipelineFrozenRoutes = {
   // verifies each line against live offers (400/500); notification and
   // payment authority are unchanged. Re-pinned again for the offer
   // economics errors: invalid_offer/insufficient_offer_stock map to 400
-  // beside the variant twins; no other route behavior changed.
+  // beside the variant twins; no other route behavior changed. Re-pinned a
+  // third time for live-offer pricing: the route loads live offer prices
+  // once, recomputes offer-line assurance fees from them, and threads them
+  // into the negotiation catalog and VAT basis; authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'c9880b7e72fcd20093dfbe3392213e64331176f331ba4bd35839d07e4a435652',
+    'c77a9792a490f5e557dd9e4b86f687f6350357faa23218f475710465dc0730a1',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

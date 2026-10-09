@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { findMismatchedOrderOffer } from './verify-order-offer-lines';
+import {
+  fetchLiveOrderOffers,
+  findMismatchedOrderOffer,
+} from './verify-order-offer-lines';
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 const OFFER_ID = '55555555-5555-4555-8555-555555555555';
@@ -63,5 +66,40 @@ describe('findMismatchedOrderOffer', () => {
         { product_id: PRODUCT_ID, offer_id: OFFER_ID },
       ])
     ).rejects.toThrow('offer lookup failed');
+  });
+});
+
+describe('fetchLiveOrderOffers', () => {
+  it('returns the live price map alongside the mismatch check', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [
+        { offer_id: OFFER_ID, price: 400_000 },
+        { offer_id: OTHER_OFFER_ID, price: '420000' },
+      ],
+      error: null,
+    }));
+
+    const { mismatch, prices } = await fetchLiveOrderOffers(fetchOffers, [
+      { product_id: PRODUCT_ID, offer_id: OFFER_ID },
+    ]);
+
+    expect(mismatch).toBeNull();
+    expect(fetchOffers).toHaveBeenCalledTimes(1);
+    expect(prices.get(`${PRODUCT_ID}::${OFFER_ID}`)).toBe(400_000);
+    expect(prices.get(`${PRODUCT_ID}::${OTHER_OFFER_ID}`)).toBe(420_000);
+  });
+
+  it('omits unpriced rows from the map but keeps them live', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [{ offer_id: OFFER_ID, price: null }],
+      error: null,
+    }));
+
+    const { mismatch, prices } = await fetchLiveOrderOffers(fetchOffers, [
+      { product_id: PRODUCT_ID, offer_id: OFFER_ID },
+    ]);
+
+    expect(mismatch).toBeNull();
+    expect(prices.size).toBe(0);
   });
 });

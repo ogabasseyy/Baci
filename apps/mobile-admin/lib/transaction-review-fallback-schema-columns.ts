@@ -4,6 +4,7 @@ export type TransactionReviewSchemaColumnAvailability = Readonly<{
   discountAmountUnavailable: boolean;
   discountCodeUnavailable: boolean;
   lineIdUnavailable: boolean;
+  offerIdUnavailable?: boolean;
   productMatchStatusUnavailable?: boolean;
   quizAwardIdUnavailable: boolean;
   quizAwardAmountUnavailable?: boolean;
@@ -24,6 +25,7 @@ const schemaColumnAvailabilityKeys: Readonly<
   discount_amount: 'discountAmountUnavailable',
   discount_code_id: 'discountCodeUnavailable',
   line_id: 'lineIdUnavailable',
+  offer_id: 'offerIdUnavailable',
   product_match_status: 'productMatchStatusUnavailable',
   quiz_award_amount: 'quizAwardAmountUnavailable',
   quiz_award_id: 'quizAwardIdUnavailable',
@@ -41,6 +43,7 @@ export function createTransactionReviewSchemaColumnState() {
     discountAmountUnavailable: false,
     discountCodeUnavailable: false,
     lineIdUnavailable: false,
+    offerIdUnavailable: false,
     productMatchStatusUnavailable: false,
     quizAwardAmountUnavailable: false,
     quizAwardIdUnavailable: false,
@@ -119,6 +122,9 @@ export function omitUnavailableTransactionReviewSchemaColumns(
   }
   if (isUnavailable('lineIdUnavailable', 'line_id')) {
     result = withoutSchemaColumn(result, 'line_id');
+  }
+  if (isUnavailable('offerIdUnavailable', 'offer_id')) {
+    result = withoutSchemaColumn(result, 'offer_id');
   }
   if (isUnavailable('adTrackingUnavailable', 'ad_tracking')) {
     result = withoutSchemaColumn(result, 'ad_tracking');

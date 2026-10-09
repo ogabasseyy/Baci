@@ -18,14 +18,20 @@ export class ProductRequestSubmitError extends Error {
 // repeats under fresh ids are covered by the 24h canonical dedup.
 export async function submitProductRequest(
   endpoint: string,
-  input: ProductRequest
+  input: ProductRequest,
+  init?: { csrfToken?: string | null }
 ): Promise<void> {
   const request = productRequestSchema.parse(input);
   let response: Response;
   try {
     response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Double-submit cookie name mirrors web's CSRF_HEADER_NAME; the
+        // caller reads it from the cookie (shared must not import web).
+        ...(init?.csrfToken ? { 'x-csrf-token': init.csrfToken } : {}),
+      },
       body: JSON.stringify(request),
     });
   } catch {

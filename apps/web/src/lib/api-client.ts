@@ -3,7 +3,7 @@
 
 import { CSRF_HEADER_NAME, getClientCsrfToken } from '@/lib/csrf';
 
-async function initializeCsrfToken(
+export async function initializeCsrfToken(
   signal?: AbortSignal
 ): Promise<string | null> {
   try {

@@ -1,4 +1,6 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkCsrfProtection } from '@/lib/csrf';
 
 const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
@@ -14,6 +16,9 @@ vi.mock('@/lib/logger', () => ({
     warn: (...args: unknown[]) => mocks.warn(...args),
   },
 }));
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: vi.fn().mockResolvedValue({ valid: true }),
+}));
 
 import { POST } from './route';
 
@@ -23,18 +28,35 @@ const input = {
   merchantSlug: 'ogabassey',
   requestId: '11111111-1111-4111-8111-111111111111',
 };
-function request(body: unknown) {
-  return new Request('http://localhost/api/storefront/product-requests', {
+function request(body: unknown, headers: Record<string, string> = {}) {
+  return new NextRequest('http://localhost/api/storefront/product-requests', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 }
 beforeEach(() => {
   mocks.submit.mockReset().mockResolvedValue({ error: null });
   mocks.warn.mockReset();
+  vi.mocked(checkCsrfProtection).mockReset().mockResolvedValue({ valid: true });
 });
 describe('product request intake', () => {
+  it('rejects cookie-bearing posts without a valid CSRF token', async () => {
+    vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: false });
+
+    const response = await POST(request(input, { cookie: 'csrf-token=stale' }));
+
+    expect(response.status).toBe(403);
+    expect(checkCsrfProtection).toHaveBeenCalledTimes(1);
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+  it('accepts cookie-less callers without a CSRF token (native shape)', async () => {
+    const response = await POST(request(input));
+
+    expect(response.status).toBe(200);
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+  });
   it('validates with Zod before calling the intake helper', async () => {
     const response = await POST(request(input));
     expect(response.status).toBe(200);

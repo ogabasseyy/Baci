@@ -29,6 +29,19 @@ describe('product request intake', () => {
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(JSON.parse(init.body)).toEqual(request);
   });
+  it('attaches the double-submit CSRF token when the caller provides one', async () => {
+    await submitProductRequest(endpoint, request, {
+      csrfToken: 'csrf-token-1',
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [
+      string,
+      { headers: Record<string, string> },
+    ];
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-csrf-token': 'csrf-token-1',
+    });
+  });
   it('rejects missing contact and punctuation-only products before a write', async () => {
     await expect(
       submitProductRequest(endpoint, { ...request, contact: '' })

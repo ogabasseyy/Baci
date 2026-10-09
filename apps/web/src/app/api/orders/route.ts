@@ -91,7 +91,7 @@ import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 import {
-  findMismatchedOrderOffer,
+  fetchLiveOrderOffers,
   type OrderOfferLine,
   type OrderOfferQueryResult,
 } from './verify-order-offer-lines';
@@ -978,16 +978,21 @@ export async function POST(request: NextRequest) {
     // Exact condition offers must name a live offer of their own product:
     // two offers can share one condition, so the stored id is the only
     // thing distinguishing them at fulfillment time.
+    const liveOfferPrices = new Map<string, number>();
     if (orderItemsPayload.some((item) => item.offer_id)) {
       let mismatchedOfferLine: OrderOfferLine | null = null;
       try {
-        mismatchedOfferLine = await findMismatchedOrderOffer(
+        const liveOffers = await fetchLiveOrderOffers(
           (productId) =>
             supabase.rpc('get_product_offers', {
               p_product_id: productId,
             }) as unknown as Promise<OrderOfferQueryResult>,
           orderItemsPayload
         );
+        mismatchedOfferLine = liveOffers.mismatch;
+        for (const [key, price] of liveOffers.prices) {
+          liveOfferPrices.set(key, price);
+        }
       } catch (error) {
         console.error('Order offer verification failed:', error);
         return NextResponse.json(
@@ -999,6 +1004,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Invalid condition offer for order item' },
           { status: 400 }
+        );
+      }
+    }
+
+    // Offer assurance fees recompute from the live offer price, never the
+    // client line price: the RPC charges live merchandise but stages the
+    // route fee, so a zero/stale client price naming a valid offer would
+    // otherwise buy live-priced goods with little or no fee. Verification
+    // above guarantees every carried offer_id has a live price here.
+    if (liveOfferPrices.size > 0) {
+      for (const line of orderItemsPayload) {
+        if (!line.offer_id || !line.has_assurance) continue;
+        const livePrice = liveOfferPrices.get(
+          `${line.product_id}::${line.offer_id}`
+        );
+        if (livePrice === undefined) continue;
+        line.assurance_fee = roundCurrency(
+          livePrice * line.quantity * SERVER_ASSURANCE_RATE
         );
       }
     }
@@ -1172,8 +1195,10 @@ export async function POST(request: NextRequest) {
           product_id: item.product_id || item.productId || item.id,
           quantity: item.quantity,
           variant_id: item.variantId || item.variant_id,
+          offer_id: item.offerId || item.offer_id,
         })),
         merchantId: merchant_id,
+        offerPrices: liveOfferPrices,
         supabase,
       });
     } catch (taxError) {
@@ -1227,11 +1252,10 @@ export async function POST(request: NextRequest) {
     const redvaultRequested = payment_method === 'uba_redvault';
 
     // ALWAYS validate per-line client prices — even for non-entitled merchants
-    // and callers that omit expected_total. The RPC charges the catalog line
-    // price, but it adds the route-recomputed `assurance_fee` (derived from the
-    // client line price) into the subtotal, so an unvalidated below-catalog
-    // price would leak an uncapped assurance discount. The derived discount is
-    // only APPLIED below.
+    // and callers that omit expected_total. The RPC charges the catalog (or
+    // live offer) line price, but it adds the route-recomputed `assurance_fee`
+    // into the subtotal, so an unvalidated below-catalog price would leak an
+    // uncapped assurance discount. The derived discount is only APPLIED below.
     let negotiationDiscount: Awaited<
       ReturnType<typeof computeOrderNegotiationDiscount>
     >;
@@ -1239,6 +1263,7 @@ export async function POST(request: NextRequest) {
       negotiationDiscount = await computeOrderNegotiationDiscount({
         items: orderItemsPayload,
         merchantId: merchant_id,
+        offerPrices: liveOfferPrices,
         supabase,
         vatRegistered,
       });

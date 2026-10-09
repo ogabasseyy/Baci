@@ -17651,6 +17651,14 @@ export type Database = {
         Args: { p_merchant_id: string; p_product_identifier: string };
         Returns: undefined;
       };
+      enroll_customer_loyalty: {
+        Args: {
+          p_customer_id: string;
+          p_merchant_id: string;
+          p_referral_code?: string;
+        };
+        Returns: Json;
+      };
       expire_order_wallet_funding_intents: {
         Args: {
           p_customer_id?: string;

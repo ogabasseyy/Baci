@@ -381,6 +381,28 @@ describe('agentic checkout order dispatch', () => {
     );
   });
 
+  it.each([
+    'invalid_offer',
+    'insufficient_offer_stock',
+  ])('maps the order RPC %s rejection to a 400', async (code) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code, message: code },
+    });
+
+    const result = await createAgenticCheckoutOrder(orderPayload(), {
+      rpc,
+      from: makeFromStub(),
+    } as unknown as SupabaseClient);
+
+    expect(result).toMatchObject({
+      error: code,
+      ok: false,
+      orderId: undefined,
+      status: 400,
+    });
+  });
+
   it('does not expose unknown order RPC error details to callers', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

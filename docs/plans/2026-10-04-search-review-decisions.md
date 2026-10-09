@@ -587,3 +587,12 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low same-ID idempotency ADJUDICATED (correct by design): byte-exact resend succeeds, differing payload under one key 409s — canonicalizing would weaken conflict detection.
 - Muse low assist cost ADJUDICATED (process note): per-IP + tenant budgets correct; production alerting is an enablement checklist item.
 - Muse low assurance disclosure: repeat of the device-QA item.
+
+## Round 80 (Codex 2 P1 on 8f82a47bb1 — both fixed; Muse 3 lows — 1 fixed, 2 by-design; CI shard-4 frozen-hash re-pinned)
+
+- CI FIXED: shard-4 boundary test failed on the M12 orders-route bytes — re-pinned eventPipelineFrozenRoutes for the route (authority unchanged), then re-pinned again after the M13 error-code mapping; 1/1 green.
+- CX-168 (P1) FIXED: offer id joins the checkout idempotency hash — shared buildOrderIdempotencyPayload accepts offer_id/offerId twins, stages offer_id (omitted when empty so pre-offer hashes stay byte-identical), and sorts by it; native fingerprint mirrors with forwarding from stored order items. Web 15/15, native 15/15, shared 1645/1645.
+- CX-167 (P1) FIXED: M13 (20261008310000, sha 24188da3) resolves live offer economics inside private.create_storefront_order_unchecked — staging joins the live offer row (same product + merchant, active), subtotal/VAT/stored line price resolve variant → offer → parent, unknown/inactive offers fail with invalid_offer, offer lines decrement offer stock (insufficient_offer_stock), and all three restock helpers restore offer stock on cancel. New codes map to 400 in the orders route + agentic dispatch. PGlite end-to-end green (10 create-path edits + 3 restock edits, rerun convergence, missing-M12 fail-closed). Registered; PR body → 36.
+- Muse low variant+offer FIXED: cart/validate rejects lines naming both a variant and an offer (contradictory — neither platform attaches both), so cart and checkout agree. +1 route test.
+- Muse low request-id replay ADJUDICATED (correct by design): same requestId with byte-identical payload succeeds; differing payload 409s — the standard idempotency-key contract, and normalizing would weaken conflict detection. Repeat of the round-79 same-ID low.
+- Muse low offset-clamp ADJUDICATED (verified by design, round-78 reaffirmed): the clamp is a documented backstop against a generic RPC 22023 failure and the args object feeds supabase.rpc directly, so a clamp signal would require reshaping a shared RPC contract for a 99-pages-deep edge.

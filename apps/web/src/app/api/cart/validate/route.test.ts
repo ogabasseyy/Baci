@@ -483,4 +483,46 @@ describe('POST /api/cart/validate', () => {
       p_product_id: PRODUCT_ID,
     });
   });
+
+  it('rejects lines naming both a variant and a condition offer', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+      },
+    ];
+    mocks.variants = [
+      {
+        id: VARIANT_ID,
+        product_id: PRODUCT_ID,
+        price_override: 480_000,
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [
+        {
+          id: PRODUCT_ID,
+          price: 480_000,
+          variantId: VARIANT_ID,
+          offerId: OFFER_ID,
+        },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::${VARIANT_ID}::offer=${OFFER_ID}`,
+    ]);
+    expect(body.validProducts).toEqual([]);
+  });
 });

@@ -3903,6 +3903,35 @@ describe('POST /api/orders — product cache revalidation after order creation',
     expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'invalid_offer',
+    'insufficient_offer_stock',
+  ])('maps the order RPC %s rejection to a 400', async (message) => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () =>
+        buildMockSupabase({
+          create_storefront_order: {
+            data: null,
+            error: { message },
+          },
+        }) as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(baseOrderPayload),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      details: message,
+      error: 'Failed to create order',
+    });
+  });
+
   it('does not revalidate on an idempotent replay (no re-decrement occurred)', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(

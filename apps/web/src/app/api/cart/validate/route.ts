@@ -223,6 +223,23 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // A line naming both a variant and a condition offer is contradictory:
+      // offers exist only for non-variant products, so neither platform
+      // attaches both and there is no defined price basis. Reject the line
+      // so cart and checkout agree — the orders route verifies any carried
+      // offer_id and would reject a dead one there instead.
+      if (item.variantId && item.offerId) {
+        const invalidComboKey = getCartValidationKey(
+          strId,
+          item.variantId,
+          item.offerId
+        );
+        if (!invalidProductIds.includes(invalidComboKey)) {
+          invalidProductIds.push(invalidComboKey);
+        }
+        continue;
+      }
+
       const currentPrice = toPriceNumber(
         variantBelongsToProduct
           ? (variant.price_override ?? product.price)

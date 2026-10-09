@@ -14,6 +14,7 @@ interface MobileCheckoutIdempotencyItem {
   condition?: string | null;
   hasAssurance?: boolean | null;
   id: string;
+  offerId?: string | null;
   price: number;
   productId?: string | null;
   quantity: number;
@@ -131,6 +132,10 @@ export function buildMobileCheckoutFingerprint(
       condition: normalizeString(item.condition),
       hasAssurance: Boolean(item.hasAssurance),
       id: normalizeString(item.id),
+      // Two offers can share one condition: without the offer id, reusing a
+      // checkout across offers yields the same fingerprint and replays the
+      // original key. Omit when empty so legacy fingerprints stay identical.
+      offerId: normalizeString(item.offerId) || undefined,
       price: normalizeNumber(item.price),
       productId: normalizeString(item.productId ?? item.id),
       quantity: normalizeNumber(item.quantity),
@@ -142,6 +147,7 @@ export function buildMobileCheckoutFingerprint(
       const comparisons = [
         left.productId.localeCompare(right.productId),
         left.variantId.localeCompare(right.variantId),
+        (left.offerId ?? '').localeCompare(right.offerId ?? ''),
         left.id.localeCompare(right.id),
         left.quantity - right.quantity,
         left.price - right.price,
@@ -249,6 +255,7 @@ export function buildMobileCheckoutOrderFingerprint({
       condition: item.condition,
       hasAssurance: item.has_assurance,
       id: item.id,
+      offerId: item.offer_id,
       price: item.price,
       productId: item.product_id,
       quantity: item.quantity,

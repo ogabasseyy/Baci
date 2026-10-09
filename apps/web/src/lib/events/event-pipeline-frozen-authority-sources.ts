@@ -36,8 +36,14 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
+  // Re-pinned for exact condition-offer identity: the route accepts
+  // offerId/offer_id twins, passes them into the order RPC items, and
+  // verifies each line against live offers (400/500); notification and
+  // payment authority are unchanged. Re-pinned again for the offer
+  // economics errors: invalid_offer/insufficient_offer_stock map to 400
+  // beside the variant twins; no other route behavior changed.
   'apps/web/src/app/api/orders/route.ts':
-    '33166c90e60c3d9d0a2648abe4ba31df243205376696e1ceae6f9bfb0d9398b0',
+    'c9880b7e72fcd20093dfbe3392213e64331176f331ba4bd35839d07e4a435652',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

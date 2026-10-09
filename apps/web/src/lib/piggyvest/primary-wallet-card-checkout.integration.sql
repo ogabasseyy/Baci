@@ -468,3 +468,41 @@ RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
   DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000002';
 END $$;
+-- Ownership conformance: assert_scope is the database mirror of the
+-- TypeScript ownership source of truth
+-- (primary-wallet-card-checkout-ownership.ts). SQL cannot import that
+-- module, so this block pins the mirrored field list instead: the six
+-- immutable IDs plus the deployment bindings must each be enforced, and
+-- the scope email must be IGNORED — a changed address (or casing) must
+-- never strand recovery. Change the rule in both places together.
+DO $$ BEGIN
+  INSERT INTO public.customers VALUES('60000000-0000-4000-8000-000000000021','10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000022','ownconform@example.test');
+  INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000021','60000000-0000-4000-8000-000000000022',repeat('c',64),'verified','ownconform-customer','ownconform-wallet');
+END $$;
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1) || '{"customerId":"60000000-0000-4000-8000-000000000021","userId":"60000000-0000-4000-8000-000000000022","email":"ownconform@example.test"}';
+  operation_id uuid;
+  key text;
+BEGIN
+  operation_id := (piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000023","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}')->>'operationId')::uuid;
+  PERFORM piggyvest_primary_card.read_operation(scope,operation_id);
+  FOREACH key IN ARRAY ARRAY['environment','integrationId','merchantId','customerId','userId','businessId','expiresAt','callbackUrl'] LOOP
+    BEGIN
+      -- expiresAt perturbs to a valid but wrong timestamp (an invalid one
+      -- would fail the cast instead of the ownership check).
+      PERFORM piggyvest_primary_card.read_operation(scope || jsonb_build_object(key,CASE WHEN key='expiresAt' THEN '2000-01-01T00:00:00Z' ELSE '00000000-0000-4000-8000-000000000000' END),operation_id);
+      RAISE EXCEPTION 'scope field % not enforced',key;
+    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  END LOOP;
+  -- Email is explicitly NOT an authorization factor: a changed address or
+  -- casing must still read. If email is ever re-added to authorization,
+  -- this is the tripwire.
+  PERFORM piggyvest_primary_card.read_operation(scope || '{"email":"changed-after-init@example.test"}',operation_id);
+  PERFORM piggyvest_primary_card.read_operation(scope || '{"email":"OWNCONFORM@EXAMPLE.TEST"}',operation_id);
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000021';
+END $$;

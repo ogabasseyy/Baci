@@ -41,6 +41,14 @@ describe('explicit search submissions', () => {
     });
   });
 
+  it('writes through the service-role client so anon INSERT can stay revoked', async () => {
+    const response = await POST(request());
+    expect(response.status).toBe(204);
+    expect(mocks.serviceClient).toHaveBeenCalledTimes(1);
+    expect(mocks.from).toHaveBeenCalledWith('search_analytics');
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves path-based stores on the platform domain', async () => {
     await POST(
       request(

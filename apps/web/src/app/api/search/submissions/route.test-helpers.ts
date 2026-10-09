@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   insert: vi.fn(),
   from: vi.fn(),
+  serviceClient: vi.fn(),
 }));
 // Hoisted bindings cannot be exported; alias for test assertions.
 export const submissionMocks = mocks;
@@ -14,7 +15,10 @@ vi.mock('@/lib/cached-data', () => ({
 }));
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({ rpc: mocks.rpc, from: mocks.from }),
+  createClient: () => ({ rpc: mocks.rpc }),
+}));
+vi.mock('@/lib/supabase/service', () => ({
+  createServiceClient: mocks.serviceClient,
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { warn: vi.fn() },
@@ -51,4 +55,5 @@ export function setupSubmissionMocks() {
   });
   mocks.insert.mockResolvedValue({ error: null });
   mocks.from.mockReturnValue({ insert: mocks.insert });
+  mocks.serviceClient.mockReturnValue({ from: mocks.from });
 }

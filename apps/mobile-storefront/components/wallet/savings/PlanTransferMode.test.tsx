@@ -43,6 +43,15 @@ jest.mock('@/lib/customer-savings-api', () => ({
     }) => ({ merchantId: input.merchantId, merchantSlug: input.merchantSlug }),
   }),
 }));
+jest.mock('@/lib/storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: () => ({
+    fetchJson: mockFetch,
+    buildMerchantIdentifiers: (input: {
+      merchantId?: string;
+      merchantSlug?: string;
+    }) => ({ merchantId: input.merchantId, merchantSlug: input.merchantSlug }),
+  }),
+}));
 jest.mock('./use-start-savings-payment-methods', () => ({
   useStartSavingsPaymentMethods: () => ({ setPaymentMethodsError: jest.fn() }),
 }));
@@ -60,12 +69,23 @@ jest.mock('./use-start-savings-submit', () => ({
 }));
 // Primary-path tests assume the server already confirmed capability;
 // BVN-free assertions only hold after explicit confirmation.
-jest.mock('@/lib/piggyvest-primary-capability', () => ({
-  usePiggyvestPrimaryCapability: () => true,
-}));
+const mockProbePlanFunding =
+  jest.fn<(merchantId: string) => Promise<boolean>>();
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as Record<string, unknown>;
+  return {
+    ...actual,
+    usePiggyvestPrimaryCapability: () => true,
+    getPiggyvestPrimaryCapability: (merchantId: string) =>
+      mockProbePlanFunding(merchantId),
+  };
+});
 beforeEach(() => {
   jest.clearAllMocks();
   mockMerchant = 'merchant-1';
+  mockProbePlanFunding.mockResolvedValue(false);
   Object.assign(process.env, {
     EXPO_PUBLIC_HOSTED_STOREFRONT: '1',
     EXPO_PUBLIC_STAGING_TEST_PAYMENTS: '1',

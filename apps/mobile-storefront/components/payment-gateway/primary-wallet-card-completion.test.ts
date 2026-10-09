@@ -85,6 +85,23 @@ it.each([
   expect(router.replace).not.toHaveBeenCalled();
   expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
 });
+it('lands the guarded error view when the terminal re-read throws synchronously', async () => {
+  const setTerminalDirective = jest.fn();
+  const input = { ...fixture(), setTerminalDirective };
+  mockRecover.mockRejectedValue(new Error('network down'));
+  mockReadPending.mockImplementation(() => {
+    throw new Error('scope invalid after sign-out');
+  });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  await flush();
+  expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Your operation is saved')
+  );
+  expect(setTerminalDirective).toHaveBeenCalledWith(null);
+  expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
+});
 it('treats an abandoned checkout as cancelled with retry copy, never credit', async () => {
   const input = fixture();
   mockRecover.mockResolvedValue({ status: 'abandoned' });

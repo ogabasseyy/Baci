@@ -6,6 +6,7 @@ import {
   piggyvestPrimaryWalletIdentitySchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
+import { PiggyvestApiError } from './client';
 import type {
   PrimaryWalletCustomerRequest,
   PrimaryWalletIntentScope,
@@ -21,10 +22,11 @@ type Input = {
 };
 
 type Outcome = {
-  status: 'pending' | 'ready' | 'conflict' | 'unavailable';
+  status: 'pending' | 'ready' | 'conflict' | 'rejected' | 'unavailable';
   code?:
     | 'NOT_CONFIGURED'
     | 'INVALID_INPUT'
+    | 'INVALID_BVN'
     | 'OWNERSHIP_REVIEW_REQUIRED'
     | 'STORAGE_UNAVAILABLE';
 };
@@ -118,7 +120,22 @@ export async function onboardPiggyvestPrimaryWallet(
     return recorded
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-  } catch {
+  } catch (error) {
+    // A definitive provider validation rejection (HTTP 400) means nothing
+    // was created: release the uncreated intent so the customer can
+    // correct the BVN. Recording it uncertain would pin the wrong-value
+    // fingerprint and conflict every corrected retry permanently. Only
+    // 400 qualifies — every other throw stays transport-ambiguous.
+    if (error instanceof PiggyvestApiError && error.status === 400) {
+      try {
+        const released = await input.storage.releaseIntent(claimedScope);
+        return released
+          ? { status: 'rejected', code: 'INVALID_BVN' }
+          : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+      } catch {
+        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+      }
+    }
     try {
       await input.storage.recordUncertain(claimedScope);
     } catch {

@@ -15,6 +15,7 @@ export async function runPrimaryCardTransfer(input: {
     token: string,
     submitted: boolean
   ) => Promise<unknown>;
+  requeue: (operationId: string, token: string) => Promise<unknown>;
 }) {
   const operationId = schemas.context.shape.operationId.parse(
     input.operationId
@@ -51,14 +52,35 @@ export async function runPrimaryCardTransfer(input: {
       return 'unknown' as const;
     }
   }
-  let submitted = false;
   try {
     await input.submitTransfer(claim.command);
-    submitted = true;
   } catch {
-    submitted = false;
+    // A submit throw is ambiguous: reconcile the deterministic reference
+    // before recording. Proven-absent requeues for the next pass with the
+    // identical reference; proven-submitted records without resubmitting;
+    // anything uncertain records unknown and never resubmits blind.
+    let observed: 'submitted' | 'absent' | 'uncertain';
+    try {
+      observed = await input.lookupTransfer(claim.command);
+    } catch {
+      observed = 'uncertain';
+    }
+    if (observed === 'absent') {
+      const requeued = await input.requeue(operationId, claim.token);
+      if (requeued !== true) throw new Error('Transfer result unavailable');
+      return 'requeued' as const;
+    }
+    const acknowledged = await input.record(
+      operationId,
+      claim.token,
+      observed === 'submitted'
+    );
+    if (acknowledged !== true) throw new Error('Transfer result unavailable');
+    return observed === 'submitted'
+      ? ('submitted' as const)
+      : ('unknown' as const);
   }
-  const acknowledged = await input.record(operationId, claim.token, submitted);
+  const acknowledged = await input.record(operationId, claim.token, true);
   if (acknowledged !== true) throw new Error('Transfer result unavailable');
-  return submitted ? ('submitted' as const) : ('unknown' as const);
+  return 'submitted' as const;
 }

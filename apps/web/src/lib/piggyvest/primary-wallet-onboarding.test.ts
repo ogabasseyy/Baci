@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
 
 vi.mock('server-only', () => ({}));
@@ -32,6 +33,7 @@ function fixture() {
       recordAccepted: vi.fn().mockResolvedValue(true),
       recordUncertain: vi.fn().mockResolvedValue(undefined),
       recordRejected: vi.fn().mockResolvedValue(undefined),
+      releaseIntent: vi.fn().mockResolvedValue(true),
     },
     createCustomer: vi.fn().mockResolvedValue({
       customer_id: 'customer-fixture',
@@ -180,6 +182,30 @@ describe('primary wallet onboarding', () => {
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 
+  it('releases the uncreated intent on a definitive provider BVN rejection so the value can be corrected', async () => {
+    const input = fixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Invalid BVN', 400)
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'rejected',
+      code: 'INVALID_BVN',
+    });
+    expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+  });
+  it('keeps non-400 provider failures transport-ambiguous', async () => {
+    const input = fixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Provider exploded', 500)
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
   it('does not claim readiness when accepted identifiers cannot be stored', async () => {
     const input = fixture();
     input.storage.recordAccepted.mockResolvedValue(false);

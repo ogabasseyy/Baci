@@ -76,6 +76,7 @@ export function createPrimaryCardCustodyConnection(input: {
         },
         record: (selected, token, submitted) =>
           execute('record', [selected, token, submitted]),
+        requeue: (selected, token) => execute('requeue', [selected, token]),
       });
     },
     async applySignedCustody(input: {

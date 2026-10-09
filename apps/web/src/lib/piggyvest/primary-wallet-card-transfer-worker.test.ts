@@ -20,6 +20,7 @@ function setup() {
     submitTransfer: vi.fn().mockResolvedValue(undefined),
     lookupTransfer: vi.fn().mockResolvedValue('absent'),
     record: vi.fn().mockResolvedValue(true),
+    requeue: vi.fn().mockResolvedValue(true),
   };
 }
 describe('irreversible primary transfer dispatch', () => {
@@ -40,15 +41,54 @@ describe('irreversible primary transfer dispatch', () => {
     input.submitTransfer.mockRejectedValue(
       new Error('connection lost after send')
     );
+    input.lookupTransfer.mockResolvedValue('uncertain');
     expect(await runPrimaryCardTransfer(input)).toBe('unknown');
     expect(input.record).toHaveBeenCalledWith(
       input.operationId,
       fixture.context.customerId,
       false
     );
+    expect(input.requeue).not.toHaveBeenCalled();
     input.claim.mockResolvedValue({ outcome: 'existing' });
     expect(await runPrimaryCardTransfer(input)).toBe('existing');
     expect(input.submitTransfer).toHaveBeenCalledTimes(1);
+  });
+  it('requeues a proven-absent reference after a submit throw instead of stranding it unknown', async () => {
+    const input = setup();
+    input.submitTransfer.mockRejectedValue(new Error('timeout before commit'));
+    input.lookupTransfer.mockResolvedValue('absent');
+    expect(await runPrimaryCardTransfer(input)).toBe('requeued');
+    expect(input.requeue).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId
+    );
+    expect(input.record).not.toHaveBeenCalled();
+    expect(input.submitTransfer).toHaveBeenCalledTimes(1);
+  });
+  it('records submitted without resubmitting when the reference exists despite the submit throw', async () => {
+    const input = setup();
+    input.submitTransfer.mockRejectedValue(new Error('response lost'));
+    input.lookupTransfer.mockResolvedValue('submitted');
+    expect(await runPrimaryCardTransfer(input)).toBe('submitted');
+    expect(input.record).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId,
+      true
+    );
+    expect(input.requeue).not.toHaveBeenCalled();
+    expect(input.submitTransfer).toHaveBeenCalledTimes(1);
+  });
+  it('records unknown when the post-failure lookup itself crashes', async () => {
+    const input = setup();
+    input.submitTransfer.mockRejectedValue(new Error('timeout before commit'));
+    input.lookupTransfer.mockRejectedValue(new Error('private lookup bug'));
+    expect(await runPrimaryCardTransfer(input)).toBe('unknown');
+    expect(input.record).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId,
+      false
+    );
+    expect(input.requeue).not.toHaveBeenCalled();
   });
   it('does not call a financial adapter for an invalid claim', async () => {
     const input = setup();

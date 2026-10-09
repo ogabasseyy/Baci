@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { primaryWalletCardSchemas } from '@/schemas/primary-wallet-card';
 
 const mockRead = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockStart = jest.fn<(...args: unknown[]) => Promise<unknown>>();
@@ -141,6 +142,32 @@ it('warns when an adopted checkout would save the card', async () => {
     expect.any(Object)
   );
   expect(router.push).not.toHaveBeenCalled();
+});
+it('pins version and one-time-charge as literals so adoption only ever compares saveCard', () => {
+  // The resume dialog discloses saveCard drift alone; if version or
+  // oneTimeCharge ever become variables, this contract fails and the
+  // dialog must surface them too.
+  expect(
+    primaryWalletCardSchemas.consent.safeParse({
+      version: 'primary-wallet-card-v1',
+      oneTimeCharge: true,
+      saveCard: false,
+    }).success
+  ).toBe(true);
+  expect(
+    primaryWalletCardSchemas.consent.safeParse({
+      version: 'primary-wallet-card-v2',
+      oneTimeCharge: true,
+      saveCard: false,
+    }).success
+  ).toBe(false);
+  expect(
+    primaryWalletCardSchemas.consent.safeParse({
+      version: 'primary-wallet-card-v1',
+      oneTimeCharge: false,
+      saveCard: false,
+    }).success
+  ).toBe(false);
 });
 it('opens the adopted checkout only after explicit resume confirmation', async () => {
   mockStart.mockResolvedValue({ ...response, adopted: true });

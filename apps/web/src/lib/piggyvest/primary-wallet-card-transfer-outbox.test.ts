@@ -66,6 +66,10 @@ beforeEach(() => {
       mocks.state = parameters.at(-1) ? 'submitted' : 'unknown';
       result = true;
     }
+    if (sql.includes('requeue_transfer')) {
+      mocks.state = 'ready';
+      result = true;
+    }
     return { rows: [{ result }] };
   });
 });
@@ -182,7 +186,31 @@ it('persists unknown acceptance and never redispatches on future scheduled runs'
     status: 'reconciliation_required',
     selectedCount: 0,
   });
-  expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  // Submit throw plus the reconciling reference lookup that follows it.
+  expect(fetchImplementation).toHaveBeenCalledTimes(2);
+});
+it('requeues a proven-absent reference after a submit throw and submits it on the next run', async () => {
+  let calls = 0;
+  const fetchImplementation = vi.fn(
+    async (_url: string | URL | Request, init?: RequestInit) => {
+      calls++;
+      // First the provider POST throws before commit; the reconciling
+      // GET then proves the reference absent; the next run's POST lands.
+      if (init?.method === 'GET')
+        return Response.json({ status: false }, { status: 404 });
+      if (calls === 1) throw new Error('timeout before commit');
+      return Response.json({ status: true }, { status: 202 });
+    }
+  );
+  expect(await run(fetchImplementation)).toMatchObject({
+    status: 'requeued_for_retry',
+    selectedCount: 1,
+  });
+  expect(mocks.state).toBe('ready');
+  expect(await run(fetchImplementation)).toMatchObject({
+    status: 'submitted_for_custody',
+  });
+  expect(mocks.state).toBe('submitted');
 });
 it('surfaces result-write failure after cancelled committed claim and never resets dispatching', async () => {
   const controller = new AbortController();
@@ -238,8 +266,10 @@ it('readiness passes with a backlog and never dispatches it', async () => {
     const result = (await query?.(sql, parameters)) as {
       rows: Array<{ result: Record<string, unknown> }>;
     };
-    if (sql.includes('select_ready_transfers'))
-      result.rows[0]!.result.operationIds = [fixture.context.operationId];
+    if (sql.includes('select_ready_transfers')) {
+      const row = result.rows[0];
+      if (row) row.result.operationIds = [fixture.context.operationId];
+    }
     return result;
   });
   const fetchImplementation = http();

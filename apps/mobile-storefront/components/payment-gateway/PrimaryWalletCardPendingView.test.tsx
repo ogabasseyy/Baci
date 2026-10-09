@@ -50,17 +50,17 @@ it('distinguishes a network status failure without inviting another charge', () 
   expect(screen.queryByText('Try payment again')).toBeNull();
 });
 
-it('shows the specific status message alongside the retained-operation copy', () => {
+it('never renders a raw status message verbatim on the error view', () => {
   render(
     <PrimaryWalletCardPendingView
       colors={Colors.light}
       statusError
-      message="Network request failed"
+      message="Network request failed: socket hangup (provider-b detail)"
       onCheck={jest.fn()}
       onBack={jest.fn()}
     />
   );
-  expect(screen.getByText('Network request failed')).toBeOnTheScreen();
+  expect(screen.queryByText(/socket hangup/)).toBeNull();
   expect(screen.getByRole('alert').props.children).toContain(
     'Do not pay again'
   );

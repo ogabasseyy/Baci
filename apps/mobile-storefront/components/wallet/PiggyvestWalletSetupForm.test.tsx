@@ -65,6 +65,31 @@ it('keeps the BVN for retry and shows a safe inline error on failure', async () 
   });
 });
 
+it('maps a definitive BVN rejection to correctable guidance', async () => {
+  const onSubmit = jest.fn().mockRejectedValue(
+    Object.assign(new Error('That BVN was rejected.'), {
+      code: 'INVALID_BVN',
+    })
+  );
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(
+    screen.getByText('That BVN was rejected. Check the number and try again.')
+  ).toBeOnTheScreen();
+  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
+});
+
 it('clears the BVN only after the setup is confirmed', async () => {
   const onSubmit = jest.fn().mockResolvedValue(undefined);
   render(

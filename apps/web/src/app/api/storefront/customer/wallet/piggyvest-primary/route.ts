@@ -218,6 +218,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 409 }
       );
     }
+    if (outcome.status === 'rejected') {
+      return NextResponse.json(
+        {
+          error: 'That BVN was rejected. Check the number and try again.',
+          code: 'INVALID_BVN',
+        },
+        { status: 422 }
+      );
+    }
     return NextResponse.json(
       { status: outcome.status },
       {

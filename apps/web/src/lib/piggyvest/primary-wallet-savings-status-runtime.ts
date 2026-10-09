@@ -48,7 +48,11 @@ export async function checkPrimaryWalletSavingsStatus(input: {
   });
   let state = await store.readStatus(operationId);
   if (state === 'reserved') {
-    await store.cancelBeforeDispatch(operationId).catch(() => undefined);
+    // Lease-scoped cancel: a live submission holds its reservation for
+    // seconds between reserve and dispatch claim, so only a stale
+    // reservation may be released here. Fresh rows stay reserved and
+    // report pending below.
+    await store.cancelStaleReservation(operationId).catch(() => undefined);
     state = await store.readStatus(operationId);
   }
   if (state === null) return { status: 'not_found' as const };

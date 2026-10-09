@@ -50,9 +50,15 @@ export function PiggyvestWalletSetupForm({
       // for correction-free retry, while success drops the sensitive
       // value from state at the earliest safe moment.
       setBvn('');
-    } catch {
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error !== null
+          ? (error as { code?: unknown }).code
+          : undefined;
       setError(
-        'Wallet setup could not be confirmed. Refresh your account before trying again.'
+        code === 'INVALID_BVN'
+          ? 'That BVN was rejected. Check the number and try again.'
+          : 'Wallet setup could not be confirmed. Refresh your account before trying again.'
       );
     } finally {
       submitting.current = false;

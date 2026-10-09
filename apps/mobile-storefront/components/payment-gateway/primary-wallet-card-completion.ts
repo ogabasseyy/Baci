@@ -110,12 +110,19 @@ export function beginPrimaryWalletCardCompletion(
       // merchant the read would throw and coerce to 'unknown', so skip it
       // and keep the generic retained-operation message.
       if (failureCause === 'recovery_unconfirmed' && input.merchantId) {
-        const retained = await client
-          .readPending({
+        // Sync-safe: readPending validates scope synchronously (and the
+        // user may have signed out mid-run), so a bare .catch would let
+        // a sync throw escape this catch, reject the completion, and
+        // strand the spinner with retries blocked.
+        let retained: unknown = 'unknown';
+        try {
+          retained = await client.readPending({
             merchantId: input.merchantId,
             userId: useAuthStore.getState().user?.id ?? '',
-          })
-          .catch(() => 'unknown' as const);
+          });
+        } catch {
+          retained = 'unknown';
+        }
         if (retained === null) failureCause = 'operation_dropped';
       }
       // Redacted cause only: the error itself may carry provider or

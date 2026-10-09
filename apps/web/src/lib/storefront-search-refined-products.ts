@@ -112,11 +112,12 @@ export async function getStorefrontRefinedSearchProducts(args: {
         ...product,
         price: match.price ?? product.price,
         condition: match.condition ?? product.condition,
+        // Collapse the choice set only for an explicit condition filter.
+        // A price-only refinement matches the single SQL-ranked best price,
+        // but sibling conditions of the same product can also satisfy the
+        // bound: collapsing would hide them from the card/PDP choice set.
         available_conditions:
-          match.condition &&
-          (args.refinements.condition !== undefined ||
-            args.refinements.minPrice !== undefined ||
-            args.refinements.maxPrice !== undefined)
+          match.condition && args.refinements.condition !== undefined
             ? [match.condition]
             : product.available_conditions,
         searchMatch: match,

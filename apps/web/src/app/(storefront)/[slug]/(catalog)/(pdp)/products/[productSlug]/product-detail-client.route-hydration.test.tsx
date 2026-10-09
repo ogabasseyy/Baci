@@ -312,10 +312,12 @@ describe('ProductDetailClient', () => {
       )
     );
     fireEvent.click(screen.getByRole('button', { name: 'Add to Cart' }));
+    // The exact offer id travels with the add: two offers that canonicalize
+    // to the same condition must not merge into one cart line.
     expect(mockAddToCart).toHaveBeenCalledWith(
       expect.objectContaining({ price: 400000, stock: 3 }),
       1,
-      { condition: 'used' }
+      { condition: 'used', offerId: 'offer-used' }
     );
   });
 });

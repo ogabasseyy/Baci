@@ -79,16 +79,19 @@ export function useProductDetailsBuyAction({
           )
         : -1;
 
+    // Capture the resolved offer once: its id identifies the cart line
+    // so two offers that canonicalize alike never merge into one line.
+    const resolvedBuyOffer = resolveCurrentOffer(
+      productData,
+      buyCondition,
+      selectedAttributesForBuy,
+      selectedVariantSelection,
+      routeOfferId
+    );
     addToCart(
       buildCartProduct(
         productData,
-        resolveCurrentOffer(
-          productData,
-          buyCondition,
-          selectedAttributesForBuy,
-          selectedVariantSelection,
-          routeOfferId
-        ),
+        resolvedBuyOffer,
         defaultColorIndex >= 0 ? defaultColorIndex : 0,
         buyCondition,
         selectedAttributesForBuy,
@@ -103,6 +106,7 @@ export function useProductDetailsBuyAction({
         color: selectedVariantSelection?.color,
         storage: selectedVariantSelection?.storage,
         condition: buyCondition,
+        offerId: resolvedBuyOffer.offerId ?? undefined,
       }
     );
     toast({

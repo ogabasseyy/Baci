@@ -436,6 +436,7 @@ export function StorefrontCartProvider({
               | 'open_box'
               | 'refurbished'
               | undefined,
+            offerId: normalizedOptions?.offerId,
             quizAwardId: normalizedOptions?.quizAwardId,
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',

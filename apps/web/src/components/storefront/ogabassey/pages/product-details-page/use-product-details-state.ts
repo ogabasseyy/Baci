@@ -92,17 +92,6 @@ export function useProductDetailsState(serverProduct: Product) {
     toast,
   });
 
-  const { currentCartItemId, inputValue, quantityInCart, setInputValue } =
-    useProductDetailsCartQuantity({
-      cart,
-      currentVariantId: currentCartVariantSelection?.variant.id,
-      productData,
-      secondaryColor,
-      selectedAttributes,
-      selectedColor,
-      selectedCondition,
-    });
-
   const { canPurchase, currentCartOffer, currentOffer, managesStock } =
     resolveProductDetailsOfferState({
       currentCartVariantSelection,
@@ -112,6 +101,18 @@ export function useProductDetailsState(serverProduct: Product) {
       routeOfferId,
       selectedCondition,
       variantSelectionAttributes,
+    });
+
+  const { currentCartItemId, inputValue, quantityInCart, setInputValue } =
+    useProductDetailsCartQuantity({
+      cart,
+      currentOfferId: currentOffer.offerId,
+      currentVariantId: currentCartVariantSelection?.variant.id,
+      productData,
+      secondaryColor,
+      selectedAttributes,
+      selectedColor,
+      selectedCondition,
     });
 
   const normalizedReviewRating = Math.max(

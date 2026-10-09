@@ -191,6 +191,42 @@ describe('refined product hydration', () => {
     expect(result.products[0].available_conditions).toEqual(['new', 'used']);
     expect(result.products[0].price).toBe(200000);
   });
+  it('keeps every available condition for a price-only refinement', async () => {
+    rpc.mockResolvedValue({
+      data: [
+        {
+          product_id: 'p1',
+          total_count: 1,
+          effective_price: 200000,
+          matched_variant_id: 'v1',
+          matched_condition: 'used',
+        },
+      ],
+      error: null,
+    });
+    read.mockResolvedValue({
+      data: [
+        {
+          id: 'p1',
+          price: 500000,
+          condition: 'new',
+          available_conditions: ['new', 'used'],
+        },
+      ],
+      error: null,
+    });
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'phone',
+      limit: 20,
+      refinements: { brands: [], sort: 'relevance', maxPrice: 250000 },
+    });
+    // The advertised price still follows the SQL-ranked match, but the
+    // choice set keeps every condition: collapsing to the single matched
+    // row would hide sibling conditions that also satisfy the bound.
+    expect(result.products[0].price).toBe(200000);
+    expect(result.products[0].available_conditions).toEqual(['new', 'used']);
+  });
   it('fails visibly when the required database contract is unavailable', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
     await expect(

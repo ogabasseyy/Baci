@@ -127,4 +127,33 @@ describe('resolveCurrentOffer', () => {
     expect(offer.rawPrice).toBe(450);
   });
 
+  it('carries the matched offer id for cart identity', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        offers: [
+          { id: 'offer-a', condition: 'used', rawPrice: 450, stock_quantity: 1 },
+          { id: 'offer-b', condition: 'uk_used', rawPrice: 420, stock_quantity: 2 },
+        ],
+      }),
+      'used',
+      {},
+      null,
+      'offer-b'
+    );
+    expect(offer.rawPrice).toBe(420);
+    expect(offer.offerId).toBe('offer-b');
+  });
+
+  it('reports no offer id when the parent family prices the selection', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        condition: 'uk_used',
+        offers: [{ id: 'offer-a', condition: 'used', rawPrice: 450, stock_quantity: 1 }],
+      }),
+      'used',
+      {}
+    );
+    expect(offer.offerId).toBeNull();
+  });
+
 });

@@ -222,7 +222,7 @@ export default function ProductDetailClient({
             variantAttributes: effectiveVariantAttributes,
           }
         : selectedOffer
-          ? { condition: selectedCondition }
+          ? { condition: selectedCondition, offerId: selectedOffer.id }
           : undefined
     );
 

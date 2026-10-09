@@ -11,6 +11,7 @@ export interface CartItem extends Product {
   secondaryColorValue?: string;
   selectedStorage?: string;
   condition?: 'new' | 'used' | 'open_box' | 'refurbished';
+  offerId?: string;
   negotiatedPrice?: number;
   negotiationStatus?: 'none' | 'pending' | 'accepted' | 'rejected';
   cartDiscount?: number;
@@ -29,6 +30,13 @@ export interface AddToCartOptions {
   secondaryColorValue?: string;
   storage?: string;
   condition?: string;
+  /**
+   * Exact condition-offer id that priced this add. Two offers can
+   * canonicalize to the same condition (used vs uk_used), so the condition
+   * alone cannot identify the line; `generateCartItemId` folds this into
+   * the line id via its extra-attribute loop.
+   */
+  offerId?: string;
   quizAwardId?: string;
   quizVoucherToken?: string;
   platform?: string;

@@ -394,6 +394,7 @@ export const CartProvider = ({
           const itemVar = item.variantId;
           const newVar = normalizedOptions?.variantId;
           if (itemVar !== newVar) return false;
+          if (item.offerId !== normalizedOptions?.offerId) return false;
 
           // Check if V2 options are used (legacy items have none)
           // If adding item with V2 options, don't match legacy item
@@ -450,6 +451,7 @@ export const CartProvider = ({
             | 'open_box'
             | 'refurbished'
             | undefined,
+          offerId: normalizedOptions?.offerId,
           negotiationStatus: 'none',
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,

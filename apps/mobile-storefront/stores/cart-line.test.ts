@@ -143,4 +143,25 @@ describe('cart-line helpers', () => {
       )
     ).toMatchObject({ quantity: 1, hasAssurance: true });
   });
+
+  it('preserves stored attributes when a wildcard-matched add omits them', () => {
+    const incoming: Omit<CartItem, 'id'> = {
+      ...incomingBaseItem,
+      color: undefined,
+      storage: undefined,
+      condition: undefined,
+    };
+    expect(isSameCartLine(baseItem, incoming)).toBe(true);
+    expect(
+      mergeExistingCartItem(baseItem, incoming, {
+        smartCartProEnabled: false,
+        merchantSlug: 'ogabassey',
+      })
+    ).toMatchObject({
+      quantity: 2,
+      color: 'Midnight Black',
+      storage: '128GB',
+      condition: 'New',
+    });
+  });
 });

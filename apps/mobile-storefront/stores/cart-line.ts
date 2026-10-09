@@ -68,6 +68,16 @@ export function mergeExistingCartItem(
     ...existingItem,
     ...incomingItem,
     id: existingItem.id,
+    // The matcher wildcards a missing dimension on either side, but the
+    // spread above would then let an explicit undefined blank the stored
+    // value. Matched lines agree wherever both sides are set, so keeping
+    // the existing value when the incoming add omits it is always safe.
+    color: incomingItem.color ?? existingItem.color,
+    storage: incomingItem.storage ?? existingItem.storage,
+    condition: incomingItem.condition ?? existingItem.condition,
+    voucher_award_id:
+      incomingItem.voucher_award_id ?? existingItem.voucher_award_id,
+    voucher_token: incomingItem.voucher_token ?? existingItem.voucher_token,
     quantity: isVoucherLine
       ? 1
       : existingItem.max_quantity

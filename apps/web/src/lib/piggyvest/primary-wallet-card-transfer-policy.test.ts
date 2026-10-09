@@ -15,13 +15,19 @@ describe('approved issuer transfer policy (internal, not a provider signing cont
         fixture.now
       )
     ).toThrow());
+  it('drains pre-expiry transfers past the integration deadline', () =>
+    expect(
+      assertPrimaryCardTransferPolicy(
+        fixture.configuration,
+        Date.parse('2027-01-01T00:00:00Z')
+      )
+    ).toEqual(fixture.configuration));
   it.each([
     { reusableBindingReady: false },
     { exhaustiveAliasContractApproved: false },
     { authority: 'operation_records_only' },
     { businessId: 'wrong' },
     { contractId: 'wrong' },
-    { expiresAt: '2026-01-01T00:00:00Z' },
   ])('cannot activate financial dispatch from unavailable/static/foreign proof %#', (change) => {
     const policyBytes = JSON.stringify({ ...fixture.policy, ...change });
     expect(() =>

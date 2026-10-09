@@ -117,7 +117,7 @@ describe('primary savings reconciliation', () => {
     dependencies.release.mockResolvedValue(outcome);
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
-    ).toEqual({ status: 'abandoned' });
+    ).toEqual({ status: 'cancelled' });
     expect(dependencies.settle).not.toHaveBeenCalled();
     expect(dependencies.release).toHaveBeenCalledWith(
       expect.objectContaining({

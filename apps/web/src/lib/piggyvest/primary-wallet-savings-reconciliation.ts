@@ -42,10 +42,14 @@ export async function reconcilePrimaryWalletSavings(
     const proof = verifyPrimaryWalletSavingsProof(reservation.data, response);
     if (proof.status === 'failed') {
       const released = await ports.release(proof);
+      // The mobile status schema accepts only pending/confirmed/
+      // cancelled: report the public cancelled status immediately after
+      // a successful release so the client resolves without a second
+      // request (the database row already reads cancelled).
       return {
         status:
           released === 'released' || released === 'duplicate'
-            ? ('abandoned' as const)
+            ? ('cancelled' as const)
             : ('pending' as const),
       };
     }

@@ -36,15 +36,43 @@ const mockStorageBucket = {
 };
 
 const mockUpsert = vi.fn();
+const mockDeleteEq = vi.fn();
+const mockDeleteIn = vi.fn(() => ({ eq: mockDeleteEq }));
 
 const mockSupabase = {
-  from: vi.fn(() => ({ upsert: mockUpsert })),
+  from: vi.fn(() => ({
+    delete: vi.fn(() => ({ in: mockDeleteIn })),
+    upsert: mockUpsert,
+  })),
   storage: {
     from: vi.fn(() => mockStorageBucket),
   },
 };
 
 import { POST } from './route';
+
+function uploadRequest({
+  bytes = ['file-bytes'],
+  filename = 'inline.webp',
+  purpose = null,
+  type = 'image/webp',
+}: {
+  bytes?: BlobPart[];
+  filename?: string;
+  purpose?: string | null;
+  type?: string;
+} = {}): NextRequest {
+  const file = new File(bytes, filename, { type });
+  return {
+    formData: vi.fn().mockResolvedValue({
+      get: (key: string) => {
+        if (key === 'file') return file;
+        if (key === 'purpose') return purpose;
+        return null;
+      },
+    }),
+  } as unknown as NextRequest;
+}
 
 describe('POST /api/admin/blog/upload', () => {
   beforeEach(() => {
@@ -93,14 +121,7 @@ describe('POST /api/admin/blog/upload', () => {
   });
 
   it('uploads media under the platform/blog prefix', async () => {
-    const file = new File(['file-bytes'], 'cover.png', {
-      type: 'image/png',
-    });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => (key === 'file' ? file : null),
-      }),
-    } as unknown as NextRequest;
+    const request = uploadRequest({ filename: 'cover.png', type: 'image/png' });
 
     const response = await POST(request);
 
@@ -124,14 +145,7 @@ describe('POST /api/admin/blog/upload', () => {
 
   it('returns 429 when upload rate limit is exceeded', async () => {
     mockCheckRateLimit.mockResolvedValueOnce(false);
-    const file = new File(['file-bytes'], 'cover.png', {
-      type: 'image/png',
-    });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => (key === 'file' ? file : null),
-      }),
-    } as unknown as NextRequest;
+    const request = uploadRequest({ filename: 'cover.png', type: 'image/png' });
 
     const response = await POST(request);
 
@@ -144,18 +158,10 @@ describe('POST /api/admin/blog/upload', () => {
   });
 
   it('rejects webp uploads for featured images', async () => {
-    const file = new File(['file-bytes'], 'cover.webp', {
-      type: 'image/webp',
+    const request = uploadRequest({
+      filename: 'cover.webp',
+      purpose: 'featured',
     });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => {
-          if (key === 'file') return file;
-          if (key === 'purpose') return 'featured';
-          return null;
-        },
-      }),
-    } as unknown as NextRequest;
 
     const response = await POST(request);
 
@@ -167,14 +173,7 @@ describe('POST /api/admin/blog/upload', () => {
   });
 
   it('allows webp uploads for inline images', async () => {
-    const file = new File(['file-bytes'], 'inline.webp', {
-      type: 'image/webp',
-    });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => (key === 'file' ? file : null),
-      }),
-    } as unknown as NextRequest;
+    const request = uploadRequest();
 
     const response = await POST(request);
 
@@ -188,22 +187,11 @@ describe('POST /api/admin/blog/upload', () => {
     );
   });
 
-  it('stages uploads as tombstones so an abandoned session still sweeps', async () => {
+  it('pre-stages uploads as tombstones so an abandoned session still sweeps', async () => {
     // The unmount flush never runs when the tab closes mid-draft, so
     // the upload itself must leave the record the cron reaps. A later
     // save clears the staged rows; only abandoned uploads go due.
-    const file = new File(['file-bytes'], 'inline.webp', {
-      type: 'image/webp',
-    });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => {
-          if (key === 'file') return file;
-          if (key === 'purpose') return 'inline';
-          return null;
-        },
-      }),
-    } as unknown as NextRequest;
+    const request = uploadRequest({ purpose: 'inline' });
 
     const response = await POST(request);
 
@@ -214,21 +202,10 @@ describe('POST /api/admin/blog/upload', () => {
     );
   });
 
-  it('removes uploaded objects when staging fails instead of orphaning them', async () => {
+  it('writes nothing when pre-staging fails instead of orphaning uploads', async () => {
     mockUpsert.mockResolvedValueOnce({ error: { message: 'down' } });
     mockStorageBucket.remove.mockResolvedValueOnce({ error: null });
-    const file = new File(['file-bytes'], 'inline.webp', {
-      type: 'image/webp',
-    });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => {
-          if (key === 'file') return file;
-          if (key === 'purpose') return 'inline';
-          return null;
-        },
-      }),
-    } as unknown as NextRequest;
+    const request = uploadRequest({ purpose: 'inline' });
 
     const response = await POST(request);
 
@@ -237,24 +214,39 @@ describe('POST /api/admin/blog/upload', () => {
       code: 'UPLOAD_FAILED',
       error: 'Failed to upload file',
     });
+    expect(mockStorageBucket.upload).not.toHaveBeenCalled();
     expect(mockStorageBucket.remove).toHaveBeenCalledWith([
       expect.stringMatching(/^platform\/blog\//),
     ]);
   });
 
+  it('releases the pre-staged tombstone when the storage write fails', async () => {
+    mockStorageBucket.upload.mockResolvedValueOnce({
+      error: { message: 'storage down' },
+    });
+    mockDeleteEq.mockResolvedValue({ error: null });
+    const request = uploadRequest({ purpose: 'inline' });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      code: 'UPLOAD_FAILED',
+      error: 'Failed to upload file',
+    });
+    expect(mockDeleteIn).toHaveBeenCalledWith('path', [
+      expect.stringMatching(/^platform\/blog\//),
+    ]);
+    expect(mockDeleteEq).toHaveBeenCalledWith('claimed', false);
+  });
+
   it('rejects files above the OG-compatible max size', async () => {
-    const file = new File([new Uint8Array(MAX_FILE_SIZE + 1)], 'cover.png', {
+    const request = uploadRequest({
+      bytes: [new Uint8Array(MAX_FILE_SIZE + 1)],
+      filename: 'cover.png',
+      purpose: 'featured',
       type: 'image/png',
     });
-    const request = {
-      formData: vi.fn().mockResolvedValue({
-        get: (key: string) => {
-          if (key === 'file') return file;
-          if (key === 'purpose') return 'featured';
-          return null;
-        },
-      }),
-    } as unknown as NextRequest;
 
     const response = await POST(request);
 

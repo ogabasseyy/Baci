@@ -104,11 +104,11 @@ describe('POST /api/admin/blog/upload featured staging', () => {
     });
   });
 
-  it('stages each object before the next storage write', async () => {
-    // Termination can strike between any two awaits: every storage
-    // write must be followed by its tombstone before the next write
-    // starts, or the completed object is a permanent orphan the cron
-    // can never see. Invocation order proves the interleaving.
+  it('stages each object before its storage write', async () => {
+    // Termination can strike between any two awaits: every tombstone
+    // must precede its storage write, or the completed object is a
+    // permanent orphan the cron can never see. Invocation order
+    // proves the interleaving.
     const response = await POST(featuredRequest());
 
     expect(response.status).toBe(200);
@@ -118,13 +118,15 @@ describe('POST /api/admin/blog/upload featured staging', () => {
       (call) => call[0] as string
     );
     const upserts = mockUpsert.mock.calls;
+    expect(upserts).toHaveLength(3);
     const orderOf = (
       mock: { mock: { invocationCallOrder: number[] } },
       index: number
     ) => mock.mock.invocationCallOrder[index] ?? Number.POSITIVE_INFINITY;
     const stageIndexFor = (path: string) =>
       upserts.findIndex((call) => stagedPaths(call).includes(path));
-    // Each object is staged after its own write...
+    // Each object's tombstone precedes its own write, so no write
+    // is ever unstaged when the invocation dies.
     for (const [uploadIndex, path] of [
       sourcePath,
       firstVariant,
@@ -132,27 +134,20 @@ describe('POST /api/admin/blog/upload featured staging', () => {
     ].entries()) {
       const stageIndex = stageIndexFor(path as string);
       expect(stageIndex).toBeGreaterThanOrEqual(0);
-      expect(orderOf(mockUpsert, stageIndex)).toBeGreaterThan(
+      expect(orderOf(mockUpsert, stageIndex)).toBeLessThan(
         orderOf(mockStorageBucket.upload, uploadIndex)
       );
     }
-    // ...and before the next object's write, so no completed write
-    // is ever unstaged when the invocation dies.
-    expect(
-      orderOf(mockUpsert, stageIndexFor(sourcePath as string))
-    ).toBeLessThan(orderOf(mockStorageBucket.upload, 1));
-    expect(
-      orderOf(mockUpsert, stageIndexFor(firstVariant as string))
-    ).toBeLessThan(orderOf(mockStorageBucket.upload, 2));
     // Generation runs after the source is already reclaimable.
     expect(orderOf(mockGenerateFeaturedImageVariants, 0)).toBeGreaterThan(
       orderOf(mockUpsert, stageIndexFor(sourcePath as string))
     );
   });
 
-  it('keeps staged objects swept-safe when variant staging fails', async () => {
-    // The failing variant is removed with its siblings left staged
-    // for the sweep; the 500 carries no unstaged orphan.
+  it('writes nothing for a variant whose staging fails', async () => {
+    // The failing variant never reaches storage; its completed
+    // siblings stay staged for the sweep and the 500 carries no
+    // unstaged orphan.
     mockUpsert
       .mockResolvedValueOnce({ error: null })
       .mockResolvedValueOnce({ error: { message: 'down' } });
@@ -160,8 +155,8 @@ describe('POST /api/admin/blog/upload featured staging', () => {
     const response = await POST(featuredRequest());
 
     expect(response.status).toBe(500);
-    // Source staged, first variant staged-then-failed and removed.
-    expect(mockStorageBucket.remove).toHaveBeenCalled();
+    // Source staged and written; first variant staged-then-failed.
+    expect(mockStorageBucket.upload).toHaveBeenCalledTimes(1);
     const staged = mockUpsert.mock.calls.flatMap(stagedPaths);
     expect(staged[0]).toMatch(/^platform\/blog\/.+\.jpg$/);
   });

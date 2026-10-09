@@ -4,6 +4,7 @@ import type {
   BlogFeaturedImageVariantsResult,
 } from '@/lib/blog-featured-image-variants';
 import type { createClient } from '@/lib/supabase/server';
+import { releaseBlogMediaPaths } from './blog-media-tombstone-release';
 import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
 import { buildPlatformMediaPath, toPlatformMediaUrl } from './upload-helpers';
 
@@ -18,12 +19,13 @@ export type FeaturedImageVariantRecord = {
 };
 
 /**
- * Upload featured-image variants, staging each object immediately
- * after its storage write and before the next upload. A terminated
- * invocation then leaves every completed object reclaimable via its
- * tombstone instead of a permanent orphan the cron can never see.
- * Upload errors throw for the caller's cleanup; a staging failure
- * returns its response (the staged objects stay swept-safe).
+ * Upload featured-image variants, staging each object before its
+ * storage write. A terminated invocation then leaves every object
+ * reclaimable via its tombstone instead of a permanent orphan the
+ * cron can never see; a confirmed upload failure releases its
+ * pre-staged tombstone and throws for the caller's cleanup. A
+ * staging failure returns its response (nothing was written for
+ * that variant, and the completed siblings stay swept-safe).
  */
 export async function uploadFeaturedImageVariants(
   supabase: ServerSupabaseClient,
@@ -44,6 +46,10 @@ export async function uploadFeaturedImageVariants(
     const variantPath = buildPlatformMediaPath(
       `${fileToken}/${variant.key}.webp`
     );
+    const variantStaging = await stageUploadedBlogMediaPaths(supabase, [
+      variantPath,
+    ]);
+    if (variantStaging) return { response: variantStaging };
     const { error: variantError } = await supabase.storage
       .from('media')
       .upload(variantPath, variant.buffer, {
@@ -53,14 +59,11 @@ export async function uploadFeaturedImageVariants(
       });
 
     if (variantError) {
+      await releaseBlogMediaPaths(supabase, [variantPath]);
       throw variantError;
     }
 
     uploadedPaths.push(variantPath);
-    const variantStaging = await stageUploadedBlogMediaPaths(supabase, [
-      variantPath,
-    ]);
-    if (variantStaging) return { response: variantStaging };
     variants[variant.key] = {
       contentType: variant.contentType,
       height: variant.height,

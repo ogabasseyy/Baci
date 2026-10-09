@@ -1909,6 +1909,17 @@ BEGIN
     'draft', TRUE, NULL, 'Guard Author'
   );
 
+  -- The guard locks referenced rows, not just reads them: the
+  -- unclaimed tombstone above must carry this transaction's row
+  -- lock, serializing the write against a concurrent claim.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/guard-live.webp'
+       AND xmax::text <> '0'
+  ) THEN
+    RAISE EXCEPTION 'direct-write guard did not lock the referenced tombstone';
+  END IF;
+
   DELETE FROM public.blog_media_delete_tombstones
    WHERE path IN ('platform/blog/guard-doomed.webp', 'platform/blog/guard-live.webp');
   DELETE FROM public.blog_posts

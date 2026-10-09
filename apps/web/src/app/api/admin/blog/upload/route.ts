@@ -11,6 +11,7 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
 import { handleBlogMediaTombstoneRefresh } from './blog-media-tombstone-refresh-route';
+import { releaseBlogMediaPaths } from './blog-media-tombstone-release';
 import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
 import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
 import {
@@ -95,6 +96,12 @@ export async function POST(request: NextRequest) {
   const sourceBuffer = Buffer.from(await file.arrayBuffer());
   const uploadedPaths: string[] = [];
 
+  // Stage before the write: termination between staging and upload
+  // leaves a tombstone the sweep reaps, while termination the other
+  // way would leak an orphan the cron can never discover.
+  const preStaging = await stageUploadedBlogMediaPaths(supabase, [filePath]);
+  if (preStaging) return preStaging;
+
   const { error: uploadError } = await supabase.storage
     .from('media')
     .upload(filePath, sourceBuffer, {
@@ -104,6 +111,7 @@ export async function POST(request: NextRequest) {
     });
 
   if (uploadError) {
+    await releaseBlogMediaPaths(supabase, [filePath]);
     console.error('Platform blog media upload failed', { error: uploadError });
     return NextResponse.json(
       { error: 'Failed to upload file', code: 'UPLOAD_FAILED' },
@@ -114,8 +122,6 @@ export async function POST(request: NextRequest) {
   uploadedPaths.push(filePath);
 
   if (purpose === 'inline') {
-    const staging = await stageUploadedBlogMediaPaths(supabase, uploadedPaths);
-    if (staging) return staging;
     revalidatePlatformBlog();
     return NextResponse.json({
       filename: `${fileToken}.${extension}`,
@@ -126,12 +132,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Featured uploads stage the source before the long generation
-  // step: a killed invocation leaves a reclaimable tombstone, not a
-  // permanent orphan the cron can never see.
-  const sourceStaging = await stageUploadedBlogMediaPaths(supabase, [filePath]);
-  if (sourceStaging) return sourceStaging;
-
+  // The source is already staged (pre-write above), so the long
+  // generation step runs with a reclaimable tombstone in place.
   let generated: Awaited<ReturnType<typeof generateFeaturedImageVariants>>;
   try {
     generated = await generateFeaturedImageVariants(sourceBuffer, {
@@ -139,6 +141,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, uploadedPaths);
     if (error instanceof BlogFeaturedImageError) {
       return toFeaturedUploadErrorResponse(error);
     }
@@ -158,6 +161,7 @@ export async function POST(request: NextRequest) {
     featuredImageVariants = uploaded.variants;
   } catch (error) {
     await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, uploadedPaths);
     console.error(
       'Platform featured variant upload failed; cleaned partial uploads',
       {
@@ -171,8 +175,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const staging = await stageUploadedBlogMediaPaths(supabase, uploadedPaths);
-  if (staging) return staging;
   revalidatePlatformBlog();
 
   return NextResponse.json({

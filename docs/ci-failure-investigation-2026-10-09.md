@@ -2,7 +2,7 @@
 
 ## Production release fixes
 
-- Android storefront prebuild failed twice on October 8 while loading the nested production Expo config. Expo transpiles the entry file only; imported TypeScript needs an additional loader. The production factory now uses plain CommonJS, with a regression exercising the actual Expo loader under `--no-experimental-strip-types`. See [Expo configuration guidance](https://docs.expo.dev/workflow/configuration/).
+- Android storefront prebuild failed twice on October 8 while loading the nested production Expo config. Expo transpiles the entry file only; imported TypeScript needs an additional loader. Expo now loads a plain CommonJS production factory; a typed compatibility entry preserves the original import path. A regression exercises the actual Expo loader under `--no-experimental-strip-types`. See [Expo configuration guidance](https://docs.expo.dev/workflow/configuration/).
 - iOS archive failed when PostHog's Hermes source-map upload returned `error sending request`. Retry only that upload's transport failures, at most three attempts. Configuration, authentication, bundling, and persistent upload failures remain fatal. A successful local test is not proof of an App Store release; rerun the release workflow after merge.
 
 ## Dependency and Windows checkout fixes
@@ -12,7 +12,7 @@
 
 ## PR failures already repaired
 
-- Search refinements extracted cart validation helpers; the current route is below the 300-line limit and its repository authority contract passes locally.
+- Search refinements extracted cart validation helpers; the current route is below the 300-line limit. Its latest run 37886517649 exposed a stale orders-route content receipt after public offer validation changed. A separate reviewed repair refreshes that receipt and its independent expectation, with a regression proving later privileged lookup drift remains rejected. Seven focused files/161 tests pass, including live boundary and authority checks.
 - Piggyvest's current branch includes `retainedWebhookSecrets: []` in the custody schema expectations; its CI run 37882795446 passed.
 - Blog's current branch uses a valid unauthenticated test fixture for the tombstone refresh route; its CI run 37884103914 passed.
 

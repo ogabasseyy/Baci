@@ -11,7 +11,7 @@ type MutationError = {
 } | null;
 
 function fakeSupabase(mutationError?: MutationError) {
-  const rpc = vi.fn((name: string) => {
+  const rpc = vi.fn((name: string, _args?: Record<string, unknown>) => {
     if (name !== 'mutate_merchant_blog_post_with_product_links') {
       throw new Error(`unexpected rpc ${name}`);
     }

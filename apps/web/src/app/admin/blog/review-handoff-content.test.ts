@@ -287,12 +287,4 @@ describe('validateImportedContent', () => {
     expect(stored).toContain('&lt;p hidden&gt;');
     expect(stored).not.toContain('hidden&quot;');
   });
-
-  it('preserves non-default ordered-list start values', () => {
-    expect(
-      validateImportedContent(
-        '<ol start="5"><li>Step five</li><li>Step six</li></ol>'
-      )
-    ).toContain('start="5"');
-  });
 });

@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { hasClosedDialog } from './review-handoff-dialog';
+import { hasUnrepresentableHiddenWrapper } from './review-handoff-disallowed-wrapper';
 import { hasClosedDisclosure } from './review-handoff-disclosure';
 import { hasUnpreservableEmbed } from './review-handoff-embed';
 import { hasUnpreservableFigure } from './review-handoff-figure';
@@ -154,6 +155,14 @@ export function validateImportedContent(rawContent: string): string {
   );
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {
     throw new Error('The article has unresolved inline image placeholders');
+  }
+  // Sanitization unwraps non-allowlisted tags and drops their classes
+  // before the strip runs, so a hiding or showing marker on such a
+  // tag reads differently on each side. Reject before that lossy step.
+  if (hasUnrepresentableHiddenWrapper(unhidden)) {
+    throw new Error(
+      'Article content has hidden wrapper markup the editor cannot preserve'
+    );
   }
   const sanitizedRaw = sanitizeHtml(unhidden);
   // The JSON-shape guard runs pre-conversion: markdown rendering wraps text

@@ -1,4 +1,5 @@
 import type { ColorScheme } from './review-handoff-breakpoints';
+import { isChannelUtility } from './review-handoff-channel-utilities';
 import { elementFrame } from './review-handoff-element-frame';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { imageSizeZeroAt } from './review-handoff-image-size';
@@ -89,59 +90,6 @@ function isKnownVariant(variant: string): boolean {
     AT_REST_NEUTRAL_VARIANTS.has(variant) ||
     isNeutralMarkerVariant(variant)
   );
-}
-
-// Bare utilities that read or flip a hiding channel, hiding and
-// showing alike: an unknown variant on `block` can show below an
-// arbitrary threshold what the bare `hidden` conceals, so showing
-// overrides reject exactly like hiding ones.
-const CHANNEL_EXACT_UTILITIES = new Set([
-  'hidden',
-  'visible',
-  'invisible',
-  'collapse',
-  'sr-only',
-  'not-sr-only',
-  'bg-clip-text',
-  'truncate',
-  'block',
-  'inline-block',
-  'inline',
-  'flow-root',
-  'flex',
-  'inline-flex',
-  'grid',
-  'inline-grid',
-  'contents',
-  'table',
-  'inline-table',
-  'table-caption',
-  'table-cell',
-  'table-column',
-  'table-column-group',
-  'table-footer-group',
-  'table-header-group',
-  'table-row-group',
-  'table-row',
-  'list-item',
-  'scale-0',
-  'scale-x-0',
-  'scale-y-0',
-  'w-0',
-  'h-0',
-  'size-0',
-]);
-
-const CHANNEL_UTILITY_PREFIXES = [
-  'opacity-',
-  'text-',
-  'overflow-',
-  'line-clamp-',
-];
-
-function isChannelUtility(utility: string): boolean {
-  if (CHANNEL_EXACT_UTILITIES.has(utility)) return true;
-  return CHANNEL_UTILITY_PREFIXES.some((prefix) => utility.startsWith(prefix));
 }
 
 function wrapsUnsupportedVariant(token: string): boolean {

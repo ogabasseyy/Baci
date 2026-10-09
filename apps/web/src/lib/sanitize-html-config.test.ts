@@ -81,4 +81,15 @@ describe('sanitize HTML config', () => {
 
     expect(sanitized).toContain('start="5"');
   });
+
+  it('preserves ordered-list marker types the editor can keep', () => {
+    // OrderedList parses type and re-emits non-numeric values, so
+    // stripping it here would silently re-letter imports to 1, 2.
+    const sanitized = sanitizeLib(
+      '<ol type="A"><li>First</li><li>Second</li></ol>',
+      createSanitizeHtmlOptions()
+    );
+
+    expect(sanitized).toContain('type="A"');
+  });
 });

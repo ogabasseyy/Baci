@@ -1,4 +1,5 @@
 import { addUtilityClass } from './review-handoff-class-merge';
+import { isZeroAreaClipPath } from './review-handoff-clip-path';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { tagAttributes } from './review-handoff-tag-attributes';
 
@@ -185,6 +186,14 @@ function hidingUtilityForStyle(
   const filter = finals.get('filter');
   if (filter !== undefined && filter !== 'none') {
     if (isZeroOpacityFilter(filter)) {
+      return 'hidden';
+    }
+  }
+  // A zero-area clip path paints nothing of the box including
+  // replaced content, so it maps to hidden as well.
+  const clipPath = finals.get('clip-path');
+  if (clipPath !== undefined && clipPath !== 'none') {
+    if (isZeroAreaClipPath(clipPath)) {
       return 'hidden';
     }
   }

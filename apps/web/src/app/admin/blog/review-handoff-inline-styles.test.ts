@@ -194,4 +194,28 @@ describe('convertHiddenInlineStyles', () => {
       )
     ).toBe('<p>Body</p>');
   });
+
+  it.each([
+    '<p style="clip-path:circle(0)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:circle(0px at 50% 50%)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:ellipse(0 0)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:ellipse(10px 0)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:inset(50%)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:inset(100% 0 0 0)">Draft note</p><p>Body</p>',
+    '<p style="clip-path:polygon(0 0, 0 0, 0 0)">Draft note</p><p>Body</p>',
+  ])('strips zero-area clipped content at import: %s', (html) => {
+    expect(validateImportedContent(html)).toBe('<p>Body</p>');
+  });
+
+  it.each([
+    '<p style="clip-path:none">Shown</p>',
+    '<p style="clip-path:circle(50%)">Shown</p>',
+    '<p style="clip-path:ellipse(10px 5px)">Shown</p>',
+    '<p style="clip-path:inset(10%)">Shown</p>',
+    '<p style="clip-path:inset(10px 10px 10px 10px)">Shown</p>',
+    '<p style="clip-path:polygon(0 0, 100% 0, 100% 100%)">Shown</p>',
+    '<p style="clip-path:path(&quot;M0,0 L10,10&quot;)">Shown</p>',
+  ])('leaves visible clip paths alone: %s', (html) => {
+    expect(convertHiddenInlineStyles(html)).toBe(html);
+  });
 });

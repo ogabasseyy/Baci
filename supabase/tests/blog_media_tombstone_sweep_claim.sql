@@ -323,8 +323,51 @@ BEGIN
     RAISE EXCEPTION 'worker release must ignore unclaimed paths, got %', v_released;
   END IF;
 
+  -- The Storage API's deletes run as the worker role: privileges let
+  -- the statement reach RLS, and the policy admits only the platform
+  -- prefix. Without the table grant the delete fails before the
+  -- policy; without the policy the merchant row would fall too.
   SET LOCAL ROLE service_role;
   PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  INSERT INTO storage.objects (bucket_id, name, owner, owner_id, metadata)
+  VALUES
+    ('media', 'platform/blog/scope-worker-del.webp', NULL, NULL, '{}'::jsonb),
+    ('media', 'merchant/scope-worker-kept.webp', NULL, NULL, '{}'::jsonb);
+  SET LOCAL ROLE blog_media_sweep_worker;
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role', 'blog_media_sweep_worker', true);
+  -- The Storage API sets storage.allow_delete_query for its own
+  -- deletes; direct SQL must opt in the same way to exercise the
+  -- RLS path instead of tripping the protection trigger.
+  PERFORM pg_catalog.set_config('storage.allow_delete_query', 'true', true);
+  DELETE FROM storage.objects
+   WHERE bucket_id = 'media'
+     AND name IN (
+      'platform/blog/scope-worker-del.webp',
+      'merchant/scope-worker-kept.webp'
+    );
+
+  -- The worker holds no SELECT, so the outcome is asserted back as
+  -- the fixture role.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  IF EXISTS (
+    SELECT 1 FROM storage.objects
+     WHERE bucket_id = 'media'
+       AND name = 'platform/blog/scope-worker-del.webp'
+  ) THEN
+    RAISE EXCEPTION 'worker role must delete in-scope platform bytes';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM storage.objects
+     WHERE bucket_id = 'media'
+       AND name = 'merchant/scope-worker-kept.webp'
+  ) THEN
+    RAISE EXCEPTION 'worker role must not delete out-of-scope bytes';
+  END IF;
+  DELETE FROM storage.objects
+   WHERE bucket_id = 'media'
+     AND name = 'merchant/scope-worker-kept.webp';
 END;
 $scope$;
 
@@ -380,6 +423,42 @@ BEGIN
     'execute'
   ) THEN
     RAISE EXCEPTION 'sweep worker capability leaks beyond its wrappers';
+  END IF;
+
+  IF NOT pg_catalog.has_schema_privilege(
+    'blog_media_sweep_worker', 'storage', 'USAGE'
+  ) OR NOT pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'storage.objects', 'DELETE'
+  ) OR NOT pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'storage.objects', 'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker lacks the storage deletion grant';
+  END IF;
+
+  IF pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'storage.objects', 'INSERT'
+  ) OR pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'storage.objects', 'UPDATE'
+  ) OR pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'storage.objects', 'TRUNCATE'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker holds more than SELECT, DELETE on storage.objects';
+  END IF;
+
+  IF NOT pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'public.merchants', 'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker lacks the policy-evaluation grant';
+  END IF;
+
+  IF pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'public.merchants', 'INSERT'
+  ) OR pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'public.merchants', 'UPDATE'
+  ) OR pg_catalog.has_table_privilege(
+    'blog_media_sweep_worker', 'public.merchants', 'DELETE'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker holds writes on merchants';
   END IF;
 
   IF NOT EXISTS (

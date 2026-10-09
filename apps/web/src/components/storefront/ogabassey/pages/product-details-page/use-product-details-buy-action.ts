@@ -25,6 +25,7 @@ interface UseProductDetailsBuyActionParams {
   productData: NormalizedProductDetails;
   routeOfferId?: string | null;
   routeResolvedVariantSelection: ProductVariantSelection;
+  selectedCondition: ConditionType;
   routerPush: (href: Route) => void;
   searchParams: { get(name: string): string | null };
   serverProduct: Product;
@@ -38,6 +39,7 @@ export function useProductDetailsBuyAction({
   productData,
   routeOfferId,
   routeResolvedVariantSelection,
+  selectedCondition,
   routerPush,
   searchParams,
   serverProduct,
@@ -62,6 +64,13 @@ export function useProductDetailsBuyAction({
 
     buyActionHandled.current = true;
     const selectedVariantSelection = routeResolvedVariantSelection;
+    // The resolved selection condition (derived from a live offer id for
+    // ID-only links) seeds non-variant buys: falling back to 'new' would
+    // reject the route offer in the condition-gated resolver and add the
+    // parent/default instead of the advertised option.
+    const buyCondition =
+      (selectedVariantSelection?.condition as ConditionType | undefined) ??
+      selectedCondition;
     const selectedAttributesForBuy = selectedVariantSelection?.attributes || {};
     const defaultColorIndex =
       selectedVariantSelection?.color != null
@@ -75,15 +84,13 @@ export function useProductDetailsBuyAction({
         productData,
         resolveCurrentOffer(
           productData,
-          (selectedVariantSelection?.condition as ConditionType | undefined) ||
-            'new',
+          buyCondition,
           selectedAttributesForBuy,
           selectedVariantSelection,
           routeOfferId
         ),
         defaultColorIndex >= 0 ? defaultColorIndex : 0,
-        (selectedVariantSelection?.condition as ConditionType | undefined) ||
-          'new',
+        buyCondition,
         selectedAttributesForBuy,
         selectedVariantSelection?.color,
         { hasVariantPricing: selectedVariantSelection?.variant != null }
@@ -95,9 +102,7 @@ export function useProductDetailsBuyAction({
         variantAttributes: selectedAttributesForBuy,
         color: selectedVariantSelection?.color,
         storage: selectedVariantSelection?.storage,
-        condition:
-          (selectedVariantSelection?.condition as ConditionType | undefined) ||
-          'new',
+        condition: buyCondition,
       }
     );
     toast({
@@ -123,6 +128,7 @@ export function useProductDetailsBuyAction({
     routeOfferId,
     routeResolvedVariantSelection,
     routerPush,
+    selectedCondition,
     searchParams,
     serverProduct,
     toast,

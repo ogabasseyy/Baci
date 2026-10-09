@@ -185,9 +185,17 @@ export default function ProductDetailClient({
 
   const handleAddToCart = () => {
     const variantForCart = currentVariantSelection?.variant;
+    // The cart guard reads product stock: carry the exact option
+    // availability (serialized units or offer quantity) so a stocked
+    // selection on a zero-parent-stock product is not silently rejected.
+    const selectedOptionStock = variantForCart
+      ? (resolveSerializedVariantStock(variantForCart) ??
+        variantForCart.stock_quantity ??
+        product.stock)
+      : (selectedOffer?.stock_quantity ?? product.stock);
     const productToAdd =
       variantForCart || selectedOffer
-        ? { ...product, price: currentPrice }
+        ? { ...product, price: currentPrice, stock: selectedOptionStock }
         : product;
 
     // Store merchant slug for checkout

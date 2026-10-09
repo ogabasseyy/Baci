@@ -1,4 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
+import { findMatchingConditionOffer } from '@/lib/product-condition-offers';
 import { useCartStore } from '@/stores/cart-store';
 import { formatProductConditionDisplay } from '@/types/product';
 import type { useProductDetailRouteData } from './use-product-detail-route-data';
@@ -30,6 +31,18 @@ export function useProductDetailCartState(routeData: RouteData) {
     }
     return routeData.product?.condition;
   };
+  // Resolve the same condition offer the add path stamps onto the line:
+  // lines split by offer id, so matching on condition alone would merge
+  // two same-condition offers into the first line's quantity.
+  const conditionOffer =
+    routeData.product && !routeData.product.has_variants
+      ? findMatchingConditionOffer(
+          routeData.product.offers,
+          routeData.offerConditionKey,
+          routeData.routeOfferId,
+          routeData.suppressConditionOfferMatch
+        )
+      : null;
   const cartItem = routeData.product
     ? items.find(
         (item) =>
@@ -37,6 +50,7 @@ export function useProductDetailCartState(routeData: RouteData) {
           (item.variant_id || null) ===
             (routeData.effectiveSelectedVariantId || null) &&
           (item.condition || null) === (getConditionDisplay() || null) &&
+          (item.offer_id || null) === (conditionOffer?.id || null) &&
           (item.color || null) === (routeData.effectiveSelectedColor || null) &&
           (item.storage || null) ===
             (routeData.effectiveSelectedStorage || null)

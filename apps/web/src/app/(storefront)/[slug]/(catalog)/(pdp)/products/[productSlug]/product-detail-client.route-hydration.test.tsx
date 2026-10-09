@@ -287,4 +287,35 @@ describe('ProductDetailClient', () => {
       expect.objectContaining({ selectedPrice: 550000, selectedStock: 10 })
     );
   });
+
+  it('passes the exact offer stock to the cart guard on add', async () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=used&offer_id=offer-used')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      stock: 0,
+      has_condition_offers: true,
+      offers: [
+        {
+          id: 'offer-used',
+          condition: 'used',
+          price: 400000,
+          stock_quantity: 3,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+    await waitFor(() =>
+      expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedPrice: 400000, selectedStock: 3 })
+      )
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Cart' }));
+    expect(mockAddToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 400000, stock: 3 }),
+      1,
+      { condition: 'used' }
+    );
+  });
 });

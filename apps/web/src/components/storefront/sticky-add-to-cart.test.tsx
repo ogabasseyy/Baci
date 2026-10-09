@@ -136,6 +136,31 @@ describe('StickyAddToCart', () => {
     );
   });
 
+  it('carries the resolved selection stock for the cart guard', async () => {
+    render(
+      <StickyAddToCart
+        product={{ ...makeProduct(), stock: 0 }}
+        selectedCondition="used"
+        selectedPrice={400000}
+        selectedStock={3}
+      />
+    );
+
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(screen.getByText('₦400000')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(mockAddToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 400000, stock: 3 }),
+      1,
+      { condition: 'used' }
+    );
+  });
+
   it('matches condition-specific cart entries and updates by cartItemId', async () => {
     const cartItem = {
       ...makeProduct(),

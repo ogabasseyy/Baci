@@ -319,7 +319,7 @@ describe('product-utils', () => {
     });
   });
 
-  it('resolveProductRow skips the variant rpc for a simple product', async () => {
+  it('resolveProductRow fetches base inventory instead of variants for a simple product', async () => {
     const simpleProduct = {
       ...validProductRow,
       has_variants: false,
@@ -333,7 +333,13 @@ describe('product-utils', () => {
       resolveProductRow('merchant-1', 'iphone-13-pro')
     ).resolves.toEqual(simpleProduct);
 
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_base_inventory',
+      {
+        p_product_ids: [validProductRow.id],
+      }
+    );
   });
 
   it('resolveProductRow hydrates sku_matrix rows when has_variants has drifted false', async () => {

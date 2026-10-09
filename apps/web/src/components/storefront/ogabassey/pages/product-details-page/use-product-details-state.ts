@@ -85,6 +85,7 @@ export function useProductDetailsState(serverProduct: Product) {
     productData,
     routeOfferId,
     routeResolvedVariantSelection,
+    selectedCondition,
     routerPush: router.push,
     searchParams,
     serverProduct,

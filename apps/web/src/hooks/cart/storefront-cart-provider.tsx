@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
 import {
   DEFAULT_ASSURANCE_RATE,
@@ -344,7 +345,9 @@ export function StorefrontCartProvider({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 

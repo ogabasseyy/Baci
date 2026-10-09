@@ -510,4 +510,87 @@ describe('StorefrontCartProvider', () => {
       variantId: 'iphone15-openbox-128-black-esim',
     });
   });
+
+  it('gates a quick add on the default serialized variant units, not parent stock', async () => {
+    const serializedProduct = {
+      ...mockProduct,
+      id: 'serial-1',
+      has_variants: true,
+      manage_stock: true,
+      stock: 0,
+      price: 900000,
+      variants: [
+        {
+          id: 'serial-1-strict',
+          product_id: 'serial-1',
+          merchant_id: 'merch-1',
+          condition: 'new' as const,
+          attributes: { storage: '128GB' },
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 2,
+        },
+      ],
+    };
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(serializedProduct, 1);
+    });
+
+    expect(result.current.totalItems).toBe(1);
+    expect(result.current.cart[0]).toMatchObject({
+      id: 'serial-1',
+      variantId: 'serial-1-strict',
+      stock: 2,
+    });
+  });
+
+  it('still rejects a quick add when the default serialized variant has no units', async () => {
+    const depletedProduct = {
+      ...mockProduct,
+      id: 'serial-2',
+      has_variants: true,
+      manage_stock: true,
+      stock: 9,
+      price: 900000,
+      variants: [
+        {
+          id: 'serial-2-strict',
+          product_id: 'serial-2',
+          merchant_id: 'merch-1',
+          condition: 'new' as const,
+          attributes: { storage: '128GB' },
+          stock_quantity: 9,
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+        },
+      ],
+    };
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(depletedProduct, 1);
+    });
+
+    expect(result.current.totalItems).toBe(0);
+  });
 });

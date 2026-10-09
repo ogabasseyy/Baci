@@ -284,6 +284,10 @@ export function buildCartProduct(
     ...baseProduct,
     ...selectedAttributes,
     price: currentOffer.rawPrice,
+    // The cart guard reads product stock: carry the resolved option
+    // availability (offer quantity or serialized units) so an exact
+    // selection on a zero-parent-stock product is not silently rejected.
+    stock: currentOffer.stock,
     ...(catalogPrice === undefined ? {} : { catalogPrice }),
     image,
     imageLarge: image,

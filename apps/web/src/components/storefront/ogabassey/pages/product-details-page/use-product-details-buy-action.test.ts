@@ -43,6 +43,9 @@ function renderBuyAction(
     routeResolvedVariantSelection?: Parameters<
       typeof useProductDetailsBuyAction
     >[0]['routeResolvedVariantSelection'];
+    selectedCondition?: Parameters<
+      typeof useProductDetailsBuyAction
+    >[0]['selectedCondition'];
   } = {}
 ) {
   const addToCart = vi.fn();
@@ -60,6 +63,7 @@ function renderBuyAction(
         overrides.routeResolvedVariantSelection ?? null,
       routerPush,
       searchParams: makeSearchParams(overrides.query),
+      selectedCondition: overrides.selectedCondition ?? 'new',
       serverProduct,
       toast: toast as unknown as BuyActionArgs['toast'],
     })
@@ -138,6 +142,27 @@ describe('useProductDetailsBuyAction', () => {
         condition: 'used',
         variantId: 'variant-silver',
       })
+    );
+  });
+
+  it('seeds a non-variant buy from the resolved selection condition', () => {
+    const { addToCart } = renderBuyAction({
+      query: 'action=buy&offer_id=offer-used-1',
+      routeResolvedVariantSelection: null,
+      selectedCondition: 'used',
+    });
+
+    expect(mockResolveCurrentOffer).toHaveBeenCalledWith(
+      productData,
+      'used',
+      {},
+      null,
+      undefined
+    );
+    expect(addToCart).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.objectContaining({ condition: 'used' })
     );
   });
 

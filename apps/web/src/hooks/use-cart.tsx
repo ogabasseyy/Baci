@@ -29,6 +29,7 @@ import { resolveDefaultVariantSelection } from '@baci/shared/lib';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 interface CartProviderProps {
   children: ReactNode;
@@ -339,7 +340,9 @@ export const CartProvider = ({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 

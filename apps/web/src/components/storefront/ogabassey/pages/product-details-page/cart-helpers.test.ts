@@ -193,6 +193,18 @@ describe('buildCartProduct catalog basis', () => {
     expect(product.catalogPrice).toBe(650000);
   });
 
+  it('carries the resolved option stock for the cart guard', () => {
+    const product = buildCartProduct(
+      makeProductData({ condition: 'new' }),
+      { rawPrice: 600000, stock: 3 } as Parameters<typeof buildCartProduct>[1],
+      0,
+      'used',
+      {}
+    );
+
+    expect(product.stock).toBe(3);
+  });
+
   it('omits the catalog price when the condition matches the base', () => {
     const product = buildCartProduct(
       makeProductData({ condition: 'new' }),

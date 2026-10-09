@@ -22,6 +22,14 @@ jest.mock('@/lib/piggyvest-primary-capability', () => {
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
 }));
+let mockActiveUserId: string | null = '11111111-1111-4111-8111-111111111111';
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockActiveUserId === null ? null : { id: mockActiveUserId },
+    }),
+  },
+}));
 const { fundPrimaryWalletCard } =
   require('./fund-primary-wallet-card') as typeof import('./fund-primary-wallet-card');
 const input = {
@@ -42,6 +50,7 @@ const response = {
 const alert = jest.spyOn(Alert, 'alert');
 beforeEach(() => {
   jest.clearAllMocks();
+  mockActiveUserId = '11111111-1111-4111-8111-111111111111';
   mockCapability.mockResolvedValue(true);
   mockRead.mockResolvedValue(null);
   mockStart.mockResolvedValue(response);
@@ -360,4 +369,31 @@ it('still confirms when the balance refresh fails', async () => {
     'Funding confirmed',
     'Your wallet funding is confirmed.'
   );
+});
+it('never opens a checkout bound to a signed-out account', async () => {
+  mockActiveUserId = '22222222-2222-4222-8222-222222222222';
+  await fundPrimaryWalletCard(input);
+  // The request ran as the original user, so its operation exists and
+  // stays saved for their recovery — but nothing is displayed.
+  expect(mockStart).toHaveBeenCalledTimes(1);
+  expect(router.push).not.toHaveBeenCalled();
+  expect(router.replace).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith(
+    'Signed-in account changed',
+    'You switched accounts during card funding. Any pending funding stays saved under the previous account.'
+  );
+  for (const [, message] of alert.mock.calls)
+    expect(String(message ?? '')).not.toMatch(/100000|Synthetic123|pvb-first/);
+});
+it('recovers the retained operation when its owner returns', async () => {
+  mockActiveUserId = '22222222-2222-4222-8222-222222222222';
+  await fundPrimaryWalletCard(input);
+  expect(router.push).not.toHaveBeenCalled();
+  mockActiveUserId = '11111111-1111-4111-8111-111111111111';
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  await fundPrimaryWalletCard(input);
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/payment-gateway',
+    params: expect.objectContaining({ paymentKind: 'primary_wallet_card' }),
+  });
 });

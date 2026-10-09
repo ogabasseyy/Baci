@@ -150,6 +150,26 @@ export async function fundPrimaryWalletCard(
         returnTo: sanitizeWalletReturnTo(input.walletReturnTo),
       });
     }
+    // Account-switch guard: the awaits above (storage, probe, dialogs,
+    // network) can span an auth change. Never display or navigate to a
+    // checkout bound to a different account than the one now signed in —
+    // the new account must not enter card details into a checkout whose
+    // immutable destination is the previous account's wallet. The
+    // operation stays saved (only the display is skipped), so its owner
+    // recovers it on their next attempt. The message reveals nothing
+    // about the other account's funding. Lazy-loaded so this module
+    // stays light: a static auth-store import would drag the whole
+    // storage/push chain into every importer of the wallet handlers.
+    const { useAuthStore } =
+      require('@/stores/auth-store') as typeof import('@/stores/auth-store');
+    if (useAuthStore.getState().user?.id !== userId) {
+      Alert.alert(
+        'Signed-in account changed',
+        'You switched accounts during card funding. Any pending funding stays saved under the previous account.'
+      );
+      input.resetFundPanel();
+      return;
+    }
     // Adopted checkout: the server resumed the customer's stored
     // unresolved operation (lost device storage, re-entered amount or
     // consent) instead of the just-entered values. Never open its checkout

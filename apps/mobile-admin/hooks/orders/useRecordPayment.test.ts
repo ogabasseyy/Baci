@@ -229,6 +229,9 @@ describe('useRecordPayment', () => {
       queryKey: ['monthly-transaction-count', 'merchant-1'],
     });
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['transaction-review', 'merchant-1'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['dashboard-stats', 'merchant-1'],
     });
   });

@@ -72,5 +72,20 @@ export function createPrimaryWalletStore(input: {
         throw new Error('Primary wallet storage unavailable');
       }
     },
+    async recordRejected(command) {
+      try {
+        const parsed = schemas.rejected.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(PRIMARY_WALLET_STATEMENTS.reject, [
+          scopeJson,
+          parsed.intentId,
+          parsed.claimToken,
+        ]);
+        if (!schemas.recordedRows.parse(response.rows)[0].result)
+          throw new Error('Stale claim');
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
   };
 }

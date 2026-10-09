@@ -161,13 +161,16 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
         createWallet: vi
           .fn()
           .mockResolvedValue({ id: 'integrated-destination' }),
-        listWallets: vi.fn().mockResolvedValue([
-          {
-            id: 'integrated-destination',
-            name: walletName,
-            status: 'active',
-          },
-        ]),
+        listWallets: vi
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValue([
+            {
+              id: 'integrated-destination',
+              name: walletName,
+              status: 'active',
+            },
+          ]),
         retrieveWallet: vi.fn().mockResolvedValue({
           id: 'integrated-destination',
           name: walletName,

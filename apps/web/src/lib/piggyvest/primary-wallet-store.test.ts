@@ -78,6 +78,19 @@ describe('primary wallet storage boundary', () => {
     ).rejects.toThrow('Primary wallet storage unavailable');
   });
 
+  it('records explicit ownership rejections through the terminal rejection statement', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await createPrimaryWalletStore({ scope, execute }).recordRejected({
+      ...scope,
+      intentId,
+      claimToken,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining('piggyvest_primary.record_onboarding_rejection'),
+      [JSON.stringify(scope), intentId, claimToken]
+    );
+  });
+
   it('never exposes database diagnostic text', async () => {
     const execute = vi
       .fn()

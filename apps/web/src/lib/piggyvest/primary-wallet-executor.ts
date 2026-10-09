@@ -30,7 +30,8 @@ export function createPrimaryWalletExecutor(
           ? 2
           : statement === PRIMARY_WALLET_STATEMENTS.record
             ? 5
-            : statement === PRIMARY_WALLET_STATEMENTS.uncertain
+            : statement === PRIMARY_WALLET_STATEMENTS.uncertain ||
+                statement === PRIMARY_WALLET_STATEMENTS.reject
               ? 3
               : null;
     if (

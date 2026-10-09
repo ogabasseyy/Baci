@@ -2,13 +2,13 @@ import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { createLogger } from '@/lib/logger';
 import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
 import { scheduleLocalNotification } from '@/services/push-notifications';
 import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
+import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 import { WALLET_FUNDING_ACCOUNT_MESSAGES } from './wallet-funding-account.constants';
 import {
   buildWalletTopUpGatewayParams,
@@ -157,7 +157,9 @@ export async function fundWallet({
     );
     return;
   }
-  if (isPiggyvestPrimaryMerchant(activeMerchantId)) {
+  const rail = await resolveFundWalletRail(activeMerchantId);
+  if (rail === 'blocked') return;
+  if (rail === 'primary') {
     // Recovery runs before any amount validation: a saved primary-card
     // operation (possibly already charged) must be rechecked even when the
     // funding form holds its normal empty amount. New primary fundings

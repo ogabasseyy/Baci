@@ -7,16 +7,16 @@ export function createPrimaryCardCustodyInboxIntake(input: {
   configuration: unknown;
   capability: string;
   execute: ReturnType<typeof createPrimaryCardCustodyExecutor>;
-  now?: () => number;
 }) {
   const config = schemas.runtime
     .or(schemas.intakeRuntime)
     .parse(input.configuration);
   return async (rawBody: Uint8Array, signature: string | null) => {
+    // No integration-deadline check: receipts complete transfers
+    // dispatched before expiry, so post-expiry intake must still enqueue
+    // for the worker to drain. The database gates on fresh intake
+    // credentials, enabled flags, and the capability binding instead.
     const payload = Uint8Array.from(rawBody);
-    const now = (input.now ?? Date.now)();
-    if (!Number.isFinite(now) || now >= Date.parse(config.expiresAt))
-      throw new Error('Signed custody intake unavailable');
     if (
       signature === null ||
       payload.byteLength === 0 ||

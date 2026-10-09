@@ -99,6 +99,7 @@ export function primaryReadinessFixture() {
       role(onboarding, 'piggyvest_primary_provisioner', [
         'piggyvest_primary.claim_onboarding(jsonb,text)',
         'piggyvest_primary.record_onboarding(jsonb,uuid,uuid,text,text)',
+        'piggyvest_primary.record_onboarding_rejection(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding(jsonb)',
         'piggyvest_primary.verify_onboarding(jsonb,jsonb)',
       ]),

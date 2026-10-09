@@ -15,7 +15,7 @@ CREATE ROLE goal_fixture LOGIN;
 GRANT piggyvest_primary_goal_provisioner TO goal_fixture;
 INSERT INTO piggyvest_primary.goal_provisioning_authorities
   VALUES('00000000-0000-4000-8000-000000000004','goal_fixture',true);
-UPDATE piggyvest_primary.onboarding_intents SET state='verified';
+UPDATE piggyvest_primary.onboarding_intents SET state='verified' WHERE state<>'rejected';
 CREATE TEMP TABLE reclaim_tokens(t1 uuid,t2 uuid);
 GRANT ALL ON reclaim_tokens TO goal_fixture;
 SET SESSION AUTHORIZATION goal_fixture;

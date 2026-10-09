@@ -6,7 +6,9 @@ import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-prim
 const statements = new Set([
   'SELECT piggyvest_primary.apply_inflow_environment($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.read_dispatched_savings($1::uuid,$2::text,$3::uuid) AS result',
+  'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
   'SELECT piggyvest_primary.settle_savings($1::uuid,$2::text,$3::jsonb) AS result',
+  'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -34,6 +36,10 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       throw new Error('Primary wallet evidence statement unavailable');
     if (statement.includes('read_dispatched_savings'))
       piggyvestPrimarySavingsTransferSchemas.request.shape.operationId.parse(
+        parameters[2]
+      );
+    else if (statement.includes('find_dispatched_savings_by_reference'))
+      piggyvestPrimarySavingsTransferSchemas.reserved.shape.reference.parse(
         parameters[2]
       );
     else JSON.parse(parameters[2]);

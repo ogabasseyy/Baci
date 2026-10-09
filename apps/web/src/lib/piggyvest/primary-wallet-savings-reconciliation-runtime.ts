@@ -7,6 +7,31 @@ import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
+// Shared verify-query port: the client status path and the webhook outflow
+// path must interrogate the provider identically, or the same transfer could
+// confirm on one path and hang on the other.
+export function createSavingsVerifyQueryProvider(input: {
+  environment: unknown;
+  token: string;
+  fetchImplementation?: typeof fetch;
+}) {
+  return async ({
+    reference,
+    walletId,
+  }: {
+    reference: string;
+    walletId: string;
+  }) =>
+    await requestPrefundedCardProviderJson({
+      url: `${getPrimaryWalletProviderOrigin(input.environment)}/api/v1/transaction/verify?reference=${encodeURIComponent(reference)}&wallet_id=${encodeURIComponent(walletId)}`,
+      token: input.token,
+      timeoutMs: 10000,
+      maxResponseBytes: 65536,
+      fetchImplementation: input.fetchImplementation ?? fetch,
+      init: { method: 'GET' },
+    });
+}
+
 export async function runPrimaryWalletSavingsReconciliation(input: {
   configuration: unknown;
   providerToken: unknown;
@@ -26,14 +51,10 @@ export async function runPrimaryWalletSavingsReconciliation(input: {
   });
   return await reconcilePrimaryWalletSavings(input.operationId, {
     ...store,
-    queryProvider: async ({ reference, walletId }) =>
-      await requestPrefundedCardProviderJson({
-        url: `${getPrimaryWalletProviderOrigin(configuration.environment)}/api/v1/transaction/verify?reference=${encodeURIComponent(reference)}&wallet_id=${encodeURIComponent(walletId)}`,
-        token,
-        timeoutMs: 10000,
-        maxResponseBytes: 65536,
-        fetchImplementation: input.fetchImplementation ?? fetch,
-        init: { method: 'GET' },
-      }),
+    queryProvider: createSavingsVerifyQueryProvider({
+      environment: configuration.environment,
+      token,
+      fetchImplementation: input.fetchImplementation,
+    }),
   });
 }

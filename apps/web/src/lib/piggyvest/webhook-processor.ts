@@ -12,6 +12,8 @@ import {
   attributedWalletId,
   PlanWalletRestrictionError,
 } from './plan-wallet-restrictions';
+import { runPrimaryWalletSavingsOutflowReconciliation } from './primary-wallet-savings-outflow-reconciliation';
+import { readPrimaryWalletSavingsRuntime } from './primary-wallet-savings-runtime';
 import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
@@ -69,10 +71,35 @@ function isHandledEvent(event: PiggyvestWebhookEvent): event is HandledEvent {
   );
 }
 
+export interface ProcessPiggyvestEventDeps {
+  piggyvestConfig?: PiggyvestClientConfig | null;
+  savingsRuntime?: {
+    reconciliationConfiguration: unknown;
+    providerToken: unknown;
+  } | null;
+  fetchImplementation?: typeof fetch;
+}
+
+function readSavingsRuntimeForOutflow(): ProcessPiggyvestEventDeps['savingsRuntime'] {
+  try {
+    return readPrimaryWalletSavingsRuntime();
+  } catch (error) {
+    // Savings is auxiliary to the legacy outflow path: a misconfigured
+    // savings runtime must not 503 legacy webhooks (the savings routes
+    // already surface the misconfiguration loudly). The operation still
+    // reconciles via the client status path once config is repaired.
+    console.warn(
+      '[PiggyVest Webhook] Savings outflow reconciliation skipped:',
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
+}
+
 async function applyEvent(
   supabase: SupabaseClient,
   event: HandledEvent,
-  config: PiggyvestClientConfig | null
+  deps: ProcessPiggyvestEventDeps
 ): Promise<void> {
   if (event.eventType === 'interest-payout.success') {
     await recordInterestPayout(supabase, event);
@@ -110,7 +137,7 @@ async function applyEvent(
     }
     const liftedOutcome = await applyRestrictionLifted(
       supabase,
-      config,
+      deps.piggyvestConfig ?? null,
       walletId
     );
     if (liftedOutcome === 'unknown-wallet') {
@@ -137,6 +164,29 @@ async function applyEvent(
         ? 'failed'
         : 'succeeded',
   });
+  // Savings attribution: the same references may belong to a dispatched
+  // primary savings transfer. Reconcile through the shared proof so an
+  // accepted transfer whose client never polls status still confirms;
+  // legacy-only references resolve unmatched with no further effect.
+  const savings =
+    deps.savingsRuntime === undefined
+      ? readSavingsRuntimeForOutflow()
+      : deps.savingsRuntime;
+  if (savings) {
+    const outcome = await runPrimaryWalletSavingsOutflowReconciliation({
+      configuration: savings.reconciliationConfiguration,
+      providerToken: savings.providerToken,
+      references,
+      fetchImplementation: deps.fetchImplementation,
+    });
+    if (outcome === 'pending') {
+      // The webhook is terminal but the provider re-query cannot confirm
+      // yet (propagation lag or ambiguous proof): stay retryable so the
+      // redelivery re-runs reconciliation. Resolving here would strand
+      // the operation as dispatched with no further trigger.
+      throw new Error('Primary savings outflow reconciliation inconclusive');
+    }
+  }
 }
 
 function poisonReason(error: unknown): string | null {
@@ -178,7 +228,7 @@ function failureReason(eventType: HandledEvent['eventType']): string {
 export async function processPiggyvestEvent(
   supabase: PiggyvestIntakeServiceClient,
   event: PiggyvestWebhookEvent,
-  deps: { piggyvestConfig?: PiggyvestClientConfig | null } = {}
+  deps: ProcessPiggyvestEventDeps = {}
 ): Promise<ProcessPiggyvestEventOutcome> {
   if (!isHandledEvent(event)) {
     return 'deferred';
@@ -196,7 +246,7 @@ export async function processPiggyvestEvent(
   }
 
   try {
-    await applyEvent(supabase, event, deps.piggyvestConfig ?? null);
+    await applyEvent(supabase, event, deps);
   } catch (error) {
     const poison = poisonReason(error);
     if (poison) {

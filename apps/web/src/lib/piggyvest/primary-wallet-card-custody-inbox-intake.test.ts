@@ -12,7 +12,6 @@ function setup() {
     configuration: fixture.configuration,
     capability: fixture.capability,
     execute,
-    now: () => fixture.now,
   });
   return { execute, accept };
 }
@@ -43,12 +42,30 @@ describe('private signed raw-byte custody intake', () => {
       },
       capability: fixture.capability,
       execute,
-      now: () => fixture.now,
     });
     const signature = createHmac('sha512', 'retained-custody-key')
       .update(fixture.rawBody)
       .digest('hex');
     expect(await accept(fixture.rawBody, signature)).toBe('accepted');
+  });
+  it('enqueues receipts after the integration deadline for the worker to drain', async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(fixture.ready)
+      .mockResolvedValueOnce('accepted');
+    const accept = createPrimaryCardCustodyInboxIntake({
+      configuration: {
+        ...fixture.configuration,
+        expiresAt: '2020-01-01T00:00:00Z',
+      },
+      capability: fixture.capability,
+      execute,
+    });
+    expect(await accept(fixture.rawBody, fixture.signature)).toBe('accepted');
+    expect(execute.mock.calls.map(([action]) => action)).toEqual([
+      'inboxReadiness',
+      'inboxEnqueue',
+    ]);
   });
   it('never stores unsigned bytes or constructs an operation from unsigned metadata', async () => {
     const input = setup();

@@ -15,6 +15,19 @@ const noStore = { 'Cache-Control': 'no-store' };
 // Returns a response when an intake claims the delivery, 'conflict' when
 // the inflow dispatcher reports a redelivery conflict (the route owns the
 // quarantine write), or null to fall through to the legacy path.
+//
+// A verified dedicated-key delivery whose intake is disabled (rollback)
+// answers retryable 503 — never null. Falling through would quarantine
+// and ack the valid event, and the quarantine stores only a digest, so
+// the provider would stop retrying and the deposit or payout could never
+// be replayed.
+function retryable(code: string, error: string): Response {
+  return NextResponse.json(
+    { received: false, code, error },
+    { status: 503, headers: noStore }
+  );
+}
+
 export async function dispatchPrimaryPiggyvestIntake(input: {
   rawBody: Buffer;
   signature: string | null;
@@ -29,6 +42,11 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
         signature: input.signature,
       });
       if (custody.response) return custody.response;
+      if (custody.outcome === 'disabled')
+        return retryable(
+          'PRIMARY_CARD_INBOX_UNAVAILABLE',
+          'Primary card signed intake unavailable'
+        );
     }
   }
   if (input.event.eventType === 'interest-payout.success') {
@@ -37,16 +55,23 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
         rawBody: input.rawBody,
         signature: input.signature,
       });
+      if (primary === 'disabled')
+        return retryable(
+          'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+          'Primary interest intake unavailable'
+        );
       if (primary) return primary;
     }
   }
   if (input.event.eventType === 'bank-transfer.inflow.success') {
+    let bankInboxDisabled = false;
     if (input.families.includes('bank')) {
       const bank = await dispatchPrimaryWalletBankInboxIntake({
         rawBody: input.rawBody,
         signature: input.signature,
       });
       if (bank.response) return bank.response;
+      bankInboxDisabled = bank.outcome === 'disabled';
     }
     const primary = await dispatchPrimaryWalletInflow({
       rawBody: input.rawBody,
@@ -63,6 +88,14 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
     if (primary === 'conflict') {
       return 'conflict';
     }
+    // Rollback order matters: the legacy inflow runs first so a
+    // rollback-to-legacy still credits; 503 only when it too is
+    // unavailable and the inbox already declined as disabled.
+    if (bankInboxDisabled && primary === 'disabled')
+      return retryable(
+        'PRIMARY_BANK_INBOX_UNAVAILABLE',
+        'Primary bank receipt intake unavailable'
+      );
   }
   return null;
 }

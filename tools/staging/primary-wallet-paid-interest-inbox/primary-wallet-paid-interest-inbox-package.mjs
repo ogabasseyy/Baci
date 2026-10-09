@@ -15,9 +15,9 @@ const frozen = {
   '20261007220002_piggyvest_primary_interest_projection.sql':
     '69d04201df8f6acc9d1d931ba61bae1c8a8d30e796f382f1c287c86ddd1ca7e5',
   '20261007220003_piggyvest_primary_interest_reads_notifications.sql':
-    'b9a68040c6c2df26abda6b80b054d556bd000a3007c473e1b8964d7c2444f888',
+    '6d9287dbd83809f77e91c95091c26a3e0c3bb06857621a1b2d71e3307b0eb3c7',
   '20261007220100_piggyvest_primary_interest_inbox.sql':
-    'c42c1a478d4038d7c41fd35520dee3b4e6955f8ca38a9a1bb57ca275ad29804e',
+    '7287bdf24ba8e1be90947d1f335030de079bfe047ddb76b883ea7bab0c0d6f52',
   '20261007220101_piggyvest_primary_interest_inbox_worker.sql':
     '1207928cce8e03ad87f9fb126c2a3c83cee370a8423bb34afb3dcf721e6e1f32',
 };

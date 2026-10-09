@@ -95,7 +95,6 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
       configuration: config,
       capability,
       execute: createPrimaryCardCustodyExecutor(config),
-      now: input.now,
     });
     const outcome = await accept(input.rawBody, input.signature);
     if (outcome === 'not_handled') return { outcome, response: null };

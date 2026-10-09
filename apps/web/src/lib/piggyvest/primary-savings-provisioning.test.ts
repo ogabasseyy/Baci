@@ -79,6 +79,7 @@ const ready = {
 describe('primary savings provisioning connection', () => {
   it('creates once for the verified customer, then enrolls only provider-confirmed destination', async () => {
     const input = fixture();
+    input.listWallets.mockResolvedValueOnce([]);
     expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
     expect(input.createWallet).toHaveBeenCalledWith({
       customerId: 'customer',
@@ -101,6 +102,7 @@ describe('primary savings provisioning connection', () => {
   });
   it('does not repeat creation after an ambiguous timeout and recovers by reads', async () => {
     const input = fixture();
+    input.listWallets.mockResolvedValueOnce([]);
     input.createWallet.mockRejectedValueOnce(
       new Error('private provider details')
     );
@@ -200,7 +202,33 @@ describe('primary savings provisioning connection', () => {
     expect((await provisionPrimarySavingsWallet(input)).status).toBe(
       'conflict'
     );
+    expect(input.createWallet).not.toHaveBeenCalled();
     expect(input.store.enroll).not.toHaveBeenCalled();
+  });
+  it('adopts a listed wallet on a reclaimed claim instead of reposting creation', async () => {
+    const input = fixture();
+    expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
+    expect(input.createWallet).not.toHaveBeenCalled();
+    expect(input.store.record).toHaveBeenCalledWith(
+      goalId,
+      'claim',
+      'destination'
+    );
+    expect(input.store.enroll).toHaveBeenCalledWith(
+      goalId,
+      expect.objectContaining({ providerWalletId: 'destination' })
+    );
+  });
+  it('falls through to creation when the adoption pre-list fails', async () => {
+    const input = fixture();
+    input.listWallets.mockRejectedValueOnce(new Error('private list outage'));
+    expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
+    expect(input.createWallet).toHaveBeenCalledOnce();
+    expect(input.store.record).toHaveBeenCalledWith(
+      goalId,
+      'claim',
+      'destination'
+    );
   });
   it('waits for valid funding channels rather than inventing a BVN or account', async () => {
     const input = fixture();
@@ -225,6 +253,7 @@ describe('primary savings provisioning connection', () => {
   });
   it('uses explicit persisted interest opt-in without claiming verified payout or enablement', async () => {
     const input = fixture();
+    input.listWallets.mockResolvedValueOnce([]);
     input.interestAccepted = true;
     input.store.prepare.mockResolvedValue({
       ...(await input.store.prepare()),

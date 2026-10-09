@@ -90,7 +90,11 @@ export async function onboardPiggyvestPrimaryWallet(
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
     if (!result.data.new_customer && claim.reclaimed !== true) {
-      await input.storage.recordUncertain(claimedScope);
+      // An explicit existing-customer response is an ownership verdict,
+      // not transport ambiguity: record it as terminally rejected so a
+      // retry can never reclaim this intent and adopt the unrelated
+      // provider wallet behind the reviewer's back.
+      await input.storage.recordRejected(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
     // A reclaimed intent retries the same fingerprinted request, so when

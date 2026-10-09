@@ -6,7 +6,7 @@ import { dispatchPrimaryWalletPaidInterestInbox } from './primary-wallet-paid-in
 export async function primaryInterestWebhookResponse(input: {
   rawBody: Uint8Array;
   signature: string | null;
-}): Promise<NextResponse | null> {
+}): Promise<NextResponse | 'disabled' | null> {
   const receipt = await dispatchPrimaryWalletPaidInterestInbox(input);
   if (receipt === 'not_handled') return null;
   if (receipt !== 'disabled') {
@@ -28,7 +28,12 @@ export async function primaryInterestWebhookResponse(input: {
     );
   }
   const outcome = await dispatchPrimaryWalletPaidInterest(input);
-  if (outcome === 'disabled' || outcome === 'not_handled') return null;
+  // Both paths unavailable (e.g. rollback): the caller must answer
+  // retryable so the provider redelivers — quarantining would ack a
+  // verified payout into permanent loss. Unknown wallets stay null
+  // (quarantine), matching the inbox-enabled path.
+  if (outcome === 'disabled') return 'disabled';
+  if (outcome === 'not_handled') return null;
   if (outcome === 'credited' || outcome === 'duplicate') {
     return NextResponse.json(
       { received: true, duplicate: outcome === 'duplicate' },

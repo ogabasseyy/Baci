@@ -10,7 +10,17 @@ jest.mock('@/lib/piggyvest-primary-capability', () => {
   const actual = jest.requireActual(
     '@/lib/piggyvest-primary-capability'
   ) as typeof import('@/lib/piggyvest-primary-capability');
-  return { ...actual, usePiggyvestPrimaryCapability: () => false };
+  return {
+    ...actual,
+    usePiggyvestPrimaryCapability: () => false,
+    getPiggyvestPrimaryCapability: async () => false,
+  };
+});
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability-cache'
+  ) as typeof import('@/lib/piggyvest-primary-capability-cache');
+  return { ...actual, readObservedPiggyvestPrimaryCapability: () => false };
 });
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -1682,7 +1692,7 @@ describe('WalletScreen', () => {
     expect(screen.getByText('show-redeem-panel:true')).toBeOnTheScreen();
   });
 
-  it('blocks invalid wallet top-up amounts before calling the API', () => {
+  it('blocks invalid wallet top-up amounts before calling the API', async () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation(() => undefined);
@@ -1693,9 +1703,11 @@ describe('WalletScreen', () => {
     fireEvent.press(screen.getByText('Set Invalid Fund Amount'));
     fireEvent.press(screen.getByText('Confirm Fund'));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Invalid Amount',
-      'Wallet top-up amount must be between ₦100 and ₦500,000.'
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Invalid Amount',
+        'Wallet top-up amount must be between ₦100 and ₦500,000.'
+      )
     );
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
   });

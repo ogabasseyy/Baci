@@ -67,6 +67,46 @@ it('refuses another integration, environment, or arbitrary SQL before connecting
     await expect(execute(sql, parameters)).rejects.toThrow();
   expect(mocks.connect).not.toHaveBeenCalled();
 });
+it('admits the reference lookup and the failed-release receipt', async () => {
+  // The refusal test never connects, so its queued pair leaks: reset to a
+  // known queue instead of inheriting leftovers.
+  mocks.query.mockReset();
+  const verify = {
+    rows: [
+      {
+        database_name: 'postgres',
+        login_name: config.database.login,
+        role_name: config.database.login,
+        safe: true,
+        tls: true,
+      },
+    ],
+  };
+  mocks.query
+    .mockResolvedValueOnce(verify)
+    .mockResolvedValueOnce({ rows: [{ result: null }] })
+    .mockResolvedValueOnce(verify)
+    .mockResolvedValueOnce({ rows: [{ result: 'released' }] });
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  await expect(
+    execute(
+      'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
+      [config.integrationId, 'staging', 'pvb-save-reference']
+    )
+  ).resolves.toEqual({ rows: [{ result: null }] });
+  await expect(
+    execute(
+      'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
+      [config.integrationId, 'staging', JSON.stringify({ operationId })]
+    )
+  ).resolves.toEqual({ rows: [{ result: 'released' }] });
+  await expect(
+    execute(
+      'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
+      [config.integrationId, 'staging', '']
+    )
+  ).rejects.toThrow();
+});
 it('never runs a financial statement after an unsafe session check', async () => {
   mocks.query.mockReset().mockResolvedValue({ rows: [{ safe: false }] });
   await expect(

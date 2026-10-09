@@ -9,10 +9,12 @@ CREATE TABLE public.customers(id uuid PRIMARY KEY, merchant_id uuid REFERENCES p
 \ir ../../../../../supabase/migrations/20261007141000_piggyvest_primary_wallet_mapping_read.sql
 \ir ../../../../../supabase/migrations/20261008090200_piggyvest_primary_onboarding_reclaim.sql
 \ir ../../../../../supabase/migrations/20261008091400_piggyvest_primary_onboarding_dispatched_lease.sql
+\ir ../../../../../supabase/migrations/20261008093000_piggyvest_primary_onboarding_rejection.sql
 INSERT INTO public.merchants VALUES ('00000000-0000-4000-8000-000000000001');
 INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000003');
 INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000000a');
 INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-00000000000b', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000000c');
+INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-00000000000d', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000000e');
 CREATE TABLE public.stale_dispatch_fixture(intent_id uuid, claim_token uuid);
 GRANT SELECT, INSERT ON public.stale_dispatch_fixture TO primary_fixture;
 INSERT INTO piggyvest_primary.integrations VALUES ('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', 'fixture-business', 'staging', 'primary_fixture', true);
@@ -87,7 +89,27 @@ BEGIN
   IF piggyvest_primary.read_onboarding(scope3) <> '{"providerCustomerId":"revived-customer","providerWalletId":"revived-wallet"}'::jsonb THEN RAISE EXCEPTION 'revived mapping unreadable'; END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+-- An explicit existing-customer response is terminally rejected: retries
+-- report conflict for owner review instead of reclaiming and adopting
+-- the unrelated provider wallet.
+SET SESSION AUTHORIZATION primary_fixture;
+DO $$
+DECLARE
+  scope4 jsonb := '{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-00000000000d","userId":"00000000-0000-4000-8000-00000000000e","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}';
+  rejected jsonb;
+BEGIN
+  rejected := piggyvest_primary.claim_onboarding(scope4, repeat('f',64));
+  IF rejected->>'status' <> 'claimed' THEN RAISE EXCEPTION 'rejection setup claim failed'; END IF;
+  IF piggyvest_primary.record_onboarding_rejection(scope4, (rejected->>'intentId')::uuid, '00000000-0000-4000-8000-000000000005') THEN RAISE EXCEPTION 'stale rejection token accepted'; END IF;
+  IF NOT piggyvest_primary.record_onboarding_rejection(scope4, (rejected->>'intentId')::uuid, (rejected->>'claimToken')::uuid) THEN RAISE EXCEPTION 'rejection record failed'; END IF;
+  IF piggyvest_primary.record_onboarding_rejection(scope4, (rejected->>'intentId')::uuid, (rejected->>'claimToken')::uuid) THEN RAISE EXCEPTION 'rejection replayed'; END IF;
+  IF piggyvest_primary.claim_onboarding(scope4, repeat('f',64))->>'status' <> 'conflict' THEN RAISE EXCEPTION 'rejected intent reclaimable'; END IF;
+  IF piggyvest_primary.read_onboarding(scope4) IS NOT NULL THEN RAISE EXCEPTION 'rejected intent readable'; END IF;
+  IF piggyvest_primary.record_onboarding(scope4, (rejected->>'intentId')::uuid, (rejected->>'claimToken')::uuid, 'adopted-customer', 'adopted-wallet') THEN RAISE EXCEPTION 'rejected intent adopted'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
   IF has_function_privilege('authenticated', 'piggyvest_primary.claim_onboarding(jsonb,text)', 'EXECUTE') THEN RAISE EXCEPTION 'public claim granted'; END IF;
+  IF has_function_privilege('authenticated', 'piggyvest_primary.record_onboarding_rejection(jsonb,uuid,uuid)', 'EXECUTE') THEN RAISE EXCEPTION 'public rejection granted'; END IF;
   IF has_table_privilege('primary_fixture', 'piggyvest_primary.onboarding_intents', 'SELECT') THEN RAISE EXCEPTION 'worker direct table granted'; END IF;
 END $$;

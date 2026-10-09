@@ -84,6 +84,7 @@ export function useProductDetailsSelectionState(
         normalizeCanonicalProductCondition
       );
   const rawConditionParam = searchParams.get('condition');
+  const rawOfferIdParam = searchParams.get('offer_id');
   const usesVariantRouteSelection = Boolean(productData.variants?.length);
   const routeSelectionResolution = usesVariantRouteSelection
     ? resolveVariantSelectionParamResolution(
@@ -98,9 +99,19 @@ export function useProductDetailsSelectionState(
   const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
   const routeSelectionAttributes = routeSelectionInput.attributes || {};
   const routeSelectionAttributesKey = JSON.stringify(routeSelectionAttributes);
+  // ID-only search links derive condition from this product's live offer
+  // (mirrors the generic PDP route selection): the card deliberately omits
+  // the snapshot condition, so without this the PDP would open the parent
+  // default instead of the advertised offer. Explicit condition constraints
+  // remain authoritative when supplied.
   const routeConditionSource =
     routeSelectionInput.condition ??
-    (!usesVariantRouteSelection ? rawConditionParam : undefined);
+    (!usesVariantRouteSelection
+      ? (rawConditionParam ??
+        productData.offers?.find(
+          (offer) => String(offer.id) === rawOfferIdParam
+        )?.condition)
+      : undefined);
   const routeCondition = normalizeCanonicalProductCondition(routeConditionSource);
   const routeVariantId =
     usesVariantRouteSelection && routeSelectionInput.variantId
@@ -131,6 +142,7 @@ export function useProductDetailsSelectionState(
     routeCondition,
     routeSelectionAttributesKey,
     routeVariantId ?? null,
+    rawOfferIdParam ?? null,
   ]);
   // Render-time seed keeps SSR/pre-hydration selection purchasable.
   const resolveInitialSeed = () =>

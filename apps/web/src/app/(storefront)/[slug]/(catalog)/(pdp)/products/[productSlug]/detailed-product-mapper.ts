@@ -32,17 +32,16 @@ function parseOptionalPrice(value: number | string | null | undefined) {
     : undefined;
 }
 
-function parseRequiredPrice(value: number | string | null | undefined) {
-  return parseOptionalPrice(value) ?? 0;
-}
-
 function isProductCondition(value: unknown): value is Product['condition'] {
   return PRODUCT_CONDITIONS.includes(
     value as (typeof PRODUCT_CONDITIONS)[number]
   );
 }
 
-function normalizeActiveOffers(offers: DetailedCachedProduct['offers']) {
+function normalizeActiveOffers(
+  offers: DetailedCachedProduct['offers'],
+  parentStock: number
+) {
   if (!Array.isArray(offers)) return [];
 
   return offers.flatMap((offer) => {
@@ -53,7 +52,11 @@ function normalizeActiveOffers(offers: DetailedCachedProduct['offers']) {
     const price = parseOptionalPrice(offer.price);
     if (price === undefined || price < 0) return [];
 
-    const stockQuantity = parseRequiredPrice(offer.stock_quantity);
+    // A null offer quantity inherits parent stock (mirroring the variant
+    // normalizer's parentStock and the price-options CTE): coercing to 0
+    // here would mark a search-advertised offer out of stock on the PDP.
+    const stockQuantity =
+      parseOptionalPrice(offer.stock_quantity) ?? parentStock;
     return [
       {
         id: offer.id,
@@ -218,7 +221,10 @@ export function mapDetailedCachedProductToProduct(
       )
         ? (detailedProduct.available_conditions as Product['available_conditions'])
         : undefined,
-    offers: normalizeActiveOffers(detailedProduct.offers),
+    offers: normalizeActiveOffers(
+      detailedProduct.offers,
+      getEffectiveStock(detailedProduct)
+    ),
     variants: normalizedVariants,
     specifications: detailedProduct.specifications as Product['specifications'],
     product_key_specs: normalizeProductKeySpecs(

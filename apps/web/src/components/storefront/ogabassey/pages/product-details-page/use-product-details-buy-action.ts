@@ -104,9 +104,13 @@ export function useProductDetailsBuyAction({
     if (checkoutRedirectTimeoutRef.current !== null) {
       window.clearTimeout(checkoutRedirectTimeoutRef.current);
     }
+    // Route through the cart, not checkout (mirrors the generic PDP): the
+    // cart carries the optional-service (assurance) disclosure and toggle,
+    // so a direct checkout redirect would let a default-on fee reach
+    // payment without presenting the choice.
     checkoutRedirectTimeoutRef.current = window.setTimeout(() => {
       checkoutRedirectTimeoutRef.current = null;
-      routerPush(asRoute(basePath ? `${basePath}/checkout` : '/checkout'));
+      routerPush(asRoute(basePath ? `${basePath}/cart` : '/cart'));
     }, 500);
   }, [
     addToCart,

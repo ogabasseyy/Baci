@@ -79,7 +79,7 @@ describe('useProductDetailsBuyAction', () => {
     cleanup();
   });
 
-  it('adds to cart and schedules a checkout redirect when action=buy is present', () => {
+  it('adds to cart and schedules a cart redirect when action=buy is present', () => {
     const { addToCart, routerPush, toast } = renderBuyAction({
       query: 'action=buy',
     });
@@ -94,7 +94,9 @@ describe('useProductDetailsBuyAction', () => {
       vi.advanceTimersByTime(500);
     });
 
-    expect(routerPush).toHaveBeenCalledWith('/ogabassey/checkout');
+    // The cart carries the assurance disclosure and opt-out toggle, so the
+    // buy flow must land there instead of skipping straight to checkout.
+    expect(routerPush).toHaveBeenCalledWith('/ogabassey/cart');
   });
 
   it('does NOT add to cart or redirect when the buy param is absent', () => {

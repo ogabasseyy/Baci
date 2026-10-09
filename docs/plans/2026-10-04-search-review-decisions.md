@@ -537,3 +537,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low merchant-scope ADJUDICATED: stock quantities are public PDP-displayed catalog data; product UUIDs unguessable; RLS is the real boundary — client-side scoping cannot be a security control since anon key holders query products directly. No PII; no change.
 - Muse low isInCompare ADJUDICATED (bounded by design): mutations hydrate-on-write so duplicate-add is impossible; only read paths flicker until first interaction/idle/timeout, matching the deliberate SSR-safe deferred design. No correctness issue.
 - Muse med Assurance disclosure: repeat of the tracked merchant sign-off item (code verified correct).
+
+## Round 74 (Codex 3 P1 on 6d0c864c — all fixed; Muse 2 med + 1 low — all repeats; CI green on 6d0c864c)
+
+- CX-149 (P1) FIXED: generic PDP mapper no longer coerces null offer stock to 0 — normalizeActiveOffers takes parentStock (same getEffectiveStock value as the variant normalizer) and null inherits it; explicit 0 preserved. Existing null-parent→0 test still green. New test pins inherit-6/keep-0.
+- CX-150 (P1) FIXED: categorized selection hook reads offer_id and derives route condition from the live offer (mirrors generic useProductRouteSelection); explicit ?condition stays authoritative; unknown ids ignored; offer id added to the reseed key. 3 new tests.
+- CX-151 (P1) FIXED: categorized ?action=buy routes through /cart instead of /checkout (mirrors the generic PDP comment/rationale) so the assurance disclosure + opt-out presents before payment. Test updated to /ogabassey/cart.
+- Muse med contact-rotation budget + low notification PII + med Assurance disclosure: all repeats of adjudicated/tracked items (PR-declared deferred; disclosure+erasure+RLS pinned; product sign-off).

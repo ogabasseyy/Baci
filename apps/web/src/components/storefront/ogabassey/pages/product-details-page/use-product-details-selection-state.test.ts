@@ -121,6 +121,63 @@ describe('useProductDetailsSelectionState', () => {
     expect(result.current.selectedCondition).toBe('new');
   });
 
+  it('derives the condition from a live ?offer_id when no ?condition is given', () => {
+    const offerProduct = {
+      ...baseProduct,
+      offers: [
+        {
+          id: 'offer-used-1',
+          condition: 'used',
+          price: '₦4,000',
+          rawPrice: 4000,
+          stock_quantity: 3,
+        },
+      ],
+    } as Product;
+    const { result } = renderHook(() =>
+      useProductDetailsSelectionState(
+        offerProduct,
+        makeSearchParams('offer_id=offer-used-1')
+      )
+    );
+
+    expect(result.current.selectedCondition).toBe('used');
+  });
+
+  it('keeps an explicit ?condition authoritative over ?offer_id', () => {
+    const offerProduct = {
+      ...baseProduct,
+      offers: [
+        {
+          id: 'offer-used-1',
+          condition: 'used',
+          price: '₦4,000',
+          rawPrice: 4000,
+          stock_quantity: 3,
+        },
+      ],
+    } as Product;
+    const { result } = renderHook(() =>
+      useProductDetailsSelectionState(
+        offerProduct,
+        makeSearchParams('condition=open_box&offer_id=offer-used-1')
+      )
+    );
+
+    expect(result.current.selectedCondition).toBe('open_box');
+  });
+
+  it('ignores an ?offer_id that names no offer on this product', () => {
+    const { result } = renderHook(() =>
+      useProductDetailsSelectionState(
+        baseProduct,
+        makeSearchParams('offer_id=offer-gone')
+      )
+    );
+
+    expect(result.current.selectedCondition).toBe('new');
+  });
+
   it('reseeds selection when the product input changes between renders', () => {
     const { result, rerender } = renderHook(
       ({ product }: { product: Product }) =>

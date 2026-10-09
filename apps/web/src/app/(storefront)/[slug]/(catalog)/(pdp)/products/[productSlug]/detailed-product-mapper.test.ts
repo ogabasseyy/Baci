@@ -317,4 +317,38 @@ describe('mapDetailedCachedProductToProduct', () => {
       },
     ]);
   });
+
+  it('inherits parent stock for null offer quantities, keeps explicit zeros', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'prod-inherit',
+        merchant_id: 'merchant-1',
+        name: 'Inherit Phone',
+        stock_quantity: 6,
+        images: [],
+        offers: [
+          {
+            id: 'null-stock',
+            condition: 'used',
+            price: 100,
+            stock_quantity: null,
+            status: 'active',
+          },
+          {
+            id: 'zero-stock',
+            condition: 'open_box',
+            price: 90,
+            stock_quantity: 0,
+            status: 'active',
+          },
+        ],
+      } as never,
+      'merchant-1'
+    );
+
+    expect(product.offers).toEqual([
+      expect.objectContaining({ id: 'null-stock', stock_quantity: 6 }),
+      expect.objectContaining({ id: 'zero-stock', stock_quantity: 0 }),
+    ]);
+  });
 });

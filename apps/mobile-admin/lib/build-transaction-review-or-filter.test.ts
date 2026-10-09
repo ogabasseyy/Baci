@@ -28,4 +28,15 @@ describe('buildTransactionReviewOrFilter', () => {
       `and(or(${VISIBILITY}),or(transaction_date.gte.2026-10-01),or(transaction_date.lte.2026-10-08))`
     );
   });
+
+  it('conjoins a created_at/id keyset cursor for newest-first paging', () => {
+    expect(
+      buildTransactionReviewOrFilter({
+        cursor: { createdAt: '2026-10-05T10:00:00Z', id: 'order-9' },
+        includeTransactionDate: false,
+      })
+    ).toBe(
+      `and(or(${VISIBILITY}),or(created_at.lt.2026-10-05T10:00:00Z,and(created_at.eq.2026-10-05T10:00:00Z,id.lt.order-9)))`
+    );
+  });
 });

@@ -462,6 +462,22 @@ BEGIN
     RAISE EXCEPTION 'multi-term search failed: %', v_ids;
   END IF;
 
+  -- Case-duplicate raw terms collapse before the 10-term cap (client parity):
+  -- 11 raw terms fold to 10 distinct, so every term survives capping and the
+  -- order matching all of them is still found.
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY[
+      'ord-1001', 'ada', 'lovelace', 'paystack', '353232106161443',
+      'sn-999', 'phx-blk-128', '500', '+2348000000001', 'phone', 'ADA'
+    ]
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'case-fold term cap parity failed: %', v_ids;
+  END IF;
+
   SELECT array_agg(order_id)
   INTO v_ids
   FROM public.search_mobile_admin_transaction_review_orders(

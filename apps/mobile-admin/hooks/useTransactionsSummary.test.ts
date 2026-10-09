@@ -44,7 +44,9 @@ describe('useTransactionsSummary', () => {
       missingCosts: 5,
       transactions: 12,
     });
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE);
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE, {
+      fetchAllRange: true,
+    });
     expect(mocks.useMonthlyTransactionCount).toHaveBeenCalledWith(ANCHOR);
   });
 
@@ -54,7 +56,9 @@ describe('useTransactionsSummary', () => {
     // clears. No enabled:false is ever passed.
     renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE);
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE, {
+      fetchAllRange: true,
+    });
     expect(mocks.useTransactionReview).not.toHaveBeenCalledWith(
       RANGE,
       expect.objectContaining({ enabled: false })
@@ -95,6 +99,19 @@ describe('useTransactionsSummary', () => {
     const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.summary.transactions).toBe('Unavailable');
+  });
+
+  it('marks the count with a plus when the range scan truncates', () => {
+    mocks.useTransactionReview.mockReturnValue({
+      data: [{ missingCostCount: 2 }, { missingCostCount: 3 }],
+      error: null,
+      isPending: false,
+      searchTruncated: true,
+    });
+
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
+
+    expect(result.current.summary.missingCosts).toBe('5+');
   });
 
   it('exposes the monthly count refetch', () => {

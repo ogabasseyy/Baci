@@ -32,7 +32,7 @@ export async function fetchTransactionReviewRows({
   startDateFilter?: string;
   startDateIso?: string;
 }) {
-  function createQuery(cursor?: string) {
+  function createQuery(cursor?: { createdAt: string; id: string }) {
     let query = supabase
       .from('orders')
       .select(selectStatement)
@@ -50,13 +50,17 @@ export async function fetchTransactionReviewRows({
         endDateFilter,
         includeTransactionDate,
         startDateFilter,
+        ...(fetchAll && cursor ? { cursor } : {}),
       })
     );
 
     if (fetchAll) {
-      // A stable unique cursor avoids shifting offsets when new orders arrive.
-      query = query.order('id', { ascending: true });
-      if (cursor) query = query.gt('id', cursor);
+      // Newest-first keyset over (created_at, id): id order is random (v4
+      // UUIDs), so an id-ordered scan would cap an arbitrary subset and a
+      // recent match could never appear. The tiebreak keeps paging exact.
+      query = query
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
     } else {
       if (includeTransactionDate) {
         query = query.order('transaction_date', {
@@ -81,7 +85,7 @@ export async function fetchTransactionReviewRows({
   }
 
   const rows: TransactionReviewOrderRow[] = [];
-  let cursor: string | undefined;
+  let cursor: { createdAt: string; id: string } | undefined;
   let truncated = false;
   while (true) {
     const result = await createQuery(cursor);
@@ -101,7 +105,8 @@ export async function fetchTransactionReviewRows({
       truncated = true;
       break;
     }
-    cursor = page[page.length - 1].id;
+    const lastRow = page[page.length - 1];
+    cursor = { createdAt: lastRow.created_at, id: lastRow.id };
   }
   rows.sort((a, b) => {
     const dateDifference =

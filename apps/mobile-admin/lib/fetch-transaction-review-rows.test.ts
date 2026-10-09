@@ -186,7 +186,16 @@ it('searches an older IMEI beyond the first database page', async () => {
     '354066782325743'
   );
   expect(matches.map((order) => order.id)).toEqual(['older-order']);
-  expect(mocks.gt).toHaveBeenCalledWith('id', 'a-199');
+  expect(mocks.order).toHaveBeenCalledWith('created_at', {
+    ascending: false,
+  });
+  expect(mocks.order).toHaveBeenCalledWith('id', { ascending: false });
+  expect(mocks.or).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'or(created_at.lt.2025-01-01T00:00:00Z,and(created_at.eq.2025-01-01T00:00:00Z,id.lt.a-199))'
+    )
+  );
+  expect(mocks.gt).not.toHaveBeenCalled();
   expect(mocks.eq).toHaveBeenCalledWith('payment_status', 'paid');
   expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
 });

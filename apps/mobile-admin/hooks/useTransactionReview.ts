@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
+import {
+  fetchTransactionReviewRange,
+  mapTransactionReviewData,
+} from '@/lib/fetch-transaction-review-range';
 import { fetchTransactionReviewWithFallbacks } from '@/lib/fetch-transaction-review-with-fallbacks';
-import { filterExcludedTransactionReviewRows } from '@/lib/filter-excluded-transaction-review-rows';
 import {
   searchTransactionReviewOrders,
   TRANSACTION_REVIEW_SEARCH_LIMIT,
@@ -9,10 +12,8 @@ import {
 import {
   buildTransactionReviewRangeFilters,
   filterTransactionOrders,
-  mapTransactionOrderRows,
   type TransactionReviewItem,
   type TransactionReviewOrder,
-  type TransactionReviewOrderRow,
 } from '@/lib/transaction-review';
 import { filterOrdersForTransactionTab } from '@/lib/transaction-review-inputs';
 import { TRANSACTION_REVIEW_SELECTORS } from '@/lib/transaction-review-selectors';
@@ -27,19 +28,12 @@ export type { TransactionReviewItem, TransactionReviewOrder };
 export const TRANSACTION_REVIEW_LEGACY_SELECT =
   TRANSACTION_REVIEW_SELECTORS.legacy;
 
-function mapTransactionReviewData(data: unknown) {
-  return mapTransactionOrderRows(
-    filterExcludedTransactionReviewRows(
-      (data ?? []) as unknown as TransactionReviewOrderRow[]
-    )
-  );
-}
-
 export function useTransactionReview(
   range?: TransactionReviewRange,
   options: {
     enabled?: boolean;
     exactDates?: boolean;
+    fetchAllRange?: boolean;
     search?: string;
     tab?: 'missing-costs' | 'paid';
   } = {}
@@ -94,6 +88,9 @@ export function useTransactionReview(
       // tab pages past the server cap); browsing filters client-side, so
       // the key stays stable on tab switches there.
       searching ? (options.tab ?? 'paid') : null,
+      // The summary scans the full bounded range while browsing reads one
+      // window: without this element both views would share a cache entry.
+      options.fetchAllRange ? 'fetch-all' : null,
     ],
     queryFn: async () => {
       if (!merchant?.id) {
@@ -108,19 +105,16 @@ export function useTransactionReview(
         );
       }
 
-      const { data, error } = await fetchTransactionReviewWithFallbacks({
+      const { orders, truncated } = await fetchTransactionReviewRange({
         endDateFilter,
         endDateIso,
+        fetchAll: options.fetchAllRange,
         merchantId: merchant.id,
         startDateFilter,
         startDateIso,
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return { orders: mapTransactionReviewData(data), searchTruncated: false };
+      return { orders, searchTruncated: truncated };
     },
     enabled: Boolean(merchant?.id) && options.enabled !== false,
     staleTime: 1000 * 60,

@@ -131,15 +131,16 @@ BEGIN
     );
 
   -- Normalize defensively: blank terms would match every row under ILIKE, so
-  -- drop them; cap term count and length to bound planning cost. The client
-  -- splitter mirrors these caps exactly, so they bind only for direct RPC
-  -- callers. Accepted edge: past the cap, the client's JS sort and this
-  -- ORDER BY (database collation) can select different subsets for
-  -- non-ASCII terms; ASCII parity is exact.
+  -- drop them; cap term count and length to bound planning cost. Terms are
+  -- lowercased before DISTINCT to match the client's case-folded splitter
+  -- exactly, so case-duplicate raw terms never consume cap slots. Accepted
+  -- edge: past the cap, the client's JS sort and this ORDER BY (database
+  -- collation) can still select different subsets for non-ASCII terms;
+  -- ASCII parity is exact.
   SELECT COALESCE(array_agg(term ORDER BY term), '{}')
   INTO v_terms
   FROM (
-    SELECT DISTINCT left(btrim(term), 60) AS term
+    SELECT DISTINCT lower(left(btrim(term), 60)) AS term
     FROM unnest(p_terms) AS term
     WHERE btrim(term) <> ''
     ORDER BY term

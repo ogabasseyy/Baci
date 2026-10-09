@@ -21,20 +21,25 @@ export function useTransactionsSummary(
     data: rangeOrders = [],
     error: rangeSummaryError,
     isPending: rangeSummaryPending,
-  } = useTransactionReview(range);
+    searchTruncated: rangeTruncated,
+  } = useTransactionReview(range, { fetchAllRange: true });
 
+  const missingCostCount = rangeOrders.reduce(
+    (count, order) => count + order.missingCostCount,
+    0
+  );
   const summary = {
     // The range query has no data on a cold cache: show a placeholder
     // rather than a 0 that reads as final. A failed range query is
-    // unavailable, even when the search succeeds.
+    // unavailable, even when the search succeeds. A truncated scan counts
+    // only the fetched window, so it is marked with a plus.
     missingCosts: rangeSummaryError
       ? 'Unavailable'
       : rangeSummaryPending
         ? '--'
-        : rangeOrders.reduce(
-            (count, order) => count + order.missingCostCount,
-            0
-          ),
+        : rangeTruncated
+          ? `${missingCostCount}+`
+          : missingCostCount,
     transactions: monthlyCountQuery.error
       ? 'Unavailable'
       : (monthlyCountQuery.data ?? '--'),

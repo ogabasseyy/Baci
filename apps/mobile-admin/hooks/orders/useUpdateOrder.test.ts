@@ -137,7 +137,7 @@ describe('useUpdateOrder', () => {
     ).rejects.toThrow('Failed to update order');
   });
 
-  it('invalidates order, list, dashboard, counts, audit, and review queries after success', () => {
+  it('invalidates order, list, dashboard, counts, audit, review, and monthly count queries after success', () => {
     const mutation = useUpdateOrder() as unknown as UpdateOrderMutationConfig;
 
     mutation.onSuccess(
@@ -162,6 +162,9 @@ describe('useUpdateOrder', () => {
     });
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['transaction-review', 'merchant-1'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count', 'merchant-1'],
     });
   });
 });

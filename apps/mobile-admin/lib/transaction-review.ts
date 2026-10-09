@@ -259,10 +259,10 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
 // would match a weakened subset, fill its cap with newer subset matches,
 // and hide an older order matching the full query. Both callers of this
 // splitter (the RPC sender and the refinement filter) stay aligned by
-// construction. Terms are case-folded before dedup because the server
-// matches case-insensitively; sort-order parity with the server holds for
-// ASCII terms, so non-ASCII queries past the term cap may select a
-// different subset.
+// construction. Terms are case-folded before dedup, mirroring the
+// server's lower() DISTINCT; sort-order parity with the server holds for
+// ASCII terms, so non-ASCII queries past the term cap may still select a
+// different subset (database collation vs JS sort).
 export const TRANSACTION_REVIEW_MAX_SEARCH_TERMS = 10;
 export const TRANSACTION_REVIEW_MAX_SEARCH_TERM_LENGTH = 60;
 

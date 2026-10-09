@@ -1,15 +1,8 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
-
-const enrollSchema = z.object({
-  merchant_id: z.uuid(),
-  customer_id: z.uuid(),
-  // customer_loyalty.referral_code is varchar(20); the RPC matches case-insensitively.
-  referral_code: z.string().trim().min(1).max(20).optional(),
-});
+import { storefrontLoyaltyEnrollSchema } from '@/schemas/storefront-loyalty-enroll';
 
 type EnrollRpcResult = {
   success: boolean;
@@ -23,22 +16,27 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   already_enrolled: 409,
   program_unavailable: 404,
   customer_not_found: 404,
+  forbidden: 403,
   invalid_input: 400,
+  referral_code_collision: 503,
 };
 
 const RPC_ERROR_MESSAGE: Record<string, string> = {
   already_enrolled: 'Customer is already enrolled in the loyalty program',
   program_unavailable: 'Loyalty program not available for this merchant',
   customer_not_found: 'Customer not found for this merchant',
+  forbidden: 'You can only enroll your own customer account',
   invalid_input: 'Invalid enrollment input',
+  referral_code_collision:
+    'Enrollment is temporarily unavailable, please try again',
 };
 
 // POST - Enroll a customer in loyalty program.
 //
-// All enrollment logic runs atomically inside the enroll_customer_loyalty
-// SECURITY DEFINER RPC; this route only validates input and maps the RPC
-// result to HTTP status codes. The response shape is kept stable for the
-// use-loyalty.ts enroll() caller.
+// The caller must own the customer row: the session user must match the
+// customer resolved for this merchant. The RPC re-verifies ownership, so
+// direct invocation with another customer's IDs fails closed too. The
+// response shape is kept stable for the use-loyalty.ts enroll() caller.
 export async function POST(request: NextRequest) {
   try {
     let rawBody: unknown = {};
@@ -48,7 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const parsed = enrollSchema.safeParse(rawBody);
+    const parsed = storefrontLoyaltyEnrollSchema.safeParse(rawBody);
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'merchant_id and customer_id are required' },
@@ -58,6 +56,44 @@ export async function POST(request: NextRequest) {
 
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Resolve the caller's own customer row for this merchant. A mismatch
+    // returns the same 404 as a missing customer so callers cannot probe
+    // which customer IDs exist.
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('merchant_id', parsed.data.merchant_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (customerError) {
+      logger.error({
+        message: 'Error resolving enrollment customer',
+        error: customerError,
+      });
+      return NextResponse.json(
+        { error: 'Failed to enroll in loyalty program' },
+        { status: 500 }
+      );
+    }
+
+    if (!customer || customer.id !== parsed.data.customer_id) {
+      return NextResponse.json(
+        { error: 'Customer not found for this merchant' },
+        { status: 404 }
+      );
+    }
 
     const { data, error } = await supabase.rpc('enroll_customer_loyalty', {
       p_merchant_id: parsed.data.merchant_id,

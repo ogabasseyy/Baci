@@ -11,6 +11,7 @@ export async function applyPrimaryCardSignedCustody(input: {
   signature: string | null;
   secret: string | undefined;
   operationId: string;
+  inboxToken: string;
   loadContext: (operationId: string) => Promise<unknown>;
   observe: ReturnType<typeof createPrimaryCardCustodyReader>;
   settle: (proof: ReturnType<typeof schemas.proof.parse>) => Promise<unknown>;
@@ -55,6 +56,7 @@ export async function applyPrimaryCardSignedCustody(input: {
     context,
     envelope: parsed.data,
     bodyDigest: createHash('sha256').update(input.rawBody).digest('hex'),
+    inboxToken: input.inboxToken,
     now: (input.now ?? Date.now)(),
   });
   if (result.status !== 'verified') return 'deferred' as const;

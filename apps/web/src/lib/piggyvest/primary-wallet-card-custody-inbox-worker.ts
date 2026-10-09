@@ -82,6 +82,7 @@ export function createPrimaryCardCustodyInboxWorker(input: {
                     signature: claim.signature,
                     secret: config.webhookSecret,
                     operationId,
+                    inboxToken: claim.token,
                     loadContext: (selected) =>
                       input.execute('context', [selected]),
                     observe: input.observe,

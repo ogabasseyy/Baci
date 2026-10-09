@@ -52,8 +52,15 @@ describe('primary card trusted deployment configuration', () => {
       readPrimaryWalletCardCheckoutRuntimeDrain(expired)?.settings.expiresAt
     ).toBe('2026-10-06T15:59:10Z');
   });
+  it('drains enabled-created operations after the feature flag is turned off', () => {
+    const disabled = { ...env, PIGGYVEST_PRIMARY_CARD_ENABLED: 'false' };
+    expect(readPrimaryWalletCardCheckoutRuntime(disabled)).toBeNull();
+    expect(
+      readPrimaryWalletCardCheckoutRuntimeDrain(disabled)?.settings
+        .integrationId
+    ).toBe(fixture.settings.integrationId);
+  });
   it.each([
-    { PIGGYVEST_PRIMARY_CARD_ENABLED: 'false' },
     { VERCEL_ENV: 'production' },
     { PIGGYVEST_PRIMARY_CARD_ENVIRONMENT: 'production' },
     { PIGGYVEST_PRIMARY_CARD_EVIDENCE_PASSWORD: '' },

@@ -12,6 +12,7 @@ export function verifyPrimaryCardCustodyProof(input: {
   destinationWallet: unknown;
   crosswalk: unknown;
   bodyDigest: string;
+  inboxToken: string;
   now?: number;
 }) {
   try {
@@ -89,6 +90,7 @@ export function verifyPrimaryCardCustodyProof(input: {
         providerTransactionId: single.id,
         transactionAliases: aliases,
         eventId: event.eventId,
+        inboxToken: input.inboxToken,
         bodyDigest: input.bodyDigest,
         crosswalkDigest: crosswalk.evidenceSha256,
         observedAt: new Date(now).toISOString(),

@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   intake: vi.fn(),
   legacy: vi.fn(),
+  processPiggyvestEvent: vi.fn(),
+  families: ['legacy', 'interest'] as string[],
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({
@@ -28,10 +30,8 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
         ...input,
         secrets: ['fixture-secret', 'retained-secret'],
       });
-      // Family binding is covered by dedicated tests; these suites pin
-      // downstream handling with the legacy-authorized family.
       return secret
-        ? { status: 'verified' as const, secret, families: ['legacy'] as const }
+        ? { status: 'verified' as const, secret, families: mocks.families }
         : { status: 'invalid' as const };
     },
   };
@@ -44,6 +44,10 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
   createPiggyvestIntakeServiceClient: mocks.legacy,
+}));
+vi.mock('@/lib/piggyvest/webhook-processor', () => ({
+  processPiggyvestEvent: (...args: unknown[]) =>
+    mocks.processPiggyvestEvent(...args),
 }));
 
 import { POST } from './route';
@@ -59,6 +63,7 @@ function request(valid = true, secret = 'fixture-secret') {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.families = ['legacy', 'interest'];
   mocks.intake.mockResolvedValue('disabled');
   mocks.legacy.mockImplementation(() => {
     throw new Error('legacy must not handle primary interest');
@@ -150,4 +155,41 @@ it('redacts primary interest storage failures and requests redelivery', async ()
     'private database'
   );
   expect(mocks.legacy).not.toHaveBeenCalled();
+});
+it('skips the interest intake for a legacy-family delivery', async () => {
+  mocks.families = ['legacy'];
+  mocks.processPiggyvestEvent.mockResolvedValue('processed');
+  const query: Record<string, unknown> = {};
+  const upsert = vi.fn(() => query);
+  const select = vi.fn(() =>
+    Object.assign(
+      Promise.resolve({
+        data: [{ event_id: paidInterestFixture.event.eventId }],
+        error: null,
+      }),
+      {
+        eq: vi.fn(() => ({
+          maybeSingle: async () => ({ data: null, error: null }),
+        })),
+      }
+    )
+  );
+  const then = (resolve: (value: unknown) => void) =>
+    Promise.resolve({
+      data: [{ event_id: paidInterestFixture.event.eventId }],
+      error: null,
+    }).then(resolve);
+  Object.assign(query, { select, then, upsert });
+  mocks.legacy.mockImplementation(() => ({ from: vi.fn(() => query) }));
+
+  const response = await POST(request());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    received: true,
+    duplicate: false,
+  });
+  expect(mocks.intake).not.toHaveBeenCalled();
+  expect(mocks.dispatch).not.toHaveBeenCalled();
+  expect(mocks.processPiggyvestEvent).toHaveBeenCalled();
 });

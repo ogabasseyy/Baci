@@ -232,6 +232,25 @@ it('readiness validates storage but cannot select, claim or POST', async () => {
   expect(fetchImplementation).not.toHaveBeenCalled();
   expect(mocks.state).toBe('ready');
 });
+it('readiness passes with a backlog and never dispatches it', async () => {
+  const query = mocks.query.getMockImplementation();
+  mocks.query.mockImplementation(async (sql: string, parameters: unknown[]) => {
+    const result = (await query?.(sql, parameters)) as {
+      rows: Array<{ result: Record<string, unknown> }>;
+    };
+    if (sql.includes('select_ready_transfers'))
+      result.rows[0]!.result.operationIds = [fixture.context.operationId];
+    return result;
+  });
+  const fetchImplementation = http();
+  expect(await run(fetchImplementation, 'readiness')).toMatchObject({
+    status: 'approved_policy_and_storage_ready',
+    selectedCount: 1,
+    submittedCount: 0,
+  });
+  expect(fetchImplementation).not.toHaveBeenCalled();
+  expect(mocks.state).toBe('ready');
+});
 it('missing approved policy, abort, malformed selection and selector storage failures remain visible and do not POST', async () => {
   const fetchImplementation = http();
   await expect(

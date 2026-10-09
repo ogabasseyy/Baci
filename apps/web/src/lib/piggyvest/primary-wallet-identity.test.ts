@@ -43,7 +43,11 @@ describe('primary wallet authenticated identity', () => {
   it('resolves only the authenticated user within the selected merchant', async () => {
     const input = fixture();
     await expect(
-      resolvePrimaryWalletIdentity({ ...input, merchantId })
+      resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
     ).resolves.toEqual({
       merchantId,
       customerId,
@@ -60,7 +64,11 @@ describe('primary wallet authenticated identity', () => {
     const input = fixture();
     input.user.email_confirmed_at = undefined;
     expect(
-      await resolvePrimaryWalletIdentity({ ...input, merchantId })
+      await resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
     ).toBeNull();
     expect(input.from).not.toHaveBeenCalled();
   });
@@ -68,16 +76,51 @@ describe('primary wallet authenticated identity', () => {
     { user_id: null },
     { user_id: customerId },
     { merchant_id: customerId },
-    { email: 'different@example.com' },
     { phone: null },
-  ])('does not use mismatched or incomplete customer identity: %j', async (change) => {
+  ])('does not use mismatched customer identity: %j', async (change) => {
     const input = fixture();
     input.maybeSingle.mockResolvedValue({
       data: { ...input.row, ...change },
       error: null,
     });
     expect(
-      await resolvePrimaryWalletIdentity({ ...input, merchantId })
+      await resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
+    ).toBeNull();
+  });
+  it('resolves an existing wallet after a confirmed auth email change', async () => {
+    // customers.email has no auth sync, so a confirmed email change
+    // would otherwise orphan the funding account and strand dispatched
+    // contributions: reads, recovery, and submissions to already-bound
+    // wallets resolve on immutable IDs alone.
+    const input = fixture();
+    input.user.email = 'new-address@example.com';
+    await expect(
+      resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
+    ).resolves.toMatchObject({
+      merchantId,
+      customerId,
+      userId,
+      email: 'new-address@example.com',
+      emailVerified: true,
+    });
+  });
+  it('requires the stored-email match only for new provider onboarding', async () => {
+    const input = fixture();
+    input.user.email = 'new-address@example.com';
+    expect(
+      await resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: true,
+      })
     ).toBeNull();
   });
   it('returns a safe failure on database errors', async () => {
@@ -87,7 +130,11 @@ describe('primary wallet authenticated identity', () => {
       error: { message: 'private details' },
     });
     expect(
-      await resolvePrimaryWalletIdentity({ ...input, merchantId })
+      await resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
     ).toBeNull();
   });
 });

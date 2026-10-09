@@ -6,6 +6,8 @@
 \ir ../../../../../supabase/migrations/20261008091000_primary_bank_hold_specificity.sql
 \ir ../../../../../supabase/migrations/20261007230200_primary_bank_inbox_worker.sql
 \ir ../../../../../supabase/migrations/20261008093600_primary_bank_inbox_expiry_drain.sql
+\ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
+\ir ../../../../../supabase/migrations/20261008093700_primary_bank_inbox_unsettled_deletion_block.sql
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
 CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
 CREATE ROLE baci_primary_bank_worker LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
@@ -254,4 +256,64 @@ RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-drain' AND state='processed') THEN RAISE EXCEPTION 'drain receipt not processed'; END IF;
  IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>592 THEN RAISE EXCEPTION 'drain deposit miscredited'; END IF;
+END $$;
+-- Deletion is rejected while a bank deposit is still being processed:
+-- detaching the intent would return the receipt to prerequisite
+-- forever even though the provider holds the money. This chain
+-- predates the 092700 detach, so mirror its onboarding_intents row
+-- here (the full migration needs savings tables this chain lacks).
+ALTER TABLE piggyvest_primary.onboarding_intents DROP CONSTRAINT onboarding_intents_customer_id_fkey;
+ALTER TABLE piggyvest_primary.onboarding_intents ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE piggyvest_primary.onboarding_intents ADD CONSTRAINT onboarding_intents_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+ALTER TABLE piggyvest_primary_card.operations DROP CONSTRAINT operations_customer_id_fkey;
+ALTER TABLE piggyvest_primary_card.operations ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE piggyvest_primary_card.operations ADD CONSTRAINT operations_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+-- The custody-chain stubs below predate ON DELETE CASCADE, which the
+-- 20260418 baseline defines for both tables.
+ALTER TABLE public.customer_wallets DROP CONSTRAINT customer_wallets_customer_id_fkey;
+ALTER TABLE public.customer_wallets ADD CONSTRAINT customer_wallets_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+ALTER TABLE public.customer_wallet_transactions DROP CONSTRAINT customer_wallet_transactions_customer_id_fkey;
+ALTER TABLE public.customer_wallet_transactions ADD CONSTRAINT customer_wallet_transactions_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'guard',scope,receipt||'{"eventId":"bank-guard","providerTransactionId":"guard-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-guard"'),'{eventData,transaction_id}','"guard-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='drain';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='guard';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='guard';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'guard intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ DECLARE v_deleted boolean := false; BEGIN
+ BEGIN
+  DELETE FROM public.customers WHERE email='third@example.test';
+  v_deleted := true;
+ EXCEPTION WHEN raise_exception THEN NULL; END;
+ IF v_deleted THEN RAISE EXCEPTION 'pending bank deposit deletion allowed'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM public.customers WHERE email='third@example.test') THEN RAISE EXCEPTION 'guard customer deleted'; END IF;
+END $$;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='guard';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased->>'eventId'<>'bank-guard' THEN RAISE EXCEPTION 'guard claim missed'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'guard deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+-- Terminal rows release the guard: the delete detaches the intent and
+-- receipt links while retaining the money evidence.
+DO $$ BEGIN
+ DELETE FROM public.customers WHERE email='third@example.test';
+ IF (SELECT count(*) FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-guard' AND state='processed')<>1 THEN RAISE EXCEPTION 'terminal bank row lost'; END IF;
+ IF (SELECT count(*) FROM piggyvest_primary.inflow_receipts WHERE event_id='bank-guard' AND wallet_transaction_id IS NULL)<>1 THEN RAISE EXCEPTION 'terminal bank receipt lost'; END IF;
+END $$;
+-- The guard trigger function itself must not keep the default PUBLIC
+-- grant, or bank_role_safe fails every bank session.
+DO $$ BEGIN
+ IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_bank_inbox_customer_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'bank guard publicly executable'; END IF;
 END $$;

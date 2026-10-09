@@ -29,6 +29,7 @@ END $$;
 \ir ../../../../../supabase/migrations/20261008093300_primary_card_reconciliation_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093400_primary_savings_unsettled_deletion_block.sql
 \ir ../../../../../supabase/migrations/20261008093500_primary_card_saved_token_deletion_purge.sql
+\ir ../../../../../supabase/migrations/20261008093800_primary_trigger_function_privilege_hygiene.sql
 -- Account deletion must succeed for a fully onboarded customer: all money
 -- evidence detaches (customer/goal/transaction NULL, row retained). Only
 -- provisioning-process intents cascade with their goal.
@@ -240,4 +241,11 @@ BEGIN
   VALUES(v_op,'10000000-0000-4000-8000-000000000004','staging','424242','{"reference":"pvb-first-primary-token"}','{"authorizationCode":"AUTH_fixture","customerCode":"CUS_fixture","email":"token@example.test","reusable":true}');
   DELETE FROM public.customers WHERE id = v_token;
   IF (SELECT count(*) FROM piggyvest_primary_card.collections WHERE operation_id = v_op AND saved_token IS NULL AND provider_transaction_id = '424242' AND evidence = '{"reference":"pvb-first-primary-token"}') <> 1 THEN RAISE EXCEPTION 'saved token not purged'; END IF;
+END $$;
+-- bank_role_safe fails any bank session that can execute a
+-- piggyvest_primary function outside its allowlist, so guard trigger
+-- functions must not keep the default PUBLIC grant.
+DO $$ BEGIN
+ IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_savings_customer_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'savings guard publicly executable'; END IF;
+ IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_savings_goal_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'savings goal guard publicly executable'; END IF;
 END $$;

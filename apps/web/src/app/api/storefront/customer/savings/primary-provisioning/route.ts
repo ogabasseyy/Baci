@@ -50,6 +50,7 @@ async function handle(
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.onboarding.merchantId,
+      forOnboarding: mode === 'provision',
     });
     if (!identity)
       return NextResponse.json(

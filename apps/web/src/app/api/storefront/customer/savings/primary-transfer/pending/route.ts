@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.merchantId,
+      forOnboarding: false,
     });
     if (!identity)
       return NextResponse.json(

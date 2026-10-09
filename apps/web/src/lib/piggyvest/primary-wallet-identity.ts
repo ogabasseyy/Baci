@@ -6,6 +6,7 @@ export async function resolvePrimaryWalletIdentity(input: {
   supabase: SupabaseClient;
   user: User;
   merchantId: string;
+  forOnboarding: boolean;
 }) {
   if (!input.user.email_confirmed_at || !input.user.email) return null;
   const { data, error } = await input.supabase
@@ -15,11 +16,18 @@ export async function resolvePrimaryWalletIdentity(input: {
     .eq('user_id', input.user.id)
     .maybeSingle();
   if (error || !data) return null;
+  // Email is contact data, not identity: the merchant/user/customer IDs
+  // bind the account. The stored-email match applies only to new
+  // provider onboarding (which records the email with the provider);
+  // reads, recovery, and submissions to already-bound wallets resolve
+  // on IDs alone so a confirmed auth email change cannot orphan an
+  // existing funding account or strand a dispatched contribution.
+  if (data.merchant_id !== input.merchantId || data.user_id !== input.user.id)
+    return null;
   if (
-    data.merchant_id !== input.merchantId ||
-    data.user_id !== input.user.id ||
-    typeof data.email !== 'string' ||
-    data.email.toLowerCase() !== input.user.email.toLowerCase()
+    input.forOnboarding &&
+    (typeof data.email !== 'string' ||
+      data.email.toLowerCase() !== input.user.email.toLowerCase())
   )
     return null;
   const identity = piggyvestPrimaryWalletIdentitySchema.safeParse({

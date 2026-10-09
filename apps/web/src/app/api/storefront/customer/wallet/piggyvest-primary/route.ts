@@ -51,6 +51,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.onboarding.merchantId,
+      forOnboarding: false,
     });
     if (!identity) {
       return NextResponse.json(
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.onboarding.merchantId,
+      forOnboarding: true,
     });
     if (!identity) {
       return NextResponse.json(

@@ -46,6 +46,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.merchantId,
+      forOnboarding: false,
     });
     if (!identity)
       return NextResponse.json(
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.merchantId,
+      forOnboarding: false,
     });
     if (!identity)
       return NextResponse.json(

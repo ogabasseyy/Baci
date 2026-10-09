@@ -20,9 +20,9 @@ const env = {
   PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD: fixture.config.database.password,
   PIGGYVEST_PRIMARY_DB_CA: fixture.config.database.certificateAuthority,
 };
-it('keeps inbox disabled unless explicitly enabled', () => {
+it('keeps intake disabled unless explicitly enabled', () => {
   expect(
-    readPrimaryWalletPaidInterestInboxRuntime({ NODE_ENV: 'test' })
+    readPrimaryWalletPaidInterestInboxRuntime('intake', { NODE_ENV: 'test' })
   ).toBeNull();
 });
 it('exposes signing keys while the worker stays unconfigured', () => {
@@ -34,9 +34,9 @@ it('exposes signing keys while the worker stays unconfigured', () => {
     webhookSecret: fixture.config.webhookSecret,
     retainedWebhookSecrets: [],
   });
-  expect(() => readPrimaryWalletPaidInterestInboxRuntime(incomplete)).toThrow(
-    /configuration unavailable/
-  );
+  expect(() =>
+    readPrimaryWalletPaidInterestInboxRuntime('worker', incomplete)
+  ).toThrow(/configuration unavailable/);
   expect(
     readPrimaryWalletPaidInterestInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();
@@ -50,18 +50,27 @@ it('keeps signing keys available while intake processing is rolled back', () => 
     webhookSecret: fixture.config.webhookSecret,
     retainedWebhookSecrets: [],
   });
-  expect(readPrimaryWalletPaidInterestInboxRuntime(disabled)).toBeNull();
+  expect(
+    readPrimaryWalletPaidInterestInboxRuntime('intake', disabled)
+  ).toBeNull();
+});
+it('drains queued receipts in worker mode after the inbox is disabled', () => {
+  const config = readPrimaryWalletPaidInterestInboxRuntime('worker', {
+    ...env,
+    PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED: 'false',
+  });
+  expect(config?.businessId).toBe(fixture.config.businessId);
 });
 it('can preserve signed receipts while API credentials are unavailable', () => {
   const { providerToken: _token, ...config } = fixture.config;
-  expect(readPrimaryWalletPaidInterestInboxRuntime(env)).toEqual({
+  expect(readPrimaryWalletPaidInterestInboxRuntime('worker', env)).toEqual({
     ...config,
     retainedWebhookSecrets: [],
   });
 });
 it('accepts bounded server-configured retained keys without exposing malformed values', () => {
   expect(
-    readPrimaryWalletPaidInterestInboxRuntime({
+    readPrimaryWalletPaidInterestInboxRuntime('worker', {
       ...env,
       PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS:
         '["old-test-only-key"]',
@@ -72,7 +81,7 @@ it('accepts bounded server-configured retained keys without exposing malformed v
     JSON.stringify(Array(5).fill('test-key')),
   ])
     expect(() =>
-      readPrimaryWalletPaidInterestInboxRuntime({
+      readPrimaryWalletPaidInterestInboxRuntime('worker', {
         ...env,
         PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS: value,
       })
@@ -80,16 +89,19 @@ it('accepts bounded server-configured retained keys without exposing malformed v
 });
 it('rejects preview, staging and missing signing evidence', () => {
   expect(() =>
-    readPrimaryWalletPaidInterestInboxRuntime({ ...env, VERCEL_ENV: 'preview' })
+    readPrimaryWalletPaidInterestInboxRuntime('worker', {
+      ...env,
+      VERCEL_ENV: 'preview',
+    })
   ).toThrow('environment mismatch');
   expect(() =>
-    readPrimaryWalletPaidInterestInboxRuntime({
+    readPrimaryWalletPaidInterestInboxRuntime('worker', {
       ...env,
       PIGGYVEST_PRIMARY_ENVIRONMENT: 'staging',
     })
   ).toThrow('configuration unavailable');
   expect(() =>
-    readPrimaryWalletPaidInterestInboxRuntime({
+    readPrimaryWalletPaidInterestInboxRuntime('worker', {
       ...env,
       PIGGYVEST_PRIMARY_PAID_INTEREST_WEBHOOK_SECRET: undefined,
     })

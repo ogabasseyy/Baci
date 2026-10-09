@@ -1016,6 +1016,42 @@ describe('WalletScreen', () => {
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
   });
 
+  it('retries funding from the wallet screen after a transient probe failure', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    mockReadObservedCapability.mockReturnValue(null);
+    mockGetPrimaryCapability
+      .mockRejectedValueOnce(new Error('transport down'))
+      .mockResolvedValueOnce(false);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Unable to fund wallet',
+        'We could not confirm your wallet rail. Please try again.',
+        expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    const buttons = alertSpy.mock.calls[0][2] ?? [];
+    const retry = buttons.find((button) => button?.text === 'Try again');
+    expect(retry?.onPress).toEqual(expect.any(Function));
+
+    await act(async () => {
+      retry?.onPress?.();
+    });
+    await waitFor(() => {
+      expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 2500 })
+      );
+    });
+  });
+
   it('routes to start savings and manage cards screens', () => {
     render(<WalletScreen />);
 

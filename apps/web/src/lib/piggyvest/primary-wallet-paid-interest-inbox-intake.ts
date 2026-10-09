@@ -9,7 +9,7 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   signature: string | null;
   env?: NodeJS.ProcessEnv;
 }) {
-  const config = readPrimaryWalletPaidInterestInboxRuntime(input.env);
+  const config = readPrimaryWalletPaidInterestInboxRuntime('intake', input.env);
   if (!config) return 'disabled' as const;
   const rawBody = Uint8Array.from(input.rawBody);
   if (

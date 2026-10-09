@@ -6,10 +6,12 @@ export function readPrimaryCardTransferRuntime(
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now()
 ) {
+  // No rollout-flag gates: the only callers (transfer outbox, provider
+  // dispatch) advance pre-existing rows, so a rollback must drain them
+  // instead of stranding charged-but-uncredited checkouts. Credential
+  // binding, environment match, and the signed policy still fail
+  // closed below.
   if (
-    env.PIGGYVEST_PRIMARY_CARD_TRANSFER_PROVIDER_ENABLED !== 'true' ||
-    env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true' ||
-    env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true' ||
     env.PIGGYVEST_PRIMARY_CARD_CUSTODY_PASSWORD ||
     env.PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD ||
     (env.VERCEL_ENV === 'production') !==

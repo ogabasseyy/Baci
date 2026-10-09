@@ -40,9 +40,17 @@ export function readPrimaryWalletPaidInterestInboxSecrets(
 }
 
 export function readPrimaryWalletPaidInterestInboxRuntime(
+  mode: 'intake' | 'worker',
   env: NodeJS.ProcessEnv = process.env
 ) {
-  if (env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true') return null;
+  // Intake stops at the flag (no new rows while disabled); the worker
+  // drains already-acknowledged rows through the same credentials-bound
+  // config, or a rollback leaves queued payouts permanently unapplied.
+  if (
+    mode === 'intake' &&
+    env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true'
+  )
+    return null;
   if (env.VERCEL_ENV !== 'production')
     throw new Error('Primary interest inbox environment mismatch');
   let retainedWebhookSecrets: unknown = [];

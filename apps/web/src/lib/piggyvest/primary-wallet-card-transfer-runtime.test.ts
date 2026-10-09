@@ -20,17 +20,27 @@ describe('trusted isolated financial transfer deployment profile', () => {
       )
     ).toEqual(parsed));
   it.each([
-    { PIGGYVEST_PRIMARY_CARD_TRANSFER_PROVIDER_ENABLED: 'false' },
     { PIGGYVEST_PRIMARY_CARD_TRANSFER_POLICY_BYTES: undefined },
     { PIGGYVEST_PRIMARY_CARD_TRANSFER_POLICY_SIGNATURE: '0'.repeat(64) },
     { PIGGYVEST_PRIMARY_CARD_CUSTODY_PASSWORD: 'forbidden' },
     { PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD: 'forbidden' },
     { VERCEL_ENV: 'production' },
-  ])('rejects disabled/unsigned/mixed profile %#', (change) =>
+  ])('rejects unsigned/forbidden/mixed profile %#', (change) =>
     expect(
       readPrimaryCardTransferRuntime(
         { ...fixture.environment, ...change },
         fixture.now
       )
     ).toBeNull());
+  it.each([
+    { PIGGYVEST_PRIMARY_CARD_TRANSFER_PROVIDER_ENABLED: 'false' },
+    { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },
+    { PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
+  ])('drains existing transfers while rollout flags are off %#', (change) =>
+    expect(
+      readPrimaryCardTransferRuntime(
+        { ...fixture.environment, ...change },
+        fixture.now
+      )
+    ).toEqual(parsed));
 });

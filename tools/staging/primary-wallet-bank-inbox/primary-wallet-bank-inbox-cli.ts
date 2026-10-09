@@ -6,8 +6,17 @@ export async function primaryWalletBankInboxCli(
   args: string[],
   env: NodeJS.ProcessEnv = process.env
 ) {
-  if (args.length !== 1 || !['--readiness', '--once'].includes(args[0]))
-    throw new Error('Usage: bank-inbox --readiness|--once');
+  if (
+    args.length !== 1 ||
+    !['--plan', '--readiness', '--once'].includes(args[0])
+  )
+    throw new Error('Usage: bank-inbox --plan|--readiness|--once');
+  // Offline executable plan: proves the sealed bundle runs with no
+  // database/provider operations before any owner-approved invocation.
+  if (args[0] === '--plan')
+    return {
+      plan: 'Plan only: no database/provider operations. --once requires owner-approved production bank inbox configuration and restricted TLS worker credentials. Processes at most one durable receipt.',
+    };
   const config = readPrimaryWalletBankInboxRuntime('worker', env);
   if (!config) throw new Error('Primary bank worker disabled');
   const controller = new AbortController();

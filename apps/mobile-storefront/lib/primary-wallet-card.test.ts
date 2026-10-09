@@ -7,6 +7,7 @@ const mockSetItem = jest.fn(async (key: string, value: string) => {
   mockStorage.set(key, value);
 });
 const mockUuid = jest.fn(() => '33333333-3333-4333-8333-333333333333');
+const mockWarn = jest.fn<(message: string, ...args: unknown[]) => void>();
 const mockCreateApiClient = jest.fn(() => ({ fetchJson: mockFetchJson }));
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -21,6 +22,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 jest.mock('expo-crypto', () => ({ randomUUID: mockUuid }));
 jest.mock('./storefront-customer-api-client', () => ({
   createStorefrontCustomerApiClient: mockCreateApiClient,
+}));
+jest.mock('./logger', () => ({
+  createLogger: () => ({ warn: mockWarn }),
 }));
 jest.mock('./supabase', () => ({
   supabase: { auth: { getUser: mockGetUser } },
@@ -267,6 +271,12 @@ it.each([
   expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
     amountKobo: 100000,
   });
+  // The drop is observable but redacted: no record bytes or scope ids.
+  expect(mockWarn).toHaveBeenCalledWith(
+    expect.stringContaining('corrupt persisted card funding record')
+  );
+  for (const call of mockWarn.mock.calls)
+    expect(call.join(' ')).not.toContain(raw);
 });
 it('preserves a foreign-account record while refusing to use it', async () => {
   const foreign = JSON.stringify({

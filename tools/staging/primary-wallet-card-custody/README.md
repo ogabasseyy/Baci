@@ -86,3 +86,35 @@ Still separate code/integration gates: **financial transfer adapter is not wired
 Regression tests first reproduced shared intake-role selection and mandatory transfer credential dependency; the corrected profiles pass. Mocked launch-flow tests exercise actual runtime/executor/mapping/reader/signed settlement composition with five GETs, exact configured crosswalk, one settlement and fenced finish; provider failure persists `io_retry` and fails the launch. CLI tests exercise file metadata, argument rejection and sanitized process failure. Package tests compile/smoke the standalone artifact, validate hashes/templates, refuse reuse/source-tree output and make no network requests.
 
 `primary-wallet-card-custody-launch.integration.sql` applies the existing exact-once bank/card fixture, frozen inbox migrations and `201100` in a fresh Unix-socket-only PostgreSQL cluster. It proves intake enqueue, denied actual claim/settle/table access, intake expiry, worker claiming an intake-created receipt, worker expiry and denied generic user/service-role grants. The cluster is stopped after validation. No credentials or external provider evidence are captured in the package.
+
+## Activation (scheduler before rail)
+
+The primary-card rail must stay disabled until this worker's systemd timer
+instance is installed and enabled; signed custody receipts would otherwise sit
+in the inbox with no settlement drain. The activation suite makes that ordering
+verifiable:
+
+- `primary-wallet-card-custody-package.mjs` builds the sealed offline bundle
+  (`custody.cjs`, `baci-primary-card-custody@.service`/`.timer` templates for
+  user `baci-primary-card-custody`, manifest) outside the repository.
+- `primary-wallet-card-custody-host-inventory.mjs` collects read-only host
+  metadata for one reviewed instance name (installed unit files,
+  `systemctl show` state, service account) over SSH from the authorized host.
+  It performs no writes.
+- `primary-wallet-card-custody-db-inventory.sql` captures the restricted live-DB
+  posture (fixed custody login, sole capability, exact 8-RPC allowlist,
+  signed-inbox readiness probe) with no secret values.
+- `primary-wallet-card-custody-activation-prepare.mjs` seals bundle +
+  inventories into an expiry-bounded preparation with a review-only owner
+  install plan bound to the inventoried instance. The crosswalk file stays an
+  out-of-band owner delivery; it is never packaged in the sealed bundle.
+- `primary-wallet-card-custody-activation-guard.mjs --owner-gate` refuses to run
+  until the owner records exact unexpired approvals, including
+  `schedulerStartApproved`, and wires itself as `ExecStartPre` via
+  `worker-expiry.conf`.
+
+Local suite checks (no SSH, no database):
+
+```sh
+node --test tools/staging/primary-wallet-card-custody/primary-wallet-card-custody-host-inventory.test.mjs tools/staging/primary-wallet-card-custody/primary-wallet-card-custody-activation-prepare.test.mjs
+```

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import type { z } from 'zod';
 import { primaryWalletCardSchemas as schemas } from '@/schemas/primary-wallet-card';
+import { createLogger } from './logger';
 import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 import { supabase } from './supabase';
@@ -12,6 +13,7 @@ type Pending = z.infer<typeof schemas.pending>;
 // double taps share one initialization), but a slow call for one account
 // can no longer head-of-line-block every other merchant/account app-wide.
 const queues = new Map<string, Promise<unknown>>();
+const log = createLogger('PrimaryWalletCard');
 
 export function createPrimaryWalletCardFundingClient() {
   const key = (scope: Scope) =>
@@ -44,6 +46,10 @@ export function createPrimaryWalletCardFundingClient() {
       // (a surviving server operation is re-adopted by initialize).
       // Ownership mismatches below are NOT dropped — that record belongs
       // to another account and must survive.
+      // Redacted by construction: no record bytes or scope ids, so a
+      // corrupt drop is distinguishable from no record during triage
+      // without leaking funding data into logs.
+      log.warn('Dropping a corrupt persisted card funding record.');
       await AsyncStorage.removeItem(key(scope));
       return null;
     }

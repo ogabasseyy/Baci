@@ -4,8 +4,10 @@ import { vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   merchant: vi.fn(),
   rpc: vi.fn(),
-  insert: vi.fn(),
-  from: vi.fn(),
+  cookieInsert: vi.fn(),
+  cookieFrom: vi.fn(),
+  serviceInsert: vi.fn(),
+  serviceFrom: vi.fn(),
   serviceClient: vi.fn(),
 }));
 // Hoisted bindings cannot be exported; alias for test assertions.
@@ -15,10 +17,10 @@ vi.mock('@/lib/cached-data', () => ({
 }));
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({ rpc: mocks.rpc }),
+  createClient: () => ({ rpc: mocks.rpc, from: mocks.cookieFrom }),
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.serviceClient,
+vi.mock('@/lib/search/server-analytics-client', () => ({
+  createSearchAnalyticsServiceClient: mocks.serviceClient,
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { warn: vi.fn() },
@@ -53,7 +55,9 @@ export function setupSubmissionMocks() {
     data: [{ product_id: 'phone-1', total_count: 27 }],
     error: null,
   });
-  mocks.insert.mockResolvedValue({ error: null });
-  mocks.from.mockReturnValue({ insert: mocks.insert });
-  mocks.serviceClient.mockReturnValue({ from: mocks.from });
+  mocks.cookieInsert.mockResolvedValue({ error: null });
+  mocks.cookieFrom.mockReturnValue({ insert: mocks.cookieInsert });
+  mocks.serviceInsert.mockResolvedValue({ error: null });
+  mocks.serviceFrom.mockReturnValue({ insert: mocks.serviceInsert });
+  mocks.serviceClient.mockReturnValue({ from: mocks.serviceFrom });
 }

@@ -23,6 +23,9 @@ const piggyvestIntakeClientBrand: unique symbol = Symbol(
 const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
   'baci.immediate-notification-completion.service-role-client'
 );
+const searchAnalyticsClientBrand: unique symbol = Symbol(
+  'baci.search-analytics.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -101,6 +104,21 @@ export type ImmediateNotificationCompletionServiceClient =
   };
 
 /**
+ * A service-role client reserved for the search-submissions ingestion edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the telemetry insert
+ * cannot be driven by a generic service client from any other edge. Only
+ * `/api/search/submissions` may construct it, via
+ * `createSearchAnalyticsServiceClient`, after the Origin and storefront
+ * gates pass. Requires an owner-approved temporary exception: the backend
+ * key inherently bypasses RLS; the brand constrains the approved call
+ * graph, not that capability.
+ */
+export type SearchAnalyticsServiceClient = SupabaseClient<Database> & {
+  readonly [searchAnalyticsClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -130,6 +148,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'immediate-notification-completion'
 ): ImmediateNotificationCompletionServiceClient;
+export function createServiceClient(
+  sentinel: 'search-analytics'
+): SearchAnalyticsServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -140,6 +161,7 @@ export function createServiceClient(
     | 'shipping-quote-booking-economics'
     | 'piggyvest-intake'
     | 'immediate-notification-completion'
+    | 'search-analytics'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -205,6 +227,11 @@ export function createServiceClient(
   if (sentinel === 'piggyvest-intake') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'search-analytics') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [searchAnalyticsClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

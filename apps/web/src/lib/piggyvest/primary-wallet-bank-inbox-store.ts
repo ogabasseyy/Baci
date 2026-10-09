@@ -5,13 +5,13 @@ import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wall
 
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (role.rolcanlogin AND NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
-    AND role.rolvaliduntil>clock_timestamp() AND role.rolvaliduntil<=$2::timestamptz
+    AND role.rolvaliduntil>clock_timestamp()
     AND pg_has_role(SESSION_USER,$1::text,'MEMBER')
     AND NOT EXISTS(SELECT 1 FROM pg_auth_members membership JOIN pg_roles parent ON parent.oid=membership.roleid
       WHERE membership.member=role.oid AND parent.rolname<>$1::text)
     AND EXISTS(SELECT 1 FROM pg_roles parent WHERE parent.rolname=$1::text AND NOT parent.rolcanlogin
       AND NOT parent.rolsuper AND NOT parent.rolbypassrls AND NOT parent.rolcreaterole AND NOT parent.rolcreatedb AND NOT parent.rolreplication)) AS safe,
-  piggyvest_primary.bank_role_safe($3::boolean) AS capability_safe,
+  piggyvest_primary.bank_role_safe($2::boolean) AS capability_safe,
   EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl) AS tls
   FROM pg_roles role WHERE role.rolname=SESSION_USER`;
 const statements = {
@@ -56,9 +56,13 @@ export function createPrimaryWalletBankInboxStore(configuration: unknown) {
     });
     try {
       await client.connect();
+      // No validity-against-deadline pin: intake and worker drain
+      // existing mappings past the deposit deadline, so role validity
+      // must cover the drain window (extended operationally at
+      // decommission, revoked after the drain). The session still fails
+      // closed on expired validity, and the database pins the scope.
       const verified = await client.query(verify, [
         intake ? 'primary_bank_signed_intake' : 'primary_bank_inbox_worker',
-        config.scope.expiresAt,
         !intake,
       ]);
       const session = verified.rows[0];

@@ -5,11 +5,16 @@ const mocks = vi.hoisted(() => ({
   readStatus: vi.fn(),
   reconcile: vi.fn(),
   cancel: vi.fn(),
+  adoptPending: vi.fn(),
+  lookupTransfer: vi.fn(),
+  retrieveWallet: vi.fn(),
+  transfer: vi.fn(),
 }));
 vi.mock('./primary-wallet-savings-store', () => ({
   createPrimaryWalletSavingsStore: () => ({
     readStatus: mocks.readStatus,
     cancelBeforeDispatch: mocks.cancel,
+    adoptPending: mocks.adoptPending,
   }),
 }));
 vi.mock('./primary-wallet-savings-executor', () => ({
@@ -17,6 +22,15 @@ vi.mock('./primary-wallet-savings-executor', () => ({
 }));
 vi.mock('./primary-wallet-savings-reconciliation-runtime', () => ({
   runPrimaryWalletSavingsReconciliation: mocks.reconcile,
+}));
+vi.mock('./primary-wallet-savings-transfer-lookup', () => ({
+  lookupSavingsTransferReference: mocks.lookupTransfer,
+}));
+vi.mock('./wallets', () => ({
+  retrievePiggyvestWallet: mocks.retrieveWallet,
+}));
+vi.mock('./transfers', () => ({
+  transferToWallet: mocks.transfer,
 }));
 const integrationId = '11111111-1111-4111-8111-111111111111';
 const operationId = '22222222-2222-4222-8222-222222222222';
@@ -82,6 +96,7 @@ it('reconciles without releasing funds if dispatch wins the cancellation race', 
     .mockResolvedValueOnce('reserved')
     .mockResolvedValueOnce('dispatched');
   mocks.cancel.mockRejectedValue(new Error('dispatch won'));
+  mocks.adoptPending.mockResolvedValue({ status: 'existing' });
   mocks.reconcile.mockResolvedValue({ status: 'pending' });
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
     status: 'pending',
@@ -90,6 +105,7 @@ it('reconciles without releasing funds if dispatch wins the cancellation race', 
 });
 it('reconciles only a dispatched operation selected by the authenticated scope', async () => {
   mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockResolvedValue({ status: 'existing' });
   mocks.reconcile.mockResolvedValue({ status: 'pending' });
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
     status: 'pending',
@@ -99,4 +115,82 @@ it('reconciles only a dispatched operation selected by the authenticated scope',
     providerToken: 'test-only',
     operationId,
   });
+});
+it('resubmits a stale dispatched operation the provider never received', async () => {
+  // claimDispatch succeeded but the provider request died pre-transfer:
+  // the wallet hold and goal slot pin forever unless status drives the
+  // lookup-gated reclaim — the client only polls status, never re-posts.
+  const reservation = {
+    operationId,
+    goalId: '33333333-3333-4333-8333-333333333333',
+    amountKobo: 25000,
+    sourceWalletId: 'source-wallet',
+    destinationWalletId: 'destination-wallet',
+    reference: 'pvb-save-stale',
+    businessId: 'business',
+    providerCustomerId: 'provider-customer',
+  };
+  mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockResolvedValue({ status: 'reclaimed', reservation });
+  mocks.lookupTransfer.mockResolvedValue('absent');
+  mocks.retrieveWallet.mockImplementation(
+    async (_provider: unknown, walletId: string) => ({
+      id: walletId,
+      api_customer_id: 'provider-customer',
+      business_id: 'business',
+      currency: 'NGN',
+      status: 'active',
+      balance: 50000,
+    })
+  );
+  mocks.transfer.mockResolvedValue({ accepted: true });
+  mocks.reconcile.mockResolvedValue({ status: 'pending' });
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'pending',
+  });
+  expect(mocks.transfer).toHaveBeenCalledTimes(1);
+  expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+});
+it('leaves a fresh dispatched operation to its live holder', async () => {
+  mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockResolvedValue({ status: 'existing' });
+  mocks.reconcile.mockResolvedValue({ status: 'pending' });
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'pending',
+  });
+  expect(mocks.lookupTransfer).not.toHaveBeenCalled();
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+});
+it('does not resubmit when the provider already holds the transfer', async () => {
+  mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation: {
+      operationId,
+      goalId: '33333333-3333-4333-8333-333333333333',
+      amountKobo: 25000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'destination-wallet',
+      reference: 'pvb-save-landed',
+      businessId: 'business',
+      providerCustomerId: 'provider-customer',
+    },
+  });
+  mocks.lookupTransfer.mockResolvedValue('submitted');
+  mocks.reconcile.mockResolvedValue({ status: 'pending' });
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'pending',
+  });
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+});
+it('still reconciles when the reclaim attempt fails', async () => {
+  mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockRejectedValue(new Error('adopt unavailable'));
+  mocks.reconcile.mockResolvedValue({ status: 'pending' });
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'pending',
+  });
+  expect(mocks.reconcile).toHaveBeenCalledTimes(1);
 });

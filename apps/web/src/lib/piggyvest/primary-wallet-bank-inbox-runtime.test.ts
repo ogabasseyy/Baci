@@ -52,15 +52,11 @@ it('keeps signing keys available while intake processing is rolled back', () => 
   });
   expect(readPrimaryWalletBankInboxRuntime('intake', disabled)).toBeNull();
 });
-it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-environment settings', () => {
+it('fails closed on explicitly enabled incomplete, malformed or wrong-environment settings', () => {
   for (const env of [
     { NODE_ENV: 'test' as const, PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true' },
     { ...fixture.env, PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'TRUE' },
     { ...fixture.env, VERCEL_ENV: 'production' },
-    {
-      ...fixture.env,
-      PIGGYVEST_PRIMARY_BANK_INBOX_EXPIRES_AT: '2000-01-01T00:00:00Z',
-    },
     {
       ...fixture.env,
       PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: 'malformed-secret-value',
@@ -69,6 +65,22 @@ it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-e
     expect(() => readPrimaryWalletBankInboxRuntime('worker', env)).toThrow(
       /Primary bank inbox/
     );
+});
+it.each([
+  'intake',
+  'worker',
+] as const)('drains existing mappings past the deposit deadline in %s mode', (mode) => {
+  // Intake enqueues only owned (existing verified) mappings and the
+  // worker processes only enqueued rows, so both modes are drain-only
+  // by construction: refusing them past expiry would 503 signed
+  // deposits into existing wallets until retries exhaust, stranding
+  // money with no local credit. The deadline gates new exposure, never
+  // the processing of deposits.
+  const config = readPrimaryWalletBankInboxRuntime(mode, {
+    ...fixture.env,
+    PIGGYVEST_PRIMARY_BANK_INBOX_EXPIRES_AT: '2000-01-01T00:00:00Z',
+  });
+  expect(config?.scope.expiresAt).toBe('2000-01-01T00:00:00Z');
 });
 it.each([
   'intake',

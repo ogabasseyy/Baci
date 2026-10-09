@@ -186,12 +186,10 @@ export function createPaymentGatewayMessageHandler({
     }
 
     if (data.type === 'crypto_success') {
-      // Intentional belt-and-braces: the early primary_wallet_card guard
-      // above already returns for every success-claim type, so this inner
-      // guard is unreachable today. It stays so a future narrowing of the
-      // early guard cannot silently let a WebView crypto claim credit a
-      // primary card checkout, which confirms only through hosted status.
-      if (paymentKind === 'primary_wallet_card') return;
+      // The early primary_wallet_card guard above returns for every
+      // success-claim type, so primary checkouts never reach this
+      // branch; the primary-card tests pin that routing and go red if
+      // the early guard ever narrows.
       await handleCryptoSuccessMessage(data, {
         amount,
         clearCart,

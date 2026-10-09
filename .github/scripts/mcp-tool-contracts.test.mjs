@@ -46,6 +46,8 @@ test('production smoke watches and runs the extracted contract tests', () => {
 
 test('production smoke ignores stale repository tool overrides', () => {
   const workflow = readFileSync(new URL('../workflows/mcp-production-smoke.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /^      MCP_REQUIRED_TOOLS: ""$/m);
-  assert.equal(workflow.includes('vars.MCP_REQUIRED_TOOLS'), false);
+  const match = workflow.match(/^\s*MCP_REQUIRED_TOOLS:\s*(.*)$/m);
+  assert.ok(match, 'expected an MCP_REQUIRED_TOOLS env entry');
+  assert.equal(match[1].trim(), '""');
+  assert.equal(workflow.includes('${{ vars.MCP_REQUIRED_TOOLS'), false);
 });

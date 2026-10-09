@@ -35,6 +35,25 @@ it('rejects preview and staging environments instead of falling back', () => {
     })
   ).toThrow('configuration unavailable');
 });
+it('reads bounded retained rotation keys for the direct fallback verifier', () => {
+  expect(
+    readPrimaryWalletPaidInterestRuntime({
+      ...env,
+      PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS:
+        '["old-test-only-key"]',
+    })?.retainedWebhookSecrets
+  ).toEqual(['old-test-only-key']);
+  for (const value of [
+    'private-malformed-value',
+    JSON.stringify(Array(5).fill('test-key')),
+  ])
+    expect(() =>
+      readPrimaryWalletPaidInterestRuntime({
+        ...env,
+        PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS: value,
+      })
+    ).toThrow('configuration unavailable');
+});
 it('fails closed when dedicated signing or API credentials are unavailable', () => {
   expect(() =>
     readPrimaryWalletPaidInterestRuntime({

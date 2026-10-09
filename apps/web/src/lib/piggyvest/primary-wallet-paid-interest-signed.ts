@@ -18,14 +18,19 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
   now?: () => Date;
 }): Promise<z.infer<typeof schemas.outcome>> {
   const config = schemas.runtime.parse(input.configuration);
+  // The outer key-union already matched one of these keys; re-accept the
+  // same bounded set here so a rotation-retained signature verifies on
+  // the direct path instead of 503ing until retries exhaust.
   if (
     input.rawBody.byteLength === 0 ||
     input.rawBody.byteLength > 65536 ||
-    !verifyPiggyvestPayloadSignature({
-      payload: input.rawBody,
-      signature: input.signature,
-      secret: config.webhookSecret,
-    })
+    ![config.webhookSecret, ...config.retainedWebhookSecrets].some((secret) =>
+      verifyPiggyvestPayloadSignature({
+        payload: input.rawBody,
+        signature: input.signature,
+        secret,
+      })
+    )
   )
     throw new Error('Primary paid-interest authentication failed');
   let event: z.infer<typeof schemas.event>;

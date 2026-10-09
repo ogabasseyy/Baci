@@ -1,4 +1,7 @@
-import type { StartSavingsColors } from './start-savings.types';
+import type {
+  SavingsProductChoice,
+  StartSavingsColors,
+} from './start-savings.types';
 
 export const SAVINGS_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const;
 
@@ -188,4 +191,58 @@ export function getRequiredTopUp({
   requiredContribution: number;
 }) {
   return Math.max(0, requiredContribution - Math.max(0, availableBalance));
+}
+
+export function deriveStartSavingsAmounts({
+  contributionAmount,
+  frequency,
+  initialContributionAmount,
+  initialContributionEnabled,
+  safeWalletBalance,
+  selectedFundingOption,
+  selectedProduct,
+  startDate,
+}: {
+  contributionAmount: string;
+  frequency: SavingsFrequency;
+  initialContributionAmount: string;
+  initialContributionEnabled: boolean;
+  safeWalletBalance: number;
+  selectedFundingOption: SavingsFundingOption;
+  selectedProduct: SavingsProductChoice | null;
+  startDate: string;
+}) {
+  const contributionValue = parseAmount(contributionAmount);
+  const targetValue =
+    selectedProduct && !selectedProduct.requiresVariantSelection
+      ? selectedProduct.price
+      : 0;
+  const targetAmount = targetValue > 0 ? String(targetValue) : '';
+  const initialContributionValue = parseAmount(initialContributionAmount);
+  const maturityDate =
+    calculateMaturityDate({
+      contributionAmount: contributionValue,
+      frequency,
+      startDate,
+      targetAmount: targetValue,
+    }) ?? '';
+  const effectiveInitialContribution = getEffectiveInitialContribution({
+    contributionAmount: contributionValue,
+    fundingOption: selectedFundingOption,
+    initialContributionAmount: initialContributionValue,
+    initialContributionEnabled,
+  });
+  const requiredTopUpAmount = getRequiredTopUp({
+    availableBalance: safeWalletBalance,
+    requiredContribution: effectiveInitialContribution,
+  });
+  return {
+    contributionValue,
+    targetValue,
+    targetAmount,
+    initialContributionValue,
+    maturityDate,
+    effectiveInitialContribution,
+    requiredTopUpAmount,
+  };
 }

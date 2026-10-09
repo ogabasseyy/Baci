@@ -237,8 +237,13 @@ it('sets the terminal directive on abandoned and dropped runs', async () => {
   beginPrimaryWalletCardCompletion(dropped);
   await flush();
   await flush();
+  // A dropped record is inferred terminality, not server confirmation:
+  // the copy must not claim no money moved.
   expect(setTerminalDirective).toHaveBeenCalledWith(
-    expect.stringContaining('Start a new funding to try again')
+    expect.stringContaining('could not find this funding on this device')
+  );
+  expect(setTerminalDirective).not.toHaveBeenCalledWith(
+    expect.stringContaining('No money moved')
   );
 });
 it('recovers a non-pilot merchant without consulting the volatile capability cache', async () => {

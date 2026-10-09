@@ -30,6 +30,10 @@ const runtime = piggyvestPrimaryInflowRuntimeSchema.extend({
   businessId: identifier,
   providerToken: z.string().min(1).max(4096),
   webhookSecret: z.string().min(1).max(4096),
+  retainedWebhookSecrets: z
+    .array(z.string().min(1).max(4096))
+    .max(4)
+    .default([]),
 });
 
 export const primaryWalletPaidInterestSchemas = {

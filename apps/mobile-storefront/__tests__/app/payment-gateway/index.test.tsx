@@ -56,6 +56,16 @@ it.each([
   expect(router.replace).toHaveBeenCalledWith('/wallet');
 });
 
+it('fails closed to primary funding copy on an unknown future status', () => {
+  mockStatus = 'future-terminal-state';
+  render(<PaymentGatewayScreen />);
+  expect(screen.getByRole('header').props.children).toBe(
+    'Wallet funding pending'
+  );
+  expect(screen.queryByText('View your orders')).toBeNull();
+  expect(screen.queryByText('Payment Failed')).toBeNull();
+});
+
 it('resumes the saved savings handoff when leaving the pending funding view', () => {
   mockStatus = 'pending';
   mockReturnTo = '/wallet?action=savings&savingsGoalId=owned-goal';

@@ -46,9 +46,14 @@ export function readPrimaryWalletBankInboxRuntime(
   mode: 'intake' | 'worker',
   env: NodeJS.ProcessEnv = process.env
 ) {
+  // Intake stops at the flag (no new rows while disabled); the worker
+  // drains already-acknowledged rows through the same credentials-bound
+  // config, or a rollback strands provider-acked deposits with no retry
+  // path and no local credit.
   if (
-    env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === undefined ||
-    env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === 'false'
+    mode === 'intake' &&
+    (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === undefined ||
+      env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === 'false')
   )
     return null;
   // Retained keys parse in both modes: the outer webhook gate and this
@@ -88,7 +93,11 @@ export function readPrimaryWalletBankInboxRuntime(
       certificateAuthority: env.PIGGYVEST_PRIMARY_DB_CA,
     },
   });
-  if (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true' || !parsed.success)
+  if (
+    (mode === 'intake' &&
+      env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true') ||
+    !parsed.success
+  )
     throw new Error('Primary bank inbox configuration unavailable');
   // No deposit-deadline check: intake enqueues only owned (existing
   // verified) mappings and the worker processes only enqueued rows, so

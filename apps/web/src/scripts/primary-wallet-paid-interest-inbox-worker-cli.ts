@@ -20,7 +20,10 @@ export async function runPrimaryWalletPaidInterestInboxCli(input: {
   }
   const env = input.env ?? process.env;
   try {
-    const configuration = readPrimaryWalletPaidInterestInboxRuntime(env);
+    const configuration = readPrimaryWalletPaidInterestInboxRuntime(
+      'worker',
+      env
+    );
     if (env.PIGGYVEST_PRIMARY_PAID_INTEREST_WORKER_APPROVED !== 'true' ||
       !configuration || !readPrimaryWalletPaidInterestRuntime(env))
       throw new Error('Worker configuration unavailable');

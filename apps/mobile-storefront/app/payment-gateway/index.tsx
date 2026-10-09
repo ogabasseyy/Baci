@@ -51,9 +51,18 @@ export default function PaymentGatewayScreen() {
       );
     }
 
+    // Closed primary status set: beginPrimaryWalletCardCompletion only
+    // emits processing/pending/error/success. 'loading'/'ready' fall
+    // through to the Paystack checkout WebView below by design (the
+    // authorization URL rides in the navigation params); 'processing'
+    // shows the generic spinner and 'success' the generic success view.
+    // A never-emitted 'held' is captured here so primary funding can
+    // never leak into Redvault held copy.
     if (
       controller.paymentKind === 'primary_wallet_card' &&
-      (controller.status === 'pending' || controller.status === 'error')
+      (controller.status === 'pending' ||
+        controller.status === 'error' ||
+        controller.status === 'held')
     ) {
       return (
         <PrimaryWalletCardPendingView

@@ -15,7 +15,7 @@ export async function drainPrimaryWalletPaidInterestInbox(input: {
   batchSize?: number;
 }) {
   const totals = { claimed: 0, processed: 0, deferred: 0, quarantined: 0 };
-  const config = readPrimaryWalletPaidInterestInboxRuntime(input.env);
+  const config = readPrimaryWalletPaidInterestInboxRuntime('worker', input.env);
   if (!config || input.signal?.aborted) return totals;
   const store = createPrimaryWalletPaidInterestInboxStore(config);
   const request = schemas.claim.parse({ batchSize: input.batchSize ?? 5 });

@@ -38,6 +38,9 @@ beforeEach(() => {
 it.each([
   ['pending', 'Wallet funding pending'],
   ['error', 'Could not check funding status'],
+  // A never-emitted 'held' stays on primary funding copy instead of
+  // leaking into the generic Redvault held view.
+  ['held', 'Wallet funding pending'],
 ])('routes primary %s to safe funding status UI, not failed payment or orders', (status, title) => {
   mockStatus = status;
   render(<PaymentGatewayScreen />);

@@ -5,19 +5,28 @@ import {
   readPrimaryWalletBankInboxSecrets,
 } from './primary-wallet-bank-inbox-runtime';
 
-it.each([
-  'intake',
-  'worker',
-] as const)('does not require new configuration on an old deployment for %s', (mode) => {
+it('does not require new configuration on an old deployment for intake', () => {
   expect(
-    readPrimaryWalletBankInboxRuntime(mode, { NODE_ENV: 'test' })
+    readPrimaryWalletBankInboxRuntime('intake', { NODE_ENV: 'test' })
   ).toBeNull();
   expect(
-    readPrimaryWalletBankInboxRuntime(mode, {
+    readPrimaryWalletBankInboxRuntime('intake', {
       NODE_ENV: 'test',
       PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'false',
     })
   ).toBeNull();
+});
+it('drains acknowledged rows in worker mode after the inbox is disabled', () => {
+  const config = readPrimaryWalletBankInboxRuntime('worker', {
+    ...fixture.env,
+    PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'false',
+  });
+  expect(config?.database.login).toBe('baci_primary_bank_worker');
+  // Missing credentials still fail closed: drain is credentials-bound,
+  // not a bypass.
+  expect(() =>
+    readPrimaryWalletBankInboxRuntime('worker', { NODE_ENV: 'test' })
+  ).toThrow(/Primary bank inbox/);
 });
 it('exposes signing keys while the worker stays unconfigured', () => {
   const env = {
@@ -55,7 +64,6 @@ it('keeps signing keys available while intake processing is rolled back', () => 
 it('fails closed on explicitly enabled incomplete, malformed or wrong-environment settings', () => {
   for (const env of [
     { NODE_ENV: 'test' as const, PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true' },
-    { ...fixture.env, PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'TRUE' },
     { ...fixture.env, VERCEL_ENV: 'production' },
     {
       ...fixture.env,
@@ -65,6 +73,14 @@ it('fails closed on explicitly enabled incomplete, malformed or wrong-environmen
     expect(() => readPrimaryWalletBankInboxRuntime('worker', env)).toThrow(
       /Primary bank inbox/
     );
+  // The flag value no longer gates the worker (drain), but intake still
+  // requires an exact 'true'.
+  expect(() =>
+    readPrimaryWalletBankInboxRuntime('intake', {
+      ...fixture.env,
+      PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'TRUE',
+    })
+  ).toThrow(/Primary bank inbox/);
 });
 it.each([
   'intake',

@@ -38,6 +38,11 @@ const statements = {
     sql: 'SELECT piggyvest_primary_card.record_abandonment($1::jsonb,$2::uuid) AS result',
     count: 2,
   },
+  selectStaleReady: {
+    role: 'evidence',
+    sql: 'SELECT piggyvest_primary_card.select_stale_ready_checkouts($1::jsonb,$2::timestamptz,$3::integer) AS result',
+    count: 3,
+  },
 } as const;
 
 const verifySession = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,

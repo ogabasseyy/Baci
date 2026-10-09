@@ -32,8 +32,7 @@ describe('explicit search submissions', () => {
         result_limit: 1,
       })
     );
-    expect(mocks.serviceFrom).toHaveBeenCalledWith('search_analytics');
-    expect(mocks.serviceInsert).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith({
       merchant_id: merchantId,
       search_query: 'iphone',
       results_count: 27,
@@ -41,12 +40,15 @@ describe('explicit search submissions', () => {
     });
   });
 
-  it('writes through the service-role client so anon INSERT can stay revoked', async () => {
+  it('writes through the narrow ingestion edge so direct writes stay revoked', async () => {
     const response = await POST(request());
     expect(response.status).toBe(204);
-    expect(mocks.serviceClient).toHaveBeenCalledTimes(1);
-    expect(mocks.serviceFrom).toHaveBeenCalledWith('search_analytics');
-    expect(mocks.serviceInsert).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith({
+      merchant_id: merchantId,
+      search_query: 'iphone',
+      results_count: 27,
+      search_method: 'client',
+    });
     expect(mocks.cookieFrom).not.toHaveBeenCalledWith('search_analytics');
     expect(mocks.cookieInsert).not.toHaveBeenCalled();
   });
@@ -109,7 +111,7 @@ describe('explicit search submissions', () => {
     expect(response.status).toBe(204);
     expect(mocks.merchant).toHaveBeenCalledWith('shop.example.com');
     expect(mocks.merchant).toHaveBeenCalledWith('www.shop.example.com');
-    expect(mocks.serviceInsert).toHaveBeenCalledExactlyOnceWith(
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ merchant_id: merchantId })
     );
   });
@@ -130,7 +132,7 @@ describe('explicit search submissions', () => {
     mocks.rpc.mockResolvedValue({ data: [], error: null });
     expect((await POST(request())).status).toBe(204);
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
-    expect(mocks.serviceInsert).toHaveBeenCalledWith(
+    expect(mocks.recordSubmission).toHaveBeenCalledWith(
       expect.objectContaining({ results_count: 0 })
     );
   });
@@ -152,11 +154,11 @@ describe('explicit search submissions', () => {
         error: { message: 'secret database detail' },
       });
     if (failure === 'insert')
-      mocks.serviceInsert.mockResolvedValue({
+      mocks.recordSubmission.mockResolvedValue({
         error: { message: 'secret database detail' },
       });
     if (failure === 'throw')
-      mocks.serviceInsert.mockRejectedValue(
+      mocks.recordSubmission.mockRejectedValue(
         new Error('secret database detail')
       );
     const response = await POST(request());
@@ -165,6 +167,6 @@ describe('explicit search submissions', () => {
       error: 'Search tracking unavailable',
     });
     if (failure === 'search')
-      expect(mocks.serviceInsert).not.toHaveBeenCalled();
+      expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 });

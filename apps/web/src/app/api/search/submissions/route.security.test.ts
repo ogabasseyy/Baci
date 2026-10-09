@@ -21,7 +21,7 @@ describe('explicit search submissions security gates', () => {
     if (!('origin' in headers)) req.headers.delete('origin');
     expect((await POST(req)).status).toBe(403);
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it('logs origin rejections so proxy-induced shedding is observable', async () => {
@@ -54,7 +54,7 @@ describe('explicit search submissions security gates', () => {
       (await POST(request(undefined, { 'user-agent': userAgent }))).status
     ).toBe(204);
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it('records shoppers whose device model merely contains bot', async () => {
@@ -65,7 +65,7 @@ describe('explicit search submissions security gates', () => {
       })
     );
     expect(response.status).toBe(204);
-    expect(mocks.serviceInsert).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSubmission).toHaveBeenCalledTimes(1);
   });
 
   it('sheds full crawler user agents with token boundaries', async () => {
@@ -77,14 +77,14 @@ describe('explicit search submissions security gates', () => {
     );
     expect(response.status).toBe(204);
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it('records same-origin submissions with a stripped user agent', async () => {
     const req = request();
     req.headers.delete('user-agent');
     expect((await POST(req)).status).toBe(204);
-    expect(mocks.serviceInsert).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSubmission).toHaveBeenCalledTimes(1);
   });
 
   it('rejects originless stripped clients at the origin gate', async () => {
@@ -93,7 +93,7 @@ describe('explicit search submissions security gates', () => {
     req.headers.delete('origin');
     expect((await POST(req)).status).toBe(403);
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it('sheds originless bots silently without an origin warning', async () => {
@@ -102,7 +102,7 @@ describe('explicit search submissions security gates', () => {
     expect((await POST(req)).status).toBe(204);
     expect(logger.warn).not.toHaveBeenCalled();
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -115,7 +115,7 @@ describe('explicit search submissions security gates', () => {
   ])('rejects invalid input: %j', async (body) => {
     expect((await POST(request(body))).status).toBe(400);
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -126,7 +126,7 @@ describe('explicit search submissions security gates', () => {
     expect(
       (await POST(request(undefined, { 'content-type': contentType }))).status
     ).toBe(204);
-    expect(mocks.serviceInsert).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSubmission).toHaveBeenCalledTimes(1);
   });
 
   it('rejects lookalike media types at the content gate', async () => {
@@ -138,7 +138,7 @@ describe('explicit search submissions security gates', () => {
       ).status
     ).toBe(415);
     expect(mocks.merchant).not.toHaveBeenCalled();
-    expect(mocks.serviceInsert).not.toHaveBeenCalled();
+    expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 
   it('rejects an oversized body before parsing or data access', async () => {

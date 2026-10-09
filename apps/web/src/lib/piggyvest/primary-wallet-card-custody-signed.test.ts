@@ -92,14 +92,40 @@ describe('signed primary custody boundary', () => {
     await expect(applyPrimaryCardSignedCustody(input)).rejects.toThrow();
     expect(input.settle).not.toHaveBeenCalled();
   });
-  it('defers malformed signed evidence without attempting settlement', async () => {
+  it('conflicts malformed signed evidence for quarantine, never deferred retry', async () => {
     const input = setup();
     input.rawBody = new TextEncoder().encode('{');
     input.signature = createHmac('sha512', input.secret)
       .update(input.rawBody)
       .digest('hex');
-    expect(await applyPrimaryCardSignedCustody(input)).toBe('deferred');
+    expect(await applyPrimaryCardSignedCustody(input)).toBe('conflict');
     expect(input.loadContext).not.toHaveBeenCalled();
+    expect(input.settle).not.toHaveBeenCalled();
+  });
+  it('conflicts a mismatched envelope for quarantine, never deferred retry', async () => {
+    const input = setup();
+    input.rawBody = new TextEncoder().encode(
+      JSON.stringify({
+        ...fixture.envelope,
+        eventType: 'wallet-transfer.outflow.failed',
+      })
+    );
+    input.signature = createHmac('sha512', input.secret)
+      .update(input.rawBody)
+      .digest('hex');
+    expect(await applyPrimaryCardSignedCustody(input)).toBe('conflict');
+    expect(input.loadContext).not.toHaveBeenCalled();
+    expect(input.settle).not.toHaveBeenCalled();
+  });
+  it('conflicts a wrong-operation context for quarantine, never deferred retry', async () => {
+    const input = setup();
+    input.loadContext.mockResolvedValue({
+      ...fixture.context,
+      operationId: '00000000-0000-4000-8000-000000000099',
+      reference: 'pvb-primary-transfer-00000000-0000-4000-8000-000000000099',
+    });
+    expect(await applyPrimaryCardSignedCustody(input)).toBe('conflict');
+    expect(input.observe).not.toHaveBeenCalled();
     expect(input.settle).not.toHaveBeenCalled();
   });
 });

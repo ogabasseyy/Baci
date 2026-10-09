@@ -372,6 +372,17 @@ it('drops only the null-operation placeholder on authoritative not-ready', async
   expect(mockStorage.size).toBe(0);
   expect(await client.readPending(scope)).toBeNull();
 });
+it('drops the null-operation placeholder on the pre-reservation email 409', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('rejected'), { code: 'VERIFIED_EMAIL_REQUIRED' })
+  );
+  await expect(client.start(start)).rejects.toMatchObject({
+    code: 'VERIFIED_EMAIL_REQUIRED',
+  });
+  expect(mockStorage.size).toBe(0);
+  expect(await client.readPending(scope)).toBeNull();
+});
 it('keeps the placeholder for ambiguous failures so recovery can retry', async () => {
   const client = createPrimaryWalletCardFundingClient();
   mockFetchJson.mockRejectedValueOnce(new Error('transport exploded'));

@@ -3,12 +3,16 @@ import { Alert } from 'react-native';
 import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
 import {
   getPiggyvestPrimaryCapability,
+  isVerifiedEmailRequired,
   rollbackObservedCapabilityOnNotReady,
 } from '@/lib/piggyvest-primary-capability';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO } from '@/schemas/primary-wallet-card';
-import { alertPrimaryWalletCardFundingFailure } from './primary-wallet-card-funding-alerts';
+import {
+  alertPrimaryWalletCardEmailFallback,
+  alertPrimaryWalletCardFundingFailure,
+} from './primary-wallet-card-funding-alerts';
 import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
@@ -270,6 +274,26 @@ export async function fundPrimaryWalletCard(
         'This operation is saved. Check again later; do not start another card charge.'
       );
   } catch (error) {
+    // Unverified email falls back to the legacy top-up (which has no
+    // email gate) with a nudge explaining why: the 409 fires before any
+    // reservation, so nothing is retained and the customer still funds
+    // today. The fallback cue reuses the caller's NOT_READY contract,
+    // but the merchant verdict is untouched — this is per-user
+    // eligibility, not configuration — and a retained checkout (recovery
+    // racing verification) keeps the nudge-only path below.
+    if (isVerifiedEmailRequired(error)) {
+      const retained = await client
+        .readPending({ merchantId, userId })
+        .catch(() => pending);
+      if (!retained) {
+        alertPrimaryWalletCardEmailFallback();
+        const fallback = new Error(
+          'Primary card funding needs a verified email.'
+        ) as Error & { code: string };
+        fallback.code = 'PRIMARY_CARD_NOT_READY';
+        throw fallback;
+      }
+    }
     // Unconfigured primary is the caller's cue to run the legacy top-up,
     // but only when nothing is retained: a found checkout may already have
     // charged the card, so keep it and surface the failure. Re-read on

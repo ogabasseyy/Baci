@@ -74,6 +74,93 @@ describe('wallet funding account api client', () => {
       expect.objectContaining({ method: 'POST' })
     );
   });
+  it('probes an unobserved merchant before creating a legacy DVA', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Wallet access is temporarily unavailable.',
+          code: 'PIGGYVEST_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          account: {
+            accountName: 'Ogabassey/Jane Doe',
+            accountNumber: '1234567890',
+            bankName: 'Titan Paystack',
+            provider: 'paystack',
+          },
+          requiresConsent: false,
+        }),
+      });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '00000000-0000-4000-8000-000000000002',
+      })
+    ).resolves.toMatchObject({
+      account: { accountNumber: '1234567890', provider: 'paystack' },
+    });
+    // Authoritative negative first, legacy mint second — never legacy
+    // on a cold-start guess.
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/piggyvest-primary'
+      ),
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/funding-account'
+      ),
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+  it('routes an unobserved server-enabled merchant to primary, never legacy', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '00000000-0000-4000-8000-000000000003',
+      })
+    ).rejects.toThrow('No bank account was created');
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([, options]) =>
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'POST'
+      )
+    ).toBe(false);
+  });
+  it('refuses to mint a legacy DVA when the probe fails ambiguously', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockRejectedValueOnce(new Error('timeout'));
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '00000000-0000-4000-8000-000000000004',
+      })
+    ).rejects.toThrow();
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([url]) =>
+          typeof url === 'string' &&
+          url.includes('/api/storefront/customer/wallet/funding-account')
+      )
+    ).toBe(false);
+  });
   it('falls back to the legacy funding account when primary is unconfigured', async () => {
     mockFetchWithTimeout.mockClear();
     mockFetchWithTimeout
@@ -173,20 +260,33 @@ describe('wallet funding account api client', () => {
   });
 
   it('creates the customer funding account with explicit merchant id and slug', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({
-        account: {
-          accountName: 'Ogabassey/Jane Doe',
-          accountNumber: '1234567890',
-          bankName: 'Titan Paystack',
-          provider: 'paystack',
-        },
-        requiresConsent: false,
-      }),
-    });
+    mockFetchWithTimeout.mockClear();
+    // Unobserved merchant: the capability probe runs first and its
+    // authoritative negative routes this create to the legacy POST.
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Wallet access is temporarily unavailable.',
+          code: 'PIGGYVEST_NOT_READY',
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          account: {
+            accountName: 'Ogabassey/Jane Doe',
+            accountNumber: '1234567890',
+            bankName: 'Titan Paystack',
+            provider: 'paystack',
+          },
+          requiresConsent: false,
+        }),
+      });
 
     await expect(
       createWalletFundingAccount({
@@ -200,8 +300,13 @@ describe('wallet funding account api client', () => {
       requiresConsent: false,
     });
 
-    expect(mockFetchWithTimeout.mock.calls.length).toBeGreaterThan(0);
-    const call = mockFetchWithTimeout.mock.calls[0];
+    expect(mockFetchWithTimeout.mock.calls.length).toBeGreaterThan(1);
+    const call = mockFetchWithTimeout.mock.calls.find(
+      ([, options]) =>
+        typeof options === 'object' &&
+        options !== null &&
+        (options as { method?: string }).method === 'POST'
+    );
     expect(call).toBeDefined();
     const requestOptions = call?.[1];
     expect(requestOptions).toBeDefined();

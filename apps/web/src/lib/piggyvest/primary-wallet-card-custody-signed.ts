@@ -30,13 +30,19 @@ export async function applyPrimaryCardSignedCustody(input: {
     )
   )
     throw new Error('Custody authentication failed');
+  // Authentic but permanently unprocessable input conflicts — it must
+  // quarantine (blocked + proof_conflict), never ride the deferred
+  // retryable backlog: no retry can make unparseable bytes parse, fix a
+  // mismatched envelope, or reconcile a wrong-operation context. Only an
+  // unverified proof below stays deferred, because its evidence may
+  // legitimately complete on a later pass.
   let decoded: unknown;
   try {
     decoded = JSON.parse(
       new TextDecoder('utf-8', { fatal: true }).decode(input.rawBody)
     );
   } catch {
-    return 'deferred' as const;
+    return 'conflict' as const;
   }
   const selected = schemas.context.shape.operationId.safeParse(
     input.operationId
@@ -49,10 +55,10 @@ export async function applyPrimaryCardSignedCustody(input: {
     parsed.data.eventType !== 'wallet-transfer.outflow.success' ||
     parsed.data.eventCategory !== 'wallet-transfer'
   )
-    return 'deferred' as const;
+    return 'conflict' as const;
   const loaded = await input.loadContext(selected.data);
   const context = schemas.context.parse(loaded);
-  if (context.operationId !== selected.data) return 'deferred' as const;
+  if (context.operationId !== selected.data) return 'conflict' as const;
   const observations = await input.observe(context, parsed.data);
   const result = verifyPrimaryCardCustodyProof({
     ...observations,

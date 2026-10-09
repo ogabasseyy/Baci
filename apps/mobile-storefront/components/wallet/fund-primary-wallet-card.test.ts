@@ -357,6 +357,33 @@ it('falls back when recovery drops a stale placeholder on not-ready', async () =
   });
   expect(alert).not.toHaveBeenCalled();
 });
+it('nudges and falls back to legacy top-up when email verification is required', async () => {
+  mockStart.mockRejectedValue(
+    Object.assign(new Error('rejected'), { code: 'VERIFIED_EMAIL_REQUIRED' })
+  );
+  await expect(fundPrimaryWalletCard(input)).rejects.toMatchObject({
+    code: 'PRIMARY_CARD_NOT_READY',
+  });
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Verify your email for card funding',
+    expect.stringContaining('standard top-up')
+  );
+});
+it('keeps the nudge-only path when email is required with a retained checkout', async () => {
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockRejectedValue(
+    Object.assign(new Error('rejected'), { code: 'VERIFIED_EMAIL_REQUIRED' })
+  );
+  await fundPrimaryWalletCard(input);
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Verify your email',
+    expect.stringContaining('do not start another charge')
+  );
+  expect(Alert.alert).not.toHaveBeenCalledWith(
+    'Verify your email for card funding',
+    expect.anything()
+  );
+});
 it('debounces repeat taps for one scope without blocking another account', async () => {
   const other = {
     ...input,

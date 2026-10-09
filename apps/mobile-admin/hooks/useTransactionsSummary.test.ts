@@ -38,26 +38,27 @@ describe('useTransactionsSummary', () => {
   });
 
   it('sums missing costs and reports the monthly count', () => {
-    const { result } = renderHook(() =>
-      useTransactionsSummary(RANGE, false, ANCHOR)
-    );
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.summary).toEqual({
       missingCosts: 5,
       transactions: 12,
     });
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE, {
-      enabled: true,
-    });
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE);
     expect(mocks.useMonthlyTransactionCount).toHaveBeenCalledWith(ANCHOR);
   });
 
-  it('disables the range query while searching', () => {
-    renderHook(() => useTransactionsSummary(RANGE, true, ANCHOR));
+  it('keeps the range query enabled so cost edits refresh the card', () => {
+    // The card renders during search: a disabled query would ignore
+    // cost-edit invalidations and show a pre-edit value until the search
+    // clears. No enabled:false is ever passed.
+    renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE, {
-      enabled: false,
-    });
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(RANGE);
+    expect(mocks.useTransactionReview).not.toHaveBeenCalledWith(
+      RANGE,
+      expect.objectContaining({ enabled: false })
+    );
   });
 
   it('shows a placeholder while the range summary is pending', () => {
@@ -67,9 +68,7 @@ describe('useTransactionsSummary', () => {
       isPending: true,
     });
 
-    const { result } = renderHook(() =>
-      useTransactionsSummary(RANGE, false, ANCHOR)
-    );
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.summary.missingCosts).toBe('--');
   });
@@ -81,9 +80,7 @@ describe('useTransactionsSummary', () => {
       isPending: false,
     });
 
-    const { result } = renderHook(() =>
-      useTransactionsSummary(RANGE, false, ANCHOR)
-    );
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.summary.missingCosts).toBe('Unavailable');
   });
@@ -95,9 +92,7 @@ describe('useTransactionsSummary', () => {
       refetch: vi.fn(),
     });
 
-    const { result } = renderHook(() =>
-      useTransactionsSummary(RANGE, false, ANCHOR)
-    );
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.summary.transactions).toBe('Unavailable');
   });
@@ -110,9 +105,7 @@ describe('useTransactionsSummary', () => {
       refetch,
     });
 
-    const { result } = renderHook(() =>
-      useTransactionsSummary(RANGE, false, ANCHOR)
-    );
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
 
     expect(result.current.refetchMonthlyCount).toBe(refetch);
   });

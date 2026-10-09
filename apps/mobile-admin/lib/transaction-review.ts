@@ -12,6 +12,7 @@ import {
   getUnitCostByIndex,
   IMEI_KEYS,
   SERIAL_KEYS,
+  toCanonicalSearchDate,
   toFiniteNumberOrNull,
 } from './transaction-review-row-helpers';
 import type {
@@ -227,7 +228,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
       order.customer_email,
       order.customer_phone,
       order.payment_method,
-      transactionDate,
+      toCanonicalSearchDate(transactionDate),
       order.total,
       orderDetailTokens,
       items.map((item) => item.searchText),

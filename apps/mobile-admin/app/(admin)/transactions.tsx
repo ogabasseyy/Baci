@@ -72,7 +72,6 @@ export default function TransactionsScreen() {
   });
   const { refetchMonthlyCount, summary } = useTransactionsSummary(
     range,
-    searching,
     currentMonthAnchor
   );
   const isRetrying = isLoading || isRefetching;

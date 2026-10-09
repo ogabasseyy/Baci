@@ -83,6 +83,12 @@ const paymentGatewayParamsObject = z.object({
   customerIdentifier: trimmedOptionalString(
     'Customer identifier cannot be empty'
   ),
+  // Initiating-user bind for primary card checkout: the fund flow stamps
+  // the user it guarded, so the mounted screen can block the WebView when
+  // a later account switch would otherwise let another user enter card
+  // details into the previous account's charge. Absent on legacy links,
+  // where only the completion-time ownership guard applies.
+  userId: z.uuid().optional(),
 });
 
 export const PaymentGatewayParamsSchema = paymentGatewayParamsObject

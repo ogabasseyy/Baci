@@ -17,7 +17,7 @@ export function createPrimaryWalletSavingsStore(input: {
 
   async function manage(
     operationId: string,
-    action: 'dispatch' | 'cancel' | 'cancel_stale'
+    action: 'dispatch' | 'cancel' | 'cancel_stale' | 'release'
   ) {
     const parsed = schemas.request.shape.operationId.parse(operationId);
     const result = await input.execute(
@@ -79,6 +79,9 @@ export function createPrimaryWalletSavingsStore(input: {
     },
     async cancelStaleReservation(operationId: string) {
       return await manage(operationId, 'cancel_stale');
+    },
+    async releaseAfterRejection(operationId: string) {
+      return await manage(operationId, 'release');
     },
   };
 }

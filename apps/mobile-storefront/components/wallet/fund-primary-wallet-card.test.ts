@@ -93,6 +93,15 @@ it('requires actual one-time-charge UI consent and sends no save-card or BVN inf
     }),
   });
 });
+it('stamps the guarded user into the checkout launch params', async () => {
+  await fundPrimaryWalletCard(input);
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/payment-gateway',
+    params: expect.objectContaining({
+      userId: input.user.id,
+    }),
+  });
+});
 it('does not initialize on cancelled consent', async () => {
   alert.mockImplementation((_title, _message, buttons) => {
     buttons?.find((button) => button.text === 'Cancel')?.onPress?.();
@@ -258,6 +267,24 @@ it('reports a closed adoption without opening checkout', async () => {
   expect(alert).toHaveBeenCalledWith(
     'Previous funding closed',
     expect.stringContaining('Start a new funding')
+  );
+  expect(router.push).not.toHaveBeenCalled();
+  expect(input.resetFundPanel).toHaveBeenCalled();
+});
+it('reports a closed checkout without opening checkout even when not adopted', async () => {
+  mockStart.mockResolvedValue({
+    ...response,
+    status: 'abandoned',
+    authorizationUrl: undefined,
+  });
+  await fundPrimaryWalletCard(input);
+  expect(alert).toHaveBeenCalledWith(
+    'Previous funding closed',
+    expect.stringContaining('Start a new funding')
+  );
+  expect(alert).not.toHaveBeenCalledWith(
+    'Card funding pending',
+    expect.anything()
   );
   expect(router.push).not.toHaveBeenCalled();
   expect(input.resetFundPanel).toHaveBeenCalled();

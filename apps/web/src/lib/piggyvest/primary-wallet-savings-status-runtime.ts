@@ -75,6 +75,7 @@ export async function checkPrimaryWalletSavingsStatus(input: {
       baseUrl: getPrimaryWalletProviderOrigin(configuration.environment),
     },
     adoptPending: (id) => store.adoptPending(id),
+    releaseAfterRejection: (id) => store.releaseAfterRejection(id),
   }).catch(() => undefined);
   return await runPrimaryWalletSavingsReconciliation({
     configuration: evidence,
@@ -93,6 +94,7 @@ async function driveStaleDispatchReclaim(input: {
     | { status: 'adopted' | 'reclaimed'; reservation: unknown }
     | { status: 'existing' }
   >;
+  releaseAfterRejection: (operationId: string) => Promise<boolean>;
 }) {
   const adoption = await input.adoptPending(input.operationId);
   if (adoption.status !== 'reclaimed') return;
@@ -121,5 +123,7 @@ async function driveStaleDispatchReclaim(input: {
         reference: candidate.reference,
         narration: 'Savings contribution',
       }),
+    releaseAfterRejection: (operationId) =>
+      input.releaseAfterRejection(operationId),
   });
 }

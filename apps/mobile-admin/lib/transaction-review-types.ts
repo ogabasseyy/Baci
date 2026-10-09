@@ -98,6 +98,7 @@ export interface TransactionReviewOrder {
   createdAt: string;
   customerEmail: string | null;
   customerName: string;
+  detailTokens?: string[];
   customerPhone: string | null;
   discountAmount?: number;
   estimatedProfit: number;

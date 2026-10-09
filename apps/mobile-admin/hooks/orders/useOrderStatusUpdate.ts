@@ -190,6 +190,9 @@ export function useUpdateOrderStatus() {
         queryKey: ['transaction-review', merchant?.id],
       });
       queryClient.invalidateQueries({
+        queryKey: ['monthly-transaction-count', merchant?.id],
+      });
+      queryClient.invalidateQueries({
         queryKey: ['dashboard-stats', merchant?.id],
       });
       queryClient.invalidateQueries({

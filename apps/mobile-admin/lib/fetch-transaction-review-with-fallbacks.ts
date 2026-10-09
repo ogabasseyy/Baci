@@ -102,11 +102,11 @@ export async function fetchTransactionReviewWithFallbacks(
       );
     return runWithUnavailableSchemaColumns(runQuery);
   };
-  let { data, error } = await fetchRichTransactionReviewRows(query, {
+  let { data, error, truncated } = await fetchRichTransactionReviewRows(query, {
     onMissingSchemaColumn: schemaColumnState.markMissingSchemaColumn,
   });
   if (isMissingSchemaColumn(error, 'line_id')) {
-    ({ data, error } = await runLegacyFallbackQuery(
+    ({ data, error, truncated } = await runLegacyFallbackQuery(
       'FullNoLineId',
       TRANSACTION_REVIEW_SELECTORS.fullNoLineId,
       true,
@@ -117,7 +117,7 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseWithDiscount',
       TRANSACTION_REVIEW_SELECTORS.baseWithDiscount,
       true,
@@ -129,14 +129,14 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'Base',
       TRANSACTION_REVIEW_SELECTORS.base,
       true
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runLegacyFallbackQuery(
+    ({ data, error, truncated } = await runLegacyFallbackQuery(
       'Legacy',
       TRANSACTION_REVIEW_SELECTORS.legacyCompat,
       false,
@@ -147,7 +147,7 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseWithDiscount',
       TRANSACTION_REVIEW_SELECTORS.baseWithDiscountCompat,
       false,
@@ -159,21 +159,21 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'Base',
       TRANSACTION_REVIEW_SELECTORS.baseCompat,
       false
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'Base',
       TRANSACTION_REVIEW_SELECTORS.noDiscount,
       false
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseNoLineId',
       TRANSACTION_REVIEW_SELECTORS.baseWithDiscountNoLineId,
       true,
@@ -185,14 +185,14 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseNoLineId',
       TRANSACTION_REVIEW_SELECTORS.noLineId,
       false
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseNoVariantId',
       TRANSACTION_REVIEW_SELECTORS.baseWithDiscountNoVariantId,
       true,
@@ -204,18 +204,18 @@ export async function fetchTransactionReviewWithFallbacks(
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseNoVariantId',
       TRANSACTION_REVIEW_SELECTORS.noVariantId,
       false
     ));
   }
   if (isTransactionReviewSchemaCacheError(error)) {
-    ({ data, error } = await runBaseFallbackQuery(
+    ({ data, error, truncated } = await runBaseFallbackQuery(
       'BaseNoQuizAwardId',
       TRANSACTION_REVIEW_SELECTORS.noVariantIdNoQuizAwardId,
       false
     ));
   }
-  return { data, error };
+  return { data, error, truncated };
 }

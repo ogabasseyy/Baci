@@ -12,8 +12,6 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/dependabot.yml'
-      - '.github/scripts/muse-dependabot-policy.test.mjs'
       - '.github/scripts/muse-review/**'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
@@ -27,8 +25,6 @@ on:
       - '.github/workflows/dependency-review.yml'
   pull_request:
     paths:
-      - '.github/dependabot.yml'
-      - '.github/scripts/muse-dependabot-policy.test.mjs'
       - '.github/scripts/muse-review/**'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
@@ -79,7 +75,6 @@ jobs:
               bash .github/scripts/semgrep-sarif-hardening-shard.test.sh "${SHARD#hard-}"
               ;;
             static)
-              node --test .github/scripts/muse-dependabot-policy.test.mjs
               for f in .github/scripts/muse-review/*.sh; do
                 bash -n "${f}"
               done

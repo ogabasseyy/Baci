@@ -19,13 +19,9 @@ test('excludes only the audited Muse workflow from automated action updates', ()
 });
 
 test('runs the pin-policy regression when updater policy changes', () => {
-  const selftest = readFileSync('.github/workflows/muse-review-selftest.yml', 'utf8');
-  assert.equal(
-    selftest.match(/- '\.github\/dependabot\.yml'/g)?.length,
-    2
-  );
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
   assert.match(
-    selftest,
-    /static\)[\s\S]*node --test \.github\/scripts\/muse-dependabot-policy\.test\.mjs/
+    ci,
+    /node --test \.github\/scripts\/muse-dependabot-policy\.test\.mjs/
   );
 });

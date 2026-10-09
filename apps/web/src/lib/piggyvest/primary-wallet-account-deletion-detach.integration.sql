@@ -26,6 +26,7 @@ END $$;
 \ir ../../../../../supabase/migrations/20261008092900_primary_savings_deletion_retention.sql
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093200_primary_card_unsettled_deletion_block.sql
+\ir ../../../../../supabase/migrations/20261008093300_primary_card_reconciliation_deletion_detach.sql
 -- Account deletion must succeed for a fully onboarded customer: all money
 -- evidence detaches (customer/goal/transaction NULL, row retained). Only
 -- provisioning-process intents cascade with their goal.
@@ -145,4 +146,19 @@ BEGIN
   UPDATE piggyvest_primary_card.operations SET state = 'completed' WHERE email = 'blocked@example.test';
   DELETE FROM public.customers WHERE id = v_blocked;
   IF (SELECT customer_id FROM piggyvest_primary_card.operations WHERE email = 'blocked@example.test') IS NOT NULL THEN RAISE EXCEPTION 'settled operation not detached'; END IF;
+END $$;
+-- reconciliation_required operations hold no live money-movement state
+-- (flag_reconciliation releases the reservation; record_collection
+-- rejects the state so no collection or transfer_outbox row can exist),
+-- so detaching them strands no dispatch. The deletion guard must let
+-- them detach: blocking this absorbing state would lock the account
+-- permanently with no terminal transition.
+DO $$ DECLARE
+  v_review uuid := '50000000-0000-4000-8000-000000000031';
+BEGIN
+  INSERT INTO public.customers VALUES(v_review, '10000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000032', 'review@example.test');
+  INSERT INTO piggyvest_primary_card.operations(integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_review,'50000000-0000-4000-8000-000000000032','staging','fixture-business','review@example.test','50000000-0000-4000-8000-000000000033',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('f',64),'review-wallet','review-customer','reconciliation_required');
+  DELETE FROM public.customers WHERE id = v_review;
+  IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE email = 'review@example.test' AND customer_id IS NULL AND amount_kobo = 25000 AND state = 'reconciliation_required') <> 1 THEN RAISE EXCEPTION 'review operation not retained'; END IF;
 END $$;

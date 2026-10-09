@@ -218,4 +218,35 @@ SELECT pg_temp.assert_true(
   'unknown referral code blocked enrollment'
 );
 
+-- 7. Negative bonus config clamps to zero (never negative balances).
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES ('01aa0000-0000-4000-8000-000000000014', '01aa0000-0000-4000-8000-000000000001', 'enroll-d@example.com');
+
+UPDATE public.loyalty_settings
+SET signup_bonus_points = -50, referral_bonus_points = -100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'points_balance')::integer = 0
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000014',
+     NULL
+   ) AS result),
+  'negative bonus config was not clamped to zero'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT points_balance = 0 AND lifetime_points = 0
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000014')
+  AND (SELECT count(*) = 0
+   FROM public.points_transactions
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000014'),
+  'negative bonus config wrote negative balances or ledger rows'
+);
+
 ROLLBACK;

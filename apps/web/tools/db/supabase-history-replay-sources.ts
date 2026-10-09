@@ -12,6 +12,7 @@ import { GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-rep
 import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
+import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
 import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
@@ -261,6 +262,7 @@ const PENDING_SOURCES = [
   GIGL_WALLET_SHIPPING_PENDING_SOURCES,
   INVENTORY_PENDING_REPLAY_SOURCE_ROWS,
   JUMIA_PENDING_REPLAY_SOURCE_ROWS,
+  LOYALTY_PENDING_REPLAY_SOURCE_ROWS,
   NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS,
   REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS,
   REDVAULT_PENDING_REPLAY_SOURCE_ROWS,

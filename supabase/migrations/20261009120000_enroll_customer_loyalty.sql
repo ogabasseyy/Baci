@@ -38,10 +38,11 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  -- Fail closed when the program is missing or disabled.
+  -- Fail closed when the program is missing or disabled. Clamp negative
+  -- merchant config to zero so balances can never go negative.
   SELECT
-    COALESCE(signup_bonus_points, 0),
-    COALESCE(referral_bonus_points, 0)
+    GREATEST(COALESCE(signup_bonus_points, 0), 0),
+    GREATEST(COALESCE(referral_bonus_points, 0), 0)
   INTO v_signup_bonus, v_referral_bonus
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id

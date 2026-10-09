@@ -422,6 +422,34 @@ describe('POST /api/cart/validate', () => {
     });
   });
 
+  it('returns 500 when offer prices cannot be loaded', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+      },
+    ];
+    mocks.offerError = { message: 'offer query failed' };
+
+    const response = await postCartValidate({
+      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toContain('offer query failed');
+    expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
+      p_product_id: PRODUCT_ID,
+    });
+  });
+
   it('invalidates only the line whose offer is gone', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

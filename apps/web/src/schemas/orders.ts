@@ -141,6 +141,8 @@ const orderCreateSchemaBase = z
               ),
             variantId: z.string().optional(),
             variant_id: z.string().optional(),
+            offerId: z.string().optional(),
+            offer_id: z.string().optional(),
             variantName: optionalVariantNameSchema,
             variant_name: optionalVariantNameSchema,
             variantAttributes: z

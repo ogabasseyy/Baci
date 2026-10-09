@@ -3,6 +3,11 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/server';
 import { cartValidateSchema } from '@/schemas/cart';
+import {
+  fetchCartOfferPrices,
+  type OfferQueryResult,
+} from './cart-offer-prices';
+import { prepareCartValidationItems } from './prepare-cart-validation-items';
 
 type CartProductRow = {
   id: string;
@@ -19,27 +24,6 @@ type CartVariantRow = {
   product_id: string;
   price_override: number | string | null;
 };
-
-type CartValidationItem = {
-  id: string;
-  price: number | null;
-  variantId?: string;
-  offerId?: string;
-};
-
-type CartOfferRow = {
-  offer_id: string;
-  price: number | string | null;
-};
-
-const uuidRegex =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function normalizeVariantId(
-  item: { variantId?: string; variant_id?: string } | undefined
-) {
-  return item?.variantId || item?.variant_id || undefined;
-}
 
 function toPriceNumber(value: number | string | null | undefined) {
   const price = Number(value ?? 0);
@@ -87,18 +71,14 @@ export async function POST(request: NextRequest) {
     }
 
     const { productIds, cartItems } = parsed.data;
-    const hasCartItems = Array.isArray(cartItems) && cartItems.length > 0;
-    const validationItems: CartValidationItem[] = hasCartItems
-      ? cartItems.map((item) => ({
-          id: item.id,
-          price: item.price,
-          variantId: normalizeVariantId(item),
-          offerId: item.offerId,
-        }))
-      : (productIds ?? []).map((id) => ({ id, price: null }));
-    const idsToValidate = validationItems.map((item) => item.id);
+    const {
+      validationItems,
+      validFormatIds,
+      invalidFormatIds,
+      validVariantIds,
+    } = prepareCartValidationItems(cartItems, productIds);
 
-    if (!idsToValidate.length) {
+    if (!validationItems.length) {
       return NextResponse.json({
         validProducts: [],
         invalidProductIds: [],
@@ -106,51 +86,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const validFormatIds: string[] = [];
-    const invalidFormatIds: string[] = [];
-    const validVariantIds = Array.from(
-      new Set(
-        validationItems
-          .map((item) => item.variantId)
-          .filter(
-            (variantId): variantId is string =>
-              typeof variantId === 'string' && uuidRegex.test(variantId)
-          )
-      )
-    );
-
-    for (const id of idsToValidate) {
-      const strId = String(id);
-      if (uuidRegex.test(strId)) {
-        validFormatIds.push(strId);
-      } else {
-        const safeId = strId.replace(/[\r\n]/g, '').slice(0, 50);
-        console.warn(`Cart contains invalid product ID format: "${safeId}"`);
-        invalidFormatIds.push(strId);
-      }
-    }
-
     const supabase = await createClient();
 
-    // Products with non-variant offer lines need their live condition
-    // offers (the public RPC returns active rows only, so a missing row
-    // means the offer is gone). Variant lines price from the variant
-    // override, never from an offer.
-    const offerProductIds = Array.from(
-      new Set(
-        validationItems
-          .filter(
-            (item) =>
-              !item.variantId &&
-              typeof item.offerId === 'string' &&
-              uuidRegex.test(item.offerId) &&
-              uuidRegex.test(String(item.id))
-          )
-          .map((item) => String(item.id))
-      )
-    );
-
-    const [productsResult, variantsResult, offersResults] = await Promise.all([
+    const [productsResult, variantsResult, offerMap] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
             .from('products')
@@ -168,24 +106,14 @@ export async function POST(request: NextRequest) {
             error: { message: string } | null;
           }>)
         : Promise.resolve({ data: null, error: null }),
-      Promise.all(
-        offerProductIds.map(
-          async (
-            productId
-          ): Promise<{
-            productId: string;
-            data: CartOfferRow[] | null;
-            error: { message: string } | null;
-          }> => {
-            const result = (await supabase.rpc('get_product_offers', {
-              p_product_id: productId,
-            })) as unknown as {
-              data: CartOfferRow[] | null;
-              error: { message: string } | null;
-            };
-            return { productId, ...result };
-          }
-        )
+      fetchCartOfferPrices(
+        (productId) =>
+          supabase.rpc('get_product_offers', {
+            p_product_id: productId,
+          }) as unknown as Promise<OfferQueryResult>,
+        validationItems
+      ).catch((error: unknown) =>
+        error instanceof Error ? error : new Error('Offer query failed')
       ),
     ]);
 
@@ -208,11 +136,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const offerError = offersResults.find((result) => result.error)?.error;
-    if (offerError) {
-      console.error('Cart validation offer query error:', offerError);
+    if (offerMap instanceof Error) {
+      console.error('Cart validation offer query error:', offerMap);
       return NextResponse.json(
-        { error: `Failed to validate cart: ${offerError.message}` },
+        { error: `Failed to validate cart: ${offerMap.message}` },
         { status: 500 }
       );
     }
@@ -225,14 +152,6 @@ export async function POST(request: NextRequest) {
     );
     const variantMap = new Map(
       variants.map((variant) => [String(variant.id), variant])
-    );
-    const offerMap = new Map(
-      offersResults.flatMap((result) =>
-        (result.data || []).map(
-          (offer) =>
-            [`${result.productId}::${String(offer.offer_id)}`, offer] as const
-        )
-      )
     );
 
     const validProducts: {
@@ -259,7 +178,9 @@ export async function POST(request: NextRequest) {
       const product = productMap.get(strId);
 
       if (product?.status !== 'active') {
-        if (uuidRegex.test(strId) && !invalidProductIds.includes(strId)) {
+        // Malformed ids arrive pre-seeded from invalidFormatIds, so the
+        // includes check alone covers both shapes without re-testing.
+        if (!invalidProductIds.includes(strId)) {
           invalidProductIds.push(strId);
         }
         continue;

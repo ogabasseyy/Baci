@@ -90,6 +90,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
+import {
+  findMismatchedOrderOffer,
+  type OrderOfferLine,
+  type OrderOfferQueryResult,
+} from './verify-order-offer-lines';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -951,6 +956,7 @@ export async function POST(request: NextRequest) {
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
+        offer_id: item.offerId || item.offer_id,
         variant_name: variantName ?? undefined,
         variant_attributes:
           item.variantAttributes || item.variant_attributes || {},
@@ -967,6 +973,34 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid order items' },
         { status: 400 }
       );
+    }
+
+    // Exact condition offers must name a live offer of their own product:
+    // two offers can share one condition, so the stored id is the only
+    // thing distinguishing them at fulfillment time.
+    if (orderItemsPayload.some((item) => item.offer_id)) {
+      let mismatchedOfferLine: OrderOfferLine | null = null;
+      try {
+        mismatchedOfferLine = await findMismatchedOrderOffer(
+          (productId) =>
+            supabase.rpc('get_product_offers', {
+              p_product_id: productId,
+            }) as unknown as Promise<OrderOfferQueryResult>,
+          orderItemsPayload
+        );
+      } catch (error) {
+        console.error('Order offer verification failed:', error);
+        return NextResponse.json(
+          { error: 'Failed to verify order offers' },
+          { status: 500 }
+        );
+      }
+      if (mismatchedOfferLine) {
+        return NextResponse.json(
+          { error: 'Invalid condition offer for order item' },
+          { status: 400 }
+        );
+      }
     }
 
     let quizVoucherRouteProof: ReturnType<

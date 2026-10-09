@@ -75,6 +75,8 @@ export interface MobileCheckoutOrderItemPayload {
   condition?: string;
   image_url?: string;
   variant_id?: string;
+  /** Exact condition-offer id: two offers can share one condition. */
+  offer_id?: string;
   variant_name?: string;
   variant_attributes?: Record<string, string>;
   has_assurance: boolean;

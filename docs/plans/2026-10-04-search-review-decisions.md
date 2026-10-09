@@ -577,3 +577,13 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse med migrations-live ADJUDICATED (process note, explicitly not a code defect: append-only ordering + DB replay gate already hold; no file edits needed).
 - Muse low contact-rotation: repeat of the PR-disclosed deferred residual.
 - Muse low offset-clamp ADJUDICATED (verified by design): web probes + redirects the URL to the true last page; native infinite scroll shows no page numbers and terminates via nextOffset null; the brands probe discards the offset.
+
+## Round 79 (Codex 1 P1 on 1e3e50e232 fixed; Muse 4 adjudicated; CI shard-6 300-line guard fixed)
+
+- CI FIXED: cart/validate route hit 309 lines via the CX-161 offer block — extracted fetchCartOfferPrices (live-offer fan-out + map) and prepareCartValidationItems (body normalization + id partitions) with colocated tests; route at 273, authority contract green.
+- CX-166 (P1) FIXED: exact offer id flows through checkout into the stored order — web buildCheckoutOrderItems + native mapCartItemsToOrderItems/schema/payload emit offer_id; /api/orders accepts offerId/offer_id twins, passes through, and verifies each line names a live offer of its own product (400 on mismatch/malformed, 500 on lookup failure) via findMismatchedOrderOffer (+4 tests).
+- M12 (20261008300000, sha c49f8c57): order_items.offer_id uuid FK to product_offers + index; threads the id through private.create_storefront_order_unchecked (temp table, staging, item input, insert) with six chained fail-closed patches in the ordinals-migration pattern (quiz/savings delegate p_items untouched). PGlite end-to-end green (happy path + rerun idempotency + missing-ordinals fail-closed). Registered; PR body → 35.
+- Muse med contact-rotation: repeat of the PR-disclosed deferred residual.
+- Muse low same-ID idempotency ADJUDICATED (correct by design): byte-exact resend succeeds, differing payload under one key 409s — canonicalizing would weaken conflict detection.
+- Muse low assist cost ADJUDICATED (process note): per-IP + tenant budgets correct; production alerting is an enablement checklist item.
+- Muse low assurance disclosure: repeat of the device-QA item.

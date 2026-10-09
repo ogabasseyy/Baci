@@ -174,4 +174,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008290000_storefront_product_base_inventory.sql',
     sha256: '52393acaf42273ca22ec33cc002005183ab520fca91898fdd2ab007786066c3d',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008300000_storefront_order_item_offer.sql',
+    sha256: 'c49f8c57d3cb9610e342829ae6bbba168760bf88eb195ef3e4e3800634d88003',
+  },
 ] as const;

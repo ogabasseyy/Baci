@@ -20,9 +20,15 @@ export function usePrimarySavingsRecovery({
   setAmount: (value: string) => void;
 }) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  // An unknown verdict (null) enables the lookup but never readiness: a
+  // rolled-out non-pilot merchant whose probe failed transiently reads
+  // non-primary from the static allowlist, yet a primary transfer may
+  // still be pending. Only an authoritative false skips the lookup and
+  // releases legacy submissions.
+  const verdictUnknown = primaryCapability === null;
   const enabled =
-    isPiggyvestPrimaryMerchant(merchantId) &&
     primaryCapability !== false &&
+    (isPiggyvestPrimaryMerchant(merchantId) || verdictUnknown) &&
     Boolean(userId && goalId);
   const key = JSON.stringify([merchantId, userId, goalId]);
   const boundKey = useRef<string | null>(null);
@@ -69,7 +75,10 @@ export function usePrimarySavingsRecovery({
   return {
     ready:
       !enabled ||
-      (state.key === key && state.revision === revision && state.ready),
+      (state.key === key &&
+        state.revision === revision &&
+        state.ready &&
+        !verdictUnknown),
     error:
       enabled &&
       state.key === key &&

@@ -29,6 +29,7 @@ beforeEach(() => {
   mockUseCapability.mockReturnValue(null);
 });
 it('restores a server-owned pending operation after restarting the screen', async () => {
+  mockUseCapability.mockReturnValue(true);
   const props = input();
   mockRecover.mockResolvedValue({
     operationId: 'existing-operation',
@@ -43,6 +44,7 @@ it('restores a server-owned pending operation after restarting the screen', asyn
   expect(props.setAmount).toHaveBeenCalledWith('125');
 });
 it('keeps submission blocked after recovery fails and supports a read-only retry', async () => {
+  mockUseCapability.mockReturnValue(true);
   mockRecover
     .mockRejectedValueOnce(new Error('unavailable'))
     .mockResolvedValueOnce(null);
@@ -54,6 +56,7 @@ it('keeps submission blocked after recovery fails and supports a read-only retry
   await waitFor(() => expect(result.current.ready).toBe(true));
 });
 it('ignores a previous goal response after switching goals', async () => {
+  mockUseCapability.mockReturnValue(true);
   const props = input();
   let resolveOld!: (value: unknown) => void;
   mockRecover
@@ -90,7 +93,8 @@ it('keeps submissions blocked when recovery throws not-ready with no bound opera
   expect(result.current.ready).toBe(false);
   expect(props.operationRef.current).toBeNull();
 });
-it('allows legacy contribution when recovery durably confirms no operation', async () => {
+it('allows contribution when recovery durably confirms no operation', async () => {
+  mockUseCapability.mockReturnValue(true);
   mockRecover.mockResolvedValue(null);
   const props = input();
   const { result } = renderHook(() => usePrimarySavingsRecovery(props));
@@ -122,4 +126,42 @@ it('stays ready without recovering when the server reports unconfigured', async 
   });
   expect(mockRecover).not.toHaveBeenCalled();
   expect(props.setAmount).not.toHaveBeenCalled();
+});
+it('blocks submissions while the capability verdict is unknown', async () => {
+  // Rolled-out non-pilot merchant whose probe failed transiently: the
+  // observed cache is unknown, so the static allowlist reports
+  // non-primary — but a primary transfer may still be pending. The
+  // lookup must still run (durable state is consultable), yet
+  // submissions must wait for the verdict instead of taking legacy.
+  mockUseCapability.mockReturnValue(null);
+  mockRecover.mockResolvedValue(null);
+  const props = {
+    ...input(),
+    merchantId: '22222222-2222-4222-8222-222222222222',
+  };
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(result.current.ready).toBe(false);
+  expect(result.current.error).toBe(false);
+});
+it('unblocks to legacy when an unknown verdict resolves to unconfigured', async () => {
+  mockUseCapability.mockReturnValue(null);
+  mockRecover.mockResolvedValue(null);
+  const props = {
+    ...input(),
+    merchantId: '22222222-2222-4222-8222-222222222222',
+  };
+  const { result, rerender } = renderHook(
+    (_tick: number) => usePrimarySavingsRecovery(props),
+    { initialProps: 0 }
+  );
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
+  expect(result.current.ready).toBe(false);
+  mockUseCapability.mockReturnValue(false);
+  rerender(1);
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
 });

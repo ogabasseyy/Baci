@@ -133,10 +133,19 @@ describe('useCart stock validation', () => {
       typeof supabase.from
     >;
     jest.mocked(supabase.from).mockReturnValue(productQuery);
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: [{ offer_id: 'offer-7', stock_quantity: 2 }],
-      error: null,
-    });
+    (supabase.rpc as jest.Mock).mockImplementation((fn: string) =>
+      Promise.resolve(
+        fn === 'get_storefront_product_base_inventory'
+          ? {
+              data: [{ product_id: 'product-1', effective_policy: 'legacy' }],
+              error: null,
+            }
+          : {
+              data: [{ offer_id: 'offer-7', stock_quantity: 2 }],
+              error: null,
+            }
+      )
+    );
 
     const queryClient = new QueryClient({
       defaultOptions: {

@@ -1,7 +1,7 @@
 import { createLogger } from '@/lib/logger';
+import { hydrateProductRowsWithConditionOffers } from '@/lib/storefront-product-offers';
 import {
   hydrateProductRowsWithBaseInventory,
-  hydrateProductRowsWithConditionOffers,
   hydrateProductRowsWithStorefrontVariants,
 } from '@/lib/storefront-product-variants';
 import { isVariantBearingProduct } from './product-variant-state';

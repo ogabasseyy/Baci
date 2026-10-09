@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   adoptPending: vi.fn(),
   claimDispatch: vi.fn(),
   cancelBeforeDispatch: vi.fn(),
+  releaseAfterRejection: vi.fn(),
   retrieve: vi.fn(),
   transfer: vi.fn(),
   executor: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('./primary-wallet-savings-store', () => ({
     adoptPending: mocks.adoptPending,
     claimDispatch: mocks.claimDispatch,
     cancelBeforeDispatch: mocks.cancelBeforeDispatch,
+    releaseAfterRejection: mocks.releaseAfterRejection,
   }),
 }));
 vi.mock('./wallets', () => ({ retrievePiggyvestWallet: mocks.retrieve }));

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   cancelStale: vi.fn(),
   adoptPending: vi.fn(),
+  releaseAfterRejection: vi.fn(),
   lookupTransfer: vi.fn(),
   retrieveWallet: vi.fn(),
   transfer: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('./primary-wallet-savings-store', () => ({
     readStatus: mocks.readStatus,
     cancelStaleReservation: mocks.cancelStale,
     adoptPending: mocks.adoptPending,
+    releaseAfterRejection: mocks.releaseAfterRejection,
   }),
 }));
 vi.mock('./primary-wallet-savings-executor', () => ({

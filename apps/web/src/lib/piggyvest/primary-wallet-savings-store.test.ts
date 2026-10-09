@@ -71,6 +71,18 @@ it('cancels only stale reservations from status checks', async () => {
     [JSON.stringify(scope), operationId, 'cancel_stale']
   );
 });
+it('releases dispatched holds with fixed SQL after definitive rejection', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).releaseAfterRejection(
+      operationId
+    )
+  ).resolves.toBe(true);
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result',
+    [JSON.stringify(scope), operationId, 'release']
+  );
+});
 it('rejects injected wallet IDs before storage contact', async () => {
   const execute = vi.fn();
   await expect(

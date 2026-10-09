@@ -49,6 +49,7 @@ jest.mock('@/lib/supabase', () => ({
     },
   },
 }));
+let mockParamsUserId: string | undefined;
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn(), back: jest.fn() },
   Stack: { Screen: () => null },
@@ -60,6 +61,7 @@ jest.mock('expo-router', () => ({
     authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
     amount: '1000',
     returnTo: mockReturnTo,
+    ...(mockParamsUserId ? { userId: mockParamsUserId } : {}),
   }),
 }));
 jest.mock('@tanstack/react-query', () => ({
@@ -111,6 +113,7 @@ jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
 beforeEach(async () => {
   jest.clearAllMocks();
   mockUserId = '11111111-1111-4111-8111-111111111111';
+  mockParamsUserId = undefined;
   mockStorage.clear();
   mockFetchJson.mockResolvedValue(response);
   await createPrimaryWalletCardFundingClient().start({
@@ -147,6 +150,33 @@ it('blocks another account through the actual controller and lets the original o
   expect(mockFetchJson).toHaveBeenCalledTimes(1);
   expect(mockInvalidate).not.toHaveBeenCalled();
   expect(mockStorage.size).toBe(1);
+});
+
+it('hides the mounted primary checkout when the account switches after navigation', async () => {
+  mockParamsUserId = '11111111-1111-4111-8111-111111111111';
+  const view = render(<PaymentGatewayScreen />);
+  expect(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  ).toBeOnTheScreen();
+  // User B signs in while A's checkout stays mounted: the WebView must
+  // disappear so B can never enter card details into A's charge.
+  mockUserId = '44444444-4444-4444-8444-444444444444';
+  view.rerender(<PaymentGatewayScreen />);
+  expect(
+    screen.getByText(
+      'Signed-in account changed. This checkout belongs to the previous account — go back so its owner can complete it.'
+    )
+  ).toBeOnTheScreen();
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+  // A signs back in: the owner's checkout returns.
+  mockUserId = '11111111-1111-4111-8111-111111111111';
+  view.rerender(<PaymentGatewayScreen />);
+  expect(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  ).toBeOnTheScreen();
 });
 
 it('checks the same durable operation through the actual callback, pending button and controller after restart', async () => {

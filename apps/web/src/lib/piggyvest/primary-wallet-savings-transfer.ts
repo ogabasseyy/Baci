@@ -1,6 +1,7 @@
 import 'server-only';
 import type { z } from 'zod';
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
+import { PiggyvestApiError } from './client';
 
 type Request = z.infer<typeof schemas.request>;
 type Reservation = z.infer<typeof schemas.reserved>;
@@ -23,7 +24,60 @@ interface Ports {
   retrieveWallet: (walletId: string) => Promise<unknown>;
   cancelBeforeDispatch: (operationId: string) => Promise<void>;
   claimDispatch: (operationId: string) => Promise<boolean>;
+  releaseAfterRejection: (operationId: string) => Promise<boolean>;
   transfer: (reservation: Reservation) => Promise<{ accepted: true }>;
+}
+
+/**
+ * Definitive no-transfer rejections: signals proving the provider
+ * created nothing, so the hold may release once a lookup also proves
+ * the reference absent. Auth failures are rejected before processing;
+ * 400/404/422 refuse the request content; an explicit decline envelope
+ * on 2xx was processed and refused. Everything else — transport and
+ * timeout failures, 429/5xx, conflicts, success-shaped responses that
+ * failed local parsing, and non-provider errors — stays ambiguous and
+ * holds pending for reconciliation.
+ */
+export function isDefinitiveNoTransferRejection(error: unknown): boolean {
+  if (!(error instanceof PiggyvestApiError)) return false;
+  if (error.code === 'PIGGYVEST_AUTH_ERROR') return true;
+  if (error.code !== 'PIGGYVEST_REQUEST_ERROR') return false;
+  if (
+    error.status !== null &&
+    (error.status === 400 || error.status === 404 || error.status === 422)
+  )
+    return true;
+  return (
+    error.declined === true &&
+    error.status !== null &&
+    error.status >= 200 &&
+    error.status < 300
+  );
+}
+
+async function observeTransfer(
+  reservation: Reservation,
+  ports: Pick<Ports, 'lookupTransfer'>
+): Promise<'submitted' | 'absent' | 'uncertain'> {
+  try {
+    return await ports.lookupTransfer(reservation);
+  } catch {
+    return 'uncertain';
+  }
+}
+
+async function releaseIfDefinitivelyRejected(
+  operationId: string,
+  reservation: Reservation,
+  error: unknown,
+  ports: Pick<Ports, 'lookupTransfer' | 'releaseAfterRejection'>
+): Promise<boolean> {
+  // A definitive rejection alone is not enough: only a proven-absent
+  // reference releases, so a late provider submission is never orphaned
+  // by a freed hold. Uncertain or submitted stays pending.
+  if (!isDefinitiveNoTransferRejection(error)) return false;
+  if ((await observeTransfer(reservation, ports)) !== 'absent') return false;
+  return await ports.releaseAfterRejection(operationId);
 }
 
 export async function submitPrimaryWalletSavingsTransfer(
@@ -48,11 +102,20 @@ export async function submitPrimaryWalletSavingsTransfer(
     )
       throw new Error('Savings transfer ownership unavailable');
     // A reclaimed dispatch may predate a provider submission that landed:
-    // only a proven-absent reference resubmits. Anything else stays
-    // pending for reconciliation, which settles submitted transfers.
+    // only a proven-absent reference resubmits. A definitive provider
+    // rejection with a proven-absent reference releases the hold and
+    // reports cancelled; anything else stays pending for reconciliation,
+    // which settles submitted transfers.
     if (adoption.status === 'reclaimed') {
-      await resubmitReclaimedSavingsDispatch(reservation, ports);
-      return { status: 'pending' as const };
+      const resubmission = await resubmitReclaimedSavingsDispatch(
+        reservation,
+        ports
+      );
+      return {
+        status: (resubmission === 'released' ? 'cancelled' : 'pending') as
+          | 'cancelled'
+          | 'pending',
+      };
     }
     return await dispatchFresh(request, reservation, ports);
   }
@@ -69,27 +132,36 @@ export async function submitPrimaryWalletSavingsTransfer(
 
 export async function resubmitReclaimedSavingsDispatch(
   reservation: Reservation,
-  ports: Pick<Ports, 'lookupTransfer' | 'retrieveWallet' | 'transfer'>
-): Promise<boolean> {
+  ports: Pick<
+    Ports,
+    'lookupTransfer' | 'retrieveWallet' | 'transfer' | 'releaseAfterRejection'
+  >
+): Promise<'submitted' | 'released' | 'pending'> {
   // Only a proven-absent deterministic reference resubmits, so a late
   // provider submission for the reclaimed dispatch is never duplicated.
-  // Returns whether a new transfer was submitted; any other outcome
-  // stays pending for reconciliation, which settles submitted transfers.
-  let observed: 'submitted' | 'absent' | 'uncertain';
-  try {
-    observed = await ports.lookupTransfer(reservation);
-  } catch {
-    observed = 'uncertain';
-  }
-  if (observed !== 'absent') return false;
-  if (!(await verifyWallets(reservation, ports))) return false;
+  // A definitive provider rejection with a still-absent reference
+  // releases the hold ('released') instead of stranding it; any other
+  // outcome stays pending for reconciliation, which settles submitted
+  // transfers.
+  if ((await observeTransfer(reservation, ports)) !== 'absent')
+    return 'pending';
+  if (!(await verifyWallets(reservation, ports))) return 'pending';
   try {
     const response = await ports.transfer(reservation);
     if (response.accepted !== true) throw new Error('Invalid acceptance');
-  } catch {
-    return false;
+  } catch (error) {
+    if (
+      await releaseIfDefinitivelyRejected(
+        reservation.operationId,
+        reservation,
+        error,
+        ports
+      )
+    )
+      return 'released';
+    return 'pending';
   }
-  return true;
+  return 'submitted';
 }
 
 async function verifyWallets(
@@ -130,7 +202,21 @@ async function dispatchFresh(
   try {
     const response = await ports.transfer(reservation);
     if (response.accepted !== true) throw new Error('Invalid acceptance');
-  } catch {
+  } catch (error) {
+    // The dispatch claim already moved the operation out of 'reserved',
+    // so the pre-dispatch cancel path cannot run here: only a definitive
+    // provider rejection with a proven-absent reference releases the
+    // hold (reported cancelled); ambiguous failures hold pending for
+    // reconciliation, which settles submitted transfers.
+    if (
+      await releaseIfDefinitivelyRejected(
+        request.operationId,
+        reservation,
+        error,
+        ports
+      )
+    )
+      return { status: 'cancelled' as const };
     return { status: 'pending' as const };
   }
   return { status: 'pending' as const };

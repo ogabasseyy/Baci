@@ -150,22 +150,26 @@ export async function fundPrimaryWalletCard(
       rejectAccountSwitch();
       return;
     }
+    // Closed checkout, adopted or not: the service terminalized the
+    // operation as abandoned (duplicate deterministic reference after an
+    // ambiguous retry) and the client already dropped its saved record,
+    // so the next attempt starts fresh. This must not depend on the
+    // adoption flag — matching amount/consent skips adoption, but the
+    // fallback below would then wrongly claim an operation is saved.
+    if (result.status === 'abandoned') {
+      Alert.alert(
+        'Previous funding closed',
+        'Your earlier card funding could not complete. Start a new funding with the amount you want.'
+      );
+      input.resetFundPanel();
+      return;
+    }
     // Adopted checkout: the server resumed the customer's stored
     // unresolved operation (lost device storage, re-entered amount or
     // consent) instead of the just-entered values. Never open its checkout
     // silently — the consent prompt showed a different figure or save-card
-    // choice — so confirm the stored values first. A closed adoption just
-    // reports; the saved record was already dropped so the next attempt
-    // starts fresh.
+    // choice — so confirm the stored values first.
     if ('adopted' in result && result.adopted) {
-      if (result.status === 'abandoned') {
-        Alert.alert(
-          'Previous funding closed',
-          'Your earlier card funding could not complete. Start a new funding with the amount you want.'
-        );
-        input.resetFundPanel();
-        return;
-      }
       const consentChanged =
         result.saveCard !== undefined &&
         result.saveCard !== ENTERED_CONSENT.saveCard;
@@ -208,6 +212,11 @@ export async function fundPrimaryWalletCard(
           paymentKind: 'primary_wallet_card',
           gateway: 'paystack',
           merchantId,
+          // Initiating-user stamp: the mounted checkout compares this
+          // against the active identity and blocks the WebView after an
+          // account switch, so another user can never enter card
+          // details into this account's charge.
+          userId,
           authorizationUrl: result.authorizationUrl,
           reference: result.reference,
           amount: formatGatewayAmountNaira(result.amountKobo),

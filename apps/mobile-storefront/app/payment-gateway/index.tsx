@@ -51,6 +51,34 @@ export default function PaymentGatewayScreen() {
       );
     }
 
+    // Post-navigation account switch: the fund flow stamps the guarded
+    // user into the launch params, but the mounted screen keeps that
+    // user's authorization URL and reference. When the active identity no
+    // longer matches the stamp, block the whole primary screen — WebView
+    // included — instead of letting another user enter card details into
+    // the previous account's charge. The operation stays saved for its
+    // owner; going back returns to this device's wallet. Launches
+    // without the stamp (legacy links) keep only the completion-time
+    // ownership guard below.
+    if (
+      controller.paymentKind === 'primary_wallet_card' &&
+      controller.validatedParams.data?.userId &&
+      user?.id !== controller.validatedParams.data.userId
+    ) {
+      return (
+        <PrimaryWalletCardPendingView
+          colors={colors}
+          statusError
+          message={null}
+          terminalDirective="Signed-in account changed. This checkout belongs to the previous account — go back so its owner can complete it."
+          onCheck={controller.handleRetry}
+          onBack={() =>
+            router.replace(getWalletReturnHref(controller.returnTo))
+          }
+        />
+      );
+    }
+
     // Closed primary status set: beginPrimaryWalletCardCompletion only
     // emits processing/pending/error/success. 'loading'/'ready' fall
     // through to the Paystack checkout WebView below by design (the

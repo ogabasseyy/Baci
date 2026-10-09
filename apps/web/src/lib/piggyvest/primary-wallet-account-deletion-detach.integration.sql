@@ -16,6 +16,7 @@ DO $$ BEGIN
     CREATE ROLE piggyvest_primary_evidence NOLOGIN NOSUPERUSER NOBYPASSRLS;
   END IF;
 END $$;
+\ir ../../../../../supabase/migrations/20261007142000_piggyvest_primary_inflow_ledger.sql
 \ir ../../../../../supabase/migrations/20261007144000_piggyvest_primary_savings_reservations.sql
 \ir ../../../../../supabase/migrations/20261007150000_piggyvest_primary_savings_settlement.sql
 \ir ../../../../../supabase/migrations/20261007181000_piggyvest_primary_paid_interest_completion.sql
@@ -23,6 +24,8 @@ END $$;
 \ir ../../../../../supabase/migrations/20261007220000_piggyvest_primary_interest_storage.sql
 \ir ../../../../../supabase/migrations/20261008092700_primary_wallet_account_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008092900_primary_savings_deletion_retention.sql
+\ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
+\ir ../../../../../supabase/migrations/20261008093200_primary_card_unsettled_deletion_block.sql
 -- Account deletion must succeed for a fully onboarded customer: all money
 -- evidence detaches (customer/goal/transaction NULL, row retained). Only
 -- provisioning-process intents cascade with their goal.
@@ -46,9 +49,11 @@ BEGIN
   INSERT INTO piggyvest_primary.savings_operations VALUES(v_savings_operation,v_integration,v_intent,v_goal,25000,'source-wallet','detach-wallet','detach-reference','confirmed',v_wallet_transaction,clock_timestamp());
   INSERT INTO piggyvest_primary.savings_completion_reviews(goal_id,integration_id,merchant_id,customer_id,pending_operation_ids,overshoot_kobo,state,first_flagged_at,updated_at) VALUES(v_goal,v_integration,v_merchant,v_customer,ARRAY[v_savings_operation],'0','open',clock_timestamp(),clock_timestamp());
   INSERT INTO piggyvest_primary.savings_completion_evidence VALUES(v_savings_operation,v_integration,'detach-provider-txn','{}',clock_timestamp());
+  INSERT INTO piggyvest_primary.inflow_receipts(id,integration_id,intent_id,provider_transaction_id,event_id,body_digest,financial_identity,wallet_transaction_id)
+  VALUES('50000000-0000-4000-8000-000000000014',v_integration,v_intent,'detach-provider-inflow','detach-inflow-event',repeat('a',64),'{}',v_wallet_transaction);
   INSERT INTO piggyvest_primary.goal_wallet_intents VALUES(v_integration,v_goal,v_intent,'detach-wallet-name','enrolled',NULL,'detach-wallet',true,clock_timestamp(),clock_timestamp(),clock_timestamp());
   INSERT INTO piggyvest_primary_card.operations(integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
-  VALUES(v_integration,v_merchant,v_customer,v_user,'staging','fixture-business','detach@example.test','50000000-0000-4000-8000-000000000007',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('e',64),'detach-wallet','detach-customer','ready');
+  VALUES(v_integration,v_merchant,v_customer,v_user,'staging','fixture-business','detach@example.test','50000000-0000-4000-8000-000000000007',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('e',64),'detach-wallet','detach-customer','completed');
   INSERT INTO piggyvest_primary.paid_interest_crosswalks(integration_id,goal_id,api_wallet_id,api_customer_id,onboarding_customer_id,webhook_customer_id,source_wallet_id,accrued_wallet_id,destination_wallet_id,provider_evidence_sha256,policy_evidence_sha256,policy_reference,allocation_policy,enabled)
   VALUES(v_integration,v_goal,'detach-wallet','detach-api-customer','detach-customer','detach-webhook','detach-source','detach-accrued','detach-destination',repeat('f',64),repeat('a',64),'detach-policy','provider_net_is_customer_plan_interest',true)
   RETURNING id INTO v_crosswalk;
@@ -71,6 +76,7 @@ BEGIN
   IF (SELECT count(*) FROM piggyvest_primary.savings_operations WHERE id = v_savings_operation AND goal_id IS NULL AND wallet_transaction_id IS NULL AND amount_kobo = 25000 AND reference = 'detach-reference' AND state = 'confirmed') <> 1 THEN RAISE EXCEPTION 'operation not retained'; END IF;
   IF (SELECT count(*) FROM piggyvest_primary.savings_completion_reviews WHERE goal_id IS NULL AND customer_id IS NULL AND state = 'open') <> 1 THEN RAISE EXCEPTION 'review not retained'; END IF;
   IF (SELECT count(*) FROM piggyvest_primary.savings_completion_evidence WHERE operation_id = v_savings_operation) <> 1 THEN RAISE EXCEPTION 'evidence not retained'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary.inflow_receipts WHERE provider_transaction_id = 'detach-provider-inflow' AND wallet_transaction_id IS NULL AND intent_id = v_intent) <> 1 THEN RAISE EXCEPTION 'inflow receipt not retained'; END IF;
   -- Provisioning-process intents still cascade with their goal.
   IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_wallet_intents WHERE goal_id = v_goal) THEN RAISE EXCEPTION 'wallet intents not cascaded'; END IF;
   -- The detach allowance is exact: financial fields stay frozen and links
@@ -120,4 +126,23 @@ BEGIN
   ON CONFLICT(goal_id) DO UPDATE SET pending_operation_ids=excluded.pending_operation_ids,overshoot_kobo=excluded.overshoot_kobo,state='open',updated_at=clock_timestamp();
   IF (SELECT overshoot_kobo FROM piggyvest_primary.savings_completion_reviews WHERE goal_id = v_goal2) <> 5 THEN RAISE EXCEPTION 'reviews upsert arbiter broken'; END IF;
   IF (SELECT count(*) FROM piggyvest_primary.savings_destinations WHERE goal_id = v_goal2 AND provider_wallet_id = 'retained-wallet') <> 1 THEN RAISE EXCEPTION 'destination composite key broken'; END IF;
+END $$;
+-- Deletion is rejected while a card operation is unresolved: detaching a
+-- custody_pending operation would strand the collected charge without a
+-- wallet to credit. Terminal operations keep detaching (main block).
+DO $$ DECLARE
+  v_blocked uuid := '50000000-0000-4000-8000-000000000021';
+BEGIN
+  INSERT INTO public.customers VALUES(v_blocked, '10000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000022', 'blocked@example.test');
+  INSERT INTO piggyvest_primary_card.operations(integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_blocked,'50000000-0000-4000-8000-000000000022','staging','fixture-business','blocked@example.test','50000000-0000-4000-8000-000000000023',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('d',64),'blocked-wallet','blocked-customer','custody_pending');
+  BEGIN
+    DELETE FROM public.customers WHERE id = v_blocked;
+    RAISE EXCEPTION 'unsettled deletion allowed';
+  EXCEPTION WHEN raise_exception THEN NULL; END;
+  IF NOT EXISTS (SELECT 1 FROM public.customers WHERE id = v_blocked) THEN RAISE EXCEPTION 'blocked customer deleted'; END IF;
+  IF (SELECT customer_id FROM piggyvest_primary_card.operations WHERE email = 'blocked@example.test') <> v_blocked THEN RAISE EXCEPTION 'blocked operation detached'; END IF;
+  UPDATE piggyvest_primary_card.operations SET state = 'completed' WHERE email = 'blocked@example.test';
+  DELETE FROM public.customers WHERE id = v_blocked;
+  IF (SELECT customer_id FROM piggyvest_primary_card.operations WHERE email = 'blocked@example.test') IS NOT NULL THEN RAISE EXCEPTION 'settled operation not detached'; END IF;
 END $$;

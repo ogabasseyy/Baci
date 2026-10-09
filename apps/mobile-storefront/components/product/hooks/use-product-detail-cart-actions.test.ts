@@ -111,7 +111,7 @@ describe('useProductDetailCartActions add-to-cart image', () => {
 });
 
 describe('useProductDetailCartActions catalog basis', () => {
-  it('retains the catalog price for a non-variant condition offer', () => {
+  it('omits the catalog price for a non-variant condition offer', () => {
     const { addItem, args } = buildArgs({
       routeData: {
         product: {
@@ -141,13 +141,14 @@ describe('useProductDetailCartActions catalog basis', () => {
       result.current.handleAddToCart();
     });
 
-    expect(addItem.mock.calls[0]?.[0]).toEqual(
+    const added = addItem.mock.calls[0]?.[0];
+    expect(added).toEqual(
       expect.objectContaining({
         price: 320000,
-        catalog_price: 410000,
         offer_id: 'offer-7',
       })
     );
+    expect(added).not.toHaveProperty('catalog_price');
   });
 
   it('omits the catalog price without a condition offer', () => {
@@ -171,8 +172,8 @@ describe('useProductDetailCartActions catalog basis', () => {
       result.current.handleAddToCart();
     });
 
-    expect(addItem.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ catalog_price: undefined, offer_id: undefined })
-    );
+    const added = addItem.mock.calls[0]?.[0];
+    expect(added).toEqual(expect.objectContaining({ offer_id: undefined }));
+    expect(added).not.toHaveProperty('catalog_price');
   });
 });

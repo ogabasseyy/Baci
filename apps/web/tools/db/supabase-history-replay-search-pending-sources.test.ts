@@ -56,6 +56,7 @@ describe('search pending replay sources', () => {
       '20261008380000_storefront_order_offer_unlimited_allocation.sql',
       '20261008390000_storefront_restock_offer_unlimited_scalar.sql',
       '20261008400000_storefront_order_offer_managed_guard.sql',
+      '20261008410000_storefront_restock_offer_unmanaged_parent.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

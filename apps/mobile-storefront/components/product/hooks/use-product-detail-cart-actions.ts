@@ -133,9 +133,10 @@ export function useProductDetailCartActions(
           Boolean
         )
       : undefined;
-    // Non-variant condition offers price the line below catalog, but the
-    // server verifies against products.price. Retain the catalog basis so
-    // quote subtotals match the canonical subtotal.
+    // Non-variant condition offers price the line below catalog. The
+    // server verifies offer lines against the live offer price, so no
+    // catalog basis is retained: shipping quotes must use the selected
+    // offer price or they would display a tier the order rejects.
     const conditionOffer = !product.has_variants
       ? findMatchingConditionOffer(
           product.offers,
@@ -154,13 +155,6 @@ export function useProductDetailCartActions(
       name: product.name,
       brand: product.brand,
       price: purchaseState.effectivePrice,
-      catalog_price:
-        conditionOffer != null &&
-        typeof product.price === 'number' &&
-        Number.isFinite(product.price) &&
-        product.price >= 0
-          ? product.price
-          : undefined,
       compare_at_price: purchaseState.effectiveComparePrice,
       quantity: 1,
       image_url: resolveCartItemImageUrl({

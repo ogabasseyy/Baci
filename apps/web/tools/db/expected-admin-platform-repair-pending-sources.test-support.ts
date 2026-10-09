@@ -194,4 +194,9 @@ export const ADMIN_PLATFORM_REPAIR_PENDING_SOURCES = [
       'supabase/migrations/20260817211000_repair_notification_segment_and_timezone_invariants.sql',
     sha256: '424904a5925149a268aedc34424ae24b4684c8d034a0b294f827ac6f75626add',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008103000_allow_admin_order_date_edit.sql',
+    sha256: '610e8f168d62ec1c9ade2997c304fcfdb3b35b9d24cc2d8e719ef4a06f61e786',
+  },
 ] as const;

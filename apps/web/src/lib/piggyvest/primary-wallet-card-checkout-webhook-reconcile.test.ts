@@ -57,6 +57,30 @@ function setup(status = 'ready') {
 }
 
 describe('primary card checkout webhook reconcile', () => {
+  it('acknowledges a terminal abandonment instead of leaving redeliveries retryable', async () => {
+    let intent = { ...fixture.intent, status: 'ready' };
+    const execute = vi.fn(async (action: string): Promise<unknown> => {
+      if (action === 'read') return intent;
+      if (action === 'abandonment') {
+        intent = { ...intent, status: 'abandoned' };
+        return true;
+      }
+      throw new Error(`Invalid test action ${action}`);
+    });
+    const provider = {
+      initialize: vi.fn(),
+      verify: vi.fn().mockResolvedValue({ outcome: 'abandoned' }),
+    };
+    const response = await reconcilePrimaryWalletCardCheckoutWebhook({
+      body: body({ status: 'failed' }),
+      runtime: { settings: fixture.settings },
+      execute: execute as never,
+      provider: provider as never,
+    });
+    // Abandonment is durable and terminal: redelivery can never change
+    // it, so ack rather than returning null into the 503 retry boundary.
+    expect(response?.status).toBe(200);
+  });
   it('uses authoritative mocked HTTP verification without a phone callback and deduplicates durable collection', async () => {
     const { execute, runtime } = setup('ready');
     const receipt = body();

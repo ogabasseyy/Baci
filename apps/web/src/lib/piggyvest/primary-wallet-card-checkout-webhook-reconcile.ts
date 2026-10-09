@@ -100,10 +100,16 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
         createPrimaryWalletCardCheckoutProvider(runtime.settings, fetch),
     });
     const result = await service.status(operationId);
+    // Terminal abandonment acks: the outcome is durable and redelivery
+    // can never change it, so returning null would 503 forever on the
+    // retry boundary. Non-terminal states stay null (retryable).
     if (
-      !['custody_pending', 'reconciliation_required', 'completed'].includes(
-        result.status
-      )
+      ![
+        'custody_pending',
+        'reconciliation_required',
+        'completed',
+        'abandoned',
+      ].includes(result.status)
     )
       return null;
     return Response.json(

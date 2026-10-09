@@ -16,6 +16,7 @@ function setup(
   }>
 ) {
   const deleteUpload = vi.fn(async () => {});
+  const refreshUpload = vi.fn(async () => {});
   const toast = vi.fn();
   const refs = () => ({
     savedFormRef: {
@@ -29,6 +30,7 @@ function setup(
       const uploader = useBlogFeaturedImageUpload({
         coverStashRef: { current: null },
         deleteUpload,
+        refreshUpload,
         setForm,
         toast,
         upload,

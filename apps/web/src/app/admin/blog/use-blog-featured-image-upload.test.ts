@@ -34,6 +34,7 @@ function setup(
     const uploader = useBlogFeaturedImageUpload({
       coverStashRef,
       deleteUpload,
+      refreshUpload: vi.fn().mockResolvedValue(undefined),
       savedFormRef,
       setForm,
       toast,

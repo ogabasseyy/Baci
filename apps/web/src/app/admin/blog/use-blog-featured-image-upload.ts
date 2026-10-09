@@ -14,6 +14,10 @@ import type {
 } from './blog-types';
 import { chunkArray } from './chunk-array';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
+import { dropKeptUploadPaths } from './drop-kept-upload-paths';
+import { retainKeptUploadPaths } from './retain-kept-upload-paths';
+import { unreferencedUploadPaths } from './unreferenced-upload-paths';
+import { useBlogMediaTombstoneHeartbeat } from './use-blog-media-tombstone-heartbeat';
 
 type UploadResult = {
   url: string;
@@ -22,78 +26,27 @@ type UploadResult = {
   variants?: Record<string, string>;
 };
 
-function unreferencedUploadPaths(
-  result: UploadResult,
-  keepPaths: Set<string>
-): string[] {
-  return [result.url, ...Object.values(result.variants ?? {})]
-    .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
-    .filter((path): path is string => path !== null && !keepPaths.has(path));
-}
-
-function retainKeptUploadPaths(
-  result: UploadResult,
-  keepPaths: Set<string>
-): UploadResult | null {
-  // A result the draft partially reuses stays tracked trimmed to its
-  // kept paths, so a later import deletes only what is still
-  // abandoned instead of retrying already-deleted objects.
-  const urlPath = extractManagedBlogStoragePath(result.url, {
-    kind: 'platform',
-  });
-  const url = urlPath !== null && keepPaths.has(urlPath) ? result.url : '';
-  const variants = Object.fromEntries(
-    Object.entries(result.variants ?? {}).filter(([, variantUrl]) => {
-      const variantPath = extractManagedBlogStoragePath(variantUrl, {
-        kind: 'platform',
-      });
-      return variantPath !== null && keepPaths.has(variantPath);
-    })
-  );
-  if (url === '' && Object.keys(variants).length === 0) return null;
-  return { ...result, url, variants };
-}
-
-function dropKeptUploadPaths(
-  result: UploadResult,
-  keepPaths: Set<string>
-): UploadResult | null {
-  // Complement trim for staged originals: what stays pending when a
-  // reuse revives the kept paths back into tracking. Fully reused
-  // results vanish from pending instead of being copied.
-  const urlPath = extractManagedBlogStoragePath(result.url, {
-    kind: 'platform',
-  });
-  const url = urlPath !== null && !keepPaths.has(urlPath) ? result.url : '';
-  const variants = Object.fromEntries(
-    Object.entries(result.variants ?? {}).filter(([, variantUrl]) => {
-      const variantPath = extractManagedBlogStoragePath(variantUrl, {
-        kind: 'platform',
-      });
-      return variantPath !== null && !keepPaths.has(variantPath);
-    })
-  );
-  if (url === '' && Object.keys(variants).length === 0) return null;
-  return { ...result, url, variants };
-}
-
 export function useBlogFeaturedImageUpload({
   upload,
   deleteUpload,
+  refreshUpload,
   setForm,
   toast,
   coverStashRef,
   savedFormRef,
+  heartbeatIntervalMs,
 }: {
   upload: (file: File) => Promise<UploadResult>;
   deleteUpload: (paths: {
     path: string;
     variantPaths: string[];
   }) => Promise<void>;
+  refreshUpload: (paths: string[]) => Promise<void>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
   savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
+  heartbeatIntervalMs?: number;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const mountedRef = useRef(true);
@@ -153,6 +106,32 @@ export function useBlogFeaturedImageUpload({
       void send();
     };
   }, [savedFormRef]);
+
+  // Settled session uploads stage as tombstones at POST time, so an
+  // editor open past the grace window must keep its unsaved uploads
+  // leased: each beat extends settled paths the last saved payload
+  // does not keep. Staged results stay out — they were replaced and
+  // should expire.
+  useBlogMediaTombstoneHeartbeat({
+    getPaths: () => {
+      const keepPaths = new Set<string>();
+      const saved = savedFormRef.current;
+      if (saved !== null) {
+        for (const path of draftReferencedMediaPaths(saved)) {
+          keepPaths.add(path);
+        }
+      }
+      const paths = new Set<string>();
+      for (const result of settledUploadsRef.current) {
+        for (const path of unreferencedUploadPaths(result, keepPaths)) {
+          paths.add(path);
+        }
+      }
+      return [...paths];
+    },
+    intervalMs: heartbeatIntervalMs,
+    refresh: refreshUpload,
+  });
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;

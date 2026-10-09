@@ -193,6 +193,55 @@ describe('filterBlogMediaPathsWithoutPersistedReferences', () => {
     expect(range.mock.calls.length).toBeGreaterThan(1);
   });
 
+  it('protects paths referenced through percent-encoded URLs', async () => {
+    // Extraction decodes %74 to t, so the candidate arrives decoded
+    // while the persisted text stays encoded: matching raw text
+    // would stage the live object for deletion.
+    const { client } = fakeClient([
+      {
+        data: [
+          {
+            content:
+              '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/%74oken.webp">',
+          },
+        ],
+        error: null,
+      },
+    ]);
+    expect(
+      await filterBlogMediaPathsWithoutPersistedReferences(client, [
+        'platform/blog/token.webp',
+        'platform/blog/orphan.webp',
+      ])
+    ).toEqual({
+      deletable: ['platform/blog/orphan.webp'],
+      skipped: ['platform/blog/token.webp'],
+    });
+  });
+
+  it('survives malformed escapes without losing raw matches', async () => {
+    const { client } = fakeClient([
+      {
+        data: [
+          {
+            content:
+              '<p>100% coverage</p><img src="https://cdn.example.com/media/platform/blog/kept.webp">',
+          },
+        ],
+        error: null,
+      },
+    ]);
+    expect(
+      await filterBlogMediaPathsWithoutPersistedReferences(client, [
+        'platform/blog/kept.webp',
+        'platform/blog/orphan.webp',
+      ])
+    ).toEqual({
+      deletable: ['platform/blog/orphan.webp'],
+      skipped: ['platform/blog/kept.webp'],
+    });
+  });
+
   it('returns null when the reference scan fails', async () => {
     const failed = fakeClient([{ data: null, error: { message: 'down' } }]);
     expect(

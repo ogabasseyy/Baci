@@ -3,6 +3,7 @@ import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths'
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { chunkArray } from './chunk-array';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
+import { useBlogMediaTombstoneHeartbeat } from './use-blog-media-tombstone-heartbeat';
 
 /**
  * Track pending inline-image uploads so imports wait until they settle:
@@ -14,14 +15,18 @@ import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 export function useBlogInlineImageUpload({
   upload,
   deleteUpload,
+  refreshUpload,
   savedFormRef,
+  heartbeatIntervalMs,
 }: {
   upload: (file: File) => Promise<{ url: string }>;
   deleteUpload: (paths: {
     path: string;
     variantPaths: string[];
   }) => Promise<void>;
+  refreshUpload: (paths: string[]) => Promise<void>;
   savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
+  heartbeatIntervalMs?: number;
 }) {
   const [pendingInlineUploads, setPendingInlineUploads] = useState(0);
   const settledUploadsRef = useRef<string[]>([]);
@@ -90,6 +95,29 @@ export function useBlogInlineImageUpload({
       void send();
     };
   }, [savedFormRef]);
+
+  // Mirror the featured hook: settled session uploads stage at
+  // POST time, so each beat extends the ones the last saved payload
+  // does not keep. Staged uploads stay out to expire.
+  useBlogMediaTombstoneHeartbeat({
+    getPaths: () => {
+      const keepPaths = new Set<string>();
+      const saved = savedFormRef.current;
+      if (saved !== null) {
+        for (const path of draftReferencedMediaPaths(saved)) {
+          keepPaths.add(path);
+        }
+      }
+      const paths = new Set<string>();
+      for (const url of settledUploadsRef.current) {
+        const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
+        if (path !== null && !keepPaths.has(path)) paths.add(path);
+      }
+      return [...paths];
+    },
+    intervalMs: heartbeatIntervalMs,
+    refresh: refreshUpload,
+  });
 
   const uploadInlineImage = (file: File) => {
     setPendingInlineUploads((count) => count + 1);

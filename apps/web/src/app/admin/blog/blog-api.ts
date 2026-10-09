@@ -167,3 +167,20 @@ export async function deleteBlogMediaUpload(
     throw new Error(await readErrorMessage(response, 'Failed to delete file'));
   }
 }
+
+export async function refreshBlogMediaUploadLease(
+  paths: string[]
+): Promise<void> {
+  if (paths.length === 0) return;
+  const [path, ...variantPaths] = paths as [string, ...string[]];
+  const response = await fetchWithCsrf('/api/admin/blog/upload', {
+    body: JSON.stringify({ path, variantPaths }),
+    method: 'PATCH',
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, 'Failed to refresh media lease')
+    );
+  }
+}

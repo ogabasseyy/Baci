@@ -201,6 +201,23 @@ describe('convertHiddenInlineStyles', () => {
     ).toBe('<p>Body</p>');
   });
 
+  it.each([
+    '<p style="scale:0%">Draft note</p><p>Body</p>',
+    '<p style="transform:scale(0%)">Draft note</p><p>Body</p>',
+    '<p style="transform:scaleX(0%)">Draft note</p><p>Body</p>',
+    '<p style="scale:50% 0%">Draft note</p><p>Body</p>',
+  ])('strips percentage zero-scale content at import: %s', (html) => {
+    expect(validateImportedContent(html)).toBe('<p>Body</p>');
+  });
+
+  it.each([
+    '<p style="scale:50%">Shown</p>',
+    '<p style="transform:scale(50%)">Shown</p>',
+    '<p style="transform:matrix(0%, 0, 0, 0, 0, 0)">Shown</p>',
+  ])('leaves non-zero and invalid percentage scales alone: %s', (html) => {
+    expect(convertHiddenInlineStyles(html)).toBe(html);
+  });
+
   it('honors important declarations over later normal ones at import', () => {
     expect(
       validateImportedContent(

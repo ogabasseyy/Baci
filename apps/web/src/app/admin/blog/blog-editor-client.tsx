@@ -8,6 +8,7 @@ import { type RefObject, useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
   deleteBlogMediaUpload,
+  refreshBlogMediaUploadLease,
   updatePlatformBlogPost,
 } from '@/app/admin/blog/blog-api';
 import { BlogEditorFields } from '@/app/admin/blog/blog-editor-fields';
@@ -165,6 +166,7 @@ export function BlogEditorClient({
     coverStashRef,
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
+    refreshUpload: (paths) => refreshBlogMediaUploadLease(paths),
     savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'featured'),
     setForm,
@@ -177,6 +179,7 @@ export function BlogEditorClient({
   } = useBlogInlineImageUpload({
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
+    refreshUpload: (paths) => refreshBlogMediaUploadLease(paths),
     savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });

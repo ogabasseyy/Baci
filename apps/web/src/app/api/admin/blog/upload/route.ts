@@ -10,6 +10,7 @@ import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
+import { handleBlogMediaTombstoneRefresh } from './blog-media-tombstone-refresh-route';
 import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
 import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
 import {
@@ -282,4 +283,8 @@ export async function DELETE(request: NextRequest) {
 
   revalidatePlatformBlog();
   return NextResponse.json({ skipped, success: true, tombstoned: deletable });
+}
+
+export function PATCH(request: NextRequest) {
+  return handleBlogMediaTombstoneRefresh(request);
 }

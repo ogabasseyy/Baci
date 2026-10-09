@@ -257,6 +257,40 @@ BEGIN
 END;
 $register$;
 
+DO $encoded$
+DECLARE
+  v_claimed boolean;
+BEGIN
+  -- Extraction decodes %74 to t while the persisted text stays
+  -- encoded: the claim must resurrect the decoded candidate instead
+  -- of flagging the live object. The malformed bare % proves the
+  -- decoder falls back instead of raising.
+  INSERT INTO public.blog_posts (
+    id, title, slug, author_name, is_platform_post, merchant_id, content
+  )
+  VALUES ('01ac0000-0000-4000-8000-000000000099', 'Encoded', 'encoded', 'QA',
+    TRUE, NULL,
+    '<p>100% real</p><img src="https://cdn.example.com/media/platform/blog/%74oken.webp">');
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at)
+  VALUES ('platform/blog/token.webp', now() - interval '2 hours');
+  SELECT claim.tombstone_claimed INTO v_claimed
+    FROM public.claim_sweepable_blog_media_tombstones(
+      now() - interval '1 hour', 500) AS claim
+   WHERE claim.tombstone_path = 'platform/blog/token.webp';
+  IF v_claimed IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'encoded reference must resurrect, got %', v_claimed;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/token.webp'
+  ) THEN
+    RAISE EXCEPTION 'resurrected encoded tombstone must be deleted';
+  END IF;
+  DELETE FROM public.blog_posts
+   WHERE id = '01ac0000-0000-4000-8000-000000000099';
+END;
+$encoded$;
+
 DO $scope$
 DECLARE
   v_released integer;

@@ -10,6 +10,7 @@ import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
+import { hasUnopenedPopover } from './review-handoff-popover';
 import { hasReadableContent } from './review-handoff-readability';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
 import { hasUnpreservableStylesheet } from './review-handoff-stylesheet';
@@ -259,6 +260,14 @@ export function validateImportedContent(rawContent: string): string {
   if (hasUnpreservableStylesheet(rendered)) {
     throw new Error(
       'Article content has stylesheet markup the editor cannot preserve'
+    );
+  }
+  // Popovers cannot survive either: static markup cannot express the
+  // shown state, and sanitization drops the attribute while keeping
+  // the hidden note as visible text.
+  if (hasUnopenedPopover(rendered)) {
+    throw new Error(
+      'Article content has popover markup the editor cannot preserve'
     );
   }
   return visible;

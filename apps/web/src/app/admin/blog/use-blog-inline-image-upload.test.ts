@@ -19,11 +19,17 @@ function reuseDraft(url: string) {
 
 function setup(upload: (file: File) => Promise<{ url: string }>) {
   const deleteUpload = vi.fn(async () => {});
+  const refreshUpload = vi.fn(async () => {});
   const savedFormRef = {
     current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
   };
   const hook = renderHook(() =>
-    useBlogInlineImageUpload({ deleteUpload, savedFormRef, upload })
+    useBlogInlineImageUpload({
+      deleteUpload,
+      refreshUpload,
+      savedFormRef,
+      upload,
+    })
   );
   return { ...hook, deleteUpload, savedFormRef };
 }

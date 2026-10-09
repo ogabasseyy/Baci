@@ -10,10 +10,30 @@ export type BlogPostMediaRow = {
   author_image_url?: string | null;
 };
 
+function decodeStoredMediaText(field: string): string {
+  // Stored URLs may percent-encode path segments (%74oken) while the
+  // candidate paths arrive decoded: compare against the decoded text
+  // so an encoded reference still protects its object. Decode to a
+  // bounded fixpoint for multiply-encoded URLs; malformed escapes
+  // keep the raw text instead of throwing the scan out.
+  let current = field;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current.includes('%')) return current;
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) return current;
+      current = decoded;
+    } catch {
+      return current;
+    }
+  }
+  return current;
+}
+
 /**
  * Whether a persisted platform post embeds a storage path. Variant maps
- * serialize before matching; every other media-carrying column compares
- * directly, since stored URLs always contain the raw storage path.
+ * serialize before matching; every media-carrying column compares
+ * percent-decoded, since stored URLs may encode the raw storage path.
  */
 function blogPostRowReferencesPath(
   row: BlogPostMediaRow,
@@ -31,7 +51,8 @@ function blogPostRowReferencesPath(
     fields.push(JSON.stringify(row.featured_image_variants));
   }
   return fields.some(
-    (field) => typeof field === 'string' && field.includes(path)
+    (field) =>
+      typeof field === 'string' && decodeStoredMediaText(field).includes(path)
   );
 }
 

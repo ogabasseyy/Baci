@@ -6,7 +6,7 @@ describe('explicit signed custody intake capability deployment', () => {
   it('requires approved payload and mapping contracts rather than inferring provider reference semantics', () => {
     expect(
       readPrimaryCardCustodyInboxRuntime(fixture.environment, fixture.now)
-    ).toEqual(fixture.configuration);
+    ).toEqual({ ...fixture.configuration, retainedWebhookSecrets: [] });
   });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined },

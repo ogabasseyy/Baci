@@ -56,6 +56,21 @@ describe('deriveWalletFundingAccountAvailability', () => {
     );
   });
 
+  it('reports pending availability while the primary verdict is unresolved', () => {
+    const availability = deriveWalletFundingAccountAvailability({
+      customerPhone: '08012345678',
+      isPaymentSettingsError: false,
+      isPaymentSettingsPending: false,
+      paymentSettings: enabledPaymentSettings,
+      primaryVerdictPending: true,
+    });
+
+    expect(availability.canCreateFundingAccount).toBe(false);
+    expect(availability.createFundingAccountUnavailableMessage).toBe(
+      WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING
+    );
+  });
+
   it('reports unavailable account creation when payment settings fail to load', () => {
     const availability = deriveWalletFundingAccountAvailability({
       customerPhone: '08012345678',

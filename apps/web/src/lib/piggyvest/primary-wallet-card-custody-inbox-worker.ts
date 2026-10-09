@@ -51,11 +51,16 @@ export function createPrimaryCardCustodyInboxWorker(input: {
       try {
         const payload = Buffer.from(claim.rawHex, 'hex');
         if (
-          !verifyPiggyvestPayloadSignature({
-            payload,
-            signature: claim.signature,
-            secret: config.webhookSecret,
-          })
+          ![
+            config.webhookSecret,
+            ...(config.retainedWebhookSecrets ?? []),
+          ].some((secret) =>
+            verifyPiggyvestPayloadSignature({
+              payload,
+              signature: claim.signature,
+              secret,
+            })
+          )
         )
           outcome = 'deferred';
         else {
@@ -83,6 +88,7 @@ export function createPrimaryCardCustodyInboxWorker(input: {
                     rawBody: payload,
                     signature: claim.signature,
                     secret: config.webhookSecret,
+                    retainedSecrets: config.retainedWebhookSecrets,
                     operationId,
                     inboxToken: claim.token,
                     loadContext: (selected) =>

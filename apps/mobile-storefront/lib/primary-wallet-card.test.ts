@@ -219,6 +219,33 @@ it('adopts the stored operation when initialize returns a different amount after
   expect('adopted' in recovered).toBe(false);
   expect(mockStorage.size).toBe(0);
 });
+it('adopts the stored operation when initialize echoes a different save-card choice', async () => {
+  // Same amount, but the stored checkout would save the card while the
+  // customer just chose not to — adoption flags it for confirmation and
+  // persists the stored (effective) consent, not the just-entered one.
+  mockFetchJson.mockResolvedValue({ ...response, saveCard: true });
+  const client = createPrimaryWalletCardFundingClient();
+  const result = await client.start(start);
+  expect(result).toMatchObject({
+    adopted: true,
+    operationId,
+    amountKobo: 100000,
+    saveCard: true,
+  });
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    operationId,
+    consent: { ...start.consent, saveCard: true },
+  });
+});
+it('does not adopt when the echoed save-card choice matches', async () => {
+  mockFetchJson.mockResolvedValue({ ...response, saveCard: false });
+  const result = await createPrimaryWalletCardFundingClient().start(start);
+  expect('adopted' in result).toBe(false);
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    operationId,
+    consent: start.consent,
+  });
+});
 it.each([
   '{{{truncated-json',
   '{"operationId":42}',

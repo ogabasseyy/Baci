@@ -93,6 +93,10 @@ export const primaryWalletCardCustodySchemas = {
     expiresAt: z.iso.datetime({ offset: true }),
     apiToken: z.string().min(1).max(4096),
     webhookSecret: z.string().min(1).max(4096),
+    retainedWebhookSecrets: z
+      .array(z.string().min(1).max(4096))
+      .max(3)
+      .default([]),
     transfer: database
       .extend({
         login: z.literal('baci_primary_card_transfer'),

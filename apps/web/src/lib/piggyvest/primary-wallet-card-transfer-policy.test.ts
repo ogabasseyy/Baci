@@ -4,10 +4,15 @@ import { primaryCardTransferFixture as fixture } from './primary-wallet-card-tra
 import { assertPrimaryCardTransferPolicy } from './primary-wallet-card-transfer-policy';
 
 describe('approved issuer transfer policy (internal, not a provider signing contract)', () => {
+  // Parsed runtimes carry the schema-default empty retained-key list.
+  const parsed = {
+    ...fixture.configuration,
+    runtime: { ...fixture.configuration.runtime, retainedWebhookSecrets: [] },
+  };
   it('permits only configured approved reusable proof and current deployment scope', () =>
     expect(
       assertPrimaryCardTransferPolicy(fixture.configuration, fixture.now)
-    ).toEqual(fixture.configuration));
+    ).toEqual(parsed));
   it('rejects forged signatures', () =>
     expect(() =>
       assertPrimaryCardTransferPolicy(
@@ -21,7 +26,7 @@ describe('approved issuer transfer policy (internal, not a provider signing cont
         fixture.configuration,
         Date.parse('2027-01-01T00:00:00Z')
       )
-    ).toEqual(fixture.configuration));
+    ).toEqual(parsed));
   it.each([
     { reusableBindingReady: false },
     { exhaustiveAliasContractApproved: false },

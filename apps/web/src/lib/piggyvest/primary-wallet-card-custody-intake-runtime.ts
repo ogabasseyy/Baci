@@ -3,6 +3,7 @@ import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wal
 
 export type PrimaryCardCustodyIntakeSecrets = {
   webhookSecret: unknown;
+  retainedWebhookSecrets: unknown;
 };
 
 /**
@@ -21,10 +22,27 @@ export function readPrimaryCardCustodyIntakeSecrets(
     (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )
     return null;
+  let retainedWebhookSecrets: unknown = [];
+  try {
+    if (env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS)
+      retainedWebhookSecrets = JSON.parse(
+        env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS
+      );
+  } catch {
+    // Malformed rotation config drops the retained list only; the full
+    // runtime still fails closed and the intake answers 503.
+    retainedWebhookSecrets = [];
+  }
   const webhookSecret = env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET;
-  if (typeof webhookSecret !== 'string' || !webhookSecret.trim()) return null;
+  if (
+    (typeof webhookSecret !== 'string' || !webhookSecret.trim()) &&
+    (!Array.isArray(retainedWebhookSecrets) ||
+      retainedWebhookSecrets.length === 0)
+  )
+    return null;
   return {
     webhookSecret,
+    retainedWebhookSecrets,
   };
 }
 
@@ -39,6 +57,19 @@ export function readPrimaryCardCustodyIntakeRuntime(
       (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )
     return null;
+  // Retained keys parse in both intake and worker modes: the outer webhook
+  // gate and this intake read the intake runtime, so a rotation key must
+  // verify there — worker-only parsing would strand retained-signed
+  // retries as invalid.
+  let retained: unknown = [];
+  try {
+    if (env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS)
+      retained = JSON.parse(
+        env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS
+      );
+  } catch {
+    return null;
+  }
   const parsed = schemas.intakeRuntime.safeParse({
     intakeOnly: true,
     integrationId: env.PIGGYVEST_PRIMARY_CARD_INTEGRATION_ID,
@@ -47,6 +78,7 @@ export function readPrimaryCardCustodyIntakeRuntime(
     environment: env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT,
     expiresAt: env.PIGGYVEST_PRIMARY_CARD_EXPIRES_AT,
     webhookSecret: env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+    retainedWebhookSecrets: retained,
     crosswalkAuthority: {
       contractId: env.PIGGYVEST_PRIMARY_CARD_CROSSWALK_CONTRACT_ID,
       evidenceIssuer: env.PIGGYVEST_PRIMARY_CARD_CROSSWALK_ISSUER,

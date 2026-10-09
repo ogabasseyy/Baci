@@ -37,6 +37,19 @@ describe('signed primary custody boundary', () => {
       })
     );
   });
+  it('verifies rotation retries against retained secrets', async () => {
+    const input = setup();
+    const signature = createHmac('sha512', 'retained-custody-key')
+      .update(input.rawBody)
+      .digest('hex');
+    expect(
+      await applyPrimaryCardSignedCustody({
+        ...input,
+        signature,
+        retainedSecrets: ['retained-custody-key'],
+      })
+    ).toBe('completed');
+  });
   it.each([
     { signature: null },
     { secret: undefined },

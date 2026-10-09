@@ -1,10 +1,15 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
-import { readPrimaryWalletRuntime } from './primary-wallet-runtime';
+import {
+  readPrimaryWalletRuntime,
+  readPrimaryWalletRuntimeDrain,
+} from './primary-wallet-runtime';
 
-function readPrimaryWalletSavingsCore(env: NodeJS.ProcessEnv) {
-  const primary = readPrimaryWalletRuntime(env);
+function readPrimaryWalletSavingsCore(env: NodeJS.ProcessEnv, drain: boolean) {
+  const primary = drain
+    ? readPrimaryWalletRuntimeDrain(env)
+    : readPrimaryWalletRuntime(env);
   if (!primary) throw new Error('Primary savings configuration unavailable');
   const configuration = piggyvestPrimarySavingsRuntimeSchema.parse({
     integrationId: primary.onboarding.integrationId,
@@ -22,7 +27,7 @@ export function readPrimaryWalletSavingsRuntime(
   env: NodeJS.ProcessEnv = process.env
 ) {
   if (env.PIGGYVEST_PRIMARY_SAVINGS_ENABLED !== 'true') return null;
-  const { primary, configuration } = readPrimaryWalletSavingsCore(env);
+  const { primary, configuration } = readPrimaryWalletSavingsCore(env, false);
   return {
     configuration,
     reconciliationConfiguration: piggyvestPrimaryInflowRuntimeSchema.parse({
@@ -42,15 +47,16 @@ export function readPrimaryWalletSavingsRuntime(
 
 /**
  * Recovery-only savings configuration: durable pending lookups must run
- * even when the savings runtime is disabled, so a restart can never
- * mistake "runtime off" for "no outstanding operation" and reroute a new
- * legacy contribution alongside an already-submitted primary transfer.
- * Never used to reserve or dispatch — those stay behind the enabled flag.
+ * even when the savings runtime or the base primary flag is disabled, so a
+ * restart can never mistake "runtime off" for "no outstanding operation"
+ * and reroute a new legacy contribution alongside an already-submitted
+ * primary transfer. Never used to reserve or dispatch — those stay behind
+ * the enabled flags.
  */
 export function readPrimaryWalletSavingsRecoveryRuntime(
   env: NodeJS.ProcessEnv = process.env
 ) {
-  const { primary, configuration } = readPrimaryWalletSavingsCore(env);
+  const { primary, configuration } = readPrimaryWalletSavingsCore(env, true);
   return {
     configuration,
     merchantId: primary.onboarding.merchantId,

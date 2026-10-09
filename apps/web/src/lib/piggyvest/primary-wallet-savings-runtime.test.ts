@@ -5,8 +5,10 @@ import {
 } from './primary-wallet-savings-runtime';
 
 const primary = vi.hoisted(() => vi.fn());
+const primaryDrain = vi.hoisted(() => vi.fn());
 vi.mock('./primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: primary,
+  readPrimaryWalletRuntimeDrain: primaryDrain,
 }));
 beforeEach(() => {
   vi.clearAllMocks();
@@ -38,7 +40,7 @@ it('does not use provisioning credentials when authorizer credentials are missin
   ).toThrow();
 });
 it('builds recovery lookups without the savings enabled flag', () => {
-  primary.mockReturnValue({
+  primaryDrain.mockReturnValue({
     onboarding: {
       integrationId: '11111111-1111-4111-8111-111111111111',
       environment: 'staging',
@@ -56,13 +58,19 @@ it('builds recovery lookups without the savings enabled flag', () => {
   });
   const recovery = readPrimaryWalletSavingsRecoveryRuntime({
     NODE_ENV: 'test',
+    PIGGYVEST_PRIMARY_ENABLED: 'false',
+    PIGGYVEST_PRIMARY_SAVINGS_ENABLED: 'false',
     PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD: 'authorizer-secret',
   });
   expect(recovery.merchantId).toBe('33333333-3333-4333-8333-333333333333');
   expect(recovery).not.toHaveProperty('providerToken');
+  // Recovery reads through the drain reader only: the flag-gated reader is
+  // never consulted, so a disabled runtime can't mask an outstanding op.
+  expect(primary).not.toHaveBeenCalled();
+  expect(primaryDrain).toHaveBeenCalledTimes(1);
 });
 it('fails recovery lookups closed without primary configuration', () => {
-  primary.mockReturnValue(null);
+  primaryDrain.mockReturnValue(null);
   expect(() =>
     readPrimaryWalletSavingsRecoveryRuntime({ NODE_ENV: 'test' })
   ).toThrow('Primary savings configuration unavailable');

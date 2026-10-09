@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
@@ -29,6 +30,25 @@ describe('private signed raw-byte custody intake', () => {
       'inboxReadiness',
       'inboxEnqueue',
     ]);
+  });
+  it('accepts rotation retries signed with a retained key', async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(fixture.ready)
+      .mockResolvedValueOnce('accepted');
+    const accept = createPrimaryCardCustodyInboxIntake({
+      configuration: {
+        ...fixture.configuration,
+        retainedWebhookSecrets: ['retained-custody-key'],
+      },
+      capability: fixture.capability,
+      execute,
+      now: () => fixture.now,
+    });
+    const signature = createHmac('sha512', 'retained-custody-key')
+      .update(fixture.rawBody)
+      .digest('hex');
+    expect(await accept(fixture.rawBody, signature)).toBe('accepted');
   });
   it('never stores unsigned bytes or constructs an operation from unsigned metadata', async () => {
     const input = setup();

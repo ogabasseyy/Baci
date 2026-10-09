@@ -17,6 +17,18 @@ export function readPrimaryCardCustodyRuntime(
     name: env.PIGGYVEST_PRIMARY_CARD_DB_NAME,
     certificateAuthority: env.PIGGYVEST_PRIMARY_CARD_DB_CA,
   };
+  // Malformed rotation config fails the whole runtime closed: the worker
+  // must re-verify every secret the intake accepted, so a partial retained
+  // list would strand or mis-verify retained-signed claims.
+  let retained: unknown = [];
+  try {
+    if (env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS)
+      retained = JSON.parse(
+        env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS
+      );
+  } catch {
+    return null;
+  }
   const parsed = schemas.runtime.safeParse({
     integrationId: env.PIGGYVEST_PRIMARY_CARD_INTEGRATION_ID,
     merchantId: env.PIGGYVEST_PRIMARY_CARD_MERCHANT_ID,
@@ -32,6 +44,7 @@ export function readPrimaryCardCustodyRuntime(
     },
     apiToken: env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_TOKEN,
     webhookSecret: env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+    retainedWebhookSecrets: retained,
     transfer: env.PIGGYVEST_PRIMARY_CARD_TRANSFER_PASSWORD
       ? {
           ...database,

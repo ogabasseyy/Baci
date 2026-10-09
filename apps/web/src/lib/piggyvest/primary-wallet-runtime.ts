@@ -2,7 +2,26 @@ import 'server-only';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
-  if (env.PIGGYVEST_PRIMARY_ENABLED !== 'true') return null;
+  return parseRuntime(env, false);
+}
+
+/**
+ * Drain/recovery reader for durable pending lookups: after the base flag is
+ * turned off, operations created while enabled must still resolve or a
+ * restart mistakes "runtime off" for "no outstanding operation" and reroutes
+ * a new legacy contribution alongside an already-submitted primary transfer.
+ * Only the flag is bypassed; environment binding, credentials, and schema
+ * still fail closed, and the reader carries no dispatch handle — callers
+ * must only perform lookups with it, never reserve or dispatch.
+ */
+export function readPrimaryWalletRuntimeDrain(
+  env: NodeJS.ProcessEnv = process.env
+) {
+  return parseRuntime(env, true);
+}
+
+function parseRuntime(env: NodeJS.ProcessEnv, drain: boolean) {
+  if (!drain && env.PIGGYVEST_PRIMARY_ENABLED !== 'true') return null;
   const environment = env.PIGGYVEST_PRIMARY_ENVIRONMENT;
   if (
     (env.VERCEL_ENV === 'production' && environment !== 'production') ||

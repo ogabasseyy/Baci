@@ -1,5 +1,5 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
-import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { getPiggyvestPrimaryCapabilitySnapshot } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import {
   parseProjectWalletFundingAccount,
@@ -25,10 +25,14 @@ export async function readPrimaryFundingAccount(
     // Unknown verdict: probe once so a server-enabled merchant resolves
     // its primary account on first load instead of projecting legacy
     // until a manual refetch. Pilot and observed merchants skip the
-    // probe; a cached negative answers without network.
+    // probe; a cached negative answers without network. A fresh probe
+    // reuses its own snapshot — the account below is the same read, not
+    // a second one.
     try {
-      if (!(await getPiggyvestPrimaryCapability(merchantId)))
-        return { status: 'unavailable' };
+      const snapshot = await getPiggyvestPrimaryCapabilitySnapshot(merchantId);
+      if (!snapshot.available) return { status: 'unavailable' };
+      if (snapshot.account !== undefined)
+        return { status: 'ready', account: snapshot.account };
     } catch {
       return { status: 'unavailable' };
     }

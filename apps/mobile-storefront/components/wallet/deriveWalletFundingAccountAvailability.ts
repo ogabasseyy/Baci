@@ -6,6 +6,12 @@ interface DeriveWalletFundingAccountAvailabilityParams {
   isPaymentSettingsError: boolean;
   isPaymentSettingsPending: boolean;
   paymentSettings?: PaymentSettings | null;
+  /**
+   * True while a never-observed non-pilot merchant awaits the first primary
+   * capability verdict. Creation must wait: a legacy DVA minted now would be
+   * orphaned if the verdict comes back primary-enabled.
+   */
+  primaryVerdictPending?: boolean;
   primaryWalletSetup?: boolean;
 }
 
@@ -23,6 +29,7 @@ export function deriveWalletFundingAccountAvailability({
   isPaymentSettingsError,
   isPaymentSettingsPending,
   paymentSettings,
+  primaryVerdictPending = false,
   primaryWalletSetup = false,
 }: DeriveWalletFundingAccountAvailabilityParams): WalletFundingAccountAvailability {
   const walletDvaEnabled =
@@ -31,7 +38,10 @@ export function deriveWalletFundingAccountAvailability({
   let createFundingAccountUnavailableMessage: string | undefined;
   let needsPhone = false;
 
-  if (!primaryWalletSetup && isPaymentSettingsPending) {
+  if (
+    !primaryWalletSetup &&
+    (isPaymentSettingsPending || primaryVerdictPending)
+  ) {
     createFundingAccountUnavailableMessage =
       WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING;
   } else if (!primaryWalletSetup && isPaymentSettingsError) {

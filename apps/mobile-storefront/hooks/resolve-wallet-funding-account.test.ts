@@ -107,6 +107,8 @@ it('resolves a server-enabled merchant on first load via one probe', async () =>
     bank_name: 'Provider Bank',
     provider: 'piggyvest',
   });
+  // The probe's own snapshot answers: no second account read.
+  expect(read).toHaveBeenCalledTimes(1);
 });
 
 it('treats an ambiguous probe failure as unavailable and retries next load', async () => {

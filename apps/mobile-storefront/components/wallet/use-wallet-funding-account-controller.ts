@@ -48,16 +48,22 @@ export function useWalletFundingAccountController({
   updateProfile,
 }: UseWalletFundingAccountControllerParams) {
   const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
-  const primary = Boolean(
-    activeMerchantId &&
-      isPiggyvestPrimaryMerchant(activeMerchantId) &&
-      primaryCapability !== false
+  const primaryObserved = Boolean(
+    activeMerchantId && isPiggyvestPrimaryMerchant(activeMerchantId)
+  );
+  const primary = Boolean(primaryObserved && primaryCapability !== false);
+  // A never-observed non-pilot merchant must wait for the first capability
+  // verdict before creating a legacy DVA: creating now could orphan the
+  // account when the merchant turns out primary-enabled.
+  const primaryVerdictPending = Boolean(
+    activeMerchantId && !primaryObserved && primaryCapability === null
   );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,
     isPaymentSettingsError,
     isPaymentSettingsPending,
     paymentSettings,
+    primaryVerdictPending,
     primaryWalletSetup: primary,
   });
   const [phoneRequiredOverride, setPhoneRequiredOverride] = useState(false);
@@ -66,6 +72,12 @@ export function useWalletFundingAccountController({
   const handleCreateFundingAccount = () => {
     if (primary) {
       setShowFundPanel(true);
+      return Promise.resolve(false);
+    }
+    if (primaryVerdictPending) {
+      // Defense in depth: the create CTA is already disabled with a checking
+      // message while the verdict is pending; never mint a legacy DVA the
+      // probe might orphan.
       return Promise.resolve(false);
     }
     return createWalletFundingAccount({

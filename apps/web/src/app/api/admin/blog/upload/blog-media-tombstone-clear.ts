@@ -1,6 +1,6 @@
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type { createClient } from '@/lib/supabase/server';
-import { unescapeJsonSlashes } from './blog-media-json-slash-unescape';
+import { unescapeJsonStringEscapes } from './blog-media-json-string-unescape';
 import type { BlogPostMediaRow } from './blog-media-reference-scan';
 import { BLOG_MEDIA_TOMBSTONE_TABLE } from './blog-media-tombstone-constants';
 
@@ -38,7 +38,7 @@ export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
     // JSON slash escapes unescape before matching: an escaped URL
     // spells its scheme `https:\/\/`, which the URL pattern would
     // otherwise never match at all.
-    const unescaped = unescapeJsonSlashes(text);
+    const unescaped = unescapeJsonStringEscapes(text);
     for (const url of unescaped.match(URL_PATTERN) ?? []) {
       const normalized = trimMarkdownDelimiters(url);
       const path = extractManagedBlogStoragePath(normalized, {

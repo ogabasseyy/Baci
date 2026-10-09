@@ -36,4 +36,20 @@ describe('stripNoscriptSubtrees', () => {
       validateImportedContent('<!-- <noscript> note --><p>Visible body</p>')
     ).toBe('<p>Visible body</p>');
   });
+
+  it('strips noscript before the DOM-based template strip parses', () => {
+    // Parsing promotes noscript children to markup, so the lexical
+    // noscript strip must run on unparsed input first; otherwise the
+    // wrapper is gone before it is seen and inert notes publish.
+    expect(
+      validateImportedContent(
+        '<noscript><template><p>Deep note</p></template></noscript><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+    expect(
+      validateImportedContent(
+        '<template><noscript><p>Deep note</p></noscript></template><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+  });
 });

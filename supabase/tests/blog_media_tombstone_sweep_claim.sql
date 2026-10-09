@@ -1045,6 +1045,91 @@ BEGIN
 END;
 $nul_guard$;
 
+DO $unicode_unescape$
+DECLARE
+  v_decoded TEXT;
+  v_row RECORD;
+  v_saw_live BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- Structured URLs escape characters as \u00XX; the storefront's
+  -- JSON.parse resolves them to the live URL, so the scan must see
+  -- the same characters or the sweep deletes a live image.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT public.blog_media_json_unescape_string(
+    'https:\/\/cdn.example.com\/media\/platform\/blog\/\u0074oken.webp'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'https://cdn.example.com/media/platform/blog/token.webp'
+  THEN
+    RAISE EXCEPTION 'unicode unescape failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_json_unescape_string('100\u0025') INTO v_decoded;
+  IF v_decoded <> '100%' THEN
+    RAISE EXCEPTION 'escaped percent failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_json_unescape_string('a\u0000b') INTO v_decoded;
+  IF v_decoded <> 'a\u0000b' THEN
+    RAISE EXCEPTION 'NUL escape was not preserved: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_json_unescape_string('x\u005cu002f')
+  INTO v_decoded;
+  IF v_decoded <> 'x\u002f' THEN
+    RAISE EXCEPTION 'decoded output was rescanned: %', v_decoded;
+  END IF;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'Unicode unescape test',
+    'sweep-claim-unicode-post',
+    '{"src":"https:\/\/cdn.example.com\/media\/platform\/blog\/\u0074oken.webp"}',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/token.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/uni-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    IF v_row.tombstone_path = 'platform/blog/token.webp' THEN
+      v_saw_live := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'unicode escapes failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/uni-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the unicode control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF NOT v_saw_live OR NOT v_saw_orphan THEN
+    RAISE EXCEPTION 'claim omitted the unicode fixtures';
+  END IF;
+
+  DELETE FROM public.blog_posts
+   WHERE slug = 'sweep-claim-unicode-post';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/token.webp',
+    'platform/blog/uni-orphan.webp'
+  );
+END;
+$unicode_unescape$;
+
 RESET ROLE;
 
 ROLLBACK;

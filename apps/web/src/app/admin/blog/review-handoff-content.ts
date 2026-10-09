@@ -82,9 +82,12 @@ function normalizeContent(
     ) {
       return { content: sanitizedRaw, rendered };
     }
+    // Noscript strips before the DOM-based template strip: parsing
+    // promotes noscript children to markup, hiding the wrapper the
+    // lexical strip must see.
     const converted = convertHiddenInlineStyles(
       convertHiddenAttributes(
-        stripNoscriptSubtrees(stripTemplateSubtrees(rendered))
+        stripTemplateSubtrees(stripNoscriptSubtrees(rendered))
       )
     );
     return { content: sanitizeHtml(converted), rendered };
@@ -155,9 +158,12 @@ function hasSelectablePictureSource(html: string): boolean {
  */
 export function validateImportedContent(rawContent: string): string {
   // Convert hidden attributes and styles to hiding classes pre-sanitize.
+  // Noscript strips before the DOM-based template strip: parsing
+  // promotes noscript children to markup, hiding the wrapper the
+  // lexical strip must see.
   const unhidden = convertHiddenInlineStyles(
     convertHiddenAttributes(
-      stripNoscriptSubtrees(stripTemplateSubtrees(rawContent))
+      stripTemplateSubtrees(stripNoscriptSubtrees(rawContent))
     )
   );
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {

@@ -103,6 +103,18 @@ describe('clearBlogMediaTombstonesForRow', () => {
     expect(remove).toHaveBeenCalledWith('path', ['platform/blog/json.webp']);
   });
 
+  it('clears paths with unicode escapes inside structured URLs', async () => {
+    // The storefront's JSON.parse resolves \u0074 to the live URL;
+    // the save handshake must register the same path or the
+    // upload's tombstone expires and deletes the saved post's media.
+    const { client, remove } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, {
+      content:
+        '{"src":"https:\\/\\/cdn.example.com\\/media\\/platform\\/blog\\/\\u0074oken.webp"}',
+    });
+    expect(remove).toHaveBeenCalledWith('path', ['platform/blog/token.webp']);
+  });
+
   it('never fails the committed save', async () => {
     const failed = fakeClient({ error: { message: 'down' } });
     await expect(

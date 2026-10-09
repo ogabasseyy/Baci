@@ -1,37 +1,22 @@
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
+import { parseHandoffDom } from './review-handoff-dom';
 import { stripHtmlComments } from './strip-html-comments';
 
 /**
  * Remove inert template subtrees before sanitization. Template
  * contents never render in the source document, but the sanitizer
  * discards only the disallowed wrapper and keeps its allowed
- * descendants — surfacing notes the author never displayed. Nesting
- * tracks depth (a self-closing slash opens like browsers do), an
- * unclosed template drops to end of input, and stray closes pass
- * through for the sanitizer to discard. Comments strip first: a
- * template opener inside comment text is not markup, and the
- * sanitizer drops comments anyway.
+ * descendants — surfacing notes the author never displayed. A real
+ * parser locates the template elements, so openers inside raw-text
+ * elements (`<script>`, `<style>`) or attribute values never count
+ * as markup. Comments strip first: a template opener inside comment
+ * text is not markup, and the sanitizer drops comments anyway. A
+ * stray close parses to nothing (the sanitizer would discard it),
+ * and an unclosed template auto-closes at end of input per HTML.
  */
 export function stripTemplateSubtrees(html: string): string {
-  const source = stripHtmlComments(html);
-  const segments: string[] = [];
-  let depth = 0;
-  let position = 0;
-  for (const match of source.matchAll(HTML_TAG_PATTERN)) {
-    const index = match.index ?? source.length;
-    if (depth === 0) segments.push(source.slice(position, index));
-    position = index + match[0].length;
-    if (match[2].toLowerCase() !== 'template') {
-      if (depth === 0) segments.push(match[0]);
-      continue;
-    }
-    if (match[1] === '/') {
-      if (depth > 0) depth -= 1;
-      else segments.push(match[0]);
-    } else {
-      depth += 1;
-    }
+  const doc = parseHandoffDom(stripHtmlComments(html));
+  for (const template of doc.querySelectorAll('template')) {
+    template.remove();
   }
-  if (depth === 0) segments.push(source.slice(position));
-  return segments.join('');
+  return doc.body.innerHTML;
 }

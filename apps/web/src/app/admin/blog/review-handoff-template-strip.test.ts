@@ -16,7 +16,9 @@ describe('stripTemplateSubtrees', () => {
     // A template opener inside comment text is not markup: the scan
     // must not treat it as an unclosed template and discard the body.
     ['<!-- <template> note --><p>Visible body</p>', '<p>Visible body</p>'],
-    ['<p>Visible</p></template>', '<p>Visible</p></template>'],
+    // A stray close parses to nothing; the sanitizer would have
+    // discarded the passed-through tag anyway.
+    ['<p>Visible</p></template>', '<p>Visible</p>'],
     ['<p>Untouched</p>', '<p>Untouched</p>'],
     ['<template></template>', ''],
   ])('strips inert template subtrees: %s', (html, expected) => {
@@ -38,5 +40,18 @@ describe('stripTemplateSubtrees', () => {
     expect(
       validateImportedContent('<!-- <template> note --><p>Visible body</p>')
     ).toBe('<p>Visible body</p>');
+  });
+
+  it('ignores template text inside raw-text elements', () => {
+    // The parser treats the opener as script text, so no template
+    // element exists and nothing is stripped; the sanitizer then
+    // discards the script while retaining the paragraph. A lexical
+    // walk would see an unclosed template and drop the body.
+    const html =
+      '<script>const sample="<template>"</script><p>Visible body</p>';
+    // The leading script parses into head; the body keeps its
+    // paragraph instead of being dropped as unclosed-template text.
+    expect(stripTemplateSubtrees(html)).toBe('<p>Visible body</p>');
+    expect(validateImportedContent(html)).toBe('<p>Visible body</p>');
   });
 });

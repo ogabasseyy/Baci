@@ -14,6 +14,10 @@ import { handleBlogMediaTombstoneRefresh } from './blog-media-tombstone-refresh-
 import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
 import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
 import {
+  type FeaturedImageVariantRecord,
+  uploadFeaturedImageVariants,
+} from './upload-featured-image-variants';
+import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
   getAllowedTypesForPurpose,
@@ -122,6 +126,12 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Featured uploads stage the source before the long generation
+  // step: a killed invocation leaves a reclaimable tombstone, not a
+  // permanent orphan the cron can never see.
+  const sourceStaging = await stageUploadedBlogMediaPaths(supabase, [filePath]);
+  if (sourceStaging) return sourceStaging;
+
   let generated: Awaited<ReturnType<typeof generateFeaturedImageVariants>>;
   try {
     generated = await generateFeaturedImageVariants(sourceBuffer, {
@@ -135,43 +145,17 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 
-  const featuredImageVariants: Record<
-    string,
-    {
-      contentType: string;
-      height: number;
-      path: string;
-      url: string;
-      width: number;
-    }
-  > = {};
+  let featuredImageVariants: Record<string, FeaturedImageVariantRecord>;
 
   try {
-    for (const variant of Object.values(generated.variants)) {
-      const variantPath = buildPlatformMediaPath(
-        `${fileToken}/${variant.key}.webp`
-      );
-      const { error: variantError } = await supabase.storage
-        .from('media')
-        .upload(variantPath, variant.buffer, {
-          cacheControl: '31536000',
-          contentType: variant.contentType,
-          upsert: false,
-        });
-
-      if (variantError) {
-        throw variantError;
-      }
-
-      uploadedPaths.push(variantPath);
-      featuredImageVariants[variant.key] = {
-        contentType: variant.contentType,
-        height: variant.height,
-        path: variantPath,
-        url: toPlatformMediaUrl(variantPath),
-        width: variant.width,
-      };
-    }
+    const uploaded = await uploadFeaturedImageVariants(
+      supabase,
+      fileToken,
+      generated,
+      uploadedPaths
+    );
+    if ('response' in uploaded) return uploaded.response;
+    featuredImageVariants = uploaded.variants;
   } catch (error) {
     await cleanupUploadedPaths(supabase, uploadedPaths);
     console.error(

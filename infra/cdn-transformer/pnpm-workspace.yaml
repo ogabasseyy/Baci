@@ -22,7 +22,7 @@ allowBuilds:
   sharp: true
 
 overrides:
-  # Pin to 0.35.4 to mitigate GHSA-f88m-g3jw-g9cj plus the libheif
+  # Pin to 0.35.5 to mitigate librsvg GHSA-wq5f-xc86-pv6w plus the libheif
   # GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545, and retain the corrected
   # TypeScript export map (mirrors the root security override).
-  sharp: 0.35.4
+  sharp: 0.35.5

@@ -96,7 +96,7 @@ test('generates, commits, and reports two jobs end to end', async () => {
   const report = JSON.parse(
     await readFile(join(outputRoot, 'reports', reports[0]), 'utf8')
   );
-  assert.equal(report.versions.sharp, '0.35.4');
+  assert.equal(report.versions.sharp, '0.35.5');
   assert.ok(report.versions.libvips.length > 0);
   assert.ok(report.versions.node.length > 0);
   assert.equal(report.jobs.length, 2);

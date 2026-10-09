@@ -668,6 +668,126 @@ BEGIN
 END;
 $grants$;
 
+DO $refresh_update$
+DECLARE
+  v_member uuid := 'b1e62a11-0000-4000-8000-000000000001';
+  v_other uuid := 'b1e62a11-0000-4000-8000-000000000002';
+  v_updated integer;
+BEGIN
+  -- A delegated content manager (no legacy platform-admin merchant
+  -- row) must refresh staged leases through PostgREST: without an
+  -- UPDATE policy the heartbeat UPDATE matches zero rows silently
+  -- and the sweep deletes media from an active draft. Fixtures seed
+  -- as the session role (service_role holds no auth.users grant);
+  -- the jwt claim still reads service_role, so the explicit
+  -- created_at survives the force-insert trigger.
+  RESET ROLE;
+  INSERT INTO auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data
+  ) VALUES
+    (v_member, '00000000-0000-0000-0000-000000000000', 'authenticated',
+     'authenticated', 'refresh-member@example.com', 'test', now(), now(), now(),
+     '{}', '{}'),
+    (v_other, '00000000-0000-0000-0000-000000000000', 'authenticated',
+     'authenticated', 'refresh-other@example.com', 'test', now(), now(), now(),
+     '{}', '{}');
+  INSERT INTO public.platform_admin_memberships (user_id, role, status, reason)
+  VALUES (v_member, 'content', 'active', 'refresh update regression test');
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/refresh-delegated.webp', now() - interval '50 minutes', FALSE);
+
+  SET LOCAL ROLE authenticated;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', v_member::text, true);
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = now()
+   WHERE path = 'platform/blog/refresh-delegated.webp'
+     AND claimed IS FALSE;
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 1 THEN
+    RAISE EXCEPTION 'delegated content manager refresh updated % rows, want 1', v_updated;
+  END IF;
+
+  -- A user without the permission still refreshes nothing.
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', v_other::text, true);
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = now()
+   WHERE path = 'platform/blog/refresh-delegated.webp'
+     AND claimed IS FALSE;
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 0 THEN
+    RAISE EXCEPTION 'unpermissioned refresh updated % rows, want 0', v_updated;
+  END IF;
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/refresh-delegated.webp'
+       AND claimed IS FALSE
+       AND created_at > now() - interval '1 minute'
+  ) THEN
+    RAISE EXCEPTION 'delegated refresh did not move the lease forward';
+  END IF;
+
+  -- Cleanup runs as the session role for the same grant reason.
+  RESET ROLE;
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/refresh-delegated.webp';
+  DELETE FROM public.platform_admin_memberships WHERE user_id = v_member;
+  DELETE FROM auth.users WHERE id IN (v_member, v_other);
+END;
+$refresh_update$;
+
+DO $cutoff_cap$
+DECLARE
+  v_claimed boolean;
+BEGIN
+  -- A future cutoff passed to the worker wrapper must not claim
+  -- fresh uploads: the wrapper caps it at the standard grace
+  -- window instead of trusting the argument.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/cutoff-fresh.webp', now() - interval '10 minutes', FALSE),
+    ('platform/blog/cutoff-due.webp', now() - interval '2 hours', FALSE);
+
+  SET LOCAL ROLE blog_media_sweep_worker;
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role', 'blog_media_sweep_worker', true);
+  PERFORM public.blog_media_sweep_worker_claim(
+    '2100-01-01T00:00:00Z'::timestamptz, 500);
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  SELECT claimed INTO v_claimed
+    FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/cutoff-fresh.webp';
+  IF v_claimed IS NOT FALSE THEN
+    RAISE EXCEPTION 'future cutoff claimed a fresh upload';
+  END IF;
+
+  -- The cap degrades to the standard window: genuinely due rows
+  -- still claim through the same future-cutoff call.
+  SELECT claimed INTO v_claimed
+    FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/cutoff-due.webp';
+  IF v_claimed IS NOT TRUE THEN
+    RAISE EXCEPTION 'capped cutoff failed to claim a due row';
+  END IF;
+
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/cutoff-fresh.webp',
+    'platform/blog/cutoff-due.webp'
+  );
+END;
+$cutoff_cap$;
+
 RESET ROLE;
 
 ROLLBACK;

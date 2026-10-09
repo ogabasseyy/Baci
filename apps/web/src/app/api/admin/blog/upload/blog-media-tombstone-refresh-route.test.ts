@@ -23,7 +23,8 @@ vi.mock('@/lib/rate-limiter', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
-const mockEq = vi.fn();
+const mockSelect = vi.fn();
+const mockEq = vi.fn(() => ({ select: mockSelect }));
 const mockIn = vi.fn(() => ({ eq: mockEq }));
 const mockUpdate = vi.fn(() => ({ in: mockIn }));
 
@@ -49,7 +50,10 @@ describe('handleBlogMediaTombstoneRefresh', () => {
     });
     mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
     mockCheckRateLimit.mockResolvedValue(true);
-    mockEq.mockResolvedValue({ error: null });
+    mockSelect.mockResolvedValue({
+      data: [{ path: 'platform/blog/draft.webp' }],
+      error: null,
+    });
   });
 
   it('refreshes staged paths for an active draft', async () => {
@@ -79,7 +83,7 @@ describe('handleBlogMediaTombstoneRefresh', () => {
   });
 
   it('reports refresh failures', async () => {
-    mockEq.mockResolvedValueOnce({ error: { message: 'down' } });
+    mockSelect.mockResolvedValueOnce({ data: [], error: { message: 'down' } });
 
     const response = await handleBlogMediaTombstoneRefresh(
       patchRequest({ path: 'platform/blog/draft.webp', variantPaths: [] })
@@ -93,7 +97,7 @@ describe('handleBlogMediaTombstoneRefresh', () => {
 
   it('requires authentication', async () => {
     mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
-      status: 'unauthorized',
+      status: 'unauthenticated',
     });
 
     const response = await handleBlogMediaTombstoneRefresh(

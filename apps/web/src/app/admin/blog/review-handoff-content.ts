@@ -10,6 +10,7 @@ import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
+import { stripNoscriptSubtrees } from './review-handoff-noscript-strip';
 import { hasUnopenedPopover } from './review-handoff-popover';
 import { hasReadableContent } from './review-handoff-readability';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
@@ -79,7 +80,9 @@ function normalizeContent(
       return { content: sanitizedRaw, rendered };
     }
     const converted = convertHiddenInlineStyles(
-      convertHiddenAttributes(stripTemplateSubtrees(rendered))
+      convertHiddenAttributes(
+        stripNoscriptSubtrees(stripTemplateSubtrees(rendered))
+      )
     );
     return { content: sanitizeHtml(converted), rendered };
   } catch {
@@ -153,7 +156,9 @@ function hasSelectablePictureSource(html: string): boolean {
 export function validateImportedContent(rawContent: string): string {
   // Convert hidden attributes and styles to hiding classes pre-sanitize.
   const unhidden = convertHiddenInlineStyles(
-    convertHiddenAttributes(stripTemplateSubtrees(rawContent))
+    convertHiddenAttributes(
+      stripNoscriptSubtrees(stripTemplateSubtrees(rawContent))
+    )
   );
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {
     throw new Error('The article has unresolved inline image placeholders');

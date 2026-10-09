@@ -4,15 +4,24 @@ import { refreshBlogMediaTombstones } from './blog-media-tombstone-refresh';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-function fakeClient(updateError: { message: string } | null = null) {
-  const eq = vi.fn(() => Promise.resolve({ error: updateError }));
+function fakeClient(
+  refreshedPaths: string[] = ['platform/blog/draft.webp'],
+  updateError: { message: string } | null = null
+) {
+  const select = vi.fn(() =>
+    Promise.resolve({
+      data: refreshedPaths.map((path) => ({ path })),
+      error: updateError,
+    })
+  );
+  const eq = vi.fn(() => ({ select }));
   const update = vi.fn((_payload: { created_at: string }) => ({
     in: vi.fn(() => ({ eq })),
   }));
   const client = {
     from: vi.fn(() => ({ update })),
   } as unknown as ServerSupabaseClient;
-  return { client, eq, update };
+  return { client, eq, select, update };
 }
 
 describe('refreshBlogMediaTombstones', () => {
@@ -38,10 +47,23 @@ describe('refreshBlogMediaTombstones', () => {
   });
 
   it('reports failure without throwing', async () => {
-    const { client } = fakeClient({ message: 'down' });
+    const { client } = fakeClient([], { message: 'down' });
 
     await expect(
       refreshBlogMediaTombstones(client, ['platform/blog/draft.webp'])
+    ).resolves.toBe(false);
+  });
+
+  it('fails when RLS silently drops a row', async () => {
+    // An UPDATE policy gap returns success with fewer rows: every
+    // requested path must come back or the lease did not move.
+    const { client } = fakeClient(['platform/blog/draft.webp']);
+
+    await expect(
+      refreshBlogMediaTombstones(client, [
+        'platform/blog/draft.webp',
+        'platform/blog/other.webp',
+      ])
     ).resolves.toBe(false);
   });
 

@@ -31,6 +31,7 @@ function fixture() {
       }),
       recordAccepted: vi.fn().mockResolvedValue(true),
       recordUncertain: vi.fn().mockResolvedValue(undefined),
+      recordRejected: vi.fn().mockResolvedValue(undefined),
     },
     createCustomer: vi.fn().mockResolvedValue({
       customer_id: 'customer-fixture',
@@ -125,7 +126,20 @@ describe('primary wallet onboarding', () => {
       code: 'OWNERSHIP_REVIEW_REQUIRED',
     });
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an explicitly rejected intent in conflict on retry without provider contact', async () => {
+    const input = fixture();
+    input.storage.claim.mockResolvedValue({ status: 'conflict' });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+    });
+    expect(input.createCustomer).not.toHaveBeenCalled();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
   });
 
   it('adopts the existing provider customer when retrying a reclaimed uncertain intent', async () => {

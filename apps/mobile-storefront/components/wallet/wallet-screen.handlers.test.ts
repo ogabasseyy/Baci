@@ -28,6 +28,35 @@ jest.mock('./fund-primary-wallet-card', () => ({
     mockFundPrimaryWalletCard(...args),
 }));
 
+// These suites pin the known-verdict paths: merchant-1 is observed
+// non-primary, so funding must route legacy without probing.
+const mockGetCapability = jest
+  .fn<(...args: unknown[]) => Promise<boolean>>()
+  .mockRejectedValue(new Error('must not probe on a known verdict'));
+const mockReadObserved = jest
+  .fn<(...args: unknown[]) => boolean | null>()
+  .mockReturnValue(false);
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return {
+    ...actual,
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockGetCapability(...args),
+  };
+});
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability-cache'
+  ) as typeof import('@/lib/piggyvest-primary-capability-cache');
+  return {
+    ...actual,
+    readObservedPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockReadObserved(...args),
+  };
+});
+
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
     error: jest.fn(),
@@ -200,6 +229,8 @@ describe('wallet-screen.handlers', () => {
     expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
       expect.objectContaining({ returnTo: '/checkout' })
     );
+    // A known non-primary verdict routes legacy without probing.
+    expect(mockGetCapability).not.toHaveBeenCalled();
     expect(mockTrackEvent).toHaveBeenCalledWith(
       'wallet_top_up_started',
       expect.objectContaining({ amount: 5000, gateway: 'paystack' })

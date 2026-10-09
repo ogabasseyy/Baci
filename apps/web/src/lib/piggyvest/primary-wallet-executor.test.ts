@@ -71,6 +71,30 @@ describe('primary wallet restricted executor', () => {
     );
     expect(mocks.end).toHaveBeenCalledTimes(1);
   });
+  it('permits the terminal rejection RPC with its three bound arguments', async () => {
+    await createPrimaryWalletExecutor(config)(
+      PRIMARY_WALLET_STATEMENTS.reject,
+      [
+        '{}',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002',
+      ]
+    );
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      PRIMARY_WALLET_STATEMENTS.reject,
+      [
+        '{}',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002',
+      ]
+    );
+    await expect(
+      createPrimaryWalletExecutor(config)(PRIMARY_WALLET_STATEMENTS.reject, [
+        '{}',
+        '00000000-0000-4000-8000-000000000001',
+      ])
+    ).rejects.toThrow('Primary wallet database unavailable');
+  });
   it('rejects arbitrary SQL before opening a connection', async () => {
     await expect(
       createPrimaryWalletExecutor(config)('SELECT * FROM public.customers', [])

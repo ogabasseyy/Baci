@@ -12,6 +12,8 @@ describe('sanitizeWalletReturnTo', () => {
     '/',
     '/imei-check',
     '/wallet/history',
+    '/checkout',
+    '/wallet?action=savings&savingsGoalId=goal-1',
   ])('keeps valid wallet return path %s', (value) => {
     expect(sanitizeWalletReturnTo(value)).toBe(value);
   });

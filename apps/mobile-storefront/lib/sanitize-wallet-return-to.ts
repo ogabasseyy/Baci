@@ -88,6 +88,13 @@ function isSafeQuery(query: string): boolean {
  * query is only required to be well-formed and free of nested redirects.
  * Fragments are rejected outright — nothing in this app produces one, and one
  * would otherwise carry unchecked path-ish text past the path rules.
+ *
+ * Deliberately NOT allowlisted to /wallet*: returnTo is a general
+ * interrupted-flow handoff — wallet funding resumes /checkout (abandoned
+ * purchase), /imei-check (device check), and savings routes. Same-app
+ * screens are deep-linkable regardless, so same-app navigation is not a
+ * privilege boundary; the security boundary here is off-app escape
+ * (absolute URLs, protocol-relative, traversal, nested hops).
  */
 /**
  * True when a saved handoff resumes the savings flow: the href must first

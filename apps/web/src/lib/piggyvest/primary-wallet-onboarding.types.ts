@@ -34,6 +34,12 @@ export interface PrimaryWalletOnboardingStorage {
       claimToken: string;
     }
   ): Promise<void>;
+  recordRejected(
+    input: PrimaryWalletIntentScope & {
+      intentId: string;
+      claimToken: string;
+    }
+  ): Promise<void>;
 }
 
 export interface PrimaryWalletCustomerRequest {

@@ -152,3 +152,72 @@ it('returns null for events no primary intake owns', async () => {
   expect(mocks.bank).not.toHaveBeenCalled();
   expect(mocks.inflow).not.toHaveBeenCalled();
 });
+
+it('answers retryable while a custody-signed outflow waits for configuration', async () => {
+  mocks.custody.mockResolvedValue({ outcome: 'disabled', response: null });
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'wallet-transfer.outflow.success' } as never,
+    families: ['custody'],
+  })) as Response;
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PRIMARY_CARD_INBOX_UNAVAILABLE',
+    error: 'Primary card signed intake unavailable',
+  });
+});
+
+it('answers retryable while both interest paths are disabled', async () => {
+  mocks.interest.mockResolvedValue('disabled');
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'interest-payout.success' } as never,
+    families: ['interest'],
+  })) as Response;
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+    error: 'Primary interest intake unavailable',
+  });
+});
+
+it('answers retryable while the bank inbox and legacy inflow are both disabled', async () => {
+  mocks.bank.mockResolvedValue({ outcome: 'disabled', response: null });
+  mocks.inflow.mockResolvedValue('disabled');
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families: ['bank'],
+  })) as Response;
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PRIMARY_BANK_INBOX_UNAVAILABLE',
+    error: 'Primary bank receipt intake unavailable',
+  });
+});
+
+it('still credits through legacy inflow when only the bank inbox is disabled', async () => {
+  mocks.bank.mockResolvedValue({ outcome: 'disabled', response: null });
+  mocks.inflow.mockResolvedValue('credited');
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families: ['bank'],
+  })) as Response;
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ received: true, duplicate: false });
+});
+
+it('falls through when an enabled bank inbox declines an unmapped receipt', async () => {
+  mocks.bank.mockResolvedValue({ outcome: 'not_handled', response: null });
+  mocks.inflow.mockResolvedValue('unmapped');
+  const response = await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families: ['bank'],
+  });
+  expect(response).toBeNull();
+});

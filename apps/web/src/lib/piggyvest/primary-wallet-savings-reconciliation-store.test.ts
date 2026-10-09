@@ -76,3 +76,53 @@ it('rejects malformed operation IDs before storage', async () => {
   await expect(store.loadDispatched('foreign-sql')).rejects.toThrow();
   expect(execute).not.toHaveBeenCalled();
 });
+it('finds dispatched operations by reference through a parameterized read', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: null }] });
+  const store = createPrimaryWalletSavingsReconciliationStore({
+    integrationId,
+    environment: 'staging',
+    execute,
+  });
+  expect(
+    await store.findDispatchedByReference('pvb-save-reference')
+  ).toBeNull();
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
+    [integrationId, 'staging', 'pvb-save-reference']
+  );
+  await expect(store.findDispatchedByReference('')).rejects.toThrow();
+});
+it('reports detached rows as unmatched but still rejects corrupt rows', async () => {
+  const detached = {
+    operationId,
+    goalId: null,
+    amountKobo: 100,
+    sourceWalletId: 'source',
+    destinationWalletId: 'destination',
+    reference: 'pvb-save-reference',
+    businessId: 'business',
+    providerCustomerId: 'source-customer',
+  };
+  const execute = vi
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ result: detached }] })
+    .mockResolvedValueOnce({
+      rows: [{ result: { ...detached, goalId: operationId } }],
+    })
+    .mockResolvedValueOnce({ rows: [{ result: { operationId } }] });
+  const store = createPrimaryWalletSavingsReconciliationStore({
+    integrationId,
+    environment: 'staging',
+    execute,
+  });
+  expect(
+    await store.findDispatchedByReference('pvb-save-reference')
+  ).toBeNull();
+  expect(await store.findDispatchedByReference('pvb-save-reference')).toEqual({
+    ...detached,
+    goalId: operationId,
+  });
+  await expect(
+    store.findDispatchedByReference('pvb-save-reference')
+  ).rejects.toThrow();
+});

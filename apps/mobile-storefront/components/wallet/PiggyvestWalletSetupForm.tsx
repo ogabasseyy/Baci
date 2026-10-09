@@ -44,9 +44,12 @@ export function PiggyvestWalletSetupForm({
     submitting.current = true;
     setBusy(true);
     setError(null);
-    setBvn('');
     try {
       await onSubmit(parsed.data);
+      // Clear only after the setup is confirmed: a failure keeps the BVN
+      // for correction-free retry, while success drops the sensitive
+      // value from state at the earliest safe moment.
+      setBvn('');
     } catch {
       setError(
         'Wallet setup could not be confirmed. Refresh your account before trying again.'

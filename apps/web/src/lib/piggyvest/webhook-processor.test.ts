@@ -16,6 +16,7 @@ const mockApplyCreated = vi.fn();
 const mockApplyLifted = vi.fn();
 const mockApplyOutflow = vi.fn();
 const mockRecordQuarantine = vi.fn();
+const mockSavingsOutflow = vi.fn();
 
 vi.mock('./event-quarantine', () => ({
   recordQuarantineEvent: (...args: unknown[]) => mockRecordQuarantine(...args),
@@ -56,6 +57,11 @@ import { InflowLedgerError } from './inflow-ledger';
 import { InterestLedgerError } from './interest-ledger';
 import { processPiggyvestEvent } from './webhook-processor';
 
+vi.mock('./primary-wallet-savings-outflow-reconciliation', () => ({
+  runPrimaryWalletSavingsOutflowReconciliation: (...args: unknown[]) =>
+    mockSavingsOutflow(...args),
+}));
+
 vi.mock('./transfer-outbox', () => ({
   applyOutflowTerminal: (...args: unknown[]) => mockApplyOutflow(...args),
   outflowReferenceCandidates: (eventData: Record<string, unknown>) =>
@@ -95,6 +101,7 @@ describe('processPiggyvestEvent', () => {
     mockApplyLifted.mockResolvedValue('ready');
     mockApplyOutflow.mockResolvedValue('matched');
     mockRecordQuarantine.mockResolvedValue('recorded');
+    mockSavingsOutflow.mockResolvedValue('unmatched');
   });
 
   it('defers unhandled events without claiming', async () => {
@@ -197,6 +204,68 @@ describe('processPiggyvestEvent', () => {
       'processed'
     );
     expect(mockApplyOutflow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'confirmed',
+    'cancelled',
+    'unmatched',
+  ] as const)('resolves outflow as processed when savings reconciliation reports %s', async (outcome) => {
+    mockSavingsOutflow.mockResolvedValue(outcome);
+    const event = {
+      eventId: 'outflow-003',
+      eventType: 'wallet-transfer.outflow.success',
+      eventData: { reference: 'ref-003' },
+    };
+    await expect(
+      processPiggyvestEvent(supabase, event as never, {
+        savingsRuntime: {
+          reconciliationConfiguration: {},
+          providerToken: 'token',
+        },
+      })
+    ).resolves.toBe('processed');
+    expect(mockSavingsOutflow).toHaveBeenCalledWith({
+      configuration: {},
+      providerToken: 'token',
+      references: ['ref-003'],
+      fetchImplementation: undefined,
+    });
+  });
+
+  it('stays retryable when savings reconciliation is inconclusive', async () => {
+    mockSavingsOutflow.mockResolvedValue('pending');
+    const event = {
+      eventId: 'outflow-004',
+      eventType: 'wallet-transfer.outflow.success',
+      eventData: { reference: 'ref-004' },
+    };
+    await expect(
+      processPiggyvestEvent(supabase, event as never, {
+        savingsRuntime: {
+          reconciliationConfiguration: {},
+          providerToken: 'token',
+        },
+      })
+    ).rejects.toThrow('Primary savings outflow reconciliation inconclusive');
+    expect(mockResolve).toHaveBeenCalledWith(supabase, {
+      eventId: event.eventId,
+      claimToken,
+      status: 'failed',
+      lastError: 'outflow status update failed',
+    });
+  });
+
+  it('skips savings reconciliation when the runtime is explicitly absent', async () => {
+    const event = {
+      eventId: 'outflow-005',
+      eventType: 'wallet-transfer.outflow.success',
+      eventData: { reference: 'ref-005' },
+    };
+    await expect(
+      processPiggyvestEvent(supabase, event as never, { savingsRuntime: null })
+    ).resolves.toBe('processed');
+    expect(mockSavingsOutflow).not.toHaveBeenCalled();
   });
 
   it('acks without work only when already processed', async () => {

@@ -49,6 +49,24 @@ export function createPrimaryWalletSavingsReconciliationStore(input: {
       );
       return result === null ? null : schemas.reserved.parse(result);
     },
+    async findDispatchedByReference(reference: string) {
+      const selection = schemas.reserved.shape.reference.parse(reference);
+      const result = await execute(
+        'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
+        selection
+      );
+      if (result === null) return null;
+      // Detached rows (account deleted, goal link nulled) are retained
+      // for manual recovery, not auto-reconciliation: settling one would
+      // credit a deleted goal. Report them as unmatched so the webhook
+      // acks instead of 503-looping on an op reconciliation can never
+      // confirm — while genuinely corrupt rows still throw loudly.
+      const detached = schemas.reserved
+        .extend({ goalId: schemas.reserved.shape.goalId.nullable() })
+        .safeParse(result);
+      if (detached.success && detached.data.goalId === null) return null;
+      return schemas.reserved.parse(result);
+    },
     async settle(
       proof: Proof
     ): Promise<'confirmed' | 'duplicate' | 'conflict'> {

@@ -60,20 +60,52 @@ export async function provisionPrimarySavingsWallet(input: Input) {
     if (intent.status === 'claimed') {
       if (input.mode !== 'provision' || !intent.claimToken)
         return outcome('unavailable');
+      // A reclaimed claim may already have its wallet at the provider:
+      // creation succeeded but the response was lost. The wallet name is
+      // deterministic, so adopt a listed match instead of reposting —
+      // subaccount_name is provider-unique, so a repost would be rejected
+      // as a duplicate and strand recovery for another request. A list
+      // failure falls through to creation: failing closed here would turn
+      // a transient list outage into a provisioning outage.
+      let prelisted: { id: string }[] | null = null;
+      const walletName = intent.walletName;
+      const providerCustomerId = intent.providerCustomerId;
       try {
-        const created = schemas.created.parse(
-          await input.createWallet({
-            customerId: intent.providerCustomerId,
-            subaccountName: intent.walletName,
-            reserveVirtualAccount: true,
-            enableInterestAccrual: intent.interestAccepted,
-          })
-        );
-        if (!(await input.store.record(goalId, intent.claimToken, created.id)))
-          return outcome('unavailable');
+        prelisted = schemas.wallets
+          .parse(await input.listWallets(providerCustomerId))
+          .filter((wallet) => wallet.name === walletName);
       } catch {
-        await input.store.record(goalId, intent.claimToken, null);
-        return outcome('pending');
+        prelisted = null;
+      }
+      if (prelisted !== null && prelisted.length > 1)
+        return outcome('conflict');
+      if (prelisted !== null && prelisted.length === 1) {
+        if (
+          !(await input.store.record(
+            goalId,
+            intent.claimToken,
+            prelisted[0].id
+          ))
+        )
+          return outcome('unavailable');
+      } else {
+        try {
+          const created = schemas.created.parse(
+            await input.createWallet({
+              customerId: intent.providerCustomerId,
+              subaccountName: intent.walletName,
+              reserveVirtualAccount: true,
+              enableInterestAccrual: intent.interestAccepted,
+            })
+          );
+          if (
+            !(await input.store.record(goalId, intent.claimToken, created.id))
+          )
+            return outcome('unavailable');
+        } catch {
+          await input.store.record(goalId, intent.claimToken, null);
+          return outcome('pending');
+        }
       }
       intent = await input.store.read(goalId);
       if (!intent) return outcome('unavailable');

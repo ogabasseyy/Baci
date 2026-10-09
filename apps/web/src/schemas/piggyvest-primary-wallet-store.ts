@@ -21,6 +21,7 @@ export const piggyvestPrimaryWalletStoreSchemas = {
     providerWalletId: piggyvestProviderIdSchema,
   }),
   uncertain: recorded,
+  rejected: recorded,
   claimedRows: z
     .array(
       z.strictObject({

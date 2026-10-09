@@ -39,7 +39,7 @@ it('exposes the visible button label as its accessible name', () => {
   expect(screen.getByText('Create account number')).toBeOnTheScreen();
 });
 
-it('clears sensitive input and shows a safe inline error on failure', async () => {
+it('keeps the BVN for retry and shows a safe inline error on failure', async () => {
   const onSubmit = jest
     .fn()
     .mockRejectedValue(new Error('private provider error'));
@@ -56,8 +56,32 @@ it('clears sensitive input and shows a safe inline error on failure', async () =
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
-  expect(screen.getByLabelText('BVN').props.value).toBe('');
+  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
   expect(screen.queryByText('private provider error')).toBeNull();
+  expect(onSubmit).toHaveBeenCalledWith({
+    merchantId,
+    bvn: '12345678901',
+    consent: true,
+  });
+});
+
+it('clears the BVN only after the setup is confirmed', async () => {
+  const onSubmit = jest.fn().mockResolvedValue(undefined);
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText('BVN').props.value).toBe('')
+  );
   expect(onSubmit).toHaveBeenCalledWith({
     merchantId,
     bvn: '12345678901',

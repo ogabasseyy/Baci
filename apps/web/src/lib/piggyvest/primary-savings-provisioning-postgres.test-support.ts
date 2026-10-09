@@ -23,7 +23,7 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET SESSION AUTHORIZATION;
-UPDATE piggyvest_primary.onboarding_intents SET state='verified';
+UPDATE piggyvest_primary.onboarding_intents SET state='verified' WHERE state<>'rejected';
 SET SESSION AUTHORIZATION goal_fixture;
 DO $$
 DECLARE

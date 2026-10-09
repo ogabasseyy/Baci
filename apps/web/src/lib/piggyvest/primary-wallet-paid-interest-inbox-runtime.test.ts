@@ -41,6 +41,17 @@ it('exposes signing keys while the worker stays unconfigured', () => {
     readPrimaryWalletPaidInterestInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();
 });
+it('keeps signing keys available while intake processing is rolled back', () => {
+  const disabled = {
+    ...env,
+    PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED: 'false',
+  };
+  expect(readPrimaryWalletPaidInterestInboxSecrets(disabled)).toEqual({
+    webhookSecret: fixture.config.webhookSecret,
+    retainedWebhookSecrets: [],
+  });
+  expect(readPrimaryWalletPaidInterestInboxRuntime(disabled)).toBeNull();
+});
 it('can preserve signed receipts while API credentials are unavailable', () => {
   const { providerToken: _token, ...config } = fixture.config;
   expect(readPrimaryWalletPaidInterestInboxRuntime(env)).toEqual({

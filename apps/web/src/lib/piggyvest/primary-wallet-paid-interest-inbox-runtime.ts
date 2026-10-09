@@ -9,12 +9,14 @@ export type PrimaryWalletPaidInterestInboxSecrets = {
 /**
  * Authentication keys independent of worker readiness (see the bank
  * secrets reader): the outer gate verifies with these while the intake
- * itself still fails closed on incomplete provisioning.
+ * itself still fails closed on incomplete provisioning. The enabled flag
+ * gates processing only, never verification: during a processing
+ * rollback the keys stay available so legitimate deliveries retry
+ * instead of being silently dropped as invalid.
  */
 export function readPrimaryWalletPaidInterestInboxSecrets(
   env: NodeJS.ProcessEnv = process.env
 ): PrimaryWalletPaidInterestInboxSecrets | null {
-  if (env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true') return null;
   if (env.VERCEL_ENV !== 'production') return null;
   let retainedWebhookSecrets: unknown = [];
   try {
@@ -24,8 +26,15 @@ export function readPrimaryWalletPaidInterestInboxSecrets(
   } catch {
     retainedWebhookSecrets = [];
   }
+  const webhookSecret = env.PIGGYVEST_PRIMARY_PAID_INTEREST_WEBHOOK_SECRET;
+  if (
+    (typeof webhookSecret !== 'string' || !webhookSecret.trim()) &&
+    (!Array.isArray(retainedWebhookSecrets) ||
+      retainedWebhookSecrets.length === 0)
+  )
+    return null;
   return {
-    webhookSecret: env.PIGGYVEST_PRIMARY_PAID_INTEREST_WEBHOOK_SECRET,
+    webhookSecret,
     retainedWebhookSecrets,
   };
 }

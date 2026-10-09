@@ -112,6 +112,38 @@ describe('durable goal-independent card checkout service', () => {
     expect(await service.initialize(request)).toEqual(first);
     expect(provider.initialize).toHaveBeenCalledTimes(1);
   });
+  it('refuses new reservations once the deadline passes', async () => {
+    const { execute, provider } = setup();
+    const service = createPrimaryWalletCardCheckoutService({
+      settings: fixture.settings,
+      scope,
+      execute,
+      provider,
+      now: () => Date.parse('2100-01-01T00:00:00Z'),
+    });
+    await expect(service.initialize(request)).rejects.toThrow(
+      'Primary card checkout unavailable'
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('resolves a committed reservation even when the deadline passes mid-initialization', async () => {
+    const { execute, provider } = setup();
+    let calls = 0;
+    const service = createPrimaryWalletCardCheckoutService({
+      settings: fixture.settings,
+      scope,
+      execute,
+      provider,
+      now: () =>
+        ++calls === 1
+          ? Date.parse('2026-01-01T00:00:00Z')
+          : Date.parse('2100-01-01T00:00:00Z'),
+    });
+    const result = await service.initialize(request);
+    expect(result.status).toBe('ready');
+    expect(result.operationId).toBe(fixture.intent.operationId);
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+  });
   it('authorizes recovery by immutable IDs across a profile email change', async () => {
     const { service, execute } = setup();
     const changed = { ...fixture.intent, email: 'changed@example.test' };

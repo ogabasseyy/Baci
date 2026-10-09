@@ -897,6 +897,68 @@ describe('POST /api/payments/webhook', () => {
       expect(data).toEqual({ error: 'Invalid signature' });
     });
 
+    it('routes a checkout-key-only delivery exclusively to the card reconcile path', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'pvb-first-primary-op-1' },
+        };
+        const bodyString = JSON.stringify(body);
+        const reconciled = Response.json({ received: true }, { status: 200 });
+        mockReconcilePrimaryCardCheckout.mockResolvedValueOnce(reconciled);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        expect(await POST(request)).toBe(reconciled);
+        expect(mockReconcilePrimaryCardCheckout).toHaveBeenCalledWith({
+          body,
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
+    });
+
+    it('acks a non-card checkout-key delivery without legacy handling', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'REF123' },
+        };
+        const bodyString = JSON.stringify(body);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          message: 'Event ignored',
+        });
+        expect(mockReconcilePrimaryCardCheckout).toHaveBeenCalledWith({
+          body,
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
+    });
+
     it('accepts valid Korapay signature', async () => {
       const body = {
         reference: 'REF123',

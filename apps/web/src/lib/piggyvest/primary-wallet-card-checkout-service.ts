@@ -141,7 +141,11 @@ export function createPrimaryWalletCardCheckoutService(input: {
       // slot — so initialization proceeds on it and the response carries
       // the stored amount and operation ID for the client to persist and
       // resume. The client must confirm the adopted amount before payment.
-      active();
+      // No deadline re-check from here on: the reservation is committed,
+      // and failing now would strand it (treasury held, client without
+      // the operation ID, re-initialization disabled past expiry). The
+      // deadline gates reservation only; a reserved checkout always
+      // resolves through claim/initialize like any other drain.
       const claim = schemas.claim.parse(
         await input.execute('claim', [storageScope, intent.operationId])
       );
@@ -153,7 +157,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
       if (claim.outcome === 'existing') return publicState(claim.intent);
       let session: ReturnType<typeof schemas.session.parse> | null = null;
       try {
-        active();
         session = schemas.session.parse(
           await input.provider.initialize(claim.intent)
         );
@@ -164,7 +167,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
         // whose checkout URL was never recorded or delivered. Abandon
         // rather than pinning the retry to init_unknown.
         if (isPrimaryCardDuplicateReference(error)) {
-          active();
           schemas.acknowledgement.parse(
             await input.execute('abandonment', [
               storageScope,

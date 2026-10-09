@@ -335,4 +335,124 @@ describe('storefront-cart-validation', () => {
       })
     ).toBe(cart);
   });
+
+  it('distinguishes same-condition offer lines in the cart validation hash', () => {
+    const first = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p::a', offerId: 'offer-a' }),
+    ]);
+    const second = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p::b', offerId: 'offer-b' }),
+    ]);
+
+    expect(first).not.toBe(second);
+  });
+
+  it('posts exact-offer identity for server-side validation', async () => {
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ invalidProductIds: [], priceChanges: [] }),
+    });
+
+    await validateStorefrontCart(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+      ],
+      new AbortController().signal
+    );
+
+    expect(mocks.fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/cart/validate',
+      expect.objectContaining({
+        body: JSON.stringify({
+          cartItems: [
+            {
+              condition: 'used',
+              id: 'product-1',
+              price: 400,
+              offerId: 'offer-a',
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('applies offer-specific price changes only to the matching cart line', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-b',
+          condition: 'used',
+          offerId: 'offer-b',
+          price: 420,
+        }),
+      ],
+      {
+        priceChanges: [
+          {
+            id: 'product-1',
+            offerId: 'offer-b',
+            oldPrice: 420,
+            newPrice: 430,
+          },
+        ],
+      }
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-a',
+        price: 400,
+      }),
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-b',
+        price: 430,
+      }),
+    ]);
+  });
+
+  it('invalidates only the targeted offer cart line key', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-b',
+          condition: 'used',
+          offerId: 'offer-b',
+          price: 420,
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1::offer=offer-b'],
+      }
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-a',
+        price: 400,
+      }),
+    ]);
+  });
 });

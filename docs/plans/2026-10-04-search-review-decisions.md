@@ -566,3 +566,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse med native wildcard-merge FIXED: mergeExistingCartItem preserves existing color/storage/condition/voucher identifiers when the incoming add omits them (matched lines agree wherever both sides are set, so preservation is always safe). +1 test; native cart suites 49/49.
 - Muse med price-only collapse FIXED: getStorefrontRefinedSearchProducts collapses available_conditions only for an explicit condition filter; price-only refinements keep the full set while the advertised price still follows the SQL-ranked match. +1 test.
 - Muse low rotating-contact intake: repeat of the PR-disclosed deferred availability residual (budgets + alert recommendation unchanged).
+
+## Round 78 (Codex 5 P1 on 2082aed792 — all fixed; Muse 1 med + 2 low — all adjudicated; CI green on 2082aed792)
+
+- CX-161 (P1) FIXED: cart validation prices offer lines from the live offer — client sends offerId, validation keys gain a ::offer= segment on both sides, the route resolves non-variant offer lines via the public get_product_offers RPC (missing row invalidates only that line), and the schema accepts offerId. Client +4, route +3 tests.
+- CX-162 (P1) FIXED: V1 separator-format legacy lines decline exact-offer merges (their ids predate offer identity so the price basis is unknown); condition-only V1 merging preserved. +2 hook tests.
+- CX-163 (P1) FIXED: refined-search-rpc split into refined-search-constants + refined-search-args + refined-search-rows with the original as a barrel (+ colocated tests, barrel smoke).
+- CX-164 (P1) FIXED: shopping-assistance-stream split into assistance-frame (schema+type) + encode-assistance-frame + assistance-stream-decoder + read-assistance-stream + describe-assisted-filters with the original as a barrel (+ colocated tests incl. first coverage for the reader and labels, barrel smoke).
+- CX-165 (P1) FIXED: getSearchQuickFilterGroups extracted to search-quick-filter-groups.ts (+ moved test); barrel rewired.
+- Muse med migrations-live ADJUDICATED (process note, explicitly not a code defect: append-only ordering + DB replay gate already hold; no file edits needed).
+- Muse low contact-rotation: repeat of the PR-disclosed deferred residual.
+- Muse low offset-clamp ADJUDICATED (verified by design): web probes + redirects the URL to the true last page; native infinite scroll shows no page numbers and terminates via nextOffset null; the brands probe discards the offset.

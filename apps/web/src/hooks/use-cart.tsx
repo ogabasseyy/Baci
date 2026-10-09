@@ -379,7 +379,15 @@ export const CartProvider = ({
         if (item.cartItemId === cartItemId) return true;
 
         // 2. Legacy V1 Match (old - separator format stored in cart)
-        if (item.cartItemId?.includes('-') && !item.cartItemId.includes('::')) {
+        // A V1 id encodes variant/color/storage/condition but never the
+        // exact condition offer, so its price basis is unknown: an
+        // exact-offer add must not merge into it (mirrors the offer guard
+        // on ID-less legacy lines below).
+        if (
+          item.cartItemId?.includes('-') &&
+          !item.cartItemId.includes('::') &&
+          !normalizedOptions?.offerId
+        ) {
           // Rebuild what the old generateCartItemId would have produced
           const legacyParts = [product.id];
           if (options?.variantId) legacyParts.push(options.variantId);

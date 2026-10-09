@@ -24,6 +24,12 @@ type CartValidationItem = {
   id: string;
   price: number | null;
   variantId?: string;
+  offerId?: string;
+};
+
+type CartOfferRow = {
+  offer_id: string;
+  price: number | string | null;
 };
 
 const uuidRegex =
@@ -40,14 +46,19 @@ function toPriceNumber(value: number | string | null | undefined) {
   return Number.isFinite(price) ? price : 0;
 }
 
-function getCartValidationKey(id: string, variantId?: string) {
-  return variantId ? `${id}::${variantId}` : id;
+function getCartValidationKey(
+  id: string,
+  variantId?: string,
+  offerId?: string
+) {
+  const variantKey = variantId ? `${id}::${variantId}` : id;
+  return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
 }
 
 /**
  * POST /api/cart/validate
  *
- * Body: { productIds?: string[], cartItems?: { id, price, variantId? }[] }
+ * Body: { productIds?: string[], cartItems?: { id, price, variantId?, offerId? }[] }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -82,6 +93,7 @@ export async function POST(request: NextRequest) {
           id: item.id,
           price: item.price,
           variantId: normalizeVariantId(item),
+          offerId: item.offerId,
         }))
       : (productIds ?? []).map((id) => ({ id, price: null }));
     const idsToValidate = validationItems.map((item) => item.id);
@@ -120,7 +132,25 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    const [productsResult, variantsResult] = await Promise.all([
+    // Products with non-variant offer lines need their live condition
+    // offers (the public RPC returns active rows only, so a missing row
+    // means the offer is gone). Variant lines price from the variant
+    // override, never from an offer.
+    const offerProductIds = Array.from(
+      new Set(
+        validationItems
+          .filter(
+            (item) =>
+              !item.variantId &&
+              typeof item.offerId === 'string' &&
+              uuidRegex.test(item.offerId) &&
+              uuidRegex.test(String(item.id))
+          )
+          .map((item) => String(item.id))
+      )
+    );
+
+    const [productsResult, variantsResult, offersResults] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
             .from('products')
@@ -138,6 +168,25 @@ export async function POST(request: NextRequest) {
             error: { message: string } | null;
           }>)
         : Promise.resolve({ data: null, error: null }),
+      Promise.all(
+        offerProductIds.map(
+          async (
+            productId
+          ): Promise<{
+            productId: string;
+            data: CartOfferRow[] | null;
+            error: { message: string } | null;
+          }> => {
+            const result = (await supabase.rpc('get_product_offers', {
+              p_product_id: productId,
+            })) as unknown as {
+              data: CartOfferRow[] | null;
+              error: { message: string } | null;
+            };
+            return { productId, ...result };
+          }
+        )
+      ),
     ]);
 
     if (productsResult.error) {
@@ -159,6 +208,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const offerError = offersResults.find((result) => result.error)?.error;
+    if (offerError) {
+      console.error('Cart validation offer query error:', offerError);
+      return NextResponse.json(
+        { error: `Failed to validate cart: ${offerError.message}` },
+        { status: 500 }
+      );
+    }
+
     const products = productsResult.data || [];
     const variants = variantsResult.data || [];
 
@@ -168,6 +226,14 @@ export async function POST(request: NextRequest) {
     const variantMap = new Map(
       variants.map((variant) => [String(variant.id), variant])
     );
+    const offerMap = new Map(
+      offersResults.flatMap((result) =>
+        (result.data || []).map(
+          (offer) =>
+            [`${result.productId}::${String(offer.offer_id)}`, offer] as const
+        )
+      )
+    );
 
     const validProducts: {
       id: string;
@@ -176,11 +242,13 @@ export async function POST(request: NextRequest) {
       manage_stock: boolean;
       name: string;
       variantId?: string;
+      offerId?: string;
     }[] = [];
     const invalidProductIds: string[] = [...invalidFormatIds];
     const priceChanges: {
       id: string;
       variantId?: string;
+      offerId?: string;
       oldPrice: number;
       newPrice: number;
     }[] = [];
@@ -202,9 +270,34 @@ export async function POST(request: NextRequest) {
         variant && String(variant.product_id) === strId;
 
       if (item.variantId && !variantBelongsToProduct) {
-        const invalidVariantKey = getCartValidationKey(strId, item.variantId);
+        const invalidVariantKey = getCartValidationKey(
+          strId,
+          item.variantId,
+          item.offerId
+        );
         if (!invalidProductIds.includes(invalidVariantKey)) {
           invalidProductIds.push(invalidVariantKey);
+        }
+        continue;
+      }
+
+      // Non-variant offer lines price from the live condition offer, not
+      // the parent: pricing them from products.price would silently
+      // replace the advertised offer price on every validation pass. A
+      // missing row means the offer is gone (the RPC returns active rows
+      // only), so only that line is invalidated.
+      const offer =
+        !item.variantId && item.offerId
+          ? offerMap.get(`${strId}::${item.offerId}`)
+          : undefined;
+      if (!item.variantId && item.offerId && !offer) {
+        const invalidOfferKey = getCartValidationKey(
+          strId,
+          undefined,
+          item.offerId
+        );
+        if (!invalidProductIds.includes(invalidOfferKey)) {
+          invalidProductIds.push(invalidOfferKey);
         }
         continue;
       }
@@ -212,7 +305,7 @@ export async function POST(request: NextRequest) {
       const currentPrice = toPriceNumber(
         variantBelongsToProduct
           ? (variant.price_override ?? product.price)
-          : product.price
+          : (offer?.price ?? product.price)
       );
 
       validProducts.push({
@@ -222,15 +315,21 @@ export async function POST(request: NextRequest) {
         name: product.name,
         manage_stock: Boolean(product.manage_stock),
         ...(item.variantId ? { variantId: item.variantId } : {}),
+        ...(item.offerId ? { offerId: item.offerId } : {}),
       });
 
       if (item.price !== null && item.price !== currentPrice) {
-        const priceChangeKey = getCartValidationKey(strId, item.variantId);
+        const priceChangeKey = getCartValidationKey(
+          strId,
+          item.variantId,
+          item.offerId
+        );
         if (!seenPriceChangeKeys.has(priceChangeKey)) {
           seenPriceChangeKeys.add(priceChangeKey);
           priceChanges.push({
             id: strId,
             variantId: item.variantId,
+            offerId: item.offerId,
             oldPrice: item.price,
             newPrice: currentPrice,
           });

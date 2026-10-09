@@ -7,13 +7,24 @@ interface CartValidationResponse {
   priceChanges?: {
     id: string;
     variantId?: string;
+    offerId?: string;
     oldPrice: number;
     newPrice: number;
   }[];
 }
 
-const createCartValidationKey = (id: string, variantId?: string | null) =>
-  variantId ? `${id}::${variantId}` : id;
+// Mirrors the validate route's getCartValidationKey exactly: variant first,
+// then the offer segment. Two offers that canonicalize to the same
+// condition share product + condition, so the offer segment is what keeps
+// their validation results on separate lines.
+const createCartValidationKey = (
+  id: string,
+  variantId?: string | null,
+  offerId?: string | null
+) => {
+  const variantKey = variantId ? `${id}::${variantId}` : id;
+  return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
+};
 
 const serializeVariantAttributes = (
   variantAttributes: CartItem['variantAttributes']
@@ -28,7 +39,11 @@ const serializeVariantAttributes = (
 export const createCartHash = (cart: CartItem[]) => {
   return cart
     .map((item) => {
-      const itemKey = createCartValidationKey(item.id, item.variantId);
+      const itemKey = createCartValidationKey(
+        item.id,
+        item.variantId,
+        item.offerId
+      );
       const serializedAttributes = serializeVariantAttributes(
         item.variantAttributes
       );
@@ -48,6 +63,7 @@ export const validateStorefrontCart = async (
     price: item.price,
     variantAttributes: item.variantAttributes,
     variantId: item.variantId,
+    offerId: item.offerId,
   }));
 
   const response = await fetchWithCsrf('/api/cart/validate', {
@@ -75,7 +91,11 @@ export const applyValidationResults = (
   const invalidIds = new Set(validation.invalidProductIds || []);
   const priceChanges = new Map(
     (validation.priceChanges || []).map((priceChange) => [
-      createCartValidationKey(priceChange.id, priceChange.variantId),
+      createCartValidationKey(
+        priceChange.id,
+        priceChange.variantId,
+        priceChange.offerId
+      ),
       priceChange,
     ])
   );
@@ -86,12 +106,16 @@ export const applyValidationResults = (
 
   return cart
     .filter((item) => {
-      const itemKey = createCartValidationKey(item.id, item.variantId);
+      const itemKey = createCartValidationKey(
+        item.id,
+        item.variantId,
+        item.offerId
+      );
       return !invalidIds.has(item.id) && !invalidIds.has(itemKey);
     })
     .map((item) => {
       const priceChange = priceChanges.get(
-        createCartValidationKey(item.id, item.variantId)
+        createCartValidationKey(item.id, item.variantId, item.offerId)
       );
       if (!priceChange) {
         return item;

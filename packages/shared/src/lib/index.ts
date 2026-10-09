@@ -81,8 +81,8 @@ export * from './resumable-wallet-return-to';
 export * from './sanitize-html-text';
 export * from './sanitize-wallet-return-to';
 export * from './santa-granted-price';
+export { getSearchQuickFilterGroups } from './search-quick-filter-groups';
 export {
-  getSearchQuickFilterGroups,
   getSearchRefinementChips,
   type SearchRefinementChip,
 } from './search-refinement-chips';

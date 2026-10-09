@@ -53,9 +53,11 @@ export const eventPipelineFrozenRoutes = {
   // shipping-rate eligibility; notification and payment authority are
   // unchanged. Re-pinned a sixth time: offer verification, condition
   // reconciliation, and assurance recomputation move to focused route
-  // helpers with identical responses; authority unchanged.
+  // helpers with identical responses; authority unchanged. Re-pinned a
+  // seventh time: those helpers move to lib/checkout (import-only);
+  // authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '200ce734149398870a171fa0fb4723896f48c0fdca46af2ae779ff22666863d6',
+    '467b5777e5b3bced2c38dfcbf61c109a7ebad7489d7c6e54cb7a9afcd641fb49',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

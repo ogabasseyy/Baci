@@ -79,7 +79,7 @@ export function TransactionOrderCardItem({
               ? `Condition ${formatProductCondition(item.condition) ?? item.condition}`
               : null}
             {item.condition && item.offerId ? ' · ' : null}
-            {item.offerId ? `Offer ${item.offerId.slice(0, 8)}` : null}
+            {item.offerId ? `Offer ${String(item.offerId).slice(0, 8)}` : null}
           </Text>
         ) : null}
       </View>

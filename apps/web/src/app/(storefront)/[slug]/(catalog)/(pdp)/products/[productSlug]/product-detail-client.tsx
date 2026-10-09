@@ -22,6 +22,7 @@ import { trackEvent } from '@/lib/event-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
+import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
@@ -192,7 +193,11 @@ export default function ProductDetailClient({
       ? (resolveSerializedVariantStock(variantForCart) ??
         variantForCart.stock_quantity ??
         product.stock)
-      : (selectedOffer?.stock_quantity ?? product.stock);
+      : selectedOffer
+        ? (resolveSerializedOfferStock(selectedOffer, product) ??
+          selectedOffer.stock_quantity ??
+          product.stock)
+        : product.stock;
     const productToAdd =
       variantForCart || selectedOffer
         ? { ...product, price: currentPrice, stock: selectedOptionStock }

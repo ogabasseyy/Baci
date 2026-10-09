@@ -28,14 +28,17 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { resolveOrderOfferEconomics } from '@/lib/checkout/resolve-order-offer-economics';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
+import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
@@ -90,9 +93,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
-import { recomputeOfferAssuranceFees } from './recompute-offer-assurance-fees';
-import { resolveOrderOfferEconomics } from './resolve-order-offer-economics';
-import type { OrderOfferQueryResult } from './verify-order-offer-lines';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';

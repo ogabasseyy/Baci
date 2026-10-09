@@ -90,6 +90,7 @@ export interface DetailedCachedProduct {
   min_variant_price?: number | null;
   max_variant_price?: number | null;
   manage_stock?: boolean | null;
+  inventory_tracking_policy?: string | null;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
   images?: RawProductImage[] | null;
@@ -192,6 +193,8 @@ export function mapDetailedCachedProductToProduct(
     min_variant_price: detailedProduct.min_variant_price ?? undefined,
     max_variant_price: detailedProduct.max_variant_price ?? undefined,
     manage_stock: detailedProduct.manage_stock ?? false,
+    inventory_tracking_policy:
+      detailedProduct.inventory_tracking_policy ?? undefined,
     stock: getEffectiveStock(detailedProduct),
     image: firstImage,
     imageLarge: firstImage,

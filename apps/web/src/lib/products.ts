@@ -176,6 +176,7 @@ export interface Product {
   price: number;
   manage_stock: boolean;
   stock: number;
+  inventory_tracking_policy?: string | null;
   minimum_order_quantity?: number;
   image: string;
   imageLarge: string;

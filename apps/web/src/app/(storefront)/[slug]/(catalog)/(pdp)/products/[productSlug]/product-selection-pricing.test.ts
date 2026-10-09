@@ -145,4 +145,70 @@ describe('resolveSelectionPricing', () => {
       isOutOfStock: false,
     });
   });
+
+  it('caps a strict simple offer by the folded base unit count', () => {
+    const strictProduct = {
+      ...product,
+      inventory_tracking_policy: 'serialized_strict',
+      stock: 2,
+    } as Product;
+    expect(
+      resolveSelectionPricing({
+        product: strictProduct,
+        selectedOffer: { price: 80, stock_quantity: 5 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 2,
+      isOutOfStock: false,
+    });
+    expect(
+      resolveSelectionPricing({
+        product: { ...strictProduct, stock: 0 },
+        selectedOffer: { price: 80, stock_quantity: 5 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      }).isOutOfStock
+    ).toBe(true);
+  });
+
+  it('prices an unlimited simple offer from its binding scalar', () => {
+    // Unlimited folds manage_stock false, but the finite offer
+    // allocation still binds the order — never infinity here.
+    expect(
+      resolveSelectionPricing({
+        product: {
+          ...product,
+          inventory_tracking_policy: 'serialized_then_unlimited',
+          stock: 9999,
+        } as Product,
+        selectedOffer: { price: 80, stock_quantity: 5 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: false,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 5,
+      isOutOfStock: false,
+    });
+  });
+
+  it('keeps scalar-only offer stock for non-serialized products', () => {
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: { price: 80, stock_quantity: 3 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      }).currentStock
+    ).toBe(3);
+  });
 });

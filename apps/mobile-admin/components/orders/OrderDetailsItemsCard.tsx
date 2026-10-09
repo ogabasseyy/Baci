@@ -87,7 +87,7 @@ export function OrderDetailsItemsCard({
                   {[
                     item.offer_grade ? `Grade ${item.offer_grade}` : null,
                     item.offer_condition_notes ?? null,
-                    `ref ${item.offer_id.slice(0, 8)}`,
+                    `ref ${String(item.offer_id).slice(0, 8)}`,
                   ]
                     .filter(Boolean)
                     .join(' · ')}

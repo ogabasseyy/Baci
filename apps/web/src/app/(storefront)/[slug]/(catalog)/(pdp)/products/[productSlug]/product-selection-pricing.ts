@@ -1,5 +1,6 @@
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
+import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 export interface SelectionPricingOffer {
@@ -57,7 +58,15 @@ export function resolveSelectionPricing({
   const serializedVariantStock = effectiveVariant
     ? resolveSerializedVariantStock(effectiveVariant)
     : undefined;
-  const currentStock = !isStockManaged
+  // Offer selections on serialized simple products cap by the folded base
+  // unit count (strict) or the binding offer scalar (unlimited) — ahead
+  // of the unmanaged short-circuit, since unlimited folds manage_stock
+  // false while the scalar still binds the order.
+  const serializedOfferStock =
+    !effectiveVariant && selectedOffer
+      ? resolveSerializedOfferStock(selectedOffer, product)
+      : undefined;
+  const managedStock = !isStockManaged
     ? Number.POSITIVE_INFINITY
     : (serializedVariantStock ??
       getEffectiveStock(
@@ -80,6 +89,9 @@ export function resolveSelectionPricing({
               }
             : product
       ));
-  const isOutOfStock = isStockManaged ? currentStock === 0 : false;
+  const currentStock = serializedOfferStock ?? managedStock;
+  // A zero allocation disables purchase even when the snapshot folds the
+  // product unmanaged (unlimited offers still bind their scalar).
+  const isOutOfStock = currentStock === 0;
   return { currentPrice, currentCompareAtPrice, currentStock, isOutOfStock };
 }

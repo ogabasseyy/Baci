@@ -351,4 +351,21 @@ describe('mapDetailedCachedProductToProduct', () => {
       expect.objectContaining({ id: 'zero-stock', stock_quantity: 0 }),
     ]);
   });
+
+  it('threads the snapshot inventory policy for serialized offer caps', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'product-1',
+        merchant_id: 'merchant-1',
+        name: 'Strict Phone',
+        price: 100,
+        stock: 0,
+        manage_stock: true,
+        inventory_tracking_policy: 'serialized_strict',
+      } as never,
+      'merchant-1'
+    );
+
+    expect(product.inventory_tracking_policy).toBe('serialized_strict');
+  });
 });

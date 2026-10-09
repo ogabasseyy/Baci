@@ -1,10 +1,11 @@
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
-// Resolved legacy verdict: these tests exercise DVA derivation from payment
-// settings and phone state, not the capability probe — the fixture merchant
-// reads as server-confirmed legacy so creation gating reflects only the
-// axis under test. Cold-start probe-wait behavior is covered in the
+// Controllable verdict (never a live probe: the real probe's network
+// timeouts hang this suite): DVA/legacy tests run with a resolved
+// legacy verdict so creation gating reflects only the axis under
+// test, while dedicated tests flip the verdict to cover the primary
+// fund rail. Cold-start probe-wait behavior is covered in the
 // funding-account controller tests.
 jest.mock('@/lib/piggyvest-primary-capability', () => {
   const actual = jest.requireActual(
@@ -12,16 +13,26 @@ jest.mock('@/lib/piggyvest-primary-capability', () => {
   ) as typeof import('@/lib/piggyvest-primary-capability');
   return {
     ...actual,
-    usePiggyvestPrimaryCapability: () => false,
-    getPiggyvestPrimaryCapability: async () => false,
+    usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockUsePrimaryCapability(...args),
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockGetPrimaryCapability(...args),
   };
 });
 jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
   const actual = jest.requireActual(
     '@/lib/piggyvest-primary-capability-cache'
   ) as typeof import('@/lib/piggyvest-primary-capability-cache');
-  return { ...actual, readObservedPiggyvestPrimaryCapability: () => false };
+  return {
+    ...actual,
+    readObservedPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockReadObservedCapability(...args),
+  };
 });
+jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
+  fundPrimaryWalletCard: (...args: unknown[]) =>
+    mockFundPrimaryWalletCard(...args),
+}));
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
@@ -141,6 +152,14 @@ const mockUseMerchantPaymentSettings = jest.fn();
 const mockUseStorefrontInsets = jest.fn();
 let mockMerchantId = 'configured-merchant';
 let mockMerchantSlug = 'ogabassey';
+const mockUsePrimaryCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockGetPrimaryCapability = jest.fn<
+  (...args: unknown[]) => Promise<boolean>
+>();
+const mockReadObservedCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockFundPrimaryWalletCard = jest.fn<
+  (...args: unknown[]) => Promise<void>
+>();
 const mockInitializeWalletTopUp =
   jest.fn<
     (input: unknown) => Promise<{
@@ -321,6 +340,10 @@ describe('WalletScreen', () => {
     mockSearchParams = {};
     mockMerchantId = 'configured-merchant';
     mockMerchantSlug = 'ogabassey';
+    mockUsePrimaryCapability.mockReturnValue(false);
+    mockGetPrimaryCapability.mockResolvedValue(false);
+    mockReadObservedCapability.mockReturnValue(false);
+    mockFundPrimaryWalletCard.mockResolvedValue(undefined);
     mockRefetch.mockResolvedValue(undefined);
     mockRedirect.mockImplementation(({ href }) => (
       <View testID="wallet-redirect" accessibilityLabel={href} />
@@ -975,6 +998,24 @@ describe('WalletScreen', () => {
         gateway: 'paystack',
       })
     );
+  });
+
+  it('routes a wallet top-up through the primary card rail when capable', async () => {
+    mockUsePrimaryCapability.mockReturnValue(true);
+    mockGetPrimaryCapability.mockResolvedValue(true);
+    mockReadObservedCapability.mockReturnValue(true);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(mockFundPrimaryWalletCard).toHaveBeenCalledWith(
+        expect.objectContaining({ fundAmount: '2500' })
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
   });
 
   it('routes to start savings and manage cards screens', () => {

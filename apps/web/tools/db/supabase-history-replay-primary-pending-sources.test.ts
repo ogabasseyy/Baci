@@ -14,9 +14,9 @@ const root = path.resolve(__dirname, '../../../..');
 const execFileAsync = promisify(execFile);
 
 describe('bugfix: PR 3620 pending migration registry', () => {
-  it('registers all 75 primary additions only as pending sources', async () => {
+  it('registers all 77 primary additions only as pending sources', async () => {
     const manifest = supabaseHistoryReplayManifest;
-    expect(EXPECTED_PRIMARY_PENDING_SOURCES).toHaveLength(75);
+    expect(EXPECTED_PRIMARY_PENDING_SOURCES).toHaveLength(77);
 
     for (const expected of EXPECTED_PRIMARY_PENDING_SOURCES) {
       expect(

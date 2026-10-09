@@ -427,13 +427,36 @@ describe('TransactionsScreen', () => {
   it('renders a retryable error state when no transactions are available', () => {
     const refetch = vi.fn();
     const monthlyRefetch = vi.fn();
-    mocks.useTransactionReview.mockReturnValue({
-      data: [],
-      error: new Error('boom'),
-      isLoading: false,
-      isRefetching: false,
-      refetch,
-    });
+    const rangeRefetch = vi.fn();
+    mocks.useTransactionReview.mockImplementation(
+      (
+        _range: unknown,
+        options?: {
+          enabled?: boolean;
+          fetchAllRange?: boolean;
+          search?: string;
+        }
+      ) => {
+        if (options && 'fetchAllRange' in options) {
+          return {
+            data: [],
+            error: new Error('range boom'),
+            isLoading: false,
+            isPending: false,
+            isRefetching: false,
+            refetch: rangeRefetch,
+          };
+        }
+        return {
+          data: [],
+          error: new Error('boom'),
+          isLoading: false,
+          isPending: false,
+          isRefetching: false,
+          refetch,
+        };
+      }
+    );
     mocks.useMonthlyTransactionCount.mockReturnValue({
       data: 2,
       error: null,
@@ -448,6 +471,7 @@ describe('TransactionsScreen', () => {
     fireEvent.click(screen.getByLabelText('Retry loading transactions'));
     expect(refetch).toHaveBeenCalled();
     expect(monthlyRefetch).toHaveBeenCalled();
+    expect(rangeRefetch).toHaveBeenCalled();
   });
 
   it('renders an empty state when there are no transactions', () => {

@@ -126,4 +126,18 @@ describe('useTransactionsSummary', () => {
 
     expect(result.current.refetchMonthlyCount).toBe(refetch);
   });
+
+  it('exposes the range summary refetch', () => {
+    const refetch = vi.fn();
+    mocks.useTransactionReview.mockReturnValue({
+      data: [],
+      error: new Error('range boom'),
+      isPending: false,
+      refetch,
+    });
+
+    const { result } = renderHook(() => useTransactionsSummary(RANGE, ANCHOR));
+
+    expect(result.current.refetchRangeSummary).toBe(refetch);
+  });
 });

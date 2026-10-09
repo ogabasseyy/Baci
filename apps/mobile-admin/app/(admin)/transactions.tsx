@@ -70,10 +70,8 @@ export default function TransactionsScreen() {
     search: searching ? debouncedSearchQuery : undefined,
     tab: activeTab,
   });
-  const { refetchMonthlyCount, summary } = useTransactionsSummary(
-    range,
-    currentMonthAnchor
-  );
+  const { refetchMonthlyCount, refetchRangeSummary, summary } =
+    useTransactionsSummary(range, currentMonthAnchor);
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
@@ -227,6 +225,7 @@ export default function TransactionsScreen() {
             onRetry={() => {
               void refetch();
               void refetchMonthlyCount();
+              void refetchRangeSummary();
             }}
             searching={searching}
             searchTruncated={searchTruncated}

@@ -39,4 +39,29 @@ describe('buildTransactionReviewOrFilter', () => {
       `and(or(${VISIBILITY}),or(created_at.lt.2026-10-05T10:00:00Z,and(created_at.eq.2026-10-05T10:00:00Z,id.lt.order-9)))`
     );
   });
+
+  it('pages the dated phase after the (transaction_date, created_at, id) tuple', () => {
+    expect(
+      buildTransactionReviewOrFilter({
+        cursor: {
+          createdAt: '2020-01-01T00:00:00Z',
+          id: 'order-9',
+          transactionDate: '2026-10-04T00:00:00Z',
+        },
+        includeTransactionDate: true,
+        phase: 'dated',
+      })
+    ).toBe(
+      `and(or(${VISIBILITY}),or(transaction_date.not.is.null),or(transaction_date.lt.2026-10-04T00:00:00Z,and(transaction_date.eq.2026-10-04T00:00:00Z,created_at.lt.2020-01-01T00:00:00Z),and(transaction_date.eq.2026-10-04T00:00:00Z,created_at.eq.2020-01-01T00:00:00Z,id.lt.order-9)))`
+    );
+  });
+
+  it('restricts the undated phase to null transaction dates', () => {
+    expect(
+      buildTransactionReviewOrFilter({
+        includeTransactionDate: true,
+        phase: 'undated',
+      })
+    ).toBe(`and(or(${VISIBILITY}),or(transaction_date.is.null))`);
+  });
 });

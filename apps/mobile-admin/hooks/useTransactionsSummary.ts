@@ -21,6 +21,7 @@ export function useTransactionsSummary(
     data: rangeOrders = [],
     error: rangeSummaryError,
     isPending: rangeSummaryPending,
+    refetch: refetchRangeSummary,
     searchTruncated: rangeTruncated,
   } = useTransactionReview(range, { fetchAllRange: true });
 
@@ -45,5 +46,9 @@ export function useTransactionsSummary(
       : (monthlyCountQuery.data ?? '--'),
   };
 
-  return { refetchMonthlyCount: monthlyCountQuery.refetch, summary };
+  return {
+    refetchMonthlyCount: monthlyCountQuery.refetch,
+    refetchRangeSummary,
+    summary,
+  };
 }

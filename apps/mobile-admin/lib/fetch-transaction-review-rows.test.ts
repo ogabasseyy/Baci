@@ -110,7 +110,7 @@ describe('fetchTransactionReviewRows', () => {
     const { fetchTransactionReviewRows } = await import(
       './fetch-transaction-review-rows'
     );
-    mocks.returns.mockResolvedValue({
+    mocks.returns.mockResolvedValueOnce({
       data: [
         {
           created_at: '2026-10-01T10:00:00.000Z',
@@ -152,6 +152,7 @@ it('searches an older IMEI beyond the first database page', async () => {
   const row = {
     id: 'older-order',
     created_at: '2025-01-01T00:00:00Z',
+    transaction_date: '2025-06-01T00:00:00Z',
     customer_email: null,
     customer_name: 'Older customer',
     customer_phone: null,
@@ -186,13 +187,23 @@ it('searches an older IMEI beyond the first database page', async () => {
     '354066782325743'
   );
   expect(matches.map((order) => order.id)).toEqual(['older-order']);
+  expect(mocks.order).toHaveBeenCalledWith('transaction_date', {
+    ascending: false,
+    nullsFirst: false,
+  });
   expect(mocks.order).toHaveBeenCalledWith('created_at', {
     ascending: false,
   });
   expect(mocks.order).toHaveBeenCalledWith('id', { ascending: false });
   expect(mocks.or).toHaveBeenCalledWith(
+    expect.stringContaining('or(transaction_date.not.is.null)')
+  );
+  expect(mocks.or).toHaveBeenCalledWith(
+    expect.stringContaining('or(transaction_date.is.null)')
+  );
+  expect(mocks.or).toHaveBeenCalledWith(
     expect.stringContaining(
-      'or(created_at.lt.2025-01-01T00:00:00Z,and(created_at.eq.2025-01-01T00:00:00Z,id.lt.a-199))'
+      'or(transaction_date.lt.2025-06-01T00:00:00Z,and(transaction_date.eq.2025-06-01T00:00:00Z,created_at.lt.2025-01-01T00:00:00Z),and(transaction_date.eq.2025-06-01T00:00:00Z,created_at.eq.2025-01-01T00:00:00Z,id.lt.a-199))'
     )
   );
   expect(mocks.gt).not.toHaveBeenCalled();
@@ -278,4 +289,109 @@ it('applies both month boundaries and cancellation visibility in a single logica
   expect(mocks.or).toHaveBeenCalledWith(
     'and(or(shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)),or(transaction_date.gte.2026-10-01),or(transaction_date.lte.2026-10-08))'
   );
+});
+
+it('finds a re-dated order by transaction date even though its creation time is old', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  // A created_at-ordered scan would page this row after every recently
+  // created order; the dated phase ranks it by its recent transaction date.
+  const redatedRow = {
+    created_at: '2020-01-01T00:00:00Z',
+    id: 'redated-order',
+    transaction_date: '2026-10-04T00:00:00Z',
+  };
+  mocks.returns
+    .mockResolvedValueOnce({
+      data: Array.from({ length: 200 }, (_, index) => ({
+        created_at: '2026-10-06T00:00:00Z',
+        id: `recent-${String(index).padStart(3, '0')}`,
+        transaction_date: '2026-10-05T00:00:00Z',
+      })),
+      error: null,
+    })
+    .mockResolvedValueOnce({ data: [redatedRow], error: null });
+
+  const result = await fetchTransactionReviewRows({
+    fetchAll: true,
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    selectStatement: 'id',
+  });
+
+  expect(result.error).toBeNull();
+  expect(result.data).toHaveLength(201);
+  expect(result.data?.map((row) => row.id)).toContain('redated-order');
+  // Effective-date rank: the re-dated row sorts after the newer dated rows.
+  expect(result.data?.[200]?.id).toBe('redated-order');
+  expect(mocks.order.mock.calls[0]).toEqual([
+    'transaction_date',
+    { ascending: false, nullsFirst: false },
+  ]);
+  expect(mocks.or).toHaveBeenCalledWith(
+    expect.stringContaining('transaction_date.lt.2026-10-05T00:00:00Z')
+  );
+});
+
+it('scans undated legacy rows after the dated phase ends', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  mocks.returns
+    .mockResolvedValueOnce({
+      data: [
+        {
+          created_at: '2026-10-06T00:00:00Z',
+          id: 'dated-row',
+          transaction_date: '2026-10-06T00:00:00Z',
+        },
+      ],
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: Array.from({ length: 200 }, (_, index) => ({
+        created_at: '2024-01-01T00:00:00Z',
+        id: `legacy-${String(index).padStart(3, '0')}`,
+        transaction_date: null,
+      })),
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: [
+        {
+          created_at: '2023-01-01T00:00:00Z',
+          id: 'legacy-last',
+          transaction_date: null,
+        },
+      ],
+      error: null,
+    });
+
+  const result = await fetchTransactionReviewRows({
+    fetchAll: true,
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    selectStatement: 'id',
+  });
+
+  expect(result.error).toBeNull();
+  expect(result.truncated).toBe(false);
+  expect(result.data).toHaveLength(202);
+  expect(mocks.or).toHaveBeenCalledWith(
+    expect.stringContaining('or(transaction_date.is.null)')
+  );
+  // The undated phase pages by (created_at, id): no transaction-date cursor.
+  const undatedCursorCall = mocks.or.mock.calls.find((call) =>
+    String(call[0]).includes('created_at.lt.')
+  );
+  expect(String(undatedCursorCall?.[0] ?? '')).toContain(
+    'transaction_date.is.null'
+  );
+  expect(String(undatedCursorCall?.[0] ?? '')).not.toContain(
+    'transaction_date.lt.'
+  );
+  expect(result.data?.map((row) => row.id)).toContain('legacy-last');
 });

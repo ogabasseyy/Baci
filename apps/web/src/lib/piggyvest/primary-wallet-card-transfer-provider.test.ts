@@ -19,15 +19,17 @@ describe('documented primary wallet transfer adapter', () => {
     ).rejects.toThrow();
     expect(fetchImplementation).not.toHaveBeenCalled();
   });
-  it('rechecks expiry at actual HTTP boundary', async () => {
-    const fetchImplementation = vi.fn();
-    await expect(
-      createPrimaryCardTransferProvider({
-        configuration: fixture.configuration,
-        fetchImplementation,
-        now: () => Date.parse(fixture.configuration.runtime.expiresAt),
-      })(fixture.command, fixture.context)
-    ).rejects.toThrow();
-    expect(fetchImplementation).not.toHaveBeenCalled();
+  it('dispatches pre-expiry transfers past the integration deadline', async () => {
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: true }), { status: 200 })
+      );
+    await createPrimaryCardTransferProvider({
+      configuration: fixture.configuration,
+      fetchImplementation,
+      now: () => Date.parse(fixture.configuration.runtime.expiresAt),
+    })(fixture.command, fixture.context);
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,7 +24,9 @@ export function createPrimaryCardCustodyInboxWorker(input: {
     };
     if (signal?.aborted) return totals;
     const now = (input.now ?? Date.now)();
-    if (!Number.isFinite(now) || now >= Date.parse(config.expiresAt))
+    // No integration-deadline check: the worker drains pre-existing
+    // inbox rows past expiry (reserve is the strict new-work gate).
+    if (!Number.isFinite(now))
       throw new Error('Signed custody worker unavailable');
     const readiness = schemas.readiness.parse(
       await input.execute('inboxReadiness', [input.capability])

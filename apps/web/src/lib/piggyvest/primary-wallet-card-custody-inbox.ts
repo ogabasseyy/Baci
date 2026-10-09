@@ -30,9 +30,11 @@ export function createPrimaryCardCustodyInbox(input: {
   const common = { configuration: config, capability, execute, now: input.now };
   return {
     async readiness() {
+      // No integration-deadline check: the inbox worker drains
+      // pre-existing rows past expiry (reserve is the strict new-work
+      // gate), so readiness reports the database verdict, not the clock.
       const now = (input.now ?? Date.now)();
-      if (!Number.isFinite(now) || now >= Date.parse(config.expiresAt))
-        return { ready: false as const };
+      if (!Number.isFinite(now)) return { ready: false as const };
       return schemas.readiness.parse(
         await execute('inboxReadiness', [capability])
       );

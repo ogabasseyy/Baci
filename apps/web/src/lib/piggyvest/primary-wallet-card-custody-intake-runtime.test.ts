@@ -38,6 +38,14 @@ describe('intake-only configured custody capability', () => {
       })
     ).toBeNull();
   });
+  it('drains in-flight custody past the integration deadline', () => {
+    expect(
+      readPrimaryCardCustodyIntakeRuntime(
+        fixture.environment,
+        Date.parse('2100-01-01T00:00:00Z')
+      )
+    ).not.toBeNull();
+  });
   it('keeps signing keys available while intake processing is rolled back', () => {
     for (const change of [
       { PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
@@ -55,7 +63,6 @@ describe('intake-only configured custody capability', () => {
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },
     { PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT: undefined },
     { PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD: undefined },
-    { PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-10-01T00:00:00Z' },
   ])('fails closed on unavailable signed intake scope %#', (change) => {
     expect(
       readPrimaryCardCustodyIntakeRuntime(

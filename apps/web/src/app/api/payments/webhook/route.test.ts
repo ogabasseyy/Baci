@@ -927,6 +927,36 @@ describe('POST /api/payments/webhook', () => {
       }
     });
 
+    it('retries an unresolved card-shaped checkout-key charge', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'pvb-first-primary-op-9' },
+        };
+        const bodyString = JSON.stringify(body);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        const response = await POST(request);
+        expect(response.status).toBe(503);
+        expect(await response.json()).toEqual({
+          error: 'Primary card reconciliation pending',
+          code: 'PRIMARY_CARD_WEBHOOK_PENDING',
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
+    });
+
     it('acks a non-card checkout-key delivery without legacy handling', async () => {
       process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
         'test-checkout-secret';

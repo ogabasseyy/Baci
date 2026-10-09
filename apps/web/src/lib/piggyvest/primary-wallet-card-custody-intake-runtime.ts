@@ -67,11 +67,11 @@ export function readPrimaryCardCustodyIntakeRuntime(
       mappingContract: env.PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT,
     },
   });
-  if (
-    !parsed.success ||
-    !Number.isFinite(now) ||
-    now >= Date.parse(parsed.data.expiresAt)
-  )
-    return null;
+  // No integration-deadline check: intake receipts complete transfers
+  // dispatched before expiry, so a post-expiry run drains in-flight
+  // custody instead of stranding it. Flags, environment binding,
+  // credentials, and (in the database) the intake credential expiry
+  // still fail closed.
+  if (!parsed.success || !Number.isFinite(now)) return null;
   return parsed.data;
 }

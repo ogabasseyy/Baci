@@ -82,6 +82,7 @@ export function createPrimaryCardCustodyConnection(input: {
       operationId: string;
       rawBody: Uint8Array;
       signature: string | null;
+      inboxToken: string;
     }) {
       active();
       return await applyPrimaryCardSignedCustody({

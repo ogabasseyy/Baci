@@ -47,6 +47,12 @@ describe('leased durable custody receipt worker', () => {
       'settle',
       'inboxFinish',
     ]);
+    const settleCall = input.execute.mock.calls.find(
+      (call) => call[0] === 'settle'
+    ) as unknown as [string, [string]] | undefined;
+    expect(JSON.parse(settleCall?.[1]?.[0] ?? '')).toEqual(
+      expect.objectContaining({ inboxToken: fixture.claim.token })
+    );
   });
   it('retains unmapped signed receipts for retry, not processed or financial completion', async () => {
     const input = setup();

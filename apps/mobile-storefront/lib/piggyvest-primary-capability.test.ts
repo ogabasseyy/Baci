@@ -91,6 +91,23 @@ describe('getPiggyvestPrimaryCapability', () => {
     ).rejects.toMatchObject({ code: 'PRIMARY_CARD_UNAVAILABLE' });
   });
 
+  it('resolves feature-scoped not-ready once without caching it', async () => {
+    read.mockRejectedValueOnce(notReady('SAVINGS_NOT_READY'));
+    await expect(
+      getPiggyvestPrimaryCapability('00000000-0000-4000-8000-000000000000')
+    ).resolves.toBe(false);
+    expect(
+      readObservedPiggyvestPrimaryCapability(
+        '00000000-0000-4000-8000-000000000000'
+      )
+    ).toBeNull();
+    read.mockResolvedValue({ account: null });
+    await expect(
+      getPiggyvestPrimaryCapability('00000000-0000-4000-8000-000000000000')
+    ).resolves.toBe(true);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it('dedupes concurrent probes and caches the verdict', async () => {
     read.mockResolvedValue({ account: null });
     const [first, second] = await Promise.all([
@@ -124,6 +141,32 @@ describe('rollbackObservedCapabilityOnNotReady', () => {
     // The rolled-back negative fails closed without re-probing the server.
     await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
       false
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back once on feature-scoped codes without poisoning the shared cache', async () => {
+    read.mockResolvedValue({ account: null });
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
+    );
+    expect(
+      rollbackObservedCapabilityOnNotReady(
+        PRIMARY_MERCHANT,
+        notReady('SAVINGS_NOT_READY')
+      )
+    ).toBe(true);
+    expect(
+      rollbackObservedCapabilityOnNotReady(
+        PRIMARY_MERCHANT,
+        notReady('PRIMARY_CARD_NOT_READY')
+      )
+    ).toBe(true);
+    // The shared positive verdict survives: a card-only outage must not
+    // reroute savings (or vice versa).
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(true);
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
     );
     expect(read).toHaveBeenCalledTimes(1);
   });
@@ -187,6 +230,29 @@ describe('usePiggyvestPrimaryCapability', () => {
     expect(result.current).toBe(false);
     await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
     expect(result.current).toBe(false);
+  });
+
+  it('stays unknown on ambiguous probe failure and reprobes instead of enabling legacy', async () => {
+    jest.useFakeTimers();
+    try {
+      read.mockRejectedValueOnce(new Error('timeout'));
+      const { result } = renderHook(() =>
+        usePiggyvestPrimaryCapability(OTHER_MERCHANT)
+      );
+      await act(async () => {});
+      expect(read).toHaveBeenCalledTimes(1);
+      // Unknown, not false: consumers must wait for a confirmed verdict
+      // rather than routing money through legacy on a timeout.
+      expect(result.current).toBeNull();
+      read.mockResolvedValue({ account: null });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(NEGATIVE_CAPABILITY_TTL_MS);
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(result.current).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('reprobes a mounted screen after the negative verdict expires', async () => {

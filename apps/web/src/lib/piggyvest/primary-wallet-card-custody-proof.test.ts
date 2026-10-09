@@ -29,6 +29,7 @@ describe('primary custody economic and identity proof', () => {
       ]);
       expect(result.proof.amountKobo).toBe(25000);
       expect(result.proof).not.toHaveProperty('authorizationCode');
+      expect(result.proof.inboxToken).toBe(fixture.inboxToken);
     }
   });
   it.each([

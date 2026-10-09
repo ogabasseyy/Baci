@@ -62,6 +62,7 @@ export const primaryWalletCardCustodySchemas = {
     providerTransactionId: identifier,
     transactionAliases: z.array(identifier).min(1).max(8),
     eventId: identifier,
+    inboxToken: z.uuid(),
     bodyDigest: hash,
     crosswalkDigest: hash,
     observedAt: z.iso.datetime({ offset: true }),

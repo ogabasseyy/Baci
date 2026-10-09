@@ -12,6 +12,7 @@ function setup() {
       .digest('hex'),
     secret: fixture.configuration.webhookSecret,
     operationId: fixture.context.operationId,
+    inboxToken: fixture.context.customerId,
     loadContext: vi.fn().mockResolvedValue(fixture.context),
     observe: vi.fn().mockResolvedValue(fixture),
     settle: vi.fn().mockResolvedValue('completed'),
@@ -32,6 +33,7 @@ describe('signed primary custody boundary', () => {
         amountKobo: 25000,
         providerTransactionId: 'canonical-transfer',
         transactionAliases: ['bank-transfer', 'canonical-transfer'],
+        inboxToken: fixture.context.customerId,
       })
     );
   });

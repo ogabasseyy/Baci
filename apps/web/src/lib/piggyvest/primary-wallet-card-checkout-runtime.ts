@@ -9,10 +9,12 @@ export function readPrimaryWalletCardCheckoutRuntime(
 }
 
 // Drain/recovery reader for status polling and webhook reconciliation:
-// after expiresAt no NEW checkout may start, but operations created
-// before expiry must still resolve (status reads, collection recording)
-// or customers stay charged-but-uncredited while Paystack retries a 503.
-// Only the deadline is bypassed; every other gate still fails closed.
+// after expiresAt — or after the feature flag is turned off — no NEW
+// checkout may start, but operations created while enabled must still
+// resolve (status reads, collection recording) or customers stay
+// charged-but-uncredited while Paystack retries a 503. Only the deadline
+// and the flag are bypassed; environment binding, credentials, and clock
+// still fail closed, so the drain runtime stays credentials-bound.
 export function readPrimaryWalletCardCheckoutRuntimeDrain(
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now()
@@ -20,12 +22,8 @@ export function readPrimaryWalletCardCheckoutRuntimeDrain(
   return parseRuntime(env, now, true);
 }
 
-function parseRuntime(
-  env: NodeJS.ProcessEnv,
-  now: number,
-  allowExpired: boolean
-) {
-  if (env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true') return null;
+function parseRuntime(env: NodeJS.ProcessEnv, now: number, drain: boolean) {
+  if (!drain && env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true') return null;
   const environment = env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT;
   if ((env.VERCEL_ENV === 'production') !== (environment === 'production'))
     return null;
@@ -59,7 +57,7 @@ function parseRuntime(
   if (
     !parsed.success ||
     !Number.isFinite(now) ||
-    (!allowExpired && now >= Date.parse(parsed.data.settings.expiresAt))
+    (!drain && now >= Date.parse(parsed.data.settings.expiresAt))
   )
     return null;
   return parsed.data;

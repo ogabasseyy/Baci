@@ -12,7 +12,9 @@ import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
  * Server-delivered "primary is not configured" signals. Every code here is
  * returned only when the server's primary runtime is missing or bound to a
  * different merchant — never for transient failures — so the mobile app may
- * treat it as authoritative permission to use the working legacy flows.
+ * treat it as authoritative permission to use the working legacy flows
+ * for that call. Only the base code is cacheable (see below): the
+ * feature codes describe independently configured runtimes.
  */
 const PRIMARY_NOT_READY_CODES = new Set([
   'PIGGYVEST_NOT_READY',
@@ -30,6 +32,14 @@ export function isPrimaryWalletNotReady(error: unknown): boolean {
   );
 }
 
+function isBasePrimaryNotReady(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'PIGGYVEST_NOT_READY'
+  );
+}
+
 /**
  * Rolls back the cached verdict when an authoritative NOT_READY arrives
  * over a non-probe path (connect/reserve/status mutations). A cached
@@ -38,13 +48,20 @@ export function isPrimaryWalletNotReady(error: unknown): boolean {
  * attempt earns another 503. Returns true when the error is authoritative
  * (the caller falls back to the working legacy flow); transient and
  * foreign failures leave the cache untouched and return false.
+ *
+ * Only the base PIGGYVEST_NOT_READY verdict is written to the shared
+ * merchant-wide cache: the feature codes (PRIMARY_CARD_NOT_READY,
+ * SAVINGS_NOT_READY) describe independently configured runtimes, so a
+ * card-only outage must not reroute savings contributions through legacy
+ * (or vice versa). Feature codes fall back once without caching.
  */
 export function rollbackObservedCapabilityOnNotReady(
   merchantId: string | null | undefined,
   error: unknown
 ): boolean {
   if (!isPrimaryWalletNotReady(error)) return false;
-  if (merchantId) observePiggyvestPrimaryCapability(merchantId, false);
+  if (merchantId && isBasePrimaryNotReady(error))
+    observePiggyvestPrimaryCapability(merchantId, false);
   return true;
 }
 
@@ -76,7 +93,10 @@ export async function getPiggyvestPrimaryCapability(
       return true;
     } catch (error) {
       if (!isPrimaryWalletNotReady(error)) throw error;
-      observePiggyvestPrimaryCapability(merchantId, false);
+      // Feature-scoped codes resolve false once without caching: only the
+      // base verdict describes the whole merchant integration.
+      if (isBasePrimaryNotReady(error))
+        observePiggyvestPrimaryCapability(merchantId, false);
       return false;
     } finally {
       inflight.delete(merchantId);
@@ -122,7 +142,16 @@ export function usePiggyvestPrimaryCapability(
           }, NEGATIVE_CAPABILITY_TTL_MS);
       },
       () => {
-        if (active) setAvailable(pilot ? null : false);
+        // Ambiguous probe failure (timeout, network): stay unknown instead
+        // of reporting false, so an observed merchant keeps its primary
+        // routing and financial actions wait for a confirmed verdict
+        // rather than misrouting through legacy — and reprobe so a
+        // mounted screen recovers without remount.
+        if (!active) return;
+        setAvailable(null);
+        refreshTimer = setTimeout(() => {
+          if (active) setRevision((value) => value + 1);
+        }, NEGATIVE_CAPABILITY_TTL_MS);
       }
     );
     return () => {

@@ -112,4 +112,5 @@ export const primaryCardCustodyFixture = {
     expiresAt: '2026-10-07T20:00:30Z',
   },
   bodyDigest: 'a'.repeat(64),
+  inboxToken: '20000000-0000-4000-8000-000000000009',
 } as const;

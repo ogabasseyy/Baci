@@ -73,6 +73,7 @@ describe('concrete storage to signed settlement connection', () => {
         operationId: fixture.context.operationId,
         rawBody,
         signature,
+        inboxToken: fixture.context.customerId,
       })
     ).toBe('completed');
     expect(execute.mock.calls[0]).toEqual([
@@ -118,6 +119,7 @@ describe('concrete storage to signed settlement connection', () => {
         operationId: fixture.context.operationId,
         rawBody: new Uint8Array([1]),
         signature: null,
+        inboxToken: fixture.context.customerId,
       })
     ).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();

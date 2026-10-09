@@ -25,7 +25,12 @@ export function resolveCurrentOffer(
     price_modifier?: number | null;
     stock_quantity?: number | null;
     inventory_tracking_policy?: string | null;
-  }> | null
+  }> | null,
+  // Validated ?offer_id from the route (names one of this product's offers):
+  // preferred over condition matching so two rows that canonicalize alike
+  // (used vs uk_used) resolve the exact advertised offer. Required to match
+  // the selected condition so an explicit later pick wins over the URL id.
+  routeOfferId?: string | null
 ): ProductDetailsCurrentOffer {
   let price = productData.rawPrice || 0;
   if (!price && typeof productData.price === 'string') {
@@ -42,9 +47,19 @@ export function resolveCurrentOffer(
     // Canonical comparison: stored rows use merchant spellings (refurbished,
     // uk_used) that never equal the canonical selection raw, which silently
     // fell back to the parent price for exactly those offers.
-    const offer = productData.offers?.find(
-      (item) => normalizeConditionType(item.condition) === selectedCondition
-    );
+    const idMatchedOffer =
+      routeOfferId != null
+        ? productData.offers?.find(
+            (item) =>
+              String(item.id) === routeOfferId &&
+              normalizeConditionType(item.condition) === selectedCondition
+          )
+        : undefined;
+    const offer =
+      idMatchedOffer ??
+      productData.offers?.find(
+        (item) => normalizeConditionType(item.condition) === selectedCondition
+      );
 
     if (offer) {
       selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null };

@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  hydrateRowsNeedingBaseInventory,
   hydrateRowsNeedingStorefrontVariants,
+  needsBaseInventoryHydration,
   needsVariantHydration,
 } from './product-hydration';
 
 const mockHydrateProductRowsWithStorefrontVariants: jest.Mock = jest.fn();
+const mockHydrateProductRowsWithBaseInventory: jest.Mock = jest.fn();
 const mockLoggerWarn = jest.fn();
 
 jest.mock('@/lib/logger', () => ({
@@ -19,6 +22,8 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/storefront-product-variants', () => ({
   hydrateProductRowsWithStorefrontVariants: (...args: unknown[]) =>
     mockHydrateProductRowsWithStorefrontVariants(...args),
+  hydrateProductRowsWithBaseInventory: (...args: unknown[]) =>
+    mockHydrateProductRowsWithBaseInventory(...args),
 }));
 
 describe('product-hydration', () => {
@@ -179,5 +184,47 @@ describe('product-hydration', () => {
         error: expect.any(Error),
       })
     );
+  });
+
+  it('identifies only non-variant rows as base inventory candidates', () => {
+    expect(
+      needsBaseInventoryHydration({ has_variants: false, variants: [] })
+    ).toBe(true);
+    expect(needsBaseInventoryHydration({ variants: [] })).toBe(true);
+    expect(
+      needsBaseInventoryHydration({ has_variants: true, variants: [] })
+    ).toBe(false);
+  });
+
+  it('hydrates only simple rows with base inventory in one batch', async () => {
+    const rows = [
+      {
+        id: 'simple-product',
+        has_variants: false,
+        variants: [],
+      },
+      {
+        id: 'variant-product',
+        has_variants: true,
+        variants: [],
+      },
+    ];
+    const hydratedRow = {
+      ...rows[0],
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 4,
+    };
+    mockHydrateProductRowsWithBaseInventory.mockImplementationOnce(async () => [
+      hydratedRow,
+    ]);
+
+    const result = await hydrateRowsNeedingBaseInventory(rows);
+
+    expect(mockHydrateProductRowsWithBaseInventory).toHaveBeenCalledWith([
+      rows[0],
+    ]);
+    expect(mockHydrateProductRowsWithBaseInventory).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([hydratedRow, rows[1]]);
+    expect(result[1]).toBe(rows[1]);
   });
 });

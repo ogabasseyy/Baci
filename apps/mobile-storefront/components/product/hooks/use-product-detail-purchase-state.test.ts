@@ -97,6 +97,55 @@ it.each([
   expect(result.current.canPurchase).toBe(expected);
 });
 
+it.each([
+  {
+    name: 'simple unlimited base with zero scalar stays purchasable',
+    product: {
+      stock_quantity: 0,
+      base_effective_policy: 'serialized_then_unlimited',
+    },
+    quantityInCart: 0,
+    expected: true,
+  },
+  {
+    name: 'simple strict base compares units against the cart quantity',
+    product: {
+      stock_quantity: 0,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 3,
+    },
+    quantityInCart: 2,
+    expected: true,
+  },
+  {
+    name: 'simple strict base with exhausted units is out of stock',
+    product: {
+      stock_quantity: 0,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 1,
+    },
+    quantityInCart: 1,
+    expected: false,
+  },
+  {
+    name: 'simple legacy base still uses the scalar quantity',
+    product: { stock_quantity: 2, base_effective_policy: 'legacy' },
+    quantityInCart: 2,
+    expected: false,
+  },
+])('$name', ({ product, quantityInCart, expected }) => {
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: { id: 'p1', price: 100, ...product } as Product,
+      }),
+      quantityInCart,
+      null
+    )
+  );
+  expect(result.current.canPurchase).toBe(expected);
+});
+
 it('forwards an exact offer id into price resolution and offer selection', () => {
   renderHook(() =>
     useProductDetailPurchaseState(

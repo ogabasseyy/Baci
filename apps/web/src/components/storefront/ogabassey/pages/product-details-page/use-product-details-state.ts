@@ -15,7 +15,7 @@ import {
   getDeliveryEstimate,
   getMissingSelectionFields,
 } from './product-details-helpers';
-import { resolveCurrentOffer } from './offer-resolution';
+import { resolveProductDetailsOfferState } from './product-details-offer-state';
 import { useDeliveryToday } from './use-delivery-today';
 import { shareProductLink } from './product-share';
 import { useProductDetailsBuyAction } from './use-product-details-buy-action';
@@ -64,6 +64,7 @@ export function useProductDetailsState(serverProduct: Product) {
     setSelectedColor,
     setSelectedCondition,
     setSelectedImage,
+    routeOfferId,
     variantSelectionAttributes,
   } = useProductDetailsSelectionState(serverProduct, searchParams);
 
@@ -82,6 +83,7 @@ export function useProductDetailsState(serverProduct: Product) {
     basePath,
     checkoutRedirectTimeoutRef,
     productData,
+    routeOfferId,
     routeResolvedVariantSelection,
     routerPush: router.push,
     searchParams,
@@ -100,24 +102,16 @@ export function useProductDetailsState(serverProduct: Product) {
       selectedCondition,
     });
 
-  const currentOffer = resolveCurrentOffer(
-    productData,
-    selectedCondition,
-    variantSelectionAttributes,
-    currentVariantDisplaySelection
-  );
-  const currentCartOffer = resolveCurrentOffer(
-    productData,
-    selectedCondition,
-    variantSelectionAttributes,
-    currentCartVariantSelection
-  );
-  const managesStock = productData.manage_stock !== false;
-  const canPurchase =
-    (productData.variants?.length ?? 0) > 0
-      ? Boolean(currentVariantSelection) &&
-        (!managesStock || currentCartOffer.stock > 0)
-      : !managesStock || currentOffer.stock > 0;
+  const { canPurchase, currentCartOffer, currentOffer, managesStock } =
+    resolveProductDetailsOfferState({
+      currentCartVariantSelection,
+      currentVariantDisplaySelection,
+      currentVariantSelection,
+      productData,
+      routeOfferId,
+      selectedCondition,
+      variantSelectionAttributes,
+    });
 
   const normalizedReviewRating = Math.max(
     0,

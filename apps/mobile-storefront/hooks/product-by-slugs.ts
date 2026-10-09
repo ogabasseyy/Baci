@@ -1,4 +1,7 @@
-import { hydrateRowsNeedingStorefrontVariants } from '@/hooks/product-hydration';
+import {
+  hydrateRowsNeedingBaseInventory,
+  hydrateRowsNeedingStorefrontVariants,
+} from '@/hooks/product-hydration';
 import { withSupabaseRetry } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
@@ -37,8 +40,10 @@ export async function fetchProductsBySlugs(
   });
   if (result.error) throw result.error;
 
-  const hydratedRows = await hydrateRowsNeedingStorefrontVariants(
-    (result.data || []) as Record<string, unknown>[]
+  const hydratedRows = await hydrateRowsNeedingBaseInventory(
+    await hydrateRowsNeedingStorefrontVariants(
+      (result.data || []) as Record<string, unknown>[]
+    )
   );
   return hydratedRows
     .map(transformProduct)

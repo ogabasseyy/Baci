@@ -66,9 +66,16 @@ export function useProductDetailPurchaseState(
         ? routeData.product.manage_stock === false ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
             ? selectedConditionOffer.stock_quantity > quantityInCart
-            : typeof routeData.product.stock_quantity === 'number'
-              ? routeData.product.stock_quantity > quantityInCart
-              : routeData.product.in_stock === true)
+            : routeData.product.base_effective_policy ===
+                'serialized_then_unlimited'
+              ? true
+              : routeData.product.base_effective_policy === 'serialized_strict'
+                ? (typeof routeData.product.base_available_units === 'number'
+                    ? routeData.product.base_available_units
+                    : 0) > quantityInCart
+                : typeof routeData.product.stock_quantity === 'number'
+                  ? routeData.product.stock_quantity > quantityInCart
+                  : routeData.product.in_stock === true)
         : false;
 
   const conditionOffersForDisplay = getConditionOffersForDisplay(routeData);

@@ -22,6 +22,7 @@ import { trackEvent } from '@/lib/event-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
 import type { ProductCondition } from './product-selection-condition';
@@ -107,13 +108,18 @@ function isVariantAvailable(
     const matches = Object.entries(partialAttributes).every(
       ([key, value]) => variant.attributes[key] === value
     );
+    // Serialized tracking resolves from exact units (strict) or stays
+    // enabled with no finite count (unlimited); other variants use the
+    // scalar quantity with parent-stock inheritance.
+    const serializedStock = resolveSerializedVariantStock(variant);
     return (
       conditionMatches &&
       matches &&
-      getEffectiveStock({
-        stock: variant.stock_quantity ?? fallbackStock,
-        stock_quantity: variant.stock_quantity ?? fallbackStock,
-      }) > 0
+      (serializedStock ??
+        getEffectiveStock({
+          stock: variant.stock_quantity ?? fallbackStock,
+          stock_quantity: variant.stock_quantity ?? fallbackStock,
+        })) > 0
     );
   });
 }
@@ -568,7 +574,7 @@ export default function ProductDetailClient({
                   </ThemedBadge>
                 )}
                 {isStockManaged ? (
-                  currentStock > 0 ? (
+                  currentStock > 0 && Number.isFinite(currentStock) ? (
                     <p
                       className={cn(
                         'text-sm mt-2',

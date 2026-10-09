@@ -3,6 +3,7 @@
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
 import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
+import { resolveProductDetailsRouteSelection } from './product-details-route-selection';
 import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
@@ -11,7 +12,6 @@ import {
   resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
-  resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
 import type { Product } from '../../types';
 import {
@@ -83,40 +83,23 @@ export function useProductDetailsSelectionState(
         ],
         normalizeCanonicalProductCondition
       );
-  const rawConditionParam = searchParams.get('condition');
-  const rawOfferIdParam = searchParams.get('offer_id');
   const usesVariantRouteSelection = Boolean(productData.variants?.length);
-  const routeSelectionResolution = usesVariantRouteSelection
-    ? resolveVariantSelectionParamResolution(
-        {
-          ...variantResolutionProduct,
-          attributeAxes: effectiveAxes,
-          variant_attributes: serverProduct.variant_attributes,
-        },
-        searchParams
-      )
-    : null;
-  const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
-  const routeSelectionAttributes = routeSelectionInput.attributes || {};
-  const routeSelectionAttributesKey = JSON.stringify(routeSelectionAttributes);
-  // ID-only search links derive condition from this product's live offer
-  // (mirrors the generic PDP route selection): the card deliberately omits
-  // the snapshot condition, so without this the PDP would open the parent
-  // default instead of the advertised offer. Explicit condition constraints
-  // remain authoritative when supplied.
-  const routeConditionSource =
-    routeSelectionInput.condition ??
-    (!usesVariantRouteSelection
-      ? (rawConditionParam ??
-        productData.offers?.find(
-          (offer) => String(offer.id) === rawOfferIdParam
-        )?.condition)
-      : undefined);
-  const routeCondition = normalizeCanonicalProductCondition(routeConditionSource);
-  const routeVariantId =
-    usesVariantRouteSelection && routeSelectionInput.variantId
-      ? routeSelectionInput.variantId
-      : undefined;
+  const {
+    routeCondition,
+    routeOfferId,
+    routeSelectionAttributes,
+    routeSelectionAttributesKey,
+    routeVariantId,
+  } = resolveProductDetailsRouteSelection({
+    offers: productData.offers,
+    resolutionProduct: {
+      ...variantResolutionProduct,
+      attributeAxes: effectiveAxes,
+      variant_attributes: serverProduct.variant_attributes,
+    },
+    searchParams,
+    usesVariantRouteSelection,
+  });
   const productColorsKey = JSON.stringify(
     productData.colors.map((color) => color.name)
   );
@@ -142,7 +125,7 @@ export function useProductDetailsSelectionState(
     routeCondition,
     routeSelectionAttributesKey,
     routeVariantId ?? null,
-    rawOfferIdParam ?? null,
+    routeOfferId,
   ]);
   // Render-time seed keeps SSR/pre-hydration selection purchasable.
   const resolveInitialSeed = () =>
@@ -305,6 +288,7 @@ export function useProductDetailsSelectionState(
     setSelectedAttributes,
     setSelectedColor,
     setSelectedCondition,
+    routeOfferId,
     routeResolvedVariantSelection,
     setSelectedImage,
     variantSelectionAttributes,

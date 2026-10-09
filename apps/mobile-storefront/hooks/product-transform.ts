@@ -227,6 +227,8 @@ export function transformProduct(item: unknown): Product | null {
     review_count: reviewCount,
     manage_stock: (product.manage_stock as boolean) ?? true,
     stock_quantity: inventory.stock_quantity,
+    base_effective_policy: product.base_effective_policy ?? undefined,
+    base_available_units: product.base_available_units ?? undefined,
     colors: variantMetadata.colors,
     color_images: variantMetadata.colorImages,
     has_variants: isVariantBearingProduct(product),

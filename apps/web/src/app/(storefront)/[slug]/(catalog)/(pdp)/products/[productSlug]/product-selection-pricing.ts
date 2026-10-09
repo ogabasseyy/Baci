@@ -1,5 +1,6 @@
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 export interface SelectionPricingOffer {
   price: number | string;
@@ -14,6 +15,8 @@ export interface SelectionPricingDisplaySelection {
 export interface SelectionPricingVariant {
   price_override?: number | null;
   stock_quantity?: number | string | null;
+  effective_policy?: string | null;
+  available_units?: number | null;
 }
 
 /**
@@ -48,8 +51,16 @@ export function resolveSelectionPricing({
         product.price);
   const currentCompareAtPrice =
     displaySelection?.compareAtPrice ?? product.compare_at_price;
-  const currentStock = isStockManaged
-    ? getEffectiveStock(
+  // Serialized tracking resolves from exact units (strict) or stays enabled
+  // with no finite count (unlimited); only non-serialized selections reach
+  // the scalar/parent logic below.
+  const serializedVariantStock = effectiveVariant
+    ? resolveSerializedVariantStock(effectiveVariant)
+    : undefined;
+  const currentStock = !isStockManaged
+    ? Number.POSITIVE_INFINITY
+    : (serializedVariantStock ??
+      getEffectiveStock(
         effectiveVariant
           ? {
               stock:
@@ -68,8 +79,7 @@ export function resolveSelectionPricing({
                   selectedOffer.stock_quantity ?? product.stock ?? undefined,
               }
             : product
-      )
-    : Number.POSITIVE_INFINITY;
+      ));
   const isOutOfStock = isStockManaged ? currentStock === 0 : false;
   return { currentPrice, currentCompareAtPrice, currentStock, isOutOfStock };
 }

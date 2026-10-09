@@ -88,6 +88,8 @@ export const ProductRowSchema = z.object({
   manage_stock: z.boolean().nullable().optional(),
   stock: NullableNonnegativeIntegerLikeSchema.optional(),
   stock_quantity: NullableNonnegativeIntegerLikeSchema.optional(),
+  base_effective_policy: z.string().nullable().optional(),
+  base_available_units: NullableNonnegativeIntegerLikeSchema.optional(),
   status: z.string().optional(),
   specifications: z
     .union([

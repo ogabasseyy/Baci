@@ -121,6 +121,8 @@ export interface Product {
   in_stock?: boolean;
   manage_stock?: boolean;
   stock_quantity?: number;
+  base_effective_policy?: string;
+  base_available_units?: number;
   has_variants?: boolean;
   variant_model?: 'legacy' | 'sku_matrix';
   available_conditions?: ProductCondition[];

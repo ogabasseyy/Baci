@@ -126,11 +126,17 @@ describe('fetchProductsPage catalog variant hydration', () => {
       count: 'exact',
     });
     expect(query.range).toHaveBeenCalledWith(0, 2);
-    expect(mockRpc).toHaveBeenCalledTimes(1);
-    expect(mockRpc).toHaveBeenCalledWith(
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      1,
       'get_storefront_product_variants',
       { p_product_ids: ['product-1', 'product-2'] },
       { count: 'exact' }
+    );
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      2,
+      'get_storefront_product_base_inventory',
+      { p_product_ids: ['simple-product'] }
     );
     expect(result).toEqual({
       nextOffset: null,

@@ -1,4 +1,5 @@
 import { getEffectiveStock } from './product-stock';
+import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 /** Evaluate hydrated public units before applying the parent stock policy. */
 export function isPublicVariantPurchasable(
@@ -9,14 +10,16 @@ export function isPublicVariantPurchasable(
   },
   variant: {
     inventory_tracking_policy?: string | null;
+    effective_policy?: string | null;
+    available_units?: number | null;
     stock_quantity?: number | null;
   }
 ): boolean {
-  if (variant.inventory_tracking_policy === 'serialized_strict') {
-    return (variant.stock_quantity ?? 0) > 0;
-  }
-  if (variant.inventory_tracking_policy === 'serialized_then_unlimited') {
-    return true;
+  // Serialized tracking resolves from exact units (strict) or stays enabled
+  // (unlimited); only non-serialized variants reach the scalar/parent logic.
+  const serializedStock = resolveSerializedVariantStock(variant);
+  if (serializedStock !== undefined) {
+    return serializedStock > 0;
   }
   // The categorized PDP normalizes legacy null manage_stock to managed
   // inventory before downstream evaluation; match it so a depleted child

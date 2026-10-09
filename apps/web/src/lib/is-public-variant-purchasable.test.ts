@@ -71,4 +71,39 @@ describe('isPublicVariantPurchasable', () => {
       )
     ).toBe(false);
   });
+
+  it('resolves strict tracking from exact units ahead of a stale scalar', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 4 },
+        {
+          effective_policy: 'serialized_strict',
+          available_units: 2,
+          stock_quantity: 0,
+        }
+      )
+    ).toBe(true);
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 4 },
+        {
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+          stock_quantity: 5,
+        }
+      )
+    ).toBe(false);
+  });
+
+  it('lets an inherited unlimited policy enable a zero-scalar variant', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 0 },
+        {
+          effective_policy: 'serialized_then_unlimited',
+          stock_quantity: 0,
+        }
+      )
+    ).toBe(true);
+  });
 });

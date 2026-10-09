@@ -73,6 +73,23 @@ describe('product-transform', () => {
     ]);
   });
 
+  it('carries hydrated base policy and units onto simple products', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      has_variants: false,
+      variant_model: 'legacy',
+      variants: [],
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 4,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({
+        base_effective_policy: 'serialized_strict',
+        base_available_units: 4,
+      })
+    );
+  });
+
   it('normalizes live variant attributes to selector strings only', () => {
     expect(
       normalizeProductVariants(variantProductRow.variants, {

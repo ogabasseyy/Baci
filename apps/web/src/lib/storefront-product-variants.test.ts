@@ -185,4 +185,32 @@ describe('normalizeStorefrontProductVariants', () => {
       stock_quantity: 0,
     });
   });
+  it('maps the inherited effective policy and unit count into the variant model', () => {
+    const [mapped, unlimited] = normalizeStorefrontProductVariants(
+      [
+        {
+          id: 'strict-units',
+          stock_quantity: 0,
+          inventory_tracking_policy: 'serialized_strict',
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+        {
+          id: 'unlimited',
+          stock_quantity: 0,
+          effective_policy: 'serialized_then_unlimited',
+          available_units: 0,
+        },
+      ],
+      { merchantId: 'merchant', productId: 'product', parentStock: 9 }
+    );
+    expect(mapped).toMatchObject({
+      effective_policy: 'serialized_strict',
+      available_units: 3,
+    });
+    expect(unlimited).toMatchObject({
+      effective_policy: 'serialized_then_unlimited',
+      available_units: 0,
+    });
+  });
 });

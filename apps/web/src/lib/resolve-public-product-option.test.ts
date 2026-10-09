@@ -78,4 +78,25 @@ describe('public option resolution', () => {
       }).purchasable
     ).toBe(false);
   });
+  it('reports exact serialized units ahead of a stale scalar', () => {
+    const option = resolvePublicProductOption(parent, {
+      variant: {
+        effective_policy: 'serialized_strict',
+        available_units: 3,
+        stock_quantity: 0,
+      },
+    });
+    expect(option.stockQuantity).toBe(3);
+    expect(option.purchasable).toBe(true);
+  });
+  it('keeps unlimited tracking enabled without a finite count', () => {
+    const option = resolvePublicProductOption(parent, {
+      variant: {
+        effective_policy: 'serialized_then_unlimited',
+        stock_quantity: 0,
+      },
+    });
+    expect(option.stockQuantity).toBe(Number.POSITIVE_INFINITY);
+    expect(option.purchasable).toBe(true);
+  });
 });

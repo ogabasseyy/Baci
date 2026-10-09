@@ -44,6 +44,7 @@ describe('search pending replay sources', () => {
       '20261008260000_storefront_product_request_query_key.sql',
       '20261008270000_storefront_variant_rpc_serialized_policy.sql',
       '20261008280000_storefront_variant_rpc_admin_visibility.sql',
+      '20261008290000_storefront_product_base_inventory.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

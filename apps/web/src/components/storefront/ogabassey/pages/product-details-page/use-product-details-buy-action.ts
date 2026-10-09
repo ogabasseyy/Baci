@@ -23,6 +23,7 @@ interface UseProductDetailsBuyActionParams {
   basePath: string;
   checkoutRedirectTimeoutRef: RefObject<number | null>;
   productData: NormalizedProductDetails;
+  routeOfferId?: string | null;
   routeResolvedVariantSelection: ProductVariantSelection;
   routerPush: (href: Route) => void;
   searchParams: { get(name: string): string | null };
@@ -35,6 +36,7 @@ export function useProductDetailsBuyAction({
   basePath,
   checkoutRedirectTimeoutRef,
   productData,
+  routeOfferId,
   routeResolvedVariantSelection,
   routerPush,
   searchParams,
@@ -76,7 +78,8 @@ export function useProductDetailsBuyAction({
           (selectedVariantSelection?.condition as ConditionType | undefined) ||
             'new',
           selectedAttributesForBuy,
-          selectedVariantSelection
+          selectedVariantSelection,
+          routeOfferId
         ),
         defaultColorIndex >= 0 ? defaultColorIndex : 0,
         (selectedVariantSelection?.condition as ConditionType | undefined) ||
@@ -117,6 +120,7 @@ export function useProductDetailsBuyAction({
     basePath,
     checkoutRedirectTimeoutRef,
     productData,
+    routeOfferId,
     routeResolvedVariantSelection,
     routerPush,
     searchParams,

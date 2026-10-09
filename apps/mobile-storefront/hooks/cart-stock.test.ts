@@ -102,6 +102,16 @@ describe('cart-stock helpers', () => {
     (supabase.from as jest.Mock).mockReturnValue({
       select: () => ({ eq: () => ({ single }) }),
     });
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'legacy',
+          available_units: 0,
+        },
+      ],
+      error: null,
+    });
 
     await expect(checkStock('product-1', 1)).resolves.toEqual({
       available: false,
@@ -118,6 +128,16 @@ describe('cart-stock helpers', () => {
     (supabase.from as jest.Mock).mockReturnValue({
       select: () => ({ eq: () => ({ single }) }),
     });
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'legacy',
+          available_units: 0,
+        },
+      ],
+      error: null,
+    });
 
     await expect(checkStock('product-1', 2)).resolves.toEqual({
       available: true,
@@ -133,6 +153,16 @@ describe('cart-stock helpers', () => {
     });
     (supabase.from as jest.Mock).mockReturnValue({
       select: () => ({ eq: () => ({ single }) }),
+    });
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'legacy',
+          available_units: 0,
+        },
+      ],
+      error: null,
     });
 
     await expect(checkStock('product-1', 2)).resolves.toEqual({
@@ -386,6 +416,69 @@ describe('cart-stock helpers', () => {
     await expect(
       checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
     ).rejects.toThrow('Cannot verify stock availability');
+  });
+
+  it('bypasses the quantity check for unlimited serialized base options', async () => {
+    mockProductAndRpc(parent(), {
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_then_unlimited',
+          available_units: 0,
+        },
+      ],
+    });
+
+    await expect(checkStock('product-1', 1)).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('compares strict serialized base options against exact unit counts', async () => {
+    mockProductAndRpc(parent(), {
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 2,
+        },
+      ],
+    });
+
+    await expect(checkStock('product-1', 2)).resolves.toEqual({
+      available: true,
+      currentStock: 2,
+      requestedQuantity: 2,
+    });
+    await expect(checkStock('product-1', 3)).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+  });
+
+  it('reports zero for a base option missing from the projection', async () => {
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_storefront_product_base_inventory: [],
+    });
+
+    await expect(checkStock('product-1', 1)).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('throws when the base inventory lookup fails', async () => {
+    mockProductAndRpc(parent(), {
+      get_storefront_product_base_inventory: { error: { message: 'boom' } },
+    });
+
+    await expect(checkStock('product-1', 1)).rejects.toThrow(
+      'Cannot verify stock availability'
+    );
   });
 
   it('prefers the variant identity when both option ids are present', async () => {

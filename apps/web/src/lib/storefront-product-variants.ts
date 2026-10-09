@@ -21,6 +21,8 @@ function normalizeStorefrontCondition(condition: string | null | undefined) {
 
 interface StorefrontVariantRecord {
   inventory_tracking_policy?: string | null;
+  effective_policy?: string | null;
+  available_units?: number | null;
   archived_at?: string | null;
   attributes?: Record<string, unknown> | null;
   condition?: string | null;
@@ -106,6 +108,15 @@ export function normalizeStorefrontProductVariants(
       variant.inventory_tracking_policy === 'serialized_strict' ||
       variant.inventory_tracking_policy === 'serialized_then_unlimited'
         ? { inventory_tracking_policy: variant.inventory_tracking_policy }
+        : {}),
+      ...(variant.effective_policy === 'off' ||
+      variant.effective_policy === 'serialized_strict' ||
+      variant.effective_policy === 'serialized_then_unlimited'
+        ? { effective_policy: variant.effective_policy }
+        : {}),
+      ...(typeof variant.available_units === 'number' &&
+      Number.isFinite(variant.available_units)
+        ? { available_units: variant.available_units }
         : {}),
       product_id: variant.product_id || options.productId,
       merchant_id: variant.merchant_id || options.merchantId,

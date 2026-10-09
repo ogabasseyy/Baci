@@ -169,4 +169,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008280000_storefront_variant_rpc_admin_visibility.sql',
     sha256: 'c33e64d8b744e664379addb10f18f4216248edd071c355fd93b26cf55250ea2a',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008290000_storefront_product_base_inventory.sql',
+    sha256: '52393acaf42273ca22ec33cc002005183ab520fca91898fdd2ab007786066c3d',
+  },
 ] as const;

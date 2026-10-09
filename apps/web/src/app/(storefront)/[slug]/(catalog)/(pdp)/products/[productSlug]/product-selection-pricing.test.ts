@@ -102,4 +102,47 @@ describe('resolveSelectionPricing', () => {
       isOutOfStock: false,
     });
   });
+
+  it('prices a strict variant from exact units ahead of a zero scalar', () => {
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: null,
+        displaySelection: null,
+        effectiveVariant: {
+          price_override: 140,
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 140,
+      currentCompareAtPrice: 120,
+      currentStock: 3,
+      isOutOfStock: false,
+    });
+  });
+
+  it('keeps an unlimited variant enabled with no finite count', () => {
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: null,
+        displaySelection: null,
+        effectiveVariant: {
+          price_override: 140,
+          stock_quantity: 0,
+          effective_policy: 'serialized_then_unlimited',
+        },
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 140,
+      currentCompareAtPrice: 120,
+      currentStock: Number.POSITIVE_INFINITY,
+      isOutOfStock: false,
+    });
+  });
 });

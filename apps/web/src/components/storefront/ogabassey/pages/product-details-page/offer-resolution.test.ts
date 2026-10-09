@@ -80,4 +80,51 @@ describe('resolveCurrentOffer', () => {
     expect(resolveCurrentOffer(productWith({ manage_stock: null, stock_quantity: 0 }), 'new', {}).stock).toBe(0);
   });
 
+  it('prefers the route offer id among same-canonical-condition offers', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        offers: [
+          { id: 'offer-used', condition: 'used', rawPrice: 450, stock_quantity: 1 },
+          { id: 'offer-uk-used', condition: 'uk_used', rawPrice: 400, stock_quantity: 2 },
+        ],
+      }),
+      'used',
+      {},
+      null,
+      'offer-uk-used'
+    );
+    expect(offer.rawPrice).toBe(400);
+    expect(offer.stock).toBe(2);
+  });
+
+  it('falls back to condition matching when the route id no longer matches the selection', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        offers: [
+          { id: 'offer-used', condition: 'used', rawPrice: 450, stock_quantity: 1 },
+          { id: 'offer-box', condition: 'open_box', rawPrice: 480, stock_quantity: 3 },
+        ],
+      }),
+      'open_box',
+      {},
+      null,
+      'offer-used'
+    );
+    expect(offer.rawPrice).toBe(480);
+    expect(offer.stock).toBe(3);
+  });
+
+  it('falls back to condition matching when the route id names no offer', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        offers: [{ id: 'offer-used', condition: 'used', rawPrice: 450, stock_quantity: 1 }],
+      }),
+      'used',
+      {},
+      null,
+      'offer-gone'
+    );
+    expect(offer.rawPrice).toBe(450);
+  });
+
 });

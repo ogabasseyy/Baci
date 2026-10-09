@@ -30,7 +30,7 @@ const FASTFILE_PATH = path.join(PROJECT_ROOT, 'fastlane', 'Fastfile');
 const PRODUCTION_CONFIG_PATH = path.join(
   PROJECT_ROOT,
   'config',
-  'development-storefront-expo-config-production.ts'
+  'development-storefront-expo-config-production.js'
 );
 
 function copyRequiredProjectFiles(tempRoot: string) {
@@ -47,7 +47,7 @@ function copyRequiredProjectFiles(tempRoot: string) {
       path.join(
         tempRoot,
         'config',
-        'development-storefront-expo-config-production.ts'
+        'development-storefront-expo-config-production.js'
       )
     );
   }
@@ -102,7 +102,7 @@ describe('check-ad-tracking-native-config', () => {
         ? path.join(
             tempRoot,
             'config',
-            'development-storefront-expo-config-production.ts'
+            'development-storefront-expo-config-production.js'
           )
         : path.join(tempRoot, 'app.config.ts');
       const appConfigSource = readFileSync(declarationsPath, 'utf8')

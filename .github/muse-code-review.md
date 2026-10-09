@@ -48,6 +48,17 @@ cheap and advisory:
 Forks skipped by the job `if` (head repo check) — load-bearing under
 pull_request_target, which WOULD expose secrets to forks otherwise.
 
+## Updating reviewed action pins
+
+Dependabot excludes only `.github/workflows/muse-code-review.yml`; other
+workflows continue receiving automated action updates. Its two checkout pins
+are trust anchors for the privileged reviewer and must be updated manually.
+Review the new action revision, then update both workflow pins,
+`.github/scripts/semgrep_sarif_pins.py`, and the filter/hardening mutation
+fixtures together. Run the SARIF filter suite and all four hardening shards
+before merging. Keep the audit fail-closed; a dependency bump alone does not
+authorize changing the reviewed allowlist.
+
 ## Layout
 
 The workflow file only orchestrates steps; every shell program lives in

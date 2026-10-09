@@ -154,3 +154,47 @@ describe('run-pagespeed', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(5);
   });
 });
+
+describe('PageSpeed blocked-page diagnostics', () => {
+  it('names failing weighted audits without relaxing the SEO threshold', () => {
+    const result = pageSpeedTools.evaluatePageSpeedResult({
+      lighthouseResult: {
+        categories: {
+          seo: {
+            score: 0.8,
+            auditRefs: [
+              { id: 'http-status-code', weight: 1 },
+              { id: 'is-crawlable', weight: 1 },
+              { id: 'manual-check', weight: 0 },
+            ],
+          },
+        },
+        audits: {
+          'http-status-code': { score: 0 },
+          'is-crawlable': { score: 0 },
+          'manual-check': { score: 0 },
+        },
+      },
+    });
+    expect(result.failures).toContainEqual({
+      metric: 'seo',
+      actual: 0.8,
+      threshold: 0.9,
+      message: 'Failing Lighthouse audits: http-status-code, is-crawlable',
+    });
+    expect(result.passed).toBe(false);
+  });
+
+  it('reports a Lighthouse runtime error separately from missing scores', () => {
+    const result = pageSpeedTools.evaluatePageSpeedResult({
+      lighthouseResult: { runtimeError: { code: 'ERRORED_DOCUMENT_REQUEST' } },
+    });
+    expect(result.failures).toContainEqual({
+      metric: 'request',
+      actual: null,
+      threshold: 0,
+      message: 'Lighthouse runtime error: ERRORED_DOCUMENT_REQUEST',
+    });
+    expect(result.passed).toBe(false);
+  });
+});

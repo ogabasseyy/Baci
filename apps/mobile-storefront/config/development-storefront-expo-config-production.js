@@ -1,28 +1,25 @@
-import type { TikTokBusinessPlugin } from '@baci/tiktok-business';
-import type { ConfigContext, ExpoConfig } from 'expo/config';
-import { buildStorefrontAndroidIntentFilters } from './android-intent-filters.js';
-import { createExpoPlugins } from './expo-plugins.js';
-import { resolveUpdateChannel } from './resolve-update-channel.js';
-import { buildSentryExpoConfiguration } from './sentry-expo-config.js';
-import { isSentryConfigurationRequired } from './sentry-required-environment.js';
-import tiktokConstants from './tiktok-constants.js';
+const {
+  buildStorefrontAndroidIntentFilters,
+} = require('./android-intent-filters.js');
+const { createExpoPlugins } = require('./expo-plugins.js');
+const { resolveUpdateChannel } = require('./resolve-update-channel.js');
+const { buildSentryExpoConfiguration } = require('./sentry-expo-config.js');
+const {
+  isSentryConfigurationRequired,
+} = require('./sentry-required-environment.js');
+const tiktokConstants = require('./tiktok-constants.js');
 
-// tiktok-constants exports string literals, which Node's CJS named-export
-// detection skips; read them off the default export instead.
 const {
   DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID,
   DEFAULT_STOREFRONT_TIKTOK_IOS_TIKTOK_APP_ID,
-} = tiktokConstants as {
-  DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID: string;
-  DEFAULT_STOREFRONT_TIKTOK_IOS_TIKTOK_APP_ID: string;
-};
+} = tiktokConstants;
 
 const rawAndroidVersionCode = process.env.ANDROID_VERSION_CODE;
 const parsedAndroidVersionCode =
   rawAndroidVersionCode === undefined
     ? undefined
     : Number(rawAndroidVersionCode);
-let androidVersionCode: number | undefined;
+let androidVersionCode;
 const appVersion = '2.0.1';
 const androidRuntimeVersion = `${appVersion}-android-sdk57-rn0862`;
 const DEFAULT_ANDROID_VERSION_CODE = 741;
@@ -46,7 +43,7 @@ if (parsedAndroidVersionCode !== undefined) {
 }
 
 const rawIosBuildNumber = process.env.IOS_BUILD_NUMBER;
-let iosBuildNumber: string | undefined;
+let iosBuildNumber;
 
 if (rawIosBuildNumber !== undefined) {
   const parsed = Number(rawIosBuildNumber);
@@ -60,7 +57,7 @@ if (rawIosBuildNumber !== undefined) {
 }
 
 const rawIosAppVersion = process.env.IOS_APP_VERSION;
-let _iosAppVersion: string | undefined;
+let _iosAppVersion;
 
 if (rawIosAppVersion !== undefined && rawIosAppVersion.trim().length > 0) {
   const trimmed = rawIosAppVersion.trim();
@@ -84,7 +81,7 @@ const tiktokIosAppSecret =
 const isTikTokBusinessConfigured = Boolean(
   tiktokIosAppStoreId && tiktokIosAppId && tiktokIosAppSecret
 );
-const tiktokBusinessPlugin: TikTokBusinessPlugin | null =
+const tiktokBusinessPlugin =
   isTikTokBusinessConfigured && tiktokIosAppSecret
     ? [
         '@baci/tiktok-business/plugin',
@@ -155,7 +152,7 @@ if (!posthogApiKey) {
 
 const isFacebookSdkConfigured = Boolean(facebookAppId && facebookClientToken);
 
-const facebookSdkPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
+const facebookSdkPlugin =
   isFacebookSdkConfigured && facebookAppId && facebookClientToken
     ? [
         'react-native-fbsdk-next',
@@ -174,9 +171,8 @@ const { plugin: sentryPlugin } = buildSentryExpoConfiguration(process.env, {
   required: isSentryRequiredEnv,
 });
 
-export const buildStorefrontConfig = ({
-  config,
-}: ConfigContext): ExpoConfig => ({
+/** @type {(context: import('expo/config').ConfigContext) => import('expo/config').ExpoConfig} */
+const buildStorefrontConfig = ({ config }) => ({
   ...config,
   name: 'Ogabassey',
   slug: 'ogabassey-store',
@@ -284,3 +280,5 @@ export const buildStorefrontConfig = ({
   },
   runtimeVersion,
 });
+
+module.exports = { buildStorefrontConfig };

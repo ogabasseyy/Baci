@@ -81,6 +81,10 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    # This privileged workflow has reviewed action trust anchors. Upgrade its
+    # pins together with the SARIF audit and mutation tests in a manual PR.
+    exclude-paths:
+      - ".github/workflows/muse-code-review.yml"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

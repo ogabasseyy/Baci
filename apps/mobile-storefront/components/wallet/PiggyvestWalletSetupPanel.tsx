@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
+import { useAuthStore } from '@/stores/auth-store';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 import {
   WalletFundPhonePrompt,
@@ -29,20 +30,40 @@ export function PiggyvestWalletSetupPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [awaitingAccount, setAwaitingAccount] = useState(false);
+  // Account binding: every input and flow state below belongs to whoever
+  // is signed in. The panel is merchant-keyed by its parent, so without
+  // this an account switch would leave A's retained BVN submittable under
+  // B's session. Remount inputs per account (key below), reset flow state
+  // on change, and ignore in-flight results from a previous account.
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const authUserIdRef = useRef(authUserId);
+  authUserIdRef.current = authUserId;
+  const previousAuthUserIdRef = useRef(authUserId);
+  useEffect(() => {
+    if (previousAuthUserIdRef.current === authUserId) return;
+    previousAuthUserIdRef.current = authUserId;
+    setPending(false);
+    setBusy(false);
+    setError(false);
+    setAwaitingAccount(false);
+  }, [authUserId]);
 
   async function refresh() {
     if (busy) return;
+    const requestUserId = authUserIdRef.current;
     setBusy(true);
     setError(false);
     setAwaitingAccount(false);
     try {
       const result = await piggyvestPrimaryWalletApi.read(merchantId);
+      if (authUserIdRef.current !== requestUserId) return;
       if (result.account) onRefresh();
       else setAwaitingAccount(true);
     } catch {
+      if (authUserIdRef.current !== requestUserId) return;
       setError(true);
     } finally {
-      setBusy(false);
+      if (authUserIdRef.current === requestUserId) setBusy(false);
     }
   }
 
@@ -56,7 +77,11 @@ export function PiggyvestWalletSetupPanel({
         <Text style={{ color: colors.text, textAlign: 'right' }}>Close</Text>
       </Pressable>
       {needsPhone ? (
-        <WalletFundPhonePrompt colors={colors} onSubmit={onSubmitPhone} />
+        <WalletFundPhonePrompt
+          key={authUserId ?? 'signed-out'}
+          colors={colors}
+          onSubmit={onSubmitPhone}
+        />
       ) : pending ? (
         <>
           <Text style={{ color: colors.text }}>
@@ -86,6 +111,7 @@ export function PiggyvestWalletSetupPanel({
         </>
       ) : (
         <PiggyvestWalletSetupForm
+          key={authUserId ?? 'signed-out'}
           colors={colors}
           merchantId={merchantId}
           onSubmit={async (input) => {
@@ -95,7 +121,11 @@ export function PiggyvestWalletSetupPanel({
             // remounts fresh state). A rejection propagates so the
             // still-mounted form keeps its input and shows its error
             // for correction and resubmission.
+            const requestUserId = authUserIdRef.current;
             const result = await piggyvestPrimaryWalletApi.create(input);
+            // Switched mid-flight: the input belonged to the previous
+            // account, so never apply its outcome to the new one.
+            if (authUserIdRef.current !== requestUserId) return;
             if (result.account) onRefresh();
             else setPending(true);
           }}

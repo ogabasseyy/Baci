@@ -5,9 +5,10 @@ import { primaryWalletCardCustodySchemas as schemas } from './primary-wallet-car
 describe('goal independent custody schemas', () => {
   it('accepts a scoped operation and distinct role configuration without a goal', () => {
     expect(schemas.context.parse(fixture.context)).toEqual(fixture.context);
-    expect(schemas.runtime.parse(fixture.configuration)).toEqual(
-      fixture.configuration
-    );
+    expect(schemas.runtime.parse(fixture.configuration)).toEqual({
+      ...fixture.configuration,
+      retainedWebhookSecrets: [],
+    });
     expect(schemas.crosswalk.parse(fixture.crosswalk)).toEqual(
       fixture.crosswalk
     );

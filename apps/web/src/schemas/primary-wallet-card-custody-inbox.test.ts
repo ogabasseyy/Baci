@@ -4,9 +4,10 @@ import { primaryCardCustodyInboxSchemas as schemas } from './primary-wallet-card
 
 describe('signed inbox durable capability schemas', () => {
   it('accepts bounded signed bytes and immutable claims under explicit mapping contracts', () => {
-    expect(schemas.runtime.parse(fixture.configuration)).toEqual(
-      fixture.configuration
-    );
+    expect(schemas.runtime.parse(fixture.configuration)).toEqual({
+      ...fixture.configuration,
+      retainedWebhookSecrets: [],
+    });
     expect(schemas.claims.parse([fixture.claim])).toEqual([fixture.claim]);
   });
   it.each([

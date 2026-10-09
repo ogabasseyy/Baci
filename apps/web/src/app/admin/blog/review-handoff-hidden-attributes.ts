@@ -50,6 +50,20 @@ function hasBareDisplayUtility(tag: string): boolean {
   return false;
 }
 
+function hasUntilFoundValue(tag: string): boolean {
+  // hidden="until-found" renders through content-visibility rather
+  // than display, so a display utility cannot expose it; only the
+  // ordinary hidden state yields to a bare display class. The match
+  // is ASCII case-insensitive per the enumerated-attribute rules,
+  // with no trimming: padded values fall back to Hidden state.
+  for (const { name, value } of tagAttributes(tag)) {
+    if (name === 'hidden' && value.toLowerCase() === 'until-found') {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Rewrite HTML-hidden elements to hiding classes before the sanitizer
  * drops the unsupported attribute. Converted markup flows through the
@@ -60,7 +74,7 @@ export function convertHiddenAttributes(html: string): string {
   return html.replace(HTML_TAG_PATTERN, (tag, closing) => {
     if (closing) return tag;
     if (!hasHiddenAttribute(tag)) return tag;
-    if (hasBareDisplayUtility(tag)) return tag;
+    if (hasBareDisplayUtility(tag) && !hasUntilFoundValue(tag)) return tag;
     return addUtilityClass(tag, 'hidden');
   });
 }

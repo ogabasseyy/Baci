@@ -219,6 +219,32 @@ describe('filterBlogMediaPathsWithoutPersistedReferences', () => {
     });
   });
 
+  it('decodes valid references despite unrelated invalid bytes', async () => {
+    // A stray %FF elsewhere in the field must not hide the encoded
+    // live reference: runs decode independently, so the scan still
+    // finds platform/blog/token.webp and skips the live object.
+    const { client } = fakeClient([
+      {
+        data: [
+          {
+            content:
+              '<p>100%FF coverage</p><img src="https://cdn.example.com/media/platform/blog/%74oken.webp">',
+          },
+        ],
+        error: null,
+      },
+    ]);
+    expect(
+      await filterBlogMediaPathsWithoutPersistedReferences(client, [
+        'platform/blog/token.webp',
+        'platform/blog/orphan.webp',
+      ])
+    ).toEqual({
+      deletable: ['platform/blog/orphan.webp'],
+      skipped: ['platform/blog/token.webp'],
+    });
+  });
+
   it('survives malformed escapes without losing raw matches', async () => {
     const { client } = fakeClient([
       {

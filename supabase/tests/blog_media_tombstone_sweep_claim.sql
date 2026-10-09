@@ -788,6 +788,94 @@ BEGIN
 END;
 $cutoff_cap$;
 
+DO $mixed_decode$
+DECLARE
+  v_decoded TEXT;
+  v_row RECORD;
+  v_saw_token BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- A stored field mixing a valid encoded reference with unrelated
+  -- invalid bytes must still protect the live object: the invalid
+  -- run cannot sink the whole-field decode anymore. The sub claim
+  -- resets first: the audit trigger rejects actorful writers without
+  -- content.manage, and the earlier delegated block leaves one set.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT public.blog_media_percent_decode(
+    'https://cdn.example.com/media/platform/blog/%74oken.webp and %FF text'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'https://cdn.example.com/media/platform/blog/token.webp and %FF text'
+  THEN
+    RAISE EXCEPTION 'mixed decode lost the valid reference: %', v_decoded;
+  END IF;
+
+  -- Clean multi-byte escapes still fully decode on the first attempt.
+  SELECT public.blog_media_percent_decode('platform/blog/caf%C3%A9.webp')
+    INTO v_decoded;
+  IF v_decoded <> 'platform/blog/café.webp' THEN
+    RAISE EXCEPTION 'clean multi-byte decode regressed: %', v_decoded;
+  END IF;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'Mixed decode test',
+    'sweep-claim-mixed-decode-post',
+    '<p>100%FF coverage</p><img src="https://cdn.example.com/media/platform/blog/mixed-%74oken.webp">',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/mixed-token.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/mixed-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    IF v_row.tombstone_path = 'platform/blog/mixed-token.webp' THEN
+      v_saw_token := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'mixed field failed to protect its live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/mixed-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the mixed control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF NOT v_saw_token OR NOT v_saw_orphan THEN
+    RAISE EXCEPTION 'claim omitted the mixed fixtures';
+  END IF;
+
+  -- Referenced rows resurrect (delete) rather than linger claimed.
+  IF EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/mixed-token.webp'
+  ) THEN
+    RAISE EXCEPTION 'mixed live object was not resurrected';
+  END IF;
+
+  DELETE FROM public.blog_posts WHERE slug = 'sweep-claim-mixed-decode-post';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/mixed-token.webp',
+    'platform/blog/mixed-orphan.webp'
+  );
+END;
+$mixed_decode$;
+
 RESET ROLE;
 
 ROLLBACK;

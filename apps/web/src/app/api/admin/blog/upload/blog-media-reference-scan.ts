@@ -10,22 +10,32 @@ export type BlogPostMediaRow = {
   author_image_url?: string | null;
 };
 
+function decodeEscapeRuns(field: string): string {
+  // Decode each maximal escape run independently: a stray %FF must
+  // not hide a valid encoded reference elsewhere in the field.
+  // Runs that still fail (split UTF8, lone invalid bytes) stay
+  // literal, preserving the previous matching behavior there.
+  return field.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+  });
+}
+
 function decodeStoredMediaText(field: string): string {
   // Stored URLs may percent-encode path segments (%74oken) while the
   // candidate paths arrive decoded: compare against the decoded text
   // so an encoded reference still protects its object. Decode to a
   // bounded fixpoint for multiply-encoded URLs; malformed escapes
-  // keep the raw text instead of throwing the scan out.
+  // keep their own run raw instead of throwing the scan out.
   let current = field;
   for (let depth = 0; depth < 3; depth += 1) {
     if (!current.includes('%')) return current;
-    try {
-      const decoded = decodeURIComponent(current);
-      if (decoded === current) return current;
-      current = decoded;
-    } catch {
-      return current;
-    }
+    const decoded = decodeEscapeRuns(current);
+    if (decoded === current) return current;
+    current = decoded;
   }
   return current;
 }

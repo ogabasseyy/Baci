@@ -120,6 +120,18 @@ describe('convertHiddenInlineStyles', () => {
       '<p style="opacity:0%">Note</p>',
       '<p style="opacity:0%" class="hidden">Note</p>',
     ],
+    [
+      '<p style="opacity:-1">Draft note</p><p>Body</p>',
+      '<p style="opacity:-1" class="hidden">Draft note</p><p>Body</p>',
+    ],
+    [
+      '<p style="opacity:-50%">Note</p>',
+      '<p style="opacity:-50%" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="filter:opacity(-1)">Note</p>',
+      '<p style="filter:opacity(-1)" class="hidden">Note</p>',
+    ],
   ])('converts hiding inline styles to hiding classes: %s', (html, expected) => {
     expect(convertHiddenInlineStyles(html)).toBe(expected);
   });
@@ -128,6 +140,7 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="display:block">Shown</p>',
     '<p style="visibility:visible">Shown</p>',
     '<p style="opacity:1">Shown</p>',
+    '<p style="opacity:2">Shown</p>',
     '<p style="opacity:">Shown</p>',
     '<p style="color:red">Shown</p>',
     '<p style="color:rgba(0,0,0,1)">Shown</p>',

@@ -23,8 +23,25 @@ describe('convertHiddenAttributes', () => {
   it.each([
     '<p hidden class="block">Shown</p>',
     '<div hidden class="flex">Shown</div>',
+    '<p hidden="hidden" class="block">Shown</p>',
   ])('leaves bare display utilities to decide: %s', (html) => {
     expect(convertHiddenAttributes(html)).toBe(html);
+  });
+
+  it.each([
+    [
+      '<div hidden="until-found" class="block">Draft note</div><p>Body</p>',
+      '<div hidden="until-found" class="block hidden">Draft note</div><p>Body</p>',
+    ],
+    [
+      '<p hidden="UNTIL-FOUND" class="flex">Note</p>',
+      '<p hidden="UNTIL-FOUND" class="flex hidden">Note</p>',
+    ],
+  ])('converts until-found despite display classes: %s', (html, expected) => {
+    // hidden="until-found" renders through content-visibility, which
+    // display utilities do not override; without the conversion the
+    // sanitizer drops the attribute and publishes the note.
+    expect(convertHiddenAttributes(html)).toBe(expected);
   });
 
   it.each([

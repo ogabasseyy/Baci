@@ -35,6 +35,14 @@ export async function handleBlogMediaTombstoneRefresh(
     );
   }
 
+  // Validate before rate limiting: malformed or out-of-scope bodies
+  // are never eligible for a refresh, so they must not consume the
+  // heartbeat budget and 429 later valid beats.
+  const parsed = await parseDeleteBodyFromRequest(request);
+  if (parsed.response) {
+    return parsed.response;
+  }
+
   const supabase = await createClient();
   const isAllowed = await checkRateLimit(
     supabase,
@@ -48,11 +56,6 @@ export async function handleBlogMediaTombstoneRefresh(
       { error: 'Rate limit exceeded', code: 'rate_limited' },
       { status: 429 }
     );
-  }
-
-  const parsed = await parseDeleteBodyFromRequest(request);
-  if (parsed.response) {
-    return parsed.response;
   }
 
   const refreshed = await refreshBlogMediaTombstones(supabase, parsed.paths);

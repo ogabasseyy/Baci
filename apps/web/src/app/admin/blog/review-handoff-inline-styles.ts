@@ -134,7 +134,8 @@ function isZeroOpacityFilter(value: string): boolean {
   while (match !== null) {
     if (match[1] === 'opacity') {
       const arg = (match[2] ?? '').trim().replace(/%$/, '');
-      if (arg !== '' && Number(arg) === 0) {
+      // Out-of-range values clamp to [0,1], so negatives hide.
+      if (arg !== '' && Number(arg) <= 0) {
         return true;
       }
     }
@@ -172,9 +173,10 @@ function hidingUtilityForStyle(
   if (finalValue('content-visibility') === 'hidden') return 'hidden';
   const opacity = finalValue('opacity');
   // Number('') is 0, so an empty opacity must not count as hiding.
-  // Percentages are valid opacity values (`opacity: 0%` hides).
+  // Percentages are valid opacity values (`opacity: 0%` hides), and
+  // out-of-range values clamp to [0,1], so negatives hide too.
   const opacityValue = opacity?.replace(/%$/, '') ?? '';
-  if (opacityValue !== '' && Number(opacityValue) === 0) {
+  if (opacityValue !== '' && Number(opacityValue) <= 0) {
     return 'hidden';
   }
   // -webkit-text-fill-color paints over color for glyphs, so it

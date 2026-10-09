@@ -82,6 +82,25 @@ describe('handleBlogMediaTombstoneRefresh', () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
+  it('validates the body before consuming the rate limit', async () => {
+    // Ineligible bodies must not burn the 30-request heartbeat
+    // budget: repeated invalid PATCHes would otherwise 429 later
+    // valid beats and let active draft leases expire.
+    const malformed = {
+      json: vi.fn().mockRejectedValue(new Error('bad json')),
+    } as unknown as NextRequest;
+    const malformedResponse = await handleBlogMediaTombstoneRefresh(malformed);
+    expect(malformedResponse.status).toBe(400);
+
+    const scopeResponse = await handleBlogMediaTombstoneRefresh(
+      patchRequest({ path: 'merchant/evil.webp', variantPaths: [] })
+    );
+    expect(scopeResponse.status).toBe(403);
+
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
   it('reports refresh failures', async () => {
     mockSelect.mockResolvedValueOnce({ data: [], error: { message: 'down' } });
 

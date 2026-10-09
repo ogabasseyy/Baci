@@ -57,6 +57,18 @@ describe('convertHiddenInlineStyles', () => {
       '<p style="color:red;color:transparent" class="text-transparent">Note</p>',
     ],
     [
+      '<p style="display:none!important;display:block">Note</p>',
+      '<p style="display:none!important;display:block" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="display:block;display:none!important">Note</p>',
+      '<p style="display:block;display:none!important" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="display:none ! important;display:block">Note</p>',
+      '<p style="display:none ! important;display:block" class="hidden">Note</p>',
+    ],
+    [
       '<p style="font-size:0">Draft note</p><p>Visible article</p>',
       '<p style="font-size:0" class="text-transparent">Draft note</p><p>Visible article</p>',
     ],
@@ -122,6 +134,8 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="color:rgb(0,0,0)">Shown</p>',
     '<p style="display:none-2x">Shown</p>',
     '<p style="display:none;display:block">Shown</p>',
+    '<p style="display:none!important;display:block!important">Shown</p>',
+    '<p style="display:none;display:block!important">Shown</p>',
     '<p style="opacity:0;opacity:1">Shown</p>',
     '<p style="visibility:hidden;visibility:visible">Shown</p>',
     '<p style="color:transparent;color:red">Shown</p>',
@@ -183,6 +197,14 @@ describe('convertHiddenInlineStyles', () => {
     expect(
       validateImportedContent(
         '<p style="filter:opacity(0)">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+  });
+
+  it('honors important declarations over later normal ones at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="display:none!important;display:block">Draft note</p><p>Body</p>'
       )
     ).toBe('<p>Body</p>');
   });

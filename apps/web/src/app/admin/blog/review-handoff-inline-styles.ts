@@ -3,13 +3,18 @@ import { isZeroAreaClipPath } from './review-handoff-clip-path';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { tagAttributes } from './review-handoff-tag-attributes';
 
+const IMPORTANT_SUFFIX_PATTERN = /!\s*important\s*$/i;
+
+function isImportantDeclaration(value: string): boolean {
+  // CSS allows whitespace between `!` and `important`, matched
+  // ASCII case-insensitively like every other declaration keyword.
+  return IMPORTANT_SUFFIX_PATTERN.test(value);
+}
+
 function normalizeDeclarationValue(value: string): string {
   // CSS-wide keywords match ASCII case-insensitively, so `NONE`
   // hides exactly like `none`.
-  return value
-    .replace(/!important\s*$/i, '')
-    .trim()
-    .toLowerCase();
+  return value.replace(IMPORTANT_SUFFIX_PATTERN, '').trim().toLowerCase();
 }
 
 function isZeroAlphaColor(value: string): boolean {
@@ -128,25 +133,31 @@ function isZeroOpacityFilter(value: string): boolean {
 function hidingUtilityForStyle(
   style: string
 ): 'hidden' | 'text-transparent' | null {
-  // The last declaration wins per property, mirroring the CSS
-  // cascade: `display:none;display:block` shows.
-  const finals = new Map<string, string>();
+  // Importance beats order per property, mirroring the CSS
+  // cascade: `display:none!important;display:block` hides, while
+  // `display:none;display:block` shows and a later important
+  // declaration still overrides an earlier one.
+  const finals = new Map<string, { important: boolean; value: string }>();
   for (const declaration of style.split(';')) {
     const separator = declaration.indexOf(':');
     if (separator === -1) continue;
-    finals.set(
-      declaration.slice(0, separator).trim().toLowerCase(),
-      normalizeDeclarationValue(declaration.slice(separator + 1))
-    );
+    const name = declaration.slice(0, separator).trim().toLowerCase();
+    const raw = declaration.slice(separator + 1);
+    const important = isImportantDeclaration(raw);
+    const existing = finals.get(name);
+    if (existing?.important && !important) continue;
+    finals.set(name, { important, value: normalizeDeclarationValue(raw) });
   }
-  if (finals.get('display') === 'none') return 'hidden';
-  const visibility = finals.get('visibility');
+  const finalValue = (property: string): string | undefined =>
+    finals.get(property)?.value;
+  if (finalValue('display') === 'none') return 'hidden';
+  const visibility = finalValue('visibility');
   if (visibility === 'hidden' || visibility === 'collapse') return 'hidden';
   // content-visibility:hidden skips rendering the element's contents
   // entirely; sanitization strips the style attribute, so convert it
   // like display:none before that lossy step.
-  if (finals.get('content-visibility') === 'hidden') return 'hidden';
-  const opacity = finals.get('opacity');
+  if (finalValue('content-visibility') === 'hidden') return 'hidden';
+  const opacity = finalValue('opacity');
   // Number('') is 0, so an empty opacity must not count as hiding.
   // Percentages are valid opacity values (`opacity: 0%` hides).
   const opacityValue = opacity?.replace(/%$/, '') ?? '';
@@ -158,24 +169,24 @@ function hidingUtilityForStyle(
   // converts to text-transparent (void elements ignore the color
   // channel) rather than hidden.
   const glyphColor =
-    finals.get('-webkit-text-fill-color') ?? finals.get('color');
+    finalValue('-webkit-text-fill-color') ?? finalValue('color');
   if (glyphColor !== undefined && isZeroAlphaColor(glyphColor)) {
     return 'text-transparent';
   }
   // Zero font size hides glyphs the same glyph-only way.
-  const fontSize = finals.get('font-size');
+  const fontSize = finalValue('font-size');
   if (fontSize !== undefined && isZeroFontSize(fontSize)) {
     return 'text-transparent';
   }
   // Zero-scale transforms collapse the whole box including replaced
   // content, so they map to hidden rather than text-transparent.
-  const transform = finals.get('transform');
+  const transform = finalValue('transform');
   if (transform !== undefined && transform !== 'none') {
     if (isZeroScaleTransform(transform)) {
       return 'hidden';
     }
   }
-  const scale = finals.get('scale');
+  const scale = finalValue('scale');
   if (scale !== undefined && scale !== 'none') {
     if (isZeroScaleProperty(scale)) {
       return 'hidden';
@@ -183,7 +194,7 @@ function hidingUtilityForStyle(
   }
   // A zeroed filter opacity makes the whole box transparent including
   // replaced content, so it maps to hidden rather than text-transparent.
-  const filter = finals.get('filter');
+  const filter = finalValue('filter');
   if (filter !== undefined && filter !== 'none') {
     if (isZeroOpacityFilter(filter)) {
       return 'hidden';
@@ -191,7 +202,7 @@ function hidingUtilityForStyle(
   }
   // A zero-area clip path paints nothing of the box including
   // replaced content, so it maps to hidden as well.
-  const clipPath = finals.get('clip-path');
+  const clipPath = finalValue('clip-path');
   if (clipPath !== undefined && clipPath !== 'none') {
     if (isZeroAreaClipPath(clipPath)) {
       return 'hidden';

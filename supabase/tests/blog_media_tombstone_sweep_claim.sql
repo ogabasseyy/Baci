@@ -332,7 +332,14 @@ BEGIN
   INSERT INTO storage.objects (bucket_id, name, owner, owner_id, metadata)
   VALUES
     ('media', 'platform/blog/scope-worker-del.webp', NULL, NULL, '{}'::jsonb),
+    ('media', 'platform/blog/scope-worker-staged.webp', NULL, NULL, '{}'::jsonb),
     ('media', 'merchant/scope-worker-kept.webp', NULL, NULL, '{}'::jsonb);
+  -- The deletable row carries a claimed tombstone like a swept byte;
+  -- the staged row is a fresh upload awaiting save.
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/scope-worker-del.webp', now() - interval '2 hours', TRUE),
+    ('platform/blog/scope-worker-staged.webp', now(), FALSE);
   SET LOCAL ROLE blog_media_sweep_worker;
   PERFORM pg_catalog.set_config(
     'request.jwt.claim.role', 'blog_media_sweep_worker', true);
@@ -344,6 +351,7 @@ BEGIN
    WHERE bucket_id = 'media'
      AND name IN (
       'platform/blog/scope-worker-del.webp',
+      'platform/blog/scope-worker-staged.webp',
       'merchant/scope-worker-kept.webp'
     );
 
@@ -356,7 +364,14 @@ BEGIN
      WHERE bucket_id = 'media'
        AND name = 'platform/blog/scope-worker-del.webp'
   ) THEN
-    RAISE EXCEPTION 'worker role must delete in-scope platform bytes';
+    RAISE EXCEPTION 'worker role must delete claimed platform bytes';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM storage.objects
+     WHERE bucket_id = 'media'
+       AND name = 'platform/blog/scope-worker-staged.webp'
+  ) THEN
+    RAISE EXCEPTION 'worker role must not delete unclaimed staged bytes';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM storage.objects
@@ -367,7 +382,15 @@ BEGIN
   END IF;
   DELETE FROM storage.objects
    WHERE bucket_id = 'media'
-     AND name = 'merchant/scope-worker-kept.webp';
+     AND name IN (
+      'platform/blog/scope-worker-staged.webp',
+      'merchant/scope-worker-kept.webp'
+    );
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/scope-worker-del.webp',
+    'platform/blog/scope-worker-staged.webp'
+  );
 END;
 $scope$;
 
@@ -449,6 +472,34 @@ BEGIN
     'blog_media_sweep_worker', 'public.merchants', 'SELECT'
   ) THEN
     RAISE EXCEPTION 'sweep worker lacks the policy-evaluation grant';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS proc
+     WHERE proc.oid =
+        'public.blog_media_sweep_worker_can_delete(text)'::pg_catalog.regprocedure
+       AND proc.prosecdef
+       AND proc.provolatile = 's'
+       AND proc.proowner = 'postgres'::pg_catalog.regrole
+  ) THEN
+    RAISE EXCEPTION 'worker delete predicate must be STABLE SECURITY DEFINER owned by postgres';
+  END IF;
+
+  IF NOT pg_catalog.has_function_privilege(
+    'blog_media_sweep_worker',
+    'public.blog_media_sweep_worker_can_delete(text)',
+    'execute'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.blog_media_sweep_worker_can_delete(text)',
+    'execute'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.blog_media_sweep_worker_can_delete(text)',
+    'execute'
+  ) THEN
+    RAISE EXCEPTION 'worker delete predicate leaks beyond the worker role';
   END IF;
 
   IF pg_catalog.has_table_privilege(

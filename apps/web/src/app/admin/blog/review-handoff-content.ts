@@ -12,6 +12,7 @@ import { groupMediaElements } from './review-handoff-media-groups';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
 import { hasReadableContent } from './review-handoff-readability';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
+import { hasUnpreservableStylesheet } from './review-handoff-stylesheet';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripTemplateSubtrees } from './review-handoff-template-strip';
 import { hasUnrepresentableVariance } from './review-handoff-variance';
@@ -251,6 +252,13 @@ export function validateImportedContent(rawContent: string): string {
   if (hasUnpreservableEmbed(rendered)) {
     throw new Error(
       'Article content has embed markup the editor cannot preserve'
+    );
+  }
+  // Stylesheets cannot survive either: sanitization strips the block
+  // while keeping the paragraphs it hides, silently exposing them.
+  if (hasUnpreservableStylesheet(rendered)) {
+    throw new Error(
+      'Article content has stylesheet markup the editor cannot preserve'
     );
   }
   return visible;

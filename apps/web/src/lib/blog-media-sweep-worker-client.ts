@@ -63,8 +63,9 @@ function hasCurrentWorkerCapability(token: string): boolean {
  * cleanup cron: the claim/release wrapper RPCs plus Storage removal
  * confined to the media bucket. Postgres confines the rest — the
  * worker role holds EXECUTE only on the wrappers and a DELETE policy
- * only on media/platform/blog/*. Throws on any invalid setup so the
- * cron fails closed until BLOG_MEDIA_SWEEP_WORKER_TOKEN is provisioned.
+ * only on claimed media/platform/blog/* tombstones. Throws on any
+ * invalid setup so the cron fails closed until
+ * BLOG_MEDIA_SWEEP_WORKER_TOKEN is provisioned.
  */
 export function createBlogMediaSweepWorkerClient(
   env: Readonly<Record<string, string | undefined>>

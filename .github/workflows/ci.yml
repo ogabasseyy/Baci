@@ -377,6 +377,7 @@ jobs:
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
+          --sql-check supabase/tests/admin_order_date_edit_replay.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

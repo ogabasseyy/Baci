@@ -1,6 +1,20 @@
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { stripHtmlComments } from './strip-html-comments';
 
+// Script, style, textarea, and title contents are tag-opaque: a
+// noscript opener inside them is text, not markup. The scan ends at
+// the first matching close exactly like the parser (even inside a
+// quoted string), or runs to end of input when unclosed — also like
+// the parser. An early opener end at a `>` inside an attribute value
+// still re-syncs at the real close, so visible content after the
+// block always survives.
+const RAW_TEXT_BLOCK_PATTERN =
+  /<(script|style|textarea|title)\b[^>]*>(?:[\s\S]*?<\/\1\s*>|$)/gi;
+
+function stripRawTextBlocks(html: string): string {
+  return html.replace(RAW_TEXT_BLOCK_PATTERN, '');
+}
+
 /**
  * Remove noscript subtrees before sanitization. Noscript contents
  * never render in the scripting-enabled source document, but the
@@ -10,10 +24,14 @@ import { stripHtmlComments } from './strip-html-comments';
  * do), an unclosed noscript drops to end of input, and stray closes
  * pass through for the sanitizer to discard. Comments strip first: a
  * noscript opener inside comment text is not markup, and the
- * sanitizer drops comments anyway.
+ * sanitizer drops comments anyway. Raw-text blocks strip next: a
+ * noscript opener inside script text is not markup either, and the
+ * sanitizer drops those blocks anyway. This scan stays lexical
+ * because parsing promotes noscript children to markup, hiding the
+ * wrapper it must see.
  */
 export function stripNoscriptSubtrees(html: string): string {
-  const source = stripHtmlComments(html);
+  const source = stripRawTextBlocks(stripHtmlComments(html));
   const segments: string[] = [];
   let depth = 0;
   let position = 0;

@@ -28,17 +28,36 @@ vi.mock('@/lib/cache-revalidation', () => ({
     blogPostRouteMocks.revalidatePlatformBlog(...args),
 }));
 
+type BlogPostRpcResponse = {
+  data: Record<string, unknown>[];
+  error: null;
+};
+
 export const blogPostSupabaseMock = {
   delete: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
   in: vi.fn(() => Promise.resolve({ data: [], error: null })),
   is: vi.fn(),
-  rpc: vi.fn((_name: string, args: { p_paths: string[] }) =>
-    Promise.resolve({
-      data: args.p_paths.map((path) => ({ path })),
-      error: null,
-    })
+  rpc: vi.fn(
+    (
+      name: string,
+      args: Record<string, unknown>
+    ): Promise<BlogPostRpcResponse> => {
+      if (name === 'mutate_platform_blog_post_atomic') {
+        return Promise.resolve({
+          data: [
+            { id: 'post-1', slug: 'launch-faster', title: 'Launch Faster' },
+          ],
+          error: null,
+        });
+      }
+      const paths = (args.p_paths as string[] | undefined) ?? [];
+      return Promise.resolve({
+        data: paths.map((path) => ({ path })),
+        error: null,
+      });
+    }
   ),
   select: vi.fn(),
   single: vi.fn(),
@@ -51,6 +70,25 @@ blogPostSupabaseMock.eq.mockReturnValue(blogPostSupabaseMock);
 blogPostSupabaseMock.is.mockReturnValue(blogPostSupabaseMock);
 blogPostSupabaseMock.update.mockReturnValue(blogPostSupabaseMock);
 blogPostSupabaseMock.delete.mockReturnValue(blogPostSupabaseMock);
+
+export function atomicPatchData(): Record<string, unknown> {
+  const calls = blogPostSupabaseMock.rpc.mock.calls as [
+    string,
+    Record<string, unknown>,
+  ][];
+  const match = calls.find(
+    ([name]) => name === 'mutate_platform_blog_post_atomic'
+  );
+  if (!match) throw new Error('atomic RPC was not called');
+  return match[1].p_post_data as Record<string, unknown>;
+}
+
+export function mockAtomicRow(row: Record<string, unknown>) {
+  blogPostSupabaseMock.rpc.mockResolvedValueOnce({
+    data: [row],
+    error: null,
+  });
+}
 
 export function blogPostRouteContext(id = 'post-1') {
   return { params: Promise.resolve({ id }) };

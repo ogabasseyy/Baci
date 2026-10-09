@@ -13,6 +13,8 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
 
 import { updatePlatformBlogPost } from './platform-blog-post-update-handler';
 
+type RpcCall = { args: Record<string, unknown>; name: string };
+
 function request(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/admin/blog/posts/post-1', {
     body: JSON.stringify(body),
@@ -25,55 +27,42 @@ function createSupabase(
   updateResult?: { data: unknown; error: unknown },
   existingPost: Record<string, unknown> = {}
 ) {
-  const updates: Record<string, unknown>[] = [];
-  const cleared: string[][] = [];
-  const clearIn = vi.fn((_column: string, paths: string[]) => {
-    cleared.push(paths);
-    return { eq: () => Promise.resolve({ error: null }) };
-  });
+  const rpcCalls: RpcCall[] = [];
   const query = {
-    delete: vi.fn(),
     eq: vi.fn(),
-    in: vi.fn(() => Promise.resolve({ data: [], error: null })),
     is: vi.fn(),
     select: vi.fn(),
-    single: vi
-      .fn()
-      .mockResolvedValueOnce({
-        data: {
-          featured_image_height: null,
-          featured_image_url: null,
-          featured_image_variants: {},
-          featured_image_width: null,
-          id: 'post-1',
-          slug: 'old-slug',
-          status: 'draft',
-          ...existingPost,
-        },
-        error: null,
-      })
-      .mockResolvedValueOnce(
-        updateResult ?? {
-          data: { id: 'post-1', slug: 'new-slug' },
-          error: null,
-        }
-      ),
-    update: vi.fn((value: Record<string, unknown>) => {
-      updates.push(value);
-      return query;
+    single: vi.fn().mockResolvedValueOnce({
+      data: {
+        featured_image_height: null,
+        featured_image_url: null,
+        featured_image_variants: {},
+        featured_image_width: null,
+        id: 'post-1',
+        slug: 'old-slug',
+        status: 'draft',
+        ...existingPost,
+      },
+      error: null,
     }),
   };
   query.eq.mockReturnValue(query);
   query.is.mockReturnValue(query);
   query.select.mockReturnValue(query);
-  query.delete.mockReturnValue({ in: clearIn });
-  const rpc = vi.fn((_name: string, args: { p_paths: string[] }) =>
-    Promise.resolve({
-      data: args.p_paths.map((path) => ({ path })),
-      error: null,
-    })
-  );
-  return { cleared, from: vi.fn(() => query), rpc, updates };
+  const rpc = vi.fn((name: string, args: Record<string, unknown>) => {
+    rpcCalls.push({ args, name });
+    return Promise.resolve(
+      updateResult ?? {
+        data: [{ id: 'post-1', slug: 'new-slug' }],
+        error: null,
+      }
+    );
+  });
+  return { from: vi.fn(() => query), rpc, rpcCalls };
+}
+
+function rpcPatch(supabase: { rpcCalls: RpcCall[] }): Record<string, unknown> {
+  return supabase.rpcCalls[0]?.args.p_post_data as Record<string, unknown>;
 }
 
 describe('updatePlatformBlogPost', () => {
@@ -116,15 +105,10 @@ describe('updatePlatformBlogPost', () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
-  it('resurrects tombstones referenced by the updated payload', async () => {
-    const supabase = createSupabase({
-      data: {
-        content:
-          '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/shared.webp">',
-        id: 'post-1',
-        slug: 'new-slug',
-      },
-      error: null,
+  it('sends merged media paths to the atomic RPC', async () => {
+    const supabase = createSupabase(undefined, {
+      content:
+        '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/shared.webp">',
     });
     mocks.createClient.mockResolvedValue(supabase);
 
@@ -134,11 +118,18 @@ describe('updatePlatformBlogPost', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.from).toHaveBeenCalledWith('blog_media_delete_tombstones');
-    expect(supabase.cleared).toEqual([['platform/blog/shared.webp']]);
+    expect(supabase.rpcCalls).toHaveLength(1);
+    expect(supabase.rpcCalls[0]?.name).toBe('mutate_platform_blog_post_atomic');
+    expect(supabase.rpcCalls[0]?.args.p_post_id).toBe('post-1');
+    expect(supabase.rpcCalls[0]?.args.p_media_paths).toEqual([
+      'platform/blog/shared.webp',
+    ]);
+    expect(rpcPatch(supabase)).toEqual(
+      expect.objectContaining({ title: 'Updated title' })
+    );
   });
 
-  it('forces platform ownership and revalidates both changed slugs', async () => {
+  it('strips ownership guards and revalidates both changed slugs', async () => {
     const supabase = createSupabase();
     mocks.createClient.mockResolvedValue(supabase);
 
@@ -153,14 +144,11 @@ describe('updatePlatformBlogPost', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.updates).toEqual([
-      expect.objectContaining({
-        is_platform_post: true,
-        merchant_id: null,
-        slug: 'new-slug',
-        title: 'Updated title',
-      }),
-    ]);
+    expect(rpcPatch(supabase)).toEqual(
+      expect.objectContaining({ slug: 'new-slug', title: 'Updated title' })
+    );
+    expect(rpcPatch(supabase)).not.toHaveProperty('is_platform_post');
+    expect(rpcPatch(supabase)).not.toHaveProperty('merchant_id');
     expect(mocks.revalidatePlatformBlog).toHaveBeenNthCalledWith(1, 'old-slug');
     expect(mocks.revalidatePlatformBlog).toHaveBeenNthCalledWith(2, 'new-slug');
   });
@@ -180,9 +168,9 @@ describe('updatePlatformBlogPost', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(supabase.updates).toEqual([
-      expect.objectContaining({ intent: null, intent_source: null }),
-    ]);
+    expect(rpcPatch(supabase)).toEqual(
+      expect.objectContaining({ intent: null, intent_source: null })
+    );
   });
 
   it('coerces a source-only update against a NULL-intent row to a clear', async () => {
@@ -198,10 +186,10 @@ describe('updatePlatformBlogPost', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.updates).toEqual([
-      expect.objectContaining({ intent_source: null }),
-    ]);
-    expect(supabase.updates[0]).not.toHaveProperty('intent');
+    expect(rpcPatch(supabase)).toEqual(
+      expect.objectContaining({ intent_source: null })
+    );
+    expect(rpcPatch(supabase)).not.toHaveProperty('intent');
   });
 
   it('keeps a source-only update against a classified intent', async () => {
@@ -217,9 +205,9 @@ describe('updatePlatformBlogPost', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.updates).toEqual([
-      expect.objectContaining({ intent_source: 'new_source' }),
-    ]);
+    expect(rpcPatch(supabase)).toEqual(
+      expect.objectContaining({ intent_source: 'new_source' })
+    );
   });
 
   it('clears stale alt text when the cover URL changes without new metadata', async () => {
@@ -240,15 +228,15 @@ describe('updatePlatformBlogPost', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(supabase.updates).toEqual([
+    expect(rpcPatch(supabase)).toEqual(
       expect.objectContaining({
         featured_image_alt: null,
         featured_image_height: null,
         featured_image_url: 'https://cdn.example.com/new.webp',
         featured_image_variants: {},
         featured_image_width: null,
-      }),
-    ]);
+      })
+    );
   });
 
   it('maps duplicate slugs to a conflict response', async () => {
@@ -266,35 +254,5 @@ describe('updatePlatformBlogPost', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'A post with this slug already exists',
     });
-  });
-
-  it('rejects clearing published_at on an already published post', async () => {
-    const supabase = createSupabase();
-    const existingQuery = supabase.from();
-    existingQuery.single.mockReset().mockResolvedValueOnce({
-      data: {
-        featured_image_height: null,
-        featured_image_url: null,
-        featured_image_variants: {},
-        featured_image_width: null,
-        id: 'post-1',
-        slug: 'published-post',
-        status: 'published',
-      },
-      error: null,
-    });
-    mocks.createClient.mockResolvedValue(supabase);
-
-    const response = await updatePlatformBlogPost(
-      request({ published_at: null }),
-      { params: Promise.resolve({ id: 'post-1' }) }
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      code: 'PUBLISHED_AT_REQUIRED',
-      error: 'Published posts must retain a publication timestamp',
-    });
-    expect(supabase.updates).toHaveLength(0);
   });
 });

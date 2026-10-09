@@ -86,6 +86,29 @@ describe('filterBlogMediaPathsWithoutPersistedReferences escapes', () => {
     });
   });
 
+  it('protects references spelled with HTML entities', async () => {
+    const { client } = fakeClient([
+      {
+        data: [
+          {
+            content:
+              '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">',
+          },
+        ],
+        error: null,
+      },
+    ]);
+    expect(
+      await filterBlogMediaPathsWithoutPersistedReferences(client, [
+        'platform/blog/token.webp',
+        'platform/blog/orphan.webp',
+      ])
+    ).toEqual({
+      deletable: ['platform/blog/orphan.webp'],
+      skipped: ['platform/blog/token.webp'],
+    });
+  });
+
   it('protects references with unicode escapes inside structured URLs', async () => {
     const { client } = fakeClient([
       {

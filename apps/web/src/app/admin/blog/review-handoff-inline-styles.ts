@@ -1,4 +1,5 @@
 import { isZeroAreaClipPath } from './review-handoff-clip-path';
+import { resolveCssVariableReferences } from './review-handoff-css-variables';
 import { parseHandoffDom } from './review-handoff-dom';
 
 const IMPORTANT_SUFFIX_PATTERN = /!\s*important\s*$/i;
@@ -195,15 +196,29 @@ function hidingUtilityForStyle(
   for (const declaration of stripCssComments(style).split(';')) {
     const separator = declaration.indexOf(':');
     if (separator === -1) continue;
-    const name = declaration.slice(0, separator).trim().toLowerCase();
+    const rawName = declaration.slice(0, separator).trim();
+    // Custom property names are case-sensitive (`--State` is not
+    // `--state`); every other property matches ASCII
+    // case-insensitively.
+    const name = rawName.startsWith('--') ? rawName : rawName.toLowerCase();
     const raw = declaration.slice(separator + 1);
     const important = isImportantDeclaration(raw);
     const existing = finals.get(name);
     if (existing?.important && !important) continue;
     finals.set(name, { important, value: normalizeDeclarationValue(raw) });
   }
-  const finalValue = (property: string): string | undefined =>
-    finals.get(property)?.value;
+  const customs = new Map<string, string>();
+  for (const [name, entry] of finals) {
+    if (name.startsWith('--')) customs.set(name, entry.value);
+  }
+  const finalValue = (property: string): string | undefined => {
+    const entry = finals.get(property);
+    if (entry === undefined) return undefined;
+    // Hiding keywords hide behind same-block custom properties
+    // (`--state:none;display:var(--state)`), which the browser
+    // resolves before matching.
+    return resolveCssVariableReferences(entry.value, customs);
+  };
   if (finalValue('display') === 'none') return 'hidden';
   const visibility = finalValue('visibility');
   if (visibility === 'hidden' || visibility === 'collapse') return 'hidden';

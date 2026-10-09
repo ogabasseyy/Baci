@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { clearBlogMediaTombstonesForRow } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
+import type { BlogPostMediaRow } from '@/app/api/admin/blog/upload/blog-media-reference-scan';
+import { blogPostMediaPaths } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -10,7 +11,8 @@ import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { createClient } from '@/lib/supabase/server';
 import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
 import { platformBlogRouteParamsSchema } from '@/schemas/platform-blog-route-params';
-import { verifyPatchedBlogPostMediaOrRestore } from './platform-blog-post-media-verify';
+import type { Json } from '@/types/supabase';
+import { readPlatformPatchError } from './platform-blog-post-patch-error';
 import {
   PLATFORM_BLOG_DETAIL_SELECT,
   type PlatformBlogRouteParams,
@@ -214,63 +216,64 @@ export async function updatePlatformBlogPost(
       );
     }
 
-    const finalUpdateData = {
+    // Scope travels as SQL predicates inside the RPC: the whitelist
+    // rejects guard columns as unknown fields.
+    const patchPayload: Record<string, unknown> = {
       ...updateData,
-      is_platform_post: true,
-      merchant_id: null,
       ...(shouldSetPublishedAt
         ? { published_at: new Date().toISOString() }
         : {}),
     };
 
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .update(finalUpdateData)
-      .eq('id', id)
-      .eq('is_platform_post', true)
-      .is('merchant_id', null)
-      .select(PLATFORM_BLOG_DETAIL_SELECT)
-      .single();
+    // Candidates come from the merged row; the RPC intersects them
+    // against the locked update, so stale ones simply miss.
+    const mergedMediaRow: BlogPostMediaRow = {
+      author_image_url: Object.hasOwn(patchPayload, 'author_image_url')
+        ? (patchPayload.author_image_url as string | null)
+        : existingPost.author_image_url,
+      content: Object.hasOwn(patchPayload, 'content')
+        ? (patchPayload.content as string)
+        : existingPost.content,
+      excerpt: Object.hasOwn(patchPayload, 'excerpt')
+        ? (patchPayload.excerpt as string | null)
+        : existingPost.excerpt,
+      featured_image_url: Object.hasOwn(patchPayload, 'featured_image_url')
+        ? (patchPayload.featured_image_url as string | null)
+        : existingPost.featured_image_url,
+      featured_image_variants: Object.hasOwn(
+        patchPayload,
+        'featured_image_variants'
+      )
+        ? patchPayload.featured_image_variants
+        : existingPost.featured_image_variants,
+    };
 
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'A post with this slug already exists' },
-          { status: 409 }
-        );
-      }
-
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-      }
-
-      console.error('Failed to update platform blog post:', error);
-      return NextResponse.json(
-        { error: 'Failed to update platform blog post' },
-        { status: 500 }
-      );
+    // An empty PATCH is a historical no-op 200.
+    if (Object.keys(patchPayload).length === 0) {
+      revalidatePlatformBlog(existingPost.slug);
+      return NextResponse.json(existingPost);
     }
 
-    // A concurrent tab may have tombstoned an upload this payload
-    // reuses; resurrect its references before the sweep can remove them.
-    const mediaRow = {
-      author_image_url: data.author_image_url,
-      content: data.content,
-      excerpt: data.excerpt,
-      featured_image_url: data.featured_image_url,
-      featured_image_variants: data.featured_image_variants,
-    };
-    await clearBlogMediaTombstonesForRow(supabase, mediaRow);
-    const mediaCheck = await verifyPatchedBlogPostMediaOrRestore(supabase, {
-      existingPost,
-      finalUpdateData,
-      mediaRow,
-      postId: id,
-    });
-    if (!mediaCheck.ok) {
+    const { data, error } = await supabase.rpc(
+      'mutate_platform_blog_post_atomic',
+      {
+        p_media_paths: blogPostMediaPaths(mergedMediaRow),
+        // Zod-validated payloads are JSON-serializable; undefined
+        // keys never survive the wire encoding.
+        p_post_data: patchPayload as unknown as Json,
+        p_post_id: id,
+      }
+    );
+    const row = Array.isArray(data) ? data[0] : data;
+
+    if (error || !row) {
+      const mapped = readPlatformPatchError(error);
+      if (mapped.status === 500) {
+        console.error('Failed to update platform blog post:', error);
+      }
       return NextResponse.json(
-        { error: 'Referenced media was removed during save' },
-        { status: 500 }
+        { error: mapped.error },
+        { status: mapped.status }
       );
     }
 
@@ -279,14 +282,14 @@ export async function updatePlatformBlogPost(
         ? existingPost.slug.trim().toLowerCase()
         : '';
     const nextSlug =
-      typeof data.slug === 'string' ? data.slug.trim().toLowerCase() : '';
+      typeof row.slug === 'string' ? row.slug.trim().toLowerCase() : '';
 
     if (previousSlug && previousSlug !== nextSlug) {
       revalidatePlatformBlog(previousSlug);
     }
 
-    revalidatePlatformBlog(data.slug);
-    return NextResponse.json(data);
+    revalidatePlatformBlog(row.slug);
+    return NextResponse.json(row);
   } catch (error) {
     console.error('Platform blog post PATCH error:', error);
     return NextResponse.json(

@@ -1,0 +1,36 @@
+import { describe, expect, it } from 'vitest';
+import { validateImportedContent } from './review-handoff-content';
+import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
+
+describe('inline styles custom properties', () => {
+  it('resolves the exact var() hiding case at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="--state:none;display:var(--state)">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+  });
+
+  it.each([
+    // Fallbacks apply when the property is missing...
+    '<p style="display:var(--missing,none)">Draft note</p><p>Body</p>',
+    // ...and through chained references.
+    '<p style="--a:var(--b);--b:hidden;visibility:var(--a)">Draft note</p><p>Body</p>',
+    // Nested fallbacks resolve inside out.
+    '<p style="display:var(--a,var(--b,none))">Draft note</p><p>Body</p>',
+  ])('strips var()-hidden content at import: %s', (html) => {
+    expect(validateImportedContent(html)).toBe('<p>Body</p>');
+  });
+
+  it.each([
+    // Cyclic chains are guaranteed-invalid: the declaration stays
+    // visible, exactly like the browser.
+    '<p style="--a:var(--b);--b:var(--a);display:var(--a)">Shown</p>',
+    // Custom names are case-sensitive: --State never feeds var(--state).
+    '<p style="--State:none;display:var(--state)">Shown</p>',
+    // An unresolvable reference with no fallback matches nothing hiding.
+    '<p style="display:var(--missing)">Shown</p>',
+  ])('leaves unresolvable var() references visible: %s', (html) => {
+    expect(convertHiddenInlineStyles(html)).toBe(html);
+  });
+});

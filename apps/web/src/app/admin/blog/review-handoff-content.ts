@@ -15,6 +15,7 @@ import { hasUnopenedPopover } from './review-handoff-popover';
 import { hasReadableContent } from './review-handoff-readability';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
 import { hasUnpreservableStylesheet } from './review-handoff-stylesheet';
+import { stripNonRenderedSvgSubtrees } from './review-handoff-svg-strip';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripTemplateSubtrees } from './review-handoff-template-strip';
 import { hasUnrepresentableVariance } from './review-handoff-variance';
@@ -87,7 +88,9 @@ function normalizeContent(
     // lexical strip must see.
     const converted = convertHiddenInlineStyles(
       convertHiddenAttributes(
-        stripTemplateSubtrees(stripNoscriptSubtrees(rendered))
+        stripTemplateSubtrees(
+          stripNonRenderedSvgSubtrees(stripNoscriptSubtrees(rendered))
+        )
       )
     );
     return { content: sanitizeHtml(converted), rendered };
@@ -163,7 +166,9 @@ export function validateImportedContent(rawContent: string): string {
   // lexical strip must see.
   const unhidden = convertHiddenInlineStyles(
     convertHiddenAttributes(
-      stripTemplateSubtrees(stripNoscriptSubtrees(rawContent))
+      stripTemplateSubtrees(
+        stripNonRenderedSvgSubtrees(stripNoscriptSubtrees(rawContent))
+      )
     )
   );
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {

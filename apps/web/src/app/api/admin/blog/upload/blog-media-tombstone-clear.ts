@@ -1,5 +1,6 @@
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type { createClient } from '@/lib/supabase/server';
+import { decodeHtmlEntities } from './blog-media-html-entity-decode';
 import { unescapeJsonStringEscapes } from './blog-media-json-string-unescape';
 import type { BlogPostMediaRow } from './blog-media-reference-scan';
 import { BLOG_MEDIA_TOMBSTONE_TABLE } from './blog-media-tombstone-constants';
@@ -35,10 +36,10 @@ export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
   const paths = new Set<string>();
   for (const text of texts) {
     if (typeof text !== 'string') continue;
-    // JSON slash escapes unescape before matching: an escaped URL
-    // spells its scheme `https:\/\/`, which the URL pattern would
-    // otherwise never match at all.
-    const unescaped = unescapeJsonStringEscapes(text);
+    // Entities decode before JSON and percent stages: an escaped
+    // URL spells its scheme `https:\/\/` or its path with character
+    // references, which the URL pattern would otherwise never match.
+    const unescaped = unescapeJsonStringEscapes(decodeHtmlEntities(text));
     for (const url of unescaped.match(URL_PATTERN) ?? []) {
       const normalized = trimMarkdownDelimiters(url);
       const path = extractManagedBlogStoragePath(normalized, {

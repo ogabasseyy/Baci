@@ -19445,6 +19445,44 @@ export type Database = {
           title: string;
         }[];
       };
+      mutate_platform_blog_post_atomic: {
+        Args: {
+          p_media_paths: string[];
+          p_post_data: Json;
+          p_post_id: string;
+        };
+        Returns: {
+          author_bio: string | null;
+          author_image_url: string | null;
+          author_name: string;
+          author_title: string | null;
+          category: string | null;
+          content: string;
+          created_at: string | null;
+          excerpt: string | null;
+          featured_image_alt: string | null;
+          featured_image_height: number | null;
+          featured_image_url: string | null;
+          featured_image_variants: Json;
+          featured_image_width: number | null;
+          focus_keyword: string | null;
+          id: string;
+          intent: string | null;
+          intent_source: string | null;
+          keywords: string[] | null;
+          published_at: string | null;
+          reading_time_minutes: number | null;
+          seo_description: string | null;
+          seo_title: string | null;
+          slug: string;
+          status: string | null;
+          tags: string[] | null;
+          title: string;
+          updated_at: string | null;
+          view_count: number | null;
+          word_count: number | null;
+        }[];
+      };
       normalize_inventory_identifier: {
         Args: { p_value: string };
         Returns: string;

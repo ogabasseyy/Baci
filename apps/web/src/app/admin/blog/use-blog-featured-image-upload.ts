@@ -17,6 +17,7 @@ import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 import { dropKeptUploadPaths } from './drop-kept-upload-paths';
 import { retainKeptUploadPaths } from './retain-kept-upload-paths';
 import { unreferencedUploadPaths } from './unreferenced-upload-paths';
+import { uploadResultPaths } from './upload-result-paths';
 import { useBlogMediaTombstoneHeartbeat } from './use-blog-media-tombstone-heartbeat';
 
 type UploadResult = {
@@ -248,13 +249,22 @@ export function useBlogFeaturedImageUpload({
     // retain/discard cycle.
     const tracked = settledUploadsRef.current;
     const stillPending: UploadResult[] = [];
+    const revived: string[] = [];
     for (const result of pendingDeletesRef.current) {
       const kept = retainKeptUploadPaths(result, keepPaths);
-      if (kept !== null) tracked.push(kept);
+      if (kept !== null) {
+        tracked.push(kept);
+        revived.push(...uploadResultPaths(kept));
+      }
       const remainder = dropKeptUploadPaths(result, keepPaths);
       if (remainder !== null) stillPending.push(remainder);
     }
     pendingDeletesRef.current = stillPending;
+    // A revived upload's tombstone may already be due: refresh it
+    // now instead of waiting for the next heartbeat, or the sweep
+    // claims the newly reused image in the gap. Failures stay
+    // silent for the next beat to retry, like the heartbeat itself.
+    if (revived.length > 0) void refreshUpload(revived).catch(() => undefined);
     if (tracked.length === 0) return;
     const retained: UploadResult[] = [];
     for (const result of tracked) {

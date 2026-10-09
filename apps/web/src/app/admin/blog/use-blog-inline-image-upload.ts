@@ -151,12 +151,20 @@ export function useBlogInlineImageUpload({
     // pending entirely.
     const tracked = settledUploadsRef.current;
     const stillPending: string[] = [];
+    const revived: string[] = [];
     for (const url of pendingDeletesRef.current) {
       const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
-      if (path !== null && keepPaths.has(path)) tracked.push(url);
-      else stillPending.push(url);
+      if (path !== null && keepPaths.has(path)) {
+        tracked.push(url);
+        revived.push(path);
+      } else stillPending.push(url);
     }
     pendingDeletesRef.current = stillPending;
+    // A revived upload's tombstone may already be due: refresh it
+    // now instead of waiting for the next heartbeat, or the sweep
+    // claims the newly reused image in the gap. Failures stay
+    // silent for the next beat to retry, like the heartbeat itself.
+    if (revived.length > 0) void refreshUpload(revived).catch(() => undefined);
     if (tracked.length === 0) return;
     const retained: string[] = [];
     for (const url of tracked) {

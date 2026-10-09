@@ -1130,6 +1130,531 @@ BEGIN
 END;
 $unicode_unescape$;
 
+DO $html_entities$
+DECLARE
+  v_decoded TEXT;
+  v_row RECORD;
+  v_saw_live BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- Persisted markup spells URLs with character references, which
+  -- HTML parsing resolves to the live URL. The claim scan must see
+  -- the same characters or the sweep deletes rendered media.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT public.blog_media_decode_html_entities(
+    'tok&#x65;n&#0000060;.webp'
+  ) INTO v_decoded;
+  IF v_decoded <> 'token<.webp' THEN
+    RAISE EXCEPTION 'entity decode failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_decode_html_entities(
+    'a=1&amp;b&#0;c&#xD83D;d&#x110000;e&unknown;f&amp'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'a=1&b&#0;c&#xD83D;d&#x110000;e&unknown;f&amp'
+  THEN
+    RAISE EXCEPTION 'entity preservation failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_percent_decode(
+    '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">'
+  ) INTO v_decoded;
+  IF v_decoded NOT LIKE '%platform/blog/token.webp%' THEN
+    RAISE EXCEPTION 'chained entity decode failed: %', v_decoded;
+  END IF;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'HTML entity test',
+    'sweep-claim-entity-post',
+    '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/token.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/entity-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    IF v_row.tombstone_path = 'platform/blog/token.webp' THEN
+      v_saw_live := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'entities failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/entity-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the entity control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF NOT v_saw_live OR NOT v_saw_orphan THEN
+    RAISE EXCEPTION 'claim omitted the entity fixtures';
+  END IF;
+
+  DELETE FROM public.blog_posts
+   WHERE slug = 'sweep-claim-entity-post';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/token.webp',
+    'platform/blog/entity-orphan.webp'
+  );
+END;
+$html_entities$;
+
+DO $update_confinement$
+DECLARE
+  v_created_grant BOOLEAN;
+  v_claimed_grant BOOLEAN;
+  v_row_count INTEGER;
+  v_message TEXT;
+  v_saw_denial BOOLEAN := FALSE;
+  v_saw_backdate_block BOOLEAN := FALSE;
+BEGIN
+  -- Direct-PostgREST regression: the heartbeat's created_at write
+  -- succeeds while claimed/path rewrites die on the column grant,
+  -- and lease backdates die on the monotonic trigger. RLS is held
+  -- open by a rolled-back permissive policy so the test isolates
+  -- grants and the trigger; the content.manage policy detail is
+  -- orthogonal and covered by the refresh-route tests. Policy DDL
+  -- runs as the session owner; the probes switch roles.
+  RESET ROLE;
+  -- UPDATE row selection reads through SELECT policies, so both
+  -- sides open; the probes isolate grants and the trigger only.
+  CREATE POLICY blog_media_grant_probe_open_update
+    ON public.blog_media_delete_tombstones
+    FOR UPDATE TO authenticated
+    USING (TRUE)
+    WITH CHECK (TRUE);
+  CREATE POLICY blog_media_grant_probe_open_select
+    ON public.blog_media_delete_tombstones
+    FOR SELECT TO authenticated
+    USING (TRUE);
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT
+    pg_catalog.has_column_privilege(
+      'authenticated', 'public.blog_media_delete_tombstones',
+      'created_at', 'UPDATE'
+    ),
+    pg_catalog.has_column_privilege(
+      'authenticated', 'public.blog_media_delete_tombstones',
+      'claimed', 'UPDATE'
+    )
+  INTO v_created_grant, v_claimed_grant;
+  IF NOT v_created_grant THEN
+    RAISE EXCEPTION 'heartbeat lost its created_at grant';
+  END IF;
+  IF v_claimed_grant THEN
+    RAISE EXCEPTION 'claimed stayed writable through PostgREST';
+  END IF;
+
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/grant-probe.webp', now(), FALSE);
+
+  SET LOCAL ROLE authenticated;
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = now() + interval '1 minute'
+   WHERE path = 'platform/blog/grant-probe.webp';
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  IF v_row_count <> 1 THEN
+    RAISE EXCEPTION 'heartbeat probe matched % rows', v_row_count;
+  END IF;
+
+  BEGIN
+    UPDATE public.blog_media_delete_tombstones
+       SET claimed = TRUE
+     WHERE path = 'platform/blog/grant-probe.webp';
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_saw_denial := TRUE;
+  END;
+  IF NOT v_saw_denial THEN
+    RAISE EXCEPTION 'claimed rewrite was not denied';
+  END IF;
+
+  BEGIN
+    UPDATE public.blog_media_delete_tombstones
+       SET created_at = now() - interval '2 hours'
+     WHERE path = 'platform/blog/grant-probe.webp';
+  EXCEPTION WHEN insufficient_privilege THEN
+    -- The trigger raises with the privilege-violation code; the
+    -- message proves the trigger fired rather than the grant.
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_backdate_block := (v_message = 'blog_media_lease_backdate_blocked');
+  END;
+  IF NOT v_saw_backdate_block THEN
+    RAISE EXCEPTION 'lease backdate was not blocked';
+  END IF;
+
+  -- Worker-shaped writes (non-authenticated role) skip the trigger.
+  RESET ROLE;
+  SET LOCAL ROLE service_role;
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = now() - interval '2 hours'
+   WHERE path = 'platform/blog/grant-probe.webp';
+
+  RESET ROLE;
+  DROP POLICY blog_media_grant_probe_open_update
+    ON public.blog_media_delete_tombstones;
+  DROP POLICY blog_media_grant_probe_open_select
+    ON public.blog_media_delete_tombstones;
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/grant-probe.webp';
+END;
+$update_confinement$;
+
+DO $worker_scope$
+DECLARE
+  v_message TEXT;
+  v_denied BOOLEAN;
+BEGIN
+  -- The pre-request hook confines the sweep worker to its two RPC
+  -- paths: every other endpoint denies even with a leaked token.
+  -- (Reload convergence is the probe script's job; this locks the
+  -- hook logic, including the preserved GIGL branch.)
+  RESET ROLE;
+
+  -- Allowed worker calls pass silently.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'blog_media_sweep_worker', true);
+  PERFORM pg_catalog.set_config('request.method', 'POST', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/blog_media_sweep_worker_claim', true);
+  PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  PERFORM pg_catalog.set_config('request.path', '/rpc/blog_media_sweep_worker_release', true);
+  PERFORM public.enforce_gigl_tracking_worker_request_scope();
+
+  -- Any other worker path denies, as does a non-POST method.
+  PERFORM pg_catalog.set_config('request.path', '/rpc/blog_media_sweep_worker_can_delete', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_denied := (v_message = 'Blog media worker request is outside its capability scope');
+  END;
+  IF NOT v_denied THEN
+    RAISE EXCEPTION 'worker scope guard admitted a third RPC';
+  END IF;
+  PERFORM pg_catalog.set_config('request.method', 'GET', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/blog_media_sweep_worker_claim', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_denied := TRUE;
+  END;
+  IF NOT v_denied THEN
+    RAISE EXCEPTION 'worker scope guard admitted GET';
+  END IF;
+
+  -- The reload canary shadows for anonymous callers.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
+  PERFORM pg_catalog.set_config('request.method', 'POST', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/__blog_media_hook_reload_canary__', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_denied := (v_message = 'BLOG MEDIA hook reload canary observed');
+  END;
+  IF NOT v_denied THEN
+    RAISE EXCEPTION 'blog canary did not shadow';
+  END IF;
+
+  -- Ordinary roles pass through untouched.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/anything', true);
+  PERFORM public.enforce_gigl_tracking_worker_request_scope();
+
+  -- The GIGL branch is preserved verbatim.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'gigl_tracking_worker', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/gigl_worker_claim_due_tracking_monitors', true);
+  PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  PERFORM pg_catalog.set_config('request.path', '/rpc/blog_media_sweep_worker_claim', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_denied := (v_message = 'GIGL worker request is outside its capability scope');
+  END;
+  IF NOT v_denied THEN
+    RAISE EXCEPTION 'GIGL branch was not preserved';
+  END IF;
+END;
+$worker_scope$;
+
+DO $claim_prefilter_scale$
+DECLARE
+  v_row RECORD;
+  v_count INTEGER := 0;
+  v_saw_plain BOOLEAN := FALSE;
+  v_saw_encoded BOOLEAN := FALSE;
+  v_saw_entity BOOLEAN := FALSE;
+  v_saw_json BOOLEAN := FALSE;
+  v_saw_prefix_short BOOLEAN := FALSE;
+  v_saw_prefix_long BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- A full 500-path batch must protect references spelled every
+  -- supported way while claiming the rest: the prefilter skips
+  -- non-matching posts without changing exact-match semantics.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  -- Earlier blocks share file-level tombstone fixtures; this block
+  -- asserts an exact 500-row batch, so it starts from its fixtures
+  -- alone. Everything rolls back with the file either way.
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path NOT LIKE 'platform/blog/scale-%'
+     AND path NOT IN ('platform/blog/pfix', 'platform/blog/pfix.webp');
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'Prefilter scale test',
+    'sweep-claim-prefilter-post',
+    '<img src="https://cdn.example.com/media/platform/blog/scale-plain.webp">'
+    '<img src="https://cdn.example.com/media/platform/blog/scale-%65ncoded.webp">'
+    '<img src="https://cdn.example.com/media/platform/blog/scale-&#x65;ntity.webp">'
+    '{"src":"https:\/\/cdn.example.com\/media\/platform\/blog\/scale-\u006ason.webp"}'
+    '<img src="https://cdn.example.com/media/platform/blog/pfix.webp">',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  SELECT 'platform/blog/scale-filler-' || seq || '.webp',
+    now() - interval '2 hours', FALSE
+    FROM pg_catalog.generate_series(1, 493) AS seq;
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/scale-plain.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/scale-encoded.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/scale-entity.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/scale-json.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/pfix', now() - interval '2 hours', FALSE),
+    ('platform/blog/pfix.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/scale-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    v_count := v_count + 1;
+    IF v_row.tombstone_path = 'platform/blog/scale-plain.webp' THEN
+      v_saw_plain := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter dropped a plain reference';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/scale-encoded.webp' THEN
+      v_saw_encoded := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter dropped an encoded reference';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/scale-entity.webp' THEN
+      v_saw_entity := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter dropped an entity reference';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/scale-json.webp' THEN
+      v_saw_json := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter dropped a JSON reference';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/pfix' THEN
+      v_saw_prefix_short := TRUE;
+      -- Substring semantics preserved: the shorter path's text
+      -- appears inside the longer URL, so both stay protected.
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter changed prefix semantics';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/pfix.webp' THEN
+      v_saw_prefix_long := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'prefilter dropped the longer prefix path';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/scale-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the scale control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF v_count <> 500 THEN
+    RAISE EXCEPTION 'claim returned % of 500 tombstones', v_count;
+  END IF;
+  IF NOT v_saw_plain OR NOT v_saw_encoded OR NOT v_saw_entity
+    OR NOT v_saw_json OR NOT v_saw_prefix_short OR NOT v_saw_prefix_long
+    OR NOT v_saw_orphan
+  THEN
+    RAISE EXCEPTION 'claim omitted scale fixtures';
+  END IF;
+
+  DELETE FROM public.blog_posts
+   WHERE slug = 'sweep-claim-prefilter-post';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path LIKE 'platform/blog/scale-%'
+      OR path IN ('platform/blog/pfix', 'platform/blog/pfix.webp');
+END;
+$claim_prefilter_scale$;
+
+DO $platform_patch_atomic$
+DECLARE
+  v_post_id UUID;
+  v_row RECORD;
+  v_message TEXT;
+  v_saw_not_found BOOLEAN := FALSE;
+  v_saw_unknown BOOLEAN := FALSE;
+  v_saw_swept BOOLEAN := FALSE;
+BEGIN
+  -- A failed platform PATCH persists nothing: the row update and
+  -- its media verification share one transaction, so title, slug,
+  -- status, and published_at roll back with the media failure
+  -- instead of committing under a 500. Runs as the table owner so
+  -- RLS (unchanged INVOKER semantics) stays out of the way; the
+  -- route tests cover the permission path through PostgREST.
+  RESET ROLE;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, status, is_platform_post, merchant_id,
+    published_at, author_name
+  )
+  VALUES (
+    'Atomic draft', 'atomic-draft',
+    '<img src="https://cdn.example.com/media/platform/blog/atomic-live.webp">',
+    'draft', TRUE, NULL, NULL, 'Atomic Author'
+  )
+  RETURNING id INTO v_post_id;
+  INSERT INTO storage.objects (bucket_id, name, owner, version, metadata)
+  VALUES ('media', 'platform/blog/atomic-live.webp', NULL, '1', '{}');
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/atomic-live.webp', now() - interval '2 hours', FALSE);
+
+  -- Success clears the tombstone and returns the merged row.
+  SELECT * INTO v_row
+    FROM public.mutate_platform_blog_post_atomic(
+      v_post_id,
+      '{"title": "Atomic updated", "status": "published",'
+      ' "published_at": "2026-10-09T10:00:00+00:00",'
+      ' "word_count": 42, "tags": ["a", "b"]}',
+      ARRAY['platform/blog/atomic-live.webp']
+    );
+  IF v_row.title <> 'Atomic updated' OR v_row.status <> 'published'
+    OR v_row.word_count <> 42 OR v_row.tags <> ARRAY['a', 'b']
+    OR v_row.slug <> 'atomic-draft'
+  THEN
+    RAISE EXCEPTION 'atomic update returned the wrong row';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/atomic-live.webp'
+  ) THEN
+    RAISE EXCEPTION 'atomic update left the tombstone behind';
+  END IF;
+
+  -- A swept reference rolls the whole PATCH back: every column,
+  -- including non-media ones, keeps its pre-save value.
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/atomic-doomed.webp', now() - interval '2 hours', TRUE);
+  BEGIN
+    PERFORM public.mutate_platform_blog_post_atomic(
+      v_post_id,
+      '{"title": "Doomed title", "slug": "doomed-slug",'
+      ' "status": "published", "content": "<img src='''
+      'https://cdn.example.com/media/platform/blog/atomic-doomed.webp''>"}',
+      ARRAY['platform/blog/atomic-doomed.webp']
+    );
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_swept := (v_message LIKE 'platform_blog_media_swept_during_save%');
+  END;
+  IF NOT v_saw_swept THEN
+    RAISE EXCEPTION 'swept media did not fail the PATCH';
+  END IF;
+  SELECT title, slug, status, content INTO v_row
+    FROM public.blog_posts WHERE id = v_post_id;
+  IF v_row.title <> 'Atomic updated' OR v_row.slug <> 'atomic-draft'
+    OR v_row.status <> 'published' OR v_row.content LIKE '%Doomed%'
+  THEN
+    RAISE EXCEPTION 'failed PATCH persisted a partial row: %', v_row.title;
+  END IF;
+
+  -- Stale candidate paths (absent from the final row) neither
+  -- resurrect tombstones nor fail the save.
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/atomic-stale.webp', now() - interval '2 hours', FALSE);
+  PERFORM public.mutate_platform_blog_post_atomic(
+    v_post_id,
+    '{"title": "Atomic final"}',
+    ARRAY['platform/blog/atomic-stale.webp', 'platform/blog/atomic-live.webp']
+  );
+  IF NOT EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/atomic-stale.webp'
+  ) THEN
+    RAISE EXCEPTION 'stale candidate resurrected a tombstone';
+  END IF;
+
+  -- Unknown fields fail closed instead of reaching the UPDATE.
+  BEGIN
+    PERFORM public.mutate_platform_blog_post_atomic(
+      v_post_id, '{"embedded_products": [1]}',
+      ARRAY[]::TEXT[]
+    );
+  EXCEPTION WHEN invalid_parameter_value THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_unknown := (v_message LIKE 'platform_blog_post_unknown_field%');
+  END;
+  IF NOT v_saw_unknown THEN
+    RAISE EXCEPTION 'unknown field was not rejected';
+  END IF;
+
+  -- Missing rows are not found (merchant-owned rows fail the same
+  -- scope predicate).
+  BEGIN
+    PERFORM public.mutate_platform_blog_post_atomic(
+      '00000000-0000-0000-0000-000000000000', '{"title": "x"}',
+      ARRAY[]::TEXT[]
+    );
+  EXCEPTION WHEN no_data_found THEN
+    v_saw_not_found := TRUE;
+  END;
+  IF NOT v_saw_not_found THEN
+    RAISE EXCEPTION 'missing post was not rejected';
+  END IF;
+
+  DELETE FROM storage.objects
+   WHERE bucket_id = 'media' AND name = 'platform/blog/atomic-live.webp';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/atomic-live.webp', 'platform/blog/atomic-doomed.webp',
+    'platform/blog/atomic-stale.webp'
+  );
+  DELETE FROM public.blog_posts WHERE id = v_post_id;
+END;
+$platform_patch_atomic$;
+
 RESET ROLE;
 
 ROLLBACK;

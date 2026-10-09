@@ -115,6 +115,18 @@ describe('clearBlogMediaTombstonesForRow', () => {
     expect(remove).toHaveBeenCalledWith('path', ['platform/blog/token.webp']);
   });
 
+  it('clears paths spelled with HTML entities', async () => {
+    // HTML parsing resolves the reference to the live URL; the save
+    // handshake must register the same path or the sweep deletes
+    // rendered media.
+    const { client, remove } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, {
+      content:
+        '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">',
+    });
+    expect(remove).toHaveBeenCalledWith('path', ['platform/blog/token.webp']);
+  });
+
   it('never fails the committed save', async () => {
     const failed = fakeClient({ error: { message: 'down' } });
     await expect(

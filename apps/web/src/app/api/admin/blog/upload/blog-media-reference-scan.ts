@@ -1,4 +1,5 @@
 import type { createClient } from '@/lib/supabase/server';
+import { decodeHtmlEntities } from './blog-media-html-entity-decode';
 import { unescapeJsonStringEscapes } from './blog-media-json-string-unescape';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -28,12 +29,13 @@ function decodeEscapeRuns(field: string): string {
 function decodeStoredMediaText(field: string): string {
   // Stored URLs may percent-encode path segments (%74oken) while the
   // candidate paths arrive decoded: compare against the decoded text
-  // so an encoded reference still protects its object. JSON slash
-  // escapes unescape first, since structured editor content
-  // serializes them and the storefront renders through them. Decode
-  // to a bounded fixpoint for multiply-encoded URLs; malformed
-  // escapes keep their own run raw instead of throwing the scan out.
-  let current = unescapeJsonStringEscapes(field);
+  // so an encoded reference still protects its object. HTML entities
+  // decode first, then JSON string escapes, since persisted markup
+  // and structured editor content serialize them and the storefront
+  // renders through both. Decode to a bounded fixpoint for
+  // multiply-encoded URLs; malformed escapes keep their own run raw
+  // instead of throwing the scan out.
+  let current = unescapeJsonStringEscapes(decodeHtmlEntities(field));
   for (let depth = 0; depth < 3; depth += 1) {
     if (!current.includes('%')) return current;
     const decoded = decodeEscapeRuns(current);

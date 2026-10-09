@@ -37,6 +37,17 @@ describe('stripNoscriptSubtrees', () => {
     ).toBe('<p>Visible body</p>');
   });
 
+  it('ignores noscript openers inside raw-text elements', () => {
+    // The parser treats the opener as script text; the sanitizer
+    // then discards the script while retaining the paragraph. A raw
+    // lexical walk would see an unclosed noscript and drop the body.
+    expect(
+      validateImportedContent(
+        '<script>const sample="<noscript>"</script><p>Visible body</p>'
+      )
+    ).toBe('<p>Visible body</p>');
+  });
+
   it('strips noscript before the DOM-based template strip parses', () => {
     // Parsing promotes noscript children to markup, so the lexical
     // noscript strip must run on unparsed input first; otherwise the

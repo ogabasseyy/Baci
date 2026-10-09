@@ -11,7 +11,19 @@ BEGIN
 END;
 $$;
 
--- The storefront enroll route serves guests and authed customers alike.
+-- Simulate an authenticated storefront caller for auth.uid().
+CREATE FUNCTION pg_temp.as_user(p_user uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claim.sub', p_user::text, true);
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role', 'authenticated', 'sub', p_user::text)::text, true);
+END;
+$$;
+
+-- Only sessions may execute: no PUBLIC grant, no anon EXECUTE, and both
+-- authenticated and service_role can execute.
 SELECT pg_temp.assert_true(
   NOT EXISTS (
     SELECT 1
@@ -21,7 +33,7 @@ SELECT pg_temp.assert_true(
       AND acl_entry.grantee = 0
       AND acl_entry.privilege_type = 'EXECUTE'
   )
-  AND has_function_privilege('anon',
+  AND NOT has_function_privilege('anon',
     'public.enroll_customer_loyalty(uuid,uuid,text)', 'EXECUTE')
   AND has_function_privilege('authenticated',
     'public.enroll_customer_loyalty(uuid,uuid,text)', 'EXECUTE')
@@ -39,11 +51,13 @@ VALUES (
   'loyalty-enroll-merchant'
 );
 
-INSERT INTO public.customers (id, merchant_id, email)
+INSERT INTO public.customers (id, merchant_id, email, user_id)
 VALUES
-  ('01aa0000-0000-4000-8000-000000000011', '01aa0000-0000-4000-8000-000000000001', 'enroll-a@example.com'),
-  ('01aa0000-0000-4000-8000-000000000012', '01aa0000-0000-4000-8000-000000000001', 'enroll-b@example.com'),
-  ('01aa0000-0000-4000-8000-000000000013', '01aa0000-0000-4000-8000-000000000001', 'enroll-c@example.com');
+  ('01aa0000-0000-4000-8000-000000000011', '01aa0000-0000-4000-8000-000000000001', 'enroll-a@example.com', '01aa0000-0000-4000-8000-000000000101'),
+  ('01aa0000-0000-4000-8000-000000000012', '01aa0000-0000-4000-8000-000000000001', 'enroll-b@example.com', '01aa0000-0000-4000-8000-000000000102'),
+  ('01aa0000-0000-4000-8000-000000000013', '01aa0000-0000-4000-8000-000000000001', 'enroll-c@example.com', '01aa0000-0000-4000-8000-000000000103'),
+  ('01aa0000-0000-4000-8000-000000000014', '01aa0000-0000-4000-8000-000000000001', 'enroll-d@example.com', '01aa0000-0000-4000-8000-000000000104'),
+  ('01aa0000-0000-4000-8000-000000000015', '01aa0000-0000-4000-8000-000000000001', 'enroll-e@example.com', '01aa0000-0000-4000-8000-000000000105');
 
 INSERT INTO public.loyalty_settings (
   merchant_id, enabled, signup_bonus_points, referral_bonus_points
@@ -55,6 +69,8 @@ INSERT INTO public.loyalty_settings (
 UPDATE public.loyalty_settings
 SET enabled = false
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'program_unavailable'
@@ -81,8 +97,30 @@ SELECT pg_temp.assert_true(
   'unknown customer did not fail closed'
 );
 
--- 3. Plain enrollment (as anon, the guest storefront path).
-SET LOCAL ROLE anon;
+-- 3. Cross-customer enrollment is forbidden.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'forbidden'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011',
+     NULL
+   ) AS result),
+  'cross-customer enrollment was not forbidden'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT count(*) = 0
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000011'),
+  'forbidden enrollment left a partial mutation'
+);
+
+-- 4. Plain enrollment as the owning customer.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'points_balance')::integer = 50
@@ -97,7 +135,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'plain enrollment returned the wrong payload'
 );
-RESET ROLE;
 
 SELECT pg_temp.assert_true(
   (SELECT points_balance = 50
@@ -123,7 +160,7 @@ SELECT pg_temp.assert_true(
   'plain enrollment wrote the wrong points_transactions row'
 );
 
--- 4. Double enrollment is rejected without side effects.
+-- 5. Double enrollment is rejected without side effects.
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'already_enrolled'
    FROM public.enroll_customer_loyalty(
@@ -146,7 +183,9 @@ SELECT pg_temp.assert_true(
   'rejected double enrollment left a partial mutation'
 );
 
--- 5. Referral enrollment awards the bonus to BOTH sides ("you both get X").
+-- 6. Referral enrollment awards the bonus to BOTH sides ("you both get X").
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'points_balance')::integer = 150
@@ -187,6 +226,7 @@ SELECT pg_temp.assert_true(
   (SELECT points_balance = 150
      AND lifetime_points = 150
      AND referral_count = 1
+     AND current_tier = 'Bronze'
    FROM public.customer_loyalty
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000011'),
@@ -205,7 +245,9 @@ SELECT pg_temp.assert_true(
   'referrer referral ledger row is wrong'
 );
 
--- 6. Unknown referral code never blocks enrollment.
+-- 7. Unknown referral code never blocks enrollment.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000103');
+
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'points_balance')::integer = 50
@@ -218,13 +260,12 @@ SELECT pg_temp.assert_true(
   'unknown referral code blocked enrollment'
 );
 
--- 7. Negative bonus config clamps to zero (never negative balances).
-INSERT INTO public.customers (id, merchant_id, email)
-VALUES ('01aa0000-0000-4000-8000-000000000014', '01aa0000-0000-4000-8000-000000000001', 'enroll-d@example.com');
-
+-- 8. Negative bonus config clamps to zero (never negative balances).
 UPDATE public.loyalty_settings
 SET signup_bonus_points = -50, referral_bonus_points = -100
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000104');
 
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
@@ -247,6 +288,35 @@ SELECT pg_temp.assert_true(
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000014'),
   'negative bonus config wrote negative balances or ledger rows'
+);
+
+-- 9. A signup bonus crossing a tier threshold enrolls above Bronze.
+UPDATE public.loyalty_settings
+SET signup_bonus_points = 1500, referral_bonus_points = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'points_balance')::integer = 1500
+     AND result ->> 'current_tier' = 'Silver'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015',
+     NULL
+   ) AS result),
+  'tier-crossing enrollment returned the wrong tier'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT current_tier = 'Silver'
+     AND points_balance = 1500
+     AND lifetime_points = 1500
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000015'),
+  'tier-crossing enrollment wrote the wrong tier'
 );
 
 ROLLBACK;

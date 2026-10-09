@@ -1,16 +1,31 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockRpc, mockSupabase } = vi.hoisted(() => {
-  const mockRpc = vi.fn();
+const { mockRpc, mockGetUser, mockMaybeSingle, mockSupabase } = vi.hoisted(
+  () => {
+    const mockRpc = vi.fn();
+    const mockGetUser = vi.fn();
+    const mockMaybeSingle = vi.fn();
+    const chain = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: mockMaybeSingle,
+    };
+    chain.select.mockReturnValue(chain);
+    chain.eq.mockReturnValue(chain);
 
-  return {
-    mockRpc,
-    mockSupabase: {
-      rpc: mockRpc,
-    },
-  };
-});
+    return {
+      mockRpc,
+      mockGetUser,
+      mockMaybeSingle,
+      mockSupabase: {
+        auth: { getUser: mockGetUser },
+        from: vi.fn(() => chain),
+        rpc: mockRpc,
+      },
+    };
+  }
+);
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(() => ({})),
@@ -30,6 +45,7 @@ import { POST } from './route';
 
 const MERCHANT_ID = '01aa0000-0000-4000-8000-000000000001';
 const CUSTOMER_ID = '01aa0000-0000-4000-8000-000000000011';
+const USER_ID = '01aa0000-0000-4000-8000-000000000101';
 
 function createRequest(body: unknown) {
   return new NextRequest('https://usebaci.com/api/storefront/loyalty/enroll', {
@@ -50,9 +66,18 @@ function createSuccessResult() {
   };
 }
 
+function mockOwnedCustomer() {
+  mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+  mockMaybeSingle.mockResolvedValue({
+    data: { id: CUSTOMER_ID },
+    error: null,
+  });
+}
+
 describe('POST /api/storefront/loyalty/enroll', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOwnedCustomer();
   });
 
   it('enrolls via a single enroll_customer_loyalty RPC call', async () => {
@@ -97,6 +122,32 @@ describe('POST /api/storefront/loyalty/enroll', () => {
       p_customer_id: CUSTOMER_ID,
       p_referral_code: 'ref2024',
     });
+  });
+
+  it('returns 401 without a session', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ error: 'Authentication required' });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the customer belongs to another user', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({ error: 'Customer not found for this merchant' });
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 when merchant_id or customer_id is missing', async () => {
@@ -160,6 +211,23 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
   });
 
+  it('returns 403 when enrollment is forbidden', async () => {
+    mockRpc.mockResolvedValue({
+      data: { success: false, error: 'forbidden' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({
+      error: 'You can only enroll your own customer account',
+    });
+  });
+
   it('returns 409 when the customer is already enrolled', async () => {
     mockRpc.mockResolvedValue({
       data: { success: false, error: 'already_enrolled' },
@@ -174,6 +242,23 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(response.status).toBe(409);
     expect(body).toEqual({
       error: 'Customer is already enrolled in the loyalty program',
+    });
+  });
+
+  it('returns 503 when referral codes collide', async () => {
+    mockRpc.mockResolvedValue({
+      data: { success: false, error: 'referral_code_collision' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: 'Enrollment is temporarily unavailable, please try again',
     });
   });
 

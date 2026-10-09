@@ -17655,7 +17655,7 @@ export type Database = {
         Args: {
           p_customer_id: string;
           p_merchant_id: string;
-          p_referral_code?: string;
+          p_referral_code?: string | null;
         };
         Returns: Json;
       };

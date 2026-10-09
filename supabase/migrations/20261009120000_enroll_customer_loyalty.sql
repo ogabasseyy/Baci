@@ -14,6 +14,15 @@
 --
 -- Product decision (issue #3165, option a): the single referral_bonus_points
 -- value is awarded to BOTH the referrer and the referee ("you both get X").
+--
+-- Authorization: the caller must own the customer row (customers.user_id =
+-- auth.uid()). Anonymous execution is revoked; the storefront route also
+-- binds the session to the customer before calling.
+
+-- Referral codes are matched case-insensitively, so uniqueness must be
+-- case-insensitive too. The mint loop retries on this constraint.
+CREATE UNIQUE INDEX IF NOT EXISTS customer_loyalty_merchant_referral_code_key
+  ON public.customer_loyalty (merchant_id, upper(referral_code));
 
 CREATE OR REPLACE FUNCTION public.enroll_customer_loyalty(
   p_merchant_id uuid,
@@ -30,9 +39,11 @@ DECLARE
   v_referrer_customer_id uuid := NULL;
   v_referrer_balance integer := 0;
   v_initial_points integer := 0;
+  v_initial_tier text := 'Bronze';
   v_loyalty_id uuid;
   v_referral_code text;
   v_attempt integer := 0;
+  v_constraint text;
 BEGIN
   IF p_merchant_id IS NULL OR p_customer_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
@@ -60,6 +71,18 @@ BEGIN
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
+  END IF;
+
+  -- The caller must own the customer row. auth.uid() is NULL for callers
+  -- without a JWT, which never matches, so this fail-closes.
+  PERFORM 1
+  FROM public.customers
+  WHERE id = p_customer_id
+    AND merchant_id = p_merchant_id
+    AND user_id = auth.uid();
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'forbidden');
   END IF;
 
   -- Reject double enrollment (also enforced by the UNIQUE insert below).
@@ -94,8 +117,11 @@ BEGIN
   ELSE
     v_initial_points := v_signup_bonus;
   END IF;
+  v_initial_tier := public.calculate_loyalty_tier(v_initial_points, p_merchant_id);
 
-  -- Mint a referral code for the new member (bounded uniqueness probe).
+  -- Mint a referral code for the new member. The probe avoids the exception
+  -- path in the common case; the insert retries on the unique index when
+  -- concurrent mints collide. Every iteration consumes one of 5 attempts.
   LOOP
     v_attempt := v_attempt + 1;
     v_referral_code := pg_catalog.upper(
@@ -105,30 +131,35 @@ BEGIN
         8
       )
     );
-    EXIT WHEN NOT EXISTS (
+    IF NOT EXISTS (
       SELECT 1
       FROM public.customer_loyalty
       WHERE merchant_id = p_merchant_id
-        AND referral_code = v_referral_code
-    );
+        AND pg_catalog.upper(referral_code) = v_referral_code
+    ) THEN
+      BEGIN
+        INSERT INTO public.customer_loyalty (
+          merchant_id, customer_id, points_balance, lifetime_points,
+          current_tier, referral_code, referred_by_customer_id
+        ) VALUES (
+          p_merchant_id, p_customer_id, v_initial_points, v_initial_points,
+          v_initial_tier, v_referral_code, v_referrer_customer_id
+        )
+        RETURNING id INTO v_loyalty_id;
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS v_constraint = CONSTRAINT_NAME;
+        IF v_constraint = 'customer_loyalty_customer_id_merchant_id_key' THEN
+          -- Lost a concurrent-enrollment race on UNIQUE (customer_id, merchant_id).
+          RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
+        END IF;
+        -- Referral-code conflict: fall through to mint again below.
+      END;
+    END IF;
     IF v_attempt >= 5 THEN
       RETURN jsonb_build_object('success', false, 'error', 'referral_code_collision');
     END IF;
   END LOOP;
-
-  BEGIN
-    INSERT INTO public.customer_loyalty (
-      merchant_id, customer_id, points_balance, lifetime_points,
-      current_tier, referral_code, referred_by_customer_id
-    ) VALUES (
-      p_merchant_id, p_customer_id, v_initial_points, v_initial_points,
-      'Bronze', v_referral_code, v_referrer_customer_id
-    )
-    RETURNING id INTO v_loyalty_id;
-  EXCEPTION WHEN unique_violation THEN
-    -- Lost a concurrent-enrollment race on UNIQUE (customer_id, merchant_id).
-    RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
-  END;
 
   -- Signup bonus ledger row.
   IF v_signup_bonus > 0 THEN
@@ -158,6 +189,16 @@ BEGIN
     SET
       points_balance = points_balance + v_referral_bonus,
       lifetime_points = lifetime_points + v_referral_bonus,
+      current_tier = public.calculate_loyalty_tier(
+        lifetime_points + v_referral_bonus, p_merchant_id
+      ),
+      tier_updated_at = CASE
+        WHEN public.calculate_loyalty_tier(
+          lifetime_points + v_referral_bonus, p_merchant_id
+        ) IS DISTINCT FROM current_tier
+        THEN pg_catalog.now()
+        ELSE tier_updated_at
+      END,
       referral_count = COALESCE(referral_count, 0) + 1,
       updated_at = pg_catalog.now()
     WHERE merchant_id = p_merchant_id
@@ -179,16 +220,17 @@ BEGIN
     'success', true,
     'points_balance', v_initial_points,
     'lifetime_points', v_initial_points,
-    'current_tier', 'Bronze',
+    'current_tier', v_initial_tier,
     'referral_code', v_referral_code,
     'referral_bonus_applied', v_referrer_customer_id IS NOT NULL AND v_referral_bonus > 0
   );
 END;
 $$;
 
--- Storefront customers (including guests, who hold no session) enroll through
--- the public route, so grant like the other customer-facing storefront RPCs.
--- The function fail-closes on program/customer/merchant checks above.
+-- Authenticated storefront customers enroll through the route, which binds
+-- the session to the customer; the function re-verifies ownership above.
+-- Anonymous execution stays revoked so the RPC is never directly invocable
+-- without a session.
 REVOKE ALL ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text)
-  TO anon, authenticated, service_role;
+  TO authenticated, service_role;

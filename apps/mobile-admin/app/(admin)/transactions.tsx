@@ -87,9 +87,11 @@ export default function TransactionsScreen() {
       : '--';
 
   const tabFilteredOrders = filterOrdersForTransactionTab(orders, activeTab);
+  // While the debounced query lags behind typing, hold the browse list
+  // instead of flashing a no-match state from the 40-row window.
   const visibleOrders = filterTransactionOrders(
     tabFilteredOrders,
-    searching ? debouncedSearchQuery : searchQuery
+    searching ? debouncedSearchQuery : ''
   );
   const unmatchedItemCount = visibleOrders.reduce(
     (count, order) =>

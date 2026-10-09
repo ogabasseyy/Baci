@@ -466,10 +466,17 @@ describe('TransactionsScreen', () => {
 
   it('shows a placeholder missing-costs count while the range summary is pending', () => {
     mocks.useTransactionReview.mockImplementation(
-      (_range: unknown, options?: { enabled?: boolean; search?: string }) => {
-        // The summary query passes { enabled } while the list query passes
-        // { search }.
-        if (options && 'enabled' in options) {
+      (
+        _range: unknown,
+        options?: {
+          enabled?: boolean;
+          fetchAllRange?: boolean;
+          search?: string;
+        }
+      ) => {
+        // The summary query passes { fetchAllRange } while the list query
+        // passes { search }.
+        if (options && 'fetchAllRange' in options) {
           return {
             data: undefined,
             error: null,
@@ -495,8 +502,15 @@ describe('TransactionsScreen', () => {
 
   it('shows an unavailable missing-costs count when the range summary fails', () => {
     mocks.useTransactionReview.mockImplementation(
-      (_range: unknown, options?: { enabled?: boolean; search?: string }) => {
-        if (options && 'enabled' in options) {
+      (
+        _range: unknown,
+        options?: {
+          enabled?: boolean;
+          fetchAllRange?: boolean;
+          search?: string;
+        }
+      ) => {
+        if (options && 'fetchAllRange' in options) {
           return {
             data: [],
             error: new Error('range boom'),
@@ -1168,16 +1182,20 @@ describe('TransactionsScreen', () => {
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
   });
 
-  it('disables the range query while searching', () => {
+  it('keeps the range query enabled while searching', () => {
     render(<TransactionsScreen />);
 
     fireEvent.change(screen.getByLabelText('Search transactions'), {
       target: { value: '353232106161443' },
     });
 
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(undefined, {
-      enabled: false,
-    });
+    // The summary card renders during search: a disabled range query would
+    // ignore cost-edit invalidations and show pre-edit values.
+    const options = mocks.useTransactionReview.mock.calls.map(
+      (call) => call[1] as { enabled?: boolean; fetchAllRange?: boolean }
+    );
+    expect(options.some((o) => o?.fetchAllRange === true)).toBe(true);
+    expect(options.some((o) => o?.enabled === false)).toBe(false);
   });
 
   it('refines with the debounced query while searching', () => {
@@ -1190,6 +1208,22 @@ describe('TransactionsScreen', () => {
     });
 
     expect(screen.queryByText('Edit ORD-1')).not.toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-2')).toBeInTheDocument();
+  });
+
+  it('holds the browse list while the debounced query lags behind typing', () => {
+    mocks.useDebounce.mockImplementation(() => '');
+
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: 'zzz-no-match-in-window' },
+    });
+
+    expect(
+      screen.queryByText('No matching transactions.')
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
     expect(screen.getByText('Edit ORD-2')).toBeInTheDocument();
   });
 

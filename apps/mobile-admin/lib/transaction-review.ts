@@ -239,6 +239,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
       customerEmail: order.customer_email,
       customerName: order.customer_name ?? 'Customer',
       customerPhone: order.customer_phone,
+      detailTokens: orderDetailTokens,
       discountAmount: Math.max(0, discountAmount),
       estimatedProfit: items.reduce((sum, item) => sum + (item.profit ?? 0), 0),
       id: order.id,

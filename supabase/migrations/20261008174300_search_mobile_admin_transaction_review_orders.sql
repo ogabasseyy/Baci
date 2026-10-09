@@ -93,6 +93,7 @@ DECLARE
   v_has_product_variants boolean := false;
   v_has_unit_costs boolean := false;
   v_can_read_unit_costs boolean := false;
+  v_can_read_variants boolean := false;
   v_order_by text := 'o.created_at DESC, o.id DESC';
   v_sql text;
 BEGIN
@@ -128,6 +129,40 @@ BEGIN
       p_merchant_id,
       'analytics',
       'view'
+    );
+
+  -- Product variants restrict reads to the owner and staff with orders:edit
+  -- or products view/edit/manage_inventory
+  -- (product_variants_select_by_merchant_access), narrower than merchant
+  -- membership. This function is SECURITY DEFINER, so the variant branch
+  -- applies the same predicate explicitly instead of relying on RLS;
+  -- otherwise any member could probe restricted variant SKUs, conditions,
+  -- and attributes through returned order IDs.
+  v_can_read_variants :=
+    v_caller_role = 'service_role'
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'orders',
+      'edit'
+    )
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'products',
+      'view'
+    )
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'products',
+      'edit'
+    )
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'products',
+      'manage_inventory'
     );
 
   -- Normalize defensively: blank terms would match every row under ILIKE, so
@@ -333,7 +368,7 @@ BEGIN
                 )
   $query$;
 
-  IF v_has_product_variants AND v_has_item_variant_id THEN
+  IF v_has_product_variants AND v_has_item_variant_id AND v_can_read_variants THEN
     v_sql := v_sql || $query$
                 OR EXISTS (
                   SELECT 1

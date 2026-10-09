@@ -107,4 +107,44 @@ describe('transaction review input helpers', () => {
       }),
     ]);
   });
+
+  it('preserves order-level tokens in the missing-costs search text', () => {
+    const [filtered] = filterOrdersForTransactionTab(
+      [
+        {
+          ...baseOrder,
+          detailTokens: ['fragile'],
+          items: [
+            {
+              costPrice: null,
+              costSource: null,
+              id: 'item-missing',
+              imeiValues: [],
+              name: 'Missing Cost',
+              productId: null,
+              productMatchStatus: 'unreviewed',
+              profit: null,
+              quantity: 1,
+              revenue: 9000,
+              searchText: 'missing cost',
+              serialValues: [],
+              sku: null,
+              supplierName: 'Test Supplier',
+              variantId: null,
+            },
+          ],
+          missingCostCount: 1,
+        },
+      ],
+      'missing-costs'
+    );
+
+    // The server matches id/total/date/details, so refinement must keep
+    // them or server candidates waste the tab paging budget.
+    expect(filtered.searchText).toContain('order-1');
+    expect(filtered.searchText).toContain('9000');
+    expect(filtered.searchText).toContain('2026-05-11t12:30:00.000z');
+    expect(filtered.searchText).toContain('fragile');
+    expect(filtered.searchText).toContain('missing cost');
+  });
 });

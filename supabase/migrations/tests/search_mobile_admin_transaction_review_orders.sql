@@ -597,6 +597,20 @@ BEGIN
     RAISE EXCEPTION 'membership search must still work for staff: %', v_ids;
   END IF;
 
+  -- Staff without orders:edit or products rights must not match through
+  -- variant rows: the RPC is SECURITY DEFINER, so it must enforce the
+  -- variant policy's narrower predicate itself. PHX-BLK-128 matches only
+  -- the variant SKU (the product SKU is the shorter PHX-BLK).
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['phx-blk-128']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'variant SKU must stay hidden from staff: %', v_ids;
+  END IF;
+
   PERFORM set_config(
     'request.jwt.claim.sub',
     '11111111-1111-4111-8111-111111111111',

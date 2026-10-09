@@ -39,6 +39,9 @@ describe('hasClosedDialog', () => {
     expect(hasClosedDialog('<dialog data-open><p>Note</p></dialog>')).toBe(
       true
     );
+    expect(hasClosedDialog('<dialog open-modal><p>Note</p></dialog>')).toBe(
+      true
+    );
     expect(
       hasClosedDialog('<dialog title="open sesame"><p>Note</p></dialog>')
     ).toBe(true);

@@ -8,13 +8,10 @@
 // need no lookahead. Transparent color hides glyphs but not image
 // pixels, so void elements (img, br) ignore the color channel, and
 // text segments hidden at every point drop even under a kept
-// ancestor whose escaping child must stay. Hiddenness propagates
-// down the stack in one traversal: each element combines its own
-// frame with its parent's effective state in O(1), so deep valid
-// articles strip in linear time.
+// ancestor whose escaping child must stay.
 import { BREAKPOINT_POINT_COUNT } from './review-handoff-breakpoints';
+import { parseHandoffDom } from './review-handoff-dom';
 import { elementFrame, type HidingFrame } from './review-handoff-element-frame';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import type {
   ColorAtPoint,
   VisibilityAtPoint,
@@ -61,43 +58,10 @@ function hiddenEverywhere(
   return true;
 }
 
-type ElementRecord = {
-  parent: number;
-  frames: [HidingFrame, HidingFrame];
-  tagName: string;
-  hiddenNoColor: boolean;
-  hiddenWithColor: boolean;
-};
-
 type DualEffective = {
   light: EffectiveHiding;
   dark: EffectiveHiding;
 };
-
-function dualEffective(
-  parent: DualEffective | null,
-  frames: [HidingFrame, HidingFrame]
-): DualEffective {
-  const top = (dual: DualEffective | null): EffectiveHiding | null =>
-    dual === null ? null : dual.light;
-  const bottom = (dual: DualEffective | null): EffectiveHiding | null =>
-    dual === null ? null : dual.dark;
-  return {
-    light: combineEffective(top(parent), frames[0]),
-    dark: combineEffective(bottom(parent), frames[1]),
-  };
-}
-
-function visibleDualEffective(): DualEffective {
-  // A parentless source element: nothing above it can hide it, and
-  // its own frame never applies (see recordElements).
-  const visible = (): EffectiveHiding => ({
-    color: new Array<ColorAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
-    terminal: new Array<boolean>(BREAKPOINT_POINT_COUNT).fill(false),
-    visibility: new Array<VisibilityAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
-  });
-  return { dark: visible(), light: visible() };
-}
 
 function hiddenEverywhereBoth(
   effective: DualEffective,
@@ -111,157 +75,97 @@ function hiddenEverywhereBoth(
   );
 }
 
-type OpenEntry = { effective: DualEffective; index: number };
-
-function popMatchingClose(
-  stack: OpenEntry[],
-  elements: ElementRecord[],
-  tagName: string
-): OpenEntry | undefined {
-  // An HTML parser ignores a closing tag with no matching open
-  // element: stray `</p>` inside a hidden div keeps the following
-  // text hidden. Popping blindly would orphan the hidden ancestry
-  // and leak its text once the class strips. Pop through a match so
-  // mis-nested closes (`<div><span></div>`) still end the element
-  // the parser would close.
-  let at = stack.length - 1;
-  while (at >= 0 && elements[stack[at].index].tagName !== tagName) {
-    at -= 1;
-  }
-  if (at === -1) return undefined;
-  const popped = stack[at];
-  stack.length = at;
-  return popped;
+function visibleDualEffective(): DualEffective {
+  // A parentless source evaluates visible: nothing above it can
+  // hide it, and its own frame never applies.
+  const visible = (): EffectiveHiding => ({
+    color: new Array<ColorAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
+    terminal: new Array<boolean>(BREAKPOINT_POINT_COUNT).fill(false),
+    visibility: new Array<VisibilityAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
+  });
+  return { dark: visible(), light: visible() };
 }
 
-function recordElements(content: string): ElementRecord[] {
-  const elements: ElementRecord[] = [];
-  const stack: OpenEntry[] = [];
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') {
-      popMatchingClose(stack, elements, match[2].toLowerCase());
-      continue;
-    }
-    const frames: [HidingFrame, HidingFrame] = [
-      elementFrame(match[0], 'light'),
-      elementFrame(match[0], 'dark'),
-    ];
-    const tagName = match[2].toLowerCase();
-    const parentEffective =
-      stack.length === 0 ? null : stack[stack.length - 1].effective;
-    const effective = dualEffective(parentEffective, frames);
-    // Source classes never participate in picture resource selection,
-    // so a source drops only with a hiding ancestor — never for its
-    // own hiding classes, which select nothing away.
-    const selfEffective =
-      tagName === 'source'
-        ? (parentEffective ?? visibleDualEffective())
-        : effective;
-    const index = elements.length;
-    elements.push({
-      parent: stack.length === 0 ? -1 : stack[stack.length - 1].index,
-      frames,
-      tagName,
-      hiddenNoColor: hiddenEverywhereBoth(selfEffective, false),
-      hiddenWithColor: hiddenEverywhereBoth(selfEffective, true),
-    });
-    if (!VOID_HTML_ELEMENTS.has(tagName)) stack.push({ index, effective });
+function dualEffectiveOf(
+  element: Element,
+  schemeFrames: Map<Element, DualEffective>
+): DualEffective {
+  // Memoized root-down evaluation: an element combines its own
+  // frames with its parent's effective state. Source classes never
+  // participate in picture resource selection, so a source drops
+  // only with a hiding ancestor — never for its own hiding classes,
+  // which select nothing away. Iterative: pathological nesting
+  // would overflow a recursive climb.
+  const chain: Element[] = [];
+  let current: Element | null = element;
+  while (current !== null && !schemeFrames.has(current)) {
+    chain.unshift(current);
+    current = current.parentElement;
   }
-  return elements;
+  let parentEffective =
+    current === null ? null : (schemeFrames.get(current) ?? null);
+  for (const item of chain) {
+    let effective: DualEffective;
+    if (item.tagName.toLowerCase() === 'source') {
+      effective = parentEffective ?? visibleDualEffective();
+    } else {
+      const frames: [HidingFrame, HidingFrame] = [
+        elementFrame(item, 'light'),
+        elementFrame(item, 'dark'),
+      ];
+      effective = {
+        light: combineEffective(parentEffective?.light ?? null, frames[0]),
+        dark: combineEffective(parentEffective?.dark ?? null, frames[1]),
+      };
+    }
+    schemeFrames.set(item, effective);
+    parentEffective = effective;
+  }
+  const resolved = schemeFrames.get(element);
+  if (!resolved) throw new Error('strip evaluation missed its element');
+  return resolved;
 }
 
 export function stripHiddenContent(content: string): string {
-  const elements = recordElements(content);
-  // Bottom-up: parents always record before their children, so
+  const doc = parseHandoffDom(content);
+  const schemeFrames = new Map<Element, DualEffective>();
+  // Bottom-up: document order lists parents before children, so
   // reverse order decides children first. An element drops when it
   // hides at every point and no element child survives; void
   // elements never consult the color channel.
-  const childrenOf = new Map<number, number[]>();
-  elements.forEach((element, index) => {
-    if (element.parent === -1) return;
-    const siblings = childrenOf.get(element.parent) ?? [];
-    siblings.push(index);
-    childrenOf.set(element.parent, siblings);
-  });
-  const selfDrop: boolean[] = new Array(elements.length).fill(false);
+  const elements = [...doc.querySelectorAll('body *')];
+  const selfDrop = new Map<Element, boolean>();
   for (let index = elements.length - 1; index >= 0; index -= 1) {
-    const hidden = VOID_HTML_ELEMENTS.has(elements[index].tagName)
-      ? elements[index].hiddenNoColor
-      : elements[index].hiddenWithColor;
-    const childrenDrop = (childrenOf.get(index) ?? []).every(
-      (child) => selfDrop[child]
+    const element = elements[index];
+    const tagName = element.tagName.toLowerCase();
+    const hidden = hiddenEverywhereBoth(
+      dualEffectiveOf(element, schemeFrames),
+      !VOID_HTML_ELEMENTS.has(tagName)
     );
-    selfDrop[index] = hidden && childrenDrop;
+    const childrenDrop = [...element.children].every(
+      (child) => selfDrop.get(child) ?? false
+    );
+    selfDrop.set(element, hidden && childrenDrop);
   }
-  const finalDrop: boolean[] = new Array(elements.length).fill(false);
-  elements.forEach((element, index) => {
-    finalDrop[index] =
-      selfDrop[index] || (element.parent !== -1 && finalDrop[element.parent]);
-  });
-  // Rebuild in one walk, skipping dropped subtrees and text hidden
-  // at every point. Effective hiding propagates down the open stack
-  // again instead of re-scanning it per tag. Stray close tags are
-  // preserved as text-adjacent markup.
-  const byOpenStart = new Map<number, number>();
-  let seen = 0;
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') continue;
-    byOpenStart.set(match.index ?? content.length, seen);
-    seen += 1;
+  for (const element of elements) {
+    if (selfDrop.get(element) === true) element.remove();
   }
-  const segments: string[] = [];
-  const openStack: OpenEntry[] = [];
-  let position = 0;
-  // Drop flags propagate from parent to child, so any dropped open
-  // element implies a dropped innermost one: check the top instead of
-  // re-scanning the stack per tag.
-  const insideDropped = () =>
-    openStack.length > 0 && finalDrop[openStack[openStack.length - 1].index];
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    const start = match.index ?? content.length;
-    const top =
-      openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
+  // Text hidden at every point drops even under a kept ancestor
+  // whose escaping child must stay.
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node !== null) {
+    const parent = node.parentElement;
     if (
-      !insideDropped() &&
-      (top === null || !hiddenEverywhereBoth(top, true))
+      parent !== null &&
+      hiddenEverywhereBoth(dualEffectiveOf(parent, schemeFrames), true)
     ) {
-      segments.push(content.slice(position, start));
+      const current = node;
+      node = walker.nextNode();
+      parent.removeChild(current);
+    } else {
+      node = walker.nextNode();
     }
-    position = start + match[0].length;
-    if (match[1] === '/') {
-      const popped = popMatchingClose(
-        openStack,
-        elements,
-        match[2].toLowerCase()
-      );
-      if (
-        (popped === undefined || !finalDrop[popped.index]) &&
-        !insideDropped()
-      ) {
-        segments.push(match[0]);
-      }
-      continue;
-    }
-    const index = byOpenStart.get(start);
-    if (index === undefined) {
-      segments.push(match[0]);
-      continue;
-    }
-    if (!VOID_HTML_ELEMENTS.has(elements[index].tagName)) {
-      openStack.push({
-        index,
-        effective: dualEffective(top, elements[index].frames),
-      });
-    }
-    if (!finalDrop[index] && !insideDropped()) segments.push(match[0]);
   }
-  const tail =
-    openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
-  if (
-    !insideDropped() &&
-    (tail === null || !hiddenEverywhereBoth(tail, true))
-  ) {
-    segments.push(content.slice(position));
-  }
-  return segments.join('');
+  return doc.body.innerHTML;
 }

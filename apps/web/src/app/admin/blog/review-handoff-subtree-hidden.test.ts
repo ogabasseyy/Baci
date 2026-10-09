@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseHandoffDom } from './review-handoff-dom';
 import { elementFrame } from './review-handoff-element-frame';
 import { HidingStack } from './review-handoff-subtree-hidden';
 
@@ -7,7 +8,11 @@ const ALL_FALSE = [false, false, false, false, false, false];
 
 function stackOf(...tags: string[]): HidingStack {
   const stack = new HidingStack();
-  for (const tag of tags) stack.push(elementFrame(tag));
+  for (const tag of tags) {
+    const element = parseHandoffDom(tag).body.firstElementChild;
+    if (!element) throw new Error(`no element parsed from ${tag}`);
+    stack.push(elementFrame(element));
+  }
   return stack;
 }
 

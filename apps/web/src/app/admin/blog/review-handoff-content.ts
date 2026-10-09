@@ -3,10 +3,10 @@ import { sanitizeHtml } from '@/lib/sanitize';
 import { hasClosedDialog } from './review-handoff-dialog';
 import { hasUnrepresentableHiddenWrapper } from './review-handoff-disallowed-wrapper';
 import { hasClosedDisclosure } from './review-handoff-disclosure';
+import { parseHandoffDom } from './review-handoff-dom';
 import { hasUnpreservableEmbed } from './review-handoff-embed';
 import { hasUnpreservableFigure } from './review-handoff-figure';
 import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
@@ -23,7 +23,9 @@ import { stripLeadingNonRenderingText } from './strip-leading-non-rendering-text
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 
 function stripMarkupText(value: string): string {
-  return value.replace(/<[^>]*>/gu, '').trim();
+  // Text comparison only: entity decoding applies to both sides, so
+  // marked escaping `&` to `&amp;` no longer counts as a change.
+  return (parseHandoffDom(value).body.textContent ?? '').trim();
 }
 
 // A brace followed by a quote opens a JSON object (allowing whitespace), as
@@ -69,11 +71,12 @@ function normalizeContent(
     // the stored copy must be the rendered output when either appears.
     // Count, not presence: raw input may already hold an anchor while
     // rendering adds another for a bare URL on the same line.
-    const countAnchors = (html: string) => html.match(/<a[\s>]/gi)?.length ?? 0;
+    const countAnchors = (html: string) =>
+      parseHandoffDom(html).querySelectorAll('a').length;
     const renderedIntroducesLink =
       countAnchors(rendered) > countAnchors(rawContent);
     if (
-      !/<pre[\s>]/i.test(rendered) &&
+      parseHandoffDom(rendered).querySelector('pre') === null &&
       !renderedIntroducesLink &&
       stripMarkupText(rendered) === stripMarkupText(rawContent)
     ) {
@@ -106,20 +109,17 @@ function hasDroppedAnchorTarget(html: string): boolean {
   // link whose target exists at import is broken at publish. Ids no
   // link targets are harmless; fragments with no matching id were
   // already broken before import and stay out of this check.
+  const doc = parseHandoffDom(html);
   const ids = new Set<string>();
-  const fragments = new Set<string>();
-  for (const match of html.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') continue;
-    for (const { name, value } of tagAttributes(match[0])) {
-      if (name === 'id') {
-        if (value) ids.add(value);
-      } else if (name === 'href') {
-        const target = fragmentTarget(value);
-        if (target !== null) fragments.add(target);
-      }
-    }
+  for (const element of doc.querySelectorAll('[id]')) {
+    const id = element.getAttribute('id');
+    if (id) ids.add(id);
   }
-  return [...fragments].some((target) => ids.has(target));
+  for (const element of doc.querySelectorAll('[href]')) {
+    const target = fragmentTarget(element.getAttribute('href') ?? '');
+    if (target !== null && ids.has(target)) return true;
+  }
+  return false;
 }
 
 function hasUnpreservableImgSrcset(html: string): boolean {

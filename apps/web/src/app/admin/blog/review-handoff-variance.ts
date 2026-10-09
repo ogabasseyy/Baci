@@ -1,13 +1,11 @@
 import type { ColorScheme } from './review-handoff-breakpoints';
 import { isChannelUtility } from './review-handoff-channel-utilities';
+import { parseHandoffDom } from './review-handoff-dom';
 import { elementFrame } from './review-handoff-element-frame';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { imageSizeZeroAt } from './review-handoff-image-size';
 import { stripImportantModifier } from './review-handoff-important';
 import { HidingStack } from './review-handoff-subtree-hidden';
-import { tagAttributes } from './review-handoff-tag-attributes';
 import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';
-import { stripHtmlComments } from './strip-html-comments';
 
 // Without a variant prefix every layer is bare, so each element's
 // verdict is constant across points and schemes: skip the ancestry
@@ -110,15 +108,11 @@ function wrapsUnsupportedVariant(token: string): boolean {
   return widthCount > 1;
 }
 
-function hasUnsupportedVariantChannelUtility(content: string): boolean {
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') continue;
-    if (match[2].toLowerCase() === 'source') continue;
-    for (const { name, value } of tagAttributes(match[0])) {
-      if (name !== 'class') continue;
-      for (const token of value.split(/\s+/)) {
-        if (wrapsUnsupportedVariant(token)) return true;
-      }
+function hasUnsupportedVariantChannelUtility(doc: Document): boolean {
+  for (const element of doc.querySelectorAll('*')) {
+    if (element.tagName.toLowerCase() === 'source') continue;
+    for (const token of element.classList) {
+      if (wrapsUnsupportedVariant(token)) return true;
     }
   }
   return false;
@@ -128,22 +122,16 @@ function verdictsVary(hiddenAt: readonly boolean[]): boolean {
   return hiddenAt.some((hidden) => hidden !== hiddenAt[0]);
 }
 
-function imageZeroVaries(tag: string): boolean {
+function imageZeroVaries(img: Element): boolean {
   // Replaced content conforms to a zeroed axis without needing a
   // clipping rule, so an image's own zero sizing varies independently
   // of the generic frame verdicts: `h-0 md:h-auto` renders nothing
   // below md whatever the ancestry says.
-  const classes: string[] = [];
-  let widthAttrZero = false;
-  let heightAttrZero = false;
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name === 'class') {
-      classes.push(...value.split(/\s+/));
-      continue;
-    }
-    if (name === 'width' && /^0+$/.test(value.trim())) widthAttrZero = true;
-    if (name === 'height' && /^0+$/.test(value.trim())) heightAttrZero = true;
-  }
+  const classes = img.getAttribute('class')?.split(/\s+/) ?? [];
+  const widthAttr = img.getAttribute('width');
+  const heightAttr = img.getAttribute('height');
+  const widthAttrZero = widthAttr !== null && /^0+$/.test(widthAttr.trim());
+  const heightAttrZero = heightAttr !== null && /^0+$/.test(heightAttr.trim());
   const schemes: ColorScheme[] = ['light', 'dark'];
   const runs = schemes.map((scheme) =>
     imageSizeZeroAt(classes, widthAttrZero, heightAttrZero, scheme)
@@ -154,6 +142,8 @@ function imageZeroVaries(tag: string): boolean {
   );
 }
 
+type WalkEntry = { element: Element; popAfter: boolean };
+
 /**
  * Whether any element hides at some evaluation cells but shows at others.
  * The editor drops input classes, so viewport- or theme-dependent hiding
@@ -161,27 +151,35 @@ function imageZeroVaries(tag: string): boolean {
  * or schemes where the source hides it. Effective (ancestry-combined)
  * verdicts decide, mirroring the strip: terminal hiding anywhere wins,
  * visibility and color resolve to the nearest marker, and void elements
- * never consult the color channel.
+ * never consult the color channel. One iterative descent carries both
+ * scheme stacks, so deep articles evaluate in linear time.
  */
 export function hasUnrepresentableVariance(content: string): boolean {
   if (!VARIANCE_PREFIX_PATTERN.test(content)) return false;
-  const withoutComments = stripHtmlComments(content);
-  if (hasUnsupportedVariantChannelUtility(withoutComments)) return true;
+  // Comments never surface as elements, so variant-looking text
+  // inside them cannot vary rendering.
+  const doc = parseHandoffDom(content);
+  if (hasUnsupportedVariantChannelUtility(doc)) return true;
   const light = new HidingStack();
   const dark = new HidingStack();
-  for (const match of withoutComments.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') {
+  const pending: WalkEntry[] = [];
+  if (doc.documentElement !== null) {
+    pending.push({ element: doc.documentElement, popAfter: false });
+  }
+  while (pending.length > 0) {
+    const { element, popAfter } = pending.pop() as WalkEntry;
+    if (popAfter) {
       light.pop();
       dark.pop();
       continue;
     }
-    const tagName = match[2].toLowerCase();
+    const tagName = element.tagName.toLowerCase();
     // Source classes select nothing, so responsive variants on a
     // source cannot vary rendering: skip it instead of rejecting.
     if (tagName === 'source') continue;
-    if (tagName === 'img' && imageZeroVaries(match[0])) return true;
-    light.push(elementFrame(match[0], 'light'));
-    dark.push(elementFrame(match[0], 'dark'));
+    if (tagName === 'img' && imageZeroVaries(element)) return true;
+    light.push(elementFrame(element, 'light'));
+    dark.push(elementFrame(element, 'dark'));
     const includeColor = !VOID_HTML_ELEMENTS.has(tagName);
     const lightHidden = light.hiddenAt(includeColor);
     const darkHidden = dark.hiddenAt(includeColor);
@@ -189,11 +187,11 @@ export function hasUnrepresentableVariance(content: string): boolean {
       verdictsVary(lightHidden) ||
       verdictsVary(darkHidden) ||
       lightHidden[0] !== darkHidden[0];
-    if (VOID_HTML_ELEMENTS.has(tagName)) {
-      light.pop();
-      dark.pop();
-    }
     if (varies) return true;
+    pending.push({ element, popAfter: true });
+    for (const child of [...element.children].reverse()) {
+      pending.push({ element: child, popAfter: false });
+    }
   }
   return false;
 }

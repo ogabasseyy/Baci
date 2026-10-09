@@ -16,6 +16,8 @@ describe('hasUnpreservableFigure', () => {
     '<p>Visible article</p>',
     '<img src="https://cdn.example.com/a.png">',
     '<p class="figure">Not a figure element</p>',
+    '<!-- <figure><img src="https://cdn.example.com/a.png"></figure> -->',
+    '</figure>',
   ])('ignores non-figure markup: %s', (html) => {
     expect(hasUnpreservableFigure(html)).toBe(false);
   });

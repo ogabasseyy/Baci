@@ -1,97 +1,81 @@
 import type { ColorScheme } from './review-handoff-breakpoints';
+import { parseHandoffDom } from './review-handoff-dom';
 import { elementFrame } from './review-handoff-element-frame';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { imageSizeZeroAt } from './review-handoff-image-size';
 import { HidingStack } from './review-handoff-subtree-hidden';
-import { tagAttributes } from './review-handoff-tag-attributes';
-import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';
-import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
 import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
-function imageZeroAt(tag: string, scheme: ColorScheme): boolean[] {
+function imageZeroAt(img: Element, scheme: ColorScheme): boolean[] {
   // A zero width or height renders no pixels. Only bare zeros count:
   // the width/height attributes take plain pixel counts, so `0px` is
   // invalid and ignored by browsers (natural size, still visible).
   // Zero-size utilities on the image itself need no overflow rule:
   // replaced content conforms to the zero box instead of
   // overflowing it.
-  const classes: string[] = [];
-  let widthAttrZero = false;
-  let heightAttrZero = false;
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name === 'class') {
-      classes.push(...value.split(/\s+/));
-      continue;
-    }
-    if (name === 'width' && /^0+$/.test(value.trim())) widthAttrZero = true;
-    if (name === 'height' && /^0+$/.test(value.trim())) heightAttrZero = true;
-  }
-  return imageSizeZeroAt(classes, widthAttrZero, heightAttrZero, scheme);
+  const classes = img.getAttribute('class')?.split(/\s+/) ?? [];
+  const widthAttr = img.getAttribute('width');
+  const heightAttr = img.getAttribute('height');
+  return imageSizeZeroAt(
+    classes,
+    widthAttr !== null && /^0+$/.test(widthAttr.trim()),
+    heightAttr !== null && /^0+$/.test(heightAttr.trim()),
+    scheme
+  );
 }
 
 function visibleAtAnyPoint(hiddenAt: readonly boolean[]): boolean {
   return hiddenAt.some((hidden) => !hidden);
 }
 
-function hasVisibleImage(content: string, scheme: ColorScheme): boolean {
-  // Track ancestry during one document-order pass instead of rescanning
-  // the prefix before every image: each image is evaluated against the
-  // live stack the moment it is reached, keeping validation linear in
-  // article size. The stack discipline matches visibleText exactly, so
-  // verdicts are unchanged — only the quadratic rescan is gone. The
-  // image's own frame joins the evaluation so a `visible` image
-  // escapes an `invisible` ancestor, while terminal hiding anywhere
-  // still wins.
+type WalkEntry = { element: Element; popAfter: boolean };
+
+function directTextVisible(element: Element, hiding: HidingStack): boolean {
+  // The element's own text nodes see exactly this stack: joining
+  // them here keeps differently-ancestored text from contaminating
+  // the verdict. Blankness decides like the old global join — a
+  // surviving character anywhere reads the same either way.
+  let direct = '';
+  for (const node of element.childNodes) {
+    if (node.nodeType === 3) direct += node.nodeValue ?? '';
+  }
+  if (direct === '') return false;
+  const text = stripNonRenderingText(direct.replace(/&nbsp;/gi, ' ')).trim();
+  return text.length > 0 && visibleAtAnyPoint(hiding.hiddenAt(true));
+}
+
+function readableInScheme(doc: Document, scheme: ColorScheme): boolean {
+  // One iterative descent carries the hiding stack: each element
+  // pushes its frame, its image verdict and direct text evaluate
+  // against the live stack, and the frame pops after the subtree.
+  // Deep articles evaluate in linear time with no recursion limit
+  // to hit.
   const hiding = new HidingStack();
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') {
+  const pending: WalkEntry[] = [];
+  if (doc.documentElement !== null) {
+    pending.push({ element: doc.documentElement, popAfter: false });
+  }
+  while (pending.length > 0) {
+    const { element, popAfter } = pending.pop() as WalkEntry;
+    if (popAfter) {
       hiding.pop();
       continue;
     }
-    const tagName = match[2].toLowerCase();
-    if (tagName === 'img') {
-      const tag = match[0];
-      const zeroAt = imageZeroAt(tag, scheme);
-      hiding.push(elementFrame(tag, scheme));
+    hiding.push(elementFrame(element, scheme));
+    if (element.tagName.toLowerCase() === 'img') {
+      const zeroAt = imageZeroAt(element, scheme);
       const hiddenAt = hiding.hiddenAt(false);
-      hiding.pop();
       if (zeroAt.some((zero, point) => !zero && !hiddenAt[point])) {
         return true;
       }
-      continue;
     }
-    if (VOID_HTML_ELEMENTS.has(tagName)) continue;
-    hiding.push(elementFrame(match[0], scheme));
+    if (directTextVisible(element, hiding)) return true;
+    pending.push({ element, popAfter: true });
+    for (const child of [...element.children].reverse()) {
+      pending.push({ element: child, popAfter: false });
+    }
   }
   return false;
-}
-
-function visibleText(content: string, scheme: ColorScheme): string {
-  // Collect text nodes outside hidden subtrees with the same ancestry
-  // stack as images. Comments are stripped first: the tag pattern does
-  // not match them, so their text must not leak in as visible segments.
-  const hiding = new HidingStack();
-  const segments: string[] = [];
-  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '');
-  let position = 0;
-  for (const match of withoutComments.matchAll(HTML_TAG_PATTERN)) {
-    const index = match.index ?? withoutComments.length;
-    if (visibleAtAnyPoint(hiding.hiddenAt(true))) {
-      segments.push(withoutComments.slice(position, index));
-    }
-    position = index + match[0].length;
-    if (match[1] === '/') {
-      hiding.pop();
-      continue;
-    }
-    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
-    hiding.push(elementFrame(match[0], scheme));
-  }
-  if (visibleAtAnyPoint(hiding.hiddenAt(true))) {
-    segments.push(withoutComments.slice(position));
-  }
-  return segments.join('');
 }
 
 export function hasReadableContent(content: string): boolean {
@@ -105,21 +89,15 @@ export function hasReadableContent(content: string): boolean {
   // where no override applies. Every channel resolves jointly per
   // breakpoint: `opacity-0 md:opacity-100` with `text-black
   // md:text-transparent` stays hidden at every point. Text gets
-  // the same ancestry handling through visibleText, plus an overridable
+  // the same ancestry handling through the descent, plus an overridable
   // color marker so opaque text escapes a `text-transparent` ancestor
-  // (glyph-only: images under transparent text still count). Comments render
-  // nothing, so strip them before matching: a commented-out <img> must
-  // neither satisfy readability itself nor donate a hidden ancestor.
-  const withoutComments = stripRawTextBlocks(stripHtmlComments(content));
-  // Readable in either scheme is readable: dark: layers apply only
-  // in the dark run, so content showing under one scheme survives
-  // even when hidden under the other.
+  // (glyph-only: images under transparent text still count). Comments
+  // never surface as elements or text nodes, so a commented-out <img>
+  // neither satisfies readability itself nor donates a hidden ancestor.
+  const withoutRawText = stripRawTextBlocks(content);
+  const doc = parseHandoffDom(withoutRawText);
   for (const scheme of ['light', 'dark'] as const) {
-    if (hasVisibleImage(withoutComments, scheme)) return true;
-    const text = stripNonRenderingText(
-      visibleText(withoutComments, scheme).replace(/&nbsp;/gi, ' ')
-    ).trim();
-    if (text.length > 0) return true;
+    if (readableInScheme(doc, scheme)) return true;
   }
   return false;
 }

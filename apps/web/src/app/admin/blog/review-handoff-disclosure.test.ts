@@ -7,6 +7,7 @@ describe('hasClosedDisclosure', () => {
     '<details><summary>Overview</summary><p>Additional detail</p></details>',
     '<details name="group"><summary>Overview</summary><p>Detail</p></details>',
     '<details data-open="yes"><summary>Overview</summary><p>Detail</p></details>',
+    '<details open-modal><summary>Overview</summary><p>Detail</p></details>',
   ])('detects closed disclosure markup: %s', (html) => {
     expect(hasClosedDisclosure(html)).toBe(true);
   });

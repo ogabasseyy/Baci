@@ -3,29 +3,40 @@ import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
 
 describe('convertHiddenAttributes', () => {
   it.each([
-    ['<p hidden>Note</p>', '<p hidden class="hidden">Note</p>'],
+    ['<p hidden>Note</p>', '<p hidden="" class="hidden">Note</p>'],
     ['<p hidden="">Note</p>', '<p hidden="" class="hidden">Note</p>'],
     ['<p hidden="false">Note</p>', '<p hidden="false" class="hidden">Note</p>'],
     [
       '<p hidden class="text-red-500">Note</p>',
-      '<p hidden class="text-red-500 hidden">Note</p>',
+      '<p hidden="" class="text-red-500 hidden">Note</p>',
     ],
     [
       '<p class="md:block" hidden>Note</p>',
-      '<p class="md:block hidden" hidden>Note</p>',
+      '<p class="md:block hidden" hidden="">Note</p>',
     ],
     ['<p>Untouched</p>', '<p>Untouched</p>'],
-    ['<P HIDDEN>Note</P>', '<P HIDDEN class="hidden">Note</P>'],
+    // Serialization normalizes case and valueless attributes; the
+    // converted markup is sanitized downstream either way.
+    ['<P HIDDEN>Note</P>', '<p hidden="" class="hidden">Note</p>'],
   ])('converts hidden attributes to hiding classes: %s', (html, expected) => {
     expect(convertHiddenAttributes(html)).toBe(expected);
   });
 
   it.each([
-    '<p hidden class="block">Shown</p>',
-    '<div hidden class="flex">Shown</div>',
-    '<p hidden="hidden" class="block">Shown</p>',
-  ])('leaves bare display utilities to decide: %s', (html) => {
-    expect(convertHiddenAttributes(html)).toBe(html);
+    [
+      '<p hidden class="block">Shown</p>',
+      '<p hidden="" class="block">Shown</p>',
+    ],
+    [
+      '<div hidden class="flex">Shown</div>',
+      '<div hidden="" class="flex">Shown</div>',
+    ],
+    [
+      '<p hidden="hidden" class="block">Shown</p>',
+      '<p hidden="hidden" class="block">Shown</p>',
+    ],
+  ])('leaves bare display utilities to decide: %s', (html, expected) => {
+    expect(convertHiddenAttributes(html)).toBe(expected);
   });
 
   it.each([
@@ -45,12 +56,18 @@ describe('convertHiddenAttributes', () => {
   });
 
   it.each([
-    '<p aria-hidden="true">Decorative</p>',
-    '<p data-hidden="yes">Kept</p>',
-    '<p title="a hidden thing">Kept</p>',
-    '<p data-hidden>Kept</p>',
-  ])('ignores hidden lookalikes: %s', (html) => {
-    expect(convertHiddenAttributes(html)).toBe(html);
+    [
+      '<p aria-hidden="true">Decorative</p>',
+      '<p aria-hidden="true">Decorative</p>',
+    ],
+    ['<p data-hidden="yes">Kept</p>', '<p data-hidden="yes">Kept</p>'],
+    [
+      '<p title="a hidden thing">Kept</p>',
+      '<p title="a hidden thing">Kept</p>',
+    ],
+    ['<p data-hidden>Kept</p>', '<p data-hidden="">Kept</p>'],
+  ])('ignores hidden lookalikes: %s', (html, expected) => {
+    expect(convertHiddenAttributes(html)).toBe(expected);
   });
 
   it('merges hidden into an unquoted class without a duplicate attribute', () => {
@@ -60,7 +77,7 @@ describe('convertHiddenAttributes', () => {
       '<p hidden class=note>Draft note</p><p>Visible article</p>'
     );
     expect(converted).toBe(
-      '<p hidden class="note hidden">Draft note</p><p>Visible article</p>'
+      '<p hidden="" class="note hidden">Draft note</p><p>Visible article</p>'
     );
     expect(converted.match(/class=/g)).toHaveLength(1);
   });

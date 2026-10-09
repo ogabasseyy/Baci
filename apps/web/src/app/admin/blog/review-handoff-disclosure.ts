@@ -1,6 +1,4 @@
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
-import { hasOpenAttribute } from './review-handoff-open-attribute';
-import { stripHtmlComments } from './strip-html-comments';
+import { parseHandoffDom } from './review-handoff-dom';
 
 /**
  * Whether markup hides content behind a closed disclosure control.
@@ -8,14 +6,10 @@ import { stripHtmlComments } from './strip-html-comments';
  * represent details/summary, so sanitization unwraps the control
  * and stores collapsed content as permanently visible text. An
  * `open` details element renders its content in the source document
- * already, so only closed disclosures drift. Comments strip first:
- * a details opener inside comment text is not markup.
+ * already, so only closed disclosures drift. Attribute presence
+ * comes from the parsed DOM, so data-open and quoted mentions never
+ * count.
  */
 export function hasClosedDisclosure(html: string): boolean {
-  for (const match of stripHtmlComments(html).matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') continue;
-    if (match[2].toLowerCase() !== 'details') continue;
-    if (!hasOpenAttribute(match[0])) return true;
-  }
-  return false;
+  return parseHandoffDom(html).querySelector('details:not([open])') !== null;
 }

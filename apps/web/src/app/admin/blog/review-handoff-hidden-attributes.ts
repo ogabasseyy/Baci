@@ -1,6 +1,4 @@
-import { addUtilityClass } from './review-handoff-class-merge';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
-import { tagAttributes } from './review-handoff-tag-attributes';
+import { parseHandoffDom } from './review-handoff-dom';
 
 // Bare Tailwind display utilities: author display beats the UA [hidden]
 // rule at every cell, so a bare display class makes the attribute
@@ -30,38 +28,20 @@ const DISPLAY_UTILITIES = new Set([
   'hidden',
 ]);
 
-function hasHiddenAttribute(tag: string): boolean {
-  // Presence hides whatever the value: even hidden="false" and
-  // hidden="until-found" keep the subtree from rendering initially.
-  // Valueless attributes never reach tagAttributes, so match the raw
-  // tag with quoted values blanked: aria-hidden, data-hidden, and a
-  // title mentioning "hidden" must not count.
-  const unquoted = tag.replace(/"[^"]*"|'[^']*'/g, '""');
-  return /(?:\s|^)hidden(?:\s*=\s*(?:""|[^\s>]+))?(?=[\s/>])/i.test(unquoted);
-}
-
-function hasBareDisplayUtility(tag: string): boolean {
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name !== 'class') continue;
-    for (const token of value.split(/\s+/)) {
-      if (!token.includes(':') && DISPLAY_UTILITIES.has(token)) return true;
-    }
+function hasBareDisplayUtility(element: Element): boolean {
+  for (const token of element.classList) {
+    if (!token.includes(':') && DISPLAY_UTILITIES.has(token)) return true;
   }
   return false;
 }
 
-function hasUntilFoundValue(tag: string): boolean {
+function hasUntilFoundValue(element: Element): boolean {
   // hidden="until-found" renders through content-visibility rather
   // than display, so a display utility cannot expose it; only the
   // ordinary hidden state yields to a bare display class. The match
   // is ASCII case-insensitive per the enumerated-attribute rules,
   // with no trimming: padded values fall back to Hidden state.
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name === 'hidden' && value.toLowerCase() === 'until-found') {
-      return true;
-    }
-  }
-  return false;
+  return element.getAttribute('hidden')?.toLowerCase() === 'until-found';
 }
 
 /**
@@ -71,10 +51,12 @@ function hasUntilFoundValue(tag: string): boolean {
  * pasted `hidden` class.
  */
 export function convertHiddenAttributes(html: string): string {
-  return html.replace(HTML_TAG_PATTERN, (tag, closing) => {
-    if (closing) return tag;
-    if (!hasHiddenAttribute(tag)) return tag;
-    if (hasBareDisplayUtility(tag) && !hasUntilFoundValue(tag)) return tag;
-    return addUtilityClass(tag, 'hidden');
-  });
+  const doc = parseHandoffDom(html);
+  for (const element of doc.querySelectorAll('[hidden]')) {
+    if (hasBareDisplayUtility(element) && !hasUntilFoundValue(element)) {
+      continue;
+    }
+    element.classList.add('hidden');
+  }
+  return doc.body.innerHTML;
 }

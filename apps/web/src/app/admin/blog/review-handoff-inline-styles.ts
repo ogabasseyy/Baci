@@ -1,7 +1,5 @@
-import { addUtilityClass } from './review-handoff-class-merge';
 import { isZeroAreaClipPath } from './review-handoff-clip-path';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
-import { tagAttributes } from './review-handoff-tag-attributes';
+import { parseHandoffDom } from './review-handoff-dom';
 
 const IMPORTANT_SUFFIX_PATTERN = /!\s*important\s*$/i;
 
@@ -233,13 +231,10 @@ function hidingUtilityForStyle(
  * machinery exactly like pasted hiding classes.
  */
 export function convertHiddenInlineStyles(html: string): string {
-  return html.replace(HTML_TAG_PATTERN, (tag, closing) => {
-    if (closing) return tag;
-    for (const { name, value } of tagAttributes(tag)) {
-      if (name !== 'style') continue;
-      const utility = hidingUtilityForStyle(value);
-      if (utility !== null) return addUtilityClass(tag, utility);
-    }
-    return tag;
-  });
+  const doc = parseHandoffDom(html);
+  for (const element of doc.querySelectorAll('[style]')) {
+    const utility = hidingUtilityForStyle(element.getAttribute('style') ?? '');
+    if (utility !== null) element.classList.add(utility);
+  }
+  return doc.body.innerHTML;
 }

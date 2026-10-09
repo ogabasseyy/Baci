@@ -126,4 +126,66 @@ describe('groupMediaElements', () => {
       )
     ).toEqual([{ tags: [], hasMedia: false }]);
   });
+
+  it('normalizes tag case and self-closing slashes', () => {
+    expect(
+      groupMediaElements(
+        '<PICTURE><SOURCE SRCSET="https://cdn.example.com/a.webp" /><IMG SRC="https://cdn.example.com/a.png" /></PICTURE>'
+      )
+    ).toEqual([
+      {
+        tags: [
+          '<source srcset="https://cdn.example.com/a.webp">',
+          '<img src="https://cdn.example.com/a.png">',
+        ],
+        hasMedia: true,
+      },
+    ]);
+  });
+
+  it('ignores media-like text inside attribute values', () => {
+    expect(
+      groupMediaElements(
+        `<div title="<img src='http://example.com/draft.png'>">Readable</div>`
+      )
+    ).toEqual([]);
+  });
+
+  it('ignores stray closes and video sources', () => {
+    // A `</div>` with no open div must not pop the picture the
+    // following img belongs to; video sources are never candidates.
+    expect(
+      groupMediaElements(
+        '<picture><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture><video><source src="https://cdn.example.com/a.mp4"></video>'
+      )
+    ).toEqual([
+      {
+        tags: [
+          '<source srcset="https://cdn.example.com/a.webp">',
+          '<img alt="">',
+        ],
+        hasMedia: true,
+      },
+    ]);
+  });
+
+  it('skips sources nested below a non-picture element', () => {
+    expect(
+      groupMediaElements(
+        '<picture><div><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture>'
+      )
+    ).toEqual([{ tags: ['<img alt="">'], hasMedia: true }]);
+  });
+
+  it('finds trailing media after deep nesting', () => {
+    // The native parser handles pathological nesting; only the
+    // grouping verdict matters, not jsdom's parse speed.
+    const html = `${'<div>'.repeat(800)}${'</span>'.repeat(800)}<img src="https://cdn.example.com/a.webp">`;
+    expect(groupMediaElements(html)).toEqual([
+      {
+        tags: ['<img src="https://cdn.example.com/a.webp">'],
+        hasMedia: true,
+      },
+    ]);
+  });
 });

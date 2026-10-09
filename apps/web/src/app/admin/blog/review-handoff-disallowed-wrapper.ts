@@ -1,9 +1,7 @@
 import { createSanitizeHtmlOptions } from '@/lib/sanitize-html-config';
 import { isChannelUtility } from './review-handoff-channel-utilities';
-import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
+import { parseHandoffDom } from './review-handoff-dom';
 import { stripImportantModifier } from './review-handoff-important';
-import { tagAttributes } from './review-handoff-tag-attributes';
-import { stripHtmlComments } from './strip-html-comments';
 
 // Tags the sanitizer preserves, derived from the live config so the
 // check cannot drift from the allowlist. Every other tag unwraps,
@@ -25,17 +23,13 @@ function baseUtility(token: string): string {
  * unwraps. Runs pre-sanitize on converted markup (hidden attributes
  * and styles are classes by then): the strip evaluates what remains
  * after unwrapping, so a channel marker on a discarded tag reads
- * differently on each side of the lossy step. Comments strip first.
+ * differently on each side of the lossy step.
  */
 export function hasUnrepresentableHiddenWrapper(html: string): boolean {
-  for (const match of stripHtmlComments(html).matchAll(HTML_TAG_PATTERN)) {
-    if (match[1] === '/') continue;
-    if (PRESERVED_TAGS.has(match[2].toLowerCase())) continue;
-    for (const { name, value } of tagAttributes(match[0])) {
-      if (name !== 'class') continue;
-      for (const token of value.split(/\s+/)) {
-        if (token !== '' && isChannelUtility(baseUtility(token))) return true;
-      }
+  for (const element of parseHandoffDom(html).querySelectorAll('*')) {
+    if (PRESERVED_TAGS.has(element.tagName.toLowerCase())) continue;
+    for (const token of element.classList) {
+      if (isChannelUtility(baseUtility(token))) return true;
     }
   }
   return false;

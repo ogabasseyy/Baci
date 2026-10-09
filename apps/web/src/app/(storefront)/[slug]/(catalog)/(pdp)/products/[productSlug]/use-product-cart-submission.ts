@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
@@ -41,7 +40,8 @@ export function useProductCartSubmission({
   const { addToCart, setMerchantSlug } = useCart();
   const { toast } = useToast();
 
-  return useCallback(() => {
+  // React Compiler owns memoization: return the closure directly.
+  return () => {
     const variantForCart = currentVariantSelection?.variant;
     // The cart guard reads product stock: carry the exact option
     // availability (serialized units or offer quantity) so a stocked
@@ -101,18 +101,5 @@ export function useProductCartSubmission({
       title: 'Added to cart!',
       description: `${quantity} x ${product.name}${variantInfo} has been added to your cart.`,
     });
-  }, [
-    addToCart,
-    currencyCode,
-    currentPrice,
-    currentVariantSelection,
-    effectiveVariantAttributes,
-    merchant,
-    product,
-    quantity,
-    selectedCondition,
-    selectedOffer,
-    setMerchantSlug,
-    toast,
-  ]);
+  };
 }

@@ -208,6 +208,65 @@ describe('ProductDetailClient', () => {
     expect(mockUpdateQuantity).toHaveBeenCalledWith('product-1', 3, undefined);
   });
 
+  it('matches the selected offer line when two offers share one condition', async () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=used&offer_id=offer-b')
+    );
+    const line = (offerId: string, cartItemId: string, quantity: number) =>
+      ({
+        id: 'product-1',
+        name: 'iPad 11th Gen',
+        price: 400000,
+        quantity,
+        condition: 'used',
+        offerId,
+        cartItemId,
+      }) as CartItem;
+    mockUseCart.mockReturnValue({
+      addToCart: mockAddToCart,
+      cart: [
+        line('offer-a', 'product-1::condition=used::offerId=offer-a', 1),
+        line('offer-b', 'product-1::condition=used::offerId=offer-b', 2),
+      ],
+      setMerchantSlug: mockSetMerchantSlug,
+      updateQuantity: mockUpdateQuantity,
+    });
+
+    render(
+      <ProductDetailClient
+        product={{
+          ...makeBaseProduct(),
+          has_condition_offers: true,
+          offers: [
+            {
+              id: 'offer-a',
+              condition: 'used',
+              price: 400000,
+              stock_quantity: 3,
+            },
+            {
+              id: 'offer-b',
+              condition: 'used',
+              price: 380000,
+              stock_quantity: 3,
+            },
+          ],
+        }}
+      />
+    );
+
+    const increaseButton = await screen.findByLabelText(
+      'Increase quantity of iPad 11th Gen'
+    );
+    increaseButton.click();
+
+    expect(mockUpdateQuantity).toHaveBeenCalledWith(
+      'product-1::condition=used::offerId=offer-b',
+      3,
+      undefined
+    );
+  });
+
   it('treats missing manage_stock as managed stock on the storefront PDP', async () => {
     const { manage_stock: _manageStock, ...product } = {
       ...makeBaseProduct(),

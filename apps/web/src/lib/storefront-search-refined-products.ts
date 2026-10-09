@@ -16,13 +16,11 @@ import { createClient } from './supabase/server';
 
 async function findRefinedDidYouMean({
   supabase,
-  rpcName,
   merchantId,
   query,
   refinements,
 }: {
   supabase: StorefrontSearchSupabase;
-  rpcName: string;
   merchantId: string;
   query: string;
   refinements: SearchRefinements;
@@ -35,9 +33,11 @@ async function findRefinedDidYouMean({
   // empty would silently drop the shopper's budget/brand/condition
   // filters. Probe the unrefined query: only a query that matches
   // nothing unrefined is a typo. An unreadable probe fails closed.
+  // The probe is deliberately unrefined, so it always uses the base RPC:
+  // the processor RPC requires processor_filter and would reject it.
   try {
     const probe = await supabase.rpc(
-      rpcName,
+      'search_storefront_products_refined',
       getRefinedSearchArgs(merchantId, query, emptySearchRefinements(), 1, 0)
     );
     if (probe.error) return null;
@@ -80,7 +80,6 @@ export async function getStorefrontRefinedSearchProducts(args: {
       query: args.query,
       didYouMean: await findRefinedDidYouMean({
         supabase,
-        rpcName,
         merchantId: args.merchantId,
         query: args.query,
         refinements: args.refinements,

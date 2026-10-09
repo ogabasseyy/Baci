@@ -90,6 +90,28 @@ describe('refined product hydration', () => {
     expect(result.didYouMean).toBeNull();
     expect(suggestion).not.toHaveBeenCalled();
   });
+  it('probes the base RPC for typo recovery under a processor refinement', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null });
+    suggestion.mockResolvedValue('iphone');
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'iphon',
+      limit: 20,
+      refinements: {
+        brands: [],
+        sort: 'relevance',
+        processor: 'Intel Core i7',
+      },
+    });
+    expect(result.didYouMean).toBe('iphone');
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[0]?.[0]).toBe(
+      'search_storefront_products_processor_refined'
+    );
+    expect(rpc.mock.calls[1]?.[0]).toBe('search_storefront_products_refined');
+  });
   it('displays the matching variant price in ranked order', async () => {
     rpc.mockResolvedValue({
       data: [

@@ -213,12 +213,17 @@ export default function ProductDetailClient({
     if (effectiveVariantId) {
       return item.id === product.id && item.variantId === effectiveVariantId;
     }
+    if (item.id !== product.id || item.variantId) return false;
+
+    // Two offers can share one displayed condition: match the selected
+    // offer by id, and require no offer id for the base line, or the
+    // quantity controls render for (and update) the wrong offer.
+    if (selectedOffer) return item.offerId === selectedOffer.id;
+    if (item.offerId) return false;
 
     // Base/simple products store no condition in cart. Only offer-driven
     // selections need an explicit condition match on non-variant rows.
     return (
-      item.id === product.id &&
-      !item.variantId &&
       (normalizeCanonicalProductCondition(
         item.condition ?? product.condition
       ) || 'new') === effectiveSelectedCondition

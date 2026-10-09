@@ -302,7 +302,7 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     // cannot distinguish the branches (slug/scheme/bundle id match).
     const production = jest.requireActual<
       typeof import('./config/development-storefront-expo-config-production')
-    >('./config/development-storefront-expo-config-production.ts');
+    >('./config/development-storefront-expo-config-production.js');
     expect(appConfig).toBe(production.buildStorefrontConfig);
   });
 

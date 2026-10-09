@@ -1,0 +1,52 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockFrom, mockInsert, mockCreateServiceClient } = vi.hoisted(() => {
+  const mockFrom = vi.fn();
+  const mockInsert = vi.fn();
+  const mockCreateServiceClient = vi.fn(() => ({ from: mockFrom }));
+  mockFrom.mockReturnValue({ insert: mockInsert });
+  return { mockFrom, mockInsert, mockCreateServiceClient };
+});
+
+vi.mock('@/lib/supabase/service', () => ({
+  createServiceClient: mockCreateServiceClient,
+}));
+
+import { recordSearchSubmission } from './server-analytics-client';
+
+describe('recordSearchSubmission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInsert.mockResolvedValue({ error: null });
+  });
+
+  it('inserts through the search-analytics brand', async () => {
+    const row = {
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: 'phone',
+      results_count: 27,
+      search_method: 'client' as const,
+    };
+
+    const result = await recordSearchSubmission(row);
+
+    expect(mockCreateServiceClient).toHaveBeenCalledWith('search-analytics');
+    expect(mockCreateServiceClient).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith('search_analytics');
+    expect(mockInsert).toHaveBeenCalledExactlyOnceWith(row);
+    expect(result).toEqual({ error: null });
+  });
+
+  it('propagates insert errors', async () => {
+    mockInsert.mockResolvedValue({ error: { message: 'db down' } });
+
+    const result = await recordSearchSubmission({
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: 'phone',
+      results_count: 0,
+      search_method: 'client',
+    });
+
+    expect(result).toEqual({ error: { message: 'db down' } });
+  });
+});

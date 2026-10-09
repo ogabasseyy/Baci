@@ -13,7 +13,7 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
-import { createSearchAnalyticsServiceClient } from '@/lib/search/server-analytics-client';
+import { recordSearchSubmission } from '@/lib/search/server-analytics-client';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createClient } from '@/lib/supabase/server';
 import { searchSubmissionSchema } from '@/schemas/search-submission';
@@ -157,18 +157,16 @@ export async function POST(request: NextRequest) {
       limit: 1,
       includeDidYouMean: false,
     });
-    // Branded service-role insert: every value is server-derived (merchant
-    // from the snapshot lookup, query/count from the bounded search RPC),
-    // and anon / authenticated table writes are revoked (#3581) so the
-    // endpoint gates cannot be bypassed with a direct table write.
-    const { error } = await createSearchAnalyticsServiceClient()
-      .from('search_analytics')
-      .insert({
-        merchant_id: merchant.id,
-        search_query: result.query,
-        results_count: result.count,
-        search_method: 'client',
-      });
+    // Narrow ingestion edge: every value is server-derived (merchant from
+    // the snapshot lookup, query/count from the bounded search RPC), and
+    // anon / authenticated table writes are revoked (#3581) so the endpoint
+    // gates cannot be bypassed with a direct table write.
+    const { error } = await recordSearchSubmission({
+      merchant_id: merchant.id,
+      search_query: result.query,
+      results_count: result.count,
+      search_method: 'client',
+    });
     if (error) return unavailable();
     return new NextResponse(null, { status: 204 });
   } catch {

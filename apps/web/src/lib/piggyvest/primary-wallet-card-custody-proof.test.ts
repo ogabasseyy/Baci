@@ -91,8 +91,6 @@ describe('primary custody economic and identity proof', () => {
       'wrong webhook customer',
       { crosswalk: { ...fixture.crosswalk, webhookCustomerId: 'other' } },
     ],
-    ['stale crosswalk', { now: fixture.now + 60001 }],
-    ['future crosswalk', { now: fixture.now - 2000 }],
     ['invalid clock', { now: Number.NaN }],
     [
       'foreign source',
@@ -189,5 +187,13 @@ describe('primary custody economic and identity proof', () => {
     expect(verifyPrimaryCardCustodyProof({ ...fixture, ...change })).toEqual({
       status: 'deferred',
     });
+  });
+  it.each([
+    ['stale crosswalk', { now: fixture.now + 60001 }],
+    ['future crosswalk', { now: fixture.now - 2000 }],
+  ])('verifies %s against live provider reads instead of stranding it', (_label, change) => {
+    expect(
+      verifyPrimaryCardCustodyProof({ ...fixture, ...change }).status
+    ).toBe('verified');
   });
 });

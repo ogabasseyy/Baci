@@ -296,6 +296,26 @@ it('keeps a saved checkout instead of falling back when recovery reports unavail
     expect.stringContaining('retained')
   );
 });
+it.each([
+  ['VERIFIED_EMAIL_REQUIRED', 'Verify your email', 'verified email address'],
+  [
+    'OWNERSHIP_REQUIRED',
+    'Checkout belongs to another account',
+    'different customer',
+  ],
+])('maps %s to specific guidance instead of the generic funding error', async (code, title, guidance) => {
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockRejectedValue(Object.assign(new Error('rejected'), { code }));
+  await fundPrimaryWalletCard(input);
+  expect(Alert.alert).toHaveBeenCalledWith(
+    title,
+    expect.stringContaining(guidance)
+  );
+  expect(Alert.alert).not.toHaveBeenCalledWith(
+    'Card funding could not be confirmed',
+    expect.anything()
+  );
+});
 it('falls back when recovery drops a stale placeholder on not-ready', async () => {
   // Pre-call read sees the stale null-operation placeholder; the request
   // drops it on the authoritative response, so the catch re-read finds

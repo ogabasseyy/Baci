@@ -128,7 +128,8 @@ it('blocks funding on an ambiguous probe instead of guessing a rail', async () =
   });
   expect(alert).toHaveBeenCalledWith(
     'Unable to fund wallet',
-    'We could not confirm your wallet rail. Please try again.'
+    'We could not confirm your wallet rail. Please try again.',
+    expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
   );
   expect(mockPrimary.mock.calls.length).toBe(primaryCalls);
   expect(mockLegacy.mock.calls.length).toBe(legacyCalls);

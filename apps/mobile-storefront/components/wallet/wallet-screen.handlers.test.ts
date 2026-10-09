@@ -283,6 +283,61 @@ describe('wallet-screen.handlers', () => {
       params: expect.objectContaining({ reference: 'ref-legacy' }),
     });
   });
+
+  it('retries funding after a transient probe failure instead of stranding the tap', async () => {
+    // Unknown verdict: the probe runs, fails once (blocked, no legacy
+    // minted on ambiguity), then the retry re-probes and routes legacy.
+    mockReadObserved.mockReturnValue(null);
+    mockGetCapability
+      .mockRejectedValueOnce(new Error('transport down'))
+      .mockResolvedValueOnce(false);
+    mockInitializeWalletTopUp.mockResolvedValue({
+      authorization_url: 'https://pay.example/authorize',
+      gateway: 'paystack',
+      reference: 'ref-retry',
+      success: true,
+    });
+    const params = {
+      activeMerchantId: 'merchant-1',
+      activeMerchantSlug: 'ogabassey',
+      customer: {
+        first_name: 'Ada',
+        id: 'customer-1',
+        last_name: 'Buyer',
+        phone: '08012345678',
+      },
+      fundAmount: '5000',
+      resetFundPanel: jest.fn(),
+      setIsFundPending: jest.fn(),
+      user: null,
+    };
+
+    await fundWallet(params);
+
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unable to fund wallet',
+      'We could not confirm your wallet rail. Please try again.',
+      expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+    );
+    const buttons = jest.mocked(Alert.alert).mock.calls[0][2] ?? [];
+    const retry = buttons.find((button) => button?.text === 'Try again');
+    expect(retry?.onPress).toEqual(expect.any(Function));
+
+    retry?.onPress?.();
+
+    // The retried probe resolves legacy and the working top-up runs.
+    for (let i = 0; i < 20 && mockGetCapability.mock.calls.length < 2; i++)
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(mockGetCapability).toHaveBeenCalledTimes(2);
+    for (
+      let i = 0;
+      i < 20 && mockInitializeWalletTopUp.mock.calls.length < 1;
+      i++
+    )
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(mockInitializeWalletTopUp).toHaveBeenCalledTimes(1);
+  });
   it('returns a savings-origin top-up to the plan without submitting a savings transfer', async () => {
     mockInitializeWalletTopUp.mockResolvedValue({
       authorization_url: 'https://pay.example/authorize',

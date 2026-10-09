@@ -1,4 +1,3 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
@@ -91,11 +90,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
-import {
-  fetchLiveOrderOffers,
-  type OrderOfferLine,
-  type OrderOfferQueryResult,
-} from './verify-order-offer-lines';
+import { recomputeOfferAssuranceFees } from './recompute-offer-assurance-fees';
+import { resolveOrderOfferEconomics } from './resolve-order-offer-economics';
+import type { OrderOfferQueryResult } from './verify-order-offer-lines';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -979,70 +976,28 @@ export async function POST(request: NextRequest) {
     // Exact condition offers must name a live offer of their own product:
     // two offers can share one condition, so the stored id is the only
     // thing distinguishing them at fulfillment time.
-    const liveOfferPrices = new Map<string, number>();
-    const liveOfferConditions = new Map<string, string>();
-    if (orderItemsPayload.some((item) => item.offer_id)) {
-      let mismatchedOfferLine: OrderOfferLine | null = null;
-      try {
-        const liveOffers = await fetchLiveOrderOffers(
-          (productId) =>
-            supabase.rpc('get_product_offers', {
-              p_product_id: productId,
-            }) as unknown as Promise<OrderOfferQueryResult>,
-          orderItemsPayload
-        );
-        mismatchedOfferLine = liveOffers.mismatch;
-        for (const [key, price] of liveOffers.prices) {
-          liveOfferPrices.set(key, price);
-        }
-        for (const [key, condition] of liveOffers.conditions) {
-          liveOfferConditions.set(key, condition);
-        }
-      } catch (error) {
-        console.error('Order offer verification failed:', error);
+    const offerEconomics = await resolveOrderOfferEconomics(
+      (productId) =>
+        supabase.rpc('get_product_offers', {
+          p_product_id: productId,
+        }) as unknown as Promise<OrderOfferQueryResult>,
+      orderItemsPayload
+    );
+    if (!offerEconomics.ok) {
+      if (offerEconomics.reason === 'verification_failed') {
+        console.error('Order offer verification failed:', offerEconomics.error);
         return NextResponse.json(
           { error: 'Failed to verify order offers' },
           { status: 500 }
         );
       }
-      if (mismatchedOfferLine) {
-        return NextResponse.json(
-          { error: 'Invalid condition offer for order item' },
-          { status: 400 }
-        );
-      }
-      // The stored condition must name the reserved offer: a refurbished
-      // offer line carrying condition 'new' would reserve and charge the
-      // offer but tell fulfillment another condition. Canonical-compare
-      // (callers send canonical spellings, rows store merchant ones) and
-      // reject mismatches; persist the live condition otherwise so the
-      // stored line always matches the priced offer exactly.
-      for (const item of orderItemsPayload) {
-        if (!item.offer_id) continue;
-        const liveCondition = liveOfferConditions.get(
-          `${item.product_id}::${item.offer_id}`
-        );
-        // A live row without a condition cannot bind fulfillment: reject
-        // rather than persist an unverified caller label.
-        if (liveCondition === undefined) {
-          return NextResponse.json(
-            { error: 'Invalid condition offer for order item' },
-            { status: 400 }
-          );
-        }
-        if (
-          item.condition != null &&
-          normalizeCanonicalProductCondition(item.condition) !==
-            normalizeCanonicalProductCondition(liveCondition)
-        ) {
-          return NextResponse.json(
-            { error: 'Invalid condition offer for order item' },
-            { status: 400 }
-          );
-        }
-        item.condition = liveCondition;
-      }
+      return NextResponse.json(
+        { error: 'Invalid condition offer for order item' },
+        { status: 400 }
+      );
     }
+    const liveOfferPrices = offerEconomics.liveOfferPrices;
+    const liveOfferConditions = offerEconomics.liveOfferConditions;
 
     // Offer assurance fees recompute below, after the negotiation preflight
     // validates (and possibly prices) the client basis: the fee follows the
@@ -1341,32 +1296,10 @@ export async function POST(request: NextRequest) {
       ? (negotiationDiscount?.totalDiscount ?? 0)
       : 0;
 
-    // Offer assurance fees recompute from the server-validated charged unit
-    // price: the live offer price minus the validated per-unit merchandise
-    // reduction, and only when that reduction is actually applied to the
-    // order. The RPC charges live merchandise but stages the route fee, so a
-    // zero/stale client price naming a valid offer must not set the fee —
-    // while an approved negotiated price must not be overcharged either.
-    // lineDiscounts is positional with orderItemsPayload (null entries for
-    // lines without a reduction).
-    if (liveOfferPrices.size > 0) {
-      orderItemsPayload.forEach((line, index) => {
-        if (!line.offer_id || !line.has_assurance) return;
-        const livePrice = liveOfferPrices.get(
-          `${line.product_id}::${line.offer_id}`
-        );
-        if (livePrice === undefined) return;
-        const validatedReduction = shouldApplyServerDerivedDiscount
-          ? (negotiationDiscount?.lineDiscounts?.[index]?.merchandiseDiscount ??
-            0)
-          : 0;
-        const chargedUnit =
-          livePrice - validatedReduction / Math.max(line.quantity, 1);
-        line.assurance_fee = roundCurrency(
-          Math.max(chargedUnit, 0) * line.quantity * SERVER_ASSURANCE_RATE
-        );
-      });
-    }
+    recomputeOfferAssuranceFees(orderItemsPayload, liveOfferPrices, {
+      applied: shouldApplyServerDerivedDiscount,
+      negotiation: negotiationDiscount ?? null,
+    });
 
     let redvaultQuote: Awaited<
       ReturnType<typeof computeRedvaultOrderQuote>

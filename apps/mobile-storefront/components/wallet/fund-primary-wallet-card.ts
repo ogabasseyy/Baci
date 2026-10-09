@@ -9,6 +9,7 @@ import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card'
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO } from '@/schemas/primary-wallet-card';
 import type { fundWallet } from './wallet-screen.handlers';
+import { alertPrimaryWalletCardFundingFailure } from './primary-wallet-card-funding-alerts';
 
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();
@@ -277,28 +278,7 @@ export async function fundPrimaryWalletCard(
         .catch(() => pending);
       if (!retained) throw error;
     }
-    const code =
-      typeof error === 'object' && error !== null
-        ? (error as { code?: unknown }).code
-        : undefined;
-    if (code === 'VERIFIED_EMAIL_REQUIRED') {
-      Alert.alert(
-        'Verify your email',
-        'Card funding needs a verified email address. Verify it, then check this funding again — do not start another charge.'
-      );
-      return;
-    }
-    if (code === 'OWNERSHIP_REQUIRED') {
-      Alert.alert(
-        'Checkout belongs to another account',
-        'This card checkout was started under a different customer. Sign in with that account before checking again.'
-      );
-      return;
-    }
-    Alert.alert(
-      'Card funding could not be confirmed',
-      'Any pending operation is retained. Check again before attempting another charge.'
-    );
+    alertPrimaryWalletCardFundingFailure(error);
   } finally {
     activeFundings.delete(fundingKey);
     input.setIsFundPending(false);

@@ -52,7 +52,6 @@ describe('primary custody bounded read-only observations', () => {
     );
   });
   it.each([
-    { ...fixture.configuration, expiresAt: '2026-10-07T19:59:00Z' },
     { ...fixture.configuration, integrationId: fixture.context.customerId },
     { ...fixture.configuration, environment: 'production' },
   ])('fails closed before observations for unavailable deployment scope %#', async (configuration) => {
@@ -61,6 +60,15 @@ describe('primary custody bounded read-only observations', () => {
       'Custody observation unavailable'
     );
     expect(input.fetchImplementation).not.toHaveBeenCalled();
+  });
+  it('keeps live observations available past the evidence window so the worker can drain', async () => {
+    const input = setup({
+      ...fixture.configuration,
+      expiresAt: '2026-10-07T19:59:00Z',
+    });
+    const observed = await input.read(fixture.context, fixture.envelope);
+    expect(observed.crosswalk).toEqual(fixture.crosswalk);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(4);
   });
   it('does not invent an endpoint when crosswalk delivery is missing', async () => {
     const input = setup();

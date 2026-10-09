@@ -39,6 +39,14 @@ function isBasePrimaryNotReady(error: unknown): boolean {
   );
 }
 
+function isProfileVerificationRequired(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'PROFILE_VERIFICATION_REQUIRED'
+  );
+}
+
 /**
  * Rolls back the cached verdict when an authoritative NOT_READY arrives
  * over a non-probe path (connect/reserve/status mutations). A cached
@@ -135,6 +143,16 @@ async function sharedProbe(
       observePiggyvestPrimaryCapability(merchantId, true);
       return { available: true, account: snapshot.account };
     } catch (error) {
+      if (isProfileVerificationRequired(error)) {
+        // The wallet GET emits this 409 only after the runtime check
+        // passes, so it proves the merchant is primary-enabled even
+        // though this customer's profile is incomplete. Record the
+        // positive verdict: without it the hook stays unknown, the
+        // funding controller waits on primaryVerdictPending, the phone
+        // prompt never renders, and every probe repeats the same 409.
+        observePiggyvestPrimaryCapability(merchantId, true);
+        return { available: true };
+      }
       if (!isPrimaryWalletNotReady(error)) throw error;
       // Feature-scoped codes resolve false once without caching: only the
       // base verdict describes the whole merchant integration.

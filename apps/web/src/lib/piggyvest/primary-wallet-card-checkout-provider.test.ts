@@ -232,6 +232,19 @@ describe('goal-independent primary card collection', () => {
     );
     expect(transport).not.toHaveBeenCalled();
   });
+  it('verifies a pre-expiry operation after the deployment deadline passes', async () => {
+    // The deadline blocks NEW sessions only: status recovery and webhook
+    // reconciliation run on the drain runtime with the real (expired)
+    // settings, and a checkout paid after expiry must still verify so
+    // its collection is recorded instead of 503ing forever.
+    const { provider, transport } = setup(response(), {
+      ...fixture.settings,
+      expiresAt: '2026-09-29T15:59:10Z',
+    });
+    const result = await provider.verify(fixture.intent);
+    expect(result.outcome).toBe('verified');
+    expect(transport).toHaveBeenCalled();
+  });
   it('rejects a checkout session with a mismatched access code', async () => {
     const { provider } = setup({
       status: true,

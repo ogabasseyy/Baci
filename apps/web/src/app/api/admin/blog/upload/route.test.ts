@@ -35,7 +35,10 @@ const mockStorageBucket = {
   upload: vi.fn(),
 };
 
+const mockUpsert = vi.fn();
+
 const mockSupabase = {
+  from: vi.fn(() => ({ upsert: mockUpsert })),
   storage: {
     from: vi.fn(() => mockStorageBucket),
   },
@@ -54,6 +57,7 @@ describe('POST /api/admin/blog/upload', () => {
     mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
     mockCheckRateLimit.mockResolvedValue(true);
     mockStorageBucket.upload.mockResolvedValue({ error: null });
+    mockUpsert.mockResolvedValue({ error: null });
   });
 
   it('returns 401 for unauthenticated users', async () => {
@@ -182,6 +186,60 @@ describe('POST /api/admin/blog/upload', () => {
         contentType: 'image/webp',
       })
     );
+  });
+
+  it('stages uploads as tombstones so an abandoned session still sweeps', async () => {
+    // The unmount flush never runs when the tab closes mid-draft, so
+    // the upload itself must leave the record the cron reaps. A later
+    // save clears the staged rows; only abandoned uploads go due.
+    const file = new File(['file-bytes'], 'inline.webp', {
+      type: 'image/webp',
+    });
+    const request = {
+      formData: vi.fn().mockResolvedValue({
+        get: (key: string) => {
+          if (key === 'file') return file;
+          if (key === 'purpose') return 'inline';
+          return null;
+        },
+      }),
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mockUpsert).toHaveBeenCalledWith(
+      [{ path: expect.stringMatching(/^platform\/blog\//) }],
+      { ignoreDuplicates: true, onConflict: 'path' }
+    );
+  });
+
+  it('removes uploaded objects when staging fails instead of orphaning them', async () => {
+    mockUpsert.mockResolvedValueOnce({ error: { message: 'down' } });
+    mockStorageBucket.remove.mockResolvedValueOnce({ error: null });
+    const file = new File(['file-bytes'], 'inline.webp', {
+      type: 'image/webp',
+    });
+    const request = {
+      formData: vi.fn().mockResolvedValue({
+        get: (key: string) => {
+          if (key === 'file') return file;
+          if (key === 'purpose') return 'inline';
+          return null;
+        },
+      }),
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      code: 'UPLOAD_FAILED',
+      error: 'Failed to upload file',
+    });
+    expect(mockStorageBucket.remove).toHaveBeenCalledWith([
+      expect.stringMatching(/^platform\/blog\//),
+    ]);
   });
 
   it('rejects files above the OG-compatible max size', async () => {

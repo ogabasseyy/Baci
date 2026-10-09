@@ -11,6 +11,7 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
 import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
+import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
 import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
@@ -108,6 +109,8 @@ export async function POST(request: NextRequest) {
   uploadedPaths.push(filePath);
 
   if (purpose === 'inline') {
+    const staging = await stageUploadedBlogMediaPaths(supabase, uploadedPaths);
+    if (staging) return staging;
     revalidatePlatformBlog();
     return NextResponse.json({
       filename: `${fileToken}.${extension}`,
@@ -183,6 +186,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const staging = await stageUploadedBlogMediaPaths(supabase, uploadedPaths);
+  if (staging) return staging;
   revalidatePlatformBlog();
 
   return NextResponse.json({

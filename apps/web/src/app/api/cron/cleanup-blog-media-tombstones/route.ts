@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { sweepDueBlogMediaTombstones } from '@/app/api/admin/blog/upload/blog-media-tombstone-sweep';
+import { createBlogMediaSweepWorkerClient } from '@/lib/blog-media-sweep-worker-client';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
-import { createServiceClient } from '@/lib/supabase/service';
 
 export const maxDuration = 60;
 
@@ -11,8 +11,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Least-privilege worker capability: the sweep's wrapper RPCs plus
+    // media-bucket removal only. Construction throws until the worker
+    // token is provisioned, failing closed to a retried 500.
     const result = await sweepDueBlogMediaTombstones(
-      createServiceClient('event-pipeline')
+      createBlogMediaSweepWorkerClient(process.env)
     );
     if (result === null) {
       return NextResponse.json(

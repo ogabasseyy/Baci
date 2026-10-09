@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { createClient } from '@/lib/supabase/server';
-import { BLOG_MEDIA_TOMBSTONE_TABLE } from './blog-media-tombstone-constants';
-import { sweepDueBlogMediaTombstones } from './blog-media-tombstone-sweep';
-
-type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+import {
+  type BlogMediaSweepClient,
+  sweepDueBlogMediaTombstones,
+} from './blog-media-tombstone-sweep';
 
 type ClaimRow = { tombstone_claimed: boolean; tombstone_path: string };
 
@@ -18,20 +17,11 @@ function fakeStore() {
     rpcError: null as { message: string } | null,
   };
   const client = {
-    from: (table: string) => {
-      if (table !== BLOG_MEDIA_TOMBSTONE_TABLE) {
-        throw new Error(`unexpected table ${table}`);
+    rpc: (name: string, args?: Record<string, unknown>) => {
+      if (name === 'delete_claimed_blog_media_tombstones') {
+        state.cleaned.push(...((args?.p_paths as string[]) ?? []));
+        return Promise.resolve({ data: null, error: state.cleanupError });
       }
-      return {
-        delete: () => ({
-          in: (_column: string, paths: string[]) => {
-            state.cleaned.push(...paths);
-            return Promise.resolve({ error: state.cleanupError });
-          },
-        }),
-      };
-    },
-    rpc: (name: string) => {
       if (name !== 'claim_sweepable_blog_media_tombstones') {
         throw new Error(`unexpected rpc ${name}`);
       }
@@ -51,7 +41,7 @@ function fakeStore() {
         },
       }),
     },
-  } as unknown as ServerSupabaseClient;
+  } as unknown as BlogMediaSweepClient;
   return { client, state };
 }
 

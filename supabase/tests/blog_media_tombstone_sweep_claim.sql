@@ -257,8 +257,131 @@ BEGIN
 END;
 $register$;
 
+DO $scope$
+DECLARE
+  v_released integer;
+BEGIN
+  -- Out-of-scope staging fails even for RLS-bypassing roles: the
+  -- CHECK bounds the table itself, not just the PostgREST policies.
+  BEGIN
+    INSERT INTO public.blog_media_delete_tombstones (path)
+    VALUES ('merchant/evil.webp');
+    RAISE EXCEPTION 'out-of-scope tombstone insert unexpectedly succeeded';
+  EXCEPTION WHEN check_violation THEN
+    NULL;
+  END;
+
+  -- Non-service inserts land server-owned: an already-due claimed
+  -- row cannot be staged through PostgREST.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/scope-forced.webp', now() - interval '2 hours', TRUE);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/scope-forced.webp'
+       AND claimed IS FALSE
+       AND created_at > now() - interval '1 minute'
+  ) THEN
+    RAISE EXCEPTION 'tombstone insert state was not forced server-side';
+  END IF;
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/scope-forced.webp';
+
+  -- The worker wrappers refuse any role but the worker, even when the
+  -- session role holds EXECUTE with a mismatched JWT claim.
+  SET LOCAL ROLE blog_media_sweep_worker;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  BEGIN
+    PERFORM public.blog_media_sweep_worker_claim(now(), 1);
+    RAISE EXCEPTION 'worker claim unexpectedly accepted a non-worker role';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  -- The release wrapper rejects out-of-scope paths before deleting.
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role', 'blog_media_sweep_worker', true);
+  BEGIN
+    PERFORM public.blog_media_sweep_worker_release(ARRAY['merchant/evil.webp']);
+    RAISE EXCEPTION 'worker release unexpectedly accepted an out-of-scope path';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    NULL;
+  END;
+
+  -- Release drops only claimed rows: stale is still flagged from the
+  -- claim block, while an unclaimed path releases nothing.
+  SELECT public.blog_media_sweep_worker_release(
+    ARRAY['platform/blog/stale.webp']) INTO v_released;
+  IF v_released <> 1 THEN
+    RAISE EXCEPTION 'worker release must drop the claimed row, got %', v_released;
+  END IF;
+  SELECT public.blog_media_sweep_worker_release(
+    ARRAY['platform/blog/never-staged.webp']) INTO v_released;
+  IF v_released <> 0 THEN
+    RAISE EXCEPTION 'worker release must ignore unclaimed paths, got %', v_released;
+  END IF;
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+END;
+$scope$;
+
 DO $grants$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS proc
+     WHERE proc.oid =
+        'public.blog_media_sweep_worker_claim(timestamptz,integer)'::pg_catalog.regprocedure
+       AND proc.prosecdef
+       AND proc.provolatile = 'v'
+       AND proc.proowner = 'postgres'::pg_catalog.regrole
+  ) THEN
+    RAISE EXCEPTION 'worker claim wrapper must be VOLATILE SECURITY DEFINER owned by postgres';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS proc
+     WHERE proc.oid =
+        'public.blog_media_sweep_worker_release(text[])'::pg_catalog.regprocedure
+       AND proc.prosecdef
+       AND proc.provolatile = 'v'
+       AND proc.proowner = 'postgres'::pg_catalog.regrole
+  ) THEN
+    RAISE EXCEPTION 'worker release wrapper must be VOLATILE SECURITY DEFINER owned by postgres';
+  END IF;
+
+  IF NOT pg_catalog.has_function_privilege(
+    'blog_media_sweep_worker',
+    'public.blog_media_sweep_worker_claim(timestamptz,integer)',
+    'execute'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'blog_media_sweep_worker',
+    'public.blog_media_sweep_worker_release(text[])',
+    'execute'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker must execute only its two wrappers';
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+    'blog_media_sweep_worker',
+    'public.claim_sweepable_blog_media_tombstones(timestamptz,integer)',
+    'execute'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.blog_media_sweep_worker_claim(timestamptz,integer)',
+    'execute'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.blog_media_sweep_worker_release(text[])',
+    'execute'
+  ) THEN
+    RAISE EXCEPTION 'sweep worker capability leaks beyond its wrappers';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
       FROM pg_catalog.pg_proc AS proc

@@ -51,6 +51,10 @@ describe('hasUnrepresentableVariance', () => {
     '<p class="md:max-lg:hidden">Draft note</p><p>Body</p>',
     '<p class="dark:md:max-lg:hidden">Draft note</p><p>Body</p>',
     '<p class="max-md:max-lg:hidden">Draft note</p><p>Body</p>',
+    '<input type="checkbox" class="peer" checked><p class="peer-checked:hidden">Draft note</p><p>Body</p>',
+    '<p class="peer-disabled:hidden">Draft note</p><p>Body</p>',
+    '<p class="peer-visited:hidden">Draft note</p><p>Body</p>',
+    '<p class="group-checked:hidden">Draft note</p><p>Body</p>',
   ])('rejects unsupported variants wrapping visibility utilities: %s', (content) => {
     expect(hasUnrepresentableVariance(content)).toBe(true);
   });
@@ -59,6 +63,7 @@ describe('hasUnrepresentableVariance', () => {
     '<p class="hover:hidden">Note</p><p>Body</p>',
     '<p class="md:hover:hidden">Note</p><p>Body</p>',
     '<p class="group-hover:hidden">Note</p><p>Body</p>',
+    '<p class="peer-focus:hidden">Note</p><p>Body</p>',
     '<p class="hidden dark:md:hidden">Note</p><p>Body</p>',
     '<p class="max-[600px]:p-4">Note</p><p>Body</p>',
   ])('accepts at-rest-neutral or non-hiding variants: %s', (content) => {
@@ -85,6 +90,14 @@ describe('hasUnrepresentableVariance', () => {
     expect(() =>
       validateImportedContent(
         '<p class="md:max-lg:hidden">Draft note</p><p>Body</p>'
+      )
+    ).toThrow('responsive visibility');
+  });
+
+  it('rejects a checked-peer hiding note at import', () => {
+    expect(() =>
+      validateImportedContent(
+        '<input type="checkbox" class="peer" checked><p class="peer-checked:hidden">Draft note</p><p>Body</p>'
       )
     ).toThrow('responsive visibility');
   });

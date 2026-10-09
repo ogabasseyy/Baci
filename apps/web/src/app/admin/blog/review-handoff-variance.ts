@@ -59,12 +59,35 @@ const AT_REST_NEUTRAL_VARIANTS = new Set([
   'open',
 ]);
 
+// Sibling/ancestor states whose absence matches the resting verdict:
+// sanitization can strip the controlling input or link, and the
+// editor drops the dependent class, so only interaction states that
+// rest inactive survive that round-trip. Persistent states
+// (checked, disabled, visited, ...) hide in the source exactly when
+// the dropped control carries them, exposing the note on import.
+const AT_REST_NEUTRAL_MARKER_STATES = new Set([
+  'hover',
+  'focus',
+  'focus-within',
+  'focus-visible',
+  'active',
+]);
+
+function isNeutralMarkerVariant(variant: string): boolean {
+  const prefix = variant.startsWith('group-')
+    ? 'group-'
+    : variant.startsWith('peer-')
+      ? 'peer-'
+      : null;
+  if (prefix === null) return false;
+  return AT_REST_NEUTRAL_MARKER_STATES.has(variant.slice(prefix.length));
+}
+
 function isKnownVariant(variant: string): boolean {
   return (
     KNOWN_WIDTH_VARIANTS.has(variant) ||
     AT_REST_NEUTRAL_VARIANTS.has(variant) ||
-    variant.startsWith('group-') ||
-    variant.startsWith('peer-')
+    isNeutralMarkerVariant(variant)
   );
 }
 

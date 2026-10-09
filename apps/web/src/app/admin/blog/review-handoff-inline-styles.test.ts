@@ -146,6 +146,8 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="filter:opacity()">Shown</p>',
     '<p style="filter:opacity(0);filter:none">Shown</p>',
     '<p style="opacity:50%">Shown</p>',
+    '<p style="content-visibility:auto">Shown</p>',
+    '<p style="content-visibility:visible">Shown</p>',
     '<p>No style</p>',
   ])('leaves non-hiding styles alone: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
@@ -181,6 +183,14 @@ describe('convertHiddenInlineStyles', () => {
     expect(
       validateImportedContent(
         '<p style="filter:opacity(0)">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+  });
+
+  it('strips content-visibility hidden content at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="content-visibility:hidden">Draft note</p><p>Body</p>'
       )
     ).toBe('<p>Body</p>');
   });

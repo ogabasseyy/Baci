@@ -91,4 +91,19 @@ describe('stripHiddenContent', () => {
       )
     ).toBe(`${open}${close}<p>Visible</p>`);
   });
+
+  it('keeps stray closes inside hidden ancestry', () => {
+    // An HTML parser ignores the unmatched </p>, so the draft note
+    // stays inside the hidden div; popping blindly would orphan it
+    // and publish it once the class strips.
+    expect(
+      stripHiddenContent('<div class="hidden"></p>Draft note</div><p>Body</p>')
+    ).toBe('<p>Body</p>');
+  });
+
+  it('closes mis-nested elements through their match', () => {
+    expect(stripHiddenContent('<div><span></div><p>Body</p>')).toBe(
+      '<div><span></div><p>Body</p>'
+    );
+  });
 });

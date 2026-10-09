@@ -57,6 +57,24 @@ describe('blog managed storage paths', () => {
     ).toBe('merchant-1/blog/upload-1/landscape_16x9.webp');
   });
 
+  it('trusts the default CDN alongside a configured override', () => {
+    // Deployments that override the CDN host still serve legacy
+    // media from the default origin: both must extract.
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.new.test');
+    expect(
+      extractManagedBlogStoragePath(
+        'https://cdn.new.test/media/platform/blog/current.webp',
+        { kind: 'platform' }
+      )
+    ).toBe('platform/blog/current.webp');
+    expect(
+      extractManagedBlogStoragePath(
+        'https://cdn.ogabassey.com/media/platform/blog/legacy.webp',
+        { kind: 'platform' }
+      )
+    ).toBe('platform/blog/legacy.webp');
+  });
+
   it('does not recover unowned or non-media URLs', () => {
     vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     expect(

@@ -5,8 +5,8 @@ const sweep = vi.hoisted(() => vi.fn());
 vi.mock('@/app/api/admin/blog/upload/blog-media-tombstone-sweep', () => ({
   sweepDueBlogMediaTombstones: sweep,
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: vi.fn(() => ({})),
+vi.mock('@/lib/blog-media-sweep-worker-client', () => ({
+  createBlogMediaSweepWorkerClient: vi.fn(() => ({})),
 }));
 
 import { GET } from './route';

@@ -1,4 +1,5 @@
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
+import { stripHtmlComments } from './strip-html-comments';
 
 /**
  * Remove inert template subtrees before sanitization. Template
@@ -7,15 +8,18 @@ import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
  * descendants — surfacing notes the author never displayed. Nesting
  * tracks depth (a self-closing slash opens like browsers do), an
  * unclosed template drops to end of input, and stray closes pass
- * through for the sanitizer to discard.
+ * through for the sanitizer to discard. Comments strip first: a
+ * template opener inside comment text is not markup, and the
+ * sanitizer drops comments anyway.
  */
 export function stripTemplateSubtrees(html: string): string {
+  const source = stripHtmlComments(html);
   const segments: string[] = [];
   let depth = 0;
   let position = 0;
-  for (const match of html.matchAll(HTML_TAG_PATTERN)) {
-    const index = match.index ?? html.length;
-    if (depth === 0) segments.push(html.slice(position, index));
+  for (const match of source.matchAll(HTML_TAG_PATTERN)) {
+    const index = match.index ?? source.length;
+    if (depth === 0) segments.push(source.slice(position, index));
     position = index + match[0].length;
     if (match[2].toLowerCase() !== 'template') {
       if (depth === 0) segments.push(match[0]);
@@ -28,6 +32,6 @@ export function stripTemplateSubtrees(html: string): string {
       depth += 1;
     }
   }
-  if (depth === 0) segments.push(html.slice(position));
+  if (depth === 0) segments.push(source.slice(position));
   return segments.join('');
 }

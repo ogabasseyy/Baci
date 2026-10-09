@@ -111,12 +111,35 @@ function hiddenEverywhereBoth(
   );
 }
 
+type OpenEntry = { effective: DualEffective; index: number };
+
+function popMatchingClose(
+  stack: OpenEntry[],
+  elements: ElementRecord[],
+  tagName: string
+): OpenEntry | undefined {
+  // An HTML parser ignores a closing tag with no matching open
+  // element: stray `</p>` inside a hidden div keeps the following
+  // text hidden. Popping blindly would orphan the hidden ancestry
+  // and leak its text once the class strips. Pop through a match so
+  // mis-nested closes (`<div><span></div>`) still end the element
+  // the parser would close.
+  let at = stack.length - 1;
+  while (at >= 0 && elements[stack[at].index].tagName !== tagName) {
+    at -= 1;
+  }
+  if (at === -1) return undefined;
+  const popped = stack[at];
+  stack.length = at;
+  return popped;
+}
+
 function recordElements(content: string): ElementRecord[] {
   const elements: ElementRecord[] = [];
-  const stack: { index: number; effective: DualEffective }[] = [];
+  const stack: OpenEntry[] = [];
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     if (match[1] === '/') {
-      stack.pop();
+      popMatchingClose(stack, elements, match[2].toLowerCase());
       continue;
     }
     const frames: [HidingFrame, HidingFrame] = [
@@ -187,7 +210,7 @@ export function stripHiddenContent(content: string): string {
     seen += 1;
   }
   const segments: string[] = [];
-  const openStack: { index: number; effective: DualEffective }[] = [];
+  const openStack: OpenEntry[] = [];
   let position = 0;
   // Drop flags propagate from parent to child, so any dropped open
   // element implies a dropped innermost one: check the top instead of
@@ -206,7 +229,11 @@ export function stripHiddenContent(content: string): string {
     }
     position = start + match[0].length;
     if (match[1] === '/') {
-      const popped = openStack.pop();
+      const popped = popMatchingClose(
+        openStack,
+        elements,
+        match[2].toLowerCase()
+      );
       if (
         (popped === undefined || !finalDrop[popped.index]) &&
         !insideDropped()

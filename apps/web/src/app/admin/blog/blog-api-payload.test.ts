@@ -5,6 +5,7 @@ import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
   type PlatformAdminBlogPostDetail,
 } from './blog-types';
+import { parseReviewHandoff } from './parse-review-handoff';
 
 const fetchWithCsrf = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf }));
@@ -123,6 +124,39 @@ it('keeps hand-edited alt text for a changed cover URL', () => {
     toApiPayload(form, { clearEmptyToNull: true, existingPost: storedPost })
       .featured_image_alt
   ).toBe('The new cover');
+});
+
+it('keeps imported alt text for a replacement cover during edit-import', () => {
+  // End-to-end edit-import: parse a handoff carrying a new cover plus
+  // its description, then reconcile against the stored post. The
+  // import marks its alt fresh, so the payload keeps the description
+  // for the new cover instead of nulling it as stale.
+  const imported = parseReviewHandoff({
+    category: 'Smartphones',
+    content_html: '<p>Choose a Galaxy A phone.</p>',
+    excerpt: 'A practical guide.',
+    featured_image: {
+      alt: 'The imported cover',
+      height: 675,
+      url: 'https://cdn.example.com/platform/blog/new.webp',
+      variants: {},
+      width: 1200,
+    },
+    focus_keyword: 'Galaxy A buyer guide',
+    intent: 'buying-guide',
+    intent_source: 'draft_task_type',
+    schema_version: 'baci-blog-review-handoff/v1',
+    seo_description: 'Compare current Galaxy A options.',
+    seo_title: 'Galaxy A buyer guide',
+    status: 'published',
+    tags: ['Samsung'],
+    title: 'Galaxy A buyer guide',
+  });
+  expect(imported.featured_image_alt_edited).toBe(true);
+  expect(
+    toApiPayload(imported, { clearEmptyToNull: true, existingPost: storedPost })
+      .featured_image_alt
+  ).toBe('The imported cover');
 });
 
 it('clears alt text the reviewer deliberately emptied', () => {

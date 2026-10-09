@@ -17,6 +17,7 @@ describe('hasClosedDisclosure', () => {
     '<details open="false"><summary>Overview</summary><p>Detail</p></details>',
     '<summary>Orphan summary</summary>',
     '<p>Visible article</p>',
+    '<!-- <details><summary>Note</summary></details> --><p>Body</p>',
   ])('accepts open or non-disclosure markup: %s', (html) => {
     expect(hasClosedDisclosure(html)).toBe(false);
   });

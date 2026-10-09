@@ -141,6 +141,10 @@ function hidingUtilityForStyle(
   if (finals.get('display') === 'none') return 'hidden';
   const visibility = finals.get('visibility');
   if (visibility === 'hidden' || visibility === 'collapse') return 'hidden';
+  // content-visibility:hidden skips rendering the element's contents
+  // entirely; sanitization strips the style attribute, so convert it
+  // like display:none before that lossy step.
+  if (finals.get('content-visibility') === 'hidden') return 'hidden';
   const opacity = finals.get('opacity');
   // Number('') is 0, so an empty opacity must not count as hiding.
   // Percentages are valid opacity values (`opacity: 0%` hides).

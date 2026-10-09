@@ -182,9 +182,12 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     category: validatedMetadata.data.category ?? '',
     excerpt: validatedMetadata.data.excerpt ?? '',
     featured_image_alt: validatedMetadata.data.featured_image_alt ?? '',
-    // Imported alt text arrives with its image, so it is fresh by
-    // construction; the flag only tracks hand edits made after import.
-    featured_image_alt_edited: false,
+    // Imported alt text arrives with its image: non-empty text is
+    // fresh for the imported cover, so payload reconciliation keeps
+    // it instead of dropping it as a stale description. The editor
+    // resets the flag on later URL changes.
+    featured_image_alt_edited:
+      (validatedMetadata.data.featured_image_alt ?? '').trim() !== '',
     focus_keyword: validatedMetadata.data.focus_keyword ?? '',
     seo_description: validatedMetadata.data.seo_description ?? '',
     seo_title: validatedMetadata.data.seo_title ?? '',

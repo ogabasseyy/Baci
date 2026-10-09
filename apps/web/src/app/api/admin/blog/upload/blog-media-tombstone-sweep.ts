@@ -1,11 +1,21 @@
-import type { createClient } from '@/lib/supabase/server';
 import {
   BLOG_MEDIA_TOMBSTONE_GRACE_MS,
   BLOG_MEDIA_TOMBSTONE_SWEEP_LIMIT,
-  BLOG_MEDIA_TOMBSTONE_TABLE,
 } from './blog-media-tombstone-constants';
 
-type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+export type BlogMediaSweepClient = {
+  rpc: (
+    functionName: string,
+    args?: Record<string, unknown>
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  storage: {
+    from: (bucket: string) => {
+      remove: (
+        paths: string[]
+      ) => Promise<{ error: { message: string } | null }>;
+    };
+  };
+};
 
 type ClaimRow = { tombstone_claimed: boolean; tombstone_path: string };
 
@@ -19,11 +29,14 @@ type ClaimRow = { tombstone_claimed: boolean; tombstone_path: string };
  * metadata. The Storage API performs the actual deletion (direct SQL
  * deletes would orphan file bytes); claimed rows persist until the API
  * removal succeeds, so a failed sweep simply retries its bytes on the
- * next run. Returns null when the sweep cannot verify safety so the
- * scheduler retries instead of deleting blind.
+ * next run. The caller supplies the least-privilege sweep worker
+ * capability — never a service-role client — so row cleanup goes
+ * through the release wrapper instead of direct table access. Returns
+ * null when the sweep cannot verify safety so the scheduler retries
+ * instead of deleting blind.
  */
 export async function sweepDueBlogMediaTombstones(
-  supabase: ServerSupabaseClient,
+  supabase: BlogMediaSweepClient,
   now: Date = new Date()
 ): Promise<{ swept: string[]; resurrected: string[] } | null> {
   const cutoff = new Date(
@@ -64,12 +77,14 @@ export async function sweepDueBlogMediaTombstones(
     return null;
   }
   // Row cleanup is best-effort: lingering claimed rows are rechecked
-  // next sweep, and object removal above is idempotent.
+  // next sweep, and object removal above is idempotent. The release
+  // wrapper revalidates the platform prefix and the claimed flag, so
+  // a compromised sweep input cannot drop arbitrary tombstone rows.
   try {
-    const { error } = await supabase
-      .from(BLOG_MEDIA_TOMBSTONE_TABLE)
-      .delete()
-      .in('path', swept);
+    const { error } = await supabase.rpc(
+      'delete_claimed_blog_media_tombstones',
+      { p_paths: swept }
+    );
     if (error) {
       console.error('Blog media tombstone sweep row cleanup failed', {
         error,

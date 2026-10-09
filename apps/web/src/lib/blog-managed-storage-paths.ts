@@ -1,5 +1,6 @@
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import { getPublicBlogMediaCdnOrigin } from '@/lib/blog-public-config';
+import { getTrustedBlogImageOrigins } from '@/lib/get-trusted-blog-image-origins';
 
 export const BLOG_FEATURED_VARIANT_KEYS = [
   'landscape_16x9',
@@ -56,16 +57,9 @@ function getConfiguredBlogMediaCdnOrigin(origin?: string): string {
 }
 
 function getTrustedBlogMediaOrigins(): string[] {
-  const origins = [getConfiguredBlogMediaCdnOrigin()];
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (supabaseUrl) {
-    try {
-      origins.push(new URL(supabaseUrl).origin);
-    } catch {
-      // A malformed Supabase URL simply contributes no trusted origin.
-    }
-  }
-  return origins;
+  // One trust set with the rest of the media pipeline: the deploy
+  // override, the default CDN, and Supabase Storage.
+  return getTrustedBlogImageOrigins();
 }
 
 export function isManagedBlogStoragePath(

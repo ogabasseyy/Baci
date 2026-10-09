@@ -28,10 +28,20 @@ const validHandoff = {
 };
 
 describe('parseReviewHandoff featured image', () => {
-  it('marks imported alt text as not hand-edited', () => {
-    expect(parseReviewHandoff(validHandoff)).toMatchObject({
-      featured_image_alt: 'Galaxy A phones',
-      featured_image_alt_edited: false,
+  // Non-empty imported text arrives fresh; the payload drops unedited alt as stale.
+  it.each([
+    ['Galaxy A phones', 'Galaxy A phones', true],
+    ['', '', false],
+    ['   ', '', false],
+  ])('marks imported alt %s fresh=%s', (alt, expectedAlt, fresh) => {
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: { ...validHandoff.featured_image, alt },
+      })
+    ).toMatchObject({
+      featured_image_alt: expectedAlt,
+      featured_image_alt_edited: fresh,
     });
   });
 

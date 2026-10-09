@@ -19406,6 +19406,7 @@ export type Database = {
       };
       mutate_merchant_blog_post_with_product_links: {
         Args: {
+          p_media_paths?: string[];
           p_merchant_id: string;
           p_post_data: Json;
           p_post_id: string;

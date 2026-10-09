@@ -210,7 +210,6 @@ export async function updateBlogPost(
     }
     const persistence = await persistBlogPostMutation({
       embeddedProductIds,
-      existingPost,
       merchantId: access.merchantId,
       postData: updateData,
       postId: id,

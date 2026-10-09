@@ -1,6 +1,8 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { hasClosedDialog } from './review-handoff-dialog';
 import { hasClosedDisclosure } from './review-handoff-disclosure';
+import { hasUnpreservableEmbed } from './review-handoff-embed';
 import { hasUnpreservableFigure } from './review-handoff-figure';
 import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
@@ -225,6 +227,21 @@ export function validateImportedContent(rawContent: string): string {
   if (hasClosedDisclosure(rendered)) {
     throw new Error(
       'Article content has closed disclosure markup the editor cannot preserve'
+    );
+  }
+  // Closed dialogs drift identically: sanitization unwraps the
+  // unrepresented control and exposes hidden content.
+  if (hasClosedDialog(rendered)) {
+    throw new Error(
+      'Article content has closed dialog markup the editor cannot preserve'
+    );
+  }
+  // Replaced-media embeds cannot survive either: sanitization drops
+  // the element while the surrounding body text lets the import
+  // succeed, silently discarding the video.
+  if (hasUnpreservableEmbed(rendered)) {
+    throw new Error(
+      'Article content has embed markup the editor cannot preserve'
     );
   }
   return visible;

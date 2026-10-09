@@ -876,6 +876,105 @@ BEGIN
 END;
 $mixed_decode$;
 
+DO $json_slashes$
+DECLARE
+  v_decoded TEXT;
+  v_row RECORD;
+  v_saw_token BOOLEAN := FALSE;
+  v_saw_unicode BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- Structured editor content escapes slashes (`\/`, `\u002f`); the
+  -- storefront parses and renders through them, so the scan must
+  -- match the literal candidate path through them too, or the sweep
+  -- deletes a live image.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT public.blog_media_json_unescape_slashes(
+    'https:\/\/cdn.example.com\/media\/platform\/blog\/token.webp'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'https://cdn.example.com/media/platform/blog/token.webp'
+  THEN
+    RAISE EXCEPTION 'slash unescape failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_json_unescape_slashes(
+    'https:\u002f\u002fcdn.example.com\/media\/platform\/blog\/token.webp'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'https://cdn.example.com/media/platform/blog/token.webp'
+  THEN
+    RAISE EXCEPTION 'unicode slash unescape failed: %', v_decoded;
+  END IF;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'JSON slash test',
+    'sweep-claim-json-slash-post',
+    '{"src":"https:\/\/cdn.example.com\/media\/platform\/blog\/json-token.webp"}',
+    'Editorial',
+    TRUE,
+    NULL
+  ), (
+    'JSON unicode slash test',
+    'sweep-claim-json-unicode-post',
+    '{"src":"https:\u002f\u002fcdn.example.com\/media\/platform\/blog\/json-unicode.webp"}',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/json-token.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/json-unicode.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/json-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    IF v_row.tombstone_path = 'platform/blog/json-token.webp' THEN
+      v_saw_token := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'escaped slashes failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/json-unicode.webp' THEN
+      v_saw_unicode := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'unicode escapes failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/json-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the JSON control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF NOT v_saw_token OR NOT v_saw_unicode OR NOT v_saw_orphan THEN
+    RAISE EXCEPTION 'claim omitted the JSON fixtures';
+  END IF;
+
+  DELETE FROM public.blog_posts
+   WHERE slug IN (
+    'sweep-claim-json-slash-post',
+    'sweep-claim-json-unicode-post'
+  );
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/json-token.webp',
+    'platform/blog/json-unicode.webp',
+    'platform/blog/json-orphan.webp'
+  );
+END;
+$json_slashes$;
+
 RESET ROLE;
 
 ROLLBACK;

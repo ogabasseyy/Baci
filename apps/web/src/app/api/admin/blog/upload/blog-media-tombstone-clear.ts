@@ -1,11 +1,24 @@
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type { createClient } from '@/lib/supabase/server';
+import { unescapeJsonSlashes } from './blog-media-json-slash-unescape';
 import type { BlogPostMediaRow } from './blog-media-reference-scan';
 import { BLOG_MEDIA_TOMBSTONE_TABLE } from './blog-media-tombstone-constants';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
+const TRAILING_PUNCTUATION_PATTERN = /[?!.,:;*_~]+$/;
+
+function trimMarkdownDelimiters(url: string): string {
+  // The URL pattern cannot see markdown structure, so a match may
+  // swallow its closing delimiter (`![alt](url)` keeps the `)`) or
+  // trailing prose punctuation (`see url.`). Trailing `)` is always
+  // a delimiter here — parens cannot appear in managed keys at all —
+  // then trailing punctuation goes. Managed keys end
+  // alphanumerically (`token.ext`, `variant.webp`), so trimming can
+  // only reveal a path, never corrupt one.
+  return url.replace(/\)+$/, '').replace(TRAILING_PUNCTUATION_PATTERN, '');
+}
 
 export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
   const texts: unknown[] = [
@@ -22,8 +35,15 @@ export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
   const paths = new Set<string>();
   for (const text of texts) {
     if (typeof text !== 'string') continue;
-    for (const url of text.match(URL_PATTERN) ?? []) {
-      const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
+    // JSON slash escapes unescape before matching: an escaped URL
+    // spells its scheme `https:\/\/`, which the URL pattern would
+    // otherwise never match at all.
+    const unescaped = unescapeJsonSlashes(text);
+    for (const url of unescaped.match(URL_PATTERN) ?? []) {
+      const normalized = trimMarkdownDelimiters(url);
+      const path = extractManagedBlogStoragePath(normalized, {
+        kind: 'platform',
+      });
       if (path !== null) paths.add(path);
     }
   }

@@ -262,7 +262,6 @@ export async function updatePlatformBlogPost(
     };
     await clearBlogMediaTombstonesForRow(supabase, mediaRow);
     const mediaCheck = await verifyPatchedBlogPostMediaOrRestore(supabase, {
-      expectedUpdatedAt: data.updated_at ?? null,
       existingPost,
       finalUpdateData,
       mediaRow,

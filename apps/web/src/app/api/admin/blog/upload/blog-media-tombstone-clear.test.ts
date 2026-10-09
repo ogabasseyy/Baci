@@ -75,6 +75,34 @@ describe('clearBlogMediaTombstonesForRow', () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it('parses managed URLs out of Markdown punctuation', async () => {
+    // The closing `)` of `![alt](url)` is markdown, not the URL: if
+    // it reaches extraction, the path is omitted from the save
+    // handshake and the sweep deletes the rendered image.
+    const { client, remove } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, {
+      content: '![alt](https://cdn.example.com/media/platform/blog/token.webp)',
+    });
+    expect(remove).toHaveBeenCalledWith('path', ['platform/blog/token.webp']);
+  });
+
+  it('trims trailing prose punctuation around bare URLs', async () => {
+    const { client, remove } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, {
+      content: '(See https://cdn.example.com/media/platform/blog/prose.webp.)',
+    });
+    expect(remove).toHaveBeenCalledWith('path', ['platform/blog/prose.webp']);
+  });
+
+  it('clears paths serialized with JSON slash escapes', async () => {
+    const { client, remove } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, {
+      content:
+        '{"src":"https:\\/\\/cdn.example.com\\/media\\/platform\\/blog\\/json.webp"}',
+    });
+    expect(remove).toHaveBeenCalledWith('path', ['platform/blog/json.webp']);
+  });
+
   it('never fails the committed save', async () => {
     const failed = fakeClient({ error: { message: 'down' } });
     await expect(

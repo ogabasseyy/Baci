@@ -32,4 +32,16 @@ describe('hasUnpreservableEmbed', () => {
       )
     ).toThrow('embed markup the editor cannot preserve');
   });
+
+  it('rejects canvas fallback content before sanitizing unwraps it', () => {
+    // A canvas-capable browser hides the fallback paragraph, but the
+    // sanitizer drops the disallowed canvas and keeps the child, so
+    // the note would publish as body text.
+    expect(hasUnpreservableEmbed('<canvas><p>Draft note</p></canvas>')).toBe(
+      true
+    );
+    expect(() =>
+      validateImportedContent('<canvas><p>Draft note</p></canvas><p>Body</p>')
+    ).toThrow('embed markup the editor cannot preserve');
+  });
 });

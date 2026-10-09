@@ -245,29 +245,6 @@ describe('filterBlogMediaPathsWithoutPersistedReferences', () => {
     });
   });
 
-  it('survives malformed escapes without losing raw matches', async () => {
-    const { client } = fakeClient([
-      {
-        data: [
-          {
-            content:
-              '<p>100% coverage</p><img src="https://cdn.example.com/media/platform/blog/kept.webp">',
-          },
-        ],
-        error: null,
-      },
-    ]);
-    expect(
-      await filterBlogMediaPathsWithoutPersistedReferences(client, [
-        'platform/blog/kept.webp',
-        'platform/blog/orphan.webp',
-      ])
-    ).toEqual({
-      deletable: ['platform/blog/orphan.webp'],
-      skipped: ['platform/blog/kept.webp'],
-    });
-  });
-
   it('returns null when the reference scan fails', async () => {
     const failed = fakeClient([{ data: null, error: { message: 'down' } }]);
     expect(

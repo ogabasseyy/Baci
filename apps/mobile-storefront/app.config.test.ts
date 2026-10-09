@@ -67,6 +67,19 @@ function findPostHogPlugin(config: ExpoConfig) {
 }
 
 describe('Expo app config (Facebook SDK and merchant domain)', () => {
+  it('preserves the original typed factory import after moving the Expo loader to CommonJS', () => {
+    const appConfig = loadAppConfigWithEnv({
+      STOREFRONT_FACEBOOK_APP_ID: 'synthetic-id',
+      STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'synthetic-token',
+      EXPO_PUBLIC_POSTHOG_API_KEY: 'synthetic-key',
+    });
+    const { buildStorefrontConfig } = jest.requireActual<
+      typeof import('./config/development-storefront-expo-config-production')
+    >('./config/development-storefront-expo-config-production');
+
+    expect(buildStorefrontConfig).toBe(appConfig);
+  });
+
   afterEach(() => {
     process.env = originalEnv;
     jest.resetModules();

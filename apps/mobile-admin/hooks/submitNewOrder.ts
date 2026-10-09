@@ -250,6 +250,9 @@ export async function submitNewOrder({
     queryClient.invalidateQueries({
       queryKey: ['transaction-review', merchantId],
     });
+    queryClient.invalidateQueries({ queryKey: ['analytics-overview'] });
+    queryClient.invalidateQueries({ queryKey: ['analytics-detail'] });
+    queryClient.invalidateQueries({ queryKey: ['top-selling-products'] });
 
     setLastOrderId(createdOrder.id);
     setShowSuccessModal(true);

@@ -17659,6 +17659,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      get_loyalty_status: {
+        Args: { p_customer_id: string; p_merchant_id: string };
+        Returns: Json;
+      };
       expire_order_wallet_funding_intents: {
         Args: {
           p_customer_id?: string;

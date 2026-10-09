@@ -42,9 +42,16 @@ const mockStorageBucket = {
 };
 
 const mockUpsert = vi.fn();
+const mockDeleteEq = vi.fn();
+const mockDeleteIn = vi.fn((_column: string, _paths: string[]) => ({
+  eq: mockDeleteEq,
+}));
 
 const mockSupabase = {
-  from: vi.fn(() => ({ upsert: mockUpsert })),
+  from: vi.fn(() => ({
+    delete: vi.fn(() => ({ in: mockDeleteIn })),
+    upsert: mockUpsert,
+  })),
   storage: {
     from: vi.fn(() => mockStorageBucket),
   },
@@ -83,6 +90,7 @@ describe('POST /api/admin/blog/upload featured staging', () => {
     mockStorageBucket.upload.mockResolvedValue({ error: null });
     mockStorageBucket.remove.mockResolvedValue({ error: null });
     mockUpsert.mockResolvedValue({ error: null });
+    mockDeleteEq.mockResolvedValue({ error: null });
     mockGenerateFeaturedImageVariants.mockResolvedValue({
       source: { height: 800, totalPixels: 960000, width: 1200 },
       variants: {
@@ -159,5 +167,66 @@ describe('POST /api/admin/blog/upload featured staging', () => {
     expect(mockStorageBucket.upload).toHaveBeenCalledTimes(1);
     const staged = mockUpsert.mock.calls.flatMap(stagedPaths);
     expect(staged[0]).toMatch(/^platform\/blog\/.+\.jpg$/);
+  });
+
+  it('releases tombstones for confirmed removals after a variant failure', async () => {
+    // The source and first variant upload, the second variant
+    // fails, cleanup removes both objects, and both tombstones
+    // release: nothing lingers in Storage or the sweep queue.
+    mockGenerateFeaturedImageVariants.mockResolvedValue({
+      source: { height: 800, totalPixels: 960000, width: 1200 },
+      variants: {
+        landscape_16x9: {
+          buffer: Buffer.from('landscape'),
+          contentType: 'image/webp',
+          height: 675,
+          key: 'landscape_16x9',
+          width: 1200,
+        },
+        square_1x1: {
+          buffer: Buffer.from('square'),
+          contentType: 'image/webp',
+          height: 800,
+          key: 'square_1x1',
+          width: 800,
+        },
+      },
+    });
+    mockStorageBucket.upload
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'storage down' } });
+
+    const response = await POST(featuredRequest());
+
+    expect(response.status).toBe(500);
+    // The failed variant's tombstone releases in the helper; the
+    // route releases the source plus the completed sibling after
+    // their removal is confirmed.
+    const releases = mockDeleteIn.mock.calls.map(([, paths]) => paths);
+    expect(releases).toHaveLength(2);
+    expect(releases.some((paths) => paths.length === 2)).toBe(true);
+    expect(mockDeleteEq).toHaveBeenCalledWith('claimed', false);
+  });
+
+  it('retains tombstones when compensating cleanup fails', async () => {
+    // Removal errors leave the objects in Storage; releasing their
+    // tombstones would orphan media the sweep can never retry. Only
+    // the failed variant's own tombstone releases (its write never
+    // happened); the uploaded source keeps its tombstone.
+    mockStorageBucket.upload
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'storage down' } });
+    mockStorageBucket.remove.mockResolvedValueOnce({
+      error: { message: 'remove down' },
+    });
+
+    const response = await POST(featuredRequest());
+
+    expect(response.status).toBe(500);
+    expect(mockDeleteIn).toHaveBeenCalledTimes(1);
+    expect(mockDeleteIn).toHaveBeenCalledWith('path', [
+      expect.stringContaining('landscape_16x9.webp'),
+    ]);
   });
 });

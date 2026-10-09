@@ -140,8 +140,11 @@ export async function POST(request: NextRequest) {
       mimeType: file.type,
     });
   } catch (error) {
-    await cleanupUploadedPaths(supabase, uploadedPaths);
-    await releaseBlogMediaPaths(supabase, uploadedPaths);
+    // Release only confirmed removals: on cleanup failure the
+    // objects stay in Storage and their tombstones must stay for
+    // the sweep to retry.
+    const removed = await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, removed);
     if (error instanceof BlogFeaturedImageError) {
       return toFeaturedUploadErrorResponse(error);
     }
@@ -160,8 +163,8 @@ export async function POST(request: NextRequest) {
     if ('response' in uploaded) return uploaded.response;
     featuredImageVariants = uploaded.variants;
   } catch (error) {
-    await cleanupUploadedPaths(supabase, uploadedPaths);
-    await releaseBlogMediaPaths(supabase, uploadedPaths);
+    const removed = await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, removed);
     console.error(
       'Platform featured variant upload failed; cleaned partial uploads',
       {

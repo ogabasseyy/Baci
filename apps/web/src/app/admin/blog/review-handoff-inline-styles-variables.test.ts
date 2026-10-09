@@ -18,6 +18,10 @@ describe('inline styles custom properties', () => {
     '<p style="--a:var(--b);--b:hidden;visibility:var(--a)">Draft note</p><p>Body</p>',
     // Nested fallbacks resolve inside out.
     '<p style="display:var(--a,var(--b,none))">Draft note</p><p>Body</p>',
+    // Custom values stay verbatim so case-sensitive names resolve.
+    '<p style="--Hide:none;--state:var(--Hide);display:var(--state)">Draft note</p><p>Body</p>',
+    // Keywords still match case-insensitively after resolution.
+    '<p style="Display:None">Draft note</p><p>Body</p>',
   ])('strips var()-hidden content at import: %s', (html) => {
     expect(validateImportedContent(html)).toBe('<p>Body</p>');
   });

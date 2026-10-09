@@ -49,9 +49,10 @@ function isImportantDeclaration(value: string): boolean {
 }
 
 function normalizeDeclarationValue(value: string): string {
-  // CSS-wide keywords match ASCII case-insensitively, so `NONE`
-  // hides exactly like `none`.
-  return value.replace(IMPORTANT_SUFFIX_PATTERN, '').trim().toLowerCase();
+  // Values stay verbatim: custom-property references are
+  // case-sensitive (`var(--Hide)` is not `var(--hide)`), so case
+  // folding happens at compare time, not parse time.
+  return value.replace(IMPORTANT_SUFFIX_PATTERN, '').trim();
 }
 
 /**

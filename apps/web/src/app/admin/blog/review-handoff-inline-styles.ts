@@ -66,10 +66,11 @@ function hidingUtilityForStyle(
   const finalValue = (property: string): string | undefined => {
     const entry = finals.get(property);
     if (entry === undefined) return undefined;
-    // Hiding keywords hide behind same-block custom properties
-    // (`--state:none;display:var(--state)`), which the browser
-    // resolves before matching.
-    return resolveCssVariableReferences(entry.value, customs);
+    // Hiding keywords hide behind custom properties (own or
+    // inherited), which the browser resolves before matching.
+    // Keywords match ASCII case-insensitively, so fold here —
+    // after resolution, never at parse time.
+    return resolveCssVariableReferences(entry.value, customs).toLowerCase();
   };
   if (finalValue('display') === 'none') return 'hidden';
   const visibility = finalValue('visibility');

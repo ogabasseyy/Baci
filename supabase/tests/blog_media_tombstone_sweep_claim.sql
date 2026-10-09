@@ -1164,6 +1164,12 @@ BEGIN
   IF v_decoded NOT LIKE '%platform/blog/token.webp%' THEN
     RAISE EXCEPTION 'chained entity decode failed: %', v_decoded;
   END IF;
+  SELECT public.blog_media_decode_html_entities(
+    'tok&#x65n&#0000060.webp a&#0b&#xD83Dz&#12345678'
+  ) INTO v_decoded;
+  IF v_decoded <> 'token<.webp a&#0b&#xD83Dz&#12345678' THEN
+    RAISE EXCEPTION 'semicolonless entity decode failed: %', v_decoded;
+  END IF;
 
   INSERT INTO public.blog_posts (
     title, slug, content, author_name, is_platform_post, merchant_id
@@ -1171,7 +1177,8 @@ BEGIN
   VALUES (
     'HTML entity test',
     'sweep-claim-entity-post',
-    '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">',
+    '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">'
+    '<img src="https://cdn.example.com/media/platform/blog/sem&#x69less.webp">',
     'Editorial',
     TRUE,
     NULL
@@ -1179,6 +1186,7 @@ BEGIN
   INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
   VALUES
     ('platform/blog/token.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/semiless.webp', now() - interval '2 hours', FALSE),
     ('platform/blog/entity-orphan.webp', now() - interval '2 hours', FALSE);
 
   FOR v_row IN
@@ -1192,6 +1200,10 @@ BEGIN
       v_saw_live := TRUE;
       IF v_row.tombstone_claimed IS TRUE THEN
         RAISE EXCEPTION 'entities failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/semiless.webp' THEN
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'semicolonless entities failed to protect a live object';
       END IF;
     ELSIF v_row.tombstone_path = 'platform/blog/entity-orphan.webp' THEN
       v_saw_orphan := TRUE;
@@ -1209,6 +1221,7 @@ BEGIN
   DELETE FROM public.blog_media_delete_tombstones
    WHERE path IN (
     'platform/blog/token.webp',
+    'platform/blog/semiless.webp',
     'platform/blog/entity-orphan.webp'
   );
 END;

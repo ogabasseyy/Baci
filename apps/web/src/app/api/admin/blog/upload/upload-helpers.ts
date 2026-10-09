@@ -98,12 +98,18 @@ type UploadCleanupClient = {
   };
 };
 
+/**
+ * Remove partially uploaded objects, returning the paths whose
+ * removal was confirmed. Callers release tombstones only for the
+ * returned paths: deleting tombstones for objects still in Storage
+ * would orphan media the sweep can never retry.
+ */
 export async function cleanupUploadedPaths(
   supabase: UploadCleanupClient,
   uploadedPaths: string[]
-) {
+): Promise<string[]> {
   if (uploadedPaths.length === 0) {
-    return;
+    return [];
   }
 
   const { error } = await supabase.storage.from('media').remove(uploadedPaths);
@@ -115,7 +121,9 @@ export async function cleanupUploadedPaths(
         uploadedPaths,
       }
     );
+    return [];
   }
+  return uploadedPaths;
 }
 
 export function toFeaturedUploadErrorResponse(error: BlogFeaturedImageError) {

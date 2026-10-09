@@ -8,7 +8,7 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 const ENTITY_PATTERN =
-  /&(?:#(\d+)|#[xX]([0-9A-Fa-f]+)|([A-Za-z][A-Za-z0-9]+));/g;
+  /&(?:#(\d+);?|#[xX]([0-9A-Fa-f]+);?|([A-Za-z][A-Za-z0-9]+);)/g;
 
 function codePointToChar(point: number, match: string): string {
   // NUL, surrogates, and out-of-range values stay literal: NUL
@@ -25,11 +25,13 @@ function codePointToChar(point: number, match: string): string {
  * matching. Persisted content spells URLs with entities (`tok&#
  * x65;n.webp`), which HTML parsing resolves to the live URL: without
  * decoding, reference scans miss the candidate path and the sweep
- * deletes rendered media. Only semicolon-terminated references
- * decode (bare `&amp` stays literal per HTML); numeric codepoints
- * cover the full scalar range while unknown names stay literal.
- * Runs before JSON and percent decoding — entities can reveal both
- * (`&#x25;32`, `&#x5c;u002f`) — in this layer and the SQL mirror.
+ * deletes rendered media. Numeric references decode with or without
+ * the semicolon (the parser flags the missing terminator but still
+ * resolves the longest digit run); named references keep requiring
+ * it. Codepoints cover the full scalar range while unknown names
+ * stay literal. Runs before JSON and percent decoding — entities
+ * can reveal both (`&#x25;32`, `&#x5c;u002f`) — in this layer and
+ * the SQL mirror.
  */
 export function decodeHtmlEntities(text: string): string {
   return text.replace(ENTITY_PATTERN, (match, dec, hex, name) => {

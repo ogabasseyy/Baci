@@ -222,15 +222,31 @@ describe('goal-independent primary card collection', () => {
       }
     );
   });
-  it('rejects expired deployment configuration before transport', async () => {
-    const { provider, transport } = setup(response(), {
-      ...fixture.settings,
-      expiresAt: '2026-09-29T15:59:10Z',
-    });
-    await expect(provider.initialize(fixture.intent)).rejects.toThrow(
-      'Primary card provider unavailable'
+  it('initializes a committed reservation after the deployment deadline passes', async () => {
+    // Only reservation creation enforces the deadline (service active(),
+    // strict start-route runtime, strict database scope): the provider
+    // runs strictly post-commit, so refusing initialize past expiry
+    // would wedge the reservation (treasury held, init_unknown
+    // re-entered forever) instead of blocking anything new.
+    const { provider, transport } = setup(
+      {
+        status: true,
+        data: {
+          reference: fixture.intent.reference,
+          authorization_url: 'https://checkout.paystack.com/fixture',
+          access_code: 'fixture',
+        },
+      },
+      {
+        ...fixture.settings,
+        expiresAt: '2026-09-29T15:59:10Z',
+      }
     );
-    expect(transport).not.toHaveBeenCalled();
+    expect(await provider.initialize(fixture.intent)).toEqual({
+      reference: fixture.intent.reference,
+      authorizationUrl: 'https://checkout.paystack.com/fixture',
+    });
+    expect(transport).toHaveBeenCalled();
   });
   it('verifies a pre-expiry operation after the deployment deadline passes', async () => {
     // The deadline blocks NEW sessions only: status recovery and webhook

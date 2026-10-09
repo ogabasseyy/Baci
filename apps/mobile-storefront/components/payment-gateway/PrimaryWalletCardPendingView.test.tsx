@@ -50,6 +50,22 @@ it('distinguishes a network status failure without inviting another charge', () 
   expect(screen.queryByText('Try payment again')).toBeNull();
 });
 
+it('shows the specific status message alongside the retained-operation copy', () => {
+  render(
+    <PrimaryWalletCardPendingView
+      colors={Colors.light}
+      statusError
+      message="Network request failed"
+      onCheck={jest.fn()}
+      onBack={jest.fn()}
+    />
+  );
+  expect(screen.getByText('Network request failed')).toBeOnTheScreen();
+  expect(screen.getByRole('alert').props.children).toContain(
+    'Do not pay again'
+  );
+});
+
 it('shows the terminal directive instead of retained-operation copy', () => {
   render(
     <PrimaryWalletCardPendingView

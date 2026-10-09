@@ -32,6 +32,9 @@ export function PrimaryWalletCardPendingView({
           : (message ??
             'We are waiting for funding confirmation. Money appears in your wallet once confirmed. Your operation is saved. Do not pay again.')}
       </Text>
+      {statusError && message ? (
+        <Text style={{ color: colors.textSecondary }}>{message}</Text>
+      ) : null}
       {operationReference ? (
         <Text
           accessibilityLabel={`Funding operation reference ${operationReference}`}

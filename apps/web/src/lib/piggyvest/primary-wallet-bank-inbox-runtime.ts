@@ -44,8 +44,7 @@ export function readPrimaryWalletBankInboxSecrets(
 
 export function readPrimaryWalletBankInboxRuntime(
   mode: 'intake' | 'worker',
-  env: NodeJS.ProcessEnv = process.env,
-  now = new Date()
+  env: NodeJS.ProcessEnv = process.env
 ) {
   if (
     env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === undefined ||
@@ -91,10 +90,17 @@ export function readPrimaryWalletBankInboxRuntime(
   });
   if (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true' || !parsed.success)
     throw new Error('Primary bank inbox configuration unavailable');
+  // No deposit-deadline check: intake enqueues only owned (existing
+  // verified) mappings and the worker processes only enqueued rows, so
+  // both modes are drain-only by construction. Refusing them past
+  // expiry would 503 signed deposits into existing wallets until
+  // retries exhaust, stranding money with no local credit; the
+  // deadline gates new exposure, never deposit processing. expiresAt
+  // stays in the scope so the database still pins callers to the exact
+  // authority row (no deadline substitution).
   if (
     (env.VERCEL_ENV === 'production') !==
-      (parsed.data.environment === 'production') ||
-    new Date(parsed.data.scope.expiresAt) <= now
+    (parsed.data.environment === 'production')
   )
     throw new Error('Primary bank inbox scope unavailable');
   return parsed.data;

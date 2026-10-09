@@ -51,21 +51,7 @@ export async function submitPrimaryWalletSavingsTransfer(
     // only a proven-absent reference resubmits. Anything else stays
     // pending for reconciliation, which settles submitted transfers.
     if (adoption.status === 'reclaimed') {
-      let observed: 'submitted' | 'absent' | 'uncertain';
-      try {
-        observed = await ports.lookupTransfer(reservation);
-      } catch {
-        observed = 'uncertain';
-      }
-      if (observed !== 'absent') return { status: 'pending' as const };
-      if (!(await verifyWallets(reservation, ports)))
-        return { status: 'pending' as const };
-      try {
-        const response = await ports.transfer(reservation);
-        if (response.accepted !== true) throw new Error('Invalid acceptance');
-      } catch {
-        return { status: 'pending' as const };
-      }
+      await resubmitReclaimedSavingsDispatch(reservation, ports);
       return { status: 'pending' as const };
     }
     return await dispatchFresh(request, reservation, ports);
@@ -81,7 +67,35 @@ export async function submitPrimaryWalletSavingsTransfer(
   return await dispatchFresh(request, reservation, ports);
 }
 
-async function verifyWallets(reservation: Reservation, ports: Ports) {
+export async function resubmitReclaimedSavingsDispatch(
+  reservation: Reservation,
+  ports: Pick<Ports, 'lookupTransfer' | 'retrieveWallet' | 'transfer'>
+): Promise<boolean> {
+  // Only a proven-absent deterministic reference resubmits, so a late
+  // provider submission for the reclaimed dispatch is never duplicated.
+  // Returns whether a new transfer was submitted; any other outcome
+  // stays pending for reconciliation, which settles submitted transfers.
+  let observed: 'submitted' | 'absent' | 'uncertain';
+  try {
+    observed = await ports.lookupTransfer(reservation);
+  } catch {
+    observed = 'uncertain';
+  }
+  if (observed !== 'absent') return false;
+  if (!(await verifyWallets(reservation, ports))) return false;
+  try {
+    const response = await ports.transfer(reservation);
+    if (response.accepted !== true) throw new Error('Invalid acceptance');
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+async function verifyWallets(
+  reservation: Reservation,
+  ports: Pick<Ports, 'retrieveWallet'>
+) {
   try {
     const source = schemas.wallet.parse(
       await ports.retrieveWallet(reservation.sourceWalletId)

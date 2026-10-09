@@ -5,6 +5,7 @@
 \ir ../../../../../supabase/migrations/20261007230100_primary_bank_custody_prerequisite.sql
 \ir ../../../../../supabase/migrations/20261008091000_primary_bank_hold_specificity.sql
 \ir ../../../../../supabase/migrations/20261007230200_primary_bank_inbox_worker.sql
+\ir ../../../../../supabase/migrations/20261008093600_primary_bank_inbox_expiry_drain.sql
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
 CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
 CREATE ROLE baci_primary_bank_worker LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
@@ -210,4 +211,47 @@ END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-prerequisite-cap' AND state='processed') THEN RAISE EXCEPTION 'prerequisite-cap receipt not processed'; END IF;
+END $$;
+-- Post-deadline drain: intake and worker keep processing deposits into
+-- existing mappings after expires_at (role validity covers the drain
+-- window operationally). Scope substitution and disabled authorities
+-- still fail closed.
+UPDATE piggyvest_primary.bank_inbox_authorities SET expires_at='2000-01-01T00:00:00Z' WHERE integration_id='10000000-0000-4000-8000-000000000004';
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'drain',jsonb_set(scope,'{expiresAt}','"2000-01-01T00:00:00.000Z"'),receipt||'{"eventId":"bank-drain","providerTransactionId":"drain-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-drain"'),'{eventData,transaction_id}','"drain-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='drain';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'drain intake failed'; END IF;
+ BEGIN
+  PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(fixture.scope||'{"expiresAt":"2099-01-01T00:00:00.000Z"}')::jsonb,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+  RAISE EXCEPTION 'drain scope substituted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_inbox_authorities SET enabled=false WHERE integration_id='10000000-0000-4000-8000-000000000004';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ BEGIN
+  PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+  RAISE EXCEPTION 'disabled drain accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_inbox_authorities SET enabled=true WHERE integration_id='10000000-0000-4000-8000-000000000004';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased->>'eventId'<>'bank-drain' THEN RAISE EXCEPTION 'drain claim missed'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'drain deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-drain' AND state='processed') THEN RAISE EXCEPTION 'drain receipt not processed'; END IF;
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>592 THEN RAISE EXCEPTION 'drain deposit miscredited'; END IF;
 END $$;

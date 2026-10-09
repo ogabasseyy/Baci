@@ -59,22 +59,22 @@ export function createPrimaryWalletCardCheckoutProvider(
   now = Date.now
 ) {
   const config = schemas.settings.parse(settings);
-  // The deployment deadline binds initialization only: every existing
-  // operation was reserved pre-expiry (reserve keeps the strict scope),
-  // so verification of a well-formed intent can only ever confirm a
-  // pre-expiry checkout. Status recovery and webhook reconciliation run
-  // on the drain runtime with the real (expired) settings — refusing
-  // verify there would 503 a paid checkout forever instead of recording
-  // its collection. Identity bindings still fail closed on both paths.
-  const select = (input: unknown, enforceExpiry: boolean) => {
+  // Only reservation creation enforces the deployment deadline (service
+  // active() before reserve, the strict runtime on the start route, and
+  // the strict database scope). The provider runs strictly post-commit —
+  // initialize is called only after reserve+claim, verify only for
+  // existing operations — so every call here is drain work: refusing it
+  // past expiry would wedge a committed reservation (treasury held,
+  // init_unknown re-entered forever) instead of blocking anything new.
+  // Identity bindings still fail closed on both paths.
+  const select = (input: unknown) => {
     const intent = schemas.intent.parse(input);
     if (
       intent.environment !== config.environment ||
       intent.integrationId !== config.integrationId ||
       intent.merchantId !== config.merchantId ||
       intent.businessId !== config.businessId ||
-      !Number.isFinite(now()) ||
-      (enforceExpiry && now() >= Date.parse(config.expiresAt))
+      !Number.isFinite(now())
     )
       throw new Error('Primary card provider unavailable');
     return intent;
@@ -101,7 +101,7 @@ export function createPrimaryWalletCardCheckoutProvider(
   return {
     async initialize(input: unknown) {
       try {
-        const intent = select(input, true);
+        const intent = select(input);
         let raw: unknown;
         try {
           raw = await request('/transaction/initialize', {
@@ -149,7 +149,7 @@ export function createPrimaryWalletCardCheckoutProvider(
       }
     },
     async verify(input: unknown) {
-      const intent = select(input, false);
+      const intent = select(input);
       let raw: unknown;
       try {
         raw = await request(

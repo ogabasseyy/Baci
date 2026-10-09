@@ -89,13 +89,15 @@ export function PiggyvestWalletSetupPanel({
           colors={colors}
           merchantId={merchantId}
           onSubmit={async (input) => {
-            setPending(true);
-            try {
-              const result = await piggyvestPrimaryWalletApi.create(input);
-              if (result.account) onRefresh();
-            } catch {
-              setError(true);
-            }
+            // Flip pending only once creation succeeds without an
+            // account yet: flipping first would unmount the form and
+            // wipe its BVN on every failure (even a catch-side reset
+            // remounts fresh state). A rejection propagates so the
+            // still-mounted form keeps its input and shows its error
+            // for correction and resubmission.
+            const result = await piggyvestPrimaryWalletApi.create(input);
+            if (result.account) onRefresh();
+            else setPending(true);
           }}
         />
       )}

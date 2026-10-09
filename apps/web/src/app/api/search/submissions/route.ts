@@ -13,9 +13,9 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
+import { createSearchAnalyticsServiceClient } from '@/lib/search/server-analytics-client';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/service';
 import { searchSubmissionSchema } from '@/schemas/search-submission';
 
 function unavailable() {
@@ -157,11 +157,11 @@ export async function POST(request: NextRequest) {
       limit: 1,
       includeDidYouMean: false,
     });
-    // Service-role insert: every value is server-derived (merchant from the
-    // snapshot lookup, query/count from the bounded search RPC), and anon /
-    // authenticated INSERT is revoked (#3581) so the endpoint gates cannot be
-    // bypassed with a direct table write.
-    const { error } = await createServiceClient()
+    // Branded service-role insert: every value is server-derived (merchant
+    // from the snapshot lookup, query/count from the bounded search RPC),
+    // and anon / authenticated table writes are revoked (#3581) so the
+    // endpoint gates cannot be bypassed with a direct table write.
+    const { error } = await createSearchAnalyticsServiceClient()
       .from('search_analytics')
       .insert({
         merchant_id: merchant.id,

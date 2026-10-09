@@ -76,3 +76,34 @@ it cannot be unsent, and acceptance still requires signed custody proof before c
 
 Collection, provider submission, signed custody settlement and spendable ledger
 credit are separate. Preserved legacy balances are not Piggy-backed funding.
+
+## Activation (scheduler before rail)
+
+The primary-card rail must stay disabled until this worker's systemd timer
+instance is installed and enabled; charged checkouts would otherwise sit
+`custody_pending` with no settlement drain. The activation suite makes that
+ordering verifiable:
+
+- `primary-wallet-card-transfer-package.mjs` builds the sealed offline bundle
+  (`transfer.cjs`, `baci-primary-card-transfer@.service`/`.timer` templates
+  for user `baci-primary-card-transfer`, manifest) outside the repository.
+- `primary-wallet-card-transfer-host-inventory.mjs` collects read-only host
+  metadata for one reviewed instance name (installed unit files,
+  `systemctl show` state, service account) over SSH from the authorized host.
+  It performs no writes.
+- `primary-wallet-card-transfer-db-inventory.sql` captures the restricted
+  live-DB posture (fixed transfer login, sole capability, exact 4-RPC
+  allowlist, mode-0 selector authority probe) with no secret values.
+- `primary-wallet-card-transfer-activation-prepare.mjs` seals bundle +
+  inventories into an expiry-bounded preparation with a review-only owner
+  install plan bound to the inventoried instance.
+- `primary-wallet-card-transfer-activation-guard.mjs --owner-gate` refuses to
+  run until the owner records exact unexpired approvals, including
+  `schedulerStartApproved`, and wires itself as `ExecStartPre` via
+  `worker-expiry.conf`.
+
+Local suite checks (no SSH, no database):
+
+```sh
+node --test tools/staging/primary-wallet-card-transfer/primary-wallet-card-transfer-host-inventory.test.mjs tools/staging/primary-wallet-card-transfer/primary-wallet-card-transfer-activation-prepare.test.mjs
+```

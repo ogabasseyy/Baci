@@ -65,6 +65,16 @@ it('propagates rejected readiness and removes both signal listeners without clai
   expect(process.listenerCount('SIGINT')).toBe(interruptListeners);
   expect(process.listenerCount('SIGTERM')).toBe(terminationListeners);
 });
+it('reports an offline plan without touching readiness, drain or configuration', async () => {
+  const planned = await primaryWalletBankInboxCli(['--plan'], {
+    NODE_ENV: 'test',
+  });
+  expect(planned).toEqual({
+    plan: expect.stringContaining('Plan only: no database/provider operations'),
+  });
+  expect(mocks.readiness).not.toHaveBeenCalled();
+  expect(mocks.drain).not.toHaveBeenCalled();
+});
 it('propagates operational failure and removes signal listeners', async () => {
   const listeners = process.listenerCount('SIGTERM');
   mocks.drain.mockRejectedValueOnce(new Error('signing key unavailable'));

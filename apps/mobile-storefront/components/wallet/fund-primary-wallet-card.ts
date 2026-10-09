@@ -54,7 +54,10 @@ function parseFundAmountKobo(fundAmount: unknown): number | null {
   // which must never silently become a charge amount.
   const normalized = fundAmount.trim().replace(/,/g, '');
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  const amountKobo = Math.round(Number(normalized) * 100);
+  // Integer-only conversion: the shape above guarantees digits with at most
+  // two decimals, so scale by string splitting — never a float multiply.
+  const [whole, fraction = ''] = normalized.split('.');
+  const amountKobo = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
   return Number.isSafeInteger(amountKobo) ? amountKobo : null;
 }
 

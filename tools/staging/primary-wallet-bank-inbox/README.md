@@ -15,6 +15,9 @@ PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false pnpm exec tsx --conditions=react-server
 PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false pnpm exec tsx --conditions=react-server --tsconfig apps/web/tsconfig.json tools/staging/primary-wallet-bank-inbox/primary-wallet-bank-inbox-entry.ts --once
 ```
 
+`--plan` prints the offline executable plan with no database/provider
+operations; it is also the sealed bundle's self-proof after packaging.
+
 Do not run these against a remote database without owner authorization. No
 dependencies need installation for the local source/smoke check. The scheduler
 runtime must retain the reviewed Node/tsx dependency closure and TypeScript path
@@ -52,3 +55,32 @@ nonzero run, not be called successful reconciliation. Deferred counters do not
 mean wallet credit. Monitor blocked/attempt-limit receipts and lease expiry with
 approved aggregate-only operational access; requeue/review policy is not automated.
 Never journal raw bytes, signatures, identifiers, configuration or credentials.
+
+## Activation (scheduler before intake)
+
+The bank inbox intake must stay disabled until this worker's systemd timer is
+installed and enabled; accepted deposits would otherwise sit in the inbox with
+no drain. The activation suite makes that ordering verifiable:
+
+- `primary-wallet-bank-inbox-package.mjs` builds the sealed offline bundle
+  (`bank-inbox.cjs`, `baci-primary-bank-inbox.service`/`.timer` templates for
+  user `baci-primary-bank-inbox`, frozen migration bytes, manifest) outside
+  the repository.
+- `primary-wallet-bank-inbox-host-inventory.mjs` collects read-only host
+  metadata (installed unit files, `systemctl show` state, service account)
+  over SSH from the authorized host. It performs no writes.
+- `primary-wallet-bank-inbox-db-inventory.sql` captures the restricted live-DB
+  posture (fixed worker login, sole capability, exact RPC allowlist, enabled
+  authority row) with no secret values.
+- `primary-wallet-bank-inbox-activation-prepare.mjs` seals bundle + inventories
+  into an expiry-bounded preparation with a review-only owner install plan.
+- `primary-wallet-bank-inbox-activation-guard.mjs --owner-gate` refuses to run
+  until the owner records exact unexpired approvals, including
+  `schedulerStartApproved`, and wires itself as `ExecStartPre` via
+  `worker-expiry.conf`.
+
+Local suite checks (no SSH, no database):
+
+```sh
+node --test tools/staging/primary-wallet-bank-inbox/*.test.mjs
+```

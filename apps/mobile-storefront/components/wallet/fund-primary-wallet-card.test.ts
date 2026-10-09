@@ -338,6 +338,19 @@ it('accepts thousands separators and surrounding whitespace', async () => {
     expect.objectContaining({ amountKobo: 100000 })
   );
 });
+it.each([
+  ['1250.29', 125029],
+  ['100.07', 10007],
+  ['99999999.99', 9999999999],
+] as [
+  string,
+  number,
+][])('parses %p to exactly %p kobo with integer arithmetic', async (fundAmount, amountKobo) => {
+  await fundPrimaryWalletCard({ ...input, fundAmount });
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ amountKobo })
+  );
+});
 it('re-sanitizes a tampered handoff before navigating on completed recovery', async () => {
   mockRead.mockResolvedValue({ operationId: 'persisted' });
   mockRecover.mockResolvedValue({

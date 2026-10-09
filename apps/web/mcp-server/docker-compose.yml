@@ -5,11 +5,9 @@ services:
       context: ../../..
       dockerfile: apps/web/mcp-server/Dockerfile
     restart: unless-stopped
-    # Shutdown needs the full drain deadline plus release time: the app
-    # forces lock release at SHUTDOWN_DRAIN_TIMEOUT_MS (10s), and the
-    # compose default grace (10s) could SIGKILL first, leaving a
-    # heartbeat-fresh lock that delays the replacement by the 30s stale
-    # window.
+    # Shutdown needs the full drain deadline: the app forces the exit at
+    # SHUTDOWN_DRAIN_TIMEOUT_MS (10s), and the compose default grace (10s)
+    # could SIGKILL first, cutting in-flight requests off mid-drain.
     stop_grace_period: 30s
     ports:
       - "127.0.0.1:8787:8787"
@@ -33,25 +31,15 @@ services:
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}
       - OPENAI_AGENTIC_SIGNING_KEY=${OPENAI_AGENTIC_SIGNING_KEY}
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
-      - MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts
-    volumes:
-      - mcp-guest-carts:/var/lib/baci/guest-carts
-    # Read-only root: the server persists only guest carts (named volume
-    # above) and needs no other runtime writes, so the filesystem stays
-    # immutable except for /tmp scratch space.
+    # Read-only root: the server persists nothing locally (guest carts live
+    # in Postgres behind version-gated RPCs), so the filesystem stays fully
+    # immutable except for /tmp scratch space. No volume, no replica pin:
+    # concurrent writers serialize through the row version gate.
     read_only: true
     security_opt:
       - no-new-privileges:true
     tmpfs:
       - /tmp
-    # Single writer only: in-process queues serialize one replica, and an
-    # exclusive `.writer.lock` in the cart directory refuses a second writer
-    # process. `deploy.replicas` is honored only by `docker stack deploy`
-    # (plain `docker compose up` ignores it). Deploy via stack deploy and do
-    # not scale past 1 replica without a shared transactional store (see
-    # README "Guest cart").
-    deploy:
-      replicas: 1
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
       interval: 30s
@@ -81,7 +69,3 @@ services:
       - mcp-server
     profiles:
       - dev
-
-volumes:
-  mcp-guest-carts:
-    name: ogabassey-mcp-guest-carts

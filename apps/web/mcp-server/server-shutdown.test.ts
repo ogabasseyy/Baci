@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('releases locks only after the server finishes draining', () => {
+it('exits only after the server finishes draining', () => {
   const order: string[] = [];
   let done: (() => void) | undefined;
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -23,9 +23,6 @@ it('releases locks only after the server finishes draining', () => {
       order.push('close');
       done = finished;
     },
-    releaseLocks: () => {
-      order.push('release');
-    },
     exit: (code) => {
       order.push(`exit:${code}`);
     },
@@ -33,10 +30,10 @@ it('releases locks only after the server finishes draining', () => {
   shutdown();
   expect(order).toEqual(['close']);
   done?.();
-  expect(order).toEqual(['close', 'release', 'exit:0']);
+  expect(order).toEqual(['close', 'exit:0']);
 });
 
-it('forces lock release when the drain never finishes', () => {
+it('forces the exit when the drain never finishes', () => {
   vi.useFakeTimers();
   const order: string[] = [];
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -45,9 +42,6 @@ it('forces lock release when the drain never finishes', () => {
     closeServer: () => {
       order.push('close');
     },
-    releaseLocks: () => {
-      order.push('release');
-    },
     exit: (code) => {
       order.push(`exit:${code}`);
     },
@@ -55,13 +49,13 @@ it('forces lock release when the drain never finishes', () => {
   shutdown();
   expect(order).toEqual(['close']);
   vi.advanceTimersByTime(SHUTDOWN_DRAIN_TIMEOUT_MS);
-  expect(order).toEqual(['close', 'release', 'exit:0']);
+  expect(order).toEqual(['close', 'exit:0']);
   expect(error).toHaveBeenCalledWith(
     expect.stringContaining('shutdown-timeout')
   );
 });
 
-it('releases the writer lock when startup validation exits early', async () => {
+it('fails closed before listening when startup validation exits early', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'guest-startup-exit-'));
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.dirname(path.dirname(path.dirname(moduleDir)));
@@ -71,17 +65,14 @@ it('releases the writer lock when startup validation exits early', async () => {
     '.bin',
     process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
   );
-  // Missing Supabase env fails startup after the store constructor claims
-  // the lock but before signal handlers exist: the exit cleanup must
-  // release the claim so a corrected restart starts immediately instead
-  // of refusing until the 30s stale window passes.
+  // Missing Supabase env must fail the process before it serves traffic.
   const childScript = path.join(root, 'startup-child.mts');
   await writeFile(
     childScript,
     `await import(${JSON.stringify(path.join(moduleDir, 'server.ts'))});\n`
   );
   try {
-    const env = { ...process.env, MCP_GUEST_CART_DIRECTORY: root };
+    const env = { ...process.env };
     delete env.NEXT_PUBLIC_SUPABASE_URL;
     delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const outcome = await new Promise<{ code: number; stderr: string }>(
@@ -112,12 +103,8 @@ it('releases the writer lock when startup validation exits early', async () => {
     );
     expect(outcome.code).toBe(1);
     // Fail closed: only a child that reached the env validation proves
-    // anything about the exit cleanup (an import-time crash would also
-    // exit 1 with no lock, vacuously passing the assertion below).
+    // anything (an import-time crash would also exit 1).
     expect(outcome.stderr).toContain('FATAL: Missing required environment');
-    await expect(
-      readFile(path.join(root, '.writer.lock'), 'utf8')
-    ).rejects.toThrow(/ENOENT/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

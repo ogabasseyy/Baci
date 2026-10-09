@@ -6,26 +6,18 @@ const directory = fileURLToPath(new URL('.', import.meta.url));
 import { describe, expect, it } from 'vitest';
 
 describe('production MCP proxy configuration', () => {
-  it('keeps guest carts in a stable private volume owned by the server user', () => {
+  it('persists nothing locally: guest carts live in Postgres', () => {
     const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
     const dockerfile = readFileSync(join(directory, 'Dockerfile'), 'utf8');
-    expect(compose).toContain('mcp-guest-carts:/var/lib/baci/guest-carts');
-    expect(compose).toContain('name: ogabassey-mcp-guest-carts');
-    expect(dockerfile).toContain(
-      'ENV MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts'
-    );
-    expect(dockerfile).toContain('chown node:node /var/lib/baci/guest-carts');
-    expect(dockerfile).toContain('chmod 700 /var/lib/baci/guest-carts');
+    // No cart volume, no cart directory, no replica pin: concurrent
+    // writers serialize through the Postgres row version gate.
+    expect(compose).not.toContain('MCP_GUEST_CART_DIRECTORY');
+    expect(compose).not.toContain('mcp-guest-carts');
+    expect(compose).not.toContain('replicas:');
+    expect(compose).toContain('read_only: true');
+    expect(dockerfile).not.toContain('MCP_GUEST_CART_DIRECTORY');
+    expect(dockerfile).not.toContain('/var/lib/baci/guest-carts');
     expect(dockerfile).toContain('USER node');
-  });
-
-  it('pins the guest-cart writer to a single replica', () => {
-    const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
-
-    expect(compose).toContain('replicas: 1');
-    expect(compose).toContain(
-      'MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts'
-    );
   });
 
   it('passes the configured GIG quote deadline into the production container', () => {
@@ -48,16 +40,16 @@ describe('production MCP proxy configuration', () => {
     );
   });
 
-  it('gives shutdown longer than the drain deadline to release the lock', async () => {
+  it('gives shutdown longer than the drain deadline to finish', async () => {
     const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
     const { SHUTDOWN_DRAIN_TIMEOUT_MS } = await import(
       './server-shutdown'
     );
-    // The app forces lock release when the drain deadline fires; compose
-    // must not SIGKILL first (the 10s default ties the deadline exactly,
-    // so jitter decides). Pin the relationship, not just the value, so a
-    // future deadline bump fails here instead of redeploying into a stale
-    // lock wait.
+    // The app forces the exit when the drain deadline fires; compose must
+    // not SIGKILL first (the 10s default ties the deadline exactly, so
+    // jitter decides). Pin the relationship, not just the value, so a
+    // future deadline bump fails here instead of redeploying into
+    // truncated drains.
     const match = compose.match(/stop_grace_period:\s*(\d+)(s|m)/);
     expect(match).not.toBeNull();
     const graceMs =

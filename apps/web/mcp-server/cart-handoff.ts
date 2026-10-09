@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
-import { STOREFRONT_SNAPSHOT_VARIANT_WINDOW } from './search-product-availability';
+import { STOREFRONT_SNAPSHOT_VARIANT_WINDOW } from './storefront-snapshot-window';
 
 type CartHandoffResult = {
   content: Array<{ type: 'text'; text: string }>;

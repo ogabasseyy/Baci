@@ -14,15 +14,11 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
  * Run with: npx tsx mcp-server/server.ts
  */
 
-import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import {
-  createGuestCartStoreOrDegraded,
-  describeGuestCartStoreHealth,
-} from './guest-cart-store';
+import { GuestCartStore } from './guest-cart-store';
+import { describeGuestCartStoreHealth } from './guest-cart-health';
 import { registerCartLinkTools } from './cart-link-tool';
 import { registerGuestCartTool } from './guest-cart-tool';
-import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
@@ -83,13 +79,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
-const guestCartStore = createGuestCartStoreOrDegraded(path.resolve(process.env.MCP_GUEST_CART_DIRECTORY || path.join(homedir(), '.local/share/baci/mcp-guest-carts')));
-// Fallible startup validation (required env, public origin) runs below and
-// exits without the graceful path: release the freshly claimed lock on any
-// exit so a corrected restart never waits out the 30s stale window. The
-// release is idempotent (entries are deleted), so the graceful shutdown
-// below stays the primary path and this only covers early exits.
-process.on('exit', releaseWriterLocks);
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -216,6 +205,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 // Public shopping tools use the normal RLS-scoped anonymous client.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guest carts persist through Postgres RPCs on the same client: no local
+// volume, no writer lock, safe to scale past one replica.
+const guestCartStore = new GuestCartStore(supabase);
 
 // =============================================================================
 // RATE LIMITING
@@ -2466,7 +2458,7 @@ const httpServer = createServer(
     }
 
     // Readiness probe. Guest-cart storage rides along as a signal only: a
-    // degraded cart volume must not flip the probe red, or catalog traffic
+    // degraded cart store must not flip the probe red, or catalog traffic
     // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
       const carts = describeGuestCartStoreHealth(guestCartStore);
@@ -2607,12 +2599,12 @@ const httpServer = createServer(
   }
 );
 
-// Graceful shutdown (see server-shutdown.ts): drain first, release the
-// guest-cart lock only once in-flight requests have finished.
+// Graceful shutdown (see server-shutdown.ts): drain in-flight requests,
+// then exit. Guest carts need no lock release: the Postgres version gate
+// serializes writers, so a replacement cannot corrupt a draining update.
 const gracefulShutdown = () =>
   createGracefulShutdown({
     closeServer: (done) => httpServer.close(done),
-    releaseLocks: releaseWriterLocks,
     exit: (code) => process.exit(code),
   })();
 

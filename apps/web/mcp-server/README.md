@@ -316,34 +316,22 @@ MCP delivery estimates enforce a 100 kg per-unit input bound for both converted 
 is an absolute total (0 removes a line), so retrying with the returned cart token
 does not add duplicates. Keep that opaque token with this conversation. It grants
 access only to this guest cart; it is not a customer login. Do not put it in logs
-or website URLs. Cart files contain product IDs and quantities, with no buyer details.
+or website URLs. Cart rows contain product IDs and quantities, with no buyer details.
 
-The single MCP writer persists carts under `~/.local/share/baci/mcp-guest-carts`
-(or `MCP_GUEST_CART_DIRECTORY`). Keep that directory on durable private storage
-across releases. The production Compose file mounts the stable named volume
-`ogabassey-mcp-guest-carts` at `/var/lib/baci/guest-carts`, owned by the container
-node user; do not remove this volume during normal promotion or rollback.
-A fresh named volume inherits the image's node ownership, but a volume that
-predates the image layer (or was created root-owned) stays root-owned: the
-server then logs "Guest-cart directory is not writable" and serves catalog
-tools with guest carts degraded instead of refusing to start; chown the
-mounted directory to the container node uid (1000) and restart to restore
-guest carts.
+Carts persist in the `mcp_guest_carts` Postgres table, reachable only through
+the version-gated `get/upsert/delete_mcp_guest_cart` RPCs; concurrent writers
+(including across replicas) serialize through the per-row version gate, so the
+server needs no local volume and no replica pin. Expired rows are reclaimed by
+the hourly `mcp-guest-cart-cleanup` pg_cron sweep.
 Guest carts expire seven days after the last update, so active conversations
 never expire mid-use; idle carts are reclaimed. Only the changed line is revalidated on
 each call, so a stale line never blocks unrelated updates; the website
-re-checks stock at transfer. At capacity the store evicts the
-least-recently-written cart instead of failing, so one guest cannot
-permanently exhaust the shared pool. A call with an expired, evicted, or
-unknown token returns `cart_expired: true` instead of a generic failure; the
-widget retries adds once without the token and recovers removals locally, so
-the shopper can keep shopping without starting over. Removing the last line
-deletes the cart file and returns `cart_emptied: true`: the token is retired
-and must be dropped, since its next use reports expired. Multiple MCP writer
-processes require a shared transactional store before horizontal scaling:
-the cart directory carries an exclusive `.writer.lock`, and a second writer
-refuses to start while the lock is held (a lock idle over 30 seconds is
-treated as a crashed holder and taken over).
+re-checks stock at transfer. A call with an expired or unknown token returns
+`cart_expired: true` instead of a generic failure; the widget retries adds
+once without the token and recovers removals locally, so the shopper can keep
+shopping without starting over. Removing the last line deletes the cart row
+and returns `cart_emptied: true`: the token is retired and must be dropped,
+since its next use reports expired.
 
 The website handoff contains only product IDs and quantities. The website reloads
 public merchant-scoped products and current availability, preserving existing cart

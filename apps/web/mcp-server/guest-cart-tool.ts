@@ -14,9 +14,9 @@ import {
 import {
   GuestCartExpiredError,
   GuestCartFullError,
-  type GuestCartStoreLike,
-} from './guest-cart-store';
-import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
+  GuestCartStorageUnavailableError,
+} from './guest-cart-errors';
+import type { GuestCartStoreLike } from './guest-cart-health';
 
 class VariantSelectionRequired extends Error {
   constructor(

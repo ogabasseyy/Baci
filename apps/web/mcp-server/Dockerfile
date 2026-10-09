@@ -15,8 +15,6 @@ FROM node:24-alpine AS runner
 WORKDIR /app/apps/web
 ENV NODE_ENV=production
 ENV MCP_PORT=8787
-ENV MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts
-RUN mkdir -p /var/lib/baci/guest-carts && chown node:node /var/lib/baci/guest-carts && chmod 700 /var/lib/baci/guest-carts
 RUN corepack enable pnpm
 
 COPY --from=deps --chown=node:node /app/node_modules /app/node_modules

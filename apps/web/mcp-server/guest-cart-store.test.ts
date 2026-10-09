@@ -1,221 +1,225 @@
-import {
-  chmod,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  utimes,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
   GuestCartFullError,
-  GuestCartStore,
-  describeGuestCartStoreHealth,
-} from './guest-cart-store';
-import { releaseWriterLocks } from './guest-cart-writer-lock';
-import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
+  GuestCartStorageUnavailableError,
+} from './guest-cart-errors';
+import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
+import { GuestCartStore } from './guest-cart-store';
+import { describeGuestCartStoreHealth } from './guest-cart-health';
+
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
-const directories: string[] = [];
-async function store() {
-  const directory = await mkdtemp(path.join(tmpdir(), 'guest-cart-'));
-  directories.push(directory);
-  return { directory, instance: new GuestCartStore(directory) };
+const lineId = (index: number) =>
+  `11111111-1111-4111-8111-${index.toString(16).padStart(12, '0')}`;
+const token = 'a'.repeat(64);
+const liveRow = (items: unknown[] = []) => ({
+  items,
+  expires_at: new Date(Date.now() + 86400000).toISOString(),
+  version: 1,
+});
+const validate = async () => {};
+
+function storeOn(supabase: SupabaseClient) {
+  return new GuestCartStore(supabase);
 }
-afterEach(async () => {
-  vi.useRealTimers();
-  // Release locks before deleting their directories: an armed heartbeat
-  // observing a missing lock file would fail closed with process.exit.
-  releaseWriterLocks();
-  await Promise.all(
-    directories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true }))
-  );
-});
-it('persists across server instances and makes an absolute-quantity retry safe', async () => {
-  const { directory, instance } = await store();
-  const first = await instance.update(
+
+it('creates a cart with a fresh token and a seven-day expiry', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const before = Date.now();
+  const result = await storeOn(fake.supabase).update(
     undefined,
     { product_id: id, quantity: 2 },
-    async () => {}
+    validate
   );
-  const restarted = new GuestCartStore(directory);
-  const retry = await restarted.update(
-    first.cart_token,
-    { product_id: id, quantity: 2 },
-    async () => {}
+  expect(result.cart_token).toMatch(/^[a-f0-9]{64}$/);
+  expect(result.items).toEqual([{ product_id: id, quantity: 2 }]);
+  expect(Date.parse(result.expires_at)).toBeGreaterThanOrEqual(
+    before + 7 * 86400000
   );
-  expect(retry.items).toEqual(first.items);
-  expect(retry.cart_token).toBe(first.cart_token);
-});
-it('maps a volume that becomes unwritable at runtime to a typed storage outage', async () => {
-  // Root bypasses permission bits, so the probe is meaningless there.
-  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
-  const { directory, instance } = await store();
-  try {
-    await chmod(directory, 0o555);
-    await expect(
-      instance.update(undefined, { product_id: id, quantity: 1 }, async () => {})
-    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
-  } finally {
-    await chmod(directory, 0o755);
-  }
-});
-it('fails removal instead of retiring a cart whose file cannot be deleted', async () => {
-  // Root bypasses permission bits, so the probe is meaningless there.
-  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
-  const { directory, instance } = await store();
-  const created = await instance.update(
-    undefined,
-    { product_id: id, quantity: 1 },
-    async () => {}
-  );
-  try {
-    await chmod(directory, 0o555);
-    // The directory rejects the deletion: the removal must surface the
-    // storage outage, not report cart_emptied with a live stale file
-    // behind the retired token.
-    await expect(
-      instance.update(
-        created.cart_token,
-        { product_id: id, quantity: 0 },
-        async () => {}
-      )
-    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
-  } finally {
-    await chmod(directory, 0o755);
-  }
-});
-it('degrades health on a failed write and recovers on the next success', async () => {
-  // Root bypasses permission bits, so the probe is meaningless there.
-  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
-  const { directory, instance } = await store();
-  expect(describeGuestCartStoreHealth(instance)).toEqual({
-    guestCarts: 'ok',
-  });
-  try {
-    await chmod(directory, 0o555);
-    await expect(
-      instance.update(undefined, { product_id: id, quantity: 1 }, async () => {})
-    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
-    // A volume that fails after a healthy startup must flip the signal:
-    // the reason carries only the token-free errno, never the outage
-    // message (file paths embed token filenames).
-    const degraded = describeGuestCartStoreHealth(instance);
-    expect(degraded.guestCarts).toBe('degraded');
-    expect(degraded.guestCartsReason).toMatch(/EACCES|EPERM|EROFS/);
-    expect(degraded.guestCartsReason).not.toContain(id);
-  } finally {
-    await chmod(directory, 0o755);
-  }
-  await instance.update(
-    undefined,
-    { product_id: id, quantity: 1 },
-    async () => {}
-  );
-  expect(describeGuestCartStoreHealth(instance)).toEqual({
-    guestCarts: 'ok',
+  expect(fake.calls).toHaveLength(1);
+  expect(fake.calls[0]).toMatchObject({
+    name: 'upsert_mcp_guest_cart',
+    params: { p_expected_version: null },
   });
 });
-it('rejects a 21st line with a typed full-cart error', async () => {
-  const { instance } = await store();
-  const line = (index: number) => ({
-    product_id: `${index.toString(16).padStart(8, '0')}-1111-4111-8111-111111111111`,
-    quantity: 1,
+
+it('merges an added line, replacing the same product absolutely', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([{ product_id: id, quantity: 2 }]));
+  const result = await storeOn(fake.supabase).update(
+    token,
+    { product_id: id, quantity: 5 },
+    validate
+  );
+  expect(result).toMatchObject({
+    cart_token: token,
+    items: [{ product_id: id, quantity: 5 }],
   });
-  const first = await instance.update(undefined, line(0), async () => {});
-  for (let index = 1; index < 20; index += 1) {
-    await instance.update(first.cart_token, line(index), async () => {});
-  }
+  expect(fake.rows.get(token)?.version).toBe(2);
+});
+
+it('removes one line at quantity 0 and keeps the rest', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(
+    token,
+    liveRow([
+      { product_id: id, quantity: 2 },
+      { product_id: other, quantity: 1 },
+    ])
+  );
+  const result = await storeOn(fake.supabase).update(
+    token,
+    { product_id: id, quantity: 0 },
+    validate
+  );
+  expect(result.items).toEqual([{ product_id: other, quantity: 1 }]);
+  expect(result).not.toHaveProperty('cart_emptied');
+});
+
+it('retires the token when the last line is removed', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([{ product_id: id, quantity: 2 }]));
+  const store = storeOn(fake.supabase);
+  const result = await store.update(token, { product_id: id, quantity: 0 }, validate);
+  expect(result).toMatchObject({ cart_token: token, items: [], cart_emptied: true });
+  expect(fake.rows.has(token)).toBe(false);
   await expect(
-    instance.update(first.cart_token, line(20), async () => {})
+    store.update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+});
+
+it('rejects a tokenless removal and a malformed token', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const store = storeOn(fake.supabase);
+  await expect(
+    store.update(undefined, { product_id: id, quantity: 0 }, validate)
+  ).rejects.toThrow('A guest cart is required');
+  await expect(
+    store.update('nope', { product_id: id, quantity: 1 }, validate)
+  ).rejects.toThrow('Invalid guest cart');
+  expect(fake.calls).toHaveLength(0);
+});
+
+it('canonicalizes product IDs before persisting', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const result = await storeOn(fake.supabase).update(
+    undefined,
+    { product_id: id.toUpperCase(), quantity: 1 },
+    validate
+  );
+  expect(result.items).toEqual([{ product_id: id, quantity: 1 }]);
+});
+
+it('enforces the per-cart line cap', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(
+    token,
+    liveRow(
+      Array.from({ length: 20 }, (_, index) => ({
+        product_id: lineId(index),
+        quantity: 1,
+      }))
+    )
+  );
+  await expect(
+    storeOn(fake.supabase).update(token, { product_id: id, quantity: 1 }, validate)
   ).rejects.toBeInstanceOf(GuestCartFullError);
 });
-it('isolates guests, preserves other products, and removes a line', async () => {
-  const { instance } = await store();
-  const first = await instance.update(
+
+it('reports an expired token and reclaims its row', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, {
+    items: [{ product_id: id, quantity: 1 }],
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+    version: 3,
+  });
+  await expect(
+    storeOn(fake.supabase).update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+  expect(fake.rows.has(token)).toBe(false);
+});
+
+it('reports unknown and corrupt rows as expired', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const store = storeOn(fake.supabase);
+  await expect(
+    store.update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+  fake.rows.set(token, { items: [{ nope: true }], expires_at: new Date().toISOString(), version: 1 });
+  await expect(
+    store.update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+  expect(fake.rows.has(token)).toBe(false);
+});
+
+it('surfaces transport failures as typed outages and clears them on success', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const store = storeOn(fake.supabase);
+  fake.failNextRpc({ code: 'XX000', message: 'boom' });
+  const failure = await store
+    .update(undefined, { product_id: id, quantity: 1 }, validate)
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(GuestCartStorageUnavailableError);
+  expect((failure as GuestCartStorageUnavailableError).code).toBe('XX000');
+  expect(store.lastStorageErrorCode).toBe('XX000');
+  expect(describeGuestCartStoreHealth(store).guestCarts).toBe('degraded');
+  const result = await store.update(undefined, { product_id: id, quantity: 1 }, validate);
+  expect(result.items).toHaveLength(1);
+  expect(store.lastStorageErrorCode).toBeNull();
+  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+});
+
+it('probes liveness without throwing, even on outage', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([]));
+  const store = storeOn(fake.supabase);
+  await expect(store.hasToken(token)).resolves.toBe(true);
+  await expect(store.hasToken('b'.repeat(64))).resolves.toBe(false);
+  await expect(store.hasToken('nope')).resolves.toBe(false);
+  fake.failNextRpc({ code: 'XX000', message: 'boom' });
+  await expect(store.hasToken(token)).resolves.toBe(false);
+  // Probes never record health: only writes do.
+  expect(store.lastStorageErrorCode).toBeNull();
+});
+
+it('validates creations before any RPC and updates after merging', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const store = storeOn(fake.supabase);
+  const seen: unknown[][] = [];
+  const created = await store.update(
     undefined,
     { product_id: id, quantity: 1 },
-    async () => {}
+    async (items) => {
+      seen.push(items);
+    }
   );
-  const second = await instance.update(
-    undefined,
-    { product_id: other, quantity: 3 },
-    async () => {}
-  );
-  expect(second.cart_token).not.toBe(first.cart_token);
-  const combined = await instance.update(
-    first.cart_token,
+  expect(fake.calls).toHaveLength(1);
+  await store.update(
+    created.cart_token,
     { product_id: other, quantity: 2 },
-    async () => {}
+    async (items) => {
+      seen.push(items);
+    }
   );
-  expect(combined.items).toHaveLength(2);
-  const removed = await instance.update(
-    first.cart_token,
-    { product_id: id, quantity: 0 },
-    async () => {}
-  );
-  expect(removed.items).toEqual([{ product_id: other, quantity: 2 }]);
-});
-it('serializes overlapping writes and preserves the cart after failed validation', async () => {
-  const { instance } = await store();
-  const first = await instance.update(
-    undefined,
-    { product_id: id, quantity: 1 },
-    async () => {}
-  );
-  await expect(
-    instance.update(
-      first.cart_token,
-      { product_id: id, quantity: 9 },
-      async () => {
-        throw new Error('stock');
-      }
-    )
-  ).rejects.toThrow('stock');
-  const [, last] = await Promise.all([
-    instance.update(
-      first.cart_token,
-      { product_id: id, quantity: 2 },
-      async () => {}
-    ),
-    instance.update(
-      first.cart_token,
-      { product_id: other, quantity: 1 },
-      async () => {}
-    ),
-  ]);
-  expect(last.items).toEqual([
-    { product_id: id, quantity: 2 },
-    { product_id: other, quantity: 1 },
-  ]);
-});
-it('rejects invalid capabilities and expired carts', async () => {
-  const { instance } = await store();
-  await expect(
-    instance.update(
-      '../escape',
+  expect(seen).toEqual([
+    [{ product_id: id, quantity: 1 }],
+    [
       { product_id: id, quantity: 1 },
-      async () => {}
-    )
-  ).rejects.toThrow();
-  const first = await instance.update(
-    undefined,
-    { product_id: id, quantity: 1 },
-    async () => {}
-  );
-  vi.useFakeTimers();
-  vi.setSystemTime(Date.now() + 8 * 24 * 60 * 60 * 1000);
+      { product_id: other, quantity: 2 },
+    ],
+  ]);
+  const rejected = vi.fn(async () => {
+    throw new Error('stale line');
+  });
   await expect(
-    instance.update(
-      first.cart_token,
-      { product_id: id, quantity: 1 },
-      async () => {}
-    )
-  ).rejects.toThrow('expired');
+    store.update(created.cart_token, { product_id: other, quantity: 3 }, rejected)
+  ).rejects.toThrow('stale line');
+  // A rejected creation never reaches storage.
+  const callsBefore = fake.calls.length;
+  await expect(
+    store.update(undefined, { product_id: id, quantity: 1 }, rejected)
+  ).rejects.toThrow('stale line');
+  expect(fake.calls.length).toBe(callsBefore);
 });

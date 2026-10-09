@@ -1,15 +1,11 @@
 // Graceful shutdown sequencing, extracted for testing: stop accepting
-// requests, drain in-flight work, and only then release the guest-cart
-// lock. Releasing before the drain would let a replacement write the same
-// carts concurrently while old updates are still awaiting validation or
-// filesystem I/O, discarding one side's lines. While we drain, the
-// heartbeat keeps our claim fresh so a replacement refuses instead of
-// racing us.
+// requests, drain in-flight work, then exit. Guest carts need no lock
+// release here: the Postgres version gate serializes writers, so a
+// replacement starting mid-drain retries on conflict instead of racing us.
 export const SHUTDOWN_DRAIN_TIMEOUT_MS = 10_000;
 
 export function createGracefulShutdown(options: {
   closeServer: (done: () => void) => void;
-  releaseLocks: () => void;
   exit: (code: number) => void;
 }): () => void {
   return () => {
@@ -25,12 +21,10 @@ export function createGracefulShutdown(options: {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
-      options.releaseLocks();
       options.exit(0);
     };
-    // A hung keep-alive must not pin the lock forever while the
-    // heartbeat keeps the claim fresh: force the release and exit so a
-    // replacement can start.
+    // A hung keep-alive must not pin the process forever: force the exit
+    // so the replacement can start.
     const timer = setTimeout(() => {
       console.error(
         JSON.stringify({

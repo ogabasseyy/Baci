@@ -270,4 +270,18 @@ describe('convertHiddenInlineStyles', () => {
   ])('leaves visible clip paths alone: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
   });
+
+  it.each([
+    '<p style="display:/* note */none">Draft note</p><p>Body</p>',
+    '<p style="/* lead */display:none">Draft note</p><p>Body</p>',
+    '<p style="display:none/* trailing">Draft note</p><p>Body</p>',
+    '<p style="display:none/*!*/!important;display:block">Draft note</p><p>Body</p>',
+  ])('strips commented hiding declarations at import: %s', (html) => {
+    expect(validateImportedContent(html)).toBe('<p>Body</p>');
+  });
+
+  it('leaves comment-like quoted strings alone', () => {
+    const html = '<p style="content:&quot;/*&quot;;display:block">Shown</p>';
+    expect(convertHiddenInlineStyles(html)).toBe(html);
+  });
 });

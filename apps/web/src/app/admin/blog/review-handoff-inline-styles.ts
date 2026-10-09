@@ -3,6 +3,48 @@ import { parseHandoffDom } from './review-handoff-dom';
 
 const IMPORTANT_SUFFIX_PATTERN = /!\s*important\s*$/i;
 
+function stripCssComments(style: string): string {
+  // Comments can hide anywhere outside strings — inside values
+  // (`display:/*x*/none`), names, even around `!important` — so
+  // strip them before declaration splitting. Quoted strings keep
+  // their text (`content:"/*"` is two characters, not a comment),
+  // and an unterminated comment runs to the end per CSS. Backslash
+  // escapes keep a quote inside its string.
+  let output = '';
+  let index = 0;
+  let quote: string | null = null;
+  while (index < style.length) {
+    const char = style[index] ?? '';
+    if (quote !== null) {
+      output += char;
+      if (char === '\\' && index + 1 < style.length) {
+        output += style[index + 1] ?? '';
+        index += 2;
+        continue;
+      }
+      if (char === quote) quote = null;
+      index += 1;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      output += char;
+      index += 1;
+      continue;
+    }
+    if (char === '/' && style[index + 1] === '*') {
+      const end = style.indexOf('*/', index + 2);
+      // CSS strips comments pre-tokenization (so `n/** /o/**/ne`
+      // reads as `none`); dropping them outright is exactly that.
+      index = end === -1 ? style.length : end + 2;
+      continue;
+    }
+    output += char;
+    index += 1;
+  }
+  return output;
+}
+
 function isImportantDeclaration(value: string): boolean {
   // CSS allows whitespace between `!` and `important`, matched
   // ASCII case-insensitively like every other declaration keyword.
@@ -150,7 +192,7 @@ function hidingUtilityForStyle(
   // `display:none;display:block` shows and a later important
   // declaration still overrides an earlier one.
   const finals = new Map<string, { important: boolean; value: string }>();
-  for (const declaration of style.split(';')) {
+  for (const declaration of stripCssComments(style).split(';')) {
     const separator = declaration.indexOf(':');
     if (separator === -1) continue;
     const name = declaration.slice(0, separator).trim().toLowerCase();

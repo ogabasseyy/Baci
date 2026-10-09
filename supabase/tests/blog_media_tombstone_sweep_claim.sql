@@ -975,6 +975,76 @@ BEGIN
 END;
 $json_slashes$;
 
+DO $nul_guard$
+DECLARE
+  v_decoded TEXT;
+  v_row RECORD;
+  v_saw_live BOOLEAN := FALSE;
+  v_saw_orphan BOOLEAN := FALSE;
+BEGIN
+  -- Encoded NUL bytes are valid stored text. Decoding must preserve
+  -- the literal escape instead of calling chr(0), which raises
+  -- outside the guarded conversion block and aborts every claim.
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  SELECT public.blog_media_percent_decode(
+    '100% coverage, NUL: %00 done'
+  ) INTO v_decoded;
+  IF v_decoded <> '100% coverage, NUL: %00 done' THEN
+    RAISE EXCEPTION 'NUL escape was not preserved: %', v_decoded;
+  END IF;
+
+  INSERT INTO public.blog_posts (
+    title, slug, content, author_name, is_platform_post, merchant_id
+  )
+  VALUES (
+    'NUL guard test',
+    'sweep-claim-nul-guard-post',
+    '100% coverage, NUL: %00, live ref https://cdn.example.com/media/platform/blog/nul-live.webp',
+    'Editorial',
+    TRUE,
+    NULL
+  );
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/nul-live.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/nul-orphan.webp', now() - interval '2 hours', FALSE);
+
+  FOR v_row IN
+    SELECT tombstone_path, tombstone_claimed
+      FROM public.claim_sweepable_blog_media_tombstones(
+        now() - interval '1 hour',
+        500
+      )
+  LOOP
+    IF v_row.tombstone_path = 'platform/blog/nul-live.webp' THEN
+      v_saw_live := TRUE;
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'NUL field failed to protect a live object';
+      END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/nul-orphan.webp' THEN
+      v_saw_orphan := TRUE;
+      IF v_row.tombstone_claimed IS NOT TRUE THEN
+        RAISE EXCEPTION 'claim skipped the NUL control orphan';
+      END IF;
+    END IF;
+  END LOOP;
+  IF NOT v_saw_live OR NOT v_saw_orphan THEN
+    RAISE EXCEPTION 'claim omitted the NUL fixtures';
+  END IF;
+
+  DELETE FROM public.blog_posts
+   WHERE slug = 'sweep-claim-nul-guard-post';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/nul-live.webp',
+    'platform/blog/nul-orphan.webp'
+  );
+END;
+$nul_guard$;
+
 RESET ROLE;
 
 ROLLBACK;

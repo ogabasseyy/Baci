@@ -10,11 +10,12 @@ type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 // that writes one of these can break media, so only such updates
 // verify: a tab that changes a title while another tab's media is
 // mid-sweep must neither fail nor restore — the media writer owns
-// both. Restore likewise covers media keys only, guarded by those
-// keys being untouched since this write: an intervening non-media
-// update moves updated_at without invalidating a media restore,
-// while an intervening media rewrite (re-verified by its own writer)
-// blocks it.
+// both. Restore covers written media keys plus their dependents
+// (alt/dimensions, word/reading stats), guarded by those keys being
+// untouched since this write: an intervening non-media update moves
+// updated_at without invalidating a media restore, while an
+// intervening rewrite of a restored key (re-verified by its own
+// writer) blocks it.
 const MEDIA_KEYS = [
   'author_image_url',
   'content',
@@ -23,9 +24,27 @@ const MEDIA_KEYS = [
   'featured_image_variants',
 ] as const;
 
+// Non-media columns derived from a media key at write time: the
+// handler null-clears alt/dimensions alongside URL changes and
+// recomputes word/reading stats from new content. A media restore
+// that omits them persists a Frankenstein row (old image, new alt;
+// old content, new word count), so dependents this save wrote
+// restore and guard together with their media key. An intervening
+// rewrite of a dependent then skips the whole restore rather than
+// clobbering it — the same no-clobber rule as media keys.
+const MEDIA_DEPENDENTS: Record<string, readonly string[]> = {
+  content: ['word_count', 'reading_time_minutes'],
+  featured_image_url: [
+    'featured_image_alt',
+    'featured_image_width',
+    'featured_image_height',
+  ],
+};
+
 /**
  * Verify a patched post's media survived the save, restoring the
- * pre-update media fields when it did not. Clearing blocks on the
+ * pre-update media and dependent fields when it did not. Clearing
+ * blocks on the
  * sweep's row locks while a claim is in flight, so this probe always
  * sees post-sweep metadata truth: a sweep that claimed between the
  * update and this probe leaves its paths missing, and the save
@@ -72,17 +91,36 @@ export async function verifyPatchedBlogPostMediaOrRestore(
     });
   }
   const snapshot = args.existingPost as Record<string, unknown>;
+  // Restore set: written media keys plus the dependents this save
+  // wrote alongside them. Dependents the save never touched keep
+  // their current value — restoring an untouched alt over another
+  // tab's independent edit would clobber work unrelated to this
+  // save's media failure.
   const restore: Record<string, unknown> = {};
+  const restoreKeys: string[] = [];
   for (const key of writtenMediaKeys) {
-    if (key in snapshot) restore[key] = snapshot[key];
+    if (key in snapshot) {
+      restore[key] = snapshot[key];
+      restoreKeys.push(key);
+    }
+    for (const dependent of MEDIA_DEPENDENTS[key] ?? []) {
+      if (
+        dependent in snapshot &&
+        args.finalUpdateData[dependent] !== undefined &&
+        dependent in args.finalUpdateData
+      ) {
+        restore[dependent] = snapshot[dependent];
+        restoreKeys.push(dependent);
+      }
+    }
   }
-  if (Object.keys(restore).length === 0) {
+  if (restoreKeys.length === 0) {
     return { ok: false, restored: false };
   }
-  // Guard columns: the media keys this update wrote. Both the
-  // skip decision and the restore write match on these — never on
-  // updated_at, which any intervening write moves, media or not.
-  const guardColumns = [...writtenMediaKeys];
+  // Guard columns: every restored key, media or dependent. Both
+  // the skip decision and the restore write match on these — never
+  // on updated_at, which any intervening write moves, media or not.
+  const guardColumns = [...restoreKeys];
   let restoreError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -98,7 +136,7 @@ export async function verifyPatchedBlogPostMediaOrRestore(
         continue;
       }
       const currentRow = current as unknown as Record<string, unknown>;
-      const intervened = writtenMediaKeys.some(
+      const intervened = restoreKeys.some(
         (key) =>
           stableStringify(currentRow[key]) !==
           stableStringify(args.finalUpdateData[key])
@@ -119,7 +157,7 @@ export async function verifyPatchedBlogPostMediaOrRestore(
         .eq('id', args.postId)
         .eq('is_platform_post', true)
         .is('merchant_id', null);
-      for (const key of writtenMediaKeys) {
+      for (const key of restoreKeys) {
         const value = args.finalUpdateData[key];
         if (value === null) {
           guarded = guarded.is(key, null);

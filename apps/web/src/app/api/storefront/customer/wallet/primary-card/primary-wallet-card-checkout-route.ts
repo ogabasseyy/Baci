@@ -58,12 +58,20 @@ export async function handlePrimaryWalletCardCheckout(
       .eq('user_id', auth.user.id)
       .maybeSingle();
     const identity = schemas.identity.safeParse(data);
+    // Initialization binds the checkout email at creation, so the stored
+    // address must match the confirmed one. Status recovery binds only the
+    // immutable IDs: a customer who changed email after initialize must
+    // still poll their unresolved or charged checkout (the service layer
+    // deliberately excludes email from identityKeys for the same reason,
+    // and the stored address is still compared as provider evidence at
+    // the collection boundary).
     if (
       queryError ||
       !identity.success ||
       identity.data.merchant_id !== runtime.settings.merchantId ||
       identity.data.user_id !== auth.user.id ||
-      identity.data.email.toLowerCase() !== auth.user.email.toLowerCase()
+      (action === 'initialize' &&
+        identity.data.email.toLowerCase() !== auth.user.email.toLowerCase())
     )
       return error('OWNERSHIP_REQUIRED', 403);
     const scope = {

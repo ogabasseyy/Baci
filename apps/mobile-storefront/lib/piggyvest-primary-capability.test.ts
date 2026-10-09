@@ -131,13 +131,54 @@ describe('getPiggyvestPrimaryCapability', () => {
     };
     read.mockResolvedValue({ account });
     await expect(
-      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT)
+      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT, 'user-a')
     ).resolves.toEqual({ available: true, account });
     // Cached verdicts carry no snapshot: nothing was fetched.
     await expect(
-      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT)
+      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT, 'user-a')
     ).resolves.toEqual({ available: true });
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one probe across concurrent loads for the same user', async () => {
+    const account = { accountNumber: '0987654321' };
+    read.mockResolvedValue({ account });
+    const merchant = '00000000-0000-4000-8000-000000000000';
+    const [first, second] = await Promise.all([
+      getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-a'),
+      getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-a'),
+    ]);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(first).toEqual({ available: true, account });
+    expect(second).toEqual({ available: true, account });
+  });
+
+  it('never shares a snapshot across users after an account switch', async () => {
+    const merchant = '00000000-0000-4000-8000-000000000001';
+    const accountA = { accountNumber: '0aaa' };
+    const accountB = { accountNumber: '0bbb' };
+    let resolveFirst!: (value: unknown) => void;
+    read
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockResolvedValueOnce({ account: accountB });
+    const pendingA = getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-a');
+    const pendingB = getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-b');
+    // B fires its own probe instead of waiting on A's promise.
+    expect(read).toHaveBeenCalledTimes(2);
+    resolveFirst({ account: accountA });
+    await expect(pendingA).resolves.toEqual({
+      available: true,
+      account: accountA,
+    });
+    await expect(pendingB).resolves.toEqual({
+      available: true,
+      account: accountB,
+    });
   });
 });
 

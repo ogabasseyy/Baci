@@ -150,6 +150,21 @@ it('opens the adopted checkout only after explicit resume confirmation', async (
     }),
   });
 });
+it('derives the gateway amount from integer kobo without float drift', async () => {
+  mockStart.mockResolvedValue({ ...response, amountKobo: 9999999999 });
+  await fundPrimaryWalletCard({ ...input, fundAmount: '99999999.99' });
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/payment-gateway',
+    params: expect.objectContaining({ amount: '99999999.99' }),
+  });
+  jest.clearAllMocks();
+  mockStart.mockResolvedValue({ ...response, amountKobo: 100050 });
+  await fundPrimaryWalletCard({ ...input, fundAmount: '1000.50' });
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/payment-gateway',
+    params: expect.objectContaining({ amount: '1000.50' }),
+  });
+});
 it('reports a closed adoption without opening checkout', async () => {
   mockStart.mockResolvedValue({
     ...response,

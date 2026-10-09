@@ -68,6 +68,13 @@ jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-redemption-id'),
 }));
 
+const mockCreateWalletFundingAccount =
+  jest.fn<(input: unknown) => Promise<unknown>>();
+jest.mock('@/lib/wallet-funding-account', () => ({
+  createWalletFundingAccount: (input: unknown) =>
+    mockCreateWalletFundingAccount(input),
+}));
+
 jest.mock('@/stores/auth-store', () => {
   const { create } = require('zustand');
 
@@ -80,7 +87,12 @@ jest.mock('@/stores/auth-store', () => {
   };
 });
 
-import { useRedeemPoints, useWallet, walletKeys } from '@/hooks/use-wallet';
+import {
+  useCreateWalletFundingAccount,
+  useRedeemPoints,
+  useWallet,
+  walletKeys,
+} from '@/hooks/use-wallet';
 import { PENDING_LOYALTY_REDEMPTION_TTL_MS } from '@/lib/loyalty-redemption-idempotency';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -1464,6 +1476,40 @@ describe('useRedeemPoints', () => {
         p_redemption_id: 'redemption-id-2',
       })
     );
+
+    unmount();
+    queryClient.clear();
+  });
+});
+
+describe('useCreateWalletFundingAccount', () => {
+  it('refreshes the wallet display after creation so the new account is visible', async () => {
+    const queryClient = createTestClient();
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    mockCreateWalletFundingAccount.mockResolvedValue({
+      account: { accountNumber: '1234567890', bankName: 'Titan Paystack' },
+    });
+    const { result, unmount } = renderHook(
+      () => useCreateWalletFundingAccount(),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(mockCreateWalletFundingAccount).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+    });
+    // Replacement for the removed Account Ready alert: the wallet query
+    // refetches and the funding-account card shows the new number.
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+      }),
+    });
 
     unmount();
     queryClient.clear();

@@ -180,7 +180,7 @@ export function usePaymentGatewayController() {
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
-    confirmRedvaultPayment: requiresServerCheckoutConfirmation(
+    confirmServerPayment: requiresServerCheckoutConfirmation(
       paymentMethod,
       paymentKind
     )

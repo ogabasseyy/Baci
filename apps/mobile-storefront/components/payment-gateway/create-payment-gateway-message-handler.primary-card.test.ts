@@ -21,7 +21,7 @@ it('uses the existing hosted callback boundary to request authoritative primary 
   const confirm = jest.fn();
   const { handler } = createHandler({
     paymentKind: 'primary_wallet_card',
-    confirmRedvaultPayment: confirm,
+    confirmServerPayment: confirm,
   });
   await sendMessage(handler, { type: 'payment_success' });
   expect(confirm).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ it('routes raw success messages through server confirmation only under productio
   // crypto path or a direct success side effect.
   const { handler, clearCart, setSuccessStatus } = createHandler({
     paymentKind: 'primary_wallet_card',
-    confirmRedvaultPayment: confirm,
+    confirmServerPayment: confirm,
   });
   await sendMessage(handler, { type: 'crypto_success' });
   await sendMessage(handler, { type: 'success' });

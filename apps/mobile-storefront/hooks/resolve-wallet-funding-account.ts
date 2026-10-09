@@ -19,7 +19,8 @@ export type SettledPrimaryFundingAccount =
  * the critical path, and every failure settles as unavailable.
  */
 export async function readPrimaryFundingAccount(
-  merchantId: string
+  merchantId: string,
+  userId: string
 ): Promise<SettledPrimaryFundingAccount> {
   if (!isPiggyvestPrimaryMerchant(merchantId)) {
     // Unknown verdict: probe once so a server-enabled merchant resolves
@@ -27,9 +28,14 @@ export async function readPrimaryFundingAccount(
     // until a manual refetch. Pilot and observed merchants skip the
     // probe; a cached negative answers without network. A fresh probe
     // reuses its own snapshot — the account below is the same read, not
-    // a second one.
+    // a second one. The probe is scoped to (merchant, user): sharing a
+    // merchant-wide snapshot promise would leak user A's bank account
+    // to user B's wallet load after an account switch.
     try {
-      const snapshot = await getPiggyvestPrimaryCapabilitySnapshot(merchantId);
+      const snapshot = await getPiggyvestPrimaryCapabilitySnapshot(
+        merchantId,
+        userId
+      );
       if (!snapshot.available) return { status: 'unavailable' };
       if (snapshot.account !== undefined)
         return { status: 'ready', account: snapshot.account };

@@ -7,7 +7,7 @@ const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
 
 interface CreatePaymentGatewayMessageHandlerInput {
-  confirmRedvaultPayment?: () => void;
+  confirmServerPayment?: () => void;
   amount?: number;
   clearCart: () => void | Promise<void>;
   confirmVtuPaymentSuccess: (input: {
@@ -101,7 +101,7 @@ function handleClipboardText({
 
 export function createPaymentGatewayMessageHandler({
   amount,
-  confirmRedvaultPayment,
+  confirmServerPayment,
   clearCart,
   confirmVtuPaymentSuccess,
   copiedGatewayTextRef,
@@ -148,7 +148,7 @@ export function createPaymentGatewayMessageHandler({
         data.type === 'success' ||
         data.type === 'payment_success')
     ) {
-      if (confirmRedvaultPayment) confirmRedvaultPayment();
+      if (confirmServerPayment) confirmServerPayment();
       return;
     }
 
@@ -175,13 +175,13 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
-    if (confirmRedvaultPayment) {
+    if (confirmServerPayment) {
       if (
         data.type === 'crypto_success' ||
         data.type === 'success' ||
         data.type === 'payment_success'
       )
-        confirmRedvaultPayment();
+        confirmServerPayment();
       return;
     }
 

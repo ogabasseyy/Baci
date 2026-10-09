@@ -176,6 +176,26 @@ describe.each([
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private details');
   });
+  it('binds status recovery to immutable IDs while initialize still requires the stored email', async () => {
+    const test = primaryWalletCardCheckoutRouteFixture(action);
+    // The customer changed their confirmed auth email after initialize;
+    // the stored customer row still carries the previous address.
+    mocks.auth.mockResolvedValue({
+      ...test.auth,
+      user: { ...test.auth.user, email: 'new-address@example.test' },
+    });
+    const response = await handlePrimaryWalletCardCheckout(
+      test.request(),
+      action
+    );
+    if (action === 'initialize') {
+      expect(response.status).toBe(403);
+      expect(mocks.execute).not.toHaveBeenCalled();
+    } else {
+      expect(response.status).toBe(202);
+      expect(mocks.status).toHaveBeenCalledTimes(1);
+    }
+  });
   it('reads runtime through the strict reader for initialize and the drain reader for status', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
     mocks.auth.mockResolvedValue(test.auth);

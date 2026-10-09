@@ -10,6 +10,7 @@ jest.mock('@/lib/piggyvest-primary-wallet', () => ({
 }));
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const userId = '11111111-1111-4111-8111-111111111111';
 const legacy = {
   account_name: 'Legacy',
   account_number: '1234567890',
@@ -35,7 +36,7 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
     requiresConsent: false,
     provisioningStatus: 'ready',
   });
-  const primary = await readPrimaryFundingAccount(merchantId);
+  const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual({
     account_name: 'Verified',
     account_number: '0987654321',
@@ -46,14 +47,14 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
 
 it('settles failed reads as unavailable instead of throwing the wallet load', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
-  await expect(readPrimaryFundingAccount(merchantId)).resolves.toEqual({
+  await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
     status: 'unavailable',
   });
 });
 
 it('keeps the last-known legacy account when PiggyVest reads fail', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
-  const primary = await readPrimaryFundingAccount(merchantId);
+  const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
     legacy
   );
@@ -63,7 +64,7 @@ it('keeps the working legacy account when the server reports primary unconfigure
   read.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
-  const primary = await readPrimaryFundingAccount(merchantId);
+  const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
     legacy
   );
@@ -71,7 +72,7 @@ it('keeps the working legacy account when the server reports primary unconfigure
 
 it('resolves no account for freshly onboarded customers without legacy rows', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
-  const primary = await readPrimaryFundingAccount(merchantId);
+  const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(resolveWalletFundingAccount(null, merchantId, primary)).toBeNull();
 });
 
@@ -79,10 +80,10 @@ it('preserves other merchants accounts while caching the negative probe', async 
   read.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
-  const primary = await readPrimaryFundingAccount('other');
+  const primary = await readPrimaryFundingAccount('other', userId);
   expect(resolveWalletFundingAccount(legacy, 'other', primary)).toEqual(legacy);
   expect(read).toHaveBeenCalledTimes(1);
-  await readPrimaryFundingAccount('other');
+  await readPrimaryFundingAccount('other', userId);
   expect(read).toHaveBeenCalledTimes(1);
 });
 
@@ -93,7 +94,8 @@ it('resolves a server-enabled merchant on first load via one probe', async () =>
     provisioningStatus: 'ready',
   });
   const primary = await readPrimaryFundingAccount(
-    '00000000-0000-4000-8000-000000000000'
+    '00000000-0000-4000-8000-000000000000',
+    userId
   );
   expect(
     resolveWalletFundingAccount(
@@ -113,12 +115,47 @@ it('resolves a server-enabled merchant on first load via one probe', async () =>
 
 it('treats an ambiguous probe failure as unavailable and retries next load', async () => {
   read.mockRejectedValueOnce(new Error('timeout'));
-  await expect(readPrimaryFundingAccount('other')).resolves.toEqual({
+  await expect(readPrimaryFundingAccount('other', userId)).resolves.toEqual({
     status: 'unavailable',
   });
   read.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
-  await readPrimaryFundingAccount('other');
+  await readPrimaryFundingAccount('other', userId);
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('never shows the previous users account after an account switch', async () => {
+  const merchant = '00000000-0000-4000-8000-000000000002';
+  const accountB = {
+    accountName: 'User B',
+    accountNumber: '0222222222',
+    bankName: 'Provider Bank',
+    provider: 'piggyvest',
+  } as const;
+  // User A loads first: probe snapshot answers with A's account and caches
+  // the merchant verdict.
+  read.mockResolvedValueOnce({
+    account: primaryAccount,
+    requiresConsent: false,
+    provisioningStatus: 'ready',
+  });
+  const first = await readPrimaryFundingAccount(merchant, 'user-a');
+  expect(first).toEqual({ status: 'ready', account: primaryAccount });
+  // User B loads after the switch: the cached verdict carries no snapshot,
+  // so B's load re-reads under B's session instead of reusing A's account.
+  read.mockResolvedValueOnce({
+    account: accountB,
+    requiresConsent: false,
+    provisioningStatus: 'ready',
+  });
+  const second = await readPrimaryFundingAccount(merchant, 'user-b');
+  expect(second).toEqual({ status: 'ready', account: accountB });
+  expect(resolveWalletFundingAccount(legacy, merchant, second)).toEqual({
+    account_name: 'User B',
+    account_number: '0222222222',
+    bank_name: 'Provider Bank',
+    provider: 'piggyvest',
+  });
   expect(read).toHaveBeenCalledTimes(2);
 });

@@ -91,15 +91,45 @@ export function clearPiggyvestPrimaryCapabilityCache() {
  * every merchant so rollout is server-driven; resolves unavailable only
  * on the server's explicit not-ready signal, while any other failure
  * rejects so callers never misroute money on an ambiguous error.
+ *
+ * The in-flight probe is scoped to (merchant, user): the verdict is
+ * merchant-wide, but the snapshot carries the authenticated caller's
+ * funding account, so a merchant-keyed promise would leak user A's bank
+ * account to user B's wallet load after an account switch. Concurrent
+ * loads for the same user still share one probe.
  */
 export async function getPiggyvestPrimaryCapabilitySnapshot(
-  merchantId: string
+  merchantId: string,
+  userId: string
 ): Promise<PiggyvestPrimaryCapabilitySnapshot> {
   const cached = readObservedPiggyvestPrimaryCapability(merchantId);
   if (cached !== null) return { available: cached };
-  const pending = inflight.get(merchantId);
+  return await sharedProbe(`${merchantId}\n${userId}`, merchantId);
+}
+
+/**
+ * Boolean view of the capability probe for callers that only gate on the
+ * verdict and never need the funding account itself. The verdict carries
+ * no account data, so the merchant-wide promise is safe to share across
+ * users — but it never shares with snapshot-bearing probes.
+ */
+export async function getPiggyvestPrimaryCapability(
+  merchantId: string
+): Promise<boolean> {
+  const cached = readObservedPiggyvestPrimaryCapability(merchantId);
+  if (cached !== null) return cached;
+  return (await sharedProbe(`${merchantId}\nverdict`, merchantId)).available;
+}
+
+async function sharedProbe(
+  scopeKey: string,
+  merchantId: string
+): Promise<PiggyvestPrimaryCapabilitySnapshot> {
+  const pending = inflight.get(scopeKey);
   if (pending) return pending;
-  const probe = (async () => {
+  // Assigned synchronously below; the closure only runs after that.
+  let probe!: Promise<PiggyvestPrimaryCapabilitySnapshot>;
+  probe = (async () => {
     try {
       const snapshot = await piggyvestPrimaryWalletApi.read(merchantId);
       observePiggyvestPrimaryCapability(merchantId, true);
@@ -112,21 +142,11 @@ export async function getPiggyvestPrimaryCapabilitySnapshot(
         observePiggyvestPrimaryCapability(merchantId, false);
       return { available: false };
     } finally {
-      inflight.delete(merchantId);
+      if (inflight.get(scopeKey) === probe) inflight.delete(scopeKey);
     }
   })();
-  inflight.set(merchantId, probe);
+  inflight.set(scopeKey, probe);
   return await probe;
-}
-
-/**
- * Boolean view of the capability probe for callers that only gate on the
- * verdict and never need the funding account itself.
- */
-export async function getPiggyvestPrimaryCapability(
-  merchantId: string
-): Promise<boolean> {
-  return (await getPiggyvestPrimaryCapabilitySnapshot(merchantId)).available;
 }
 
 /**

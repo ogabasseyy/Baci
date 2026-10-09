@@ -152,7 +152,9 @@ export async function fetchWalletData(
     fetchWalletSavingsInterest(merchantId),
     // Same contract for the primary provider lookup: it resolves
     // alongside the database reads instead of serializing the load.
-    readPrimaryFundingAccount(merchantId),
+    // Scoped to the authenticated identity so a snapshot-bearing probe
+    // can never leak across an account switch.
+    readPrimaryFundingAccount(merchantId, userId ?? resolvedCustomerId),
   ]);
 
   if (fundingAccountResult.error) {

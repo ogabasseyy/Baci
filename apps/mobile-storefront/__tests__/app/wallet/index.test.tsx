@@ -676,6 +676,9 @@ describe('WalletScreen', () => {
     await waitFor(() => {
       expect(mockCreateFundingAccountMutateAsync).toHaveBeenCalledTimes(1);
     });
+    // No success dialog: the mutation invalidates the wallet query and the
+    // funding-account card shows the new number instead (asserted in
+    // use-wallet.test.ts > useCreateWalletFundingAccount).
     expect(alertSpy).not.toHaveBeenCalled();
   });
 

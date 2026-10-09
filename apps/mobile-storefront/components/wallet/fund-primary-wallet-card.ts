@@ -34,6 +34,18 @@ function formatNairaFromKobo(amountKobo: number): string {
   return `${whole}.${koboPart}`;
 }
 
+function formatGatewayAmountNaira(amountKobo: number): string {
+  // Integer-derived (never float division): the gateway amount is
+  // display-only — the charge binds to the operation server-side — but it
+  // must still match the consented integer-kobo figure exactly at every
+  // magnitude the schema allows.
+  const whole = Math.floor(amountKobo / 100);
+  const kobo = amountKobo % 100;
+  return kobo === 0
+    ? String(whole)
+    : `${whole}.${String(kobo).padStart(2, '0')}`;
+}
+
 function parseFundAmountKobo(fundAmount: unknown): number | null {
   if (typeof fundAmount !== 'string') return null;
   // Normalize display/user input (surrounding whitespace, thousands
@@ -191,7 +203,7 @@ export async function fundPrimaryWalletCard(
           merchantId,
           authorizationUrl: result.authorizationUrl,
           reference: result.reference,
-          amount: String(result.amountKobo / 100),
+          amount: formatGatewayAmountNaira(result.amountKobo),
           ...(result.returnTo ? { returnTo: result.returnTo } : {}),
         },
       });

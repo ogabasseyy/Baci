@@ -43,12 +43,14 @@ export async function runPrimaryCardTransferOutbox(input: {
       input.mode === 'once' ? '1' : '0',
     ])
   );
-  if (input.mode === 'readiness' && selected.operationIds.length !== 0)
-    throw new Error('Invalid readiness selection');
   input.signal?.throwIfAborted();
   const reconciliationRequired =
     selected.unknownCount > 0 || selected.dispatchingCount > 0;
-  const operationId = selected.operationIds[0];
+  // Readiness runs as ExecStartPre: it validates selection and storage but
+  // never dispatches, and a non-empty selection must not fail the probe —
+  // otherwise any backlog would skip ExecStart and deadlock --once.
+  const operationId =
+    input.mode === 'once' ? selected.operationIds[0] : undefined;
   // Drain the selected ready operation even while unrelated operations
   // await reconciliation: selection, claim, and the provider reference
   // are all per-operation, so one ambiguous transfer must not stall the

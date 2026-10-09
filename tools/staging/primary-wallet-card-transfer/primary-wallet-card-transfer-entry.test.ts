@@ -12,6 +12,7 @@ afterEach(() => {
 });
 it('does not acknowledge durable unknown acceptance as successful scheduler completion', async () => {
   mocks.launch.mockResolvedValueOnce({
+    mode: 'once',
     status: 'reconciliation_required',
     fundingComplete: false,
   });
@@ -25,11 +26,31 @@ it('does not acknowledge durable unknown acceptance as successful scheduler comp
   await Promise.resolve();
   expect(process.exitCode).toBe(2);
   expect(stdout).toHaveBeenCalledWith(
-    '{"status":"reconciliation_required","fundingComplete":false}\n'
+    '{"mode":"once","status":"reconciliation_required","fundingComplete":false}\n'
   );
   expect(stderr).toHaveBeenCalledWith(
     'Primary card transfer reconciliation required\n'
   );
+});
+it('passes the readiness probe despite a stuck-sibling backlog', async () => {
+  mocks.launch.mockResolvedValueOnce({
+    mode: 'readiness',
+    status: 'reconciliation_required',
+    fundingComplete: false,
+  });
+  const stdout = vi
+    .spyOn(process.stdout, 'write')
+    .mockImplementation(() => true);
+  const stderr = vi
+    .spyOn(process.stderr, 'write')
+    .mockImplementation(() => true);
+  await import('./primary-wallet-card-transfer-entry');
+  await Promise.resolve();
+  expect(process.exitCode).toBe(previous);
+  expect(stdout).toHaveBeenCalledWith(
+    '{"mode":"readiness","status":"reconciliation_required","fundingComplete":false}\n'
+  );
+  expect(stderr).not.toHaveBeenCalled();
 });
 it('redacts operational failures while returning a failing process status', async () => {
   mocks.launch.mockRejectedValueOnce(new Error('private-provider-material'));

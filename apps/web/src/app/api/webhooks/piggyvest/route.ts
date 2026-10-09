@@ -3,10 +3,6 @@ import z from 'zod';
 import { getPiggyvestApiConfig } from '@/env';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
-import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
-import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
-import { dispatchPrimaryCardSignedCustodyIntake } from '@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch';
-import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-inflow-dispatch';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import {
@@ -20,6 +16,7 @@ import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
 } from '@/schemas/piggyvest/events';
+import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 
 /**
@@ -186,59 +183,25 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   try {
-    if (parsed.data.eventType === 'wallet-transfer.outflow.success') {
-      // The custody inbox verifies against custody keys only: invoke it
-      // solely for custody-family deliveries so a legacy-signed outflow
-      // keeps flowing to the legacy outflow processor instead of
-      // 503-looping on an invalid-signature verdict here.
-      if (verification.families.includes('custody')) {
-        const custody = await dispatchPrimaryCardSignedCustodyIntake({
-          rawBody,
-          signature,
-        });
-        if (custody.response) return custody.response;
-      }
-    }
-    if (parsed.data.eventType === 'interest-payout.success') {
-      const primary = await primaryInterestWebhookResponse({
+    // Specialized primary intakes claim their deliveries first (each gated
+    // on its own key family); null falls through to legacy processing.
+    const primary = await dispatchPrimaryPiggyvestIntake({
+      rawBody,
+      signature,
+      matchedSecret,
+      event: parsed.data,
+      families: verification.families,
+    });
+    if (primary === 'conflict') {
+      return quarantineAndAck(
         rawBody,
-        signature,
-      });
-      if (primary) return primary;
+        'conflict',
+        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
+      );
     }
-    if (parsed.data.eventType === 'bank-transfer.inflow.success') {
-      // The bank inbox verifies against bank keys only: invoke it solely for
-      // bank-family deliveries so a legacy-signed inflow keeps flowing to
-      // the shared inflow dispatcher instead of 503-looping here.
-      if (verification.families.includes('bank')) {
-        const bank = await dispatchPrimaryWalletBankInboxIntake({
-          rawBody,
-          signature,
-        });
-        if (bank.response) return bank.response;
-      }
-      const primary = await dispatchPrimaryWalletInflow({
-        rawBody,
-        signature,
-        secret: matchedSecret,
-        families: verification.families,
-      });
-      if (primary === 'credited' || primary === 'duplicate') {
-        return NextResponse.json(
-          { received: true, duplicate: primary === 'duplicate' },
-          { status: 200, headers: noStore }
-        );
-      }
-      if (primary === 'conflict') {
-        return quarantineAndAck(
-          rawBody,
-          'conflict',
-          { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-          redactEventDetails(parsed.data),
-          createPiggyvestIntakeServiceClient
-        );
-      }
-    }
+    if (primary) return primary;
     // Key-family binding: only the legacy secret authorizes legacy ledger
     // writes. A delivery signed solely by a primary family key that no
     // specialized intake claimed is quarantined, never legacy-processed —

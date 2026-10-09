@@ -2,7 +2,10 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
-import { storefrontLoyaltyEnrollSchema } from '@/schemas/storefront-loyalty-enroll';
+import {
+  storefrontLoyaltyEnrollResultSchema,
+  storefrontLoyaltyEnrollSchema,
+} from '@/schemas/storefront-loyalty-enroll';
 
 type EnrollRpcResult = {
   success: boolean;
@@ -39,6 +42,19 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
 // response shape is kept stable for the use-loyalty.ts enroll() caller.
 export async function POST(request: NextRequest) {
   try {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     let rawBody: unknown = {};
     try {
       rawBody = await request.json();
@@ -51,19 +67,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'merchant_id and customer_id are required' },
         { status: 400 }
-      );
-    }
-
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
       );
     }
 
@@ -131,13 +134,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validated = storefrontLoyaltyEnrollResultSchema.safeParse(result);
+    if (!validated.success) {
+      logger.error({
+        message: 'Malformed loyalty enrollment result',
+        error: { result },
+      });
+      return NextResponse.json(
+        { error: 'Failed to enroll in loyalty program' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Successfully enrolled in loyalty program',
       data: {
-        points_balance: result.points_balance,
-        tier: result.current_tier,
-        referral_code: result.referral_code,
+        points_balance: validated.data.points_balance,
+        tier: validated.data.current_tier,
+        referral_code: validated.data.referral_code,
       },
     });
   } catch (error) {

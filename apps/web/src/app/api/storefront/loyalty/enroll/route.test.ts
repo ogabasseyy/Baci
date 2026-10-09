@@ -288,4 +288,19 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'Failed to enroll in loyalty program' });
   });
+
+  it('returns 500 for a malformed success payload', async () => {
+    mockRpc.mockResolvedValue({
+      data: { success: true, points_balance: 'fifty' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: 'Failed to enroll in loyalty program' });
+  });
 });

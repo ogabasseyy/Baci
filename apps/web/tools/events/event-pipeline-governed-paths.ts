@@ -39,7 +39,13 @@ function repoRoot(): string {
 }
 
 function gitPaths(root: string, args: readonly string[]): string[] {
-  return execFileSync('git', [...args], { cwd: root, encoding: 'utf8' })
+  // The repo-wide ls-files inventory exceeds the 1MB spawnSync default
+  // (same 64MB ceiling as the sibling git snapshot readers).
+  return execFileSync('git', [...args], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split('\0')
     .filter(Boolean);
 }

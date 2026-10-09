@@ -114,7 +114,7 @@ describe('actual mocked HTTP primary transfer integration', () => {
   it.each([
     401, 403, 500, 302,
   ])('persists HTTP %s as unknown with no financial retry', async (status) => {
-    const fetchImplementation = vi.fn(
+    const fetchImplementation = vi.fn<typeof fetch>(
       async () => new Response('{}', { status })
     );
     const dispatch = createPrimaryCardTransferConnection({
@@ -125,14 +125,22 @@ describe('actual mocked HTTP primary transfer integration', () => {
     expect(await dispatch(fixture.context.operationId)).toBe('unknown');
     expect(mocks.state).toBe('unknown');
     expect(await dispatch(fixture.context.operationId)).toBe('existing');
-    expect(fetchImplementation).toHaveBeenCalledOnce();
+    // Submit throw reconciles the deterministic reference: exactly one POST
+    // plus one lookup GET, never a second financial submission.
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(String(fetchImplementation.mock.calls[1]?.[0])).toContain(
+      '/api/v1/transaction/verify'
+    );
+    expect(fetchImplementation.mock.calls[1]?.[1]).toMatchObject({
+      method: 'GET',
+    });
   });
   it.each([
     'lost_after_send',
     'false_ack',
     'malformed_json',
   ])('retains ambiguous %s without redispatch', async (scenario) => {
-    const fetchImplementation = vi.fn(async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () => {
       if (scenario === 'lost_after_send')
         throw new Error('provider private data');
       return scenario === 'false_ack'
@@ -146,7 +154,15 @@ describe('actual mocked HTTP primary transfer integration', () => {
     });
     expect(await dispatch(fixture.context.operationId)).toBe('unknown');
     expect(await dispatch(fixture.context.operationId)).toBe('existing');
-    expect(fetchImplementation).toHaveBeenCalledOnce();
+    // Submit throw reconciles the deterministic reference: exactly one POST
+    // plus one lookup GET, never a second financial submission.
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(String(fetchImplementation.mock.calls[1]?.[0])).toContain(
+      '/api/v1/transaction/verify'
+    );
+    expect(fetchImplementation.mock.calls[1]?.[1]).toMatchObject({
+      method: 'GET',
+    });
   });
   it('retains dispatching after lost database acknowledgement and recovery never repeats HTTP', async () => {
     const fetchImplementation = vi.fn(async () =>

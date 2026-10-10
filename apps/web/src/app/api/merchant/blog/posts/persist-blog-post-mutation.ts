@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { BlogPostMediaRow } from '@/app/api/admin/blog/upload/blog-media-reference-scan';
+import { blogPostMediaPaths } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 
 type BlogPostMutationRecord = {
   category: string | null;
@@ -65,6 +67,15 @@ function readRpcMutationError(
       error.details?.includes('(merchant_id, slug)'))
   ) {
     return { error: 'A post with this slug already exists', status: 409 };
+  }
+  if (
+    error?.code === 'P0001' &&
+    error.message?.includes('merchant_blog_media_swept_during_save')
+  ) {
+    return {
+      error: 'Referenced media was removed during save',
+      status: 500,
+    };
   }
   return { error: 'Failed to persist post', status: 500 };
 }
@@ -149,9 +160,23 @@ export async function persistBlogPostMutation({
     }
   }
 
+  // The sweep scan snapshots references before claiming, so paths this
+  // save newly references can lose the race. The mutation verifies
+  // them atomically: registration resurrects unclaimed tombstones
+  // inside the same transaction, and claimed or missing paths abort
+  // the post and its links together. Unchanged fields stay
+  // continuously referenced, so only this payload's paths matter.
+  const savedMediaRow: BlogPostMediaRow = {
+    author_image_url: readNullableString(postData.author_image_url),
+    content: readString(postData.content),
+    excerpt: readNullableString(postData.excerpt),
+    featured_image_url: readNullableString(postData.featured_image_url),
+    featured_image_variants: postData.featured_image_variants ?? null,
+  };
   const { data, error } = await supabase.rpc(
     'mutate_merchant_blog_post_with_product_links',
     {
+      p_media_paths: blogPostMediaPaths(savedMediaRow),
       p_merchant_id: merchantId,
       p_post_data: postData,
       p_post_id: postId,

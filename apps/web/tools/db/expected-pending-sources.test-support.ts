@@ -1,4 +1,5 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
+import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
 import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
 import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending-sources.test-support';
@@ -39,6 +40,7 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
+  ...EXPECTED_BLOG_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',

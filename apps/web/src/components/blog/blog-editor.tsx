@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import dynamic from 'next/dynamic';
 import type { JSONContent } from 'novel';
+import type { RefObject } from 'react';
 
 // Dynamically import NovelEditor to avoid SSR issues with Tiptap
 const NovelEditor = dynamic(() => import('./novel-editor'), {
@@ -22,6 +23,8 @@ interface BlogEditorProps {
   content: string; // Used for content storage
   contentResetKey?: number;
   onChange: (content: string) => void;
+  onContentDirty?: () => void;
+  contentGenerationRef?: RefObject<number>;
   placeholder?: string;
   onImageUpload?: (file: File) => Promise<string>;
   onProductsChange?: (products: Product[]) => void;
@@ -34,6 +37,8 @@ export function BlogEditor({
   contentResetKey = 0,
   merchantId,
   onChange,
+  onContentDirty,
+  contentGenerationRef,
   onImageUpload,
   onProductsChange,
   embeddedProducts = [],
@@ -71,6 +76,8 @@ export function BlogEditor({
         merchantId={merchantId}
         initialValue={initialContent}
         onChange={handleContentChange}
+        onContentDirty={onContentDirty}
+        contentGenerationRef={contentGenerationRef}
         onImageUpload={onImageUpload}
         onProductsChange={onProductsChange}
         embeddedProducts={embeddedProducts}

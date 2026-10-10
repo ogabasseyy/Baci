@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { BlogPostMediaRow } from '@/app/api/admin/blog/upload/blog-media-reference-scan';
+import { blogPostMediaPaths } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -9,6 +11,8 @@ import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { createClient } from '@/lib/supabase/server';
 import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
 import { platformBlogRouteParamsSchema } from '@/schemas/platform-blog-route-params';
+import type { Json } from '@/types/supabase';
+import { readPlatformPatchError } from './platform-blog-post-patch-error';
 import {
   PLATFORM_BLOG_DETAIL_SELECT,
   type PlatformBlogRouteParams,
@@ -61,9 +65,7 @@ export async function updatePlatformBlogPost(
     const supabase = await createClient();
     const { data: existingPost, error: existingError } = await supabase
       .from('blog_posts')
-      .select(
-        'id, slug, status, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
-      )
+      .select(PLATFORM_BLOG_DETAIL_SELECT)
       .eq('id', id)
       .eq('is_platform_post', true)
       .is('merchant_id', null)
@@ -98,10 +100,37 @@ export async function updatePlatformBlogPost(
         { status: 400 }
       );
     }
+    // A source-only update against a NULL-intent row would store orphan
+    // provenance (the sanitizer only sees supplied fields). Coerce it to an
+    // explicit clear; a source alongside a classified intent is a legitimate
+    // provenance update and is left alone.
+    const effectiveIntent = Object.hasOwn(updateData, 'intent')
+      ? updateData.intent
+      : existingPost.intent;
+    if (
+      (effectiveIntent === null || effectiveIntent === undefined) &&
+      Object.hasOwn(updateData, 'intent_source')
+    ) {
+      updateData.intent_source = null;
+    }
+    // A reclassification orphans the old provenance the same way the
+    // editor's intent select clears it: when the request supplies a
+    // different intent without a replacement source, clear the stored one
+    // instead of persisting a label describing the previous classification.
+    if (
+      Object.hasOwn(updateData, 'intent') &&
+      updateData.intent !== existingPost.intent &&
+      !Object.hasOwn(updateData, 'intent_source')
+    ) {
+      updateData.intent_source = null;
+    }
     const featuredImageUrlChanged =
       Object.hasOwn(updateData, 'featured_image_url') &&
       updateData.featured_image_url !== existingPost.featured_image_url;
     if (featuredImageUrlChanged) {
+      if (!Object.hasOwn(updateData, 'featured_image_alt')) {
+        updateData.featured_image_alt = null;
+      }
       if (!Object.hasOwn(updateData, 'featured_image_width')) {
         updateData.featured_image_width = null;
       }
@@ -187,40 +216,64 @@ export async function updatePlatformBlogPost(
       );
     }
 
-    const finalUpdateData = {
+    // Scope travels as SQL predicates inside the RPC: the whitelist
+    // rejects guard columns as unknown fields.
+    const patchPayload: Record<string, unknown> = {
       ...updateData,
-      is_platform_post: true,
-      merchant_id: null,
       ...(shouldSetPublishedAt
         ? { published_at: new Date().toISOString() }
         : {}),
     };
 
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .update(finalUpdateData)
-      .eq('id', id)
-      .eq('is_platform_post', true)
-      .is('merchant_id', null)
-      .select(PLATFORM_BLOG_DETAIL_SELECT)
-      .single();
+    // Candidates come from the merged row; the RPC intersects them
+    // against the locked update, so stale ones simply miss.
+    const mergedMediaRow: BlogPostMediaRow = {
+      author_image_url: Object.hasOwn(patchPayload, 'author_image_url')
+        ? (patchPayload.author_image_url as string | null)
+        : existingPost.author_image_url,
+      content: Object.hasOwn(patchPayload, 'content')
+        ? (patchPayload.content as string)
+        : existingPost.content,
+      excerpt: Object.hasOwn(patchPayload, 'excerpt')
+        ? (patchPayload.excerpt as string | null)
+        : existingPost.excerpt,
+      featured_image_url: Object.hasOwn(patchPayload, 'featured_image_url')
+        ? (patchPayload.featured_image_url as string | null)
+        : existingPost.featured_image_url,
+      featured_image_variants: Object.hasOwn(
+        patchPayload,
+        'featured_image_variants'
+      )
+        ? patchPayload.featured_image_variants
+        : existingPost.featured_image_variants,
+    };
 
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'A post with this slug already exists' },
-          { status: 409 }
-        );
+    // An empty PATCH is a historical no-op 200.
+    if (Object.keys(patchPayload).length === 0) {
+      revalidatePlatformBlog(existingPost.slug);
+      return NextResponse.json(existingPost);
+    }
+
+    const { data, error } = await supabase.rpc(
+      'mutate_platform_blog_post_atomic',
+      {
+        p_media_paths: blogPostMediaPaths(mergedMediaRow),
+        // Zod-validated payloads are JSON-serializable; undefined
+        // keys never survive the wire encoding.
+        p_post_data: patchPayload as unknown as Json,
+        p_post_id: id,
       }
+    );
+    const row = Array.isArray(data) ? data[0] : data;
 
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+    if (error || !row) {
+      const mapped = readPlatformPatchError(error);
+      if (mapped.status === 500) {
+        console.error('Failed to update platform blog post:', error);
       }
-
-      console.error('Failed to update platform blog post:', error);
       return NextResponse.json(
-        { error: 'Failed to update platform blog post' },
-        { status: 500 }
+        { error: mapped.error },
+        { status: mapped.status }
       );
     }
 
@@ -229,14 +282,14 @@ export async function updatePlatformBlogPost(
         ? existingPost.slug.trim().toLowerCase()
         : '';
     const nextSlug =
-      typeof data.slug === 'string' ? data.slug.trim().toLowerCase() : '';
+      typeof row.slug === 'string' ? row.slug.trim().toLowerCase() : '';
 
     if (previousSlug && previousSlug !== nextSlug) {
       revalidatePlatformBlog(previousSlug);
     }
 
-    revalidatePlatformBlog(data.slug);
-    return NextResponse.json(data);
+    revalidatePlatformBlog(row.slug);
+    return NextResponse.json(row);
   } catch (error) {
     console.error('Platform blog post PATCH error:', error);
     return NextResponse.json(

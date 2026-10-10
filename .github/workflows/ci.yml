@@ -375,6 +375,9 @@ jobs:
           --sql-check supabase/tests/mcp_search_option_windows_guard.sql --sql-check supabase/migrations/tests/connector_owner_creation_limit.sql
           --sql-check supabase/migrations/tests/piggyvest_transfer_outbox_claims_authorization_index.sql
           --sql-check supabase/tests/mcp_guest_carts.sql
+          --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
+          --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
+          --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
       - name: Run migration replay regression test
@@ -454,6 +457,8 @@ jobs:
           .github/scripts/smoke-gigl-worker-capability.test.mjs
           .github/scripts/refuse-publish-on-promote-overlap.test.mjs
           .github/scripts/probe-gigl-hook-reload.test.mjs
+          .github/scripts/probe-blog-media-hook-reload.test.mjs
+          .github/scripts/blog-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs

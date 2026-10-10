@@ -8,16 +8,19 @@ const mockInlineUploadTrigger = vi.fn();
 vi.mock('@/components/blog/blog-editor', () => ({
   BlogEditor: ({
     content,
+    contentResetKey,
     onChange,
     onImageUpload,
   }: {
     content: string;
+    contentResetKey?: number;
     onChange: (value: string) => void;
     onImageUpload: (file: File) => Promise<string>;
   }) => (
     <div>
       <textarea
         aria-label="Blog editor content"
+        data-reset-key={contentResetKey}
         value={content}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -52,14 +55,19 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
   const onInlineImageUpload = vi
     .fn()
     .mockResolvedValue('https://cdn.example.com/inline.png');
+  const onAltEdit = vi.fn();
+  const onCoverUrlEdit = vi.fn();
   const onSubmit = vi.fn();
   const onUploadFeatured = vi.fn();
 
   render(
     <BlogEditorFields
+      coverStashRef={{ current: null }}
       form={currentForm}
       isEditMode={false}
+      onAltEdit={onAltEdit}
       onContentChange={onContentChange}
+      onCoverUrlEdit={onCoverUrlEdit}
       onFormChange={onFormChange}
       onInlineImageUpload={onInlineImageUpload}
       onSubmit={onSubmit}
@@ -72,7 +80,9 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 
   return {
     getCurrentForm: () => currentForm,
+    onAltEdit,
     onContentChange,
+    onCoverUrlEdit,
     onFormChange,
     onInlineImageUpload,
     onSubmit,
@@ -81,6 +91,13 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 }
 
 describe('BlogEditorFields', () => {
+  it('forwards the import reset key to the rich-text editor', () => {
+    renderComponent({ contentResetKey: 2 });
+    expect(screen.getByLabelText('Blog editor content')).toHaveAttribute(
+      'data-reset-key',
+      '2'
+    );
+  });
   it('renders all key editor controls and creates mode submit label', () => {
     renderComponent();
 
@@ -91,6 +108,9 @@ describe('BlogEditorFields', () => {
     expect(screen.getByLabelText('Category')).toBeInTheDocument();
     expect(screen.getByLabelText('Excerpt')).toBeInTheDocument();
     expect(screen.getByLabelText('Featured Image URL')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Featured image alt text')
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Tags (comma-separated)')).toBeInTheDocument();
     expect(screen.getByLabelText('SEO Title')).toBeInTheDocument();
     expect(screen.getByLabelText('SEO Description')).toBeInTheDocument();
@@ -115,6 +135,31 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().title).toBe('A better title');
     expect(ctx.getCurrentForm().slug).toBe('a-better-title');
     expect(ctx.getCurrentForm().status).toBe('published');
+  });
+
+  it('reports alt keystrokes so pending uploads can preserve them', () => {
+    const ctx = renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Featured image alt text'), {
+      target: { value: 'Typed description' },
+    });
+
+    expect(ctx.onAltEdit).toHaveBeenCalledTimes(1);
+    expect(ctx.getCurrentForm().featured_image_alt).toBe('Typed description');
+    expect(ctx.getCurrentForm().featured_image_alt_edited).toBe(true);
+  });
+
+  it('reports cover URL edits so pending uploads are invalidated', () => {
+    const ctx = renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: 'https://cdn.example.com/manual.webp' },
+    });
+
+    expect(ctx.onCoverUrlEdit).toHaveBeenCalledTimes(1);
+    expect(ctx.getCurrentForm().featured_image_url).toBe(
+      'https://cdn.example.com/manual.webp'
+    );
   });
 
   it('forwards content and inline image events from BlogEditor', () => {
@@ -161,32 +206,5 @@ describe('BlogEditorFields', () => {
 
     expect(ctx.onUploadFeatured).toHaveBeenCalledTimes(1);
     expect(ctx.onSubmit).toHaveBeenCalledTimes(1);
-  });
-
-  it('preserves featured metadata while editing the image url', () => {
-    const originalUrl = 'https://cdn.example.com/platform/blog/source.webp';
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_height: 675,
-        featured_image_url: originalUrl,
-        featured_image_variants: {
-          desktop: 'https://cdn.example.com/platform/blog/source/desktop.webp',
-        },
-        featured_image_width: 1200,
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://example.com/new-source.webp' },
-    });
-    expect(ctx.getCurrentForm().featured_image_url).toBe(
-      'https://example.com/new-source.webp'
-    );
-    expect(ctx.getCurrentForm().featured_image_width).toBe(1200);
-    expect(ctx.getCurrentForm().featured_image_height).toBe(675);
-    expect(ctx.getCurrentForm().featured_image_variants).toEqual({
-      desktop: 'https://cdn.example.com/platform/blog/source/desktop.webp',
-    });
   });
 });

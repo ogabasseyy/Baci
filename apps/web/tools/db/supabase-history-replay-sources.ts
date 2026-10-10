@@ -2,6 +2,7 @@
 
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
+import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
@@ -268,6 +269,7 @@ const PENDING_SOURCES = [
   TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES,
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
+  BLOG_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,

@@ -150,7 +150,9 @@ export async function GET(request: NextRequest) {
     }
 
     const status = validated.data;
-    const tier = toTierName(status.current_tier);
+    // Pass the merchant-defined tier name through (lowercased): the hook
+    // falls back to bronze styling for names outside the standard four.
+    const tier = status.current_tier.toLowerCase();
     const thresholds: Record<TierName, number> = { ...DEFAULT_THRESHOLDS };
     for (const entry of status.tiers) {
       const name = toTierName(entry.name);

@@ -64,8 +64,19 @@ export async function POST(request: NextRequest) {
 
     const parsed = storefrontLoyaltyEnrollSchema.safeParse(rawBody);
     if (!parsed.success) {
+      const body =
+        typeof rawBody === 'object' && rawBody !== null
+          ? (rawBody as Record<string, unknown>)
+          : {};
+      const hasIds =
+        typeof body.merchant_id === 'string' &&
+        typeof body.customer_id === 'string';
       return NextResponse.json(
-        { error: 'merchant_id and customer_id are required' },
+        {
+          error: hasIds
+            ? 'Invalid enrollment input'
+            : 'merchant_id and customer_id are required',
+        },
         { status: 400 }
       );
     }

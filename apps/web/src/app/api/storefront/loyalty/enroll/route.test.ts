@@ -170,6 +170,21 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
+  it('returns 400 with a generic message for invalid referral codes', async () => {
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        referral_code: '',
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: 'Invalid enrollment input' });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it('returns 400 for an invalid JSON body', async () => {
     const response = await POST(createRequest('{not json'));
     const body = await response.json();

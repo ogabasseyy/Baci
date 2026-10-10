@@ -44,6 +44,8 @@ describe('GET /api/storefront/loyalty', () => {
         gold: 5000,
         platinum: 10000,
       },
+      tier_progress: 50,
+      referral_code: 'ABCD1234',
       available_rewards: [
         {
           id: 'reward-1',

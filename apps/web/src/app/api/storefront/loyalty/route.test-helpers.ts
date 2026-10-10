@@ -85,6 +85,7 @@ export function createStatusResult() {
         reward_value: null,
       },
     ],
+    referral_code: 'ABCD1234',
     transactions: [
       {
         id: 'txn-1',

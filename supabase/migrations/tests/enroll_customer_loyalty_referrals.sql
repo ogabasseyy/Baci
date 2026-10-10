@@ -1,4 +1,4 @@
--- Referral, edge, and tier cases for the enroll_customer_loyalty suite (cases 6-10).
+-- Referral, edge, and tier cases for the enroll_customer_loyalty suite (cases 6-11).
 
 -- 6. Referral enrollment awards the bonus to BOTH sides ("you both get X").
 -- The referrer's balances are nulled first to prove legacy NULL rows are
@@ -143,13 +143,70 @@ SELECT pg_temp.assert_true(
   'tier-crossing enrollment wrote the wrong tier'
 );
 
--- 10. Purchase awards serialize on the loyalty row with referral credits:
--- without a row lock, a purchase write landing after a referral credit
--- overwrites the credited balance with a stale absolute value.
+-- 10. Purchase awards serialize with referral credits and enrollments:
+-- the row lock stops stale-balance overwrites, and both writers take the
+-- same advisory creation lock so a first purchase racing enrollment cannot
+-- create a duplicate row. (True interleaving needs two connections, which
+-- the single-session sql-check harness cannot express; these assertions
+-- pin the mechanism on both writers instead.)
 SELECT pg_temp.assert_true(
   pg_get_functiondef(
     'public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure
   ) LIKE '%FOR UPDATE%',
   'award_purchase_points does not lock the loyalty row'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT regexp_match(
+    pg_get_functiondef('public.enroll_customer_loyalty(uuid,uuid,text)'::regprocedure),
+    'pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(([^)]*)\)'
+  )) IS NOT NULL
+  AND (SELECT regexp_match(
+    pg_get_functiondef('public.enroll_customer_loyalty(uuid,uuid,text)'::regprocedure),
+    'pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(([^)]*)\)'
+  )) = (SELECT regexp_match(
+    pg_get_functiondef('public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure),
+    'pg_advisory_xact_lock\(\s*pg_catalog\.hashtext\(([^)]*)\)'
+  )),
+  'enrollment and purchase awards do not share one creation lock'
+);
+
+-- 11. A soft-deleted referrer's code is ignored: enrollment succeeds
+-- without the referee bonus and the deleted account is untouched.
+INSERT INTO public.customer_loyalty (
+  merchant_id, customer_id, points_balance, lifetime_points,
+  current_tier, referral_code
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000017',
+  40, 40, 'Bronze', 'DELETED1'
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000108');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'points_balance')::integer = 1500
+     AND result ->> 'referral_bonus_applied' = 'false'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018',
+     'deleted1'
+   ) AS result),
+  'soft-deleted referrer code granted a bonus'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT points_balance = 40
+     AND lifetime_points = 40
+     AND referral_count = 0
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000017')
+  AND (SELECT count(*) = 0
+   FROM public.points_transactions
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000017'),
+  'soft-deleted referrer account was mutated'
 );
 

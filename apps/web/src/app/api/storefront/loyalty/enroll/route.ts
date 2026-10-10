@@ -107,16 +107,20 @@ export async function POST(request: NextRequest) {
       // whose account predates their login misses the lookup above. Point
       // them at re-linking (owned by the auth-session upsert flow) instead
       // of a bare 404 — this reveals only the caller's own linkage state.
-      // Never auto-link here: enrollment writes bonus-bearing state.
-      if (user.email) {
+      // Never auto-link here: enrollment writes bonus-bearing state. The
+      // hint requires a verified email (else anyone could probe it with an
+      // unverified address) and only matches the requested row when it is
+      // still unlinked, so it cannot confirm or deny other customers.
+      if (user.email && user.email_confirmed_at) {
         const { data: guestRow } = await supabase
           .from('customers')
           .select('id')
           .eq('merchant_id', parsed.data.merchant_id)
           .eq('email', user.email)
+          .is('user_id', null)
           .is('deleted_at', null)
           .maybeSingle();
-        if (guestRow) {
+        if (guestRow && guestRow.id === parsed.data.customer_id) {
           return NextResponse.json(
             {
               error:

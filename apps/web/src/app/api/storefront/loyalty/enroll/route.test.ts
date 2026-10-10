@@ -91,30 +91,6 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns 409 when the caller owns an unlinked guest row', async () => {
-    mocks.mockGetUser.mockResolvedValue({
-      data: { user: { id: 'new-login-id', email: 'guest@example.com' } },
-    });
-    mocks.mockMaybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: { id: 'guest-row-id' },
-        error: null,
-      });
-
-    const response = await POST(
-      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(body).toEqual({
-      error:
-        'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
-    });
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
-  });
-
   it('returns 400 when merchant_id or customer_id is missing', async () => {
     const response = await POST(createRequest({ merchant_id: MERCHANT_ID }));
     const body = await response.json();

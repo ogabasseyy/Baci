@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
 import { createClient } from '@/lib/supabase/server';
 import {
   type StorefrontLoyaltyStatusResult,
@@ -25,62 +26,12 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   invalid_input: 'Invalid loyalty status input',
 };
 
-const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'] as const;
-type TierName = (typeof TIER_ORDER)[number];
-
-const DEFAULT_THRESHOLDS: Record<TierName, number> = {
+const DEFAULT_THRESHOLDS: Record<string, number> = {
   bronze: 0,
   silver: 1000,
   gold: 5000,
   platinum: 10000,
 };
-
-function toTierName(value: string): TierName {
-  const lowered = value.toLowerCase();
-  return (TIER_ORDER as readonly string[]).includes(lowered)
-    ? (lowered as TierName)
-    : 'bronze';
-}
-
-type CatalogRewardType =
-  | 'discount'
-  | 'free_shipping'
-  | 'free_product'
-  | 'exclusive_access';
-
-// Normalize persisted reward types to the storefront catalog contract: the
-// catalog indexes its icon map directly and crashes on unknown keys.
-function toCatalogReward(reward: {
-  id: string;
-  name: string;
-  description: string | null;
-  points_cost: number;
-  reward_type: string;
-  reward_value: number | null;
-}): {
-  reward_type: CatalogRewardType;
-  discount_type: 'percentage' | 'fixed' | undefined;
-} {
-  if (reward.reward_type === 'discount_percentage') {
-    return { reward_type: 'discount', discount_type: 'percentage' };
-  }
-  if (reward.reward_type === 'discount_fixed') {
-    return { reward_type: 'discount', discount_type: 'fixed' };
-  }
-  const known: readonly CatalogRewardType[] = [
-    'discount',
-    'free_shipping',
-    'free_product',
-    'exclusive_access',
-  ];
-  if ((known as readonly string[]).includes(reward.reward_type)) {
-    return {
-      reward_type: reward.reward_type as CatalogRewardType,
-      discount_type: undefined,
-    };
-  }
-  return { reward_type: 'discount', discount_type: undefined };
-}
 
 // GET - Get customer's loyalty status.
 //
@@ -212,13 +163,6 @@ export async function GET(request: NextRequest) {
     // Pass the merchant-defined tier name through (lowercased): the hook
     // falls back to bronze styling for names outside the standard four.
     const tier = status.current_tier.toLowerCase();
-    const thresholds: Record<TierName, number> = { ...DEFAULT_THRESHOLDS };
-    for (const entry of status.tiers) {
-      const name = toTierName(entry.name);
-      if (entry.name.toLowerCase() === name) {
-        thresholds[name] = entry.minPoints;
-      }
-    }
 
     // Progress along the merchant-defined ladder (the same tiers
     // calculate_loyalty_tier uses), not the hardcoded defaults: a merchant
@@ -243,6 +187,33 @@ export async function GET(request: NextRequest) {
     const pointsToNextTier = nextEntry
       ? Math.max(0, nextEntry.minPoints - status.lifetime_points)
       : 0;
+    // Thresholds cover the whole merchant ladder (custom names included)
+    // over the standard defaults, so tier_thresholds[tier] always resolves
+    // for a ladder member. Progress is computed here rather than in the
+    // card: lifetime can sit below a raised current threshold, which the
+    // card's subtraction formula turns into negative or NaN progress.
+    const thresholds: Record<string, number> = { ...DEFAULT_THRESHOLDS };
+    for (const entry of ladder) {
+      thresholds[entry.name] = entry.minPoints;
+    }
+    const currentFloor =
+      currentPosition >= 0 ? (ladder[currentPosition]?.minPoints ?? 0) : 0;
+    let tierProgress: number;
+    if (!nextEntry) {
+      tierProgress = 100;
+    } else if (nextEntry.minPoints <= currentFloor) {
+      tierProgress = status.lifetime_points >= nextEntry.minPoints ? 100 : 0;
+    } else {
+      tierProgress = Math.min(
+        100,
+        Math.max(
+          0,
+          ((status.lifetime_points - currentFloor) /
+            (nextEntry.minPoints - currentFloor)) *
+            100
+        )
+      );
+    }
 
     const perCurrency = status.points_per_currency ?? 1;
     const currencyUnit = status.points_currency_unit ?? 100;
@@ -271,6 +242,8 @@ export async function GET(request: NextRequest) {
       next_tier: nextTier,
       points_to_next_tier: pointsToNextTier,
       tier_thresholds: thresholds,
+      tier_progress: tierProgress,
+      referral_code: status.referral_code,
       available_rewards: availableRewards,
       redeemable_rewards: redeemableRewards,
       recent_transactions: status.transactions.map((txn) => ({

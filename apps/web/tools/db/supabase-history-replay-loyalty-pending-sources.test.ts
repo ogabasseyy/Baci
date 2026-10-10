@@ -9,7 +9,7 @@ const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 describe('loyalty pending replay sources', () => {
   it('pins each loyalty migration to its checked-in bytes', async () => {
     const rows = LOYALTY_PENDING_REPLAY_SOURCE_ROWS.split('\n');
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(5);
 
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

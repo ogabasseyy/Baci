@@ -41,12 +41,9 @@ interface LoyaltyData {
   tier: 'bronze' | 'silver' | 'gold' | 'platinum';
   next_tier: string | null;
   points_to_next_tier: number;
-  tier_thresholds: {
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-  };
+  tier_thresholds: Record<string, number>;
+  tier_progress: number;
+  referral_code: string | null;
   available_rewards: LoyaltyReward[];
   redeemable_rewards: LoyaltyReward[];
   recent_transactions: PointsTransaction[];
@@ -94,6 +91,8 @@ function buildPreviewLoyaltyData(): LoyaltyData {
       gold: 500,
       platinum: 1000,
     },
+    tier_progress: 55,
+    referral_code: 'PREVIEW1',
     available_rewards: [],
     redeemable_rewards: [],
     recent_transactions: [],

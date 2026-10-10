@@ -1,6 +1,6 @@
--- Status cases for the enroll_customer_loyalty suite (cases 11-13).
+-- Status cases for the enroll_customer_loyalty suite (cases 12-14).
 
--- 11. Status fail-closes on program/customer/ownership.
+-- 12. Status fail-closes on program/customer/ownership.
 UPDATE public.loyalty_settings
 SET enabled = false
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -40,7 +40,7 @@ SELECT pg_temp.assert_true(
   'cross-customer status disclosed membership'
 );
 
--- 12. A non-enrolled customer gets zeros plus the live catalog.
+-- 13. A non-enrolled customer gets zeros plus the live catalog.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000106');
 
 SELECT pg_temp.assert_true(
@@ -58,6 +58,7 @@ SELECT pg_temp.assert_true(
      )
      AND jsonb_array_length(result -> 'transactions') = 0
      AND jsonb_array_length(result -> 'tiers') = 4
+     AND (result -> 'referral_code') = 'null'::jsonb
    FROM public.get_loyalty_status(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000016'
@@ -65,7 +66,7 @@ SELECT pg_temp.assert_true(
   'non-enrolled status returned the wrong projection'
 );
 
--- 13. An enrolled customer gets balances, catalog, and recent transactions.
+-- 14. An enrolled customer gets balances, catalog, and recent transactions.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 
 SELECT pg_temp.assert_true(
@@ -74,6 +75,12 @@ SELECT pg_temp.assert_true(
      AND (result ->> 'points_balance')::integer = 100
      AND (result ->> 'lifetime_points')::integer = 100
      AND result ->> 'current_tier' = 'Bronze'
+     AND length(result ->> 'referral_code') = 8
+     AND (result ->> 'referral_code') = (
+       SELECT referral_code FROM public.customer_loyalty
+       WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+         AND customer_id = '01aa0000-0000-4000-8000-000000000011'
+     )
      AND jsonb_array_length(result -> 'rewards') = 1
      AND jsonb_array_length(result -> 'transactions') = 2
      AND (SELECT count(*)

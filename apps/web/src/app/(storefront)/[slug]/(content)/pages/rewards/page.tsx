@@ -49,7 +49,7 @@ export default function RewardsPage() {
   const merchantPayoutCurrency =
     merchantCurrencyContext?.merchant?.payout_currency ?? null;
 
-  const { enrolled, loading, recentTransactions, getTierInfo, tier } =
+  const { enrolled, loading, recentTransactions, getTierInfo, tier, refetch } =
     useLoyalty(merchantId || undefined, customerId || undefined);
 
   // Loading state
@@ -168,6 +168,7 @@ export default function RewardsPage() {
           merchantId={merchantId}
           customerId={customerId}
           merchantName={merchantName}
+          onEnrolled={refetch}
         />
       ) : (
         <div className="space-y-6">

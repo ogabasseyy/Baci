@@ -60,6 +60,10 @@ export function assertCleanWorkerDeployEnv(env = process.env) {
   }
 }
 
+export function shouldHoldReleaseLock(error) {
+  return error?.indeterminateDispatch === true;
+}
+
 export function assertRemovableLockPath(lockPath) {
   if (basename(resolve(lockPath)) !== 'baci-production-release.lock') {
     throw new Error(`refusing to remove unexpected lock path: ${lockPath}`);
@@ -110,6 +114,7 @@ async function main() {
   assertVercelApiSupport(() => command('vercel', ['api', '--help']));
   assertCleanWorkerDeployEnv();
   acquireReleaseLock(lockPath);
+  let holdLock = false;
   try {
     const result = await coordinateRelease({
       verifyCheckout: async () => {
@@ -159,9 +164,17 @@ async function main() {
       },
     }, coordinationId);
     process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);
+  } catch (error) {
+    if (shouldHoldReleaseLock(error)) {
+      holdLock = true;
+      process.stderr.write(`indeterminate dispatch outcome; release lock held at ${lockPath} — reconcile existing runs before removing it\n`);
+    }
+    throw error;
   } finally {
-    assertRemovableLockPath(lockPath);
-    rmSync(lockPath, { recursive: true });
+    if (!holdLock) {
+      assertRemovableLockPath(lockPath);
+      rmSync(lockPath, { recursive: true });
+    }
   }
 }
 

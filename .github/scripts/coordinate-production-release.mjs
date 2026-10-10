@@ -20,8 +20,16 @@ export function selectCoordinatedRun(runs, baseline, coordinationId) {
   const knownIds = new Set(baseline.map(run => run.databaseId));
   const candidates = runs.filter(run => !knownIds.has(run.databaseId) &&
     run.event === 'workflow_dispatch' && run.title === `Coordinated release ${coordinationId}`);
-  if (candidates.length > 1) throw new Error('ambiguous dispatch; reconcile workflow runs, do not redispatch');
-  return candidates[0] ?? null;
+  // Dedupe by run ID before the ambiguity check: a run landing
+  // mid-pagination can surface the same databaseId on two pages.
+  const seen = new Set();
+  const unique = candidates.filter(run => {
+    if (seen.has(run.databaseId)) return false;
+    seen.add(run.databaseId);
+    return true;
+  });
+  if (unique.length > 1) throw new Error('ambiguous dispatch; reconcile workflow runs, do not redispatch');
+  return unique[0] ?? null;
 }
 
 // Enumerated for the list-workflow-runs status filter AND the sibling
@@ -58,8 +66,21 @@ export async function coordinateRelease(operations, coordinationId) {
   const baseline = await operations.listRuns();
   if (baseline.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
   await operations.dispatch(commit);
-  const run = await operations.findRun(commit, baseline);
-  if (!run) throw new Error('dispatch outcome unknown; inspect GitHub before retrying');
+  let run;
+  try {
+    run = await operations.findRun(commit, baseline);
+  } catch (error) {
+    // The dispatch was sent but its outcome is unknown: the caller
+    // must hold the release lock for reconcile-before-removal instead
+    // of auto-releasing it for an immediate rerun.
+    if (error && typeof error === 'object') error.indeterminateDispatch = true;
+    throw error;
+  }
+  if (!run) {
+    const error = new Error('dispatch outcome unknown; inspect GitHub before retrying');
+    error.indeterminateDispatch = true;
+    throw error;
+  }
   if (!Number.isSafeInteger(run.databaseId) || run.databaseId <= 0) throw new Error('invalid dispatch run identity');
   if (run.headSha !== commit) {
     try {

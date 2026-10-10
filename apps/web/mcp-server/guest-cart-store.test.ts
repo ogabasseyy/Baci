@@ -223,3 +223,42 @@ it('validates creations before any RPC and updates after merging', async () => {
   ).rejects.toThrow('stale line');
   expect(fake.calls.length).toBe(callsBefore);
 });
+
+it('reclaims a corrupt row with an unconditional delete and reports no cart', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow('not-an-array' as unknown as never[]));
+  const store = storeOn(fake.supabase);
+  await expect(store.hasToken(token)).resolves.toBe(false);
+  // The row read back unparseable, so its version is untrusted: the
+  // reclaim delete must not pin a version that can never match (NULL
+  // deletes unconditionally), and the row must actually be gone.
+  expect(
+    fake.calls.filter((call) => call.name === 'delete_mcp_guest_cart')
+  ).toEqual([
+    {
+      name: 'delete_mcp_guest_cart',
+      params: { p_token: token, p_expected_version: null },
+    },
+  ]);
+  expect(fake.rows.has(token)).toBe(false);
+});
+
+it('fails creation with a retry-later code when the table is at capacity', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.setCapacityLimit(0);
+  const store = storeOn(fake.supabase);
+  // A 'full' outcome is terminal for this attempt: no token-mint retry
+  // can succeed while the gate holds, so the store surfaces it once.
+  const outcome = await store
+    .update(undefined, { product_id: id, quantity: 1 }, validate)
+    .then(
+      () => 'created',
+      (error: unknown) =>
+        error instanceof GuestCartStorageUnavailableError
+          ? error.code
+          : 'wrong-error'
+    );
+  expect(outcome).toBe('capacity_exhausted');
+  expect(store.lastStorageErrorCode).toBe('capacity_exhausted');
+  expect(fake.calls).toHaveLength(1);
+});

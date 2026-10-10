@@ -29,7 +29,7 @@ services:
       # Service key, guest-cart storage only: the cart RPCs are
       # service-role-executable so anon callers cannot bypass the
       # server-side creation quota. Required; the server fails closed.
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MCP_GUEST_CART_WORKER_TOKEN=${MCP_GUEST_CART_WORKER_TOKEN}
       - BACI_AGENTIC_ACCESS_TOKEN=${BACI_AGENTIC_ACCESS_TOKEN}
       - BACI_AGENTIC_SIGNING_KEY=${BACI_AGENTIC_SIGNING_KEY}
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}

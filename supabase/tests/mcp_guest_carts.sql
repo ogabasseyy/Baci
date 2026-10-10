@@ -1,6 +1,6 @@
--- MCP guest carts: RPC outcomes, version gate, expiry, retention, and the
--- service-role-only privilege boundary. Assertion-specific SQLSTATEs
--- survive replay log sanitization without exposing row data. P1101..P1123
+-- MCP guest carts: RPC outcomes, version gate, expiry, retention, capacity,
+-- and the worker-only privilege boundary. Assertion-specific SQLSTATEs
+-- survive replay log sanitization without exposing row data. P1101..P1126
 -- identify fixed assertions.
 --
 -- Privilege note: the boundary is asserted with has_*_privilege as the
@@ -165,20 +165,37 @@ BEGIN
       'SELECT, INSERT, UPDATE, DELETE') IS DISTINCT FROM FALSE
   THEN RAISE EXCEPTION USING ERRCODE = 'P1119', MESSAGE = 'cart table directly reachable'; END IF;
 
-  -- The server operates through service_role: full RPC access there.
-  IF has_function_privilege('service_role',
+  -- The worker role operates the caller RPCs; retention is not its job.
+  IF has_function_privilege('mcp_guest_cart_worker',
       'public.get_mcp_guest_cart(text)'::regprocedure, 'EXECUTE')
     IS DISTINCT FROM TRUE
-    OR has_function_privilege('service_role',
+    OR has_function_privilege('mcp_guest_cart_worker',
       'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure,
       'EXECUTE') IS DISTINCT FROM TRUE
-    OR has_function_privilege('service_role',
+    OR has_function_privilege('mcp_guest_cart_worker',
       'public.delete_mcp_guest_cart(text,bigint)'::regprocedure,
       'EXECUTE') IS DISTINCT FROM TRUE
+    OR has_function_privilege('mcp_guest_cart_worker',
+      'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1120', MESSAGE = 'worker RPC scope wrong'; END IF;
+
+  -- The service key bypasses all RLS, so it holds no caller RPCs either:
+  -- user-facing cart operations run as the worker, never as service_role.
+  -- Retention stays service-executable for the pg_cron schedule.
+  IF has_function_privilege('service_role',
+      'public.get_mcp_guest_cart(text)'::regprocedure, 'EXECUTE')
+    IS DISTINCT FROM FALSE
+    OR has_function_privilege('service_role',
+      'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+    OR has_function_privilege('service_role',
+      'public.delete_mcp_guest_cart(text,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
     OR has_function_privilege('service_role',
       'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
       'EXECUTE') IS DISTINCT FROM TRUE
-  THEN RAISE EXCEPTION USING ERRCODE = 'P1120', MESSAGE = 'service_role lost cart RPC access'; END IF;
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1121', MESSAGE = 'service_role RPC scope wrong'; END IF;
 
   -- The store caps carts at 20 lines: the 21st is rejected, the 20th kept.
   BEGIN
@@ -186,7 +203,7 @@ BEGIN
       '1212121212121212121212121212121212121212121212121212121212121212',
       (SELECT jsonb_agg(jsonb_build_object('n', g)) FROM generate_series(1, 21) g),
       pg_catalog.now() + interval '7 days', NULL);
-    RAISE EXCEPTION USING ERRCODE = 'P1121', MESSAGE = 'oversized cart accepted';
+    RAISE EXCEPTION USING ERRCODE = 'P1122', MESSAGE = 'oversized cart accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
   END;
   SELECT outcome INTO v_outcome
@@ -195,15 +212,49 @@ BEGIN
     (SELECT jsonb_agg(jsonb_build_object('n', g)) FROM generate_series(1, 20) g),
     pg_catalog.now() + interval '7 days', NULL);
   IF v_outcome <> 'ok'
-  THEN RAISE EXCEPTION USING ERRCODE = 'P1122', MESSAGE = '20-line cart rejected'; END IF;
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1123', MESSAGE = '20-line cart rejected'; END IF;
 
   -- Retention is bounded: far-future expiry is rejected.
   BEGIN
     PERFORM public.upsert_mcp_guest_cart(
       '1414141414141414141414141414141414141414141414141414141414141414',
       '[]', pg_catalog.now() + interval '30 days', NULL);
-    RAISE EXCEPTION USING ERRCODE = 'P1123', MESSAGE = 'far-future expiry accepted';
+    RAISE EXCEPTION USING ERRCODE = 'P1124', MESSAGE = 'far-future expiry accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
   END;
+
+  -- Global capacity: creations fail with 'full' at 50,000 rows while
+  -- updates to existing carts keep working. Two fixture rows are live
+  -- above ('ffff', '1313'), so 49,997 bulk rows reach 49,999 (ok) and
+  -- one more reaches the ceiling (full).
+  INSERT INTO public.mcp_guest_carts (token, items, expires_at)
+  SELECT md5(g::text) || md5((g + 1)::text), '[]',
+    pg_catalog.now() + interval '7 days'
+  FROM generate_series(1, 49997) g;
+  SELECT outcome INTO v_outcome
+  FROM public.upsert_mcp_guest_cart(
+    '1515151515151515151515151515151515151515151515151515151515151515',
+    '[]', pg_catalog.now() + interval '7 days', NULL);
+  IF v_outcome <> 'ok'
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1125', MESSAGE = 'creation refused below capacity'; END IF;
+  SELECT outcome INTO v_outcome
+  FROM public.upsert_mcp_guest_cart(
+    '1616161616161616161616161616161616161616161616161616161616161616',
+    '[]', pg_catalog.now() + interval '7 days', NULL);
+  IF v_outcome <> 'full'
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1125', MESSAGE = 'capacity gate missed'; END IF;
+  SELECT outcome INTO v_outcome
+  FROM public.upsert_mcp_guest_cart(
+    'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    '[]', pg_catalog.now() + interval '7 days', 1);
+  IF v_outcome <> 'ok'
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1125', MESSAGE = 'update blocked at capacity'; END IF;
+
+  -- A NULL expected version deletes unconditionally for corrupt rows.
+  SELECT public.delete_mcp_guest_cart(
+    'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', NULL)
+  INTO v_deleted;
+  IF v_deleted IS NOT TRUE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1126', MESSAGE = 'unconditional delete failed'; END IF;
 END $$;
 ROLLBACK;

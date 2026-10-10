@@ -100,10 +100,10 @@ it('fails closed before listening when startup validation exits early', async ()
     });
   try {
     // Each required credential fails the process on its own: the anon
-    // pair plus the service key the cart RPCs need.
+    // pair plus the worker token the cart RPCs need.
     for (const missing of [
       ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
-      ['SUPABASE_SERVICE_ROLE_KEY'],
+      ['MCP_GUEST_CART_WORKER_TOKEN'],
     ]) {
       const env = { ...process.env };
       for (const key of missing) delete env[key];

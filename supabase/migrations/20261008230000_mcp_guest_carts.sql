@@ -1,12 +1,33 @@
 -- ---------------------------------------------------------------------------
--- MCP guest carts: Postgres-backed ephemeral carts replacing the
--- single-writer file store (mcp-guest-carts volume + .writer.lock +
--- heartbeat). The token remains the capability: only its holder can name
--- it, and all access goes through the SECURITY DEFINER RPCs below — the
--- table itself is unreachable via PostgREST (RLS on, all role grants
--- revoked). Concurrent updates to one token serialize through the
--- per-row version gate; the TS caller re-reads and retries on conflict.
+-- MCP guest carts: Postgres-backed ephemeral carts. The token remains the
+-- capability: only its holder can name it, and all access goes through
+-- the SECURITY DEFINER RPCs below — the table itself is unreachable via
+-- PostgREST (RLS on, all role grants revoked). Concurrent updates to one
+-- token serialize through the per-row version gate; the TS caller
+-- re-reads and retries on conflict.
+--
+-- Least privilege: the MCP server presents a worker JWT (role claim
+-- mcp_guest_cart_worker), never the service key — the anon key is
+-- publicly distributed and the service key bypasses all RLS, so neither
+-- may back user-facing cart operations. Only the worker role holds
+-- EXECUTE on the caller RPCs; retention stays service-role-only for the
+-- pg_cron schedule below.
 -- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mcp_guest_cart_worker') THEN
+    CREATE ROLE mcp_guest_cart_worker NOLOGIN NOINHERIT NOSUPERUSER
+      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+$$;
+
+-- Converge a pre-existing worker role: NOLOGIN + PASSWORD NULL so a later
+-- accidental LOGIN cannot resurrect password auth; a no-op on fresh
+-- chains, where the role was just created NOLOGIN above.
+ALTER ROLE mcp_guest_cart_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
+
+GRANT USAGE ON SCHEMA public TO mcp_guest_cart_worker;
 CREATE TABLE IF NOT EXISTS public.mcp_guest_carts (
   token text PRIMARY KEY CHECK (token ~ '^[a-f0-9]{64}$'),
   items jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(items) = 'array'),
@@ -29,11 +50,11 @@ REVOKE ALL ON TABLE public.mcp_guest_carts FROM PUBLIC, anon, authenticated;
 
 COMMENT ON TABLE public.mcp_guest_carts IS
   'Ephemeral MCP guest carts keyed by unguessable 64-hex capability token. '
-  'Reachable exclusively through the service-role-only SECURITY DEFINER '
-  'get/upsert/delete RPCs; RLS on and all role grants revoked. The anon key '
-  'is publicly distributed, so no caller RPC is anon-executable: writes '
-  'would otherwise bypass the MCP server quota. Expired rows are dead '
-  'weight the expires_at index exists to sweep.';
+  'Reachable exclusively through the worker-only SECURITY DEFINER '
+  'get/upsert/delete RPCs; RLS on and all role grants revoked. Neither '
+  'the public anon key nor the RLS-bypassing service key may back '
+  'user-facing cart operations. Expired rows are dead weight the '
+  'expires_at index exists to sweep.';
 
 -- ---------------------------------------------------------------------------
 -- Read one cart by capability token. Expired rows are returned (never
@@ -53,9 +74,9 @@ $$;
 
 ALTER FUNCTION public.get_mcp_guest_cart(text) OWNER TO postgres;
 REVOKE EXECUTE ON FUNCTION public.get_mcp_guest_cart(text)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_mcp_guest_cart(text)
-  TO service_role;
+  TO mcp_guest_cart_worker;
 
 COMMENT ON FUNCTION public.get_mcp_guest_cart(text) IS
   'Reads one MCP guest cart by capability token. Returns zero rows for '
@@ -98,6 +119,18 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'guest cart expiry exceeds retention';
   END IF;
   IF p_expected_version IS NULL THEN
+    -- Global capacity gate: per-IP quotas cannot bound a botnet, and the
+    -- hourly sweep reclaims at most 1000 rows, so the table itself must
+    -- refuse creations past budget. The count covers dead rows too: under
+    -- sustained abuse the caller retries after the next sweep instead of
+    -- growing storage without bound. Legitimate volume never approaches
+    -- this ceiling (carts are per-conversation and expire in 7 days).
+    IF (SELECT count(*) FROM public.mcp_guest_carts) >= 50000 THEN
+      version := NULL;
+      outcome := 'full';
+      RETURN NEXT;
+      RETURN;
+    END IF;
     BEGIN
       INSERT INTO public.mcp_guest_carts (token, items, expires_at)
       VALUES (p_token, p_items, p_expires_at)
@@ -145,24 +178,28 @@ ALTER FUNCTION public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint)
   OWNER TO postgres;
 REVOKE EXECUTE ON FUNCTION
   public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION
   public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint)
-  TO service_role;
+  TO mcp_guest_cart_worker;
 
 COMMENT ON FUNCTION
   public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint) IS
   'Creates (NULL expected version) or version-gated updates one MCP guest '
-  'cart. Outcomes: ok / conflict (retry) / missing / expired (recover).';
+  'cart. Outcomes: ok / conflict (retry) / missing / expired (recover) / '
+  'full (global capacity reached).';
 
 -- ---------------------------------------------------------------------------
 -- Version-gated delete: retires emptied carts and reclaims expired rows.
 -- Returns false when the version moved (a concurrent write landed) or the
--- row is gone; the caller re-reads instead of deleting blind.
+-- row is gone; the caller re-reads instead of deleting blind. A NULL
+-- expected version deletes unconditionally: the caller passes it only
+-- when the row's own version bytes are corrupt (nothing could match),
+-- and the token still scopes the blast radius to one cart.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.delete_mcp_guest_cart(
   p_token text,
-  p_expected_version bigint
+  p_expected_version bigint DEFAULT NULL
 ) RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -171,20 +208,24 @@ AS $$
 BEGIN
   DELETE FROM public.mcp_guest_carts
   WHERE token = p_token
-    AND mcp_guest_carts.version = p_expected_version;
+    AND (
+      p_expected_version IS NULL
+      OR mcp_guest_carts.version = p_expected_version
+    );
   RETURN FOUND;
 END;
 $$;
 
 ALTER FUNCTION public.delete_mcp_guest_cart(text, bigint) OWNER TO postgres;
 REVOKE EXECUTE ON FUNCTION public.delete_mcp_guest_cart(text, bigint)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.delete_mcp_guest_cart(text, bigint)
-  TO service_role;
+  TO mcp_guest_cart_worker;
 
 COMMENT ON FUNCTION public.delete_mcp_guest_cart(text, bigint) IS
-  'Version-gated delete of one MCP guest cart. False when the row moved or '
-  'is already gone.';
+  'Version-gated delete of one MCP guest cart (NULL expected version '
+  'deletes unconditionally for corrupt rows). False when the row moved '
+  'or is already gone.';
 
 -- ---------------------------------------------------------------------------
 -- Bounded retention. Guest carts expire lazily on read; this sweep reclaims

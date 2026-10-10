@@ -16,6 +16,7 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
 
 import { randomUUID } from 'node:crypto';
 import { GuestCartStore } from './guest-cart-store';
+import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
 import { registerCartLinkTools } from './cart-link-tool';
 import { registerGuestCartTool } from './guest-cart-tool';
@@ -76,10 +77,11 @@ import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.cons
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// Service key for guest-cart storage only: the cart RPCs are
-// service-role-executable (the anon key is publicly distributed, so
-// anon-executable writes would bypass the server-side creation quota).
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Worker JWT for guest-cart storage: minted offline with the
+// mcp_guest_cart_worker role claim, it can invoke only the three cart
+// RPCs. Neither the public anon key nor the RLS-bypassing service key
+// may back user-facing cart operations.
+const GUEST_CART_WORKER_TOKEN = process.env.MCP_GUEST_CART_WORKER_TOKEN;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
@@ -199,25 +201,43 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !GUEST_CART_WORKER_TOKEN) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, MCP_GUEST_CART_WORKER_TOKEN'
   );
   process.exit(1);
 }
+// Log the effective trust-proxy mode once: when false behind a proxy,
+// rate limiting and the cart quota key on the proxy socket address and
+// every caller shares one bucket (see README). The value is explicit
+// per deploy; this line keeps it visible in deploy logs.
+console.log(
+  JSON.stringify({
+    type: 'lifecycle',
+    event: 'mcp-trust-proxy-mode',
+    trustProxyRealIp: process.env.MCP_TRUST_PROXY_REAL_IP === 'true',
+    timestamp: new Date().toISOString(),
+  })
+);
 
 // Public shopping tools use the normal RLS-scoped anonymous client.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// Guest carts persist through service-role-only Postgres RPCs: no local
+// Guest carts persist through worker-scoped Postgres RPCs: no local
 // volume, no writer lock, safe to scale past one replica. (The
 // creation quota stays per-process, so N replicas admit N times the
 // single-host burst: over-admission, never over-refusal.)
-const guestCartServiceClient = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
-);
-const guestCartStore = new GuestCartStore(guestCartServiceClient);
+let guestCartStore: GuestCartStore;
+try {
+  guestCartStore = new GuestCartStore(
+    createGuestCartWorkerClient(SUPABASE_URL, GUEST_CART_WORKER_TOKEN)
+  );
+} catch (error) {
+  // Static messages only: the token and its claims never reach logs.
+  console.error('FATAL: Invalid guest-cart worker token');
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 // =============================================================================
 // RATE LIMITING

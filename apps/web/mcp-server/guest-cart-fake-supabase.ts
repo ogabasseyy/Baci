@@ -13,12 +13,16 @@ interface RpcCall {
 
 /**
  * In-memory stand-in for the mcp_guest_carts RPCs, mirroring the
- * migration contracts (outcomes, version gate, expiry): creations with a
- * NULL expected version conflict on any existing row, updates need the
- * current version on a live row, deletes need the current version.
+ * migration contracts (outcomes, version gate, capacity gate, expiry):
+ * creations with a NULL expected version conflict on any existing row and
+ * fail 'full' past the row cap, updates need the current version on a
+ * live row, deletes need the current version or NULL for unconditional.
  */
 export function createFakeGuestCartSupabase() {
   const rows = new Map<string, FakeRow>();
+  // Same 50000-row cap the migration enforces; tests lower it to stage a
+  // full table without seeding fifty thousand rows.
+  let capacityLimit = 50000;
   const calls: RpcCall[] = [];
   const transportErrors: { code: string; message: string }[] = [];
   let beforeRpc:
@@ -56,6 +60,8 @@ export function createFakeGuestCartSupabase() {
       const expected = params.p_expected_version as number | null;
       const row = rows.get(token);
       if (expected === null || expected === undefined) {
+        if (rows.size >= capacityLimit)
+          return { data: [{ version: null, outcome: 'full' }], error: null };
         if (row) return { data: [{ version: null, outcome: 'conflict' }], error: null };
         rows.set(token, {
           items: params.p_items,
@@ -79,8 +85,11 @@ export function createFakeGuestCartSupabase() {
       return { data: [{ version, outcome: 'ok' }], error: null };
     }
     if (name === 'delete_mcp_guest_cart') {
+      const expected = params.p_expected_version as number | null;
       const row = rows.get(params.p_token as string);
-      if (row && row.version === params.p_expected_version) {
+      // NULL is deliberately unconditional (corrupt-row reclaim); a typed
+      // version must match, and a missing key never deletes.
+      if (row && (expected === null || row.version === expected)) {
         rows.delete(params.p_token as string);
         return { data: true, error: null };
       }
@@ -100,6 +109,10 @@ export function createFakeGuestCartSupabase() {
     /** Fails the next RPC transport with a PostgREST-shaped error. */
     failNextRpc(error: { code: string; message: string }) {
       transportErrors.push(error);
+    },
+    /** Lowers the creation capacity gate so a test can stage a full table. */
+    setCapacityLimit(limit: number) {
+      capacityLimit = limit;
     },
   };
 }

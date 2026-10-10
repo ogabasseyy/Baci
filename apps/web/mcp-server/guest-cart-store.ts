@@ -56,7 +56,7 @@ interface CartRow {
 
 interface UpsertRow {
   version: number | null;
-  outcome: 'ok' | 'conflict' | 'missing' | 'expired' | string;
+  outcome: 'ok' | 'conflict' | 'missing' | 'expired' | 'full' | string;
 }
 
 /** Opaque guest capability, never an account identity. */
@@ -89,9 +89,10 @@ export class GuestCartStore {
     });
     if (!Number.isInteger(version) || !parsed.success) {
       // Unusable bytes (only reachable through a direct privileged write —
-      // the RPCs and CHECKs guard the shape): reclaim the row and report
-      // it as expired so the caller recovers.
-      await this.deleteBestEffort(token, Number.isInteger(version) ? version : -1);
+      // the RPCs and CHECKs guard the shape): reclaim the row with a
+      // deliberately unconditional delete (its version cannot be trusted)
+      // and report it as expired so the caller recovers.
+      await this.deleteBestEffort(token, null);
       return null;
     }
     return {
@@ -103,7 +104,7 @@ export class GuestCartStore {
 
   private async deleteBestEffort(
     token: string,
-    version: number
+    version: number | null
   ): Promise<void> {
     try {
       await this.rpc('delete_mcp_guest_cart', {
@@ -193,6 +194,14 @@ export class GuestCartStore {
           items,
           expires_at: new Date(expiresAt).toISOString(),
         };
+      // The table is at capacity: a retry-later signal, never a new cart.
+      // The tool layer reports storage outages as "temporarily unavailable
+      // ... try again later", this transport's equivalent of a 429.
+      if (outcome === 'full')
+        throw new GuestCartStorageUnavailableError(
+          'guest cart storage is at capacity',
+          'capacity_exhausted'
+        );
       // A conflict means the fresh-random token collided (live or expired
       // row): mint another. Anything else is a contract violation.
       if (outcome !== 'conflict')

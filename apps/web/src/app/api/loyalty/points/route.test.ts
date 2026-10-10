@@ -56,7 +56,10 @@ describe('POST /api/loyalty/points', () => {
       valid: true,
       response: null,
     });
-    mocks.mockGetMerchant.mockResolvedValue({ merchantId: MERCHANT_ID });
+    mocks.mockGetMerchant.mockResolvedValue({
+      merchantId: MERCHANT_ID,
+      staffAccess: { isOwner: true, isStaff: false },
+    });
     mocks.mockRpc.mockResolvedValue({
       data: {
         success: true,
@@ -88,6 +91,24 @@ describe('POST /api/loyalty/points', () => {
       lifetimePoints: 1100,
       pointsAwarded: 200,
     });
+  });
+
+  it('rejects staff adjustments with 403 before reaching the RPC', async () => {
+    mocks.mockGetMerchant.mockResolvedValue({
+      merchantId: MERCHANT_ID,
+      staffAccess: { isOwner: false, isStaff: true },
+    });
+
+    const response = await POST(
+      createRequest({ customerId: CUSTOMER_ID, points: 200 })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({
+      error: 'Only the merchant owner can adjust loyalty points',
+    });
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('passes the merchant reason through to the RPC', async () => {

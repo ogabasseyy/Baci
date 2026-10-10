@@ -139,7 +139,10 @@ BEGIN
   END IF;
 
   -- Per-customer usage cap: without this a limit-1 reward is redeemable
-  -- repeatedly and only global stock bounds it.
+  -- repeatedly and only global stock bounds it. Every row counts,
+  -- including codes that expire unused: points are deducted at redeem
+  -- time with no refund-on-expiry flow, so the cap counts purchases,
+  -- not checkout uses.
   IF v_reward.usage_limit_per_customer IS NOT NULL THEN
     SELECT COUNT(*) INTO v_redemption_count
     FROM public.reward_redemptions

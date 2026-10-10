@@ -21,7 +21,7 @@ vi.mock('@/lib/search/server-analytics-client', () => ({
   recordSearchSubmission: mocks.recordSubmission,
 }));
 vi.mock('@/lib/logger', () => ({
-  logger: { warn: vi.fn() },
+  logger: { warn: vi.fn(), error: vi.fn() },
 }));
 
 // Import the handler AFTER mocks so the route binds the mocked modules.

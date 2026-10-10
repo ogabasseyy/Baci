@@ -63,6 +63,7 @@ function setupProductsQuery(result: {
   };
   vi.mocked(createClient).mockReturnValue({
     from: vi.fn(() => productsQuery),
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   } as unknown as ReturnType<typeof createClient>);
 
   return productsQuery;
@@ -128,6 +129,52 @@ describe('CartPageWrapper', () => {
       );
     });
     expect(addToCart).not.toHaveBeenCalled();
+  });
+
+  it('retries the link on a later effect run after a transient lookup failure', async () => {
+    const addToCart = mockUseCart({ cart: [] });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(
+        'item_id=55555555-5555-4555-8555-555555555555'
+      ) as ReturnType<typeof useSearchParams>
+    );
+    setupProductsQuery({
+      data: null,
+      error: { message: 'database unavailable' },
+    });
+
+    const { rerender } = render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Error',
+          variant: 'destructive',
+        })
+      );
+    });
+    expect(addToCart).not.toHaveBeenCalled();
+
+    // The failed attempt must not permanently consume the link: a later cart
+    // change re-runs the effect and the retry succeeds.
+    setupProductsQuery({
+      data: [
+        {
+          id: '55555555-5555-4555-8555-555555555555',
+          images: [],
+          name: 'iPhone 15 Pro Max',
+          price: 2100000,
+          status: 'active',
+        },
+      ],
+      error: null,
+    });
+    mockUseCart({ addToCart, cart: [{ id: 'other' }] });
+    rerender(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => {
+      expect(addToCart).toHaveBeenCalledOnce();
+    });
   });
 
   it('does not add inactive products returned by the lookup', async () => {

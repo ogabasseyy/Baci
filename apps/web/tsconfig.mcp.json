@@ -15,7 +15,8 @@
     "mcp-server/variant-attribute-text-value.test.ts",
     "mcp-server/delivery-fee-quotes.test.ts",
     "mcp-server/delivery-gigl-quotes.test.ts",
-    "mcp-server/server-delivery-gigl.test.ts"
+    "mcp-server/server-delivery-gigl.test.ts",
+    "mcp-server/widgets/src/index.tsx"
   ],
   "exclude": ["node_modules"]
 }

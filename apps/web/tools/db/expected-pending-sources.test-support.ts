@@ -277,7 +277,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261010090000_mcp_guest_cart_worker_request_scope.sql',
+      'supabase/migrations/20261010090000_mcp_guest_cart_gigl_worker_request_scope.sql',
     sha256: '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a',
   },
   {

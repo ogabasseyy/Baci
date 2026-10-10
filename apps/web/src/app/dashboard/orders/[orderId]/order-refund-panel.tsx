@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  describeRefundManageBlocked,
   describeRefundWorkerError,
   orderRefundStatusLabels,
 } from '@/config/order-refund';
@@ -197,7 +198,7 @@ export function OrderRefundPanel({
             <div className="flex flex-wrap gap-2">
               {summary.canManageRefunds === false ? (
                 <p className="text-sm text-muted-foreground">
-                  You need refund permission to retry or record refunds.
+                  {describeRefundManageBlocked(summary.status)}
                 </p>
               ) : (
                 <>

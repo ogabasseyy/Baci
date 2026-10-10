@@ -115,6 +115,30 @@ describe('OrderRefundPanel', () => {
       screen.queryByRole('button', { name: 'Retry refund' })
     ).not.toBeInTheDocument();
   });
+  it('explains a busy step instead of claiming missing permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          canManageRefunds: false,
+          status: 'processing',
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(
+      await screen.findByText(
+        'Refund is being processed. Retry and manual recording unlock when it settles.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'You need refund permission to retry or record refunds.'
+      )
+    ).not.toBeInTheDocument();
+  });
   it('hides refund actions when the caller lacks refund permission', async () => {
     vi.stubGlobal(
       'fetch',

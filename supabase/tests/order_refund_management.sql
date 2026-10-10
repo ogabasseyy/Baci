@@ -295,6 +295,10 @@ BEGIN
   -- rejection then comes from the WITH CHECK policy, not a missing grant.
   GRANT INSERT ON public.transactions TO authenticated;
   GRANT SELECT ON public.orders TO authenticated;
+  GRANT SELECT ON public.order_cancellation_side_effects TO authenticated;
+  CREATE POLICY refund_suite_probe_side_effects
+    ON public.order_cancellation_side_effects FOR SELECT TO authenticated
+    USING (true);
 END;
 $fixtures$;
 
@@ -620,6 +624,25 @@ BEGIN
     RAISE EXCEPTION 'corrupt link flipped payment label to %', v_label;
   END IF;
 
+  -- Full manual coverage creates the claimable row when the worker
+  -- never started one (cash-only/legacy): the drain only enumerates
+  -- existing rows, so without creation nothing would ever invoke the
+  -- claim and finalization would never run.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000017', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'norow-1',NULL,true
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'full manual did not complete the order';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.order_cancellation_side_effects
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000017'
+      AND step = 'refund' AND status = 'failed' AND attempts = 0
+  ) THEN
+    RAISE EXCEPTION 'full manual did not create a claimable row';
+  END IF;
+
   -- Legacy rows without a cancellation timestamp route to review: the
   -- trusted finalization cannot run without one.
   BEGIN
@@ -926,6 +949,14 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000016');
   IF v_status <> 'completed' THEN
     RAISE EXCEPTION 'refunded-row coverage did not finalize, got %', v_status;
+  END IF;
+  -- The created claimable row finalizes through the trusted claim.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000017', 'refund',
+    '9ef13000-0000-4000-8000-000000000017');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'created row did not finalize, got %', v_status;
   END IF;
 END;
 $refund_claim_finalize$;

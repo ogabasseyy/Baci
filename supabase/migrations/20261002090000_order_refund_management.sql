@@ -293,12 +293,18 @@ BEGIN
       -- completing directly: the next service-role claim sees full
       -- coverage (manual rows count) and runs settlement reversal,
       -- notifications, and review close before completing the step.
-      -- A missing side-effect row means the worker never started one;
-      -- the claim creates it on first run.
-      UPDATE public.order_cancellation_side_effects SET attempts=0,
+      -- Upsert, not update: cash-only and legacy cancellations may
+      -- have no refund row at all, and the drain only enumerates
+      -- existing rows — a bare update would match zero rows, nothing
+      -- would ever invoke the claim, and finalization would never
+      -- run while the trigger still labels the order refunded.
+      INSERT INTO public.order_cancellation_side_effects AS s
+        (order_id,merchant_id,step,status,claim_token,attempts,error,result)
+      VALUES (p_order_id,v_order.merchant_id,'refund','failed',gen_random_uuid(),0,NULL,
+        jsonb_build_object('manual',true,'recorded_by',v_actor))
+      ON CONFLICT (order_id,step) DO UPDATE SET attempts=0,
         error=NULL,result=jsonb_build_object('manual',true,'recorded_by',v_actor)
-        WHERE order_id=p_order_id AND step='refund'
-        RETURNING status,error,attempts,retry_requests INTO v_step;
+        RETURNING s.status,s.error,s.attempts,s.retry_requests INTO v_step;
     END IF;
   END IF;
   -- Bound like the audit events: one row per partial manual with 30s

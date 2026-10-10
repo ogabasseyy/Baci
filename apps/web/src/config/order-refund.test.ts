@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
+  describeRefundManageBlocked,
   describeRefundWorkerError,
   orderRefundStatusLabels,
 } from './order-refund';
@@ -58,5 +59,24 @@ describe('refund worker error labels', () => {
     );
     expect(label).toContain('ran into a problem');
     expect(label).not.toContain('acquirer');
+  });
+});
+
+describe('refund manage-blocked labels', () => {
+  it('explains in-flight steps as processing', () => {
+    expect(describeRefundManageBlocked('processing')).toContain(
+      'being processed'
+    );
+  });
+  it('explains review steps as under review', () => {
+    expect(describeRefundManageBlocked('requires_review')).toContain(
+      'under review'
+    );
+  });
+  it('keeps the permission message otherwise', () => {
+    for (const status of ['failed', 'queued', 'not_started'])
+      expect(describeRefundManageBlocked(status)).toContain(
+        'refund permission'
+      );
   });
 });

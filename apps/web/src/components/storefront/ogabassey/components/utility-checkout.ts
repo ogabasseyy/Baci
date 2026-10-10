@@ -36,8 +36,12 @@ export interface UtilityCheckoutResponse {
 }
 
 /**
- * Lenient cashback guard: a malformed cashback block must never fail the
- * whole checkout — callers fall back to decrementing the local balance.
+ * Lenient cashback guard: only a credited block is trusted — the server
+ * still returns the object with `credited: false` and a default-zero
+ * `newBalance` when the credit RPC fails, and applying that zero would wipe
+ * the displayed balance. Anything else returns undefined so callers fall
+ * back to decrementing the local balance; a malformed block never fails the
+ * whole checkout.
  */
 export function parseUtilityCheckoutCashback(
   data: unknown
@@ -47,6 +51,7 @@ export function parseUtilityCheckoutCashback(
   }
   const cashback = data as Record<string, unknown>;
   if (
+    cashback.credited !== true ||
     typeof cashback.amount !== 'number' ||
     typeof cashback.newBalance !== 'number'
   ) {

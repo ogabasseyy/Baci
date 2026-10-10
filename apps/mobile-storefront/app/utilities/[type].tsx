@@ -113,7 +113,6 @@ export default function UtilityPurchaseScreen() {
     routeType,
   });
   const resolvedSuccessData = successData ?? getParamSuccessData(params);
-  const successCashbackAmount = resolvedSuccessData?.cashback?.amount ?? 0;
   const successReference = resolvedSuccessData?.reference;
 
   const pagerRef = useRef<PagerView>(null);
@@ -147,12 +146,11 @@ export default function UtilityPurchaseScreen() {
   }, [routeType]);
 
   useEffect(() => {
-    if (
-      !currentType ||
-      !customerId ||
-      !successReference ||
-      successCashbackAmount <= 0
-    ) {
+    // Every wallet purchase debits the wallet, with or without cashback,
+    // so invalidate on any success/processing reference — otherwise the
+    // pre-debit balance stays cached as fresh and the next purchase can
+    // submit against a stale balance the server will reject.
+    if (!currentType || !customerId || !successReference) {
       return;
     }
 
@@ -167,7 +165,6 @@ export default function UtilityPurchaseScreen() {
     currentType,
     customerId,
     queryClient,
-    successCashbackAmount,
     successReference,
   ]);
 

@@ -457,7 +457,7 @@ describe('UtilityPurchaseScreen', () => {
     });
   });
 
-  it('does not refresh the wallet cache when a utility success has no cashback', async () => {
+  it('refreshes the wallet cache when a utility success has no cashback', async () => {
     mockUseLocalSearchParams.mockReturnValue({
       amount: '1000',
       cashbackAmount: '0',
@@ -470,13 +470,13 @@ describe('UtilityPurchaseScreen', () => {
 
     render(<UtilityPurchaseScreen />);
 
-    await screen.findByText('Purchase success successful 08031234567');
-
-    expect(mockInvalidateQueries).not.toHaveBeenCalledWith({
-      queryKey: walletKeys.data({
-        merchantId: TEST_MERCHANT_ID,
-        ownerId: 'customer-1',
-      }),
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: walletKeys.data({
+          merchantId: TEST_MERCHANT_ID,
+          ownerId: 'customer-1',
+        }),
+      });
     });
   });
 

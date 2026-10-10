@@ -52,7 +52,7 @@ describe('UtilityModal checkout routing', () => {
     expect((applyBalanceUpdate as (balance: number) => number)(500)).toBe(400);
   });
 
-  it('blocks checkout without a network call when the wallet cannot cover the bill', async () => {
+  it('says top-up is unavailable when the wallet cannot cover the bill and the store has no funding rail', async () => {
     harness.amount.current = 1000;
 
     submitAirtimePurchase();
@@ -61,7 +61,7 @@ describe('UtilityModal checkout routing', () => {
       expect(harness.toast).toHaveBeenCalledWith({
         title: 'Insufficient wallet balance',
         description:
-          'Fund your wallet with at least ₦500 more to complete this purchase.',
+          "Your wallet balance of ₦500 is ₦500 short. Wallet top-up isn't available for this store.",
         variant: 'destructive',
       });
     });
@@ -97,6 +97,66 @@ describe('UtilityModal checkout routing', () => {
     });
     expect(harness.checkoutFetch).not.toHaveBeenCalled();
     expect(screen.getByText('9099887766')).toBeInTheDocument();
+  });
+
+  it('opens the funding panel without auto-creating a DVA on insufficient balance (consent stays with the panel CTA)', async () => {
+    harness.useWallet.mockReturnValue({
+      fundingAccount: null,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: true,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      walletDvaEnabled: true,
+      walletLoading: false,
+      walletTransactions: [],
+    });
+    harness.amount.current = 1000;
+
+    submitAirtimePurchase();
+
+    // Panel opens with the manual consent CTA…
+    await waitFor(() => {
+      expect(screen.getByText('Get my account number')).toBeInTheDocument();
+    });
+    // …but no DVA provisioning request fires until the customer clicks it.
+    expect(
+      harness.checkoutFetch.mock.calls.some(([url]) =>
+        String(url).includes('funding-account')
+      )
+    ).toBe(false);
+  });
+
+  it('auto-creates a DVA only after the customer explicitly picks Pay with Bank Transfer', async () => {
+    harness.useWallet.mockReturnValue({
+      fundingAccount: null,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: true,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      walletDvaEnabled: true,
+      walletLoading: false,
+      walletTransactions: [],
+    });
+
+    render(
+      <UtilityModal
+        isOpen={true}
+        onClose={harness.onClose}
+      />
+    );
+    fireEvent.click(screen.getByText('Pay with Bank Transfer'));
+
+    await waitFor(() => {
+      expect(
+        harness.checkoutFetch.mock.calls.some(([url]) =>
+          String(url).includes('funding-account')
+        )
+      ).toBe(true);
+    });
   });
 
   it('requires a signed-in customer before starting checkout', async () => {

@@ -31,6 +31,7 @@ const user = {
 function baseParams(overrides: Record<string, unknown> = {}) {
   return {
     activeTab: 'airtime' as const,
+    canFundByBankTransfer: true,
     clearIntent: vi.fn(),
     customer,
     isAuthLoading: false,
@@ -296,6 +297,73 @@ describe('useUtilityPurchase', () => {
 
     await waitFor(() => expect(result.current.step).toBe('success'));
     expect(setWalletBalance).toHaveBeenCalledWith(4050);
+  });
+
+  it('says plainly that top-up is unavailable when the store has no funding rail', async () => {
+    const onInsufficientWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(
+        baseParams({
+          canFundByBankTransfer: false,
+          onInsufficientWalletBalance,
+          walletBalance: 500,
+        })
+      )
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Insufficient wallet balance',
+      description:
+        'Your wallet balance of ₦500 is ₦500 short. Wallet top-up isn\'t available for this store.',
+      variant: 'destructive',
+    });
+    expect(onInsufficientWalletBalance).not.toHaveBeenCalled();
+  });
+
+  it('applies the balance effect once per reference across idempotent replays', async () => {
+    mockSubmit
+      .mockResolvedValueOnce({
+        kind: 'wallet-success',
+        reference: 'REF-SAME',
+        amount: 1000,
+        processing: true,
+      })
+      .mockResolvedValueOnce({
+        kind: 'wallet-success',
+        reference: 'REF-SAME',
+        amount: 1000,
+        processing: false,
+      })
+      .mockResolvedValueOnce({
+        kind: 'wallet-success',
+        reference: 'REF-NEW',
+        amount: 1000,
+        processing: false,
+      });
+    const setWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ setWalletBalance }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    // Same reference replayed: balance applied once.
+    expect(setWalletBalance).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    // New reference: genuine second purchase, applied again.
+    expect(setWalletBalance).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces an error toast and stays on the form when checkout fails', async () => {

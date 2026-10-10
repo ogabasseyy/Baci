@@ -103,6 +103,17 @@ export function registerGuestCartTool(
         if (!args.cart_token) {
           quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
           if (!quota.allowed) {
+            // Ops alert trail: quota denials are otherwise silent here,
+            // and the flood-guard operating point (quota_exceeded vs
+            // capacity_exhausted) must stay visible. No caller identity:
+            // the bucket key is never logged.
+            console.error(
+              JSON.stringify({
+                type: 'guest-cart',
+                event: 'quota_exceeded',
+                retry_after_seconds: quota.retryAfterSeconds,
+              })
+            );
             return {
               isError: true,
               content: [

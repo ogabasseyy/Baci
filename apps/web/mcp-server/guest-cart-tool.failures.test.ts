@@ -7,6 +7,7 @@ import {
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
+import { reserveGuestCartCreation } from './guest-cart-creation-quota';
 import { GuestCartStore } from './guest-cart-store';
 const validate = vi.hoisted(() => vi.fn());
 vi.mock('./cart-handoff', () => ({ prepareCartHandoff: validate }));
@@ -225,6 +226,33 @@ it('logs storage outages with the token-free code for ops', async () => {
       })
     );
     expect(errorSpy.mock.calls.map(String).join('\n')).not.toContain(token);
+  } finally {
+    errorSpy.mockRestore();
+  }
+});
+
+it('logs quota denials without the caller identity for ops', async () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    const fake = createFakeGuestCartSupabase();
+    const { handler: quotaHandler } = handlerFor(
+      new GuestCartStore(fake.supabase),
+      { clientIp: '198.51.100.7' }
+    );
+    for (let index = 0; index < 600; index += 1) {
+      reserveGuestCartCreation('198.51.100.7');
+    }
+    const denied = await quotaHandler({ product_id: id, quantity: 1 });
+    expect(denied.structuredContent).toMatchObject({
+      success: false,
+      quota_exceeded: true,
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"event":"quota_exceeded"')
+    );
+    expect(errorSpy.mock.calls.map(String).join('\n')).not.toContain(
+      '198.51.100.7'
+    );
   } finally {
     errorSpy.mockRestore();
   }

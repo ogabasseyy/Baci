@@ -16,6 +16,7 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
 
 import { randomUUID } from 'node:crypto';
 import { GuestCartStore } from './guest-cart-store';
+import { probeGuestCartCapability } from './guest-cart-capability-probe';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
 import { registerCartLinkTools } from './cart-link-tool';
@@ -34,7 +35,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
 import {
@@ -227,14 +228,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // volume, no writer lock, safe to scale past one replica. (The
 // creation quota stays per-process, so N replicas admit N times the
 // single-host burst: over-admission, never over-refusal.)
-let guestCartStore: GuestCartStore;
+let guestCartClient: SupabaseClient;
 try {
-  guestCartStore = new GuestCartStore(
-    createGuestCartWorkerClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY,
-      GUEST_CART_WORKER_TOKEN
-    )
+  guestCartClient = createGuestCartWorkerClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    GUEST_CART_WORKER_TOKEN
   );
 } catch (error) {
   // Static messages only: the token and its claims never reach logs.
@@ -242,6 +241,9 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
+// The startup probe authenticates this same client before the store
+// below serves traffic; the probe needs no store state.
+const guestCartStore = new GuestCartStore(guestCartClient);
 
 // =============================================================================
 // RATE LIMITING
@@ -2673,9 +2675,10 @@ function probeCapabilityWithTimeout(): Promise<string | null> {
       STARTUP_PROBE_TIMEOUT_MS
     );
   });
-  return Promise.race([guestCartStore.probeCapability(), timeout]).finally(
-    () => clearTimeout(timer)
-  );
+  return Promise.race([
+    probeGuestCartCapability(guestCartClient),
+    timeout,
+  ]).finally(() => clearTimeout(timer));
 }
 
 function onListening() {

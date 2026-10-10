@@ -116,27 +116,6 @@ export class GuestCartStore {
     }
   }
 
-  /**
-   * Startup/readiness probe: one read-only RPC with a fresh random token
-   * proves the worker JWT authenticates (signature, issuer, project, role,
-   * grants) before the server listens. Returns null when verified, else
-   * the token-free failure code. Never throws and never mutates: get is
-   * read-only and the token names no row. Deliberately records nothing
-   * for /health — startup either proceeds verified or exits.
-   */
-  async probeCapability(): Promise<string | null> {
-    try {
-      await this.rpc('get_mcp_guest_cart', {
-        p_token: randomBytes(32).toString('hex'),
-      });
-      return null;
-    } catch (error) {
-      return error instanceof GuestCartStorageUnavailableError
-        ? (error.code ?? 'unknown')
-        : 'unknown';
-    }
-  }
-
   /** True when the token names a live, parseable, unexpired cart. */
   async hasToken(token: string): Promise<boolean> {
     if (!TOKEN_PATTERN.test(token)) return false;

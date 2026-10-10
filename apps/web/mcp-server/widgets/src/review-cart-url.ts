@@ -1,5 +1,26 @@
 import { parseHandoffLines } from './parse-handoff-lines';
 
+// True when the stored cart link is a validated Ogabassey handoff that
+// still carries lines: another surface may hold the only lines under a
+// shared token, and Review must stay reachable for those foreign-only
+// carts instead of stranding them behind an empty local cart.
+export function hasReviewableHandoffLines(
+  cartUrl: string | undefined
+): boolean {
+  if (!cartUrl) return false;
+  let review: string | null;
+  try {
+    review = buildReviewCartUrl(cartUrl);
+  } catch {
+    return false;
+  }
+  if (!review) return false;
+  const lines = parseHandoffLines(
+    new URL(review).searchParams.get('guest_cart')
+  );
+  return (lines?.length ?? 0) > 0;
+}
+
 // Builds the idempotent Review URL from the stored cart link: legacy
 // one-shot `?item_id=&qty=` handoffs replay the add on every open, so Review
 // keeps only the idempotent `guest_cart` payload and otherwise opens the bare

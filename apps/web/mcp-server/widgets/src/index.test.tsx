@@ -257,6 +257,41 @@ describe('Ogabassey cart handoff widget', () => {
     ).toBeNull();
   });
 
+  it('keeps Review reachable when only foreign lines remain', () => {
+    const guestCart = encodeURIComponent(
+      JSON.stringify([
+        { product_id: '33333333-3333-4333-8333-333333333333', quantity: 1 },
+      ])
+    );
+    const openExternal = vi.fn();
+    window.openai = {
+      toolOutput: { products },
+      widgetState: {
+        cart: [],
+        cartUrl: `https://ogabassey.com/cart?guest_cart=${guestCart}`,
+        cartToken: 'a'.repeat(64),
+      },
+      setWidgetState: vi.fn(),
+      openExternal,
+    };
+    const { container } = render(<App />);
+
+    // Both the summary and the sticky footer offer Review; no local
+    // lines render, and the empty-cart badge stays hidden.
+    const reviews = screen.getAllByRole('button', {
+      name: /Review Cart on Ogabassey/,
+    });
+    expect(reviews).toHaveLength(2);
+    expect(
+      screen.queryByText('Phone One', { selector: '.cart-item-name' })
+    ).toBeNull();
+    expect(container.querySelector('.cart-badge')).toBeNull();
+    fireEvent.click(reviews[0]);
+    expect(openExternal).toHaveBeenCalledWith({
+      href: `https://ogabassey.com/cart?guest_cart=${guestCart}`,
+    });
+  });
+
   it('explains a removal when the tool bridge is unavailable', () => {
     window.openai = {
       toolOutput: { products },

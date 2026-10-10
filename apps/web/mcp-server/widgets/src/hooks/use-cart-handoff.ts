@@ -12,7 +12,7 @@ import {
 } from '../parse-cart-tool-output';
 import { parseHandoffLines } from '../parse-handoff-lines';
 import { recoverCartAdd } from '../recover-expired-add';
-import { buildReviewCartUrl } from '../review-cart-url';
+import { useCartReview } from './use-cart-review';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useCartSyncNotice } from './use-cart-sync-notice';
@@ -27,6 +27,12 @@ export function useCartHandoff() {
   const busy = useRef(false);
   const [isSavingCart, setIsSavingCart] = useState(false);
   const cart = widgetState?.cartUrl ? widgetState.cart : [];
+  const { canReviewCart, handleViewCart } = useCartReview({
+    cart,
+    cartUrl: widgetState?.cartUrl,
+    busy,
+    setCartError,
+  });
 
   const handleAddToCart = async (product: Product) => {
     if (busy.current) return;
@@ -277,18 +283,9 @@ export function useCartHandoff() {
     }
   };
 
-  const handleViewCart = () => {
-    if (busy.current || cart.length === 0 || !widgetState?.cartUrl) return;
-    try {
-      const reviewUrl = buildReviewCartUrl(widgetState.cartUrl);
-      if (reviewUrl) openOgabasseyUrl(reviewUrl);
-    } catch {
-      setCartError('Could not open your guest cart. Please try again.');
-    }
-  };
-
   return {
     cart,
+    canReviewCart,
     cartError,
     cartNotice,
     isSavingCart,

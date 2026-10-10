@@ -4,11 +4,14 @@ import type { CartItem } from './widget-types';
 // Cart Summary Component
 export function CartSummary({
   cart,
+  canReview,
   onViewCart,
   onRemoveItem,
   isSavingCart = false,
 }: {
   cart: CartItem[];
+  /** True while Review can open: local lines or a handoff URL with lines. */
+  canReview: boolean;
   isSavingCart?: boolean;
   onViewCart: () => void;
   onRemoveItem: (productId: string) => void;
@@ -19,7 +22,24 @@ export function CartSummary({
   );
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  if (cart.length === 0) return null;
+  if (cart.length === 0) {
+    // Foreign-only shared cart: nothing is displayable locally, but the
+    // handoff URL still transfers lines, so Review stays reachable (the
+    // sync notice above explains whose items these are).
+    if (!canReview) return null;
+    return (
+      <div className="cart-summary">
+        <button
+          type="button"
+          className="btn-checkout"
+          disabled={isSavingCart}
+          onClick={onViewCart}
+        >
+          Review Cart on Ogabassey →
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="cart-summary">

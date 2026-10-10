@@ -31,7 +31,7 @@ export function App() {
             ? 'No verified match was found among the checked products. Other products may match.'
             : 'No verified products match this search.'
           : toolOutput.message || 'View the tool response in the conversation.';
-  const { cart, cartError, cartNotice, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
+  const { cart, canReviewCart, cartError, cartNotice, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
     useCartHandoff();
 
   useEffect(() => {
@@ -177,17 +177,19 @@ export function App() {
 
       <CartSummary
         cart={cart}
+        canReview={canReviewCart}
         onViewCart={handleViewCart}
         onRemoveItem={handleRemoveItem}
         isSavingCart={isSavingCart}
       />
 
       {/* Mobile Sticky Footer */}
-      {cart.length > 0 && (
+      {canReviewCart && (
         <div className="mobile-sticky-footer">
           <button
             type="button"
             className="btn-negotiate-icon"
+            disabled={isSavingCart || cart.length === 0}
             onClick={() => {
               window.openai?.sendFollowUpMessage?.({
                 prompt:

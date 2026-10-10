@@ -7,6 +7,7 @@ import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { WALLET_FUNDING_TELEMETRY } from '@/lib/posthog/wallet-funding-events';
 import { useWallet } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet';
 import { useCustomerFormReset } from './use-customer-form-reset';
+import { useUtilityFundingPanel } from './use-utility-funding-panel';
 import { useUtilityPendingIntent } from './use-utility-pending-intent';
 import { useUtilityPurchase } from './use-utility-purchase';
 import { AirtimeDataForm } from './utility/AirtimeDataForm';
@@ -56,20 +57,22 @@ export const UtilityModal = ({
   const { clearIntent, intent, saveIntent } = useUtilityPendingIntent(
     customer?.id
   );
-  const [showFundingPanel, setShowFundingPanel] = useState(false);
-  // The panel's autoCreate treats the explicit bank-transfer action as
-  // consent. Programmatic opens (insufficient balance) must NOT auto-create —
-  // the customer consents by clicking the panel's own CTA instead.
-  const [fundingPanelAutoCreate, setFundingPanelAutoCreate] = useState(true);
   const canUseWallet = isAuthenticated && walletBalance > 0;
-  // The DVA is the customer's wallet funding account. Offer the action when
-  // the merchant supports DVAs and the wallet API says either an account
-  // exists or account creation is available; the panel collects a missing
-  // phone at the point of need instead of hiding the action.
-  const canFundByBankTransfer =
-    isAuthenticated &&
-    walletDvaEnabled &&
-    (Boolean(fundingAccount) || requiresFundingAccountConsent);
+  const {
+    canFundByBankTransfer,
+    closeFundingPanel,
+    fundingPanelAutoCreate,
+    openForInsufficientBalance,
+    showFundingPanel,
+    toggleFromExplicitChoice,
+  } = useUtilityFundingPanel({
+    fundingAccount,
+    isAuthenticated,
+    merchantSlug: merchant?.slug,
+    requiresFundingAccountConsent,
+    userId: user?.id,
+    walletDvaEnabled,
+  });
   const {
     handleAirtimeDataSubmit,
     handleBillSubmit,
@@ -86,16 +89,7 @@ export const UtilityModal = ({
     isAuthLoading,
     isAuthenticated,
     merchantSlug: merchant?.slug,
-    onInsufficientWalletBalance: () => {
-      // Wallet-only checkout: surface the funding panel WITHOUT auto-create
-      // so the customer can top up and retry. The panel's own CTA is the
-      // consent point — this programmatic open must not provision a DVA.
-      // No-op when bank-transfer funding is unavailable.
-      if (canFundByBankTransfer) {
-        setFundingPanelAutoCreate(false);
-        setShowFundingPanel(true);
-      }
-    },
+    onInsufficientWalletBalance: openForInsufficientBalance,
     refreshWallet,
     setWalletBalance,
     user,
@@ -136,7 +130,7 @@ export const UtilityModal = ({
       setStep('details');
       // Collapse the funding panel so reopening never re-triggers DVA
       // auto-create without a fresh "Pay with Bank Transfer" tap.
-      setShowFundingPanel(false);
+      closeFundingPanel();
       setAppliedIntentKey(intentKey);
     } else {
       // Re-arm seeding for the next open.
@@ -151,18 +145,6 @@ export const UtilityModal = ({
     setActiveTab(intent?.tab ?? initialTab);
     setStep('details');
     setAppliedIntentKey(intentKey);
-  }
-
-  // Collapse the funding panel if the signed-in customer OR the storefront
-  // merchant changes while the modal stays mounted — a previous session's
-  // open bank-transfer panel (with its DVA account number) must not carry
-  // over to a different customer or merchant.
-  const fundingIdentity = `${user?.id ?? ''}:${merchant?.slug ?? ''}`;
-  const [prevFundingIdentity, setPrevFundingIdentity] =
-    useState(fundingIdentity);
-  if (fundingIdentity !== prevFundingIdentity) {
-    setPrevFundingIdentity(fundingIdentity);
-    setShowFundingPanel(false);
   }
 
   const handleSelectWallet = () => {
@@ -238,13 +220,7 @@ export const UtilityModal = ({
                 canUseWallet={canUseWallet}
                 isLoading={loading}
                 onFundWallet={
-                  canFundByBankTransfer
-                    ? () => {
-                        // Explicit bank-transfer action: this IS the consent.
-                        setFundingPanelAutoCreate(true);
-                        setShowFundingPanel((visible) => !visible);
-                      }
-                    : undefined
+                  canFundByBankTransfer ? toggleFromExplicitChoice : undefined
                 }
                 onSelectWallet={handleSelectWallet}
                 showWalletRow={isAuthenticated}
@@ -265,7 +241,7 @@ export const UtilityModal = ({
                   onReturnToPurchase={() => {
                     // Prefill-only resume: collapse the funding panel and
                     // preselect the wallet. The customer still presses Pay.
-                    setShowFundingPanel(false);
+                    closeFundingPanel();
                     setPayWithWallet(true);
                   }}
                   requiresConsent={requiresFundingAccountConsent}

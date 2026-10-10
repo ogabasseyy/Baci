@@ -22,6 +22,12 @@ const mockReplace = jest.fn();
 const mockBack = jest.fn();
 const mockCanGoBack = jest.fn();
 const mockInvalidateQueries = jest.fn();
+const mockAuthState = {
+  customer: { id: 'customer-1' } as { id: string } | null,
+  merchantId: TEST_MERCHANT_ID as string | null,
+  session: { access_token: 'token' } as { access_token: string } | null,
+  user: null as { id: string } | null,
+};
 type UtilityRouteParams = {
   amount?: string;
   cashbackAmount?: string;
@@ -250,13 +256,9 @@ jest.mock('@/stores/auth-store', () => ({
       customer: { id: string } | null;
       merchantId: string | null;
       session: { access_token: string } | null;
+      user: { id: string } | null;
     }) => unknown
-  ) =>
-    selector({
-      customer: { id: 'customer-1' },
-      merchantId: TEST_MERCHANT_ID,
-      session: { access_token: 'token' },
-    }),
+  ) => selector(mockAuthState),
 }));
 
 jest.mock('@/hooks/use-vtu-history', () => ({
@@ -271,6 +273,10 @@ jest.mock('@/hooks/use-vtu-voucher-pin-backfill', () => ({
 describe('UtilityPurchaseScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthState.customer = { id: 'customer-1' };
+    mockAuthState.merchantId = TEST_MERCHANT_ID;
+    mockAuthState.session = { access_token: 'token' };
+    mockAuthState.user = null;
     mockCanGoBack.mockReturnValue(true);
     mockUseLocalSearchParams.mockReturnValue({ type: 'power' });
     mockUseVTUHistory.mockReturnValue(createHistoryResult());
@@ -475,6 +481,29 @@ describe('UtilityPurchaseScreen', () => {
         queryKey: walletKeys.data({
           merchantId: TEST_MERCHANT_ID,
           ownerId: 'customer-1',
+        }),
+      });
+    });
+  });
+
+  it('invalidates the user-keyed wallet when customer hydration is still pending', async () => {
+    mockAuthState.customer = null;
+    mockAuthState.user = { id: 'user-9' };
+    mockUseLocalSearchParams.mockReturnValue({
+      amount: '1000',
+      customerIdentifier: '08031234567',
+      paymentStatus: 'successful',
+      reference: 'ref-pending-customer',
+      type: 'airtime',
+    });
+
+    render(<UtilityPurchaseScreen />);
+
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: walletKeys.data({
+          merchantId: TEST_MERCHANT_ID,
+          ownerId: 'user-9',
         }),
       });
     });

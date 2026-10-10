@@ -1,7 +1,6 @@
 import { HttpError } from './fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from './network-utils';
 import {
-  computeVtuWalletAmount,
   normalizeConfirmCheckoutStatus,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
@@ -26,8 +25,7 @@ describe('vtu checkout helpers', () => {
     );
   });
 
-  it('clamps wallet amount and rotates keys only for 4xx errors', () => {
-    expect(computeVtuWalletAmount(1000, 500)).toBe(500);
+  it('rotates keys only for 4xx errors', () => {
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(400, 'bad'))
     ).toBe(true);

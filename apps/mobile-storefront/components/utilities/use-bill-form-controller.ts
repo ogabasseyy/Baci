@@ -125,7 +125,7 @@ export function useBillFormController({
     setAmount,
   });
   const numericAmount = parseUtilityAmount(amount);
-  const payment = useUtilityPayment(numericAmount);
+  const payment = useUtilityPayment();
   const normalizedCustomerId = customerId.trim();
   const currentVerificationKey = `${selectedBiller?.billerId ?? ''}:${
     selectedBillItemIdentifier ?? ''
@@ -219,6 +219,7 @@ export function useBillFormController({
       validationReference: verifiedValidationReference ?? undefined,
       verifiedCustomerName,
       verifiedCustomerAddress,
+      returnToHref: walletReturnToHref,
     })();
 
   const handlePaymentLayout = (event: LayoutChangeEvent) => {

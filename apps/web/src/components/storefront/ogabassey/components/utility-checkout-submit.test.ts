@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFetchWithCsrf = vi.hoisted(() => vi.fn());
-const mockRedirect = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: mockFetchWithCsrf,
 }));
-
-vi.mock('./utility-checkout', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./utility-checkout')>();
-  return { ...original, redirectToPaymentCheckout: mockRedirect };
-});
 
 import { submitUtilityCheckout } from './utility-checkout-submit';
 
@@ -36,18 +30,14 @@ const baseRequest = {
 describe('submitUtilityCheckout', () => {
   beforeEach(() => {
     mockFetchWithCsrf.mockReset();
-    mockRedirect.mockReset();
   });
 
-  it('routes a fully-covered wallet purchase to wallet-only checkout', async () => {
+  it('routes every purchase to wallet-only checkout with idempotency', async () => {
     mockFetchWithCsrf.mockResolvedValue(
       jsonResponse({ amount: 100, reference: 'REF1', status: 'successful' })
     );
 
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 100,
-    });
+    const result = await submitUtilityCheckout(baseRequest);
 
     expect(mockFetchWithCsrf).toHaveBeenCalledWith(
       '/api/vtu/checkout/wallet-only',
@@ -55,6 +45,12 @@ describe('submitUtilityCheckout', () => {
         headers: { 'Idempotency-Key': 'idem-key' },
       })
     );
+    expect(JSON.parse(String(mockFetchWithCsrf.mock.calls[0]?.[1]?.body))).toMatchObject({
+      amount: 100,
+      merchantSlug: 'ogabassey',
+      type: 'airtime',
+      walletAmount: 100,
+    });
     expect(result).toEqual({
       kind: 'wallet-success',
       reference: 'REF1',
@@ -63,18 +59,19 @@ describe('submitUtilityCheckout', () => {
     });
   });
 
-  it('redirects a card/partial purchase to the returned checkout url', async () => {
+  it('reports a processing wallet purchase without failing', async () => {
     mockFetchWithCsrf.mockResolvedValue(
-      jsonResponse({ checkout_url: 'https://pay.example/checkout' })
+      jsonResponse({ amount: 100, reference: 'REF1', status: 'processing' })
     );
 
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 0,
-    });
+    const result = await submitUtilityCheckout(baseRequest);
 
-    expect(mockRedirect).toHaveBeenCalledWith('https://pay.example/checkout');
-    expect(result).toEqual({ kind: 'redirected' });
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF1',
+      amount: 100,
+      processing: true,
+    });
   });
 
   it('returns an error result when the checkout call fails', async () => {
@@ -82,10 +79,7 @@ describe('submitUtilityCheckout', () => {
       jsonResponse({ error: 'Insufficient funds' }, { ok: false, status: 400 })
     );
 
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 0,
-    });
+    const result = await submitUtilityCheckout(baseRequest);
 
     expect(result).toEqual({ kind: 'error', message: 'Insufficient funds' });
   });
@@ -97,10 +91,7 @@ describe('submitUtilityCheckout', () => {
       text: () => Promise.resolve('<html>Bad gateway</html>'),
     } as Response);
 
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 0,
-    });
+    const result = await submitUtilityCheckout(baseRequest);
 
     expect(result).toEqual({
       kind: 'error',
@@ -115,34 +106,11 @@ describe('submitUtilityCheckout', () => {
       jsonResponse({ amount: 'not-a-number' })
     );
 
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 0,
-    });
+    const result = await submitUtilityCheckout(baseRequest);
 
     expect(result).toEqual({
       kind: 'error',
       message: 'Payment checkout returned an invalid response',
     });
-    expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it('fails closed when a card response returns no checkout url', async () => {
-    // Valid shape but neither checkout_url nor authorization_url: the card flow
-    // must error without redirecting anywhere.
-    mockFetchWithCsrf.mockResolvedValue(
-      jsonResponse({ amount: 100, reference: 'REF123', status: 'successful' })
-    );
-
-    const result = await submitUtilityCheckout({
-      ...baseRequest,
-      walletAmount: 0,
-    });
-
-    expect(result).toEqual({
-      kind: 'error',
-      message: 'Payment checkout URL was not returned',
-    });
-    expect(mockRedirect).not.toHaveBeenCalled();
   });
 });

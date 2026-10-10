@@ -54,26 +54,3 @@ export function getCheckoutErrorMessage(data: unknown) {
 export function createWalletIdempotencyKey() {
   return crypto.randomUUID();
 }
-
-const TRUSTED_PAYSTACK_CHECKOUT_HOSTS = new Set([
-  'checkout.paystack.com',
-  'paystack.com',
-]);
-
-export function redirectToPaymentCheckout(checkoutUrl: string) {
-  let parsedCheckoutUrl: URL;
-  try {
-    parsedCheckoutUrl = new URL(checkoutUrl);
-  } catch {
-    throw new Error('Payment checkout URL was invalid');
-  }
-
-  if (
-    parsedCheckoutUrl.protocol !== 'https:' ||
-    !TRUSTED_PAYSTACK_CHECKOUT_HOSTS.has(parsedCheckoutUrl.hostname)
-  ) {
-    throw new Error('Payment checkout URL was invalid');
-  }
-
-  window.location.assign(parsedCheckoutUrl.toString());
-}

@@ -1,5 +1,6 @@
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { Biller, BillItem } from '@/hooks/use-vtu-billers';
+import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { BillFormProps } from './bill-form.types';
 
 export type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -30,6 +31,11 @@ export interface CreateBillFormPurchaseHandlerInput {
   type: BillFormProps['type'];
   requireValidationRef?: boolean;
   validationReference?: string;
+  /**
+   * Prefilled return link for the insufficient-balance funding prompt, so a
+   * wallet top-up round-trips the customer back to the purchase form.
+   */
+  returnToHref?: WalletReturnHref | null;
   /**
    * Verified bill customer-of-record name (meter owner / account holder)
    * from the verify step or a previous successful purchase. When present,

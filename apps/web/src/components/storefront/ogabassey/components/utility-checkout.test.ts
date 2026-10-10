@@ -3,7 +3,6 @@ import {
   createWalletIdempotencyKey,
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
-  redirectToPaymentCheckout,
 } from './utility-checkout';
 
 describe('utility checkout helpers', () => {
@@ -32,17 +31,5 @@ describe('utility checkout helpers', () => {
     expect(createWalletIdempotencyKey()).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
-  });
-
-  it('rejects unsafe payment redirect schemes', () => {
-    expect(() =>
-      redirectToPaymentCheckout('javascript:alert("redirect")')
-    ).toThrow('Payment checkout URL was invalid');
-  });
-
-  it('rejects HTTPS payment redirects outside Paystack', () => {
-    expect(() =>
-      redirectToPaymentCheckout('https://checkout.example/pay')
-    ).toThrow('Payment checkout URL was invalid');
   });
 });

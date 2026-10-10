@@ -10,7 +10,6 @@ import type { UtilityCheckoutPayload } from './utility-checkout';
 import { createWalletIdempotencyKey } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import type { UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UseUtilityPurchaseParams {
   activeTab: UtilityTabId;
@@ -19,7 +18,7 @@ interface UseUtilityPurchaseParams {
   isAuthLoading: boolean;
   isAuthenticated: boolean;
   merchantSlug: string | undefined;
-  selectedPaymentMethod: UtilityPaymentMethod;
+  onInsufficientWalletBalance?: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
   walletBalance: number;
@@ -60,7 +59,9 @@ interface UseUtilityPurchaseReturn {
  * Purchase orchestration extracted from `UtilityModal` to keep that component
  * under the 300-line modularity budget. Owns the checkout submit lifecycle
  * (loading/success step, transaction reference, wallet-only idempotency) so the
- * modal only wires props and renders. Behaviour is unchanged.
+ * modal only wires props and renders. Wallet-only: blocks the submit when the
+ * balance cannot cover the bill and notifies the caller so it can open the
+ * funding panel.
  */
 export function useUtilityPurchase({
   activeTab,
@@ -69,7 +70,7 @@ export function useUtilityPurchase({
   isAuthLoading,
   isAuthenticated,
   merchantSlug,
-  selectedPaymentMethod,
+  onInsufficientWalletBalance,
   setWalletBalance,
   user,
   walletBalance,
@@ -113,6 +114,19 @@ export function useUtilityPurchase({
       return;
     }
 
+    // Wallet-only checkout: the wallet must cover the full bill — there is
+    // no card fallback. Stop here (before any network call) and let the
+    // caller open the funding panel so the customer can top up.
+    if (walletBalance < payload.amount) {
+      toast({
+        title: 'Insufficient wallet balance',
+        description: `Fund your wallet with at least ₦${payload.amount.toLocaleString()} to complete this purchase.`,
+        variant: 'destructive',
+      });
+      onInsufficientWalletBalance?.();
+      return;
+    }
+
     setLoading(true);
     const customerName =
       [customer?.first_name, customer?.last_name]
@@ -124,10 +138,6 @@ export function useUtilityPurchase({
       merchantSlug: merchantSlug || 'ogabassey',
       customerName,
       customerPhone: customer?.phone,
-      walletAmount:
-        selectedPaymentMethod === 'wallet'
-          ? Math.min(walletBalance, payload.amount)
-          : 0,
       getWalletIdempotencyKey,
     });
 

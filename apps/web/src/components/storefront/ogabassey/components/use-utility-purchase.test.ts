@@ -36,7 +36,6 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     isAuthLoading: false,
     isAuthenticated: true,
     merchantSlug: 'ogabassey',
-    selectedPaymentMethod: 'wallet' as const,
     setWalletBalance: vi.fn(),
     user,
     walletBalance: 5000,
@@ -111,6 +110,27 @@ describe('useUtilityPurchase', () => {
     // Balance is debited via a functional update (5000 - 1000).
     const updater = setWalletBalance.mock.calls[0][0] as (n: number) => number;
     expect(updater(5000)).toBe(4000);
+  });
+
+  it('blocks checkout without a network call when the wallet cannot cover the bill', async () => {
+    const onInsufficientWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(
+        baseParams({ onInsufficientWalletBalance, walletBalance: 500 })
+      )
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Insufficient wallet balance' })
+    );
+    expect(onInsufficientWalletBalance).toHaveBeenCalledTimes(1);
+    expect(result.current.step).toBe('details');
+    expect(result.current.loading).toBe(false);
   });
 
   it('surfaces an error toast and stays on the form when checkout fails', async () => {

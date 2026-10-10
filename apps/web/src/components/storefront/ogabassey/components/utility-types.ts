@@ -1,1 +1,1 @@
-export type UtilityPaymentMethod = 'wallet' | 'card';
+export type UtilityPaymentMethod = 'wallet';

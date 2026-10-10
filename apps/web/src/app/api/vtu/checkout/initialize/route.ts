@@ -1,14 +1,6 @@
-import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { initializePayment as initializeKorapayPayment } from '@/lib/korapay';
-import {
-  initializeTransaction as initializePaystackTransaction,
-  type PaymentChannel,
-} from '@/lib/paystack';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { vtuCheckoutInitializeSchema } from '@/schemas/vtu';
 
 function createErrorResponse(error: string, status = 400) {
@@ -41,194 +33,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Bank transfers must never ride Paystack's hosted pay-with-transfer
-    // channel (1.5% + ₦100, capped ₦2,000). The supported transfer path is
-    // the customer's dedicated wallet funding account (1% capped ₦300):
-    // fund the wallet by transfer, then pay via the wallet-only route. The
-    // gateway enum still accepts the value so stale mobile clients get this
-    // actionable message instead of a generic validation error.
-    if (parsed.data.gateway === 'bank_transfer') {
-      return NextResponse.json(
-        {
-          error:
-            'Bank transfer now goes through your wallet. Fund your wallet by bank transfer, then pay from your wallet balance.',
-          code: 'BANK_TRANSFER_VIA_WALLET',
-        },
-        { status: 400 }
-      );
-    }
-
-    // Wallet residual: when the customer covers some of the bill from
-    // wallet credit, the gateway charges only the residual. Full
-    // coverage (`walletAmount === amount`) must use the wallet-only
-    // route so the path that has no `transactions` row / no Paystack
-    // hop runs — this route would create a `transactions.amount=0` row
-    // and a confusing zero-charge gateway call.
-    const walletAmount = parsed.data.walletAmount ?? 0;
-    if (walletAmount === parsed.data.amount && walletAmount > 0) {
-      return createErrorResponse(
-        'wallet-only payments must use /api/vtu/checkout/wallet-only.',
-        400
-      );
-    }
-    const residualAmount = parsed.data.amount - walletAmount;
-
-    const supabase = createAdminClient();
-    const prepared = await preparePendingVtuTransaction({
-      supabase,
-      user: auth.user,
-      input: parsed.data,
-      source: 'checkout',
-      requireCustomer: true,
-    });
-
-    const customerEmail =
-      prepared.customer?.email || auth.user.email || body.customerEmail;
-    if (!customerEmail) {
-      return createErrorResponse('Customer email is required', 400);
-    }
-
-    const customerName =
-      parsed.data.customerName ||
-      [prepared.customer?.first_name, prepared.customer?.last_name]
-        .filter(Boolean)
-        .join(' ')
-        .trim() ||
-      auth.user.email ||
-      'Customer';
-    const nanoidUppercase = customAlphabet(
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-      12
+    // Wallet-only VTU checkout: gateway (card) payments for utilities are
+    // disabled because gateway fees erase the margin. Customers fund their
+    // wallet — bearing the funding charges — and pay from wallet balance
+    // via /api/vtu/checkout/wallet-only. This route stays mounted so stale
+    // clients get an actionable error instead of a 404.
+    return NextResponse.json(
+      {
+        error:
+          'Utilities now go through your wallet. Fund your wallet, then pay from your wallet balance.',
+        code: 'VTU_WALLET_ONLY',
+      },
+      { status: 400 }
     );
-    const paymentReference = `VTU-${nanoidUppercase()}`;
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-    const callbackUrl = `${protocol}://${prepared.merchant.slug}.${rootDomain}/checkout/success?reference=${paymentReference}&kind=vtu`;
-    const cancelUrl = `${protocol}://${prepared.merchant.slug}.${rootDomain}/checkout/cancelled?reference=${paymentReference}&kind=vtu`;
-    const notificationUrl = `${protocol}://${rootDomain}/api/payments/webhook`;
-    const paymentGateway =
-      parsed.data.gateway === 'korapay' ? 'korapay' : 'paystack';
-    const paymentChannel = paymentGateway === 'paystack' ? 'card' : 'korapay';
-
-    const metadata = {
-      cancel_action: cancelUrl,
-      customer_email: customerEmail,
-      customer_id: prepared.customer?.id ?? null,
-      customer_name: customerName,
-      gateway: paymentGateway,
-      merchant_slug: prepared.merchant.slug,
-      paymentChannel,
-      selectedGateway: parsed.data.gateway,
-      transaction_type: 'vtu_purchase',
-      vtu_transaction_id: prepared.transaction.id,
-      vtu_type: prepared.transaction.type,
-    };
-
-    try {
-      let authorizationUrl = '';
-      let checkoutUrl = '';
-      let gatewayResponse: Record<string, unknown> | null = null;
-
-      if (paymentGateway === 'paystack') {
-        const channels: PaymentChannel[] = ['card'];
-        const paystack = await initializePaystackTransaction({
-          channels,
-          email: customerEmail,
-          amount: Math.round(residualAmount * 100),
-          reference: paymentReference,
-          callback_url: callbackUrl,
-          metadata,
-        });
-
-        authorizationUrl = paystack.authorization_url;
-        checkoutUrl = paystack.authorization_url;
-        gatewayResponse = paystack as unknown as Record<string, unknown>;
-      } else {
-        const korapay = await initializeKorapayPayment({
-          amount: residualAmount,
-          currency: 'NGN',
-          customer: {
-            email: customerEmail,
-            name: customerName,
-          },
-          merchant_bears_cost: true,
-          metadata,
-          notification_url: notificationUrl,
-          redirect_url: callbackUrl,
-          reference: paymentReference,
-        });
-
-        authorizationUrl = korapay.authorization_url;
-        checkoutUrl = korapay.checkout_url;
-        gatewayResponse = korapay as unknown as Record<string, unknown>;
-      }
-
-      // `transactions.amount` MUST equal what the gateway charged. The
-      // confirm route compares `verifiedAmount` from Paystack/Korapay
-      // against `transaction.amount` and rejects on mismatch — storing
-      // the full bill amount here would break confirm for hybrid
-      // payments.
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .insert({
-          merchant_id: prepared.merchant.id,
-          order_id: null,
-          transaction_type: 'payment',
-          amount: residualAmount,
-          currency: 'NGN',
-          status: 'pending',
-          gateway: paymentGateway,
-          gateway_reference: paymentReference,
-          gateway_response: gatewayResponse,
-          description: `VTU checkout for ${prepared.transaction.type}`,
-          metadata,
-          platform_fee: 0,
-          merchant_amount: 0,
-        });
-
-      if (transactionError) {
-        throw new Error('Failed to initialize payment');
-      }
-
-      await supabase
-        .from('vtu_transactions')
-        .update({
-          metadata: {
-            ...(prepared.transaction.metadata ?? {}),
-            customerEmail,
-            customerName,
-            gateway: paymentGateway,
-            paymentChannel,
-            paymentReference,
-            selectedGateway: parsed.data.gateway,
-            paymentTransactionType: 'gateway_checkout',
-          },
-        })
-        .eq('id', prepared.transaction.id);
-
-      return NextResponse.json({
-        success: true,
-        authorization_url: authorizationUrl,
-        checkout_url: checkoutUrl,
-        gateway: paymentGateway,
-        reference: paymentReference,
-        vtu_reference: prepared.requestReference,
-        vtu_transaction_id: prepared.transaction.id,
-      });
-    } catch (gatewayError) {
-      await supabase
-        .from('vtu_transactions')
-        .update({
-          error_message:
-            gatewayError instanceof Error
-              ? gatewayError.message
-              : 'Failed to initialize payment',
-          status: 'failed',
-        })
-        .eq('id', prepared.transaction.id);
-
-      throw gatewayError;
-    }
   } catch (error) {
     return createErrorResponse(
       error instanceof Error ? error.message : 'Failed to initialize payment',

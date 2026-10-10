@@ -52,54 +52,51 @@ describe('UtilityModal checkout routing', () => {
     expect((applyBalanceUpdate as (balance: number) => number)(500)).toBe(400);
   });
 
-  it('sends partial wallet coverage to Paystack for the residual', async () => {
+  it('blocks checkout without a network call when the wallet cannot cover the bill', async () => {
     harness.amount.current = 1000;
-    harness.checkoutFetch.mockResolvedValue(
-      harness.createJsonResponse({
-        checkout_url: 'https://checkout.paystack.com/pay',
-        reference: 'VTU-GATEWAY',
-      })
-    );
 
     submitAirtimePurchase();
 
     await waitFor(() => {
-      expect(harness.checkoutFetch).toHaveBeenCalledWith(
-        '/api/vtu/checkout/initialize',
-        expect.objectContaining({ method: 'POST' })
-      );
+      expect(harness.toast).toHaveBeenCalledWith({
+        title: 'Insufficient wallet balance',
+        description:
+          'Fund your wallet with at least ₦1,000 to complete this purchase.',
+        variant: 'destructive',
+      });
     });
-    expect(JSON.parse(String(harness.checkoutFetch.mock.calls[0]?.[1]?.body))).toMatchObject({
-      amount: 1000,
-      gateway: 'paystack',
-      merchantSlug: 'ogabassey',
-      walletAmount: 500,
-    });
-    expect(harness.redirect).toHaveBeenCalledWith(
-      'https://checkout.paystack.com/pay'
-    );
+    expect(harness.checkoutFetch).not.toHaveBeenCalled();
   });
 
-  it('does not apply wallet credit when the customer chooses card', async () => {
+  it('opens the funding panel on insufficient balance when bank-transfer funding is available', async () => {
     harness.useWallet.mockReturnValue({
-      payWithWallet: false,
+      fundingAccount: {
+        accountName: 'OGB / TEST',
+        accountNumber: '9099887766',
+        bankName: 'Wema Bank',
+        provider: 'paystack',
+      },
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: false,
+      setFundingAccount: vi.fn(),
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      walletDvaEnabled: true,
       walletLoading: false,
+      walletTransactions: [],
     });
-    harness.checkoutFetch.mockResolvedValue(
-      harness.createJsonResponse({ checkout_url: 'https://checkout.paystack.com/pay' })
-    );
+    harness.amount.current = 1000;
 
     submitAirtimePurchase();
 
     await waitFor(() => {
-      expect(harness.checkoutFetch).toHaveBeenCalled();
+      expect(harness.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Insufficient wallet balance' })
+      );
     });
-    expect(JSON.parse(String(harness.checkoutFetch.mock.calls[0]?.[1]?.body))).not.toHaveProperty(
-      'walletAmount'
-    );
+    expect(harness.checkoutFetch).not.toHaveBeenCalled();
+    expect(screen.getByText('9099887766')).toBeInTheDocument();
   });
 
   it('requires a signed-in customer before starting checkout', async () => {

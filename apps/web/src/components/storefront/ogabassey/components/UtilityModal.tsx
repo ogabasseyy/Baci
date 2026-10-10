@@ -15,7 +15,6 @@ import { UtilityPaymentMethodSelector } from './UtilityPaymentMethodSelector';
 import { UtilityWalletFundingPanel } from './UtilityWalletFundingPanel';
 import { UtilitySuccessView } from './UtilitySuccessView';
 import { UtilityTabs, type UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UtilityModalProps {
   isOpen: boolean;
@@ -39,7 +38,6 @@ export const UtilityModal = ({
   const user = auth?.user ?? null;
   const {
     fundingAccount,
-    payWithWallet,
     refreshWallet,
     requiresFundingAccountConsent,
     setFundingAccount,
@@ -67,9 +65,6 @@ export const UtilityModal = ({
     isAuthenticated &&
     walletDvaEnabled &&
     (Boolean(fundingAccount) || requiresFundingAccountConsent);
-  const selectedPaymentMethod: UtilityPaymentMethod =
-    canUseWallet && payWithWallet ? 'wallet' : 'card';
-
   const {
     handleAirtimeDataSubmit,
     handleBillSubmit,
@@ -85,7 +80,13 @@ export const UtilityModal = ({
     isAuthLoading,
     isAuthenticated,
     merchantSlug: merchant?.slug,
-    selectedPaymentMethod,
+    onInsufficientWalletBalance: () => {
+      // Wallet-only checkout: surface the funding panel so the customer can
+      // top up and retry. No-op when bank-transfer funding is unavailable.
+      if (canFundByBankTransfer) {
+        setShowFundingPanel(true);
+      }
+    },
     setWalletBalance,
     user,
     walletBalance,
@@ -152,18 +153,18 @@ export const UtilityModal = ({
     setShowFundingPanel(false);
   }
 
-  const handleSelectPaymentMethod = (method: UtilityPaymentMethod) => {
+  const handleSelectWallet = () => {
     captureClientEvent(
       WALLET_FUNDING_TELEMETRY.events.paymentMethodSelected,
       {
-        method,
+        method: 'wallet',
         wallet_balance: walletBalance,
         can_use_wallet: canUseWallet,
         merchant_slug: merchant?.slug,
         customer_id: customer?.id,
       }
     );
-    setPayWithWallet(method === 'wallet');
+    setPayWithWallet(true);
   };
 
   const handleClose = () => {
@@ -229,9 +230,7 @@ export const UtilityModal = ({
                     ? () => setShowFundingPanel((visible) => !visible)
                     : undefined
                 }
-                onSelectCard={() => handleSelectPaymentMethod('card')}
-                onSelectWallet={() => handleSelectPaymentMethod('wallet')}
-                selectedPaymentMethod={selectedPaymentMethod}
+                onSelectWallet={handleSelectWallet}
                 showWalletRow={isAuthenticated}
                 walletBalance={walletBalance}
                 walletLoading={walletLoading}

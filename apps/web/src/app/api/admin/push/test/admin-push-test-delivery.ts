@@ -52,26 +52,22 @@ export async function deliverAdminPushTest(
   const deliveryBoundary = createDeliveryStartBoundary();
   try {
     const expo = new Expo({ accessToken: readServerExpoAccessToken() });
-    const { deliveryUncertain, tickets } = await sendPushNotificationChunks(
-      expo,
-      messages,
-      { onDeliveryStart: deliveryBoundary.markDeliveryStarted }
-    );
+    const { deliveryUncertain, syntheticTicketIndexes, tickets } =
+      await sendPushNotificationChunks(expo, messages, {
+        onDeliveryStart: deliveryBoundary.markDeliveryStarted,
+      });
     const errorTickets = tickets.filter((ticket) => ticket.status === 'error');
-    // A provider throw yields synthetic ExpoError tickets plus
-    // deliveryUncertain: report those as uncertain instead of
-    // definitive failures so a test push is never misreported. Only
-    // the exact ExpoError code converts — both synthetic sites hardcode
-    // it, so any other code (DeviceNotRegistered, a future Expo code,
-    // or a missing details shape) is a real ticket and stays a
-    // definitive failure even when another message's throw made the
-    // batch uncertain. Converting wholesale would hide an invalid
-    // token behind that throw.
+    // A provider throw yields synthetic tickets plus deliveryUncertain:
+    // report those as uncertain instead of definitive failures so a
+    // test push is never misreported. Synthetic tickets are identified
+    // by producer-reported index, never by public error code — Expo's
+    // own definitive `ExpoError` tickets carry the same code (see the
+    // SDK ticket type), so code matching would excuse a real failure
+    // whenever another message's throw made the batch uncertain.
     const uncertainTickets = deliveryUncertain
-      ? errorTickets.filter(
-          (ticket) =>
-            (ticket.details as { error?: unknown } | undefined)?.error ===
-            'ExpoError'
+      ? tickets.filter(
+          (ticket, index) =>
+            ticket.status === 'error' && syntheticTicketIndexes.has(index)
         )
       : [];
     const failed = errorTickets.length - uncertainTickets.length;

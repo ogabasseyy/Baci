@@ -10,6 +10,13 @@ export type DeliveryStartOptions = {
   requiredShipmentUpdateCapability?: number;
 };
 
+/**
+ * Marker code for tickets synthesized after a provider throw. The code
+ * stays report-only for token handling (never deactivates); uncertainty
+ * itself travels on `syntheticTicketIndexes`, never inferred from code.
+ */
+const SYNTHETIC_DELIVERY_ERROR_CODE = 'ExpoError';
+
 export interface PushChunkDelivery {
   tickets: ExpoPushTicket[];
   /**
@@ -20,6 +27,13 @@ export interface PushChunkDelivery {
    * not be inferred as uncertain from their public error code.
    */
   deliveryUncertain: boolean;
+  /**
+   * Indexes into `tickets` synthesized locally after a provider throw
+   * (unconfirmed delivery). Callers must use this set — never the
+   * public error code — because Expo's own definitive `ExpoError`
+   * tickets carry the same code.
+   */
+  syntheticTicketIndexes: ReadonlySet<number>;
 }
 
 export async function sendPushNotificationChunks(
@@ -27,7 +41,12 @@ export async function sendPushNotificationChunks(
   messages: ExpoPushMessage[],
   options?: DeliveryStartOptions
 ): Promise<PushChunkDelivery> {
-  if (messages.length === 0) return { deliveryUncertain: false, tickets: [] };
+  if (messages.length === 0)
+    return {
+      deliveryUncertain: false,
+      syntheticTicketIndexes: new Set<number>(),
+      tickets: [],
+    };
 
   const validMessages: ExpoPushMessage[] = [];
   const resultMap: { index: number; ticket?: ExpoPushTicket }[] = [];
@@ -57,12 +76,14 @@ export async function sendPushNotificationChunks(
     // Locally rejected tokens never reached the provider: definitive.
     return {
       deliveryUncertain: false,
+      syntheticTicketIndexes: new Set<number>(),
       tickets: resultMap.map((entry) => entry.ticket as ExpoPushTicket),
     };
   }
 
   const chunks = expo.chunkPushNotifications(validMessages);
   const sdkTickets: ExpoPushTicket[] = [];
+  const sdkTicketSynthetic: boolean[] = [];
   const { markDeliveryStarted } = createDeliveryStartBoundary(
     options?.onDeliveryStart
   );
@@ -85,6 +106,7 @@ export async function sendPushNotificationChunks(
           markDeliveryStarted
         );
         sdkTickets.push(...fallbackResult.tickets);
+        sdkTicketSynthetic.push(...fallbackResult.synthetic);
         allProviderResponsesDefinitive &&=
           fallbackResult.allProviderResponsesDefinitive;
         continue;
@@ -92,19 +114,22 @@ export async function sendPushNotificationChunks(
 
       allProviderResponsesDefinitive = false;
       for (const _ of chunk) {
-        // The `ExpoError` code keeps token handling report-only (never
+        // The shared code keeps token handling report-only (never
         // deactivates); uncertainty itself travels on
-        // `deliveryUncertain`, never inferred from this public code.
+        // `syntheticTicketIndexes`, never inferred from this public
+        // code — Expo's own definitive tickets can carry it too.
         sdkTickets.push({
           status: 'error',
           message: error instanceof Error ? error.message : 'Unknown error',
-          details: { error: 'ExpoError' },
+          details: { error: SYNTHETIC_DELIVERY_ERROR_CODE },
         });
+        sdkTicketSynthetic.push(true);
       }
       continue;
     }
 
     sdkTickets.push(...chunkTickets);
+    for (const _ of chunkTickets) sdkTicketSynthetic.push(false);
   }
 
   if (
@@ -117,12 +142,16 @@ export async function sendPushNotificationChunks(
   }
 
   let sdkIndex = 0;
+  const syntheticTicketIndexes = new Set<number>();
+  const tickets = resultMap.map((entry, finalIndex) => {
+    if (entry.ticket) return entry.ticket;
+    if (sdkTicketSynthetic[sdkIndex]) syntheticTicketIndexes.add(finalIndex);
+    return sdkTickets[sdkIndex++];
+  });
   return {
     deliveryUncertain: !allProviderResponsesDefinitive,
-    tickets: resultMap.map((entry) => {
-      if (entry.ticket) return entry.ticket;
-      return sdkTickets[sdkIndex++];
-    }),
+    syntheticTicketIndexes,
+    tickets,
   };
 }
 
@@ -139,8 +168,10 @@ async function sendChunkIndividually(
 ): Promise<{
   tickets: ExpoPushTicket[];
   allProviderResponsesDefinitive: boolean;
+  synthetic: boolean[];
 }> {
   const tickets: ExpoPushTicket[] = [];
+  const synthetic: boolean[] = [];
   let allProviderResponsesDefinitive = true;
 
   for (const message of chunk) {
@@ -148,6 +179,7 @@ async function sendChunkIndividually(
     try {
       const [ticket] = await expo.sendPushNotificationsAsync([message]);
       tickets.push(ticket);
+      synthetic.push(false);
     } catch (error) {
       allProviderResponsesDefinitive = false;
       // See the chunk-level catch above: the code stays report-only
@@ -155,10 +187,11 @@ async function sendChunkIndividually(
       tickets.push({
         status: 'error',
         message: error instanceof Error ? error.message : 'Unknown error',
-        details: { error: 'ExpoError' },
+        details: { error: SYNTHETIC_DELIVERY_ERROR_CODE },
       });
+      synthetic.push(true);
     }
   }
 
-  return { tickets, allProviderResponsesDefinitive };
+  return { tickets, allProviderResponsesDefinitive, synthetic };
 }

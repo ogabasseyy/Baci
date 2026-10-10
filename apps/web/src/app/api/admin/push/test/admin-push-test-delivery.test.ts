@@ -131,6 +131,7 @@ describe('deliverAdminPushTest', () => {
     });
     mocks.sendChunks.mockResolvedValue({
       deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([0]),
       tickets: [{ details: { error: 'ExpoError' }, status: 'error' }],
     });
 
@@ -151,6 +152,7 @@ describe('deliverAdminPushTest', () => {
     });
     mocks.sendChunks.mockResolvedValue({
       deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([1]),
       tickets: [
         { status: 'error', details: { error: 'DeviceNotRegistered' } },
         { status: 'error', details: { error: 'ExpoError' } },
@@ -178,6 +180,7 @@ describe('deliverAdminPushTest', () => {
     });
     mocks.sendChunks.mockResolvedValue({
       deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([2]),
       tickets: [
         { status: 'error', details: { error: 'FutureExpoCode' } },
         { status: 'error' },
@@ -192,9 +195,38 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    // Only the exact synthetic code converts: anything else is a real
-    // ticket the batch-level flag must not excuse.
+    // Only producer-marked synthetic tickets convert: anything else is
+    // a real ticket the batch-level flag must not excuse.
     expect(result).toEqual({ failed: 2, sent: 0, uncertain: 1 });
+  });
+
+  it("keeps Expo's own definitive ExpoError ticket out of uncertain counts", async () => {
+    mockTokenQuery({
+      data: [
+        { token: 'ExponentPushToken[one]' },
+        { token: 'ExponentPushToken[two]' },
+      ],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([1]),
+      tickets: [
+        { status: 'error', details: { error: 'ExpoError' } },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // Same public code on both tickets: index 0 is Expo's definitive
+    // rejection and stays failed; only the synthetic index converts.
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
   });
 
   it('reports a post-dispatch throw as uncertain', async () => {

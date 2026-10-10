@@ -61,6 +61,7 @@ describe('sendPushNotificationChunks', () => {
       }),
     ]);
     expect(delivery.deliveryUncertain).toBe(true);
+    expect(delivery.syntheticTicketIndexes).toEqual(new Set([0]));
   });
 
   it('marks a definitive provider rejection as certain', async () => {
@@ -75,6 +76,29 @@ describe('sendPushNotificationChunks', () => {
     ] as ExpoPushMessage[]);
 
     expect(delivery.deliveryUncertain).toBe(false);
+    expect(delivery.syntheticTicketIndexes).toEqual(new Set());
+  });
+
+  it('marks only the synthetic ticket when a real ExpoError shares an uncertain batch', async () => {
+    chunkPushNotifications.mockImplementationOnce((messages: unknown[]) => [
+      [messages[0]],
+      [messages[1]],
+    ]);
+    sendPushNotificationsAsync
+      .mockResolvedValueOnce([
+        { details: { error: 'ExpoError' }, status: 'error' },
+      ])
+      .mockRejectedValueOnce(new Error('socket hangup'));
+
+    const delivery = await sendPushNotificationChunks(new Expo(), [
+      { to: 'ExponentPushToken[one]', body: 'one' },
+      { to: 'ExponentPushToken[two]', body: 'two' },
+    ] as ExpoPushMessage[]);
+
+    expect(delivery.deliveryUncertain).toBe(true);
+    // Index 0 is Expo's own definitive ticket; only index 1 was
+    // synthesized after the throw — same public code, different truth.
+    expect(delivery.syntheticTicketIndexes).toEqual(new Set([1]));
   });
 
   it('calls the rejection boundary only after definitive error tickets', async () => {

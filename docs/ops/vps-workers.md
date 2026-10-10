@@ -66,7 +66,7 @@ Some cron work intentionally remains in the web app because it needs web-only ru
   service-role-only Petrock IMEI product snapshot and reports low reseller
   balance without enabling any Petrock tier.
 - `supabase-retention-cleanup`, scheduled daily at 03:20.
-- `/api/cron/process-settlements`, scheduled daily at 05:00.
+- `/api/cron/process-settlements`, scheduled daily at 05:00. Budget-skipped runs still return HTTP 200 with `success: true` by design (paging on unacknowledgeable deferred work would mask fresh failures): monitors must check the `skippedDueToBudget` / `sideEffectSkippedDueToBudget` / `notificationSkippedDueToBudget` payload flags and the `cron budget exhausted` warn logs, not the status code alone.
 - `/api/cron/reconcile-vtu-processing`, scheduled every 5 minutes.
 - `/api/cron/merchant-signup-health`, scheduled every 5 minutes. Verifies the
   merchant read/write policy shapes plus every authenticated grant used by

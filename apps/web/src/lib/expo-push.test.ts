@@ -253,7 +253,11 @@ describe('sendPushNotifications', () => {
 
   it('returns empty delivery for empty messages', async () => {
     const delivery = await sendPushNotifications([]);
-    expect(delivery).toEqual({ deliveryUncertain: false, tickets: [] });
+    expect(delivery).toEqual({
+      deliveryUncertain: false,
+      syntheticTicketIndexes: new Set(),
+      tickets: [],
+    });
     expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 });

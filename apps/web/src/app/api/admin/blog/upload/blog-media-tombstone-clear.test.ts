@@ -38,6 +38,14 @@ describe('blogPostMediaPaths', () => {
     ]);
   });
 
+  it('matches named-entity-spelled URLs', () => {
+    const spelled =
+      'https&colon;&sol;&sol;cdn&period;example&period;com&sol;media&sol;platform&sol;blog&sol;inline-1&period;png';
+    expect(blogPostMediaPaths(row({ content: spelled }))).toEqual([
+      'platform/blog/inline-1.png',
+    ]);
+  });
+
   it('serializes object variants before matching', () => {
     expect(
       blogPostMediaPaths(row({ featured_image_variants: { a: INLINE } }))

@@ -7,6 +7,15 @@ import { finalDeclarationsForStyle } from './review-handoff-style-declarations';
 
 function isZeroAlphaColor(value: string): boolean {
   if (value === 'transparent') return true;
+  // Four- and eight-digit hex carry an alpha channel; a zero alpha
+  // paints nothing. Three- and six-digit hex are always opaque.
+  const hex = /^#([0-9a-f]+)$/.exec(value);
+  if (hex) {
+    const digits = hex[1] ?? '';
+    if (digits.length === 4) return digits[3] === '0';
+    if (digits.length === 8) return digits.slice(6) === '00';
+    return false;
+  }
   const fn = /^(?:rgba?|hsla?)\((.*)\)$/.exec(value);
   if (!fn) return false;
   const inner = fn[1].trim();
@@ -54,7 +63,7 @@ function isZeroOpacityFilter(value: string): boolean {
 function hidingUtilityForStyle(
   style: string,
   inherited: ReadonlyMap<string, string>
-): 'hidden' | 'text-transparent' | null {
+): 'hidden' | 'text-transparent' | 'invisible' | 'visible' | null {
   const finals = finalDeclarationsForStyle(style);
   // Inherited declarations seed the environment; the own block
   // overrides them, matching the CSS cascade for custom
@@ -74,7 +83,12 @@ function hidingUtilityForStyle(
   };
   if (finalValue('display') === 'none') return 'hidden';
   const visibility = finalValue('visibility');
-  if (visibility === 'hidden' || visibility === 'collapse') return 'hidden';
+  // Visibility hides on the overridable channel: descendants can
+  // escape with visibility:visible, so a terminal hidden marker
+  // would strip browser-visible content.
+  if (visibility === 'hidden' || visibility === 'collapse') {
+    return 'invisible';
+  }
   // content-visibility:hidden skips rendering the element's contents
   // entirely; sanitization strips the style attribute, so convert it
   // like display:none before that lossy step.
@@ -131,6 +145,11 @@ function hidingUtilityForStyle(
       return 'hidden';
     }
   }
+  // An explicit visible escapes an inherited invisible exactly like
+  // the browser. It maps last so terminal hiding on the same
+  // element (display, opacity, color, scale, filter, clip) still
+  // wins — visible cannot un-hide those channels.
+  if (visibility === 'visible') return 'visible';
   return null;
 }
 

@@ -1170,6 +1170,20 @@ BEGIN
   IF v_decoded <> 'token<.webp a&#0b&#xD83Dz&#12345678' THEN
     RAISE EXCEPTION 'semicolonless entity decode failed: %', v_decoded;
   END IF;
+  SELECT public.blog_media_decode_html_entities(
+    'https&colon;&sol;&sol;cdn&period;example&period;com&sol;media&sol;platform&sol;blog&sol;token&period;webp'
+  ) INTO v_decoded;
+  IF v_decoded <>
+    'https://cdn.example.com/media/platform/blog/token.webp'
+  THEN
+    RAISE EXCEPTION 'named URL entity decode failed: %', v_decoded;
+  END IF;
+  SELECT public.blog_media_decode_html_entities(
+    '&quest;&num;&semi;&comma;&equals;&excl;&dollar;&commat;&lpar;&rpar;&ast;&plus;&lbrack;&rbrack;&percnt;&lowbar;&vert;&Hat;&grave;&lcub;&rcub;&bsol;'
+  ) INTO v_decoded;
+  IF v_decoded <> '?#;,=!$@()*+[]%_|^`{}\' THEN
+    RAISE EXCEPTION 'named punctuation entity decode failed: %', v_decoded;
+  END IF;
 
   INSERT INTO public.blog_posts (
     title, slug, content, author_name, is_platform_post, merchant_id
@@ -1178,7 +1192,8 @@ BEGIN
     'HTML entity test',
     'sweep-claim-entity-post',
     '<img src="https://cdn.example.com/media/platform/blog/tok&#x65;n.webp">'
-    '<img src="https://cdn.example.com/media/platform/blog/sem&#x69less.webp">',
+    '<img src="https://cdn.example.com/media/platform/blog/sem&#x69less.webp">'
+    '<img src="https&colon;&sol;&sol;cdn&period;example&period;com&sol;media&sol;platform&sol;blog&sol;named&period;webp">',
     'Editorial',
     TRUE,
     NULL
@@ -1187,6 +1202,7 @@ BEGIN
   VALUES
     ('platform/blog/token.webp', now() - interval '2 hours', FALSE),
     ('platform/blog/semiless.webp', now() - interval '2 hours', FALSE),
+    ('platform/blog/named.webp', now() - interval '2 hours', FALSE),
     ('platform/blog/entity-orphan.webp', now() - interval '2 hours', FALSE);
 
   FOR v_row IN
@@ -1205,6 +1221,10 @@ BEGIN
       IF v_row.tombstone_claimed IS TRUE THEN
         RAISE EXCEPTION 'semicolonless entities failed to protect a live object';
       END IF;
+    ELSIF v_row.tombstone_path = 'platform/blog/named.webp' THEN
+      IF v_row.tombstone_claimed IS TRUE THEN
+        RAISE EXCEPTION 'named entities failed to protect a live object';
+      END IF;
     ELSIF v_row.tombstone_path = 'platform/blog/entity-orphan.webp' THEN
       v_saw_orphan := TRUE;
       IF v_row.tombstone_claimed IS NOT TRUE THEN
@@ -1222,6 +1242,7 @@ BEGIN
    WHERE path IN (
     'platform/blog/token.webp',
     'platform/blog/semiless.webp',
+    'platform/blog/named.webp',
     'platform/blog/entity-orphan.webp'
   );
 END;
@@ -1939,6 +1960,74 @@ BEGIN
    WHERE slug IN ('guard-clean', 'guard-live');
 END;
 $direct_write_guard$;
+
+DO $delete_confinement$
+DECLARE
+  v_message TEXT;
+  v_row_count INTEGER;
+  v_saw_block BOOLEAN := FALSE;
+BEGIN
+  -- Direct-PostgREST regression: a claimed-row DELETE dies on the
+  -- confinement trigger while unclaimed deletes (the upload release
+  -- path) succeed. RLS is held open with probe policies so the
+  -- trigger — not the policy — decides.
+  RESET ROLE;
+  CREATE POLICY blog_media_delete_probe_open_delete
+    ON public.blog_media_delete_tombstones
+    FOR DELETE TO authenticated
+    USING (TRUE);
+  CREATE POLICY blog_media_delete_probe_open_select
+    ON public.blog_media_delete_tombstones
+    FOR SELECT TO authenticated
+    USING (TRUE);
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES
+    ('platform/blog/delete-probe-claimed.webp', now(), TRUE),
+    ('platform/blog/delete-probe-open.webp', now(), FALSE);
+
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    DELETE FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/delete-probe-claimed.webp';
+  EXCEPTION WHEN insufficient_privilege THEN
+    -- The trigger raises with the privilege-violation code; the
+    -- message proves the trigger fired rather than the policy.
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_block := (v_message = 'blog_media_claimed_delete_blocked');
+  END;
+  IF NOT v_saw_block THEN
+    RAISE EXCEPTION 'claimed tombstone delete was not blocked';
+  END IF;
+
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/delete-probe-open.webp';
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  IF v_row_count <> 1 THEN
+    RAISE EXCEPTION 'unclaimed tombstone delete removed % rows', v_row_count;
+  END IF;
+
+  -- Worker-shaped deletes (non-authenticated role) skip the trigger.
+  RESET ROLE;
+  SET LOCAL ROLE service_role;
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/delete-probe-claimed.webp';
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  IF v_row_count <> 1 THEN
+    RAISE EXCEPTION 'service delete removed % rows', v_row_count;
+  END IF;
+
+  RESET ROLE;
+  DROP POLICY blog_media_delete_probe_open_delete
+    ON public.blog_media_delete_tombstones;
+  DROP POLICY blog_media_delete_probe_open_select
+    ON public.blog_media_delete_tombstones;
+END;
+$delete_confinement$;
 
 RESET ROLE;
 

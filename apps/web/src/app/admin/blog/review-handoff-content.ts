@@ -11,6 +11,7 @@ import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasBrokenMediaTag } from './review-handoff-media-validation';
 import { stripNoscriptSubtrees } from './review-handoff-noscript-strip';
+import { hasUnrepresentableOptionList } from './review-handoff-option-list';
 import { hasUnopenedPopover } from './review-handoff-popover';
 import { hasReadableContent } from './review-handoff-readability';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
@@ -269,6 +270,15 @@ export function validateImportedContent(rawContent: string): string {
   if (hasUnpreservableEmbed(rendered)) {
     throw new Error(
       'Article content has embed markup the editor cannot preserve'
+    );
+  }
+  // Option-list markup cannot survive either: sanitization drops
+  // these subtrees entirely while surrounding body text lets the
+  // import succeed, silently discarding the control. The check runs
+  // pre-sanitize, since sanitization itself removes the evidence.
+  if (hasUnrepresentableOptionList(rendered)) {
+    throw new Error(
+      'Article content has option-list markup the editor cannot preserve'
     );
   }
   // Stylesheets cannot survive either: sanitization strips the block

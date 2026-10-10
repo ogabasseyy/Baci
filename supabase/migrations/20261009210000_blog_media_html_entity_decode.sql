@@ -6,8 +6,12 @@
 -- the semicolon (the parser flags the missing terminator but still
 -- resolves the longest digit run); named references keep requiring
 -- it. Codepoints cover the full scalar range while unknown names
--- stay literal, mirroring the TypeScript decoder exactly (same six
--- named entities, same NUL/surrogate/range preservation). Entities
+-- stay literal, mirroring the TypeScript decoder exactly (same
+-- thirty-one named entities, same NUL/surrogate/range preservation).
+-- The named set covers every URL-structural ASCII character HTML
+-- defines a reference for (WHATWG entities.json: all require the
+-- semicolon), so `https&colon;&sol;&sol;...` resolves to the live
+-- managed URL in both layers. Entities
 -- decode first because they can reveal JSON escapes (`&#x5c;
 -- u002f`) and percent escapes (`&#x25;32`) the later stages then
 -- handle. Significant digit runs cap at 7 decimal / 6 hex digits so
@@ -108,16 +112,66 @@ BEGIN
       v_rest := pg_catalog.substring(v_rest, v_semi + 1);
       IF v_body = 'amp' THEN
         v_out := v_out || '&';
-      ELSIF v_body = 'lt' THEN
-        v_out := v_out || '<';
-      ELSIF v_body = 'gt' THEN
-        v_out := v_out || '>';
-      ELSIF v_body = 'quot' THEN
-        v_out := v_out || '"';
       ELSIF v_body = 'apos' THEN
         v_out := v_out || pg_catalog.chr(39);
+      ELSIF v_body = 'ast' THEN
+        v_out := v_out || '*';
+      ELSIF v_body = 'bsol' THEN
+        v_out := v_out || pg_catalog.chr(92);
+      ELSIF v_body = 'colon' THEN
+        v_out := v_out || ':';
+      ELSIF v_body = 'comma' THEN
+        v_out := v_out || ',';
+      ELSIF v_body = 'commat' THEN
+        v_out := v_out || '@';
+      ELSIF v_body = 'dollar' THEN
+        v_out := v_out || '$';
+      ELSIF v_body = 'equals' THEN
+        v_out := v_out || '=';
+      ELSIF v_body = 'excl' THEN
+        v_out := v_out || '!';
+      ELSIF v_body = 'grave' THEN
+        v_out := v_out || '`';
+      ELSIF v_body = 'gt' THEN
+        v_out := v_out || '>';
+      ELSIF v_body = 'Hat' THEN
+        v_out := v_out || '^';
+      ELSIF v_body = 'lbrack' THEN
+        v_out := v_out || '[';
+      ELSIF v_body = 'lcub' THEN
+        v_out := v_out || '{';
+      ELSIF v_body = 'lowbar' THEN
+        v_out := v_out || '_';
+      ELSIF v_body = 'lpar' THEN
+        v_out := v_out || '(';
+      ELSIF v_body = 'lt' THEN
+        v_out := v_out || '<';
       ELSIF v_body = 'nbsp' THEN
         v_out := v_out || pg_catalog.chr(160);
+      ELSIF v_body = 'num' THEN
+        v_out := v_out || '#';
+      ELSIF v_body = 'percnt' THEN
+        v_out := v_out || '%';
+      ELSIF v_body = 'period' THEN
+        v_out := v_out || '.';
+      ELSIF v_body = 'plus' THEN
+        v_out := v_out || '+';
+      ELSIF v_body = 'quest' THEN
+        v_out := v_out || '?';
+      ELSIF v_body = 'quot' THEN
+        v_out := v_out || '"';
+      ELSIF v_body = 'rbrack' THEN
+        v_out := v_out || ']';
+      ELSIF v_body = 'rcub' THEN
+        v_out := v_out || '}';
+      ELSIF v_body = 'rpar' THEN
+        v_out := v_out || ')';
+      ELSIF v_body = 'semi' THEN
+        v_out := v_out || ';';
+      ELSIF v_body = 'sol' THEN
+        v_out := v_out || '/';
+      ELSIF v_body = 'vert' THEN
+        v_out := v_out || '|';
       ELSE
         v_out := v_out || '&' || v_body || ';';
       END IF;

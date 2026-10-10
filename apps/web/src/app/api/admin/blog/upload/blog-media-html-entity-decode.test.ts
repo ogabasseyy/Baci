@@ -10,6 +10,19 @@ describe('decodeHtmlEntities', () => {
     ['a=1&amp;b=2', 'a=1&b=2'],
     ['&lt;&gt;&quot;&apos;', '<>"\''],
     ['&#x25;32', '%32'],
+    // URL-relevant named references resolve like the browser so
+    // entity-spelled managed URLs match the reference scan.
+    [
+      'https&colon;&sol;&sol;cdn&period;example&period;com&sol;media&sol;platform&sol;blog&sol;token&period;webp',
+      'https://cdn.example.com/media/platform/blog/token.webp',
+    ],
+    [
+      '&quest;&num;&semi;&comma;&equals;&excl;&dollar;&commat;&lpar;&rpar;&ast;&plus;&lbrack;&rbrack;&percnt;&lowbar;&vert;&Hat;&grave;&lcub;&rcub;&bsol;',
+      '?#;,=!$@()*+[]%_|^`{}\\',
+    ],
+    // Semicolonless named references stay literal: no
+    // URL-structural character has a legacy semicolonless form.
+    ['&colon&sol', '&colon&sol'],
     // Semicolonless numerics resolve the longest digit run, like the
     // HTML parser (which flags the missing terminator as an error).
     ['tok&#x65n.webp', 'token.webp'],

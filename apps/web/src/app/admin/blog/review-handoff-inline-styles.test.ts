@@ -14,11 +14,27 @@ describe('convertHiddenInlineStyles', () => {
     ],
     [
       '<p style="color:red; visibility:hidden; margin:0">Note</p>',
-      '<p style="color:red; visibility:hidden; margin:0" class="hidden">Note</p>',
+      '<p style="color:red; visibility:hidden; margin:0" class="invisible">Note</p>',
     ],
     [
       '<p style="visibility:collapse">Note</p>',
-      '<p style="visibility:collapse" class="hidden">Note</p>',
+      '<p style="visibility:collapse" class="invisible">Note</p>',
+    ],
+    [
+      '<p style="visibility:visible">Shown</p>',
+      '<p style="visibility:visible" class="visible">Shown</p>',
+    ],
+    [
+      '<p style="visibility:hidden;visibility:visible">Shown</p>',
+      '<p style="visibility:hidden;visibility:visible" class="visible">Shown</p>',
+    ],
+    [
+      '<p style="color:#0000">Note</p>',
+      '<p style="color:#0000" class="text-transparent">Note</p>',
+    ],
+    [
+      '<p style="color:#12345600">Note</p>',
+      '<p style="color:#12345600" class="text-transparent">Note</p>',
     ],
     [
       '<p style="opacity:0">Note</p>',
@@ -138,11 +154,14 @@ describe('convertHiddenInlineStyles', () => {
 
   it.each([
     '<p style="display:block">Shown</p>',
-    '<p style="visibility:visible">Shown</p>',
     '<p style="opacity:1">Shown</p>',
     '<p style="opacity:2">Shown</p>',
     '<p style="opacity:">Shown</p>',
     '<p style="color:red">Shown</p>',
+    '<p style="color:#fff">Shown</p>',
+    '<p style="color:#ffffff">Shown</p>',
+    '<p style="color:#1234">Shown</p>',
+    '<p style="color:#12345678">Shown</p>',
     '<p style="color:rgba(0,0,0,1)">Shown</p>',
     '<p style="color:rgb(0,0,0)">Shown</p>',
     '<p style="display:none-2x">Shown</p>',
@@ -150,7 +169,6 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="display:none!important;display:block!important">Shown</p>',
     '<p style="display:none;display:block!important">Shown</p>',
     '<p style="opacity:0;opacity:1">Shown</p>',
-    '<p style="visibility:hidden;visibility:visible">Shown</p>',
     '<p style="color:transparent;color:red">Shown</p>',
     '<p style="color:transparent;-webkit-text-fill-color:red">Shown</p>',
     '<p style="font-size:16px">Shown</p>',
@@ -283,5 +301,37 @@ describe('convertHiddenInlineStyles', () => {
   it('leaves comment-like quoted strings alone', () => {
     const html = '<p style="content:&quot;/*&quot;;display:block">Shown</p>';
     expect(convertHiddenInlineStyles(html)).toBe(html);
+  });
+
+  it('strips transparent hexadecimal colors at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="color:#0000">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+    expect(
+      validateImportedContent(
+        '<p style="color:#12345600">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
+  });
+
+  it('keeps visibility-visible descendants of hidden wrappers', () => {
+    // The visible child escapes on the overridable channel; the
+    // markers persist into the stored draft (the editor drops input
+    // classes at mount, leaving both elements visible).
+    expect(
+      validateImportedContent(
+        '<div style="visibility:hidden"><p style="visibility:visible">Visible body</p></div>'
+      )
+    ).toBe('<div class="invisible"><p class="visible">Visible body</p></div>');
+  });
+
+  it('lets terminal hiding win over visibility-visible', () => {
+    expect(
+      convertHiddenInlineStyles(
+        '<p style="visibility:visible;opacity:0">Note</p>'
+      )
+    ).toBe('<p style="visibility:visible;opacity:0" class="hidden">Note</p>');
   });
 });

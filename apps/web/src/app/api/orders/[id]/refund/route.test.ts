@@ -177,4 +177,30 @@ describe('order refund route', () => {
       code: expectedCode,
     });
   });
+  it('maps concurrent duplicate references to the 409 conflict', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "transactions_order_reference_uidx"',
+      },
+    });
+    const response = await POST(
+      request({
+        action: 'manual',
+        amount: 10,
+        refundedAt: '2026-09-28T12:00:00Z',
+        reference: 'bank-1',
+        method: 'bank_transfer',
+        confirmed: true,
+      }),
+      context
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'This reference was already used for a different refund',
+      code: 'manual_reference_conflict',
+    });
+  });
 });

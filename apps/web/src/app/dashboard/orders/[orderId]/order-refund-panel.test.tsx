@@ -219,4 +219,36 @@ describe('OrderRefundPanel', () => {
     rerender(<OrderRefundPanel orderId="order-2" onRefunded={second} />);
     await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
   });
+  it('masks raw worker text in the refund activity list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          error: null,
+          events: [
+            {
+              id: 'event-1',
+              action: 'retry_requested',
+              date: '2026-10-01T12:00:00Z',
+              actor: null,
+              details: { error: 'Paystack/insufficient-balance (acquirer 51)' },
+            },
+          ],
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    const label = await screen.findByText(
+      'The refund ran into a problem. Support has the details.'
+    );
+    expect(label).toHaveAttribute(
+      'title',
+      'Paystack/insufficient-balance (acquirer 51)'
+    );
+    expect(
+      screen.queryByText('Paystack/insufficient-balance (acquirer 51)')
+    ).not.toBeInTheDocument();
+  });
 });

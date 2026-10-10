@@ -159,13 +159,24 @@ BEGIN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
       SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
-        'refunded_at',min(metadata->>'refunded_at')) INTO v_replay
+        'refunded_at',min(metadata->>'refunded_at'),'note',min(metadata->>'note')) INTO v_replay
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
         AND gateway='manual' AND metadata->>'reference'=v_reference;
       IF (v_replay->>'amount') IS NOT NULL THEN
         IF (v_replay->>'amount')::numeric<>p_amount OR v_replay->>'method'<>p_method
           OR (v_replay->>'refunded_at')::timestamptz<>p_refunded_at THEN
           RAISE EXCEPTION 'manual_reference_conflict' USING ERRCODE='P0001';
+        END IF;
+        -- Same transfer: money fields match, so no new money moves. A
+        -- differing note is an annotation correction, not a new
+        -- transfer (a new reference would double-record the money),
+        -- so refresh it on every leg row instead of keeping stale
+        -- audit text.
+        IF COALESCE(v_replay->>'note','') IS DISTINCT FROM COALESCE(p_note,'') THEN
+          UPDATE public.transactions SET metadata = metadata ||
+            jsonb_build_object('note',p_note)
+            WHERE order_id=p_order_id AND transaction_type='refund'
+              AND gateway='manual' AND metadata->>'reference'=v_reference;
         END IF;
         p_action := 'status'; -- Idempotent retry of an already recorded transfer.
       END IF;

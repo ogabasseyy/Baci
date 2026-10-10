@@ -74,6 +74,12 @@ async function handle(
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);
   if (error) {
+    // A unique violation is the concurrent twin of the reference
+    // conflict the RPC detects itself: two recorders racing the same
+    // merchant reference, one winner. Report it as the same 409
+    // conflict instead of a generic 500.
+    const key =
+      error.code === '23505' ? 'manual_reference_conflict' : error.message;
     const status =
       error.code === '42501'
         ? 403
@@ -81,7 +87,7 @@ async function handle(
           ? 401
           : error.code === 'P0002'
             ? 404
-            : error.code === 'P0001'
+            : error.code === 'P0001' || error.code === '23505'
               ? 409
               : error.code === '22023'
                 ? 400
@@ -89,12 +95,10 @@ async function handle(
     // Callers only branch on the application-level code: raw SQLSTATEs
     // stay server-side so error classes are not fingerprinted.
     const code =
-      KNOWN_REFUND_ERRORS[error.message] === undefined
-        ? 'internal_error'
-        : error.message;
+      KNOWN_REFUND_ERRORS[key] === undefined ? 'internal_error' : key;
     return NextResponse.json(
       {
-        error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',
+        error: KNOWN_REFUND_ERRORS[key] ?? 'Unable to manage refund',
         code,
       },
       { status }

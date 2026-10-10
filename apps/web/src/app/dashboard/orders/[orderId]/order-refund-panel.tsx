@@ -249,20 +249,26 @@ export function OrderRefundPanel({
               <details>
                 <summary>Refund activity</summary>
                 <ul className="space-y-2 text-sm" aria-label="Refund activity">
-                  {summary.events.map((event) => (
-                    <li key={event.id}>
-                      <p>
-                        {orderRefundStatusLabels[event.action] ||
-                          'Refund activity'}{' '}
-                        · {new Date(event.date).toLocaleString()}
-                      </p>
-                      {(event.details.error || event.details.previousError) && (
+                  {summary.events.map((event) => {
+                    // Worker strings never render verbatim here either:
+                    // fixed label visible, raw text in the title.
+                    const eventError =
+                      event.details.error || event.details.previousError;
+                    return (
+                      <li key={event.id}>
                         <p>
-                          {event.details.error || event.details.previousError}
+                          {orderRefundStatusLabels[event.action] ||
+                            'Refund activity'}{' '}
+                          · {new Date(event.date).toLocaleString()}
                         </p>
-                      )}
-                    </li>
-                  ))}
+                        {eventError && (
+                          <p title={eventError}>
+                            {describeRefundWorkerError(eventError)}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </details>
             )}

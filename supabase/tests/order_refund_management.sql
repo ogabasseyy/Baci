@@ -355,6 +355,23 @@ BEGIN
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'manual replay duplicated the ledger row';
   END IF;
+  -- Replaying with a corrected note refreshes the annotation on the
+  -- existing rows instead of recording new money or going stale.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1', 'teller 4', true
+  ) INTO v_result;
+  IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
+    RAISE EXCEPTION 'note-corrected replay duplicated the ledger row';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND gateway_reference = 'partial-1#1'
+      AND metadata->>'note' = 'teller 4'
+  ) THEN
+    RAISE EXCEPTION 'note correction not persisted on replay';
+  END IF;
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 25,

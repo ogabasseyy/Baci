@@ -37,14 +37,13 @@ export const IN_FLIGHT_RUN_STATUSES = new Set([
   'action_required',
 ]);
 
-export function selectSiblingCoordinatedRuns(runs, baseline, coordinationId, commit) {
+export function selectSiblingCoordinatedRuns(runs, baseline, coordinationId) {
   const knownIds = new Set(baseline.map(run => run.databaseId));
   return runs.filter(run => !knownIds.has(run.databaseId) &&
     run.event === 'workflow_dispatch' &&
     typeof run.title === 'string' && run.title.startsWith('Coordinated release ') &&
     run.title !== `Coordinated release ${coordinationId}` &&
-    IN_FLIGHT_RUN_STATUSES.has(run.status) &&
-    run.headSha === commit);
+    IN_FLIGHT_RUN_STATUSES.has(run.status));
 }
 
 export async function coordinateRelease(operations, coordinationId) {
@@ -72,16 +71,17 @@ export async function coordinateRelease(operations, coordinationId) {
     throw new Error('dispatch commit mismatch; cancellation requested');
   }
   // The lock is local, so a second coordinator on another machine can
-  // race this release. An in-flight sibling coordinated run for the
-  // same commit aborts loudly instead — cancelling our own run first.
-  // Best effort, not atomic: near-simultaneous dispatches can list
-  // before the other's run is API-visible, in which case both runs
-  // serialize in the workflow concurrency queue and may publish the
-  // same SHA sequentially. True mutual exclusion needs the single
-  // outer coordinator from the unattended integration boundary.
-  // Completed siblings are earlier releases of the same SHA, not
-  // racers, and are ignored.
-  const siblings = selectSiblingCoordinatedRuns(await operations.listCoordinatedRuns(), baseline, coordinationId, commit);
+  // race this release — on the same commit or a different one. An
+  // in-flight sibling coordinated run aborts loudly instead,
+  // cancelling our own run first, so a concurrent release can never
+  // silently supersede this one. Best effort, not atomic:
+  // near-simultaneous dispatches can list before the other's run is
+  // API-visible, in which case both runs serialize in the workflow
+  // concurrency queue and may publish sequentially. True mutual
+  // exclusion needs the single outer coordinator from the unattended
+  // integration boundary. Completed siblings are earlier releases,
+  // not racers, and are ignored.
+  const siblings = selectSiblingCoordinatedRuns(await operations.listCoordinatedRuns(), baseline, coordinationId);
   if (siblings.length > 0) {
     try {
       await operations.cancelRun(run.databaseId);
@@ -104,7 +104,8 @@ export async function coordinateRelease(operations, coordinationId) {
 }
 
 export function assertLiveDeployment(deployment, commit, projectId) {
-  if (deployment.projectId !== projectId || deployment.meta?.githubCommitSha !== commit ||
+  if (!deployment || typeof deployment !== 'object' || Array.isArray(deployment) ||
+    deployment.projectId !== projectId || deployment.meta?.githubCommitSha !== commit ||
     deployment.readyState !== 'READY' || deployment.target !== 'production') {
     throw new Error('live production deployment does not match the verified release');
   }

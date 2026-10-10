@@ -29,7 +29,11 @@ This entry point is not an installed automatic-on-merge workflow. Do not invoke 
 inside deploy.yml: the worker script correctly rejects an in-flight publishing run.
 Before unattended integration, move release initiation into one outer coordinator,
 disable competing push publication, and retain manual dispatch as a coordinated
-operator path. Provision restricted runner authentication and trusted VPS access
+operator path. Until then the guarantees in this document (SHA pinning,
+dispatch correlation, skipped-publication rejection, live-alias checks)
+apply to coordinator-driven workflow_dispatch releases only;
+push-to-main publication keeps its existing uncoordinated path.
+Provision restricted runner authentication and trusted VPS access
 without copying personal SSH keys or introducing a broad permanent token.
 
 The current VPS cannot SSH to its own deployment endpoint and has no gh CLI on its

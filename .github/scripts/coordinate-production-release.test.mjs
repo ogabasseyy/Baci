@@ -108,6 +108,17 @@ test('an approval-gated sibling aborts the release like any in-flight run', asyn
   assert.equal(setup.calls.at(-1), 'cancelRun');
 });
 
+test('an in-flight sibling on a different SHA aborts the release', async () => {
+  const setup = fixture({
+    listCoordinatedRuns: async () => [{
+      databaseId: 43, event: 'workflow_dispatch', headSha: 'c'.repeat(40),
+      status: 'in_progress', title: 'Coordinated release other-id',
+    }],
+  });
+  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
+  assert.equal(setup.calls.at(-1), 'cancelRun');
+});
+
 test('a completed sibling is an earlier release, not a racer', async () => {
   const setup = fixture({
     listCoordinatedRuns: async () => [{
@@ -190,5 +201,8 @@ test('live verification requires matching project, production target, state and 
     { readyState: 'ERROR' }, { target: 'preview' },
   ]) {
     assert.throws(() => assertLiveDeployment({ ...deployment, ...change }, commit, 'baci'), /does not match/);
+  }
+  for (const malformed of [null, undefined, [], 'READY', 42, { message: 'not found' }]) {
+    assert.throws(() => assertLiveDeployment(malformed, commit, 'baci'), /does not match/);
   }
 });

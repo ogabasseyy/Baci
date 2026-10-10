@@ -16,7 +16,13 @@ function command(binary, args, capture = true) {
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   });
-  if (result.error || result.status !== 0) throw new Error(`${binary} failed; inspect preceding diagnostics`);
+  if (result.error || result.status !== 0) {
+    // Keep reconciliation context: which call failed, how, and the
+    // first bytes of whatever it printed before dying.
+    const output = typeof result.stdout === 'string' ? result.stdout.trim().slice(0, 500) : '';
+    const cause = result.error ? ` (${result.error.message})` : '';
+    throw new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
+  }
   return capture ? result.stdout.trim() : '';
 }
 

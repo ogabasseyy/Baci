@@ -65,14 +65,16 @@ export async function coordinateRelease(operations, coordinationId) {
   if (await operations.readMain() !== commit) throw new Error('main changed during worker preparation; publication refused');
   const baseline = await operations.listRuns();
   if (baseline.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
-  await operations.dispatch(commit);
+  // Dispatch and discovery are the indeterminate window: once the
+  // dispatch request is sent, any failure (lost response, unknown
+  // outcome, ambiguity) means a run may exist that we cannot see, so
+  // the caller must hold the release lock for reconcile-before-removal
+  // instead of auto-releasing it for an immediate rerun.
   let run;
   try {
+    await operations.dispatch(commit);
     run = await operations.findRun(commit, baseline);
   } catch (error) {
-    // The dispatch was sent but its outcome is unknown: the caller
-    // must hold the release lock for reconcile-before-removal instead
-    // of auto-releasing it for an immediate rerun.
     if (error && typeof error === 'object') error.indeterminateDispatch = true;
     throw error;
   }

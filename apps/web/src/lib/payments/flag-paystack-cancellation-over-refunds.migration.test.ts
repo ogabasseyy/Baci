@@ -49,6 +49,35 @@ describe('flag paystack cancellation over refunds migration', () => {
     );
   });
 
+  it('merges later excess into the open review instead of discarding it', () => {
+    const mergePath = resolve(
+      __dirname,
+      '../../../../../supabase/migrations/20260928184900_merge_over_refund_evidence_into_open_review.sql'
+    );
+    expect(existsSync(mergePath)).toBe(true);
+    if (!existsSync(mergePath)) return;
+
+    const mergeSql = normalizeSql(readFileSync(mergePath, 'utf8'));
+
+    // Same signature: OR REPLACE keeps every existing call on the
+    // new body.
+    expect(mergeSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.flag_paystack_cancellation_over_refunds_v1('
+    );
+    // The open review absorbs the recomputed legs on conflict: a
+    // later provider-verified refund must grow the review, never
+    // vanish into DO NOTHING while ops resolves stale amounts.
+    expect(mergeSql).toContain(
+      'ON CONFLICT (issue_type, order_id) WHERE resolved_at IS NULL AND order_id IS NOT NULL DO UPDATE SET'
+    );
+    expect(mergeSql).toContain('merge_over_refund_review_legs_v1(');
+    expect(mergeSql).not.toContain('ON CONFLICT DO NOTHING');
+    // Keyed union: incoming legs win per payment leg, untouched
+    // legs persist, order is deterministic.
+    expect(mergeSql).toContain("elem->>'payment_transaction_id'");
+    expect(mergeSql).toContain('priority DESC');
+  });
+
   it('wires the over-refund flag into the shared finalizer', () => {
     const finalizePath = resolve(
       __dirname,

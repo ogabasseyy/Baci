@@ -49,6 +49,38 @@ describe('refund reference-watch migration', () => {
     expect(migrationSql).not.toContain("status IN ('open', 'claimed')");
   });
 
+  it('reuses the claimed watch on redelivery instead of retaining another', () => {
+    const reusePath = resolve(
+      __dirname,
+      '../../../../../supabase/migrations/20260928185000_reuse_claimed_reference_watch_on_redelivery.sql'
+    );
+    expect(existsSync(reusePath)).toBe(true);
+    if (!existsSync(reusePath)) return;
+
+    const reuseSql = normalizeSql(readFileSync(reusePath, 'utf8'));
+
+    // Same signature: OR REPLACE keeps every existing call on the
+    // new body.
+    expect(reuseSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.mark_paystack_refund_reference_watch_claimed_v1('
+    );
+    // When a claimed row already carries the handoff, the duplicate
+    // open row folds into it and is dropped — never flipped into a
+    // second permanent claimed row the completion claim scans
+    // forever.
+    expect(reuseSql).toContain("AND status = 'claimed'");
+    expect(reuseSql).toContain(
+      'DELETE FROM public.paystack_refund_recovery_watch'
+    );
+    // The fold keeps the sticky verdict rule: a delayed failed
+    // redelivery must not overwrite a processed observation.
+    expect(reuseSql).toContain(
+      "v_claimed_evidence->>'provider_refund_status' IS DISTINCT FROM 'failed'"
+    );
+    // First handling still flips open to claimed.
+    expect(reuseSql).toContain("SET status = 'claimed', updated_at = now()");
+  });
+
   it('keeps a non-failed verdict when a failed redelivery refreshes the watch', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;

@@ -204,6 +204,15 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         }),
       })
     );
+    // Mismatched captures retire under their own resolution so the
+    // cancellation transition (which only promotes verified clean legs)
+    // can never refund them.
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'verified_capture_mismatch_reviewed',
+      })
+    );
     expect(update).not.toHaveBeenCalled();
   });
 

@@ -109,6 +109,35 @@ export async function drainPaystackRefundNotifications(
         .eq('status', 'processing')
         .select('id')
         .maybeSingle();
+    // Restore a deferred row's pending release after a failed finish
+    // write. Deferred rows never attempted delivery, so re-releasing
+    // cannot double-send — but only on a proven state read, never
+    // blindly. Returns false when the row is no longer releasable,
+    // leaving it processing for the stale-claim sweep.
+    const recoverDeferredRelease = async (): Promise<boolean> => {
+      const { data: refetched, error: refetchError } = await supabase
+        .from('paystack_cancellation_refund_notifications')
+        .select('status, claim_token')
+        .eq('id', row.id)
+        .maybeSingle();
+      if (refetchError) return false;
+      const current = (refetched ?? null) as {
+        claim_token?: unknown;
+        status?: unknown;
+      } | null;
+      // The release landed unseen: nothing left to do.
+      if (current?.status === 'pending') return true;
+      if (
+        current?.status !== 'processing' ||
+        current?.claim_token !== row.claim_token
+      )
+        return false;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const retry = await persistFinish();
+        if (!retry.error && retry.data) return true;
+      }
+      return false;
+    };
     let finish = await persistFinish();
     if (finish.error) {
       // A database error is not a generation mismatch: the attempt
@@ -117,6 +146,10 @@ export async function drainPaystackRefundNotifications(
       finish = await persistFinish();
     }
     if (finish.error || !finish.data) {
+      // A deferred row never attempted delivery, so restoring its
+      // pending release is always safe — and parking it uncertain
+      // would terminalize a healthy row for a transient write blip.
+      if (outcome === 'deferred' && (await recoverDeferredRelease())) continue;
       if (!finish.error) {
         // No error, no row: the generation predicate rejected the
         // write. Re-read the row and requeue only on a proven race
@@ -169,6 +202,19 @@ export async function drainPaystackRefundNotifications(
             continue;
           }
         }
+      }
+      if (outcome === 'deferred') {
+        // Release failed and no race to requeue: never park a
+        // never-attempted row uncertain — leave it processing for the
+        // stale-claim sweep (15-minute backstop with an ops-visible
+        // error) instead of terminalizing a healthy row.
+        logger.error({
+          message:
+            'Refund notification deferred release could not be persisted',
+          notificationId: row.id,
+        });
+        failed++;
+        continue;
       }
       // Unproven race or failed retry: never requeue — the finish
       // may have persisted unseen, and a second sweep would re-send.

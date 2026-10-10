@@ -142,10 +142,17 @@ export async function fileDuplicatePaymentCapture({
     evidence.gateway === 'paystack'
       ? 'stamp_abandoned_sweep_resolution_v1'
       : 'stamp_abandoned_sweep_resolution_any_gateway_v1';
+  // Mismatched captures keep their own stamp: the cancellation
+  // transition only promotes verified_success_captured legs, and
+  // promoting a contradictory capture would refund with the mismatched
+  // reference or currency. The gate and sweep carve out any stamped
+  // row, so the mismatch stamp still retires the leg for operations.
   const { data: stamped, error: stampError } = await supabase.rpc(stampFn, {
     p_transaction_id: attempt.id,
     p_expected_reference: attempt.gateway_reference,
-    p_resolution: 'verified_success_captured',
+    p_resolution: evidence.mismatchKind
+      ? 'verified_capture_mismatch_reviewed'
+      : 'verified_success_captured',
   });
   return !stampError && stamped === true;
 }

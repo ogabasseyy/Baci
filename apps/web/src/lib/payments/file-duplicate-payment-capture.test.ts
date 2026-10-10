@@ -115,6 +115,41 @@ describe('fileDuplicatePaymentCapture', () => {
     );
   });
 
+  it('stamps mismatched captures with their own resolution', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const db = {
+      from: vi.fn(() => ({ insert })),
+      rpc,
+    };
+
+    await expect(
+      fileDuplicatePaymentCapture({
+        attempt,
+        evidence: {
+          ...evidence,
+          mismatchDetail: 'amount differs',
+          mismatchKind: 'payment_evidence_mismatch',
+        },
+        supabase: db as never,
+      })
+    ).resolves.toBe(true);
+    // The cancellation transition only promotes verified_success_captured
+    // legs: a contradictory capture must never carry the clean stamp, or
+    // cancelling would refund with the mismatched reference or currency.
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'verified_capture_mismatch_reviewed',
+        p_transaction_id: 'attempt-1',
+      })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'verified_success_captured' })
+    );
+  });
+
   it('merges into the open review on conflict', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });

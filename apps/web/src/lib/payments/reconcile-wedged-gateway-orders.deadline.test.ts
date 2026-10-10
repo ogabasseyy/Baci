@@ -180,6 +180,52 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
     }
   });
 
+  it('interleaves filing-only retries with mains so the deadline cannot starve them', async () => {
+    const retryCandidate = {
+      ...wedgedCandidate,
+      gateway_reference: 'retry-ref-1',
+      id: 'txn-retry-1',
+      metadata: { duplicate_capture_review_pending: 'true' },
+      orders: { cancelled_at: null, id: 'order-1', payment_status: 'paid' },
+    };
+    const builder: Record<string, unknown> = {};
+    const select = vi.fn().mockReturnValue(builder);
+    builder.select = select;
+    for (const method of ['eq', 'neq', 'not', 'lt', 'is', 'or', 'order']) {
+      builder[method] = vi.fn().mockReturnValue(builder);
+    }
+    builder.limit = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [wedgedCandidate, wedgedCandidate] })
+      .mockResolvedValueOnce({ data: [retryCandidate, retryCandidate] })
+      .mockResolvedValue({ data: [], error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue(builder),
+    } as unknown as SupabaseClient;
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: true,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    await reconcileWedgedGatewayOrders({ scheduleAfter, supabase });
+
+    // Mains-first interleave: a retry runs second even when mains fill
+    // the batch, so a deadline stop still lets filing-only rows file.
+    expect(
+      mocks.verifyPaystackPayment.mock.calls.map(([reference]) => reference)
+    ).toEqual([
+      wedgedCandidate.gateway_reference,
+      'retry-ref-1',
+      wedgedCandidate.gateway_reference,
+      'retry-ref-1',
+    ]);
+  });
+
   it('bounds in-flight verification to the remaining pass share', async () => {
     const supabase = buildSupabase({ data: [wedgedCandidate] });
     mocks.verifyPaystackPayment.mockResolvedValue({

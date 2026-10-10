@@ -126,19 +126,21 @@ export async function processCancellationDrain(
   // so a rejection-only check would report persistent outages as success.
   const cancellationFailures =
     cancellationResult.status === 'fulfilled'
-      ? cancellationResult.value.failed.length
+      ? (cancellationResult.value.failed ?? []).length
       : 0;
   const refundFailures =
-    refundResult.status === 'fulfilled' ? refundResult.value.failed : 0;
+    refundResult.status === 'fulfilled' ? (refundResult.value.failed ?? 0) : 0;
   const legacyRefundFailures =
     legacyRefundResult.status === 'fulfilled'
-      ? legacyRefundResult.value.failed
+      ? (legacyRefundResult.value.failed ?? 0)
       : 0;
   const watchSweepFailures =
-    watchSweepResult.status === 'fulfilled' ? watchSweepResult.value.failed : 0;
+    watchSweepResult.status === 'fulfilled'
+      ? (watchSweepResult.value.failed ?? 0)
+      : 0;
   const notificationFailures =
     notificationResult[0].status === 'fulfilled'
-      ? notificationResult[0].value.failed
+      ? (notificationResult[0].value.failed ?? 0)
       : 0;
   // A worker shape without the field must read as zero, not
   // undefined: `undefined > 0` happens to be false, but the value is

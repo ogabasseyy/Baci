@@ -289,6 +289,96 @@ describe('refund notification cron deadline', () => {
     );
   });
 
+  it('restores a deferred release instead of parking it uncertain after finish errors', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn();
+    // Both finish writes error, but the row never attempted delivery:
+    // the re-read proves it is still ours, so the pending release is
+    // retried instead of parking a healthy row delivery_uncertain.
+    db.finish.maybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValueOnce({
+        data: { claim_token: 'claim-1', status: 'processing' },
+        error: null,
+      });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined,
+      1_060_000
+    );
+
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+    expect(db.finish.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'delivery_uncertain' })
+    );
+  });
+
+  it('leaves an unrecoverable deferred row processing instead of parking it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn();
+    // Every write fails: the row stays processing for the stale-claim
+    // sweep rather than terminalizing a never-attempted row as
+    // delivery_uncertain, and the failure surfaces once.
+    db.finish.maybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValueOnce({
+        data: { claim_token: 'claim-1', status: 'processing' },
+        error: null,
+      })
+      .mockResolvedValue({ data: null, error: { message: 'down' } });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined,
+      1_060_000
+    );
+
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'delivery_uncertain' })
+    );
+  });
+
   it('skips the push and sends the capped email when only the email fits', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);

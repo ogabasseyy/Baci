@@ -135,9 +135,10 @@ describe('Expo compliance', () => {
       'utf-8'
     );
     // Split-config indirection: app.config.ts now delegates to the
-    // production builder, which imports the nested helpers relatively.
-    // Follow the delegation so the no-type-stripping pin still covers
-    // the helpers actually loaded in production.
+    // production builder, which loads the nested helpers relatively
+    // (ES imports in the .ts builder, CJS require in the plain-CJS
+    // .js builder). Follow the delegation so the no-type-stripping
+    // pin still covers the helpers actually loaded in production.
     const builderMatch = configSource.match(/require\('(\.\/config\/[^']+)'\)/);
     const builderSource = builderMatch
       ? readFileSync(path.join(ROOT, builderMatch[1]), 'utf-8')
@@ -149,7 +150,7 @@ describe('Expo compliance', () => {
     ].map((match) => match[1]);
     const builderHelperPaths = [
       ...builderSource.matchAll(
-        /from\s+'(\.\/(?:expo-plugins|resolve-update-channel)[^']*)'/g
+        /(?:from\s+'|require\(')(\.\/(?:expo-plugins|resolve-update-channel)[^']*)/g
       ),
     ].map((match) => `./config/${match[1].slice(2)}`);
     const allHelperPaths = [...helperPaths, ...builderHelperPaths];

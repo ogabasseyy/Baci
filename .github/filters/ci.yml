@@ -203,6 +203,7 @@ deploy_scripts:
   - '.github/scripts/verify-coordinated-release.test.mjs'
   - 'ci_scripts/validate-promote-record.mjs'
   - 'ci_scripts/validate-promote-record.test.mjs'
+  - 'lefthook.yml'
   - '.github/scripts/preview-workflow-contract.test.mjs'
   - '.github/scripts/preview-workflow-contract-parsing.test.mjs'
   - '.github/scripts/preview-workflow-redact-contract.test.mjs'

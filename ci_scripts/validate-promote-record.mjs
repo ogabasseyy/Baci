@@ -61,9 +61,12 @@ function readTreeEntries(revision) {
       const [mode, type, object] = metadata.split(' ');
       if (type !== 'blob' || !/^[a-f0-9]{40}$/.test(object))
         throw new Error('invalid operational record object');
+      // Read buffer sits above the 16384-character policy limit: the
+      // policy check below stays authoritative, and an over-limit blob
+      // fails there instead of tripping ENOBUFS mid-read.
       const content = execFileSync('git', ['cat-file', 'blob', object], {
         encoding: 'utf8',
-        maxBuffer: 16384,
+        maxBuffer: 65536,
       });
       return { path, mode, content };
     });

@@ -92,6 +92,10 @@ export async function coordinateRelease(operations, coordinationId) {
   }
   await operations.watchRun(run.databaseId);
   const jobs = await operations.readJobs(run.databaseId);
+  // gh run view reports the latest attempt's jobs for the single
+  // non-matrixed deploy-production job, so exactly one success is the
+  // green shape; re-runs supersede earlier attempts rather than
+  // appending entries.
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
     throw new Error('production publication did not succeed; inspect the workflow');
   }

@@ -1,5 +1,5 @@
 name: Deploy to Vercel
-run-name: ${{ inputs.coordination_id && format('Coordinated release {0}', inputs.coordination_id) || format('Deploy {0}', github.sha) }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.coordination_id && format('Coordinated release {0}', inputs.coordination_id) || format('Deploy {0}', github.sha) }}
 
 on:
   push:

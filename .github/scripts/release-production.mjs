@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 
@@ -28,7 +28,7 @@ export function assertVercelApiSupport(probe) {
   try {
     probe();
   } catch {
-    throw new Error('operator Vercel CLI must provide `vercel api` (>= 50.5.0); upgrade vercel and retry');
+    throw new Error('operator Vercel CLI must provide `vercel api` (>= 50.5.1); upgrade vercel and retry');
   }
 }
 
@@ -36,6 +36,28 @@ export function originRepoSlug(remoteUrl) {
   const withoutSuffix = String(remoteUrl ?? '').replace(/\.git$/, '');
   const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
   return match ? match[1].toLowerCase() : '';
+}
+
+export function assertCanonicalOriginPushUrls(pushUrls) {
+  const urls = String(pushUrls ?? '').split('\n').map(line => line.trim()).filter(Boolean);
+  if (urls.length === 0 || !urls.every(url => originRepoSlug(url) === repository.toLowerCase())) {
+    throw new Error('release checkout must use the canonical repository');
+  }
+}
+
+export function assertCleanWorkerDeployEnv(env = process.env) {
+  if (env.BACI_DEPLOY_SKIP_INFLIGHT_CHECK === '1') {
+    throw new Error('refusing release with BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1; unset it so worker promotion stays strict');
+  }
+  if (env.BACI_DEPLOY_WORKFLOW_REPO) {
+    throw new Error(`refusing release with BACI_DEPLOY_WORKFLOW_REPO=${env.BACI_DEPLOY_WORKFLOW_REPO}; unset it so promotion queries the canonical repository`);
+  }
+}
+
+export function assertRemovableLockPath(lockPath) {
+  if (basename(resolve(lockPath)) !== 'baci-production-release.lock') {
+    throw new Error(`refusing to remove unexpected lock path: ${lockPath}`);
+  }
 }
 
 // Pagination is manual and capped: one gh call per page, each holding at
@@ -58,10 +80,13 @@ export function readRuns(filter, paginate = false) {
   const runs = [];
   const lastPage = paginate ? RUNS_MAX_PAGES : 1;
   for (let page = 1; page <= lastPage; page++) {
-    const batch = JSON.parse(gh(['api',
-      `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`])).workflow_runs;
-    runs.push(...batch.map(slimWorkflowRun));
-    if (batch.length < RUNS_PAGE_SIZE) break;
+    const payload = JSON.parse(gh(['api',
+      `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`]));
+    if (!Array.isArray(payload.workflow_runs)) {
+      throw new Error(`workflow run listing for ${filter} returned no runs payload; inspect preceding gh diagnostics`);
+    }
+    runs.push(...payload.workflow_runs.map(slimWorkflowRun));
+    if (payload.workflow_runs.length < RUNS_PAGE_SIZE) break;
   }
   return runs;
 }
@@ -73,18 +98,20 @@ async function main() {
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
   // Live-alias verification shells to `vercel api` (shipped in CLI
-  // 50.5.0). Preflight before acquiring the lock: a purely local
-  // precondition failure must not leave a lock behind, and the probe
-  // needs no mutual exclusion.
+  // 50.5.1). Preflight before acquiring the lock: a purely local
+  // precondition failure must not leave a lock behind, and the probes
+  // need no mutual exclusion.
   assertVercelApiSupport(() => command('vercel', ['api', '--help']));
+  assertCleanWorkerDeployEnv();
   acquireReleaseLock(lockPath);
   try {
     const result = await coordinateRelease({
       verifyCheckout: async () => {
         if (command('git', ['status', '--porcelain', '--untracked-files=all'])) throw new Error('release checkout must be clean');
-        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'])) !== repository.toLowerCase()) {
-          throw new Error('release checkout must use the canonical repository');
-        }
+        // Push URLs, not the fetch URL: a forked pushurl would send the
+        // promote barrier and record where production cannot see them.
+        // Without an explicit pushurl this falls back to the fetch URL.
+        assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin']));
         return command('git', ['rev-parse', 'HEAD']);
       },
       readMain: async () => gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha']),
@@ -122,6 +149,7 @@ async function main() {
     }, coordinationId);
     process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);
   } finally {
+    assertRemovableLockPath(lockPath);
     rmSync(lockPath, { recursive: true });
   }
 }

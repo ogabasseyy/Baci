@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { parse as parseYaml } from 'yaml';
 import { validateRecordTree } from './validate-promote-record.mjs';
 
 const commit = 'b'.repeat(40);
@@ -70,6 +71,17 @@ test('rejects missing, malformed or oversized operational records', () => {
   ]) {
     assert.throws(() => validateRecordTree([{ ...record, content }]), /record/);
   }
+});
+
+test('the pre-push hook invokes promote-record validation', () => {
+  const config = parseYaml(
+    readFileSync(new URL('../lefthook.yml', import.meta.url), 'utf8')
+  );
+  const hook = config['pre-push'].commands['behind-base'].run;
+  assert.match(hook, /validate-promote-record\.mjs/);
+  assert.match(hook, /refs\/heads\/ops\/gigl-promote-record/);
+  assert.match(hook, /Refusing deletion of ops\/gigl-promote-record/);
+  assert.match(hook, /exit \$promote_fail/);
 });
 
 test('accepts barrier bodies with or without the trailing newline', () => {

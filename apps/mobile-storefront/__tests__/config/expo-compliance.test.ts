@@ -143,19 +143,27 @@ describe('Expo compliance', () => {
     const builderSource = builderMatch
       ? readFileSync(path.join(ROOT, builderMatch[1]), 'utf-8')
       : '';
+    const helperPattern =
+      'android-intent-filters|expo-plugins|resolve-update-channel|sentry-expo-config|sentry-required-environment|tiktok-constants';
     const helperPaths = [
       ...configSource.matchAll(
-        /require\('(\.\/config\/(?:expo-plugins|resolve-update-channel)[^']*)'\)/g
+        new RegExp(
+          `require\\('(\\.\\/config\\/(?:${helperPattern})[^']*)'\\)`,
+          'g'
+        )
       ),
     ].map((match) => match[1]);
     const builderHelperPaths = [
       ...builderSource.matchAll(
-        /(?:from\s+'|require\(')(\.\/(?:expo-plugins|resolve-update-channel)[^']*)/g
+        new RegExp(
+          `(?:from\\s+'|require\\(')(\\.\\/(?:${helperPattern})[^']*)`,
+          'g'
+        )
       ),
     ].map((match) => `./config/${match[1].slice(2)}`);
     const allHelperPaths = [...helperPaths, ...builderHelperPaths];
 
-    expect(allHelperPaths).toHaveLength(2);
+    expect(allHelperPaths).toHaveLength(6);
 
     const result = spawnSync(
       process.execPath,

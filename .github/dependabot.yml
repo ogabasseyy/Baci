@@ -83,6 +83,10 @@ updates:
     directory: "/"
     # This privileged workflow has reviewed action trust anchors. Upgrade its
     # pins together with the SARIF audit and mutation tests in a manual PR.
+    # NOTE: exclude-paths covers version updates only — Dependabot security
+    # updates still open PRs for excluded paths. Convert any security PR
+    # touching muse-code-review.yml to the manual pin-update procedure in
+    # .github/muse-code-review.md instead of merging it directly.
     exclude-paths:
       - ".github/workflows/muse-code-review.yml"
     schedule:

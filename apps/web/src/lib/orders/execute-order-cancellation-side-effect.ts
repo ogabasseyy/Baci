@@ -73,17 +73,6 @@ export async function executeOrderCancellationSideEffect({
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
   }
-  const refundAmount = Number(order.amount_paid) || 0;
-  if (
-    transactions.some(
-      (transaction) =>
-        !transaction.currency || transaction.currency !== order.currency
-    )
-  ) {
-    throw new DeliveryUncertainError(
-      'Payment currency requires review before refund'
-    );
-  }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
     .select('gateway_reference, metadata, status, amount, currency, gateway')
@@ -280,15 +269,29 @@ export async function executeOrderCancellationSideEffect({
       !mismatchedIds.has(transaction.id) &&
       !auditBlockedLegIds.has(transaction.id)
   );
+  // Only outstanding legs face initiation: fully refunded legs need no
+  // provider call, so a quirk on one must not strand the clean legs.
+  const outstandingTransactions = initiationTransactions.filter(
+    (transaction) => !refundedPaymentIds.has(transaction.id)
+  );
+  if (
+    outstandingTransactions.some(
+      (transaction) =>
+        !transaction.currency || transaction.currency !== order.currency
+    )
+  ) {
+    throw new DeliveryUncertainError(
+      'Payment currency requires review before refund'
+    );
+  }
   // Captures may legitimately exceed the recorded amount paid when
   // superseded legs exist (their completed refunds already cover them),
   // but the outstanding initiation itself must never exceed it.
-  const outstandingRefundKobo = initiationTransactions
-    .filter((transaction) => !refundedPaymentIds.has(transaction.id))
-    .reduce(
-      (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
-      0
-    );
+  const refundAmount = Number(order.amount_paid) || 0;
+  const outstandingRefundKobo = outstandingTransactions.reduce(
+    (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
+    0
+  );
   if (outstandingRefundKobo > Math.round(refundAmount * 100)) {
     throw new Error('Completed payment transaction has no refundable amount');
   }

@@ -64,7 +64,7 @@ async function handle(
         p_refunded_at: body.refundedAt,
         p_method: body.method,
         p_reference: body.reference,
-        p_note: body.note ?? null,
+        p_note: body.note?.trim() ? body.note : null,
       });
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);

@@ -96,6 +96,26 @@ describe('order refund route', () => {
     );
   });
   it.each([
+    [''],
+    ['   '],
+    [undefined],
+  ])('stores a blank manual note (%s) as null', async (note) => {
+    const body = {
+      action: 'manual',
+      amount: 50,
+      refundedAt: '2026-09-28T12:00:00Z',
+      reference: 'bank-1',
+      method: 'bank_transfer',
+      confirmed: true,
+      note,
+    };
+    expect((await POST(request(body), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'manage_order_refund',
+      expect.objectContaining({ p_note: null })
+    );
+  });
+  it.each([
     [
       '42501',
       403,

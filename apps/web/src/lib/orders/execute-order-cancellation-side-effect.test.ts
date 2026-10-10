@@ -213,6 +213,61 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 
+  it('refunds the clean leg when only a fully-refunded leg has a foreign currency', async () => {
+    const supabase = refundClient({
+      payments: [
+        {
+          ...paystackPayment,
+          id: 'payment-usd',
+          gateway_reference: 'ref-usd',
+          currency: 'USD',
+        },
+        {
+          ...paystackPayment,
+          id: 'payment-2',
+          gateway_reference: 'ref-2',
+          amount: 40,
+        },
+      ],
+      refundRows: [
+        {
+          amount: 100,
+          currency: 'USD',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'payment-usd',
+            provider_refund_status: 'processed',
+          },
+          status: 'completed',
+        },
+      ],
+    });
+    mocks.initiateRefund.mockResolvedValue({
+      data: {
+        id: 45,
+        status: 'processed',
+        transaction: { id: 125, reference: 'ref-2' },
+      },
+      success: true,
+    });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toEqual({ refundIds: [45] });
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.initiateRefund).toHaveBeenCalledWith(
+      'ref-2',
+      4000,
+      'Order cancelled',
+      undefined
+    );
+  });
+
   it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 0 }],

@@ -108,9 +108,14 @@ async function main() {
     const result = await coordinateRelease({
       verifyCheckout: async () => {
         if (command('git', ['status', '--porcelain', '--untracked-files=all'])) throw new Error('release checkout must be clean');
-        // Push URLs, not the fetch URL: a forked pushurl would send the
-        // promote barrier and record where production cannot see them.
-        // Without an explicit pushurl this falls back to the fetch URL.
+        // Both directions: a forked pushurl would send the promote
+        // barrier and record where production cannot see them, while a
+        // forked fetch URL would make the worker in-flight guard query
+        // the fork and miss active canonical runs. Without an explicit
+        // pushurl the push query falls back to the fetch URL.
+        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'])) !== repository.toLowerCase()) {
+          throw new Error('release checkout must use the canonical repository');
+        }
         assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin']));
         return command('git', ['rev-parse', 'HEAD']);
       },

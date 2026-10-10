@@ -9,10 +9,13 @@ export function decryptPrefundedCardLegacyReceipt(
   try {
     const receipt = schemas.sealed.parse(input);
     const encryptionKey = schemas.encryptionKey.parse(key);
+    // Explicit 16-byte GCM tag length: the schema pins authTag to 16 bytes,
+    // and an explicit length keeps truncated tags rejected at the crypto layer.
     const decipher = createDecipheriv(
       'aes-256-gcm',
       Buffer.from(encryptionKey, 'base64'),
-      Buffer.from(receipt.nonce, 'base64')
+      Buffer.from(receipt.nonce, 'base64'),
+      { authTagLength: 16 }
     );
     decipher.setAAD(
       Buffer.from(

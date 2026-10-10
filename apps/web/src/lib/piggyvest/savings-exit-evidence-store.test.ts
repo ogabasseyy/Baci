@@ -20,6 +20,7 @@ const configuration = {
   integrationId: '40000000-0000-4000-8000-000000000001',
   socketDirectory: '/private/tmp/baci-savings-exit-accounting.synthetic/socket',
   port: 55454,
+  password: 'synthetic-local-only',
 };
 const receipt = {
   eventId: 'event',
@@ -65,6 +66,12 @@ describe('restricted local evidence recorder', () => {
     ).toThrow();
     expect(() =>
       createSavingsExitEvidenceStore({ ...configuration, role: 'service_role' })
+    ).toThrow();
+    expect(() =>
+      createSavingsExitEvidenceStore({
+        ...configuration,
+        password: 'remote-password',
+      })
     ).toThrow();
     const execute = createSavingsExitEvidenceStore(configuration);
     await expect(execute('SELECT forbidden()', [])).rejects.toThrow('denied');

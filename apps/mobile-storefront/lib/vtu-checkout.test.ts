@@ -13,15 +13,11 @@ import {
 } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import {
-  chargeSavedVtuCard,
   chargeWalletForVtu,
-  computeVtuWalletAmount,
   confirmVtuCheckout,
-  initializeVtuCheckout,
   listSavedVtuCards,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
-  VTU_CHECKOUT_INITIALIZE_URL,
   VTU_CHECKOUT_WALLET_ONLY_URL,
   VtuPaymentStillProcessingError,
   waitForVtuConfirmation,
@@ -143,68 +139,6 @@ describe('vtu-checkout service', () => {
     expect(
       normalizeVtuCheckoutPayload({ amount: 1000, networkProvider: 'unknown' })
     ).toMatchObject({ networkProvider: 'unknown' });
-  });
-
-  it('initializes VTU checkout with the authenticated token', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    const result = await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      type: 'airtime',
-    });
-
-    expect(result.reference).toBe('VTU-123');
-    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
-      VTU_CHECKOUT_INITIALIZE_URL,
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token-123',
-        }),
-      })
-    );
-    expect(parseMockRequestBody()).toMatchObject({
-      networkProvider: MOBILE_TO_KUDA_PROVIDER.mtn,
-    });
-  });
-
-  it('sends bank transfer as a utility checkout gateway while using Paystack for confirmation', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/bank-transfer',
-        gateway: 'paystack',
-        reference: 'VTU-BANK-123',
-        vtu_reference: 'REQ-BANK-123',
-        vtu_transaction_id: 'vtu-bank-1',
-      }),
-    });
-
-    const result = await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'bank_transfer',
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      type: 'airtime',
-    });
-
-    expect(result.gateway).toBe('paystack');
-    expect(parseMockRequestBody()).toMatchObject({
-      gateway: 'bank_transfer',
-    });
   });
 
   it('confirms a successful VTU checkout', async () => {
@@ -353,93 +287,6 @@ describe('vtu-checkout service', () => {
     expect(result[0]?.label).toBe('Access Bank ending 1234');
   });
 
-  it('handles saved-card charges that require extra authorization', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        requires_authorization: true,
-        authorization_url: 'https://paystack.com/pay/auth',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-      }),
-    });
-
-    const result = await chargeSavedVtuCard({
-      amount: 1000,
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      savedPaymentMethodId: '550e8400-e29b-41d4-a716-446655440000',
-      type: 'airtime',
-    });
-
-    expect(result).toMatchObject({
-      authorization_url: 'https://paystack.com/pay/auth',
-      requires_authorization: true,
-    });
-  });
-
-  // Phase B.8 — wallet-payment threading. Three behaviours pinned at
-  // the network layer:
-  //   1. Hybrid initialize forwards walletAmount to the server.
-  //   2. Card-only initialize strips walletAmount entirely (no
-  //      `walletAmount: 0` noise; mirrors orders' guard).
-  //   3. Wallet-only POSTs to the dedicated route with a fresh
-  //      Idempotency-Key header.
-
-  it('initializeVtuCheckout: forwards walletAmount when positive (hybrid)', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      networkProvider: 'mtn',
-      phoneNumber: '08012345678',
-      type: 'airtime',
-      walletAmount: 300,
-    });
-
-    expect(parseMockRequestBody()).toMatchObject({
-      walletAmount: 300,
-      amount: 1000,
-    });
-  });
-
-  it('initializeVtuCheckout: strips walletAmount when 0 (card-only)', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      networkProvider: 'mtn',
-      phoneNumber: '08012345678',
-      type: 'airtime',
-      walletAmount: 0,
-    });
-
-    expect(parseMockRequestBody()).not.toHaveProperty('walletAmount');
-  });
-
   it('chargeWalletForVtu: posts to wallet-only with the caller-supplied Idempotency-Key header', async () => {
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
@@ -480,32 +327,6 @@ describe('vtu-checkout service', () => {
     // body field — leaking it into the body would defeat the
     // schema's parsed shape and could expose the key in logs.
     expect(body).not.toHaveProperty('idempotencyKey');
-  });
-});
-
-describe('computeVtuWalletAmount', () => {
-  it('clamps a stale selection amount down to the current bill total', () => {
-    // User enabled wallet for ₦1000 plan, then switched to a ₦500
-    // plan — the captured selection.amount is now larger than the
-    // bill. Without clamping the server would 400 on
-    // walletAmount > amount.
-    expect(computeVtuWalletAmount(1000, 500)).toBe(500);
-  });
-
-  it('passes through a selection amount within the bill total', () => {
-    expect(computeVtuWalletAmount(300, 1000)).toBe(300);
-  });
-
-  it('treats wallet-toggle-off (selection 0 or undefined) as no wallet contribution', () => {
-    expect(computeVtuWalletAmount(0, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(undefined, 1000)).toBe(0);
-  });
-
-  it('rejects negative or non-finite inputs by returning 0', () => {
-    expect(computeVtuWalletAmount(-1, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(Number.NaN, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(500, Number.NaN)).toBe(0);
-    expect(computeVtuWalletAmount(500, 0)).toBe(0);
   });
 });
 

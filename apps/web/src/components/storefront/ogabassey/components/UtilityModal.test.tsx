@@ -69,32 +69,16 @@ describe('UtilityModal', () => {
     });
   });
 
-  it('shows available wallet credit as a selected payment method', () => {
+  it('shows available wallet credit as the only payment method', () => {
     renderOpenModal();
 
     expect(
       screen.getByRole('radio', { name: /pay with wallet/i })
     ).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByText(/₦500 available/i)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /pay with card/i })).toBeInTheDocument();
-  });
-
-  it('reports the payment method when the customer selects card', () => {
-    renderOpenModal();
-
-    fireEvent.click(screen.getByRole('radio', { name: /pay with card/i }));
-
-    expect(harness.captureEvent).toHaveBeenCalledTimes(1);
-    expect(harness.captureEvent).toHaveBeenCalledWith(
-      'utility_payment_method_selected',
-      expect.objectContaining({
-        method: 'card',
-        can_use_wallet: true,
-        wallet_balance: 500,
-        merchant_slug: 'ogabassey',
-        customer_id: 'customer-1',
-      })
-    );
+    expect(
+      screen.queryByRole('radio', { name: /pay with card/i })
+    ).not.toBeInTheDocument();
   });
 
   it('reports the payment method when the customer selects wallet', () => {

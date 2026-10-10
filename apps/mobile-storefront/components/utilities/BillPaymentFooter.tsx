@@ -19,7 +19,6 @@ interface BillPaymentFooterProps {
   isKeyboardVisible: boolean;
   numericAmount: number;
   onPurchase: () => void;
-  selectedSavedCardId: string | null;
 }
 
 export function BillPaymentFooter({
@@ -30,11 +29,8 @@ export function BillPaymentFooter({
   isKeyboardVisible,
   numericAmount,
   onPurchase,
-  selectedSavedCardId,
 }: BillPaymentFooterProps) {
-  const paymentLabel = selectedSavedCardId
-    ? `Pay ${BILL_PAYMENT_AMOUNT_FORMATTER.format(numericAmount)}`
-    : 'Continue to Payment';
+  const paymentLabel = `Pay ${BILL_PAYMENT_AMOUNT_FORMATTER.format(numericAmount)}`;
 
   return (
     <View

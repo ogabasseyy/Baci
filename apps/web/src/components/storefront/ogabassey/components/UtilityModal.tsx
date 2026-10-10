@@ -7,6 +7,7 @@ import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { WALLET_FUNDING_TELEMETRY } from '@/lib/posthog/wallet-funding-events';
 import { useWallet } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet';
 import { useCustomerFormReset } from './use-customer-form-reset';
+import { useUtilityFundingPanel } from './use-utility-funding-panel';
 import { useUtilityPendingIntent } from './use-utility-pending-intent';
 import { useUtilityPurchase } from './use-utility-purchase';
 import { AirtimeDataForm } from './utility/AirtimeDataForm';
@@ -15,7 +16,6 @@ import { UtilityPaymentMethodSelector } from './UtilityPaymentMethodSelector';
 import { UtilityWalletFundingPanel } from './UtilityWalletFundingPanel';
 import { UtilitySuccessView } from './UtilitySuccessView';
 import { UtilityTabs, type UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UtilityModalProps {
   isOpen: boolean;
@@ -39,7 +39,6 @@ export const UtilityModal = ({
   const user = auth?.user ?? null;
   const {
     fundingAccount,
-    payWithWallet,
     refreshWallet,
     requiresFundingAccountConsent,
     setFundingAccount,
@@ -47,6 +46,7 @@ export const UtilityModal = ({
     setWalletBalance,
     walletBalance,
     walletDvaEnabled,
+    walletError,
     walletLoading,
     walletTransactions,
   } = useWallet({
@@ -57,19 +57,22 @@ export const UtilityModal = ({
   const { clearIntent, intent, saveIntent } = useUtilityPendingIntent(
     customer?.id
   );
-  const [showFundingPanel, setShowFundingPanel] = useState(false);
   const canUseWallet = isAuthenticated && walletBalance > 0;
-  // The DVA is the customer's wallet funding account. Offer the action when
-  // the merchant supports DVAs and the wallet API says either an account
-  // exists or account creation is available; the panel collects a missing
-  // phone at the point of need instead of hiding the action.
-  const canFundByBankTransfer =
-    isAuthenticated &&
-    walletDvaEnabled &&
-    (Boolean(fundingAccount) || requiresFundingAccountConsent);
-  const selectedPaymentMethod: UtilityPaymentMethod =
-    canUseWallet && payWithWallet ? 'wallet' : 'card';
-
+  const {
+    canFundByBankTransfer,
+    closeFundingPanel,
+    fundingPanelAutoCreate,
+    openForInsufficientBalance,
+    showFundingPanel,
+    toggleFromExplicitChoice,
+  } = useUtilityFundingPanel({
+    fundingAccount,
+    isAuthenticated,
+    merchantSlug: merchant?.slug,
+    requiresFundingAccountConsent,
+    userId: user?.id,
+    walletDvaEnabled,
+  });
   const {
     handleAirtimeDataSubmit,
     handleBillSubmit,
@@ -80,15 +83,19 @@ export const UtilityModal = ({
     transactionRef,
   } = useUtilityPurchase({
     activeTab,
+    canFundByBankTransfer,
     clearIntent,
     customer,
     isAuthLoading,
     isAuthenticated,
     merchantSlug: merchant?.slug,
-    selectedPaymentMethod,
+    onInsufficientWalletBalance: openForInsufficientBalance,
+    refreshWallet,
     setWalletBalance,
     user,
     walletBalance,
+    walletError,
+    walletLoading,
   });
 
   // Stable identity of the owned resume draft; null when nothing to resume.
@@ -123,7 +130,7 @@ export const UtilityModal = ({
       setStep('details');
       // Collapse the funding panel so reopening never re-triggers DVA
       // auto-create without a fresh "Pay with Bank Transfer" tap.
-      setShowFundingPanel(false);
+      closeFundingPanel();
       setAppliedIntentKey(intentKey);
     } else {
       // Re-arm seeding for the next open.
@@ -140,30 +147,18 @@ export const UtilityModal = ({
     setAppliedIntentKey(intentKey);
   }
 
-  // Collapse the funding panel if the signed-in customer OR the storefront
-  // merchant changes while the modal stays mounted — a previous session's
-  // open bank-transfer panel (with its DVA account number) must not carry
-  // over to a different customer or merchant.
-  const fundingIdentity = `${user?.id ?? ''}:${merchant?.slug ?? ''}`;
-  const [prevFundingIdentity, setPrevFundingIdentity] =
-    useState(fundingIdentity);
-  if (fundingIdentity !== prevFundingIdentity) {
-    setPrevFundingIdentity(fundingIdentity);
-    setShowFundingPanel(false);
-  }
-
-  const handleSelectPaymentMethod = (method: UtilityPaymentMethod) => {
+  const handleSelectWallet = () => {
     captureClientEvent(
       WALLET_FUNDING_TELEMETRY.events.paymentMethodSelected,
       {
-        method,
+        method: 'wallet',
         wallet_balance: walletBalance,
         can_use_wallet: canUseWallet,
         merchant_slug: merchant?.slug,
         customer_id: customer?.id,
       }
     );
-    setPayWithWallet(method === 'wallet');
+    setPayWithWallet(true);
   };
 
   const handleClose = () => {
@@ -225,13 +220,9 @@ export const UtilityModal = ({
                 canUseWallet={canUseWallet}
                 isLoading={loading}
                 onFundWallet={
-                  canFundByBankTransfer
-                    ? () => setShowFundingPanel((visible) => !visible)
-                    : undefined
+                  canFundByBankTransfer ? toggleFromExplicitChoice : undefined
                 }
-                onSelectCard={() => handleSelectPaymentMethod('card')}
-                onSelectWallet={() => handleSelectPaymentMethod('wallet')}
-                selectedPaymentMethod={selectedPaymentMethod}
+                onSelectWallet={handleSelectWallet}
                 showWalletRow={isAuthenticated}
                 walletBalance={walletBalance}
                 walletLoading={walletLoading}
@@ -239,7 +230,7 @@ export const UtilityModal = ({
               {showFundingPanel && canFundByBankTransfer ? (
                 <UtilityWalletFundingPanel
                   account={fundingAccount}
-                  autoCreate
+                  autoCreate={fundingPanelAutoCreate}
                   customerId={customer?.id}
                   customerFirstName={customer?.first_name ?? null}
                   customerLastName={customer?.last_name ?? null}
@@ -250,7 +241,7 @@ export const UtilityModal = ({
                   onReturnToPurchase={() => {
                     // Prefill-only resume: collapse the funding panel and
                     // preselect the wallet. The customer still presses Pay.
-                    setShowFundingPanel(false);
+                    closeFundingPanel();
                     setPayWithWallet(true);
                   }}
                   requiresConsent={requiresFundingAccountConsent}

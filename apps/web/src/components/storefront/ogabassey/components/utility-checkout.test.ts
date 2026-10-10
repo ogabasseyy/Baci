@@ -3,7 +3,7 @@ import {
   createWalletIdempotencyKey,
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
-  redirectToPaymentCheckout,
+  parseUtilityCheckoutCashback,
 } from './utility-checkout';
 
 describe('utility checkout helpers', () => {
@@ -34,15 +34,28 @@ describe('utility checkout helpers', () => {
     );
   });
 
-  it('rejects unsafe payment redirect schemes', () => {
-    expect(() =>
-      redirectToPaymentCheckout('javascript:alert("redirect")')
-    ).toThrow('Payment checkout URL was invalid');
+  it('parses well-formed cashback blocks and drops malformed ones', () => {
+    expect(
+      parseUtilityCheckoutCashback({
+        amount: 5,
+        credited: true,
+        newBalance: 4405,
+      })
+    ).toEqual({ amount: 5, newBalance: 4405 });
+    expect(
+      parseUtilityCheckoutCashback({ amount: 'five', newBalance: null })
+    ).toBeUndefined();
+    expect(parseUtilityCheckoutCashback(null)).toBeUndefined();
+    expect(parseUtilityCheckoutCashback(undefined)).toBeUndefined();
   });
 
-  it('rejects HTTPS payment redirects outside Paystack', () => {
-    expect(() =>
-      redirectToPaymentCheckout('https://checkout.example/pay')
-    ).toThrow('Payment checkout URL was invalid');
+  it('drops uncredited cashback blocks so a failed credit never zeroes the balance', () => {
+    expect(
+      parseUtilityCheckoutCashback({
+        amount: 5,
+        credited: false,
+        newBalance: 0,
+      })
+    ).toBeUndefined();
   });
 });

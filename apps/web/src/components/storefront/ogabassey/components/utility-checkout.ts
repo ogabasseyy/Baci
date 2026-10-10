@@ -15,13 +15,49 @@ export interface UtilityCheckoutPayload {
   validationReference?: string;
 }
 
+export interface UtilityCheckoutCashback {
+  amount: number;
+  newBalance: number;
+}
+
 export interface UtilityCheckoutResponse {
   amount?: number;
   authorization_url?: string;
+  /**
+   * Deliberately unvalidated here: read it only through
+   * `parseUtilityCheckoutCashback` so a malformed block degrades to the
+   * balance-decrement fallback instead of failing the checkout.
+   */
+  cashback?: unknown;
   checkout_url?: string;
   error?: string;
   reference?: string;
   status?: string;
+}
+
+/**
+ * Lenient cashback guard: only a credited block is trusted — the server
+ * still returns the object with `credited: false` and a default-zero
+ * `newBalance` when the credit RPC fails, and applying that zero would wipe
+ * the displayed balance. Anything else returns undefined so callers fall
+ * back to decrementing the local balance; a malformed block never fails the
+ * whole checkout.
+ */
+export function parseUtilityCheckoutCashback(
+  data: unknown
+): UtilityCheckoutCashback | undefined {
+  if (typeof data !== 'object' || data === null) {
+    return undefined;
+  }
+  const cashback = data as Record<string, unknown>;
+  if (
+    cashback.credited !== true ||
+    typeof cashback.amount !== 'number' ||
+    typeof cashback.newBalance !== 'number'
+  ) {
+    return undefined;
+  }
+  return { amount: cashback.amount, newBalance: cashback.newBalance };
 }
 
 export function isUtilityCheckoutResponse(
@@ -53,27 +89,4 @@ export function getCheckoutErrorMessage(data: unknown) {
 
 export function createWalletIdempotencyKey() {
   return crypto.randomUUID();
-}
-
-const TRUSTED_PAYSTACK_CHECKOUT_HOSTS = new Set([
-  'checkout.paystack.com',
-  'paystack.com',
-]);
-
-export function redirectToPaymentCheckout(checkoutUrl: string) {
-  let parsedCheckoutUrl: URL;
-  try {
-    parsedCheckoutUrl = new URL(checkoutUrl);
-  } catch {
-    throw new Error('Payment checkout URL was invalid');
-  }
-
-  if (
-    parsedCheckoutUrl.protocol !== 'https:' ||
-    !TRUSTED_PAYSTACK_CHECKOUT_HOSTS.has(parsedCheckoutUrl.hostname)
-  ) {
-    throw new Error('Payment checkout URL was invalid');
-  }
-
-  window.location.assign(parsedCheckoutUrl.toString());
 }

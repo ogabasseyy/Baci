@@ -7,45 +7,13 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type { Biller, BillItem } from '@/hooks/use-vtu-billers';
-import { VtuPaymentStillProcessingError } from '@/lib/vtu-checkout';
 import { BillForm } from './BillForm';
 
 const mockVerifyMutate = jest.fn();
 const mockVerifyReset = jest.fn();
 const mockUseUtilityPayment = jest.fn();
-const mockChargeSavedVtuCard =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      amount?: number;
-      authorization_url?: string;
-      cashback?: { amount: number; newBalance: number };
-      gateway?: 'paystack';
-      reference: string;
-      status?: 'processing';
-      voucherPin?: string;
-    }>
-  >();
-const mockInitializeVtuCheckout =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      authorization_url: string;
-      gateway: 'paystack';
-      reference: string;
-    }>
-  >();
-const mockIsSavedVtuCardChargeProcessing =
-  jest.fn<(...args: unknown[]) => boolean>();
-const mockRequiresSavedVtuCardAuthorization =
-  jest.fn<(...args: unknown[]) => boolean>();
-const mockWaitForVtuConfirmation =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      amount?: number;
-      cashback?: { amount: number; newBalance: number };
-      reference: string;
-      voucherPin?: string;
-    }>
-  >();
+const mockChargeWalletForVtu =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 function mockBillItem(overrides: Partial<BillItem>): BillItem {
   return {
@@ -121,12 +89,6 @@ jest.mock('@/hooks/use-keyboard', () => ({
   }),
 }));
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: jest.fn(),
-  },
-}));
-
 jest.mock('@/hooks/use-utility-payment', () => ({
   useUtilityPayment: () => mockUseUtilityPayment(),
 }));
@@ -140,6 +102,10 @@ jest.mock('./UtilityPaymentOptions', () => {
   };
 });
 
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
+}));
+
 jest.mock('@/lib/vtu-checkout', () => {
   const actual =
     jest.requireActual<typeof import('@/lib/vtu-checkout')>(
@@ -148,15 +114,7 @@ jest.mock('@/lib/vtu-checkout', () => {
 
   return {
     ...actual,
-    chargeSavedVtuCard: (...args: unknown[]) => mockChargeSavedVtuCard(...args),
-    initializeVtuCheckout: (...args: unknown[]) =>
-      mockInitializeVtuCheckout(...args),
-    isSavedVtuCardChargeProcessing: (...args: unknown[]) =>
-      mockIsSavedVtuCardChargeProcessing(...args),
-    requiresSavedVtuCardAuthorization: (...args: unknown[]) =>
-      mockRequiresSavedVtuCardAuthorization(...args),
-    waitForVtuConfirmation: (...args: unknown[]) =>
-      mockWaitForVtuConfirmation(...args),
+    chargeWalletForVtu: (...args: unknown[]) => mockChargeWalletForVtu(...args),
   };
 });
 
@@ -189,29 +147,17 @@ describe('BillForm', () => {
     jest.clearAllMocks();
     mockBillers = mockPowerBillers();
     mockUseUtilityPayment.mockReturnValue({
-      cards: [],
-      isLoadingCards: false,
-      refetchCards: jest.fn(),
-      selectedGateway: 'paystack',
-      selectedSavedCardId: null,
-      selectGateway: jest.fn(),
-      selectSavedCard: jest.fn(),
-      supportedGateways: ['paystack', 'korapay'],
+      canFundByBankTransfer: false,
+      walletBalance: 5000,
+      walletError: null,
+      walletIsLoading: false,
+      getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+      resetWalletIdempotencyKey: jest.fn(),
     });
-    mockChargeSavedVtuCard.mockResolvedValue({
-      amount: 1000,
+    mockChargeWalletForVtu.mockResolvedValue({
+      amount: 2500,
       reference: 'VTU-BILL-123',
-    });
-    mockInitializeVtuCheckout.mockResolvedValue({
-      authorization_url: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      reference: 'VTU-BILL-123',
-    });
-    mockIsSavedVtuCardChargeProcessing.mockReturnValue(false);
-    mockRequiresSavedVtuCardAuthorization.mockReturnValue(false);
-    mockWaitForVtuConfirmation.mockResolvedValue({
-      amount: 1000,
-      reference: 'VTU-BILL-123',
+      status: 'successful',
     });
   });
 
@@ -399,10 +345,10 @@ describe('BillForm', () => {
     });
 
     fireEvent.changeText(screen.getByPlaceholderText('Enter amount'), '2500');
-    fireEvent.press(screen.getByText('Continue to Payment'));
+    fireEvent.press(screen.getByText('Pay ₦2,500'));
 
     await waitFor(() => {
-      expect(mockInitializeVtuCheckout).toHaveBeenCalledWith(
+      expect(mockChargeWalletForVtu).toHaveBeenCalledWith(
         expect.objectContaining({
           amount: 2500,
           billerCode: 'IKEDC',
@@ -411,37 +357,19 @@ describe('BillForm', () => {
           provider: 'monnify',
           requireValidationRef: true,
           validationReference: 'VAL-123',
+          walletAmount: 2500,
         })
       );
     });
   });
 
-  it('surfaces saved-card bill payments that are still processing', async () => {
+  it('surfaces wallet bill payments that are still processing', async () => {
     const onSuccess = jest.fn();
-    mockUseUtilityPayment.mockReturnValue({
-      cards: [],
-      isLoadingCards: false,
-      refetchCards: jest.fn(),
-      // Saved-card VTU confirmation falls back to Paystack even when no manual
-      // gateway is selected in payment context.
-      selectedGateway: null,
-      selectedSavedCardId: 'saved-card-1',
-      selectGateway: jest.fn(),
-      selectSavedCard: jest.fn(),
-      supportedGateways: ['paystack', 'korapay'],
-    });
-    mockChargeSavedVtuCard.mockResolvedValueOnce({
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      amount: 2500,
       reference: 'VTU-BILL-PENDING-123',
       status: 'processing',
     });
-    mockIsSavedVtuCardChargeProcessing.mockReturnValueOnce(true);
-    mockWaitForVtuConfirmation.mockRejectedValueOnce(
-      new VtuPaymentStillProcessingError({
-        amount: 2500,
-        customerIdentifier: '1234567890',
-        reference: 'VTU-BILL-PENDING-123',
-      })
-    );
 
     render(
       <BillForm
@@ -458,20 +386,14 @@ describe('BillForm', () => {
     fireEvent.press(screen.getByText('Pay ₦2,500'));
 
     await waitFor(() => {
-      expect(mockChargeSavedVtuCard).toHaveBeenCalledWith(
+      expect(mockChargeWalletForVtu).toHaveBeenCalledWith(
         expect.objectContaining({
           amount: 2500,
           customerIdentifier: '1234567890',
-          savedPaymentMethodId: 'saved-card-1',
           type: 'electricity',
+          walletAmount: 2500,
         })
       );
-    });
-    await waitFor(() => {
-      expect(mockWaitForVtuConfirmation).toHaveBeenCalledWith({
-        gateway: 'paystack',
-        reference: 'VTU-BILL-PENDING-123',
-      });
     });
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledWith({

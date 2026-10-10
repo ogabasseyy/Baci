@@ -2,7 +2,8 @@ import { fetchWithCsrf } from '@/lib/api-client';
 import {
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
-  redirectToPaymentCheckout,
+  parseUtilityCheckoutCashback,
+  type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
 } from './utility-checkout';
 
@@ -11,101 +12,93 @@ export interface UtilityCheckoutRequest {
   merchantSlug: string;
   customerName: string;
   customerPhone: string | null | undefined;
-  walletAmount: number;
   getWalletIdempotencyKey: (payloadSignature: string) => string;
 }
 
 export type UtilityCheckoutResult =
-  | { kind: 'redirected' }
   | {
       kind: 'wallet-success';
       reference: string;
       amount: number;
       processing: boolean;
+      cashback?: UtilityCheckoutCashback;
     }
-  | { kind: 'error'; message: string };
+  // `status` is the HTTP status when the server answered, and undefined for
+  // network failures and malformed bodies. Callers rotate the idempotency
+  // key only on terminal 4xx (mirroring mobile); anything else keeps the key
+  // so a retry replays instead of double-charging.
+  | { kind: 'error'; message: string; status?: number };
 
 /**
  * Module-scope helper: keeps try/finally + throw-in-try out of the component
  * body so React Compiler can memoize the caller. Extracted from `UtilityModal`
  * to keep that component under the 300-line modularity budget.
+ *
+ * Wallet-only: utilities are always charged to wallet balance. Callers must
+ * verify the balance covers the bill before submitting (the wallet-only route
+ * rejects partial coverage).
  */
 export const submitUtilityCheckout = async ({
   payload,
   merchantSlug,
   customerName,
   customerPhone,
-  walletAmount,
   getWalletIdempotencyKey,
 }: UtilityCheckoutRequest): Promise<UtilityCheckoutResult> => {
   try {
-    const checkoutPayload = {
+    const walletPayload = {
       merchantSlug,
       customerName,
       ...(customerPhone ? { customerPhone } : {}),
       ...payload,
-    };
-    const isWalletOnly = walletAmount > 0 && walletAmount >= payload.amount;
-    const walletPayload = {
-      ...checkoutPayload,
       walletAmount: payload.amount,
     };
-    const response = await fetchWithCsrf(
-      isWalletOnly
-        ? '/api/vtu/checkout/wallet-only'
-        : '/api/vtu/checkout/initialize',
-      {
-        method: 'POST',
-        headers: isWalletOnly
-          ? {
-              'Idempotency-Key': getWalletIdempotencyKey(
-                JSON.stringify(walletPayload)
-              ),
-            }
-          : undefined,
-        body: JSON.stringify({
-          ...(isWalletOnly ? walletPayload : checkoutPayload),
-          ...(isWalletOnly
-            ? {}
-            : {
-                gateway: 'paystack',
-                ...(walletAmount > 0 ? { walletAmount } : {}),
-              }),
-        }),
-      }
-    );
+    const response = await fetchWithCsrf('/api/vtu/checkout/wallet-only', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': getWalletIdempotencyKey(
+          JSON.stringify(walletPayload)
+        ),
+      },
+      body: JSON.stringify(walletPayload),
+    });
 
     const rawResponse = await response.text();
     let parsedData: unknown;
     try {
       parsedData = JSON.parse(rawResponse);
     } catch {
-      throw new Error(
-        response.ok
-          ? 'Payment checkout returned an invalid response'
-          : `Payment checkout failed (${response.status})`
-      );
+      // Non-JSON body. A failed status is still the server answering, so
+      // preserve it for the caller's rotation decision; an OK status with a
+      // non-JSON body is ambiguous (the debit may have landed).
+      if (!response.ok) {
+        return {
+          kind: 'error',
+          message: `Payment checkout failed (${response.status})`,
+          status: response.status,
+        };
+      }
+      throw new Error('Payment checkout returned an invalid response');
     }
-    if (!response.ok) throw new Error(getCheckoutErrorMessage(parsedData));
+    if (!response.ok) {
+      return {
+        kind: 'error',
+        message: getCheckoutErrorMessage(parsedData),
+        status: response.status,
+      };
+    }
     if (!isUtilityCheckoutResponse(parsedData)) {
       throw new Error('Payment checkout returned an invalid response');
     }
     const data = parsedData;
-
-    if (!isWalletOnly) {
-      const checkoutUrl = data.checkout_url || data.authorization_url;
-      if (!checkoutUrl) {
-        throw new Error('Payment checkout URL was not returned');
-      }
-      redirectToPaymentCheckout(checkoutUrl);
-      return { kind: 'redirected' };
-    }
+    const cashback = parseUtilityCheckoutCashback(data.cashback);
 
     return {
       kind: 'wallet-success',
       reference: data.reference ?? '',
       amount: data.amount ?? payload.amount,
       processing: data.status === 'processing',
+      ...(cashback ? { cashback } : {}),
     };
   } catch (error) {
     return {

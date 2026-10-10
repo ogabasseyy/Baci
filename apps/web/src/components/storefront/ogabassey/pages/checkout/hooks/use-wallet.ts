@@ -19,6 +19,13 @@ interface UseWalletOptions {
 interface UseWalletReturn {
   walletBalance: number;
   walletLoading: boolean;
+  /**
+   * True when the last balance fetch failed (network error or non-OK
+   * response). Consumers must treat this as "unknown balance" — never as a
+   * zero balance — or purchases get blocked as "insufficient funds" when the
+   * wallet may actually cover them.
+   */
+  walletError: boolean;
   payWithWallet: boolean;
   setPayWithWallet: (v: boolean) => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
@@ -38,6 +45,7 @@ interface UseWalletReturn {
 export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWalletReturn {
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [fundingAccount, setFundingAccount] =
     useState<StorefrontWalletFundingAccount | null>(null);
@@ -60,6 +68,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
     setWalletBalance(0);
+    setWalletError(false);
     setPayWithWallet(false);
     setFundingAccount(null);
     setRequiresFundingAccountConsent(false);
@@ -74,11 +83,16 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
       if (!userId || !merchantSlug) return;
 
       setWalletLoading(true);
+      setWalletError(false);
       fetch(`/api/storefront/customer/wallet?merchant=${merchantSlug}`, {
         signal: abortController.signal,
       })
         .then(async (response) => {
-          if (!response.ok || abortController.signal.aborted) return;
+          if (abortController.signal.aborted) return;
+          if (!response.ok) {
+            setWalletError(true);
+            return;
+          }
           const data = await response.json();
           // Re-check after the await: an identity change fires the effect
           // cleanup (abort) synchronously, so a superseded response that
@@ -101,6 +115,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
         .catch((error) => {
           if (error instanceof Error && error.name !== 'AbortError') {
             console.error('Failed to fetch wallet balance:', error);
+            setWalletError(true);
           }
         })
         .finally(() => {
@@ -118,6 +133,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   return {
     walletBalance,
     walletLoading,
+    walletError,
     payWithWallet,
     setPayWithWallet,
     setWalletBalance,

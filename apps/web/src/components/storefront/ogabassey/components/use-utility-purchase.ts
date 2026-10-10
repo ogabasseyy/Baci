@@ -10,19 +10,22 @@ import type { UtilityCheckoutPayload } from './utility-checkout';
 import { createWalletIdempotencyKey } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import type { UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UseUtilityPurchaseParams {
   activeTab: UtilityTabId;
+  canFundByBankTransfer: boolean;
   clearIntent: () => void;
   customer: Customer | null;
   isAuthLoading: boolean;
   isAuthenticated: boolean;
   merchantSlug: string | undefined;
-  selectedPaymentMethod: UtilityPaymentMethod;
+  onInsufficientWalletBalance?: () => void;
+  refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
   walletBalance: number;
+  walletError: boolean;
+  walletLoading: boolean;
 }
 
 interface AirtimeDataSubmit {
@@ -60,19 +63,27 @@ interface UseUtilityPurchaseReturn {
  * Purchase orchestration extracted from `UtilityModal` to keep that component
  * under the 300-line modularity budget. Owns the checkout submit lifecycle
  * (loading/success step, transaction reference, wallet-only idempotency) so the
- * modal only wires props and renders. Behaviour is unchanged.
+ * modal only wires props and renders. Wallet-only: blocks the submit when the
+ * balance cannot cover the bill and notifies the caller so it can open the
+ * funding panel. Loading/error wallet states block separately (never reported
+ * as insufficient funds), and the idempotency key is retained while a purchase
+ * is processing so a resubmit replays instead of double-charging.
  */
 export function useUtilityPurchase({
   activeTab,
+  canFundByBankTransfer,
   clearIntent,
   customer,
   isAuthLoading,
   isAuthenticated,
   merchantSlug,
-  selectedPaymentMethod,
+  onInsufficientWalletBalance,
+  refreshWallet,
   setWalletBalance,
   user,
   walletBalance,
+  walletError,
+  walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'details' | 'success'>('details');
@@ -82,6 +93,10 @@ export function useUtilityPurchase({
     key: string;
     payloadSignature: string;
   } | null>(null);
+  // References whose debit is already reflected in the displayed balance. A
+  // retained key replays the SAME transaction on resubmit, so without this
+  // guard every processing replay would decrement the balance again.
+  const appliedBalanceRefs = useRef<Set<string>>(new Set());
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
     if (
@@ -113,6 +128,54 @@ export function useUtilityPurchase({
       return;
     }
 
+    // A failed or still-loading wallet fetch also reads as balance 0 — never
+    // report that as insufficient funds. Loading asks for patience; an error
+    // retries the fetch so the customer is not stuck until remount.
+    if (walletLoading) {
+      toast({
+        title: 'Checking wallet balance',
+        description: 'Please wait while we confirm your wallet balance.',
+      });
+      return;
+    }
+
+    if (walletError) {
+      toast({
+        title: 'Wallet unavailable',
+        description:
+          "We couldn't load your wallet balance. Trying again now.",
+        variant: 'destructive',
+      });
+      refreshWallet();
+      return;
+    }
+
+    // Wallet-only checkout: the wallet must cover the full bill — there is
+    // no card fallback. Stop here (before any network call) and let the
+    // caller open the funding panel so the customer can top up. Report only
+    // the remaining shortfall so partial balances don't overfund.
+    if (walletBalance < payload.amount) {
+      const shortfall = payload.amount - walletBalance;
+      if (!canFundByBankTransfer) {
+        // No funding rail on web for this store (DVAs disabled, no card
+        // top-up UI): say so plainly instead of promising a panel that
+        // cannot provision an account.
+        toast({
+          title: 'Insufficient wallet balance',
+          description: `Your wallet balance of ₦${walletBalance.toLocaleString()} is ₦${shortfall.toLocaleString()} short. Wallet top-up isn't available for this store.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: 'Insufficient wallet balance',
+        description: `Fund your wallet with at least ₦${shortfall.toLocaleString()} more to complete this purchase.`,
+        variant: 'destructive',
+      });
+      onInsufficientWalletBalance?.();
+      return;
+    }
+
     setLoading(true);
     const customerName =
       [customer?.first_name, customer?.last_name]
@@ -124,17 +187,33 @@ export function useUtilityPurchase({
       merchantSlug: merchantSlug || 'ogabassey',
       customerName,
       customerPhone: customer?.phone,
-      walletAmount:
-        selectedPaymentMethod === 'wallet'
-          ? Math.min(walletBalance, payload.amount)
-          : 0,
       getWalletIdempotencyKey,
     });
 
     if (result.kind === 'wallet-success') {
-      walletIdempotencyAttemptRef.current = null;
+      // Terminal success rotates the key so a buy-again gets a fresh dedupe
+      // slot. 'processing' is non-terminal — the vend is still in flight, so
+      // the key MUST stay: the modal tabs reset to details, and a resubmit
+      // with a fresh key would bypass the route's dedupe row and create a
+      // second debit. Same key + same payload replays the same transaction.
+      if (!result.processing) {
+        walletIdempotencyAttemptRef.current = null;
+      }
       clearIntent();
-      setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+      // A replayed reference is the same debit — only apply the balance
+      // effect the first time it is seen. Buy-again purchases mint new
+      // references, so genuine repeat buys still decrement.
+      if (!appliedBalanceRefs.current.has(result.reference)) {
+        appliedBalanceRefs.current.add(result.reference);
+        // Prefer the server's post-transaction balance when cashback was
+        // credited — the local decrement would otherwise display too low a
+        // balance and block a valid follow-up purchase as underfunded.
+        if (typeof result.cashback?.newBalance === 'number') {
+          setWalletBalance(result.cashback.newBalance);
+        } else {
+          setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+        }
+      }
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);
       setStep('success');
@@ -147,6 +226,18 @@ export function useUtilityPurchase({
           : `Your ${activeTab} purchase was successful!`,
       });
     } else if (result.kind === 'error') {
+      // Terminal 4xx (validation, failed fulfillment, key collision) already
+      // persisted its outcome server-side: rotate so a corrected retry is a
+      // fresh attempt instead of replaying the dead transaction. Network and
+      // 5xx failures stay ambiguous — keep the key so the retry dedupes.
+      // Mirrors mobile's shouldRotateWalletIdempotencyKeyForError.
+      if (
+        typeof result.status === 'number' &&
+        result.status >= 400 &&
+        result.status < 500
+      ) {
+        walletIdempotencyAttemptRef.current = null;
+      }
       toast({
         title: 'Transaction Failed',
         description: result.message,

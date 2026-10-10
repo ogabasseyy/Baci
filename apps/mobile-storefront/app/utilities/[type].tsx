@@ -67,7 +67,12 @@ export default function UtilityPurchaseScreen() {
   const insets = useSafeAreaInsets();
   const headerOffset = Math.max(insets.top, 42);
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  const customerId = useAuthStore((state) => state.customer?.id);
+  // Mirror useWallet's owner fallback (customer.id ?? user.id) so the
+  // post-purchase invalidation hits the same query key the wallet read
+  // uses while customer hydration is still pending.
+  const walletOwnerId = useAuthStore(
+    (state) => state.customer?.id ?? state.user?.id
+  );
   const merchantId = useAuthStore((state) => state.merchantId);
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
   const routeType =
@@ -113,7 +118,6 @@ export default function UtilityPurchaseScreen() {
     routeType,
   });
   const resolvedSuccessData = successData ?? getParamSuccessData(params);
-  const successCashbackAmount = resolvedSuccessData?.cashback?.amount ?? 0;
   const successReference = resolvedSuccessData?.reference;
 
   const pagerRef = useRef<PagerView>(null);
@@ -147,27 +151,25 @@ export default function UtilityPurchaseScreen() {
   }, [routeType]);
 
   useEffect(() => {
-    if (
-      !currentType ||
-      !customerId ||
-      !successReference ||
-      successCashbackAmount <= 0
-    ) {
+    // Every wallet purchase debits the wallet, with or without cashback,
+    // so invalidate on any success/processing reference — otherwise the
+    // pre-debit balance stays cached as fresh and the next purchase can
+    // submit against a stale balance the server will reject.
+    if (!currentType || !walletOwnerId || !successReference) {
       return;
     }
 
     void queryClient.invalidateQueries({
       queryKey: walletKeys.data({
         merchantId: activeMerchantId,
-        ownerId: customerId,
+        ownerId: walletOwnerId,
       }),
     });
   }, [
     activeMerchantId,
     currentType,
-    customerId,
+    walletOwnerId,
     queryClient,
-    successCashbackAmount,
     successReference,
   ]);
 

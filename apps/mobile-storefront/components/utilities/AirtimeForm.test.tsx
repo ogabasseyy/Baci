@@ -10,7 +10,7 @@ import { Alert } from 'react-native';
 import type { ExtractState } from 'zustand/vanilla';
 import { BRAND } from '@/constants/Colors';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import { VtuPaymentStillProcessingError } from '@/lib/vtu-checkout';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import type { useAuthStore as useAuthStoreType } from '@/stores/auth-store';
 import { AirtimeForm } from './AirtimeForm';
 
@@ -18,42 +18,14 @@ type AuthStoreState = ExtractState<typeof useAuthStoreType>;
 type AuthStorePartial = Partial<AuthStoreState>;
 
 const mockUseUtilityPayment = jest.fn();
-const mockChargeSavedVtuCard =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      amount?: number;
-      cashback?: { amount: number; newBalance: number };
-      reference: string;
-      status?: 'processing';
-      voucherPin?: string;
-    }>
-  >();
-const mockInitializeVtuCheckout =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      authorization_url: string;
-      gateway: 'paystack';
-      reference: string;
-    }>
-  >();
-const mockRouterPush = jest.fn();
-const mockIsSavedVtuCardChargeProcessing = jest.fn();
-const mockRequiresSavedVtuCardAuthorization = jest.fn();
+const mockChargeWalletForVtu =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 // Exposed by the mocked keyboard hook so future interaction tests can assert dismissal.
 const mockDismissKeyboard = jest.fn();
 const mockKeyboardState = {
   isKeyboardVisible: false,
   keyboardHeight: 0,
 };
-const mockWaitForVtuConfirmation =
-  jest.fn<
-    (...args: unknown[]) => Promise<{
-      amount?: number;
-      cashback?: { amount: number; newBalance: number };
-      reference: string;
-      voucherPin?: string;
-    }>
-  >();
 const mockAuthStoreState = {
   customer: null,
   session: null,
@@ -77,12 +49,6 @@ const recentRecipient: UtilityRepeatRecipient = {
 function spyOnConsoleError() {
   return jest.spyOn(console, 'error').mockImplementation(() => undefined);
 }
-
-jest.mock('expo-router', () => ({
-  router: {
-    push: (...args: unknown[]) => mockRouterPush(...args),
-  },
-}));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -116,17 +82,16 @@ jest.mock('@/lib/vtu-checkout', () => {
 
   return {
     ...actual,
-    chargeSavedVtuCard: (...args: unknown[]) => mockChargeSavedVtuCard(...args),
-    initializeVtuCheckout: (...args: unknown[]) =>
-      mockInitializeVtuCheckout(...args),
-    isSavedVtuCardChargeProcessing: (...args: unknown[]) =>
-      mockIsSavedVtuCardChargeProcessing(...args),
-    requiresSavedVtuCardAuthorization: (...args: unknown[]) =>
-      mockRequiresSavedVtuCardAuthorization(...args),
-    waitForVtuConfirmation: (...args: unknown[]) =>
-      mockWaitForVtuConfirmation(...args),
+    chargeWalletForVtu: (...args: unknown[]) => mockChargeWalletForVtu(...args),
   };
 });
+
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
+}));
+
+const mockEnsureUtilityWalletReady =
+  ensureUtilityWalletReady as unknown as jest.Mock;
 
 jest.mock('./UtilityPaymentOptions', () => {
   const { Text } =
@@ -137,32 +102,32 @@ jest.mock('./UtilityPaymentOptions', () => {
   };
 });
 
+function fillValidAirtimeForm() {
+  fireEvent.changeText(
+    screen.getByPlaceholderText('08012345678'),
+    '08031234567'
+  );
+  fireEvent.changeText(screen.getByPlaceholderText('1,000'), '1000');
+}
+
 describe('AirtimeForm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockKeyboardState.isKeyboardVisible = false;
     mockKeyboardState.keyboardHeight = 0;
     mockUseUtilityPayment.mockReturnValue({
-      cards: [],
-      isLoadingCards: false,
-      selectedGateway: 'paystack',
-      selectedSavedCardId: null,
-      selectGateway: jest.fn(),
-      selectSavedCard: jest.fn(),
-      supportedGateways: ['paystack', 'korapay'],
+      canFundByBankTransfer: false,
+      walletBalance: 5000,
+      walletError: null,
+      walletIsLoading: false,
+      getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+      resetWalletIdempotencyKey: jest.fn(),
     });
-    mockInitializeVtuCheckout.mockResolvedValue({
-      authorization_url: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      reference: 'VTU-AIRTIME-123',
-    });
-    mockChargeSavedVtuCard.mockResolvedValue({
+    mockChargeWalletForVtu.mockResolvedValue({
       amount: 1000,
-      reference: 'VTU-CARD-123',
-      voucherPin: 'token-123',
+      reference: 'VTU-WALLET-123',
+      status: 'successful',
     });
-    mockIsSavedVtuCardChargeProcessing.mockReturnValue(false);
-    mockRequiresSavedVtuCardAuthorization.mockReturnValue(false);
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
@@ -306,63 +271,54 @@ describe('AirtimeForm', () => {
 
     render(<AirtimeForm onSuccess={jest.fn()} />);
 
-    expect(screen.queryByText('Continue to Payment')).toBeNull();
+    expect(screen.queryByText(/Pay ₦/)).toBeNull();
   });
 
-  it('surfaces saved-card airtime purchases that are still processing', async () => {
+  it('completes a wallet airtime purchase', async () => {
     const onSuccessMock = jest.fn();
-    mockUseUtilityPayment.mockReturnValue({
-      cards: [],
-      isLoadingCards: false,
-      selectedGateway: null,
-      selectedSavedCardId: 'saved-card-1',
-      selectGateway: jest.fn(),
-      selectSavedCard: jest.fn(),
-      supportedGateways: ['paystack', 'korapay'],
-    });
-    mockChargeSavedVtuCard.mockResolvedValueOnce({
-      reference: 'VTU-CARD-PENDING-123',
-      status: 'processing',
-    });
-    mockIsSavedVtuCardChargeProcessing.mockReturnValueOnce(true);
-    mockWaitForVtuConfirmation.mockRejectedValueOnce(
-      new VtuPaymentStillProcessingError({
-        amount: 1000,
-        customerIdentifier: '08031234567',
-        reference: 'VTU-CARD-PENDING-123',
-      })
-    );
     render(<AirtimeForm onSuccess={onSuccessMock} />);
 
-    fireEvent.changeText(
-      screen.getByPlaceholderText('08012345678'),
-      '08031234567'
-    );
-    await waitFor(() => expect(screen.getByText('Network')).toBeOnTheScreen());
-    fireEvent.changeText(screen.getByPlaceholderText('1,000'), '1000');
+    fillValidAirtimeForm();
     fireEvent.press(screen.getByText('Pay ₦1,000'));
 
     await waitFor(() => {
-      expect(mockChargeSavedVtuCard).toHaveBeenCalledWith(
+      expect(mockChargeWalletForVtu).toHaveBeenCalledWith(
         expect.objectContaining({
           amount: 1000,
           phoneNumber: '08031234567',
-          savedPaymentMethodId: 'saved-card-1',
           type: 'airtime',
+          walletAmount: 1000,
+          idempotencyKey: 'test-key',
         })
       );
     });
     await waitFor(() => {
-      expect(mockWaitForVtuConfirmation).toHaveBeenCalledWith({
-        gateway: 'paystack',
-        reference: 'VTU-CARD-PENDING-123',
-      });
+      expect(onSuccessMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reference: 'VTU-WALLET-123',
+          status: 'successful',
+        })
+      );
     });
+  });
+
+  it('surfaces wallet airtime purchases that are still processing', async () => {
+    const onSuccessMock = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      amount: 1000,
+      reference: 'VTU-WALLET-PENDING-123',
+      status: 'processing',
+    });
+    render(<AirtimeForm onSuccess={onSuccessMock} />);
+
+    fillValidAirtimeForm();
+    fireEvent.press(screen.getByText('Pay ₦1,000'));
+
     await waitFor(() => {
       expect(onSuccessMock).toHaveBeenCalledWith({
         amount: 1000,
         customerIdentifier: '08031234567',
-        reference: 'VTU-CARD-PENDING-123',
+        reference: 'VTU-WALLET-PENDING-123',
         status: 'processing',
       });
     });
@@ -372,115 +328,49 @@ describe('AirtimeForm', () => {
     );
   });
 
-  it('keeps the submitting state while navigating to checkout', async () => {
-    render(<AirtimeForm onSuccess={jest.fn()} />);
-
-    fireEvent.changeText(
-      screen.getByPlaceholderText('08012345678'),
-      '08031234567'
-    );
-    await waitFor(() => expect(screen.getByText('Network')).toBeOnTheScreen());
-    fireEvent.changeText(screen.getByPlaceholderText('1,000'), '1000');
-    fireEvent.press(screen.getByText('Continue to Payment'));
-
-    await waitFor(() => {
-      expect(mockInitializeVtuCheckout).toHaveBeenCalledWith(
-        expect.objectContaining({
-          amount: 1000,
-          phoneNumber: '08031234567',
-          type: 'airtime',
-        })
-      );
-    });
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/payment-gateway',
-      params: expect.objectContaining({
-        amount: '1000',
-        customerIdentifier: '08031234567',
-        paymentKind: 'vtu',
-        reference: 'VTU-AIRTIME-123',
-        utilityType: 'airtime',
-      }),
-    });
-    expect(screen.queryByText('Continue to Payment')).toBeNull();
-  });
-
-  it('resets submitting state when checkout navigation throws', async () => {
-    const consoleErrorSpy = spyOnConsoleError();
-    mockRouterPush.mockImplementationOnce(() => {
-      throw new Error('Navigation failed');
-    });
-    render(<AirtimeForm onSuccess={jest.fn()} />);
-
-    fireEvent.changeText(
-      screen.getByPlaceholderText('08012345678'),
-      '08031234567'
-    );
-    await waitFor(() => expect(screen.getByText('Network')).toBeOnTheScreen());
-    fireEvent.changeText(screen.getByPlaceholderText('1,000'), '1000');
-    fireEvent.press(screen.getByText('Continue to Payment'));
-
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith(
-        'Payment Failed',
-        'Navigation failed'
-      );
-    });
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Airtime purchase failed:',
-      expect.any(Error)
-    );
-    await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeOnTheScreen();
-    });
-  });
-
-  it('alerts and does not complete when a saved-card airtime charge rejects', async () => {
+  it('alerts and does not complete when the wallet charge rejects', async () => {
     const consoleErrorSpy = spyOnConsoleError();
     const onSuccessMock = jest.fn();
-    mockUseUtilityPayment.mockReturnValue({
-      cards: [],
-      isLoadingCards: false,
-      selectedGateway: null,
-      selectedSavedCardId: 'saved-card-1',
-      selectGateway: jest.fn(),
-      selectSavedCard: jest.fn(),
-      supportedGateways: ['paystack', 'korapay'],
-    });
-    mockChargeSavedVtuCard.mockRejectedValueOnce(
-      new Error('Saved card charge failed')
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new Error('Wallet charge failed')
     );
     render(<AirtimeForm onSuccess={onSuccessMock} />);
 
-    fireEvent.changeText(
-      screen.getByPlaceholderText('08012345678'),
-      '08031234567'
-    );
-    await waitFor(() => expect(screen.getByText('Network')).toBeOnTheScreen());
-    fireEvent.changeText(screen.getByPlaceholderText('1,000'), '1000');
+    fillValidAirtimeForm();
     fireEvent.press(screen.getByText('Pay ₦1,000'));
 
     await waitFor(() => {
-      expect(mockChargeSavedVtuCard).toHaveBeenCalledWith(
-        expect.objectContaining({
-          amount: 1000,
-          phoneNumber: '08031234567',
-          savedPaymentMethodId: 'saved-card-1',
-          type: 'airtime',
-        })
-      );
-    });
-    await waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith(
         'Payment Failed',
-        'Saved card charge failed'
+        'Wallet charge failed'
       );
     });
-    expect(mockWaitForVtuConfirmation).not.toHaveBeenCalled();
     expect(onSuccessMock).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Airtime purchase failed:',
       expect.any(Error)
     );
+    await waitFor(() => {
+      expect(screen.getByText('Pay ₦1,000')).toBeOnTheScreen();
+    });
+  });
+
+  it('checks wallet readiness before charging and skips the charge when not ready', async () => {
+    const onSuccessMock = jest.fn();
+    mockEnsureUtilityWalletReady.mockReturnValueOnce(false);
+    render(<AirtimeForm onSuccess={onSuccessMock} />);
+
+    fillValidAirtimeForm();
+    fireEvent.press(screen.getByText('Pay ₦1,000'));
+
+    await waitFor(() => {
+      expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
+        amount: 1000,
+        payment: expect.objectContaining({ walletBalance: 5000 }),
+        returnToHref: expect.any(String),
+      });
+    });
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    expect(onSuccessMock).not.toHaveBeenCalled();
   });
 });

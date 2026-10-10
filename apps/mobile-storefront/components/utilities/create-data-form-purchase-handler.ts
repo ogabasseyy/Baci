@@ -1,18 +1,11 @@
-import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
-  chargeSavedVtuCard,
   chargeWalletForVtu,
-  computeVtuWalletAmount,
-  initializeVtuCheckout,
-  isSavedVtuCardChargeProcessing,
-  requiresSavedVtuCardAuthorization,
   shouldRotateWalletIdempotencyKeyForError,
-  VtuPaymentStillProcessingError,
-  waitForVtuConfirmation,
 } from '@/lib/vtu-checkout';
-import { DATA_SAVED_CARD_CONFIRMATION_GATEWAY } from './data-form.styles';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -43,6 +36,7 @@ interface CreateDataFormPurchaseHandlerInput {
   selectedProvider: string | null;
   setIsSubmitting: (isSubmitting: boolean) => void;
   onSuccess: (data: DataFormSuccessResult) => void;
+  returnToHref?: WalletReturnHref | null;
 }
 
 export function createDataFormPurchaseHandler({
@@ -56,6 +50,7 @@ export function createDataFormPurchaseHandler({
   selectedPlan,
   selectedProvider,
   setIsSubmitting,
+  returnToHref,
 }: CreateDataFormPurchaseHandlerInput) {
   return async () => {
     dismissKeyboard();
@@ -78,22 +73,13 @@ export function createDataFormPurchaseHandler({
       );
       return;
     }
-    const walletAmount = computeVtuWalletAmount(
-      payment.walletSelection?.use === true
-        ? payment.walletSelection.amount
-        : 0,
-      planAmount
-    );
-    const isWalletOnly = walletAmount > 0 && walletAmount === planAmount;
     if (
-      !isWalletOnly &&
-      !payment.selectedSavedCardId &&
-      !payment.selectedGateway
+      !ensureUtilityWalletReady({
+        amount: planAmount,
+        payment,
+        returnToHref,
+      })
     ) {
-      Alert.alert(
-        'Select Payment Method',
-        'Choose a payment method before continuing.'
-      );
       return;
     }
 
@@ -104,117 +90,28 @@ export function createDataFormPurchaseHandler({
         customer?.email ||
         undefined;
 
-      if (isWalletOnly) {
-        const idempotencyKey = payment.getWalletIdempotencyKey();
-        try {
-          const result = await chargeWalletForVtu({
-            amount: planAmount,
-            customerName,
-            customerPhone: customer?.phone || undefined,
-            dataPlanCode: selectedPlan,
-            networkProvider: selectedProvider,
-            phoneNumber,
-            type: 'data',
-            walletAmount: planAmount,
-            idempotencyKey,
-          });
-          // Only rotate on terminal success. 'processing' means the
-          // vend is still in flight server-side; rotating now would let
-          // a user-initiated retry bypass the route's dedupe row and
-          // create a duplicate VTU transaction.
-          if (result.status === 'successful') {
-            payment.resetWalletIdempotencyKey();
-          }
-          onSuccess({
-            amount: result.amount ?? planAmount,
-            cashback: result.cashback
-              ? {
-                  amount: result.cashback.amount,
-                  newBalance: result.cashback.newBalance,
-                }
-              : undefined,
-            reference: result.reference,
-            status: result.status,
-            voucherPin: result.voucherPin,
-          });
-          return;
-        } catch (error) {
-          // Keep the key for ambiguous failures (network, timeout, 5xx,
-          // unknown) so the route's dedupe table protects retries.
-          // Rotate only on 4xx — request rejected before any state.
-          if (shouldRotateWalletIdempotencyKeyForError(error)) {
-            payment.resetWalletIdempotencyKey();
-          }
-          throw error;
-        }
-      }
-
-      if (payment.selectedSavedCardId) {
-        const result = await chargeSavedVtuCard({
+      const idempotencyKey = payment.getWalletIdempotencyKey();
+      try {
+        const result = await chargeWalletForVtu({
           amount: planAmount,
           customerName,
           customerPhone: customer?.phone || undefined,
           dataPlanCode: selectedPlan,
           networkProvider: selectedProvider,
           phoneNumber,
-          savedPaymentMethodId: payment.selectedSavedCardId,
           type: 'data',
-          ...(walletAmount > 0 ? { walletAmount } : {}),
+          walletAmount: planAmount,
+          idempotencyKey,
         });
-
-        if (requiresSavedVtuCardAuthorization(result)) {
-          router.push({
-            pathname: '/payment-gateway',
-            params: {
-              amount: String(planAmount),
-              authorizationUrl: result.authorization_url,
-              customerIdentifier: phoneNumber,
-              gateway: result.gateway,
-              paymentKind: 'vtu',
-              reference: result.reference,
-              utilityType: 'data',
-            },
-          });
-          return;
+        // Only rotate on terminal success. 'processing' means the
+        // vend is still in flight server-side; rotating now would let
+        // a user-initiated retry bypass the route's dedupe row and
+        // create a duplicate VTU transaction.
+        if (result.status === 'successful') {
+          payment.resetWalletIdempotencyKey();
         }
-
-        if (isSavedVtuCardChargeProcessing(result)) {
-          try {
-            const confirmationGateway =
-              result.gateway ?? DATA_SAVED_CARD_CONFIRMATION_GATEWAY;
-            const confirmed = await waitForVtuConfirmation({
-              gateway: confirmationGateway,
-              reference: result.reference,
-            });
-            onSuccess({
-              amount: confirmed.amount ?? planAmount,
-              cashback: confirmed.cashback
-                ? {
-                    amount: confirmed.cashback.amount,
-                    newBalance: confirmed.cashback.newBalance,
-                  }
-                : undefined,
-              reference: confirmed.reference,
-              voucherPin: confirmed.voucherPin,
-            });
-          } catch (error) {
-            if (error instanceof VtuPaymentStillProcessingError) {
-              onSuccess({
-                amount: error.amount ?? planAmount,
-                customerIdentifier: error.customerIdentifier ?? phoneNumber,
-                reference: error.reference,
-                status: 'processing',
-              });
-              return;
-            }
-
-            throw error;
-          }
-          return;
-        }
-
         onSuccess({
-          amount: result.amount,
+          amount: result.amount ?? planAmount,
           cashback: result.cashback
             ? {
                 amount: result.cashback.amount,
@@ -222,34 +119,19 @@ export function createDataFormPurchaseHandler({
               }
             : undefined,
           reference: result.reference,
+          status: result.status,
           voucherPin: result.voucherPin,
         });
         return;
+      } catch (error) {
+        // Keep the key for ambiguous failures (network, timeout, 5xx,
+        // unknown) so the route's dedupe table protects retries.
+        // Rotate only on 4xx — request rejected before any state.
+        if (shouldRotateWalletIdempotencyKeyForError(error)) {
+          payment.resetWalletIdempotencyKey();
+        }
+        throw error;
       }
-
-      const result = await initializeVtuCheckout({
-        amount: planAmount,
-        customerName,
-        customerPhone: customer?.phone || undefined,
-        dataPlanCode: selectedPlan,
-        gateway: payment.selectedGateway,
-        networkProvider: selectedProvider,
-        phoneNumber,
-        type: 'data',
-        ...(walletAmount > 0 ? { walletAmount } : {}),
-      });
-      router.push({
-        pathname: '/payment-gateway',
-        params: {
-          amount: String(planAmount),
-          authorizationUrl: result.authorization_url,
-          customerIdentifier: phoneNumber,
-          gateway: result.gateway,
-          paymentKind: 'vtu',
-          reference: result.reference,
-          utilityType: 'data',
-        },
-      });
     } catch (error) {
       Alert.alert(
         'Payment Failed',

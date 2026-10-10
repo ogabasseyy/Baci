@@ -88,7 +88,7 @@ export function DataForm({
   const shouldScrollToPaymentRef = useRef(isRepeatPaymentReady);
   const wasRepeatPaymentReadyRef = useRef(isRepeatPaymentReady);
   const paymentYRef = useRef<number | null>(null);
-  const payment = useUtilityPayment(planAmount);
+  const payment = useUtilityPayment();
 
   const footerSpacerHeight =
     DATA_FOOTER_HEIGHT +
@@ -168,6 +168,7 @@ export function DataForm({
       isSubmittingRef.current = next;
       setIsSubmitting(next);
     },
+    returnToHref: walletReturnToHref,
   });
 
   return (
@@ -265,19 +266,10 @@ export function DataForm({
           <UtilityPaymentOptions
             amount={planAmount}
             canFundByBankTransfer={payment.canFundByBankTransfer}
-            cards={payment.cards}
-            isLoadingCards={payment.isLoadingCards}
-            onSelectGateway={payment.selectGateway}
-            onSelectSavedCard={payment.selectSavedCard}
             returnToHref={walletReturnToHref}
-            selectedGateway={payment.selectedGateway}
-            selectedSavedCardId={payment.selectedSavedCardId}
-            supportedGateways={payment.supportedGateways}
             walletBalance={payment.walletBalance}
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
-            walletSelection={payment.walletSelection}
-            onWalletToggle={payment.setWalletSelection}
           />
         </View>
       </ScrollView>
@@ -289,7 +281,6 @@ export function DataForm({
         isKeyboardVisible={isKeyboardVisible}
         isSubmitting={isSubmitting}
         planAmount={planAmount}
-        selectedSavedCardId={payment.selectedSavedCardId}
         onPress={handlePurchase}
       />
     </>

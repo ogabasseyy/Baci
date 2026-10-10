@@ -76,7 +76,6 @@ export function createDataFormPurchaseHandler({
     if (
       !ensureUtilityWalletReady({
         amount: planAmount,
-        customer,
         payment,
         returnToHref,
       })

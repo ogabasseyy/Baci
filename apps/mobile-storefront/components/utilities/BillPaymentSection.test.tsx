@@ -21,6 +21,8 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
 function createPaymentState(): PaymentState {
   return {
     canFundByBankTransfer: false,
+    isAuthenticated: true,
+    refetchWallet: jest.fn(),
     walletBalance: 0,
     walletError: null,
     walletIsLoading: false,

@@ -79,7 +79,6 @@ export function createBillFormPurchaseHandler({
       if (
         !ensureUtilityWalletReady({
           amount: numericAmount,
-          customer,
           payment,
           returnToHref,
         })

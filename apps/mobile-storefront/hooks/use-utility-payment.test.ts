@@ -10,6 +10,7 @@ let mockWalletQuery: {
   };
   error?: Error | null;
   isLoading?: boolean;
+  refetch: jest.Mock;
 };
 
 jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
@@ -48,6 +49,7 @@ describe('useUtilityPayment', () => {
       data: { wallet: { balance: 0 } },
       error: null,
       isLoading: false,
+      refetch: jest.fn(),
     };
   });
 
@@ -56,6 +58,7 @@ describe('useUtilityPayment', () => {
       data: { wallet: { balance: 1500 } },
       error: null,
       isLoading: false,
+      refetch: jest.fn(),
     };
     const { result } = renderHook(() => useUtilityPayment());
 
@@ -70,6 +73,7 @@ describe('useUtilityPayment', () => {
       data: undefined,
       error: walletError,
       isLoading: false,
+      refetch: jest.fn(),
     };
 
     const { result } = renderHook(() => useUtilityPayment());
@@ -101,6 +105,18 @@ describe('useUtilityPayment', () => {
     const { result } = renderHook(() => useUtilityPayment());
 
     expect(result.current.canFundByBankTransfer).toBe(false);
+  });
+
+  it('exposes session auth state and a wallet refetch for the readiness gate', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.isAuthenticated).toBe(true);
+    result.current.refetchWallet();
+    expect(mockWalletQuery.refetch).toHaveBeenCalledTimes(1);
+
+    mockAuthState.session = null;
+    const { result: signedOut } = renderHook(() => useUtilityPayment());
+    expect(signedOut.current.isAuthenticated).toBe(false);
   });
 
   it('offers no gateway or saved-card state: wallet is the only payment method', () => {

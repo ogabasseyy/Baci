@@ -134,7 +134,6 @@ export function useAirtimePurchaseHandler({
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,
-        customer,
         payment,
         returnToHref,
       })

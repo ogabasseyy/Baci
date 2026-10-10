@@ -366,7 +366,6 @@ describe('AirtimeForm', () => {
     await waitFor(() => {
       expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
         amount: 1000,
-        customer: null,
         payment: expect.objectContaining({ walletBalance: 5000 }),
         returnToHref: expect.any(String),
       });

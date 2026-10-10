@@ -42,6 +42,8 @@ function createPaymentState(
 ): PaymentState {
   return {
     canFundByBankTransfer: false,
+    isAuthenticated: true,
+    refetchWallet: jest.fn(),
     walletBalance: 5000,
     walletError: null,
     walletIsLoading: false,
@@ -142,7 +144,6 @@ describe('createBillFormPurchaseHandler', () => {
 
     expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
       amount: 1000,
-      customer: null,
       payment,
       returnToHref: '/utilities/power?repeatAmount=1000',
     });

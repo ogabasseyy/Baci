@@ -40,14 +40,17 @@ SELECT pg_temp.assert_true(
   NOT has_table_privilege('anon', 'public.search_analytics', 'INSERT')
   AND NOT has_table_privilege('anon', 'public.search_analytics', 'UPDATE')
   AND NOT has_table_privilege('anon', 'public.search_analytics', 'DELETE')
+  AND NOT has_table_privilege('anon', 'public.search_analytics', 'TRUNCATE')
   AND NOT has_table_privilege('anon', 'public.search_analytics', 'SELECT')
   AND NOT has_table_privilege('authenticated', 'public.search_analytics', 'INSERT')
   AND NOT has_table_privilege('authenticated', 'public.search_analytics', 'UPDATE')
   AND NOT has_table_privilege('authenticated', 'public.search_analytics', 'DELETE')
+  AND NOT has_table_privilege('authenticated', 'public.search_analytics', 'TRUNCATE')
   AND has_table_privilege('authenticated', 'public.search_analytics', 'SELECT')
   AND has_table_privilege('service_role', 'public.search_analytics', 'INSERT')
   AND has_table_privilege('service_role', 'public.search_analytics', 'UPDATE')
   AND has_table_privilege('service_role', 'public.search_analytics', 'DELETE')
+  AND has_table_privilege('service_role', 'public.search_analytics', 'TRUNCATE')
   AND has_table_privilege('service_role', 'public.search_analytics', 'SELECT'),
   'search_analytics grants are incorrect'
 );
@@ -79,6 +82,15 @@ VALUES (
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated',
   'search-analytics-owner@example.com',
+  'test', now(), now(), now(), '{}', '{}'
+);
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES (
+  '03aa0000-0000-4000-8000-000000000102',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'search-analytics-other@example.com',
   'test', now(), now(), now(), '{}', '{}'
 );
 -- merchants writes fire the identity-audit trigger, whose canonical writer
@@ -144,6 +156,34 @@ SELECT pg_temp.assert_true(
    FROM public.search_analytics
    WHERE merchant_id = '03aa0000-0000-4000-8000-000000000001'),
   'owning merchant cannot read search_analytics'
+);
+
+-- Live proof: a different authenticated merchant reads zero rows for
+-- another merchant's analytics (the ingestion edge bypasses RLS, so a
+-- future merchant_id mixup would only surface here).
+-- (Second auth user is seeded with the fixtures above; inserts here run
+-- as authenticated, which cannot write auth.users.)
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.merchants (id, email, business_name, slug, user_id)
+VALUES (
+  '03aa0000-0000-4000-8000-000000000002',
+  'search-analytics-other-merchant@example.com',
+  'Search Analytics Other Merchant',
+  'search-analytics-other-merchant',
+  '03aa0000-0000-4000-8000-000000000102'
+);
+RESET ROLE;
+SELECT set_config('role', 'authenticated', true);
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'role', 'authenticated',
+  'sub', '03aa0000-0000-4000-8000-000000000102')::text, true);
+
+SELECT pg_temp.assert_true(
+  (SELECT count(*) = 0
+   FROM public.search_analytics
+   WHERE merchant_id = '03aa0000-0000-4000-8000-000000000001'),
+  'cross-merchant search_analytics read leaked rows'
 );
 
 ROLLBACK;

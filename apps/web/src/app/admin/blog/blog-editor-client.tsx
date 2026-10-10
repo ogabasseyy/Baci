@@ -4,21 +4,28 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
+  deleteBlogMediaUpload,
+  refreshBlogMediaUploadLease,
   updatePlatformBlogPost,
 } from '@/app/admin/blog/blog-api';
 import { BlogEditorFields } from '@/app/admin/blog/blog-editor-fields';
+import { BlogReviewHandoffImporter } from '@/app/admin/blog/blog-review-handoff-importer';
 import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
+  type PlatformAdminBlogCoverState,
   type PlatformAdminBlogFormState,
   type PlatformAdminBlogPostDetail,
 } from '@/app/admin/blog/blog-types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { fetchWithCsrf } from '@/lib/api-client';
 import { generateSlug } from '@/lib/blog-utils';
+import { uploadBlogMedia } from './blog-media-upload';
+import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
+import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
+import { useBlogReviewHandoffImport } from './use-blog-review-handoff-import';
 
 type BlogEditorClientProps = {
   initialPost?: PlatformAdminBlogPostDetail | null;
@@ -26,51 +33,12 @@ type BlogEditorClientProps = {
   postId?: string;
 };
 
-type BlogMediaUploadResult = {
-  height?: number | null;
-  url: string;
-  variants?: Record<string, string>;
-  width?: number | null;
-};
-
-async function uploadBlogMedia(
-  file: File,
-  purpose: 'featured' | 'inline'
-): Promise<BlogMediaUploadResult> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('purpose', purpose);
-
-  const response = await fetchWithCsrf('/api/admin/blog/upload', {
-    body: formData,
-    method: 'POST',
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(payload?.error || 'Failed to upload image');
-  }
-
-  const payload = (await response.json()) as Partial<BlogMediaUploadResult>;
-  if (!payload.url) {
-    throw new Error('Upload response did not include a URL');
-  }
-
-  return {
-    height: payload.height ?? null,
-    url: payload.url,
-    variants: payload.variants ?? {},
-    width: payload.width ?? null,
-  };
-}
-
 type SubmitBlogPostArgs = {
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
   postId?: string;
   initialPost?: PlatformAdminBlogPostDetail | null;
+  savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
   setSaving: (saving: boolean) => void;
   toast: ReturnType<typeof useToast>['toast'];
   router: ReturnType<typeof useRouter>;
@@ -83,6 +51,7 @@ async function submitBlogPost({
   isEditMode,
   postId,
   initialPost,
+  savedFormRef,
   setSaving,
   toast,
   router,
@@ -98,13 +67,29 @@ async function submitBlogPost({
       slug: form.slug.trim() || generateSlug(form.title.trim()),
     };
 
-    if (isEditMode) {
-      if (!postId) {
-        throw new Error('Missing post id for edit mode');
+    // Snapshot the submitted payload (frozen before the request, so
+    // edits made while saving cannot shrink it) and protect it while
+    // the mutation is in flight: leaving the page before the request
+    // resolves must retain what the server is about to persist.
+    const previousSaved = savedFormRef.current;
+    savedFormRef.current = payload;
+    try {
+      if (isEditMode) {
+        if (!postId) {
+          throw new Error('Missing post id for edit mode');
+        }
+        await updatePlatformBlogPost(postId, payload, initialPost);
+      } else {
+        await createPlatformBlogPost(payload);
       }
-      await updatePlatformBlogPost(postId, payload, initialPost);
-    } else {
-      await createPlatformBlogPost(payload);
+    } catch (error) {
+      // A failed save restores the previous snapshot (when no later
+      // save replaced it) so teardown deletes the abandoned draft
+      // instead of leaking it as falsely persisted.
+      if (savedFormRef.current === payload) {
+        savedFormRef.current = previousSaved;
+      }
+      throw error;
     }
 
     toast({ title: isEditMode ? 'Post updated' : 'Post created' });
@@ -134,10 +119,14 @@ function toFormState(
     content: post.content || '',
     excerpt: post.excerpt || '',
     featured_image_alt: post.featured_image_alt || '',
+    featured_image_alt_edited: false,
     featured_image_height: post.featured_image_height ?? null,
     featured_image_url: post.featured_image_url || '',
     featured_image_variants: post.featured_image_variants ?? {},
     featured_image_width: post.featured_image_width ?? null,
+    focus_keyword: post.focus_keyword ?? '',
+    intent: post.intent ?? null,
+    intent_source: post.intent_source ?? null,
     seo_description: post.seo_description || '',
     seo_title: post.seo_title || '',
     slug: post.slug,
@@ -156,10 +145,57 @@ export function BlogEditorClient({
   const router = useRouter();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [uploadingFeatured, setUploadingFeatured] = useState(false);
+  const [contentResetKey, setContentResetKey] = useState(0);
+  const contentGenerationRef = useRef(0);
+  const coverStashRef = useRef<PlatformAdminBlogCoverState | null>(null);
+  const pendingContentEditRef = useRef(false);
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
   );
+  // Last payload the server confirmed: the unmount delete flush
+  // retains only this, since live-form references are unpersisted by
+  // definition once the page is left.
+  const savedFormRef = useRef<PlatformAdminBlogFormState | null>(null);
+  const {
+    uploadingFeatured,
+    uploadFeatured,
+    cleanupSettledSessionUploads,
+    invalidateFeaturedUploads,
+    noteAltEdit,
+  } = useBlogFeaturedImageUpload({
+    coverStashRef,
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    refreshUpload: (paths) => refreshBlogMediaUploadLease(paths),
+    savedFormRef,
+    upload: (file) => uploadBlogMedia(file, 'featured'),
+    setForm,
+    toast,
+  });
+  const {
+    cleanupSettledInlineUploads,
+    inlineUploadsPending,
+    uploadInlineImage,
+  } = useBlogInlineImageUpload({
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    refreshUpload: (paths) => refreshBlogMediaUploadLease(paths),
+    savedFormRef,
+    upload: (file) => uploadBlogMedia(file, 'inline'),
+  });
+  const handleReviewHandoffImport = useBlogReviewHandoffImport({
+    cleanupSettledInlineUploads,
+    cleanupSettledSessionUploads,
+    contentGenerationRef,
+    coverStashRef,
+    form,
+    inlineUploadsPending,
+    invalidateFeaturedUploads,
+    pendingContentEditRef,
+    saving,
+    setContentResetKey,
+    setForm,
+  });
 
   const pageTitle = isEditMode
     ? 'Edit Platform Blog Post'
@@ -173,29 +209,7 @@ export function BlogEditorClient({
       const file = input.files?.[0];
       if (!file) return;
 
-      setUploadingFeatured(true);
-      uploadBlogMedia(file, 'featured')
-        .then((upload) => {
-          setForm((current) => ({
-            ...current,
-            featured_image_height: upload.height ?? null,
-            featured_image_url: upload.url,
-            featured_image_variants: upload.variants ?? {},
-            featured_image_width: upload.width ?? null,
-          }));
-          toast({ title: 'Featured image uploaded' });
-        })
-        .catch((error) => {
-          toast({
-            title: 'Upload failed',
-            description:
-              error instanceof Error ? error.message : 'Unknown error',
-            variant: 'destructive',
-          });
-        })
-        .finally(() => {
-          setUploadingFeatured(false);
-        });
+      void uploadFeatured(file);
     };
     input.click();
   };
@@ -206,6 +220,7 @@ export function BlogEditorClient({
       isEditMode,
       postId,
       initialPost,
+      savedFormRef,
       setSaving,
       toast,
       router,
@@ -231,20 +246,46 @@ export function BlogEditorClient({
         <h1 className="text-page-title">{pageTitle}</h1>
       </div>
 
+      {!isEditMode && (
+        <BlogReviewHandoffImporter
+          disabled={saving || inlineUploadsPending}
+          onImport={handleReviewHandoffImport}
+        />
+      )}
+
       <BlogEditorFields
+        contentResetKey={contentResetKey}
+        contentGenerationRef={contentGenerationRef}
+        coverStashRef={coverStashRef}
+        initialCover={
+          initialPost
+            ? {
+                alt: initialPost.featured_image_alt ?? '',
+                altEdited: false,
+                height: initialPost.featured_image_height,
+                url: initialPost.featured_image_url ?? '',
+                variants: initialPost.featured_image_variants ?? {},
+                width: initialPost.featured_image_width,
+              }
+            : undefined
+        }
         form={form}
         isEditMode={isEditMode}
+        onAltEdit={noteAltEdit}
         onContentChange={(content) => {
+          pendingContentEditRef.current = false;
           setForm((current) => ({ ...current, content }));
         }}
+        onContentDirty={() => {
+          pendingContentEditRef.current = true;
+        }}
+        onCoverUrlEdit={invalidateFeaturedUploads}
         onFormChange={(updater) => {
           setForm((current) =>
             typeof updater === 'function' ? updater(current) : updater
           );
         }}
-        onInlineImageUpload={(file) =>
-          uploadBlogMedia(file, 'inline').then((upload) => upload.url)
-        }
+        onInlineImageUpload={uploadInlineImage}
         onSubmit={handleSubmit}
         onUploadFeatured={handleUploadFeatured}
         saving={saving}

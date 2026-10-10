@@ -8,6 +8,7 @@ const mockPush = vi.fn();
 const mockRefresh = vi.fn();
 const mockToast = vi.fn();
 const mockCreatePlatformBlogPost = vi.fn();
+const mockDeleteBlogMediaUpload = vi.fn();
 const mockUpdatePlatformBlogPost = vi.fn();
 const mockFetchWithCsrf = vi.fn();
 
@@ -40,6 +41,8 @@ vi.mock('@/hooks/use-toast', () => ({
 vi.mock('@/app/admin/blog/blog-api', () => ({
   createPlatformBlogPost: (...args: unknown[]) =>
     mockCreatePlatformBlogPost(...args),
+  deleteBlogMediaUpload: (...args: unknown[]) =>
+    mockDeleteBlogMediaUpload(...args),
   updatePlatformBlogPost: (...args: unknown[]) =>
     mockUpdatePlatformBlogPost(...args),
 }));

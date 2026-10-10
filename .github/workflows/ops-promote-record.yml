@@ -1,0 +1,76 @@
+name: Ops Promote Record
+
+# Server-side backstop for the pre-push hook: `git push --no-verify`
+# or a machine without hooks installed bypasses client-side
+# validation. A `push` trigger cannot provide this: GitHub sources
+# push workflows from the pushed ref, and ops/gigl-promote-record is
+# an orphan operational tree that never contains this file. So the
+# default branch validates the operational branch on a schedule
+# instead (plus manual dispatch). The last validated tip persists in
+# the actions cache under a rotating key (an exact-key hit skips the
+# save, so the key must be unique per run); validating from that tip
+# enforces fast-forward, so a force-push rewrite fails the check even
+# when every rewritten tree is shape-valid. A red check means the
+# branch holds an invalid or non-fast-forward record — reconcile the
+# branch, do not push more on top of it. Detection latency is bounded
+# by the schedule interval. If the cache entry is ever evicted, the
+# next run falls back to full-history validation (shape-validity
+# only) and re-seeds the tip.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize scheduled runs: two overlapping runs would validate from
+# the same cached tip and race the re-seed.
+concurrency:
+  group: ops-promote-record
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ops-promote-last-tip
+          key: ops-promote-last-tip-${{ github.run_id }}
+          restore-keys: ops-promote-last-tip-
+      - name: Validate promote-record history
+        run: |
+          # ls-remote separates a confirmed-missing ref (success, empty)
+          # from auth/transport/server failures (nonzero): only the
+          # former may exit green without validating anything.
+          if ! ref_info="$(git ls-remote --heads origin ops/gigl-promote-record 2>/dev/null)"; then
+            echo 'cannot reach origin to query ops/gigl-promote-record; failing closed.' >&2
+            exit 1
+          fi
+          if [ -z "$ref_info" ]; then
+            echo 'ops/gigl-promote-record does not exist yet; nothing to validate.'
+            exit 0
+          fi
+          if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
+            echo 'ops/gigl-promote-record exists but cannot be fetched; failing closed.' >&2
+            exit 1
+          fi
+          tip="$(git rev-parse FETCH_HEAD)"
+          previous='0000000000000000000000000000000000000000'
+          if [ -f .ops-promote-last-tip ]; then
+            previous="$(cat .ops-promote-last-tip)"
+          fi
+          # Best effort: after a rewrite the previous tip's objects may
+          # already be unreachable from every fetched ref. Missing
+          # objects still fail closed inside the validator.
+          if [ "$previous" != '0000000000000000000000000000000000000000' ]; then
+            git fetch origin "$previous" 2>/dev/null || true
+          fi
+          node ci_scripts/validate-promote-record.mjs "$tip" "$previous"
+          echo "$tip" > .ops-promote-last-tip

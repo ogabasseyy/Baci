@@ -42,6 +42,62 @@ test('fails closed when the repo cannot be resolved from origin', () => {
   assert.equal(ghArgs, '');
 });
 
+test('resolves credential-bearing remotes without leaking the credential', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://operator:s3krit-value@github.com/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+  assert.ok(!result.stderr.includes('s3krit-value'));
+  assert.ok(!result.stdout.includes('s3krit-value'));
+});
+
+test('resolves mixed-case github.com hosts like the coordinator', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://GitHub.com/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('resolves trailing-slash remotes', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo///\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('refuses fragment-embedded remotes that forge a github.com host', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example#@github.com/example-owner/example-repo\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must not contain a fragment/);
+  assert.equal(ghArgs, '');
+});
+
 test('honors the explicit repo override for exotic remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

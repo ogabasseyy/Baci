@@ -81,6 +81,43 @@ _set_inflight_repo() {
     return 0
   fi
   inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
+  # A '#' starts a URL fragment, so https://evil.com#@github.com/org/repo
+  # has host evil.com while a strip-to-last-'@' would forge a github.com
+  # match. Legitimate remotes never contain a fragment marker: refuse.
+  case "$inflight_remote" in
+    *'#'*) echo 'Refusing worker promotion: origin URL must not contain a fragment.' >&2; return 1 ;;
+  esac
+  # Normalize credential-bearing and trailing-slash HTTPS spellings to
+  # the same canonical form the coordinator accepts. Credentials must
+  # never reach the match below or the error message after it.
+  case "$inflight_remote" in
+    https://* | http://*)
+      _remote_scheme="${inflight_remote%%://*}"
+      _remote_rest="${inflight_remote#*://}"
+      _remote_host="${_remote_rest%%/*}"
+      case "$_remote_host" in
+        *@*) _remote_host="${_remote_host##*@}" ;;
+      esac
+      # Hostnames are case-insensitive and the coordinator matches
+      # github.com case-insensitively: lowercase (via tr, since macOS
+      # ships bash 3 without ${var,,}) or a GitHub.com remote passes
+      # validation then aborts the worker deploy as unresolvable.
+      _remote_host="$(printf '%s' "$_remote_host" | tr '[:upper:]' '[:lower:]')"
+      _remote_path="${_remote_rest#*/}"
+      if [ "$_remote_path" = "$_remote_rest" ]; then
+        _remote_path=""
+      else
+        _remote_path="/${_remote_path}"
+      fi
+      inflight_remote="${_remote_scheme}://${_remote_host}${_remote_path}"
+      ;;
+  esac
+  while :; do
+    case "$inflight_remote" in
+      */) inflight_remote="${inflight_remote%/}" ;;
+      *) break ;;
+    esac
+  done
   inflight_repo=""
   case "$inflight_remote" in
     https://github.com/* | http://github.com/* | git@github.com:* | ssh://git@github.com/*)
@@ -114,7 +151,7 @@ _list_noncompleted_deploy_runs() {
   _list_pass=1
   while [ "$_list_pass" -le 3 ]; do
     _list_pass_tsv=""
-    for _list_status in queued in_progress waiting requested pending; do
+    for _list_status in queued in_progress waiting requested pending action_required; do
       if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
         --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
         2>"${_list_err_file:-/dev/null}")"; then
@@ -277,7 +314,11 @@ record_deploy_workflow_promote() {
 _push_promote_record() {
   push_value="$1"
   push_ref="refs/baci-tmp/promote-record"
-  push_msg="record worker promote overlap ${push_value%%:*} [skip ci]"
+  # No [skip ci]: the Ops Promote Record workflow must validate every
+  # push to this branch server-side (the pre-push hook is bypassable).
+  # No other push workflow triggers on this branch, so record pushes
+  # run only that validator.
+  push_msg="record worker promote overlap ${push_value%%:*}"
   # Plumbing only: no checkout touched. Committer identity rides on
   # the command line so a bare-bones operator clone (no user.name or
   # user.email configured) still records.

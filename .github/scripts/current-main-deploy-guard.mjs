@@ -42,6 +42,7 @@ const WEB_WORKFLOW_FILES = new Set([
   '.github/scripts/smoke-gigl-worker-capability.sh',
   '.github/scripts/verify-gigl-fallback-token.sh',
   '.github/scripts/verify-gigl-worker-final-state.sh',
+  '.github/scripts/verify-coordinated-release.sh',
   '.github/scripts/gigl-dotenv.sh',
   '.github/scripts/deferred-production-migrations.sh',
   '.github/scripts/pending-postdeploy-migrations.sh',

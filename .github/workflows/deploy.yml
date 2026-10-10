@@ -1,9 +1,19 @@
 name: Deploy to Vercel
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.coordination_id && format('Coordinated release {0}', inputs.coordination_id) || format('Deploy {0}', github.sha) }}
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      coordination_id:
+        description: Unique release coordinator identifier
+        required: false
+        type: string
+      expected_release_sha:
+        description: Exact commit verified by the release coordinator
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -90,8 +100,14 @@ jobs:
             .github/scripts/check-gigl-cutover-latch.sh
             .github/scripts/resolve-gigl-latch-identity.sh
             .github/scripts/gigl-dotenv.sh
+            .github/scripts/verify-coordinated-release.sh
             .github/filters/deploy.yml
           sparse-checkout-cone-mode: false
+      - name: Verify coordinated release identity before production work
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          COORDINATION_ID: ${{ inputs.coordination_id }}
+        run: bash .readiness-checkout/.github/scripts/verify-coordinated-release.sh
       - name: Verify production cache-invalidation drain installation
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
@@ -384,8 +400,9 @@ jobs:
     # dispatches are NOT exempt: the changes outputs are unset there, so
     # `tracking == 'false'` is false and the smoke result is required — a
     # dispatch can never land the cron removal unverified. (The trailing
-    # dispatch term only keeps the pre-existing "dispatch always deploys"
-    # scope behavior.)
+    # dispatch term still selects this job for manual runs, but publication
+    # requires coordinator identifiers: the in-job verifier fails an
+    # uncoordinated dispatch closed before any production work.)
     if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true' && needs.vps-drain-readiness.outputs.tracking_stale == 'false' && needs.vps-drain-readiness.outputs.manifest_drift == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
@@ -438,6 +455,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Verify coordinated release identity before production work
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          COORDINATION_ID: ${{ inputs.coordination_id }}
+        run: bash .github/scripts/verify-coordinated-release.sh
       - name: Pre-run cleanup of stale secrets
         run: |
           rm -rf .vercel

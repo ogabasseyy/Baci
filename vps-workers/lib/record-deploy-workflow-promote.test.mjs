@@ -40,7 +40,7 @@ test('creates the ops branch with the promoted SHA and run ids', () => {
       encoding: 'utf8',
     }
   );
-  assert.match(message, /\[skip ci\]/);
+  assert.ok(!message.includes('[skip ci]'));
 });
 
 test('updates the existing record on the next promote', () => {

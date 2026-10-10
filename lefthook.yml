@@ -61,6 +61,47 @@ pre-push:
         # means we're in a smoke-test invocation.
         if [ -t 0 ]; then exit 0; fi
 
+        # Read the pushed refs up front: ops/gigl-promote-record
+        # validation needs no default-branch information, so it must
+        # run even when the lookups below fail and skip the
+        # behind-base check. (After the tty check: cat on a terminal
+        # would block waiting for input.) A temp file — not a pipe —
+        # feeds both loops below, since a piped loop runs in a
+        # subshell and could not report failures.
+        # Fail closed on setup errors: without `set -e`, an mktemp or
+        # cat failure would leave the loops below reading an empty or
+        # partial ref list and let the push through unvalidated.
+        refs_file=$(mktemp) || { echo '❌ Could not create temp file for pushed refs; refusing push.' >&2; exit 1; }
+        trap 'rm -f "$refs_file"' EXIT
+        cat > "$refs_file" || { echo '❌ Could not read pushed refs; refusing push.' >&2; exit 1; }
+
+        # Validate the operational tree before resolving the default
+        # branch: if refs/remotes/<remote>/HEAD is unset and the
+        # ls-remote lookup fails, the loud skip below must still
+        # refuse an invalid promote record. Unlike the main loop,
+        # deletions of THIS branch are refused: dropping the
+        # operational history is not a fast-forward update. The main
+        # loop skips this branch's behind-base comparison since its
+        # history is separate from main.
+        promote_fail=0
+        while IFS=' ' read -r _local_ref local_sha _remote_ref _remote_sha; do
+          case "$_remote_ref" in
+            refs/heads/ops/gigl-promote-record) ;;
+            *) continue ;;
+          esac
+          case "$local_sha" in
+            *[!0]*) ;;
+            *)
+              echo '❌ Refusing deletion of ops/gigl-promote-record; operational history must be preserved.' >&2
+              promote_fail=1
+              continue
+              ;;
+          esac
+          if ! node ci_scripts/validate-promote-record.mjs "$local_sha" "$_remote_sha"; then
+            promote_fail=1
+          fi
+        done < "$refs_file"
+
         # Destination remote. Lefthook commands.run does NOT expose hook
         # args as shell positional parameters — they're injected via
         # template placeholders that Lefthook substitutes BEFORE the
@@ -114,7 +155,7 @@ pre-push:
           echo "    AND \`git ls-remote --symref $remote HEAD\` failed (offline?)."
           echo "    Skipping behind-base check. Override per-branch with:"
           echo "      git config branch.<name>.base $remote/<your-base>"
-          exit 0
+          exit $promote_fail
         fi
 
         fail=0
@@ -159,6 +200,10 @@ pre-push:
           # don't get checked against themselves.
           [ "$branch" = "$default_branch" ] && continue
 
+          # Already validated above; its separate history never
+          # compares against the default base.
+          [ "$branch" = "ops/gigl-promote-record" ] && continue
+
           base=$(git config "branch.$branch.base" 2>/dev/null || true)
           if [ -z "$base" ]; then
             base="${remote}/${default_branch}"
@@ -196,6 +241,8 @@ pre-push:
             echo "   To override (emergency): git push --no-verify"
             fail=1
           fi
-        done
+        done < "$refs_file"
+
+        if [ "$promote_fail" -ne 0 ]; then fail=1; fi
 
         exit $fail

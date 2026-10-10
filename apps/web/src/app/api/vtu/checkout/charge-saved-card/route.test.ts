@@ -85,4 +85,41 @@ describe('POST /api/vtu/checkout/charge-saved-card', () => {
     expect(response.status).toBe(400);
     expect(data.code).toBe('VTU_WALLET_ONLY');
   });
+
+  it.each([
+    { type: 'airtime', extra: {} },
+    { type: 'data', extra: { dataPlanCode: 'MTN-DATA-1GB' } },
+    {
+      type: 'electricity',
+      extra: {
+        billItemIdentifier: 'PHED-PREPAID',
+        customerIdentifier: '1234567890',
+      },
+    },
+    {
+      type: 'cable_tv',
+      extra: {
+        billItemIdentifier: 'DSTV-COMPACT',
+        customerIdentifier: '1234567890',
+      },
+    },
+    {
+      type: 'betting',
+      extra: {
+        billItemIdentifier: 'BET9JA-TOPUP',
+        customerIdentifier: '1234567890',
+      },
+    },
+  ] as const)('rejects saved-card charges for $type purchases', async ({
+    type,
+    extra,
+  }) => {
+    const response = await POST(
+      makeRequest({ ...validPayload, type, ...extra })
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.code).toBe('VTU_WALLET_ONLY');
+  });
 });

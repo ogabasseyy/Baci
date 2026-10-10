@@ -66,9 +66,28 @@ export async function waitForRunCompletion(runId, readStatus, options = {}) {
 }
 
 export function originRepoSlug(remoteUrl) {
-  const withoutSuffix = String(remoteUrl ?? '').replace(/\/+$/, '').replace(/\.git$/, '');
+  // Strip userinfo (tokens) without logging it: credentials do not
+  // change where the remote points. HTTPS only — the scp-like and
+  // ssh:// forms carry their user as part of the match below.
+  const withoutUserinfo = String(remoteUrl ?? '').replace(/^(https?:\/\/)[^/]*@/, '$1');
+  const withoutSuffix = withoutUserinfo.replace(/\/+$/, '').replace(/\.git$/, '');
   const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
   return match ? match[1].toLowerCase() : '';
+}
+
+// gh --jq emits raw unquoted scalars for string results: never
+// JSON.parse them. Empty (or literal null) means the field is absent.
+export function parseGhJqString(output, label) {
+  const value = String(output ?? '').trim();
+  if (!value || value === 'null') throw new Error(`${label} unreadable; inspect preceding gh diagnostics`);
+  return value;
+}
+
+export function readWorkflowRunStatus(ghInvoke, runId) {
+  return parseGhJqString(
+    ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.status // empty']),
+    `workflow run ${runId} status`
+  );
 }
 
 export function assertCanonicalOriginPushUrls(pushUrls) {
@@ -159,7 +178,7 @@ async function main() {
         assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin']));
         return command('git', ['rev-parse', 'HEAD']);
       },
-      readMain: async () => gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha']),
+      readMain: async () => parseGhJqString(gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha // empty']), 'main ref'),
       listRuns: async () => [...IN_FLIGHT_RUN_STATUSES]
         .flatMap(status => readRuns(`status=${status}`, true)),
       listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
@@ -186,13 +205,7 @@ async function main() {
       // the readJobs check that follows.
       watchRun: async runId => waitForRunCompletion(
         runId,
-        async () => {
-          const status = JSON.parse(gh(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.status']));
-          if (typeof status !== 'string') {
-            throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
-          }
-          return status;
-        },
+        async () => readWorkflowRunStatus(gh, runId),
         {
           onWait: (status, elapsedMs) =>
             process.stderr.write(`waiting on run ${runId}: ${status} (${Math.round(elapsedMs / 1000)}s)\n`),

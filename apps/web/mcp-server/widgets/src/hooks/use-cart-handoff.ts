@@ -11,6 +11,7 @@ import {
   readStructuredContent,
 } from '../parse-cart-tool-output';
 import { parseHandoffLines } from '../parse-handoff-lines';
+import { parseRemovalRemaining } from '../parse-removal-remaining';
 import { recoverCartAdd } from '../recover-expired-add';
 import { useCartReview } from './use-cart-review';
 import type { Product, WidgetState } from '../widget-types';
@@ -238,24 +239,26 @@ export function useCartHandoff() {
         // it locally and forget the dead token. (Tokenless removals are
         // rejected, so unlike adds this path cannot retry without the token.)
         setWidgetState((previous) => dropLineFromCartState(previous, productId));
+        // No server lines can remain foreign: recompute the sync notice
+        // against the empty server cart so a stale foreign-lines notice
+        // clears instead of claiming hidden items with no Review path.
+        syncCartNotice(
+          [],
+          (widgetState?.cart ?? []).filter(
+            (item) => item.product.id !== productId
+          ),
+          productId
+        );
         return;
       }
-      const url = content?.cart_url ? new URL(content.cart_url) : null;
-      const raw = url?.searchParams.get('guest_cart') ?? null;
-      // An emptied cart arrives as a bare /cart URL (legacy responses
-      // carry guest_cart=[]); both mean no lines remain.
-      const remaining =
-        raw === null || raw === '[]' ? [] : parseHandoffLines(raw);
-      if (
-        !content?.success ||
-        content.cart_token !== widgetState.cartToken ||
-        url?.origin !== 'https://ogabassey.com' ||
-        url.pathname !== '/cart' ||
-        url.username ||
-        url.password ||
-        !remaining ||
-        remaining.some((line) => line.product_id === productId)
-      )
+      const remaining = parseRemovalRemaining(
+        content,
+        widgetState.cartToken,
+        productId
+      );
+      // The cart_url check only narrows content for the merge below: a
+      // non-null remaining already implies a valid success response.
+      if (!remaining || !content?.cart_url)
         throw new Error('Cart update failed');
       const remainingQuantities = new Map(
         remaining.map((line) => [line.product_id, line.quantity])

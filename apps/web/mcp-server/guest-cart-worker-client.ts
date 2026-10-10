@@ -132,8 +132,9 @@ function assertAllowedSupabaseHost(
  * key position before PostgREST can assume the worker role. Refuses
  * expired, mis-scoped, and malformed tokens, tokens without a 24-hour
  * rotation runway, plaintext non-loopback origins, and (outside
- * loopback, which never leaves the host) any Supabase host other than
- * the production pin plus the non-production allowlist below.
+ * loopback, which never leaves the host — and everywhere in
+ * production) any Supabase host other than the production pin plus
+ * the non-production allowlist below.
  */
 export function createGuestCartWorkerClient(
   url: string,
@@ -164,12 +165,14 @@ export function createGuestCartWorkerClient(
       'Guest-cart worker database URL must not embed credentials'
     );
   }
-  // Loopback never leaves the host, so plaintext stays allowed for
-  // local Supabase and no pin applies. Anywhere else the worker JWT
-  // would travel to the named origin, so require https and pin the
-  // host: a mistyped or substituted URL must fail here rather than
-  // exfiltrate a replayable capability.
-  if (!isLoopbackHostname(parsed.hostname)) {
+  // Loopback never leaves the host, so outside production plaintext
+  // stays allowed for local Supabase and no pin applies. In production
+  // the exemption is lifted: a substituted loopback URL would hand the
+  // worker Bearer token to whoever bound that port, and the capture
+  // replays against the real project past the creation quota.
+  const isProduction =
+    (env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
+  if (!isLoopbackHostname(parsed.hostname) || isProduction) {
     if (parsed.protocol !== 'https:') {
       throw new GuestCartWorkerTokenError(
         'Guest-cart worker token requires an https database URL outside loopback'

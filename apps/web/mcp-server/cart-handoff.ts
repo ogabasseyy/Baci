@@ -113,28 +113,12 @@ export async function prepareCartHandoff({
   if (product && manageStock === true) {
     let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&
       Number(stockQuantity ?? 0) >= quantity;
-    if (product.has_condition_offers === true) {
-      // PDP parity: the snapshot keeps 16 offers by (condition, id), so a
-      // stocked 17th offer is unpurchasable — window before the stock
-      // check or selection advertises an option the PDP cannot fulfill.
-      const { data: offers, error: offersError } = await supabase
-        .from('product_offers')
-        .select('condition, stock_quantity')
-        .eq('merchant_id', merchantId)
-        .eq('product_id', productId)
-        .eq('status', 'active')
-        .order('condition')
-        .order('id')
-        .limit(STOREFRONT_SNAPSHOT_OFFER_WINDOW);
-      if (offersError) transient = true;
-      optionAvailable ||=
-        !offersError &&
-        hasSelectableStockedOffer(
-          offers as HandoffOfferRow[] | null,
-          product.condition,
-          quantity
-        );
-    }
+    // Variants evaluate before offers: resolvePublicProductOption gives a
+    // paired variant ownership of purchasability, so for variant-bearing
+    // products an offer can only combine with an already-purchasable
+    // variant — a stocked offer alone would send the shopper to
+    // selection that cannot be added.
+    let variantAvailable = false;
     if (product.has_variants === true) {
       // The search-shaped RPC projects each variant's effective inventory
       // policy; the storefront RPC returns raw stock only, which would
@@ -158,9 +142,35 @@ export async function prepareCartHandoff({
         stock: product.stock,
         stock_quantity: stockQuantity,
       });
-      optionAvailable ||= own.some((variant) =>
+      variantAvailable = own.some((variant) =>
         isVariantRowPurchasable(variant, parentStock, quantity)
       );
+      optionAvailable ||= variantAvailable;
+    }
+    if (product.has_condition_offers === true) {
+      // PDP parity: the snapshot keeps 16 offers by (condition, id), so a
+      // stocked 17th offer is unpurchasable — window before the stock
+      // check or selection advertises an option the PDP cannot fulfill.
+      // For variant-bearing products the offer only counts when a variant
+      // already passed: purchasability belongs to the paired variant.
+      const { data: offers, error: offersError } = await supabase
+        .from('product_offers')
+        .select('condition, stock_quantity')
+        .eq('merchant_id', merchantId)
+        .eq('product_id', productId)
+        .eq('status', 'active')
+        .order('condition')
+        .order('id')
+        .limit(STOREFRONT_SNAPSHOT_OFFER_WINDOW);
+      if (offersError) transient = true;
+      optionAvailable ||=
+        !offersError &&
+        (product.has_variants !== true || variantAvailable) &&
+        hasSelectableStockedOffer(
+          offers as HandoffOfferRow[] | null,
+          product.condition,
+          quantity
+        );
     }
     if (product.has_condition_offers === true || product.has_variants === true) {
       unavailable ||= !optionAvailable;
@@ -172,13 +182,17 @@ export async function prepareCartHandoff({
     product?.has_variants === true &&
     product?.has_condition_offers !== true
   ) {
-    // Unmanaged parents fail open to option selection — except a
-    // strict-only variant set with insufficient units: no option is
+    // Unmanaged parents fail open to option selection — except an empty
+    // or strict-only variant set with insufficient units: no option is
     // purchasable (mirrors isPublicVariantPurchasable, which gates
-    // strict variants regardless of the parent policy), so report
-    // unavailable instead of sending the shopper to select options
-    // that cannot be fulfilled. Products with condition offers keep
-    // failing open: offers are not evaluated for unmanaged parents.
+    // strict variants regardless of the parent policy, and the
+    // storefront cart provider, which cannot add a variant product
+    // without a resolvable variant ID), so report unavailable instead
+    // of sending the shopper to select options that cannot be
+    // fulfilled. Products with condition offers keep failing open:
+    // offers are not evaluated for unmanaged parents. (every on an
+    // empty set is vacuously true, so no length guard is needed: zero
+    // rows is zero purchasable options.)
     const { data: variants, error: variantsError } = await supabase.rpc(
       'get_mcp_search_product_variants',
       { p_product_ids: [productId], p_merchant_id: merchantId }
@@ -193,7 +207,6 @@ export async function prepareCartHandoff({
       // row means selection would dead-end there.
       if (own.length > STOREFRONT_SNAPSHOT_VARIANT_WINDOW) unavailable = true;
       if (
-        own.length > 0 &&
         own.every(
           (variant) =>
             variant.effective_policy === 'serialized_strict' &&

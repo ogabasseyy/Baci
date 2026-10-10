@@ -157,6 +157,19 @@ it('pins the Supabase host so a substituted URL cannot take the token', () => {
       TEST_ENV
     )
   ).toThrow(/not an allowed origin/);
+  // In production the loopback exemption is lifted: a substituted
+  // loopback URL would hand the token to whoever bound that port.
+  expect(() =>
+    createGuestCartWorkerClient(LOOPBACK_URL, ANON_KEY, jwt(), production)
+  ).toThrow(/https/);
+  expect(() =>
+    createGuestCartWorkerClient(
+      'https://127.0.0.1:54321',
+      ANON_KEY,
+      jwt(),
+      production
+    )
+  ).toThrow(/not an allowed origin/);
 });
 
 it('refuses to send the token over plaintext or credentialed URLs', () => {

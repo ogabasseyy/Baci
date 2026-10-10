@@ -68,6 +68,17 @@ it('reports unavailable for strict-only variants with no units', async () => {
   });
 });
 
+it('reports unavailable when no variant rows resolve', async () => {
+  // An empty successful projection: the storefront cart provider cannot
+  // add a variant product without a resolvable variant ID, so selection
+  // would dead-end on the PDP.
+  const result = await check(unmanagedVariantProduct([]));
+  expect(result.structuredContent).toEqual({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
 it('selects options when a strict variant has units', async () => {
   const result = await check(
     unmanagedVariantProduct([

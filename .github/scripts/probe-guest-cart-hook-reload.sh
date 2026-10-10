@@ -37,6 +37,31 @@ set -euo pipefail
 : "${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}"
 : "${NEXT_PUBLIC_SUPABASE_ANON_KEY:?NEXT_PUBLIC_SUPABASE_ANON_KEY is required}"
 
+# Bind the canary to the migrated project: the migration, reload
+# notifications, and isolate grant all target SUPABASE_PROJECT_REF, so a
+# stale or substituted NEXT_PUBLIC_SUPABASE_URL must fail here rather
+# than authorize the grant with another project's acks. supabase.co URLs
+# must match the ref exactly; anything else (local stubs, preview hosts)
+# requires the explicit escape hatch below (test/local use only — the
+# deploy workflow never sets it). This check intentionally diverges from
+# the GIGL/blog-media probe mirror.
+canary_host="$(printf '%s' "$NEXT_PUBLIC_SUPABASE_URL" | sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##' -e 's#/.*##' -e 's#:.*##')"
+expected_host="${SUPABASE_PROJECT_REF}.supabase.co"
+case "$canary_host" in
+  *.supabase.co)
+    if [ "$canary_host" != "$expected_host" ]; then
+      echo "::error::GUEST CART hook probe URL host '${canary_host}' does not match project ref '${SUPABASE_PROJECT_REF}' (expected '${expected_host}'); refusing to probe." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "${GUEST_CART_HOOK_PROBE_ALLOW_UNBOUND_URL:-}" != "1" ]; then
+      echo "::error::GUEST CART hook probe URL host '${canary_host}' is not a supabase.co project URL; set GUEST_CART_HOOK_PROBE_ALLOW_UNBOUND_URL=1 to probe it explicitly (test/local use only)." >&2
+      exit 1
+    fi
+    ;;
+esac
+
 ISOLATE_VERSION=20261010100000
 CANARY_PATH=__guest_cart_hook_reload_canary__
 CANARY_MESSAGE='GUEST CART hook reload canary observed'

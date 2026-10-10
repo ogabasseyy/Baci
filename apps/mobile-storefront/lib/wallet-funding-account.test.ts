@@ -316,6 +316,53 @@ describe('wallet funding account api client', () => {
       account: { accountNumber: '1234567890' },
     });
   });
+  it('refuses the legacy fallback after an account switch mid-flight', async () => {
+    mockFetchWithTimeout.mockClear();
+    // Only the probe response is queued: the legacy POST must throw
+    // before any second fetch happens (an unconsumed queue entry would
+    // leak into the next test).
+    mockFetchWithTimeout.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      json: async () => ({
+        error: 'Wallet access is temporarily unavailable.',
+        code: 'PIGGYVEST_NOT_READY',
+      }),
+    });
+    // The probe runs as user-1, then user-2 signs in before the legacy
+    // POST: the fallback must throw before any bytes leave the device
+    // instead of minting a DVA under the new session.
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: {
+          session: { access_token: 'token-1', user: { id: 'user-1' } },
+        },
+        error: null,
+      })
+      .mockResolvedValue({
+        data: {
+          session: { access_token: 'token-2', user: { id: 'user-2' } },
+        },
+        error: null,
+      });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        userId: 'user-1',
+      })
+    ).rejects.toThrow('signed-in account changed');
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([url, options]) =>
+          typeof url === 'string' &&
+          url.includes('/api/storefront/customer/wallet/funding-account') &&
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'POST'
+      )
+    ).toBe(false);
+  });
   it('refuses to mint a legacy DVA when the probe fails ambiguously', async () => {
     mockFetchWithTimeout.mockClear();
     mockFetchWithTimeout.mockRejectedValueOnce(new Error('timeout'));

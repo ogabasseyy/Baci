@@ -28,38 +28,63 @@ export default function PaymentGatewayScreen() {
   const user = useAuthStore((state) => state.user);
   const customer = useAuthStore((state) => state.customer);
   const paramsData = controller.validatedParams.data;
-  // Deep-link params are caller-controlled, so the user stamp alone
-  // proves nothing: an attacker can stamp the victim's own id next to
-  // another customer's authorization URL and reference. Every primary
-  // launch — stamped or stampless — resolves ownership from the device
-  // record instead of the params, so nobody can enter card details
-  // into a checkout they do not own. The WebView stays unmounted
-  // until the record proves the current user owns this reference (or
-  // the launch is blocked).
+  // Deep-link params are caller-controlled: the stamp alone proves
+  // nothing, and the reference alone does not bind the payment (a
+  // caller knowing it could pair it with any live Paystack URL). Every
+  // primary launch resolves ownership from the device record, then
+  // recovers the operation from the server and requires the exact
+  // server-issued checkout URL and amount. The WebView stays unmounted
+  // until both proofs pass (or the launch is blocked).
   const needsOwnershipCheck =
     controller.validatedParams.isValid &&
     controller.paymentKind === 'primary_wallet_card';
   const [ownership, setOwnership] = useState<
-    'pending' | 'verified' | 'blocked'
+    'pending' | 'verified' | 'blocked' | 'mismatch'
   >('pending');
   useEffect(() => {
     if (!needsOwnershipCheck) return;
     let cancelled = false;
     setOwnership('pending');
     (async () => {
+      const client = createPrimaryWalletCardFundingClient();
+      let record: Awaited<ReturnType<typeof client.readPending>>;
       try {
-        const record = await createPrimaryWalletCardFundingClient().readPending(
-          {
-            merchantId: paramsData?.merchantId,
-            userId: user?.id,
-          }
-        );
-        const owns =
-          record?.operationId != null &&
-          `pvb-first-primary-${record.operationId}` === paramsData?.reference;
-        if (!cancelled) setOwnership(owns ? 'verified' : 'blocked');
+        record = await client.readPending({
+          merchantId: paramsData?.merchantId,
+          userId: user?.id,
+        });
       } catch {
         if (!cancelled) setOwnership('blocked');
+        return;
+      }
+      if (
+        record == null ||
+        record.operationId == null ||
+        `pvb-first-primary-${record.operationId}` !== paramsData?.reference
+      ) {
+        if (!cancelled) setOwnership('blocked');
+        return;
+      }
+      // Server bind: recover() status-polls the record's operation
+      // (never re-initializes: operationId is non-null here) and
+      // already enforces the record amount. Mount only when the
+      // server confirms this exact checkout URL and amount — a stale
+      // URL for an advanced operation, a forged URL, a tampered
+      // amount, or an unreachable server all fail closed. The WebView
+      // needs network regardless, so offline has no legitimate mount.
+      try {
+        const status = await client.recover({
+          merchantId: record.merchantId,
+          userId: record.userId,
+          reference: paramsData?.reference,
+        });
+        const bound =
+          status.authorizationUrl === paramsData?.authorizationUrl &&
+          typeof paramsData?.amount === 'number' &&
+          Math.round(paramsData.amount * 100) === status.amountKobo;
+        if (!cancelled) setOwnership(bound ? 'verified' : 'mismatch');
+      } catch {
+        if (!cancelled) setOwnership('mismatch');
       }
     })();
     return () => {
@@ -69,6 +94,8 @@ export default function PaymentGatewayScreen() {
     needsOwnershipCheck,
     paramsData?.merchantId,
     paramsData?.reference,
+    paramsData?.authorizationUrl,
+    paramsData?.amount,
     user?.id,
   ]);
 
@@ -140,13 +167,23 @@ export default function PaymentGatewayScreen() {
           />
         );
       }
-      if (ownership === 'blocked') {
+      // Blocked: no device record owns this reference. Mismatch: the
+      // record owns it, but the server would not confirm this exact
+      // checkout URL and amount — a forged or stale link, or an
+      // unreachable server. Never mount the WebView on unconfirmed
+      // payment bytes; the wallet fund action resumes the true pending
+      // operation.
+      if (ownership === 'blocked' || ownership === 'mismatch') {
         return (
           <PrimaryWalletCardPendingView
             colors={colors}
             statusError
             message={null}
-            terminalDirective="We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited."
+            terminalDirective={
+              ownership === 'blocked'
+                ? 'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
+                : 'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+            }
             onBack={() =>
               router.replace(getWalletReturnHref(controller.returnTo))
             }

@@ -46,3 +46,19 @@ it('uses existing operation actions once recovery is ready', () => {
   expect(mockSubmit).toHaveBeenCalledTimes(1);
   expect(result.current.hasPendingSavingsContribution).toBe(true);
 });
+it('drops the pending key when the scope changes so no foreign operation is queried', () => {
+  const idempotencyKeyRef: { current: string | null } = { current: null };
+  const { rerender } = renderHook(
+    ({ userId }: { userId: string }) =>
+      useWalletSavingsController({ ...input, idempotencyKeyRef, userId }),
+    { initialProps: { userId: 'user-a' } }
+  );
+  // A key created during the session survives same-scope re-renders.
+  idempotencyKeyRef.current = 'created-operation';
+  rerender({ userId: 'user-a' });
+  expect(idempotencyKeyRef.current).toBe('created-operation');
+  // An account switch drops it before any status query could clear it
+  // as not_found under the new identity.
+  rerender({ userId: 'user-b' });
+  expect(idempotencyKeyRef.current).toBeNull();
+});

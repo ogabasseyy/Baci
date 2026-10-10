@@ -94,23 +94,90 @@ describe('primary wallet savings settlement proof', () => {
     ).toEqual({ status: 'unverified' });
   });
 
-  it('does not treat a flat status response or processing acceptance as wallet settlement', () => {
+  it('does not treat a processing acceptance as wallet settlement', () => {
     for (const evidence of [
+      { accepted: true },
+      { status: true, data: { ...response.data, status: 'pending' } },
+      { status: true, data: { status: 'failed' } },
+      { status: false, data: { ...response.data, status: 'failed' } },
       {
+        status: true,
+        data: {
+          status: 'pending',
+          reference: reservation.reference,
+          amount: 10000,
+        },
+      },
+    ])
+      expect(verifyPrimaryWalletSavingsProof(reservation, evidence)).toEqual({
+        status: 'unverified',
+      });
+  });
+
+  it('settles on the transaction-verify TSQ success bound to the reservation', () => {
+    // The verify endpoint never returns the rich envelope: without TSQ
+    // acceptance every reconciled contribution would hold pending
+    // forever. The unguessable reference plus the amount, over the
+    // authenticated provider channel, is the success signal.
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
         status: true,
         data: {
           status: 'success',
           reference: reservation.reference,
           amount: 10000,
         },
-      },
-      { accepted: true },
-      { status: true, data: { ...response.data, status: 'pending' } },
-      { status: true, data: { status: 'failed' } },
-      { status: false, data: { ...response.data, status: 'failed' } },
-    ])
-      expect(verifyPrimaryWalletSavingsProof(reservation, evidence)).toEqual({
-        status: 'unverified',
-      });
+      })
+    ).toEqual({
+      status: 'verified',
+      providerTransactionId: reservation.reference,
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    });
+  });
+
+  it('releases the hold on a TSQ failure bound to the reservation', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        status: true,
+        data: {
+          status: 'failed',
+          reference: reservation.reference,
+          amount: 10000,
+        },
+      })
+    ).toEqual({
+      status: 'failed',
+      providerTransactionId: reservation.reference,
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    });
+  });
+
+  it.each([
+    { reference: 'another-operation' },
+    { amount: 9999 },
+  ])('does not settle or release on mismatched TSQ evidence: %j', (change) => {
+    for (const status of ['success', 'failed']) {
+      expect(
+        verifyPrimaryWalletSavingsProof(reservation, {
+          status: true,
+          data: {
+            status,
+            reference: reservation.reference,
+            amount: 10000,
+            ...change,
+          },
+        })
+      ).toEqual({ status: 'unverified' });
+    }
   });
 });

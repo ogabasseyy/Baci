@@ -42,10 +42,14 @@ export async function checkPendingPrimarySavings(input: {
       'code' in error &&
       (error as { code?: unknown }).code === 'CONTRIBUTION_NOT_FOUND'
     ) {
-      // Authoritative absence: the initial POST never reserved anything
-      // (CSRF, transport, or early 503), so release the local operation and
-      // let the next tap re-submit. The entered amount is kept. Ambiguous
-      // failures still retain the operation for recovery.
+      // Authoritative absence: the server joins the status read to the
+      // caller's own intent, so not_found means this identity never
+      // reserved this operation id (the initial POST died on CSRF,
+      // transport, or early 503 — never a cross-identity leak, and the
+      // controller drops the key on scope change before any foreign
+      // query). Release the local operation and let the next tap
+      // re-submit. The entered amount is kept. Ambiguous failures still
+      // retain the operation for recovery.
       input.clearOperation();
       Alert.alert(
         'Contribution not received',

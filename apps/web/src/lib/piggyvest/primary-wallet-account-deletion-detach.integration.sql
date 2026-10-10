@@ -249,3 +249,54 @@ DO $$ BEGIN
  IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_savings_customer_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'savings guard publicly executable'; END IF;
  IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_savings_goal_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'savings goal guard publicly executable'; END IF;
 END $$;
+\ir ../../../../../supabase/migrations/20261007220100_piggyvest_primary_interest_inbox.sql
+\ir ../../../../../supabase/migrations/20261008094900_primary_interest_inbox_unsettled_deletion_block.sql
+-- A queued interest payout blocks account deletion: the worker resolves
+-- its crosswalk through live customers and goals, so deleting now would
+-- strand the receipt in prerequisite forever. Once processed, the same
+-- delete proceeds; a disabled crosswalk never blocks.
+DO $$ DECLARE
+  v_customer uuid := '50000000-0000-4000-8000-000000000060';
+  v_goal uuid := '50000000-0000-4000-8000-000000000061';
+  v_intent uuid;
+  v_deleted boolean := false;
+BEGIN
+  INSERT INTO public.customers VALUES(v_customer,'10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000062','interest-block@example.test');
+  INSERT INTO public.customer_savings_goals VALUES(v_goal,'10000000-0000-4000-8000-000000000001',v_customer);
+  INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_customer,'50000000-0000-4000-8000-000000000062',repeat('d',64),'verified','block-customer','block-wallet') RETURNING id INTO v_intent;
+  INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled) VALUES('10000000-0000-4000-8000-000000000004',v_goal,v_intent,'block-wallet',true);
+  INSERT INTO piggyvest_primary.paid_interest_crosswalks(integration_id,goal_id,api_wallet_id,api_customer_id,onboarding_customer_id,webhook_customer_id,source_wallet_id,accrued_wallet_id,destination_wallet_id,provider_evidence_sha256,policy_evidence_sha256,policy_reference,allocation_policy,enabled)
+  VALUES('10000000-0000-4000-8000-000000000004',v_goal,'block-wallet','block-api-customer','block-customer','block-webhook','block-source','block-accrued','block-destination',repeat('f',64),repeat('a',64),'block-policy','provider_net_is_customer_plan_interest',true);
+  INSERT INTO piggyvest_primary.paid_interest_inbox(integration_id,event_id,payload,signature,body_digest)
+  VALUES('10000000-0000-4000-8000-000000000004','interest-block-event',convert_to('{"eventType":"interest-payout.success","eventCategory":"interest-payout","eventId":"interest-block-event","customer_id":"block-webhook","pvb_wallet":"block-source","pvb_accrued_interest_wallet":"block-accrued","eventData":{"destination_wallet":"block-destination"}}','UTF8'),repeat('a',128),repeat('b',64));
+  BEGIN
+    DELETE FROM public.customers WHERE id = v_customer;
+    v_deleted := true;
+  EXCEPTION WHEN raise_exception THEN NULL; END;
+  IF v_deleted THEN RAISE EXCEPTION 'queued interest deletion allowed'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.customers WHERE id = v_customer) THEN RAISE EXCEPTION 'interest-blocked customer deleted'; END IF;
+  UPDATE piggyvest_primary.paid_interest_inbox SET state = 'processed' WHERE event_id = 'interest-block-event';
+  DELETE FROM public.customers WHERE id = v_customer;
+  IF EXISTS (SELECT 1 FROM public.customers WHERE id = v_customer) THEN RAISE EXCEPTION 'processed interest deletion blocked'; END IF;
+END $$;
+DO $$ DECLARE
+  v_customer uuid := '50000000-0000-4000-8000-000000000063';
+  v_goal uuid := '50000000-0000-4000-8000-000000000064';
+  v_intent uuid;
+BEGIN
+  INSERT INTO public.customers VALUES(v_customer,'10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000065','interest-disabled@example.test');
+  INSERT INTO public.customer_savings_goals VALUES(v_goal,'10000000-0000-4000-8000-000000000001',v_customer);
+  INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_customer,'50000000-0000-4000-8000-000000000065',repeat('e',64),'verified','disabled-customer','disabled-wallet') RETURNING id INTO v_intent;
+  INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled) VALUES('10000000-0000-4000-8000-000000000004',v_goal,v_intent,'disabled-wallet',true);
+  INSERT INTO piggyvest_primary.paid_interest_crosswalks(integration_id,goal_id,api_wallet_id,api_customer_id,onboarding_customer_id,webhook_customer_id,source_wallet_id,accrued_wallet_id,destination_wallet_id,provider_evidence_sha256,policy_evidence_sha256,policy_reference,allocation_policy,enabled)
+  VALUES('10000000-0000-4000-8000-000000000004',v_goal,'disabled-wallet','disabled-api-customer','disabled-customer','disabled-webhook','disabled-source','disabled-accrued','disabled-destination',repeat('f',64),repeat('a',64),'disabled-policy','provider_net_is_customer_plan_interest',false);
+  INSERT INTO piggyvest_primary.paid_interest_inbox(integration_id,event_id,payload,signature,body_digest)
+  VALUES('10000000-0000-4000-8000-000000000004','interest-disabled-event',convert_to('{"eventType":"interest-payout.success","eventCategory":"interest-payout","eventId":"interest-disabled-event","customer_id":"disabled-webhook","pvb_wallet":"disabled-source","pvb_accrued_interest_wallet":"disabled-accrued","eventData":{"destination_wallet":"disabled-destination"}}','UTF8'),repeat('a',128),repeat('b',64));
+  DELETE FROM public.customers WHERE id = v_customer;
+  IF EXISTS (SELECT 1 FROM public.customers WHERE id = v_customer) THEN RAISE EXCEPTION 'disabled crosswalk deletion blocked'; END IF;
+END $$;
+DO $$ BEGIN
+ IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_interest_inbox_customer_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'interest guard publicly executable'; END IF;
+END $$;

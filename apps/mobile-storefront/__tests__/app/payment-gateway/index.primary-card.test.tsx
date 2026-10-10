@@ -52,6 +52,8 @@ jest.mock('@/lib/supabase', () => ({
 let mockParamsUserId: string | undefined;
 let mockParamsReference =
   'pvb-first-primary-22222222-2222-4222-8222-222222222222';
+let mockParamsAuthorizationUrl = 'https://checkout.paystack.com/Synthetic123';
+let mockParamsAmount = '1000';
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn(), back: jest.fn() },
   Stack: { Screen: () => null },
@@ -60,8 +62,8 @@ jest.mock('expo-router', () => ({
     gateway: 'paystack',
     merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
     reference: mockParamsReference,
-    authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
-    amount: '1000',
+    authorizationUrl: mockParamsAuthorizationUrl,
+    amount: mockParamsAmount,
     returnTo: mockReturnTo,
     ...(mockParamsUserId ? { userId: mockParamsUserId } : {}),
   }),
@@ -120,6 +122,8 @@ beforeEach(async () => {
   mockParamsUserId = '11111111-1111-4111-8111-111111111111';
   mockParamsReference =
     'pvb-first-primary-22222222-2222-4222-8222-222222222222';
+  mockParamsAuthorizationUrl = 'https://checkout.paystack.com/Synthetic123';
+  mockParamsAmount = '1000';
   mockStorage.clear();
   mockFetchJson.mockResolvedValue(response);
   await createPrimaryWalletCardFundingClient().start({
@@ -133,7 +137,10 @@ beforeEach(async () => {
     },
     returnTo: mockReturnTo,
   });
+  // Mounts recover the operation from the server before rendering: the
+  // default fixture answers ready with the params URL and amount.
   mockFetchJson.mockClear();
+  mockFetchJson.mockResolvedValue(response);
 });
 
 it('blocks another account through the actual controller and lets the original owner recover after signing back in', async () => {
@@ -151,7 +158,11 @@ it('blocks another account through the actual controller and lets the original o
   expect(mockFetchJson).not.toHaveBeenCalled();
   expect(mockStorage.size).toBe(1);
   mockUserId = '11111111-1111-4111-8111-111111111111';
-  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  // Mount recovery binds the server URL first, then the callback
+  // reports custody.
+  mockFetchJson
+    .mockResolvedValueOnce(response)
+    .mockResolvedValue({ ...response, status: 'custody_pending' });
   view.rerender(<PaymentGatewayScreen />);
   await waitFor(() =>
     expect(
@@ -164,7 +175,7 @@ it('blocks another account through the actual controller and lets the original o
   await waitFor(() =>
     expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
   );
-  expect(mockFetchJson).toHaveBeenCalledTimes(1);
+  expect(mockFetchJson).toHaveBeenCalledTimes(2);
   expect(mockInvalidate).not.toHaveBeenCalled();
   expect(mockStorage.size).toBe(1);
 });
@@ -194,7 +205,9 @@ it('blocks a stampless legacy launch whose device record belongs to nobody signe
 
 it('mounts a stampless legacy launch when the device record proves ownership', async () => {
   mockParamsUserId = undefined;
-  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  mockFetchJson
+    .mockResolvedValueOnce(response)
+    .mockResolvedValue({ ...response, status: 'custody_pending' });
   render(<PaymentGatewayScreen />);
   // The beforeEach record (seeded by the real fund flow) matches this
   // reference, so the WebView mounts after the async check resolves.
@@ -255,6 +268,77 @@ it('blocks a stamped launch whose reference belongs to a different operation', a
   expect(mockFetchJson).not.toHaveBeenCalled();
 });
 
+it('blocks a launch that pairs the owned reference with a foreign checkout URL', async () => {
+  // The reference matches the device record, but the deep link carries
+  // another customer's live Paystack session: mounting it would let the
+  // victim authorize someone else's charge.
+  mockParamsAuthorizationUrl = 'https://checkout.paystack.com/Attacker999';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+  expect(mockFetchJson).toHaveBeenCalledTimes(1);
+});
+
+it('blocks a launch that pairs the owned reference with a tampered amount', async () => {
+  mockParamsAmount = '999999';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+});
+
+it('blocks a stale checkout URL once the server advanced past ready', async () => {
+  // No URL comes back for a custody-pending operation, so the params
+  // URL (fresh or replayed) can never bind: the WebView must not mount
+  // it, or the customer could pay twice on a stale session.
+  const { authorizationUrl: _dropped, ...custody } = {
+    ...response,
+    status: 'custody_pending',
+  };
+  mockFetchJson.mockResolvedValue(custody);
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+});
+
+it('blocks the checkout when the server cannot confirm it at mount', async () => {
+  mockFetchJson.mockRejectedValue(new Error('Synthetic network failure'));
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+});
+
 it('hides the mounted primary checkout when the account switches after navigation', async () => {
   mockParamsUserId = '11111111-1111-4111-8111-111111111111';
   const view = render(<PaymentGatewayScreen />);
@@ -265,6 +349,7 @@ it('hides the mounted primary checkout when the account switches after navigatio
   );
   // User B signs in while A's checkout stays mounted: the WebView must
   // disappear so B can never enter card details into A's charge.
+  mockFetchJson.mockClear();
   mockUserId = '44444444-4444-4444-8444-444444444444';
   view.rerender(<PaymentGatewayScreen />);
   expect(
@@ -294,7 +379,9 @@ it('hides the mounted primary checkout when the account switches after navigatio
 });
 
 it('checks the same durable operation through the actual callback, pending button and controller after restart', async () => {
-  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  mockFetchJson
+    .mockResolvedValueOnce(response)
+    .mockResolvedValue({ ...response, status: 'custody_pending' });
   render(<PaymentGatewayScreen />);
   await waitFor(() =>
     expect(
@@ -309,7 +396,7 @@ it('checks the same durable operation through the actual callback, pending butto
   );
   expect(mockStorage.size).toBe(1);
   fireEvent.press(screen.getByRole('button', { name: 'Check funding status' }));
-  await waitFor(() => expect(mockFetchJson).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(mockFetchJson).toHaveBeenCalledTimes(3));
   await waitFor(() =>
     expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
   );
@@ -334,7 +421,9 @@ it('checks the same durable operation through the actual callback, pending butto
 });
 
 it('retains the operation through network error and recovers status from the actual UI without another charge', async () => {
-  mockFetchJson.mockRejectedValueOnce(new Error('Synthetic network failure'));
+  mockFetchJson
+    .mockResolvedValueOnce(response)
+    .mockRejectedValueOnce(new Error('Synthetic network failure'));
   render(<PaymentGatewayScreen />);
   await waitFor(() =>
     expect(
@@ -357,14 +446,16 @@ it('retains the operation through network error and recovers status from the act
   await waitFor(() =>
     expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
   );
-  expect(mockFetchJson).toHaveBeenCalledTimes(2);
+  expect(mockFetchJson).toHaveBeenCalledTimes(3);
   expect(mockStorage.size).toBe(1);
   expect(mockInvalidate).not.toHaveBeenCalled();
   expect(mockClearCart).not.toHaveBeenCalled();
 });
 
 it('shows the quotable operation reference on the pending view', async () => {
-  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  mockFetchJson
+    .mockResolvedValueOnce(response)
+    .mockResolvedValue({ ...response, status: 'custody_pending' });
   render(<PaymentGatewayScreen />);
   await waitFor(() =>
     expect(
@@ -389,6 +480,7 @@ it('shows the processing indicator while the primary server check runs', async (
   const gate = new Promise((resolve) => {
     release = resolve;
   });
+  mockFetchJson.mockResolvedValueOnce(response);
   mockFetchJson.mockReturnValue(gate);
   render(<PaymentGatewayScreen />);
   await waitFor(() =>

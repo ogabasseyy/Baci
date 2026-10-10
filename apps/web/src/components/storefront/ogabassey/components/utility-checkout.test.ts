@@ -3,6 +3,7 @@ import {
   createWalletIdempotencyKey,
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
+  parseUtilityCheckoutCashback,
 } from './utility-checkout';
 
 describe('utility checkout helpers', () => {
@@ -31,5 +32,16 @@ describe('utility checkout helpers', () => {
     expect(createWalletIdempotencyKey()).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
+  });
+
+  it('parses well-formed cashback blocks and drops malformed ones', () => {
+    expect(
+      parseUtilityCheckoutCashback({ amount: 5, newBalance: 4405 })
+    ).toEqual({ amount: 5, newBalance: 4405 });
+    expect(
+      parseUtilityCheckoutCashback({ amount: 'five', newBalance: null })
+    ).toBeUndefined();
+    expect(parseUtilityCheckoutCashback(null)).toBeUndefined();
+    expect(parseUtilityCheckoutCashback(undefined)).toBeUndefined();
   });
 });

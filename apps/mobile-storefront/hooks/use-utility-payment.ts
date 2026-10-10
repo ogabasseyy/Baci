@@ -32,6 +32,10 @@ export function useUtilityPayment() {
 
   return {
     canFundByBankTransfer,
+    isAuthenticated,
+    refetchWallet: () => {
+      void wallet.refetch();
+    },
     walletBalance,
     walletError,
     walletIsLoading: wallet.isLoading,

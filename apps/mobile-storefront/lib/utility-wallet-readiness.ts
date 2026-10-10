@@ -5,6 +5,14 @@ import { promptUtilityWalletFunding } from './utility-wallet-funding-prompt';
 
 interface UtilityWalletReadinessPayment {
   canFundByBankTransfer: boolean;
+  /**
+   * Raw session presence — NOT customer-record presence. Startup publishes
+   * session/user with customer:null while hydration finishes in the
+   * background, and the wallet still resolves by user ID, so gating on the
+   * customer record would send signed-in customers to sign in again.
+   */
+  isAuthenticated: boolean;
+  refetchWallet: () => void;
   walletBalance: number;
   walletError: Error | null;
   walletIsLoading: boolean;
@@ -20,16 +28,14 @@ interface UtilityWalletReadinessPayment {
  */
 export function ensureUtilityWalletReady({
   amount,
-  customer,
   payment,
   returnToHref,
 }: {
   amount: number;
-  customer: unknown;
   payment: UtilityWalletReadinessPayment;
   returnToHref?: WalletReturnHref | null;
 }): boolean {
-  if (!customer) {
+  if (!payment.isAuthenticated) {
     Alert.alert(
       'Sign in required',
       'Please sign in to buy utilities from your wallet.',
@@ -51,10 +57,13 @@ export function ensureUtilityWalletReady({
     return false;
   }
   if (payment.walletError) {
-    Alert.alert(
-      'Wallet unavailable',
-      "We couldn't load your wallet balance. Please try again."
-    );
+    Alert.alert('Wallet unavailable', "We couldn't load your wallet balance.", [
+      {
+        text: 'Try Again',
+        onPress: () => payment.refetchWallet(),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
     return false;
   }
   if (payment.walletBalance < amount) {

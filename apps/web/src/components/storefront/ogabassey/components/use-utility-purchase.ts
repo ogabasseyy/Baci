@@ -183,7 +183,14 @@ export function useUtilityPurchase({
         walletIdempotencyAttemptRef.current = null;
       }
       clearIntent();
-      setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+      // Prefer the server's post-transaction balance when cashback was
+      // credited — the local decrement would otherwise display too low a
+      // balance and block a valid follow-up purchase as underfunded.
+      if (typeof result.cashback?.newBalance === 'number') {
+        setWalletBalance(result.cashback.newBalance);
+      } else {
+        setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+      }
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);
       setStep('success');
@@ -196,6 +203,18 @@ export function useUtilityPurchase({
           : `Your ${activeTab} purchase was successful!`,
       });
     } else if (result.kind === 'error') {
+      // Terminal 4xx (validation, failed fulfillment, key collision) already
+      // persisted its outcome server-side: rotate so a corrected retry is a
+      // fresh attempt instead of replaying the dead transaction. Network and
+      // 5xx failures stay ambiguous — keep the key so the retry dedupes.
+      // Mirrors mobile's shouldRotateWalletIdempotencyKeyForError.
+      if (
+        typeof result.status === 'number' &&
+        result.status >= 400 &&
+        result.status < 500
+      ) {
+        walletIdempotencyAttemptRef.current = null;
+      }
       toast({
         title: 'Transaction Failed',
         description: result.message,

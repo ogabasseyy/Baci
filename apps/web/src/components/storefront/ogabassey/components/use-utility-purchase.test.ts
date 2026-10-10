@@ -231,6 +231,73 @@ describe('useUtilityPurchase', () => {
     expect(seenKeys[0]).not.toBe(seenKeys[1]);
   });
 
+  it('rotates the idempotency key after a terminal 4xx so a corrected retry is a fresh attempt', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return { kind: 'error', message: 'Payment failed', status: 400 };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).not.toBe(seenKeys[1]);
+  });
+
+  it('keeps the idempotency key after a 5xx so the retry replays instead of double-charging', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return { kind: 'error', message: 'Server error', status: 502 };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).toBe(seenKeys[1]);
+  });
+
+  it('applies the server cashback balance instead of decrementing the local balance', async () => {
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-CB',
+      amount: 1000,
+      processing: false,
+      cashback: { amount: 50, newBalance: 4050 },
+    });
+    const setWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ setWalletBalance }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    await waitFor(() => expect(result.current.step).toBe('success'));
+    expect(setWalletBalance).toHaveBeenCalledWith(4050);
+  });
+
   it('surfaces an error toast and stays on the form when checkout fails', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'error',

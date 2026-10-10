@@ -20,6 +20,8 @@ function paymentState(
 ): Parameters<typeof ensureUtilityWalletReady>[0]['payment'] {
   return {
     canFundByBankTransfer: true,
+    isAuthenticated: true,
+    refetchWallet: jest.fn(),
     walletBalance: 5000,
     walletError: null,
     walletIsLoading: false,
@@ -40,7 +42,6 @@ describe('ensureUtilityWalletReady', () => {
   it('returns true when the settled wallet covers the amount', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      customer: { id: 'customer-1' },
       payment: paymentState(),
     });
 
@@ -52,8 +53,7 @@ describe('ensureUtilityWalletReady', () => {
   it('sends signed-out customers to sign in instead of the funding prompt', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      customer: null,
-      payment: paymentState({ walletBalance: 0 }),
+      payment: paymentState({ isAuthenticated: false, walletBalance: 0 }),
     });
 
     expect(ready).toBe(false);
@@ -74,7 +74,6 @@ describe('ensureUtilityWalletReady', () => {
   it('asks loading wallets to wait instead of reporting a shortfall', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      customer: { id: 'customer-1' },
       payment: paymentState({ walletBalance: 0, walletIsLoading: true }),
     });
 
@@ -86,11 +85,12 @@ describe('ensureUtilityWalletReady', () => {
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 
-  it('surfaces wallet lookup errors instead of reporting a shortfall', () => {
+  it('offers a wallet refetch from the error state instead of reporting a shortfall', () => {
+    const refetchWallet = jest.fn();
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      customer: { id: 'customer-1' },
       payment: paymentState({
+        refetchWallet,
         walletBalance: 0,
         walletError: new Error('wallet unavailable'),
       }),
@@ -99,8 +99,15 @@ describe('ensureUtilityWalletReady', () => {
     expect(ready).toBe(false);
     expect(Alert.alert).toHaveBeenCalledWith(
       'Wallet unavailable',
-      expect.any(String)
+      expect.any(String),
+      expect.arrayContaining([expect.objectContaining({ text: 'Try Again' })])
     );
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    buttons.find((button) => button.text === 'Try Again')?.onPress?.();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 
@@ -108,7 +115,6 @@ describe('ensureUtilityWalletReady', () => {
     const returnToHref = '/utilities/airtime' as WalletReturnHref;
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      customer: { id: 'customer-1' },
       payment: paymentState({
         canFundByBankTransfer: false,
         walletBalance: 200,

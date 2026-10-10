@@ -2,6 +2,8 @@ import { fetchWithCsrf } from '@/lib/api-client';
 import {
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
+  parseUtilityCheckoutCashback,
+  type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
 } from './utility-checkout';
 
@@ -19,8 +21,13 @@ export type UtilityCheckoutResult =
       reference: string;
       amount: number;
       processing: boolean;
+      cashback?: UtilityCheckoutCashback;
     }
-  | { kind: 'error'; message: string };
+  // `status` is the HTTP status when the server answered, and undefined for
+  // network failures and malformed bodies. Callers rotate the idempotency
+  // key only on terminal 4xx (mirroring mobile); anything else keeps the key
+  // so a retry replays instead of double-charging.
+  | { kind: 'error'; message: string; status?: number };
 
 /**
  * Module-scope helper: keeps try/finally + throw-in-try out of the component
@@ -61,23 +68,37 @@ export const submitUtilityCheckout = async ({
     try {
       parsedData = JSON.parse(rawResponse);
     } catch {
-      throw new Error(
-        response.ok
-          ? 'Payment checkout returned an invalid response'
-          : `Payment checkout failed (${response.status})`
-      );
+      // Non-JSON body. A failed status is still the server answering, so
+      // preserve it for the caller's rotation decision; an OK status with a
+      // non-JSON body is ambiguous (the debit may have landed).
+      if (!response.ok) {
+        return {
+          kind: 'error',
+          message: `Payment checkout failed (${response.status})`,
+          status: response.status,
+        };
+      }
+      throw new Error('Payment checkout returned an invalid response');
     }
-    if (!response.ok) throw new Error(getCheckoutErrorMessage(parsedData));
+    if (!response.ok) {
+      return {
+        kind: 'error',
+        message: getCheckoutErrorMessage(parsedData),
+        status: response.status,
+      };
+    }
     if (!isUtilityCheckoutResponse(parsedData)) {
       throw new Error('Payment checkout returned an invalid response');
     }
     const data = parsedData;
+    const cashback = parseUtilityCheckoutCashback(data.cashback);
 
     return {
       kind: 'wallet-success',
       reference: data.reference ?? '',
       amount: data.amount ?? payload.amount,
       processing: data.status === 'processing',
+      ...(cashback ? { cashback } : {}),
     };
   } catch (error) {
     return {

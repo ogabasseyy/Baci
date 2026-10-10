@@ -81,7 +81,11 @@ describe('submitUtilityCheckout', () => {
 
     const result = await submitUtilityCheckout(baseRequest);
 
-    expect(result).toEqual({ kind: 'error', message: 'Insufficient funds' });
+    expect(result).toEqual({
+      kind: 'error',
+      message: 'Insufficient funds',
+      status: 400,
+    });
   });
 
   it('surfaces a status-coded error for a failed non-JSON response', async () => {
@@ -96,6 +100,48 @@ describe('submitUtilityCheckout', () => {
     expect(result).toEqual({
       kind: 'error',
       message: 'Payment checkout failed (502)',
+      status: 502,
+    });
+  });
+
+  it('carries the cashback balance through a wallet success', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({
+        amount: 100,
+        cashback: { amount: 5, credited: true, newBalance: 4405 },
+        reference: 'REF1',
+        status: 'successful',
+      })
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF1',
+      amount: 100,
+      processing: false,
+      cashback: { amount: 5, newBalance: 4405 },
+    });
+  });
+
+  it('drops malformed cashback without failing the checkout', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({
+        amount: 100,
+        cashback: { amount: 'five', newBalance: null },
+        reference: 'REF1',
+        status: 'successful',
+      })
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF1',
+      amount: 100,
+      processing: false,
     });
   });
 

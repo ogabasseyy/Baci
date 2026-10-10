@@ -20,10 +20,10 @@ export type SearchSubmissionRow = {
  * RLS-bypassing client itself. Anon/authenticated table writes stay
  * revoked. Server-only: must never enter a client graph.
  *
- * PENDING owner-approved temporary exception (repo NEVER rule): remove this
- * edge when search ingestion moves to a restricted worker role, or obtain
- * explicit reapproval. No sibling route or generic service-role operation
- * inherits authorization.
+ * Owner-approved temporary exception (repo NEVER rule, AGENTS.md 2026-10-09;
+ * expires 2027-01-07 or when a restricted worker role exists): remove this
+ * edge then, or obtain explicit reapproval. No sibling route or generic
+ * service-role operation inherits authorization.
  */
 export async function recordSearchSubmission(
   row: SearchSubmissionRow

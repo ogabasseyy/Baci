@@ -109,10 +109,10 @@ export type ImmediateNotificationCompletionServiceClient =
  * Keep this type distinct from `ServiceRoleClient` so the telemetry insert
  * cannot be driven by a generic service client from any other edge. Only
  * `/api/search/submissions` may construct it, via
- * `createSearchAnalyticsServiceClient`, after the Origin and storefront
- * gates pass. Requires an owner-approved temporary exception: the backend
- * key inherently bypasses RLS; the brand constrains the approved call
- * graph, not that capability.
+ * `recordSearchSubmission`, after the Origin and storefront gates pass.
+ * Covered by the owner-approved temporary exception in AGENTS.md: the
+ * backend key inherently bypasses RLS; the brand constrains the approved
+ * call graph, not that capability.
  */
 export type SearchAnalyticsServiceClient = SupabaseClient<Database> & {
   readonly [searchAnalyticsClientBrand]: true;

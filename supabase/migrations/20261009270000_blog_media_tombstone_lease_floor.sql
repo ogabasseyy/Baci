@@ -15,7 +15,7 @@ SECURITY INVOKER
 SET search_path = ''
 AS $function$
 BEGIN
-  IF pg_catalog.current_user() = 'authenticated'
+  IF current_user = 'authenticated'
     AND (
       NEW.created_at < OLD.created_at - pg_catalog.make_interval(mins => 5)
       OR NEW.created_at < pg_catalog.now() - pg_catalog.make_interval(mins => 10)

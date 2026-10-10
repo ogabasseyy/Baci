@@ -17,7 +17,7 @@ SECURITY INVOKER
 SET search_path = ''
 AS $function$
 BEGIN
-  IF pg_catalog.current_user() = 'authenticated'
+  IF current_user = 'authenticated'
     AND OLD.claimed IS TRUE
   THEN
     RAISE EXCEPTION 'blog_media_claimed_delete_blocked'

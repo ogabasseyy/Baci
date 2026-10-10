@@ -63,7 +63,16 @@ ALTER FUNCTION public.blog_media_guard_direct_row_references()
 
 DROP TRIGGER IF EXISTS blog_media_guard_direct_row_references_trigger
   ON public.blog_posts;
+-- UPDATE OF the media-bearing columns only: the guard intersects
+-- written media references against claimed tombstones, so updates
+-- that cannot change references (notably increment_blog_post_views,
+-- which sets only view_count on every public read) must not pay for
+-- five field decodes plus a tombstone scan. Non-media updates cannot
+-- resurrect a doomed path; mentioning a media column still fires.
 CREATE TRIGGER blog_media_guard_direct_row_references_trigger
-  BEFORE INSERT OR UPDATE ON public.blog_posts
+  BEFORE INSERT OR UPDATE OF
+    content, excerpt, featured_image_url, author_image_url,
+    featured_image_variants
+  ON public.blog_posts
   FOR EACH ROW
   EXECUTE FUNCTION public.blog_media_guard_direct_row_references();

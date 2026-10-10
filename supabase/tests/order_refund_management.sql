@@ -115,7 +115,35 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000010', v_merchant_id, 'REFUND-010',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000011', v_merchant_id, 'REFUND-011',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000012', v_merchant_id, 'REFUND-012',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000013', v_merchant_id, 'REFUND-013',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000014', v_merchant_id, 'REFUND-014',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000015', v_merchant_id, 'REFUND-015',
       100, 100, 'paid', 'cancelled');
+
+  -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
+  -- the legacy exception proving the manual gate requires it.
+  UPDATE public.orders SET cancelled_at = pg_catalog.now()
+  WHERE id <> '9ef11000-0000-4000-8000-000000000012'
+    AND id IN (
+      '9ef11000-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000002',
+      '9ef11000-0000-4000-8000-000000000003',
+      '9ef11000-0000-4000-8000-000000000004',
+      '9ef11000-0000-4000-8000-000000000005',
+      '9ef11000-0000-4000-8000-000000000006',
+      '9ef11000-0000-4000-8000-000000000007',
+      '9ef11000-0000-4000-8000-000000000008',
+      '9ef11000-0000-4000-8000-000000000009',
+      '9ef11000-0000-4000-8000-000000000010',
+      '9ef11000-0000-4000-8000-000000000011',
+      '9ef11000-0000-4000-8000-000000000013',
+      '9ef11000-0000-4000-8000-000000000014',
+      '9ef11000-0000-4000-8000-000000000015');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -167,7 +195,24 @@ BEGIN
       'completed', 'paystack', 'cap-10', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000015', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000011', 'payment', 100, 'USD',
-      'completed', 'paystack', 'cap-11', '{}'::jsonb);
+      'completed', 'paystack', 'cap-11', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000016', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000012', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-12', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000017', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000013', 'payment', 100, 'NGN',
+      'refunded', 'paypal', 'pp-13', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000018', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000014', 'payment', 100, 'NGN',
+      'refund_pending', 'paypal', 'pp-14', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000019', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000015', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-15', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000020', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000015', 'refund', 30, 'USD',
+      'completed', 'paystack', 'fx-15',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000019'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -476,6 +521,85 @@ BEGIN
     IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;
   END;
 
+  -- Legacy rows without a cancellation timestamp route to review: the
+  -- trusted finalization cannot run without one.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000012', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'legacy-1');
+    RAISE EXCEPTION 'manual accepted without cancellation timestamp';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- Self-terminal payment legs count toward their side: a refunded
+  -- PayPal leg is returned money, an in-flight one blocks recording.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000013'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 100 THEN
+    RAISE EXCEPTION 'refunded payment leg not counted as returned';
+  END IF;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'refunded payment leg still outstanding';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'manual offered on a self-terminally refunded order';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000014'
+  ) INTO v_result;
+  IF (v_result->>'pending')::numeric <> 100 THEN
+    RAISE EXCEPTION 'in-flight payment leg not counted as pending';
+  END IF;
+  IF v_result->>'status' <> 'processing' THEN
+    RAISE EXCEPTION 'in-flight payment leg not processing';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'manual offered beside an in-flight payment leg';
+  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000014', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'inflight-1');
+    RAISE EXCEPTION 'manual accepted beside an in-flight payment leg';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- Foreign-currency refund rows stay visible but out of coverage: the
+  -- full matching-money balance remains recordable.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000015'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0 THEN
+    RAISE EXCEPTION 'foreign-currency row counted as returned';
+  END IF;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'foreign-currency row reduced remaining';
+  END IF;
+  IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
+    RAISE EXCEPTION 'foreign-currency row hidden from history';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000015', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'matching-money manual blocked by foreign row';
+  END IF;
+
+  -- Missing and foreign orders are indistinguishable to callers.
+  v_rejected := false;
+  BEGIN
+    PERFORM public.manage_order_refund('9ef1ffff-0000-4000-8000-000000000099');
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    v_rejected := SQLERRM = 'refund_forbidden';
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'missing order distinguishable from forbidden';
+  END IF;
+
   -- Audit history stays bounded no matter how long a refund pends.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001'
@@ -605,6 +729,37 @@ BEGIN
 END;
 $refund_owner$;
 
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_claim_finalize$
+DECLARE
+  v_won boolean;
+  v_status text;
+BEGIN
+  -- A fully manual refund routes through the trusted aggregate
+  -- finalization: the next claim sees manual-row coverage and runs
+  -- settlement reversal, notifications, and review close.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000002', 'refund',
+    '9ef13000-0000-4000-8000-000000000002');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'full manual coverage did not finalize, got %', v_status;
+  END IF;
+  -- A partial manual refund leaves the legs uncovered for the worker.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000001', 'refund',
+    '9ef13000-0000-4000-8000-000000000001');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'partial manual coverage finalized early, got %', v_status;
+  END IF;
+END;
+$refund_claim_finalize$;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub',
   '9ef10000-0000-4000-8000-000000000005',
@@ -676,6 +831,23 @@ BEGIN
   WHERE id = '9ef11000-0000-4000-8000-000000000004';
   IF v_o4_status <> 'refunded' THEN
     RAISE EXCEPTION 'reversal-adjusted completion did not flip payment status';
+  END IF;
+
+  -- The aggregate claim completed the fully manual order; the
+  -- self-terminal PayPal leg flipped its label on landing.
+  IF NOT EXISTS (SELECT 1 FROM public.order_cancellation_side_effects
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000002'
+      AND step = 'refund' AND status = 'completed') THEN
+    RAISE EXCEPTION 'claim did not complete the fully manual order';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.paystack_cancellation_refund_notifications
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000002') THEN
+    RAISE EXCEPTION 'finalization skipped notifications';
+  END IF;
+  SELECT payment_status INTO v_o4_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000013';
+  IF v_o4_status <> 'refunded' THEN
+    RAISE EXCEPTION 'self-terminal payment leg did not flip payment status';
   END IF;
 
   -- Order-less ledger refunds (e.g. savings exits) still commit: the

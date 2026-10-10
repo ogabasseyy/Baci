@@ -105,6 +105,7 @@ export async function executeOrderCancellationSideEffect({
   const soleCompletedLeg =
     soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
   const {
+    manualLinkedLegIds,
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,
@@ -263,6 +264,7 @@ export async function executeOrderCancellationSideEffect({
     await preflightCancellationRefundInitiation({
       auditBlockedLegIds,
       linkedPaymentId,
+      manualLinkedLegIds,
       mismatchedIds,
       order,
       refundedPaymentIds,

@@ -89,6 +89,31 @@ describe('listPaystackRefunds', () => {
       'Unverified refund transaction'
     );
   });
+  it('preserves 64-bit transaction IDs as decimal text', async () => {
+    const u64 = '18446744073709551615';
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response({ id: u64 }))
+      .mockResolvedValueOnce(
+        response([{ ...refund, transaction: { id: u64 } }])
+      );
+    vi.stubGlobal('fetch', fetcher);
+    expect(await listPaystackRefunds('capture-1')).toHaveLength(1);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(`/refund?transaction=${u64}&`),
+      expect.anything()
+    );
+  });
+  it('rejects numeric IDs outside the safe integer range', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(response({ id: 2 ** 53 }))
+    );
+    await expect(listPaystackRefunds('capture-1')).rejects.toThrow(
+      'Unverified refund transaction'
+    );
+  });
   it('rejects failed transport and missing configuration', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(null, false)));
     await expect(listPaystackRefunds('capture-1')).rejects.toThrow('failed');

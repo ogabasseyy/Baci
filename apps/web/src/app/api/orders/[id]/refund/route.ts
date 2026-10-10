@@ -83,10 +83,16 @@ async function handle(
               : error.code === '22023'
                 ? 400
                 : 500;
+    // Callers only branch on the application-level code: raw SQLSTATEs
+    // stay server-side so error classes are not fingerprinted.
+    const code =
+      KNOWN_REFUND_ERRORS[error.message] === undefined
+        ? 'internal_error'
+        : error.message;
     return NextResponse.json(
       {
         error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',
-        code: error.code,
+        code,
       },
       { status }
     );

@@ -182,4 +182,34 @@ describe('OrderRefundPanel', () => {
     );
     expect(apiPost).not.toHaveBeenCalled();
   });
+  it('encodes the order id in refund requests', async () => {
+    render(<OrderRefundPanel orderId="order/1?x" />);
+    await screen.findByRole('button', { name: 'Retry refund' });
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/orders/order%2F1%3Fx/refund',
+      expect.anything()
+    );
+  });
+  it('fires the refunded callback once per order', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, status: 'refunded' }),
+      })
+    );
+    const first = vi.fn();
+    const { rerender } = render(
+      <OrderRefundPanel orderId="order-1" onRefunded={first} />
+    );
+    await waitFor(() => expect(first).toHaveBeenCalledTimes(1));
+    // A parent re-render with a fresh inline closure must not refire.
+    rerender(<OrderRefundPanel orderId="order-1" onRefunded={() => {}} />);
+    rerender(<OrderRefundPanel orderId="order-1" onRefunded={() => {}} />);
+    expect(first).toHaveBeenCalledTimes(1);
+    // One mounted panel viewing successive orders notifies once per order.
+    const second = vi.fn();
+    rerender(<OrderRefundPanel orderId="order-2" onRefunded={second} />);
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+  });
 });

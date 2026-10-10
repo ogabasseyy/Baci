@@ -49,7 +49,7 @@ export async function checkCancellationRefundProvider({
       continue;
     if (
       item.gateway_reference != null &&
-      processedIds.has(item.gateway_reference)
+      processedIds.has(item.gateway_reference.trim())
     )
       continue;
     const kobo = Math.round(Number(item.amount) * 100);
@@ -57,8 +57,12 @@ export async function checkCancellationRefundProvider({
     manualCandidates.push(kobo);
   }
   for (const row of rows) {
+    // Failed provider rows moved no money, so they skip both the
+    // amount/currency gate and the pairing below: a failed row must never
+    // strand the refund behind review.
+    if (row.status === 'failed') continue;
     const known = knownRefunds.find(
-      (item) => item.gateway_reference === String(row.id)
+      (item) => (item.gateway_reference ?? '').trim() === String(row.id)
     );
     if (
       normalizeRefundMoneyField(row.currency) !==
@@ -68,7 +72,6 @@ export async function checkCancellationRefundProvider({
       throw new DeliveryUncertainError(
         'Paystack refund amount or currency mismatch'
       );
-    if (row.status === 'failed') continue;
     if (known?.status === 'completed' && row.status === 'processed') continue;
     if (row.status === 'processed') {
       const pair = manualCandidates.indexOf(row.amount);

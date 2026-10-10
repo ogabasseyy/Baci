@@ -34,10 +34,13 @@ export function OrderRefundPanel({
     async function load() {
       const startedRevision = revision.current;
       try {
-        const response = await fetch(`/api/orders/${orderId}/refund`, {
-          signal: controller.signal,
-          cache: 'no-store',
-        });
+        const response = await fetch(
+          `/api/orders/${encodeURIComponent(orderId)}/refund`,
+          {
+            signal: controller.signal,
+            cache: 'no-store',
+          }
+        );
         const data = await response.json().catch(() => ({}));
         if (!response.ok)
           throw new Error(data.error || 'Unable to load refund');
@@ -63,9 +66,18 @@ export function OrderRefundPanel({
     };
   }, [orderId]);
 
+  // The parent passes an inline callback, so its identity changes on
+  // every parent render: fire the completion callback once per order.
+  const refundedFiredFor = useRef<string | null>(null);
   useEffect(() => {
-    if (summary?.status === 'refunded') onRefunded?.();
-  }, [summary?.status, onRefunded]);
+    if (
+      summary?.status === 'refunded' &&
+      refundedFiredFor.current !== orderId
+    ) {
+      refundedFiredFor.current = orderId;
+      onRefunded?.();
+    }
+  }, [summary?.status, orderId, onRefunded]);
 
   async function submit(action: 'retry' | 'manual') {
     if (busy) return;
@@ -105,7 +117,7 @@ export function OrderRefundPanel({
               confirmed,
             };
       const updated = await apiPost<RefundSummary>(
-        `/api/orders/${orderId}/refund`,
+        `/api/orders/${encodeURIComponent(orderId)}/refund`,
         payload
       );
       setSummary(updated);

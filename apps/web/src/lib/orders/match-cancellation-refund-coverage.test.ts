@@ -208,4 +208,73 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
     expect(coverage.unattributedUnlinkedCount).toBe(0);
   });
+
+  it('covers legs with explicitly linked manual rows', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          amount: 100,
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'payment-1' },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
+
+  it('waits on partial manual rows instead of mismatching them', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          amount: 20,
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'payment-1' },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
+
+  it('mismatches manual rows in the wrong money', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          amount: 100,
+          currency: 'USD',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'payment-1' },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('leaves unlinked manual rows unattributed', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({ gateway: 'manual' })],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.manualLinkedLegIds).toEqual(new Set());
+    expect(coverage.mismatchedTransactions).toEqual([]);
+    expect(coverage.unattributedUnlinkedCount).toBe(1);
+  });
 });

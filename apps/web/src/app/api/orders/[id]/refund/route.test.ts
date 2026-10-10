@@ -167,6 +167,13 @@ describe('order refund route', () => {
     });
     const response = await POST(request({ action: 'retry' }), context);
     expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ error: expectedError, code });
+    // The response carries the application-level code, never the raw
+    // SQLSTATE, so database error classes are not fingerprinted.
+    const expectedCode =
+      message === 'internal_detail' ? 'internal_error' : message;
+    expect(await response.json()).toEqual({
+      error: expectedError,
+      code: expectedCode,
+    });
   });
 });

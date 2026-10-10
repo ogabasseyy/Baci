@@ -30,6 +30,7 @@ function input(overrides: Record<string, unknown> = {}) {
   return {
     auditBlockedLegIds: new Set<string>(),
     linkedPaymentId,
+    manualLinkedLegIds: new Set<string>(),
     mismatchedIds: new Set<string>(),
     order: order as never,
     refundedPaymentIds: new Set<string>(),
@@ -84,7 +85,8 @@ describe('preflightCancellationRefundInitiation', () => {
 
   it('ignores settled foreign-currency legs but guards outstanding ones', async () => {
     const client = supabase();
-    // A fully refunded USD leg plus an outstanding NGN leg proceeds.
+    // A fully refunded USD leg plus an outstanding NGN leg proceeds, and
+    // the provider guard runs for the outstanding leg only.
     await expect(
       preflightCancellationRefundInitiation(
         input({
@@ -102,6 +104,10 @@ describe('preflightCancellationRefundInitiation', () => {
         })
       )
     ).resolves.toBeDefined();
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+    expect(checkCancellationRefundProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ reference: 'ref-1' })
+    );
     // An outstanding USD leg quarantines instead.
     await expect(
       preflightCancellationRefundInitiation(
@@ -150,6 +156,15 @@ describe('preflightCancellationRefundInitiation', () => {
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
   });
 
+  it('withholds manual-linked legs from initiation without review', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      input({
+        manualLinkedLegIds: new Set(['payment-1']),
+      })
+    );
+    expect(result.initiationTransactions).toHaveLength(0);
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+  });
   it('skips the provider guard for non-Paystack and reference-less legs', async () => {
     await preflightCancellationRefundInitiation(
       input({

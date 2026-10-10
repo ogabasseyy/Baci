@@ -175,6 +175,32 @@ describe('checkCancellationRefundProvider', () => {
       })
     ).rejects.toThrow('reconciliation');
   });
+  it('ignores failed provider rows before the amount gate', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 1, amount: 999, currency: 'USD', status: 'failed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider(input)
+    ).resolves.toBeUndefined();
+  });
+  it('matches padded ledger references to provider rows', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: ' 1 ',
+            amount: 1,
+            currency: 'NGN',
+            status: 'completed',
+          },
+        ],
+      })
+    ).resolves.toBeUndefined();
+  });
   it('compares currencies case-insensitively like the claim gate', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 1, amount: 100, currency: 'ngn', status: 'processed' },

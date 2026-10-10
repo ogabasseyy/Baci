@@ -7,6 +7,21 @@ interface ProviderRefund {
   status: string;
 }
 
+// Paystack transaction identities arrive as safe numbers, decimal text,
+// or expanded objects carrying id/reference: collect every textual
+// identity a value asserts. Unsafe numbers assert nothing (their text
+// would already be corrupted), so those rows mismatch for review.
+function identityTexts(value: unknown): string[] {
+  if (typeof value === 'number' && Number.isSafeInteger(value))
+    return [String(value)];
+  if (typeof value === 'string') return [value];
+  if (typeof value === 'object' && value !== null) {
+    const record = value as { id?: unknown; reference?: unknown };
+    return [...identityTexts(record.id), ...identityTexts(record.reference)];
+  }
+  return [];
+}
+
 export async function listPaystackRefunds(
   reference: string
 ): Promise<ProviderRefund[]> {
@@ -36,18 +51,22 @@ export async function listPaystackRefunds(
   }
   // List Refunds filters by numeric transaction ID, not by reference: an
   // alphanumeric reference in that filter matches zero rows, blinding the
-  // pre-check to existing provider refunds. Resolve the ID first.
+  // pre-check to existing provider refunds. Resolve the ID first, kept as
+  // decimal text: Paystack IDs are unsigned 64-bit, beyond the safe
+  // integer range, so a numeric parse would corrupt large IDs.
   const verified = await request(
     `/transaction/verify/${encodeURIComponent(reference)}`
   );
   const verifiedId = (verified.data as { id?: unknown } | null)?.id;
-  if (
-    typeof verifiedId !== 'number' ||
-    !Number.isSafeInteger(verifiedId) ||
-    verifiedId <= 0
-  )
-    throw new Error('Unverified refund transaction');
-  const transactionId: number = verifiedId;
+  const transactionId =
+    typeof verifiedId === 'number' &&
+    Number.isSafeInteger(verifiedId) &&
+    verifiedId > 0
+      ? String(verifiedId)
+      : typeof verifiedId === 'string' && /^[1-9][0-9]*$/.test(verifiedId)
+        ? verifiedId
+        : null;
+  if (transactionId === null) throw new Error('Unverified refund transaction');
   const refunds: ProviderRefund[] = [];
   for (let page = 1; page <= 20; page++) {
     const envelope = await request(
@@ -78,13 +97,9 @@ export async function listPaystackRefunds(
       // Rows carry the transaction as an expanded object, a bare numeric
       // ID, or (legacy) the reference string.
       const linked = candidate.transaction;
-      const matches =
-        linked === transactionId ||
-        linked === reference ||
-        linked === String(transactionId) ||
-        (typeof linked === 'object' &&
-          linked !== null &&
-          (linked.id === transactionId || linked.reference === reference));
+      const matches = identityTexts(linked).some(
+        (text) => text === transactionId || text === reference
+      );
       if (!matches) throw new Error('Refund transaction mismatch');
       refunds.push({
         id: candidate.id,

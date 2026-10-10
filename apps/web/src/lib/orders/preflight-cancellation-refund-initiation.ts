@@ -25,6 +25,7 @@ interface CancellationRefundLedgerRow {
 export async function preflightCancellationRefundInitiation({
   auditBlockedLegIds,
   linkedPaymentId,
+  manualLinkedLegIds,
   mismatchedIds,
   order,
   refundedPaymentIds,
@@ -34,6 +35,7 @@ export async function preflightCancellationRefundInitiation({
 }: {
   auditBlockedLegIds: Set<string>;
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
+  manualLinkedLegIds: Set<string>;
   mismatchedIds: Set<string>;
   order: CancellationOrder;
   refundedPaymentIds: Set<string>;
@@ -49,22 +51,29 @@ export async function preflightCancellationRefundInitiation({
       auditBlockedLegIds.has(transaction.id) &&
       !refundedPaymentIds.has(transaction.id)
   );
+  // Legs carrying manual rows never initiate: merchant-attested money
+  // plus a provider refund would double-pay the customer.
   const initiationTransactions = transactions.filter(
     (transaction) =>
       !mismatchedIds.has(transaction.id) &&
-      !auditBlockedLegIds.has(transaction.id)
+      !auditBlockedLegIds.has(transaction.id) &&
+      !manualLinkedLegIds.has(transaction.id)
+  );
+  // Fully refunded legs need no initiation: every gate below scopes to
+  // the outstanding set so a settled leg cannot strand the rest.
+  const outstandingTransactions = initiationTransactions.filter(
+    (transaction) => !refundedPaymentIds.has(transaction.id)
   );
   const refundAmount = Number(order.amount_paid) || 0;
   // Currency is an initiation-time property like the kobo cap below:
   // legacy rows pad or re-case ISO codes, so compare normalized values
   // while still rejecting missing or genuinely different currencies.
   if (
-    initiationTransactions.some(
+    outstandingTransactions.some(
       (transaction) =>
-        !refundedPaymentIds.has(transaction.id) &&
-        (!normalizeRefundMoneyField(transaction.currency) ||
-          normalizeRefundMoneyField(transaction.currency) !==
-            normalizeRefundMoneyField(order.currency))
+        !normalizeRefundMoneyField(transaction.currency) ||
+        normalizeRefundMoneyField(transaction.currency) !==
+          normalizeRefundMoneyField(order.currency)
     )
   ) {
     throw new DeliveryUncertainError(
@@ -76,12 +85,10 @@ export async function preflightCancellationRefundInitiation({
   // but the outstanding initiation itself must never exceed it. An
   // overfunded ledger cannot be repaired by retrying, so file it for
   // reconciliation instead of burning the attempt budget.
-  const outstandingRefundKobo = initiationTransactions
-    .filter((transaction) => !refundedPaymentIds.has(transaction.id))
-    .reduce(
-      (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
-      0
-    );
+  const outstandingRefundKobo = outstandingTransactions.reduce(
+    (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
+    0
+  );
   if (outstandingRefundKobo > Math.round(refundAmount * 100)) {
     await quarantineRefund({
       metadata: {
@@ -93,15 +100,13 @@ export async function preflightCancellationRefundInitiation({
       reason:
         'Completed captures exceed the recorded amount paid; reconcile the ledger before refunding',
       supabase,
-      transactions: initiationTransactions.filter(
-        (transaction) => !refundedPaymentIds.has(transaction.id)
-      ),
+      transactions: outstandingTransactions,
     });
   }
   // Pre-initiation provider guard: an existing Paystack refund the ledger
   // cannot account for must quarantine for review (delivery_uncertain)
   // instead of initiating a duplicate provider refund.
-  for (const transaction of initiationTransactions) {
+  for (const transaction of outstandingTransactions) {
     if (
       normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' ||
       !transaction.gateway_reference

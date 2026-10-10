@@ -60,6 +60,8 @@ DECLARE
   v_step record;
   v_payment record;
   v_manual_partial boolean;
+  v_payment_refunded numeric;
+  v_payment_pending numeric;
   v_refunded numeric;
   v_pending numeric;
   v_remaining numeric;
@@ -76,9 +78,12 @@ BEGIN
   IF p_action NOT IN ('status','retry','manual') THEN
     RAISE EXCEPTION 'invalid_refund_action' USING ERRCODE='22023';
   END IF;
-  SELECT merchant_id,currency,amount_paid,shipping_status INTO v_order
+  SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at INTO v_order
     FROM public.orders WHERE id=p_order_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'order_not_found' USING ERRCODE='P0002'; END IF;
+  -- Missing and foreign orders share one error: distinct not-found vs
+  -- forbidden responses would let any authenticated caller probe order
+  -- existence across tenants.
+  IF NOT FOUND THEN RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501'; END IF;
   v_can_manage := EXISTS (SELECT 1 FROM public.merchants WHERE id=v_order.merchant_id AND user_id=v_actor)
     OR public.check_staff_permission(v_actor,v_order.merchant_id,'orders','refund');
   IF NOT (v_can_manage OR (p_action='status'
@@ -88,10 +93,30 @@ BEGIN
   SELECT status,error,attempts,retry_requests INTO v_step
     FROM public.order_cancellation_side_effects
     WHERE order_id=p_order_id AND step='refund' FOR UPDATE;
+  -- Coverage counts matching money only: a foreign-currency row is an
+  -- anomaly for review, and subtracting it would let the merchant
+  -- record less than is owed while the order flips refunded.
   SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')),0),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')),0)
     INTO v_refunded,v_pending FROM public.transactions
-    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
+    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
+    AND upper(btrim(currency))=upper(btrim(v_order.currency));
+  -- Self-terminal payment legs (e.g. PayPal flips the payment row
+  -- itself instead of inserting a refund row) count toward their side:
+  -- refunded legs are returned money, refund_pending legs are
+  -- in-flight money that blocks manual recording. External legs only,
+  -- mirroring the aggregate claim; internal legs reverse through
+  -- their own ledgers below.
+  SELECT COALESCE(SUM(amount) FILTER (WHERE status='refunded'),0),
+    COALESCE(SUM(amount) FILTER (WHERE status='refund_pending'),0)
+    INTO v_payment_refunded,v_payment_pending FROM public.transactions
+    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id
+    AND transaction_type='payment' AND amount>0
+    AND upper(btrim(currency))=upper(btrim(v_order.currency))
+    AND COALESCE(public.normalized_gateway_name_v1(gateway),'') NOT IN (
+      'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
+  v_refunded := v_refunded + v_payment_refunded;
+  v_pending := v_pending + v_payment_pending;
   -- Internal redemptions return outside the refund ledger: wallet reversals
   -- credit customer_wallets and savings reversals restore the goal, so the
   -- outstanding balance excludes already-reversed internal amounts.
@@ -160,6 +185,12 @@ BEGIN
       claimed_at=now(),error=NULL WHERE order_id=p_order_id AND step='refund'
       RETURNING status,error,attempts,retry_requests INTO v_step;
   ELSIF p_action='manual' THEN
+    -- The trusted finalization requires a cancellation timestamp; legacy
+    -- rows without one need ops review before manual money can route
+    -- through the aggregate claim.
+    IF v_order.cancelled_at IS NULL THEN
+      RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
+    END IF;
     IF p_amount>v_remaining THEN RAISE EXCEPTION 'refund_exceeds_remaining' USING ERRCODE='P0001'; END IF;
     IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
       AND transaction_type='refund' AND status IN ('completed','refunded')
@@ -189,6 +220,7 @@ BEGIN
       SELECT GREATEST(v_payment.amount-COALESCE(sum(amount),0),0) INTO v_leg_remaining
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
         AND status IN ('completed','refunded')
+        AND upper(btrim(currency))=upper(btrim(v_payment.currency))
         AND metadata->>'payment_transaction_id'=v_payment.id::text;
       v_leg_remaining := LEAST(v_leg_remaining,v_allocation);
       IF v_leg_remaining>0 THEN
@@ -212,8 +244,13 @@ BEGIN
     v_refunded := v_refunded+p_amount;
     v_remaining := v_remaining-p_amount;
     IF v_remaining=0 THEN
-      UPDATE public.orders SET payment_status='refunded',updated_at=now() WHERE id=p_order_id;
-      UPDATE public.order_cancellation_side_effects SET status='completed',completed_at=now(),
+      -- Route through the trusted aggregate finalization instead of
+      -- completing directly: the next service-role claim sees full
+      -- coverage (manual rows count) and runs settlement reversal,
+      -- notifications, and review close before completing the step.
+      -- A missing side-effect row means the worker never started one;
+      -- the claim creates it on first run.
+      UPDATE public.order_cancellation_side_effects SET attempts=0,
         error=NULL,result=jsonb_build_object('manual',true,'recorded_by',v_actor)
         WHERE order_id=p_order_id AND step='refund'
         RETURNING status,error,attempts,retry_requests INTO v_step;
@@ -270,18 +307,34 @@ BEGIN
   -- have no order to audit: the events table requires order_id, so skip
   -- them instead of rolling their insert back on the NOT NULL check.
   IF NEW.order_id IS NULL THEN RETURN NEW; END IF;
-  IF NEW.transaction_type='refund' AND NEW.status IN ('completed','refunded') THEN
-    INSERT INTO public.order_refund_events(order_id,merchant_id,actor_id,action,details)
-    VALUES (NEW.order_id,NEW.merchant_id,auth.uid(),
-      CASE WHEN NEW.gateway='manual' THEN 'manual_recorded' ELSE 'provider_confirmed' END,
-      jsonb_build_object('amount',NEW.amount,
-        'reference',COALESCE(NEW.metadata->>'reference',NEW.gateway_reference)));
+  -- The audit event fires for terminal refund rows only; the payment
+  -- label below also runs when a self-terminal payment leg (e.g. PayPal
+  -- flips the payment row itself) lands, since no refund row arrives.
+  IF (NEW.transaction_type='refund' AND NEW.status IN ('completed','refunded'))
+    OR (NEW.transaction_type='payment' AND NEW.status='refunded') THEN
+    IF NEW.transaction_type='refund' THEN
+      INSERT INTO public.order_refund_events(order_id,merchant_id,actor_id,action,details)
+      VALUES (NEW.order_id,NEW.merchant_id,auth.uid(),
+        CASE WHEN NEW.gateway='manual' THEN 'manual_recorded' ELSE 'provider_confirmed' END,
+        jsonb_build_object('amount',NEW.amount,
+          'reference',COALESCE(NEW.metadata->>'reference',NEW.gateway_reference)));
+    END IF;
+    -- Coverage counts matching money only (a foreign-currency row must
+    -- not flip the label while matching money is still owed) and
+    -- includes self-terminal refunded payment legs.
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
         AND o.amount_paid <= (SELECT COALESCE(sum(t.amount),0) FROM public.transactions t
           WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
-            AND t.transaction_type='refund' AND t.status IN ('completed','refunded'))
+            AND t.transaction_type='refund' AND t.status IN ('completed','refunded')
+            AND upper(btrim(t.currency))=upper(btrim(o.currency)))
+        + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
+          WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
+            AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0
+            AND upper(btrim(p.currency))=upper(btrim(o.currency))
+            AND COALESCE(public.normalized_gateway_name_v1(p.gateway),'') NOT IN (
+              'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
         + (SELECT COALESCE(sum(w.amount),0) FROM public.customer_wallet_transactions w
           WHERE w.source_id=o.id AND w.merchant_id=o.merchant_id
             AND w.source_type='order_reversal')

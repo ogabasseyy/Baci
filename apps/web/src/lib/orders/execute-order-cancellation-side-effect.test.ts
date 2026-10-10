@@ -277,6 +277,33 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
+  it('skips manual-linked legs without quarantining them', async () => {
+    // A partial manual record waits for the merchant: the worker must
+    // neither initiate the leg (double refund) nor quarantine it
+    // (which would lock the merchant out of finishing manually).
+    const supabase = refundClient({
+      payments: [paystackPayment],
+      refundRows: [
+        {
+          amount: 20,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'payment-1' },
+          status: 'completed',
+        },
+      ],
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toEqual({ refundIds: [] });
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(supabase.insert).not.toHaveBeenCalled();
+  });
   it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 0 }],

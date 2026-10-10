@@ -3,7 +3,7 @@
 ALTER TABLE public.customer_savings_goals ADD COLUMN terms_accepted_at timestamptz;
 ALTER TABLE public.customer_savings_goals ADD COLUMN non_withdrawable_accepted_at timestamptz;
 \ir ../../../../../supabase/migrations/20261007190000_piggyvest_primary_savings_provisioning.sql
-\ir ../../../../../supabase/migrations/20261007220000_piggyvest_primary_interest_storage.sql
+\ir ../../../../../supabase/migrations/20261007212100_piggyvest_primary_interest_storage.sql
 \ir ../../../../../supabase/migrations/20261007220001_piggyvest_primary_interest_evidence.sql
 \if :{?without_primary_production_projection}
 \else

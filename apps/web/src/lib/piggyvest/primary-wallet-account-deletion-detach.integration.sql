@@ -21,7 +21,7 @@ END $$;
 \ir ../../../../../supabase/migrations/20261007150000_piggyvest_primary_savings_settlement.sql
 \ir ../../../../../supabase/migrations/20261007181000_piggyvest_primary_paid_interest_completion.sql
 \ir ../../../../../supabase/migrations/20261007190000_piggyvest_primary_savings_provisioning.sql
-\ir ../../../../../supabase/migrations/20261007220000_piggyvest_primary_interest_storage.sql
+\ir ../../../../../supabase/migrations/20261007212100_piggyvest_primary_interest_storage.sql
 \ir ../../../../../supabase/migrations/20261008092700_primary_wallet_account_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008092900_primary_savings_deletion_retention.sql
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql

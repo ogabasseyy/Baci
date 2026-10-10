@@ -124,15 +124,24 @@ export async function POST(request: NextRequest) {
       // unverified address) and only matches the requested row when it is
       // still unlinked, so it cannot confirm or deny other customers.
       if (user.email && user.email_confirmed_at) {
+        // Look the requested row up by id and compare emails in code:
+        // a case-sensitive .eq('email') misses guest rows stored with
+        // different casing, and ilike would treat %/_ in the address as
+        // wildcards. The id match below keeps this a self-linkage hint.
         const { data: guestRow } = await supabase
           .from('customers')
-          .select('id')
+          .select('id, email')
           .eq('merchant_id', parsed.data.merchant_id)
-          .eq('email', user.email)
+          .eq('id', parsed.data.customer_id)
           .is('user_id', null)
           .is('deleted_at', null)
           .maybeSingle();
-        if (guestRow && guestRow.id === parsed.data.customer_id) {
+        if (
+          guestRow &&
+          guestRow.id === parsed.data.customer_id &&
+          typeof guestRow.email === 'string' &&
+          guestRow.email.toLowerCase() === user.email.toLowerCase()
+        ) {
           return NextResponse.json(
             {
               error:

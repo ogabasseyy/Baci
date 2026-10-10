@@ -99,6 +99,44 @@ SELECT pg_temp.assert_true(
   'calculate_unspent_expired_points grants are incorrect'
 );
 
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.adjust_loyalty_points(uuid,uuid,integer,text,text)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.adjust_loyalty_points(uuid,uuid,integer,text,text)', 'EXECUTE')
+  AND has_function_privilege('authenticated',
+    'public.adjust_loyalty_points(uuid,uuid,integer,text,text)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.adjust_loyalty_points(uuid,uuid,integer,text,text)', 'EXECUTE'),
+  'adjust_loyalty_points grants are incorrect'
+);
+
+-- The tier-order migration closes the baseline's anon grant on the tier
+-- projection: only sessions may execute it directly.
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.calculate_loyalty_tier(integer,uuid)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.calculate_loyalty_tier(integer,uuid)', 'EXECUTE')
+  AND has_function_privilege('authenticated',
+    'public.calculate_loyalty_tier(integer,uuid)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.calculate_loyalty_tier(integer,uuid)', 'EXECUTE'),
+  'calculate_loyalty_tier grants are incorrect'
+);
+
 -- Fixtures.
 INSERT INTO auth.users (
   id, instance_id, aud, role, email, encrypted_password,

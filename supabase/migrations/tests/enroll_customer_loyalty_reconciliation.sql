@@ -134,8 +134,8 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
 -- 25. The minimum compares against the redeemed cost: with minimum 500,
 -- member 018 (balance 600 after case 22) is rejected on a 100-cost
--- reward — available reports the attempted cost, not the balance —
--- while a 500-cost reward clears the gate and succeeds.
+-- reward — points_cost carries the attempted cost while available keeps
+-- the member balance — and a 500-cost reward clears the gate.
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, enabled
 ) VALUES
@@ -154,7 +154,8 @@ SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
      AND result ->> 'error' = 'minimum_not_met'
      AND (result ->> 'required')::integer = 500
-     AND (result ->> 'available')::integer = 100
+     AND (result ->> 'available')::integer = 600
+     AND (result ->> 'points_cost')::integer = 100
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000018',

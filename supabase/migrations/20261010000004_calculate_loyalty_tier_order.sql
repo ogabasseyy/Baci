@@ -46,3 +46,11 @@ BEGIN
     RETURN v_result;
 END;
 $$;
+
+-- Close the baseline's anon grant: tier names and thresholds are merchant
+-- configuration, enumerable with arbitrary merchant IDs. Same shape as
+-- the sibling loyalty RPCs (the DEFINER RPCs call this with owner
+-- rights; direct callers must hold an authenticated session).
+REVOKE ALL ON FUNCTION public.calculate_loyalty_tier(integer, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.calculate_loyalty_tier(integer, uuid)
+  TO authenticated, service_role;

@@ -2,9 +2,35 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
-import { createLoyaltyRecordWithRetry } from '@/lib/loyalty-manual-record';
 import { createClient } from '@/lib/supabase/server';
-import { loyaltyManualPointsSchema } from '@/schemas/loyalty-manual-points';
+import {
+  type LoyaltyManualPointsResult,
+  loyaltyManualPointsResultSchema,
+  loyaltyManualPointsSchema,
+} from '@/schemas/loyalty-manual-points';
+
+type AdjustRpcResult = {
+  success: boolean;
+  error?: string;
+} & Partial<LoyaltyManualPointsResult>;
+
+const RPC_ERROR_STATUS: Record<string, number> = {
+  invalid_input: 400,
+  merchant_not_found: 404,
+  customer_not_found: 404,
+  negative_balance: 400,
+  out_of_range: 400,
+  creation_failed: 500,
+};
+
+const RPC_ERROR_MESSAGE: Record<string, string> = {
+  invalid_input: 'Invalid manual award input',
+  merchant_not_found: 'Merchant not found',
+  customer_not_found: 'Customer not found for this merchant',
+  negative_balance: 'Cannot reduce points below zero',
+  out_of_range: 'Points adjustment is out of range',
+  creation_failed: 'Failed to create loyalty record',
+};
 
 /**
  * Points Management API
@@ -158,121 +184,54 @@ export async function POST(request: NextRequest) {
     }
     const { customerId, points, reason, type } = parsed.data;
 
-    // Get current loyalty record (or create one)
-    const { data: initialLoyalty, error: loyaltyError } = await supabase
-      .from('customer_loyalty')
-      .select('id, points_balance, lifetime_points, current_tier')
-      .eq('merchant_id', merchantId)
-      .eq('customer_id', customerId)
-      .single();
+    // Adjust through the atomic RPC: it re-verifies merchant membership
+    // and the customer row, serializes first-award creation, and locks
+    // the member row for the read-modify-write. Direct writes race and
+    // skip the customer check, and tolerated partial writes (points
+    // updated, ledger insert failed) corrupt the ledger balance.
+    const { data, error } = await supabase.rpc('adjust_loyalty_points', {
+      p_merchant_id: merchantId,
+      p_customer_id: customerId,
+      p_points: points,
+      p_reason: reason ?? null,
+      p_type: type,
+    });
 
-    let loyalty = initialLoyalty;
-
-    if (loyaltyError && loyaltyError.code === 'PGRST116') {
-      // Create new loyalty record, retrying referral-code collisions.
-      const created = await createLoyaltyRecordWithRetry(
-        supabase,
-        merchantId,
-        customerId
-      );
-      if (!created) {
-        return NextResponse.json(
-          { error: 'Failed to create loyalty record' },
-          { status: 500 }
-        );
-      }
-      loyalty = created;
-    } else if (loyaltyError) {
-      console.error('Error fetching loyalty:', loyaltyError);
-      return NextResponse.json(
-        { error: 'Failed to fetch loyalty record' },
-        { status: 500 }
-      );
-    }
-
-    // Check for negative balance
-    const newBalance = (loyalty?.points_balance || 0) + points;
-    if (newBalance < 0) {
-      return NextResponse.json(
-        { error: 'Cannot reduce points below zero' },
-        { status: 400 }
-      );
-    }
-
-    // Update points balance
-    const newLifetime =
-      points > 0
-        ? (loyalty?.lifetime_points || 0) + points
-        : loyalty?.lifetime_points || 0;
-
-    // Recompute the tier from the new lifetime total: the storefront
-    // status path trusts the persisted current_tier, so a manual award
-    // crossing a threshold must not leave it stale.
-    let newTier: string | null = null;
-    const { data: tierData, error: tierError } = await supabase.rpc(
-      'calculate_loyalty_tier',
-      {
-        p_lifetime_points: newLifetime,
-        p_merchant_id: merchantId,
-      }
-    );
-    if (tierError) {
-      console.error('Error recomputing loyalty tier:', tierError);
-    } else if (typeof tierData === 'string' && tierData.length > 0) {
-      newTier = tierData;
-    }
-
-    const loyaltyUpdate: Record<string, unknown> = {
-      points_balance: newBalance,
-      lifetime_points: newLifetime,
-      updated_at: new Date().toISOString(),
-    };
-    const previousTier = (loyalty as { current_tier?: string } | null)
-      ?.current_tier;
-    if (newTier !== null && newTier !== previousTier) {
-      loyaltyUpdate.current_tier = newTier;
-      loyaltyUpdate.tier_updated_at = new Date().toISOString();
-    }
-
-    const { error: updateError } = await supabase
-      .from('customer_loyalty')
-      .update(loyaltyUpdate)
-      .eq('id', loyalty?.id)
-      .eq('merchant_id', merchantId);
-
-    if (updateError) {
-      console.error('Error updating points:', updateError);
+    if (error) {
+      console.error('Error adjusting loyalty points:', error);
       return NextResponse.json(
         { error: 'Failed to update points' },
         { status: 500 }
       );
     }
 
-    // Record transaction
-    const { error: txError } = await supabase
-      .from('points_transactions')
-      .insert({
-        customer_id: customerId,
-        merchant_id: merchantId,
-        type: type,
-        points: points,
-        balance_after: newBalance,
-        source: 'admin_adjust',
-        description:
-          reason ||
-          `Manual adjustment by merchant: ${points > 0 ? '+' : ''}${points} points`,
-      });
+    const result = data as AdjustRpcResult | null;
+    if (!result?.success) {
+      const code = result?.error ?? 'adjust_failed';
+      const status = RPC_ERROR_STATUS[code] ?? 500;
+      if (status === 500) {
+        console.error('Unexpected manual-adjust result:', { code, result });
+      }
+      return NextResponse.json(
+        { error: RPC_ERROR_MESSAGE[code] ?? 'Failed to update points' },
+        { status }
+      );
+    }
 
-    if (txError) {
-      console.error('Error recording transaction:', txError);
-      // Don't fail - points were updated successfully
+    const validated = loyaltyManualPointsResultSchema.safeParse(result);
+    if (!validated.success) {
+      console.error('Malformed manual-adjust result:', result);
+      return NextResponse.json(
+        { error: 'Failed to update points' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      newBalance,
-      lifetimePoints: newLifetime,
-      pointsAwarded: points,
+      newBalance: validated.data.new_balance,
+      lifetimePoints: validated.data.lifetime_points,
+      pointsAwarded: validated.data.points_awarded,
     });
   } catch (error) {
     console.error('Points POST error:', error);

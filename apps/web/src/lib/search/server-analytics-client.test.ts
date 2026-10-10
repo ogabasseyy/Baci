@@ -12,7 +12,10 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: mockCreateServiceClient,
 }));
 
-import { recordSearchSubmission } from './server-analytics-client';
+import {
+  recordSearchSubmission,
+  SearchSubmissionValidationError,
+} from './server-analytics-client';
 
 describe('recordSearchSubmission', () => {
   beforeEach(() => {
@@ -122,6 +125,17 @@ describe('recordSearchSubmission', () => {
     ).rejects.toThrow('Invalid search submission row');
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
     expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('brands guard rejections so the route can separate them from infrastructure failures', async () => {
+    await expect(
+      recordSearchSubmission({
+        merchant_id: 'not-a-uuid',
+        search_query: 'phone',
+        results_count: 27,
+        search_method: 'client',
+      })
+    ).rejects.toThrow(SearchSubmissionValidationError);
   });
 
   it('propagates insert errors', async () => {

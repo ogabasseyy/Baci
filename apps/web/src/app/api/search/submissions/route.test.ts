@@ -5,6 +5,7 @@ import {
   submissionMocks as mocks,
   POST,
   request,
+  SearchSubmissionValidationError,
   setupSubmissionMocks,
 } from './route.test-helpers';
 
@@ -42,15 +43,30 @@ describe('explicit search submissions', () => {
   });
 
   it('logs ingestion validation failures distinctly from downtime', async () => {
-    const failure = new Error('Invalid search submission row');
-    mocks.recordSubmission.mockRejectedValueOnce(failure);
+    mocks.recordSubmission.mockRejectedValueOnce(
+      new SearchSubmissionValidationError()
+    );
 
     const response = await POST(request());
 
     expect(response.status).toBe(503);
     expect(logger.error).toHaveBeenCalledExactlyOnceWith({
       message: 'Search submission row failed ingestion validation',
-      errorName: 'Error',
+      errorName: 'SearchSubmissionValidationError',
+    });
+  });
+
+  it('logs transport and config failures as infrastructure, not validation', async () => {
+    const failure = new Error('service role is not configured');
+    failure.name = 'ServiceClientConfigError';
+    mocks.recordSubmission.mockRejectedValueOnce(failure);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission ingestion infrastructure failure',
+      errorName: 'ServiceClientConfigError',
     });
   });
 
@@ -65,6 +81,20 @@ describe('explicit search submissions', () => {
     expect(logger.error).toHaveBeenCalledExactlyOnceWith({
       message: 'Search submissions insert failed',
       errorCode: 'XX000',
+    });
+  });
+
+  it('falls back to unknown when the error has no code', async () => {
+    mocks.recordSubmission.mockResolvedValueOnce({
+      error: { message: 'fetch failed' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submissions insert failed',
+      errorCode: 'unknown',
     });
   });
 

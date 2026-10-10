@@ -13,7 +13,10 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
-import { recordSearchSubmission } from '@/lib/search/server-analytics-client';
+import {
+  recordSearchSubmission,
+  SearchSubmissionValidationError,
+} from '@/lib/search/server-analytics-client';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createClient } from '@/lib/supabase/server';
 import { searchSubmissionSchema } from '@/schemas/search-submission';
@@ -169,9 +172,9 @@ export async function POST(request: NextRequest) {
     // from the bounded search RPC, and the caller-supplied query only
     // after sanitize/trim/cap; anon / authenticated table writes are
     // revoked (#3581) so the endpoint gates cannot be bypassed with a
-    // direct table write. The wrapper throws only on a programming error
-    // (its asserts accept every value built here), so log it distinctly
-    // from DB downtime.
+    // direct table write. The wrapper's guards accept every value built
+    // here, so a branded throw means a programming error; anything else
+    // thrown is client-construction/transport infrastructure.
     try {
       const { error } = await recordSearchSubmission({
         merchant_id: merchant.id,
@@ -184,19 +187,23 @@ export async function POST(request: NextRequest) {
         // must be able to distinguish shedding from a DB outage.
         logger.error({
           message: 'Search submissions insert failed',
-          errorCode: error.code,
+          errorCode: error.code ?? 'unknown',
         });
         return unavailable();
       }
-    } catch (validationError) {
-      // Log a fixed classification only: the caught object may carry
-      // provider response details that must never reach application logs.
+    } catch (thrown) {
+      // Branded validation throws mean a programming error in this sole
+      // caller; anything else (service-client construction, transport,
+      // config) is infrastructure. Log a fixed classification only: the
+      // caught object may carry provider details that must never reach
+      // application logs.
+      const isValidationError =
+        thrown instanceof SearchSubmissionValidationError;
       logger.error({
-        message: 'Search submission row failed ingestion validation',
-        errorName:
-          validationError instanceof Error
-            ? validationError.name
-            : 'UnknownError',
+        message: isValidationError
+          ? 'Search submission row failed ingestion validation'
+          : 'Search submission ingestion infrastructure failure',
+        errorName: thrown instanceof Error ? thrown.name : 'UnknownError',
       });
       return unavailable();
     }

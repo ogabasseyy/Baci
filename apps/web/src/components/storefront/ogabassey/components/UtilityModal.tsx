@@ -45,6 +45,7 @@ export const UtilityModal = ({
     setWalletBalance,
     walletBalance,
     walletDvaEnabled,
+    walletError,
     walletLoading,
     walletTransactions,
   } = useWallet({
@@ -87,9 +88,12 @@ export const UtilityModal = ({
         setShowFundingPanel(true);
       }
     },
+    refreshWallet,
     setWalletBalance,
     user,
     walletBalance,
+    walletError,
+    walletLoading,
   });
 
   // Stable identity of the owned resume draft; null when nothing to resume.

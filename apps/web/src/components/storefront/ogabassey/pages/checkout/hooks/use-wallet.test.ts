@@ -171,6 +171,56 @@ describe('useWallet', () => {
     });
   });
 
+  it('flags a failed fetch as an error instead of a zero balance', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.walletLoading).toBe(false);
+      expect(result.current.walletBalance).toBe(0);
+    });
+  });
+
+  it('flags a non-OK wallet response as an error instead of a zero balance', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.walletLoading).toBe(false);
+    });
+  });
+
+  it('clears the error flag when a later fetch succeeds', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ balance: 700 }),
+    });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+    });
+
+    result.current.refreshWallet();
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(false);
+      expect(result.current.walletBalance).toBe(700);
+    });
+  });
+
   it('should abort fetch on unmount', async () => {
     let capturedSignal: AbortSignal | undefined;
     mockFetch.mockImplementationOnce((url: string, options?: RequestInit) => {

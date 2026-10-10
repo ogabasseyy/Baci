@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
-import { promptUtilityWalletFunding } from '@/lib/utility-wallet-funding-prompt';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
   shouldRotateWalletIdempotencyKeyForError,
@@ -76,14 +76,14 @@ export function createBillFormPurchaseHandler({
         Alert.alert('Invalid Amount', amountError);
         return;
       }
-      // Wallet-only checkout: the wallet must cover the full bill — there
-      // is no card or gateway fallback.
-      if (payment.walletBalance < numericAmount) {
-        promptUtilityWalletFunding({
+      if (
+        !ensureUtilityWalletReady({
           amount: numericAmount,
-          balance: payment.walletBalance,
+          customer,
+          payment,
           returnToHref,
-        });
+        })
+      ) {
         return;
       }
 

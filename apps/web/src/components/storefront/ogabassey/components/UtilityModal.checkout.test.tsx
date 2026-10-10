@@ -61,7 +61,7 @@ describe('UtilityModal checkout routing', () => {
       expect(harness.toast).toHaveBeenCalledWith({
         title: 'Insufficient wallet balance',
         description:
-          'Fund your wallet with at least ₦1,000 to complete this purchase.',
+          'Fund your wallet with at least ₦500 more to complete this purchase.',
         variant: 'destructive',
       });
     });

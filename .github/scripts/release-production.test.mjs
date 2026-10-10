@@ -12,8 +12,10 @@ import {
   assertVercelAccess,
   originRepoSlug,
   parseGhJqString,
+  parseJobsPayload,
   readRuns,
   readWorkflowRunStatus,
+  RUN_WATCH_TIMEOUT_MS,
   RUNS_MAX_PAGES,
   shouldHoldReleaseLock,
   waitForRunCompletion,
@@ -76,10 +78,24 @@ test('waits for run completion by polling the run endpoint', async () => {
   });
   assert.deepEqual(sleeps, [10, 10]);
   assert.deepEqual(waits.map(([status]) => status), ['queued', 'in_progress']);
-  await assert.rejects(
-    waitForRunCompletion(42, async () => 'in_progress', { timeoutMs: 0, sleep: async () => {} }),
-    /timed out waiting for workflow run 42/
+  assert.ok(RUN_WATCH_TIMEOUT_MS >= (35 + 150) * 60 * 1000);
+  const timeout = await waitForRunCompletion(42, async () => 'in_progress', {
+    timeoutMs: 0,
+    sleep: async () => {},
+  }).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
   );
+  assert.match(timeout.message, /timed out waiting for workflow run 42/);
+  assert.equal(timeout.indeterminateDispatch, true);
+});
+
+test('parses job listings with run-id diagnostics', () => {
+  assert.deepEqual(parseJobsPayload('{"jobs":[{"name":"deploy-production"}]}', 42), [
+    { name: 'deploy-production' },
+  ]);
+  assert.equal(parseJobsPayload('{"jobs":null}', 42), null);
+  assert.throws(() => parseJobsPayload('<html>nope</html>', 42), /workflow run 42 jobs unreadable/);
 });
 
 test('paginates run listing with one bounded call per page', () => {

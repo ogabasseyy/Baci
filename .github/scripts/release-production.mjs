@@ -51,17 +51,33 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
   }
 }
 
+// Covers the production workflow's full allowed duration
+// (db-migrations 35 min + deploy-production 150 min) plus queue
+// and environment-approval slack, so a healthy slow build is never
+// abandoned while it may still publish.
+export const RUN_WATCH_TIMEOUT_MS = 240 * 60 * 1000;
+
 export async function waitForRunCompletion(runId, readStatus, options = {}) {
-  const { pollMs = 10000, timeoutMs = 2700000, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
+  const { pollMs = 10000, timeoutMs = RUN_WATCH_TIMEOUT_MS, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
   const started = Date.now();
   for (;;) {
     const status = await readStatus();
     if (status === 'completed') return;
     if (Date.now() - started >= timeoutMs) {
-      throw new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
+      const error = new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
+      error.indeterminateDispatch = true;
+      throw error;
     }
     if (onWait) onWait(status, Date.now() - started);
     await sleep(pollMs);
+  }
+}
+
+export function parseJobsPayload(text, runId) {
+  try {
+    return JSON.parse(text).jobs;
+  } catch {
+    throw new Error(`workflow run ${runId} jobs unreadable; inspect preceding gh diagnostics`);
   }
 }
 
@@ -224,7 +240,7 @@ async function main() {
         }
       ),
       cancelRun: async runId => gh(['run', 'cancel', String(runId), '--repo', repository]),
-      readJobs: async runId => JSON.parse(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs'])).jobs,
+      readJobs: async runId => parseJobsPayload(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs']), runId),
       verifyLive: async commit => {
         const deploymentId = readServingDeploymentId();
         const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${deploymentId}?${vercelScope}`, '--method', 'GET']));

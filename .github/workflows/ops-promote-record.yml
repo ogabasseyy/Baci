@@ -1,0 +1,22 @@
+name: Ops Promote Record
+
+# Server-side backstop for the pre-push hook: `git push --no-verify`
+# or a machine without hooks installed bypasses client-side
+# validation, so every push to the operational branch is re-validated
+# here. A red check means the branch holds an invalid or
+# non-fast-forward record range — reconcile the branch, do not push
+# more on top of it.
+on:
+  push:
+    branches: [ops/gigl-promote-record]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate promote-record range
+        run: node ci_scripts/validate-promote-record.mjs "${{ github.event.after }}" "${{ github.event.before }}"

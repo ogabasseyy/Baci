@@ -10,5 +10,10 @@ REVOKE ALL ON public.search_analytics FROM anon, authenticated;
 GRANT SELECT ON public.search_analytics TO authenticated;
 -- popular_searches is security_invoker over this table: its baseline anon
 -- grant now suggests public reads that fail on the revoked underlying
--- table. Revoke it so the permission state is not half-open.
+-- table. Revoke it so the permission state is not half-open. The
+-- aggregate GROUP BY view is not insertable, but authenticated retains
+-- baseline INSERT/UPDATE/DELETE grants on it; revoke those too so no
+-- PostgREST role advertises writes the least-privilege posture forbids.
 REVOKE ALL ON public.popular_searches FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.popular_searches
+  FROM authenticated;

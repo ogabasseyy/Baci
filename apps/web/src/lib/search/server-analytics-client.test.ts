@@ -72,6 +72,26 @@ describe('recordSearchSubmission', () => {
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
+  it('strips extra keys before the privileged insert', async () => {
+    mockInsert.mockResolvedValue({ error: null });
+
+    await recordSearchSubmission({
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: 'phone',
+      results_count: 27,
+      search_method: 'client',
+      clicked_product_id: 'p1',
+      created_at: '2026-01-01',
+    } as never);
+
+    expect(mockInsert).toHaveBeenCalledWith({
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: 'phone',
+      results_count: 27,
+      search_method: 'client',
+    });
+  });
+
   it('propagates insert errors', async () => {
     mockInsert.mockResolvedValue({ error: { message: 'db down' } });
 

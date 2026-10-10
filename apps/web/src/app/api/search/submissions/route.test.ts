@@ -57,11 +57,35 @@ describe('explicit search submissions', () => {
     await POST(
       request(
         { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
-        {},
+        { referer: 'https://usebaci.com/ogabassey/search?q=phone' },
         'https://usebaci.com/api/search/submissions'
       )
     );
     expect(mocks.merchant).toHaveBeenCalledWith('ogabassey');
+  });
+
+  it('rejects a platform-domain slug the referring page does not match', async () => {
+    const response = await POST(
+      request(
+        { query: 'phone', pathPrefix: '/victim-store', source: 'navbar' },
+        { referer: 'https://usebaci.com/attacker-store/search?q=phone' },
+        'https://usebaci.com/api/search/submissions'
+      )
+    );
+    expect(response.status).toBe(404);
+    expect(mocks.merchant).not.toHaveBeenCalledWith('victim-store');
+  });
+
+  it('rejects a platform-domain submission without a referring page', async () => {
+    const response = await POST(
+      request(
+        { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
+        {},
+        'https://usebaci.com/api/search/submissions'
+      )
+    );
+    expect(response.status).toBe(404);
+    expect(mocks.merchant).not.toHaveBeenCalledWith('ogabassey');
   });
 
   it.each([
@@ -87,7 +111,7 @@ describe('explicit search submissions', () => {
     const response = await POST(
       request(
         { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
-        {},
+        { referer: `${origin}/ogabassey/search?q=phone` },
         `${origin}/api/search/submissions`
       )
     );

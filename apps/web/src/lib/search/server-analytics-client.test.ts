@@ -58,6 +58,17 @@ describe('recordSearchSubmission', () => {
     expect(mockInsert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['string', 'nope'],
+  ])('rejects %s rows without dereferencing them', async (_label, row) => {
+    await expect(recordSearchSubmission(row as never)).rejects.toThrow(
+      'Invalid search submission row'
+    );
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+  });
+
   it('propagates insert errors', async () => {
     mockInsert.mockResolvedValue({ error: { message: 'db down' } });
 

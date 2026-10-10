@@ -180,9 +180,14 @@ export async function POST(request: NextRequest) {
       });
       if (error) return unavailable();
     } catch (validationError) {
+      // Log a fixed classification only: the caught object may carry
+      // provider response details that must never reach application logs.
       logger.error({
         message: 'Search submission row failed ingestion validation',
-        error: validationError,
+        errorName:
+          validationError instanceof Error
+            ? validationError.name
+            : 'UnknownError',
       });
       return unavailable();
     }

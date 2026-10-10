@@ -52,6 +52,13 @@ SELECT pg_temp.assert_true(
   'search_analytics grants are incorrect'
 );
 
+-- The security_invoker popular_searches view no longer advertises anon
+-- reads that would fail on the revoked underlying table.
+SELECT pg_temp.assert_true(
+  NOT has_table_privilege('anon', 'public.popular_searches', 'SELECT'),
+  'popular_searches still grants anon SELECT'
+);
+
 -- Fixtures.
 INSERT INTO public.merchants (id, email, business_name, slug, user_id)
 VALUES (

@@ -8,3 +8,7 @@ DROP POLICY IF EXISTS "Anyone can insert search analytics"
   ON public.search_analytics;
 REVOKE ALL ON public.search_analytics FROM anon, authenticated;
 GRANT SELECT ON public.search_analytics TO authenticated;
+-- popular_searches is security_invoker over this table: its baseline anon
+-- grant now suggests public reads that fail on the revoked underlying
+-- table. Revoke it so the permission state is not half-open.
+REVOKE ALL ON public.popular_searches FROM anon;

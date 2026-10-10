@@ -137,4 +137,61 @@ describe('useLoyalty', () => {
       reward_type: 'store_credit',
     });
   });
+
+  it('reuses the idempotency key across retries until success', async () => {
+    const failPayload = { error: 'Insufficient points' };
+    const successPayload = {
+      data: {
+        redemption_code: 'RDM-1',
+        reward_name: 'Perk',
+        reward_type: 'discount',
+        points_spent: 100,
+        new_balance: 400,
+        expires_at: '2026-11-09T00:00:00.000Z',
+        instructions: 'Apply this code at checkout.',
+      },
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => failPayload,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => successPayload,
+      } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => successPayload,
+      } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response);
+
+    const { result } = renderHook(() => useLoyalty('merchant-1', 'customer-1'));
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    const failed = await result.current.redeemReward('reward-9');
+    expect(failed.success).toBe(false);
+    const retried = await result.current.redeemReward('reward-9');
+    expect(retried.success).toBe(true);
+    const again = await result.current.redeemReward('reward-9');
+    expect(again.success).toBe(true);
+
+    const redeemCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) =>
+        String(url).includes('/api/storefront/loyalty/redeem')
+      );
+    expect(redeemCalls).toHaveLength(3);
+    const keys = redeemCalls.map(
+      ([, init]) => (init?.headers as Record<string, string>)['Idempotency-Key']
+    );
+    // Failure then retry share one key; post-success redeems mint fresh.
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
 });

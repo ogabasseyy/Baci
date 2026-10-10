@@ -1,0 +1,208 @@
+import { type NextRequest, NextResponse } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
+
+import { createAnonClient } from '@/lib/supabase/anon';
+import { POST } from './route';
+
+const mockCreateAnonClient = vi.mocked(createAnonClient);
+
+function mockRpc(impl: (fn: string, args: Record<string, unknown>) => unknown) {
+  const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
+    data: impl(fn, args),
+    error: null,
+  }));
+  mockCreateAnonClient.mockReturnValue({ rpc } as never);
+  return rpc;
+}
+
+function request(body: unknown): NextRequest {
+  return new Request('http://localhost/api/storefront/discount/validate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }) as NextRequest;
+}
+
+const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
+
+const baseBody = {
+  merchant_id: MERCHANT_ID,
+  code: 'RDM-ABCDEF12',
+  cart_total: 10000,
+};
+
+function loyaltyRow(overrides: Record<string, unknown> = {}) {
+  return {
+    redemption_id: '22222222-2222-4222-8222-222222222222',
+    reward_type: 'discount_fixed',
+    reward_value: 1000,
+    minimum_order_amount: null,
+    reward_enabled: true,
+    expires_at: null,
+    used: false,
+    reward_name: 'Probe reward',
+    ...overrides,
+  };
+}
+
+describe('POST /api/storefront/discount/validate loyalty fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the merchant code without calling the loyalty resolve', async () => {
+    const rpc = mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? [
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              code: 'SAVE10',
+              discount_type: 'percentage',
+              discount_value: 10,
+              starts_at: null,
+              expires_at: null,
+              usage_limit: null,
+              usage_count: 0,
+              minimum_purchase_amount: null,
+              maximum_discount_amount: null,
+              description: null,
+              applies_to: 'all',
+              product_ids: [],
+              category_ids: [],
+              usage_limit_per_customer: null,
+            },
+          ]
+        : []
+    );
+
+    const response = await POST(request({ ...baseBody, code: 'SAVE10' }));
+    const body = await response.json();
+
+    expect(body.valid).toBe(true);
+    expect(body.discount_code_id).toBe('33333333-3333-4333-8333-333333333333');
+    expect(
+      rpc.mock.calls.some(
+        ([fn]) => fn === 'get_loyalty_redemption_for_checkout'
+      )
+    ).toBe(false);
+  });
+
+  it('validates a bridgeable loyalty code after a merchant miss', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code' ? [] : [loyaltyRow()]
+    );
+
+    const response = await POST(request(baseBody));
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      valid: true,
+      loyalty_redemption_id: '22222222-2222-4222-8222-222222222222',
+      code: 'RDM-ABCDEF12',
+      discount_type: 'fixed',
+      discount_value: 1000,
+      discount_amount: 1000,
+      description: 'Probe reward',
+    });
+    expect(body.discount_code_id).toBeUndefined();
+  });
+
+  it('returns invalid when neither lookup resolves', async () => {
+    mockRpc(() => []);
+
+    const response = await POST(request(baseBody));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
+  it('reports an already-used loyalty code', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code' ? [] : [loyaltyRow({ used: true })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({
+      valid: false,
+      error: 'Discount code has already been used',
+    });
+  });
+
+  it('rejects a non-discount loyalty type as invalid', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ reward_type: 'free_shipping', reward_value: null })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
+  it('enforces the loyalty minimum against the cart total', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ minimum_order_amount: 50000 })]
+    );
+
+    const body = await (
+      await POST(request({ ...baseBody, cart_total: 10000 }))
+    ).json();
+
+    expect(body.valid).toBe(false);
+    expect(body.error).toContain('Minimum purchase of');
+  });
+
+  it('rejects an expired loyalty code', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ expires_at: '2020-01-01T00:00:00.000Z' })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({
+      valid: false,
+      error: 'Discount code has expired',
+    });
+  });
+
+  it('falls back to invalid when the loyalty lookup errors', async () => {
+    const rpc = vi.fn(async (fn: string) =>
+      fn === 'get_storefront_discount_code'
+        ? { data: [], error: null }
+        : { data: null, error: { message: 'boom' } }
+    );
+    mockCreateAnonClient.mockReturnValue({ rpc } as never);
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
+  it('rejects invalid input before any lookup', async () => {
+    const rpc = mockRpc(() => []);
+
+    const response = await POST(request({ code: 'x' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.valid).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+// Silence unused-import lint when NextResponse is only used for types.
+void NextResponse;

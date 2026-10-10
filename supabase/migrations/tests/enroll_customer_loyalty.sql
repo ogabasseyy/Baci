@@ -5,7 +5,9 @@
 --  20261010000004_calculate_loyalty_tier_order,
 --  20261010000005_redeem_loyalty_reward,
 --  20261010000006_adjust_loyalty_points,
---  20261010000007_credit_loyalty_referral).
+--  20261010000007_credit_loyalty_referral,
+--  20261010000008_loyalty_redemption_idempotency,
+--  20261010000009_loyalty_checkout_bridge).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --
@@ -19,6 +21,8 @@
 \ir enroll_customer_loyalty_status.sql
 \ir enroll_customer_loyalty_redemption.sql
 \ir enroll_customer_loyalty_redemption_limits.sql
+\ir enroll_customer_loyalty_redemption_idempotency.sql
+\ir enroll_customer_loyalty_checkout_bridge.sql
 \ir enroll_customer_loyalty_reconciliation.sql
 \ir enroll_customer_loyalty_projection.sql
 \ir enroll_customer_loyalty_adjustment.sql

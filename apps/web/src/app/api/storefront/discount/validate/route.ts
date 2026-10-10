@@ -3,6 +3,7 @@ import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount
 import { logger } from '@/lib/logger';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
+  loyaltyCheckoutCodeRowSchema,
   storefrontDiscountCodeRowSchema,
   storefrontDiscountValidateSchema,
 } from '@/schemas/storefront-discount';
@@ -62,6 +63,94 @@ export async function POST(request: NextRequest) {
     const discountCode = parsedArray.success
       ? (parsedArray.data[0] ?? null)
       : (parsedSingle?.data ?? null);
+
+    // Loyalty fallback (issue #3165): RDM-* codes live in
+    // reward_redemptions, which the merchant-code lookup never reads. Only
+    // attempted when the merchant lookup succeeded but found nothing — a
+    // lookup error keeps the existing invalid response below.
+    if (!error && !discountCode) {
+      const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
+        'get_loyalty_redemption_for_checkout',
+        {
+          p_merchant_id: merchant_id,
+          p_code: code,
+        }
+      );
+      if (!loyaltyError) {
+        const parsedLoyaltyArray = loyaltyCheckoutCodeRowSchema
+          .array()
+          .safeParse(loyaltyData);
+        const parsedLoyaltySingle = parsedLoyaltyArray.success
+          ? null
+          : loyaltyCheckoutCodeRowSchema.safeParse(loyaltyData);
+        const loyaltyCode = parsedLoyaltyArray.success
+          ? (parsedLoyaltyArray.data[0] ?? null)
+          : (parsedLoyaltySingle?.data ?? null);
+        const loyaltyValue = Number(loyaltyCode?.reward_value);
+        // Bridgeable shape only: discount type + positive value. Other
+        // reward types fall through to the generic invalid response —
+        // they are honored through manual/fulfillment channels.
+        if (
+          loyaltyCode != null &&
+          (loyaltyCode.reward_type === 'discount_fixed' ||
+            loyaltyCode.reward_type === 'discount_percentage') &&
+          Number.isFinite(loyaltyValue) &&
+          loyaltyValue > 0
+        ) {
+          if (loyaltyCode.used) {
+            return NextResponse.json(
+              { valid: false, error: 'Discount code has already been used' },
+              { status: 200 }
+            );
+          }
+          if (
+            loyaltyCode.expires_at &&
+            new Date(loyaltyCode.expires_at) < new Date()
+          ) {
+            return NextResponse.json(
+              { valid: false, error: 'Discount code has expired' },
+              { status: 200 }
+            );
+          }
+          if (
+            loyaltyCode.minimum_order_amount != null &&
+            cart_total < Number(loyaltyCode.minimum_order_amount)
+          ) {
+            return NextResponse.json(
+              {
+                valid: false,
+                error: `Minimum purchase of ₦${Number(loyaltyCode.minimum_order_amount).toLocaleString()} required`,
+              },
+              { status: 200 }
+            );
+          }
+          const loyaltyDiscountType =
+            loyaltyCode.reward_type === 'discount_fixed'
+              ? 'fixed'
+              : 'percentage';
+          const loyaltyDiscountAmount = computeDiscountAmountForSubtotal(
+            {
+              discount_type: loyaltyDiscountType,
+              discount_value: loyaltyValue,
+              maximum_discount_amount: null,
+            },
+            cart_total
+          );
+          return NextResponse.json({
+            valid: true,
+            loyalty_redemption_id: loyaltyCode.redemption_id,
+            code,
+            discount_type: loyaltyDiscountType,
+            discount_value: loyaltyValue,
+            discount_amount: loyaltyDiscountAmount,
+            minimum_order: loyaltyCode.minimum_order_amount
+              ? Number(loyaltyCode.minimum_order_amount)
+              : undefined,
+            description: loyaltyCode.reward_name,
+          });
+        }
+      }
+    }
 
     if (error || !discountCode) {
       return NextResponse.json(

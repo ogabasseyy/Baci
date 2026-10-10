@@ -16,10 +16,16 @@
 -- fulfillment, balance check, redemption insert, points deduction, and
 -- ledger row.
 -- The caller must own the customer row (customers.user_id = auth.uid()).
+-- Drop the 3-arg signature: the idempotency key below changes the
+-- argument list, and CREATE OR REPLACE would otherwise leave the old
+-- overload behind.
+DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
+
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,
   p_customer_id uuid,
-  p_reward_id uuid
+  p_reward_id uuid,
+  p_idempotency_key uuid DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -37,7 +43,26 @@ DECLARE
   v_expires_at timestamptz;
   v_expired_points integer := 0;
   v_redemption_count integer := 0;
+  v_replay jsonb := NULL;
+  v_response jsonb := NULL;
 BEGIN
+  -- Idempotency: a client retry replays the stored success instead of
+  -- minting a second redemption. The key lock serializes concurrent
+  -- same-key retries so the loser replays the winner (no orphans).
+  -- Failures are never stored, so a failed attempt retries fresh.
+  -- NULL keeps legacy direct calls working (the route always sends one).
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtext('loyalty_redeem:' || p_idempotency_key::text)
+    );
+    v_replay := public.get_loyalty_redemption_idempotency(
+      p_idempotency_key, p_merchant_id, p_customer_id, p_reward_id
+    );
+    IF v_replay IS NOT NULL THEN
+      RETURN v_replay;
+    END IF;
+  END IF;
+
   IF p_merchant_id IS NULL OR p_customer_id IS NULL OR p_reward_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
@@ -248,7 +273,7 @@ BEGIN
     'redemption', v_redemption_id::text, 'Redeemed: ' || v_reward.name
   );
 
-  RETURN jsonb_build_object(
+  v_response := jsonb_build_object(
     'success', true,
     'redemption_code', v_redemption_code,
     'reward_name', v_reward.name,
@@ -258,9 +283,16 @@ BEGIN
     'new_balance', v_new_balance,
     'expires_at', v_expires_at
   );
+  IF p_idempotency_key IS NOT NULL THEN
+    PERFORM public.store_loyalty_redemption_idempotency(
+      p_idempotency_key, p_merchant_id, p_customer_id, p_reward_id,
+      v_response
+    );
+  END IF;
+  RETURN v_response;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.redeem_loyalty_reward(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid, uuid, uuid)
+REVOKE ALL ON FUNCTION public.redeem_loyalty_reward(uuid, uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid, uuid, uuid, uuid)
   TO authenticated, service_role;

@@ -89,7 +89,10 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
+import {
+  loyaltyCheckoutCodeRowSchema,
+  storefrontDiscountCodeRowSchema,
+} from '@/schemas/storefront-discount';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -1588,6 +1591,7 @@ export async function POST(request: NextRequest) {
     // from the CANONICAL subtotal (never the client cart total). Eligibility /
     // targeting is enforced authoritatively + replay-safely in the wrapper RPC.
     let discountCodeId: string | null = null;
+    let loyaltyRedemptionId: string | null = null;
     let discountCodeAmount = 0;
     if (requestedDiscountCode) {
       if (hasVoucherItem) {
@@ -1641,13 +1645,72 @@ export async function POST(request: NextRequest) {
         : parsedDiscountSingle?.success
           ? parsedDiscountSingle.data
           : null;
-      if (!discountRow) {
-        return NextResponse.json(
-          { code: 'discount_code_invalid', error: 'Invalid discount code' },
-          { status: 400 }
-        );
+      // Normalized code economics — exactly one of discountCodeId /
+      // loyaltyRedemptionId is set below.
+      let codeDiscountType: 'fixed' | 'percentage';
+      let codeDiscountValue: number;
+      let codeMaximumDiscountAmount: number | null;
+      if (discountRow) {
+        discountCodeId = discountRow.id;
+        codeDiscountType =
+          discountRow.discount_type === 'fixed_amount' ? 'fixed' : 'percentage';
+        codeDiscountValue = Number(discountRow.discount_value);
+        codeMaximumDiscountAmount = discountRow.maximum_discount_amount;
+      } else {
+        // Loyalty fallback (issue #3165): RDM-* codes live in
+        // reward_redemptions, which the merchant-code lookup never reads.
+        // Resolve read-only; the loyalty wrapper RPC re-verifies used /
+        // expired / minimum / amount authoritatively, so resolve-time
+        // state is NOT gated here — a used code must still reach the
+        // wrapper for replay-first idempotent retries. Only the bridgeable
+        // shape (discount type + positive value) is filtered: other reward
+        // types are honored through manual/fulfillment channels.
+        const { data: loyaltyRows, error: loyaltyLookupError } =
+          await supabase.rpc('get_loyalty_redemption_for_checkout', {
+            p_merchant_id: merchant_id,
+            p_code: requestedDiscountCode,
+          });
+        if (loyaltyLookupError) {
+          logger.error({
+            message: 'Loyalty code lookup failed',
+            error: loyaltyLookupError,
+            merchantId: merchant_id,
+          });
+          return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+          );
+        }
+        const parsedLoyaltyArray = loyaltyCheckoutCodeRowSchema
+          .array()
+          .safeParse(loyaltyRows);
+        const parsedLoyaltySingle = parsedLoyaltyArray.success
+          ? null
+          : loyaltyCheckoutCodeRowSchema.safeParse(loyaltyRows);
+        const loyaltyRow = parsedLoyaltyArray.success
+          ? (parsedLoyaltyArray.data[0] ?? null)
+          : parsedLoyaltySingle?.success
+            ? parsedLoyaltySingle.data
+            : null;
+        const loyaltyValue = Number(loyaltyRow?.reward_value);
+        const loyaltyBridgeable =
+          loyaltyRow != null &&
+          (loyaltyRow.reward_type === 'discount_fixed' ||
+            loyaltyRow.reward_type === 'discount_percentage') &&
+          Number.isFinite(loyaltyValue) &&
+          loyaltyValue > 0;
+        if (!loyaltyBridgeable || loyaltyRow == null) {
+          return NextResponse.json(
+            { code: 'discount_code_invalid', error: 'Invalid discount code' },
+            { status: 400 }
+          );
+        }
+        loyaltyRedemptionId = loyaltyRow.redemption_id;
+        codeDiscountType =
+          loyaltyRow.reward_type === 'discount_fixed' ? 'fixed' : 'percentage';
+        codeDiscountValue = loyaltyValue;
+        codeMaximumDiscountAmount = null;
       }
-      discountCodeId = discountRow.id;
 
       try {
         canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
@@ -1681,12 +1744,9 @@ export async function POST(request: NextRequest) {
 
       discountCodeAmount = computeDiscountAmountForSubtotal(
         {
-          discount_type:
-            discountRow.discount_type === 'fixed_amount'
-              ? 'fixed'
-              : 'percentage',
-          discount_value: Number(discountRow.discount_value),
-          maximum_discount_amount: discountRow.maximum_discount_amount,
+          discount_type: codeDiscountType,
+          discount_value: codeDiscountValue,
+          maximum_discount_amount: codeMaximumDiscountAmount,
         },
         canonicalOrderSubtotal
       );
@@ -1959,7 +2019,10 @@ export async function POST(request: NextRequest) {
               // STABLE code identity, NOT the recomputed amount, so a merchant
               // editing the code between a checkout and its retry can't trip
               // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
+              discount_amount:
+                discountCodeId || loyaltyRedemptionId
+                  ? 0
+                  : serverDerivedDiscountAmount,
               discount_code: requestedDiscountCode,
               delivery_method: canonicalDeliveryMethod,
               gift_wrapping_fee: giftWrappingFeeValue,
@@ -2014,9 +2077,10 @@ export async function POST(request: NextRequest) {
       p_customer_phone: customer_phone || null,
       p_items: orderItemsRpcPayload,
       p_shipping_fee: effectiveShippingFee,
-      p_discount_amount: discountCodeId
-        ? discountCodeAmount
-        : serverDerivedDiscountAmount,
+      p_discount_amount:
+        discountCodeId || loyaltyRedemptionId
+          ? discountCodeAmount
+          : serverDerivedDiscountAmount,
       p_tax_amount: orderTaxAmount,
       p_payment_method: effectivePaymentMethod,
       p_payment_status: effectivePaymentStatus,
@@ -2085,7 +2149,9 @@ export async function POST(request: NextRequest) {
         ? 'create_storefront_order_with_quiz_voucher'
         : discountCodeId
           ? 'create_storefront_order_with_discount_code'
-          : 'create_storefront_order';
+          : loyaltyRedemptionId
+            ? 'create_storefront_order_with_loyalty_code'
+            : 'create_storefront_order';
 
     const orderCreateRpcArgs = requestedSavingsRedemption
       ? {
@@ -2096,7 +2162,12 @@ export async function POST(request: NextRequest) {
         }
       : discountCodeId
         ? { ...orderRpcArgs, p_discount_code_id: discountCodeId }
-        : orderRpcArgs;
+        : loyaltyRedemptionId
+          ? {
+              ...orderRpcArgs,
+              p_loyalty_redemption_id: loyaltyRedemptionId,
+            }
+          : orderRpcArgs;
 
     const orderRpcClient =
       redvaultOrderRpcClient ??
@@ -2269,7 +2340,8 @@ export async function POST(request: NextRequest) {
       // input — surface as 409 so the client shows "no longer available".
       if (
         message === 'usage_limit_reached' ||
-        message === 'per_customer_limit_reached'
+        message === 'per_customer_limit_reached' ||
+        message === 'loyalty_code_already_used'
       ) {
         return NextResponse.json(
           { code: message, error: 'Discount code is no longer available' },
@@ -2300,6 +2372,13 @@ export async function POST(request: NextRequest) {
         'code_expired',
         'minimum_purchase_not_met',
         'discount_amount_mismatch',
+        // Loyalty-code bridge client errors (issue #3165; → 400). The
+        // loyalty wrapper RPC raises these for fresh orders; safe for
+        // the client to fix and retry.
+        'loyalty_redemption_not_found',
+        'loyalty_code_not_applicable',
+        'loyalty_checkout_key_conflict',
+        'unsupported_loyalty_reward_type',
         // B3 (plan §5 B3): RPC raises when shipping_provider is set
         // without a quote id. Map to 4xx so the client gets the right
         // re-quote signal instead of a generic 500.

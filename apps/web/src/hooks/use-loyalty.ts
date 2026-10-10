@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { buildCsrfHeaders } from '@/lib/csrf';
+import { redemptionIdempotencyKeys } from '@/lib/loyalty-redemption-keys';
 
 interface LoyaltyReward {
   id: string;
@@ -276,10 +277,19 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       return { success: false, error: 'Missing merchant or customer ID' };
     }
 
+    // Stable per-reward key: a timeout retry reuses the failed
+    // attempt's key so the RPC replays instead of re-spending. The key
+    // clears only on success (a 4xx validation failure keeps it: fixing
+    // the cause and retrying replays nothing since failures never store).
+    const idempotencyKey = redemptionIdempotencyKeys.forReward(rewardId);
+
     try {
       const response = await fetch('/api/storefront/loyalty/redeem', {
         method: 'POST',
-        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+        headers: buildCsrfHeaders({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        }),
         body: JSON.stringify({
           merchant_id: merchantId,
           customer_id: customerId,
@@ -292,6 +302,8 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       if (!response.ok) {
         return { success: false, error: result.error };
       }
+
+      redemptionIdempotencyKeys.clearForReward(rewardId);
 
       // Refresh loyalty data after redemption
       await fetchLoyaltyData();

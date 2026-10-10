@@ -46,3 +46,22 @@ export const storefrontDiscountCodeRowSchema = z.object({
 export type StorefrontDiscountCodeRow = z.infer<
   typeof storefrontDiscountCodeRowSchema
 >;
+
+// Row returned by get_loyalty_redemption_for_checkout (issue #3165). The
+// resolve RPC is type-agnostic; only discount_fixed/discount_percentage with
+// a positive value are bridgeable — the call sites filter, and the order
+// wrapper re-verifies authoritatively.
+export const loyaltyCheckoutCodeRowSchema = z.object({
+  redemption_id: z.uuid(),
+  reward_type: z.string(),
+  reward_value: z.coerce.number().nullable(),
+  minimum_order_amount: z.coerce.number().nullable(),
+  reward_enabled: z.boolean().nullable(),
+  expires_at: z.string().nullable(),
+  used: z.boolean(),
+  reward_name: z.string().nullable(),
+});
+
+export type LoyaltyCheckoutCodeRow = z.infer<
+  typeof loyaltyCheckoutCodeRowSchema
+>;

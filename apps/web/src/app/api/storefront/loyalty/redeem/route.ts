@@ -28,7 +28,12 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   minimum_not_met: 400,
   usage_limit_reached: 409,
   invalid_input: 400,
+  idempotency_key_mismatch: 400,
+  idempotency_key_reused: 409,
 };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const RPC_ERROR_MESSAGE: Record<string, string> = {
   program_unavailable: 'Loyalty program not available for this merchant',
@@ -39,6 +44,9 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   minimum_not_met: 'Minimum redemption amount not met',
   usage_limit_reached: 'Redemption limit reached for this reward',
   invalid_input: 'Invalid redemption input',
+  idempotency_key_mismatch: 'Idempotency-Key does not belong to this customer',
+  idempotency_key_reused:
+    'Idempotency-Key already used for a different reward. Generate a fresh key for the new redemption.',
 };
 
 function getRedemptionInstructions(
@@ -132,6 +140,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Retry safety: without a client key a lost-response retry mints a
+    // second redemption. The RPC replays the stored success under this
+    // key (mirroring the VTU wallet-only route's contract).
+    const rawIdempotencyKey = request.headers.get('Idempotency-Key') ?? '';
+    if (!rawIdempotencyKey || !UUID_PATTERN.test(rawIdempotencyKey)) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing or invalid Idempotency-Key header (UUID required for redemptions).',
+        },
+        { status: 400 }
+      );
+    }
+    const idempotencyKey = rawIdempotencyKey.toLowerCase();
+
     // Resolve the caller's own live customer row for this merchant.
     // A mismatch returns the same 404 as a missing customer so callers
     // cannot probe which customer IDs exist. Soft-deleted rows are
@@ -169,6 +192,7 @@ export async function POST(request: NextRequest) {
       p_merchant_id: parsed.data.merchant_id,
       p_customer_id: parsed.data.customer_id,
       p_reward_id: parsed.data.reward_id,
+      p_idempotency_key: idempotencyKey,
     });
 
     if (error) {

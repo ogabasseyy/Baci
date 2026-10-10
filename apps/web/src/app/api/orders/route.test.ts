@@ -302,8 +302,13 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  create_storefront_order_with_loyalty_code?: {
+    data: unknown;
+    error: unknown;
+  };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
+  get_loyalty_redemption_for_checkout?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
@@ -8668,6 +8673,16 @@ describe('POST /api/orders — discount code', () => {
     subtotal: 1000,
     discount_amount: 100,
   };
+  const LOYALTY_CODE_ROW = {
+    redemption_id: '22222222-2222-4222-8222-222222222222',
+    reward_type: 'discount_fixed',
+    reward_value: 100,
+    minimum_order_amount: null,
+    reward_enabled: true,
+    expires_at: null,
+    used: false,
+    reward_name: 'Probe reward',
+  };
   const PRODUCT_ROWS = [{ id: 'p-1', price: 1000 }];
 
   async function setupDiscount(
@@ -8721,6 +8736,83 @@ describe('POST /api/orders — discount code', () => {
         p_discount_amount: 100,
       })
     );
+  });
+
+  it('dispatches create_storefront_order_with_loyalty_code after a merchant-code miss', async () => {
+    const supabase = await setupDiscount(
+      {
+        get_storefront_discount_code: { data: [], error: null },
+        get_loyalty_redemption_for_checkout: {
+          data: [LOYALTY_CODE_ROW],
+          error: null,
+        },
+        create_storefront_order_with_loyalty_code: {
+          data: [orderRowWithDiscount],
+          error: null,
+        },
+      },
+      { productRows: PRODUCT_ROWS }
+    );
+
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+
+    expect(response.status).toBeLessThan(400);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_loyalty_code',
+      expect.objectContaining({
+        p_loyalty_redemption_id: LOYALTY_CODE_ROW.redemption_id,
+        p_discount_amount: 100,
+      })
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_discount_code',
+      expect.anything()
+    );
+  });
+
+  it('maps loyalty_code_already_used to 409', async () => {
+    await setupDiscount(
+      {
+        get_storefront_discount_code: { data: [], error: null },
+        get_loyalty_redemption_for_checkout: {
+          data: [LOYALTY_CODE_ROW],
+          error: null,
+        },
+        create_storefront_order_with_loyalty_code: {
+          data: null,
+          error: { message: 'loyalty_code_already_used' },
+        },
+      },
+      { productRows: PRODUCT_ROWS }
+    );
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('loyalty_code_already_used');
+  });
+
+  it('returns 400 discount_code_invalid for a non-discount loyalty type', async () => {
+    await setupDiscount({
+      get_storefront_discount_code: { data: [], error: null },
+      get_loyalty_redemption_for_checkout: {
+        data: [
+          {
+            ...LOYALTY_CODE_ROW,
+            reward_type: 'free_shipping',
+            reward_value: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).code).toBe('discount_code_invalid');
   });
 
   it('still rejects a raw non-zero discount_amount when no code is sent', async () => {

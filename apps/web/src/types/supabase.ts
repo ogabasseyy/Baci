@@ -17678,6 +17678,7 @@ export type Database = {
           p_customer_id: string;
           p_merchant_id: string;
           p_reward_id: string;
+          p_idempotency_key?: string;
         };
         Returns: Json;
       };

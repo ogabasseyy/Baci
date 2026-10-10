@@ -65,16 +65,16 @@ SELECT pg_temp.assert_true(
     SELECT 1
     FROM pg_proc AS procedure,
       LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
-    WHERE procedure.oid = 'public.redeem_loyalty_reward(uuid,uuid,uuid)'::regprocedure
+    WHERE procedure.oid = 'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::regprocedure
       AND acl_entry.grantee = 0
       AND acl_entry.privilege_type = 'EXECUTE'
   )
   AND NOT has_function_privilege('anon',
-    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE')
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)', 'EXECUTE')
   AND has_function_privilege('authenticated',
-    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE')
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)', 'EXECUTE')
   AND has_function_privilege('service_role',
-    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE'),
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)', 'EXECUTE'),
   'redeem_loyalty_reward grants are incorrect'
 );
 
@@ -180,6 +180,41 @@ SELECT pg_temp.assert_true(
   AND has_function_privilege('service_role',
     'public.credit_loyalty_referral(uuid,uuid,uuid,integer,integer,uuid)', 'EXECUTE'),
   'credit_loyalty_referral grants are incorrect'
+);
+
+-- The idempotency helpers have no ownership check, so only the redeem
+-- RPC may reach them (definer's rights): no PUBLIC grant, no anon
+-- EXECUTE, no authenticated EXECUTE, service_role only.
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.get_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.get_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated',
+    'public.get_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.get_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid)', 'EXECUTE')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.store_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid,jsonb)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.store_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated',
+    'public.store_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.store_loyalty_redemption_idempotency(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE'),
+  'loyalty redemption idempotency helper grants are incorrect'
 );
 
 -- Fixtures.

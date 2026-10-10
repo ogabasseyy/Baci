@@ -3,6 +3,7 @@ import {
   CUSTOMER_ID,
   createRequest,
   createSuccessResult,
+  IDEMPOTENCY_KEY,
   MERCHANT_ID,
   mockOwnedCustomer,
   redeemMocks as mocks,
@@ -36,6 +37,7 @@ describe('POST /api/storefront/loyalty/redeem', () => {
       p_merchant_id: MERCHANT_ID,
       p_customer_id: CUSTOMER_ID,
       p_reward_id: REWARD_ID,
+      p_idempotency_key: IDEMPOTENCY_KEY,
     });
     expect(response.status).toBe(200);
     expect(body).toEqual({

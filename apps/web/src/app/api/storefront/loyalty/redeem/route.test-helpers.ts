@@ -65,10 +65,18 @@ export const CUSTOMER_ID = '01aa0000-0000-4000-8000-000000000011';
 export const USER_ID = '01aa0000-0000-4000-8000-000000000101';
 export const REWARD_ID = '02aa0000-0000-4000-8000-000000000001';
 
-export function createRequest(body: unknown) {
+export const IDEMPOTENCY_KEY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+
+export function createRequest(body: unknown, idempotencyKey?: string | null) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (idempotencyKey !== null) {
+    headers['Idempotency-Key'] = idempotencyKey ?? IDEMPOTENCY_KEY;
+  }
   return new NextRequest('https://usebaci.com/api/storefront/loyalty/redeem', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: typeof body === 'string' ? body : JSON.stringify(body),
   });
 }

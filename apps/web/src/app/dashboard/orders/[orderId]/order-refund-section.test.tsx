@@ -18,6 +18,7 @@ const summary = {
   retryRequests: 0,
   canRetry: false,
   canRecordManual: false,
+  canManageRefunds: true,
   history: [],
 };
 

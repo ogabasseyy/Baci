@@ -18,6 +18,7 @@ const summary = {
   retryRequests: 0,
   canRetry: true,
   canRecordManual: true,
+  canManageRefunds: true,
   history: [],
 };
 describe('OrderRefundPanel', () => {
@@ -105,6 +106,27 @@ describe('OrderRefundPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden');
     expect(
       screen.queryByRole('button', { name: 'Retry refund' })
+    ).not.toBeInTheDocument();
+  });
+  it('hides refund actions when the caller lacks refund permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, canManageRefunds: false }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(
+      await screen.findByText(
+        'You need refund permission to retry or record refunds.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Retry refund' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Record manual refund' })
     ).not.toBeInTheDocument();
   });
   it('falls back to a generic message when the error body is not JSON', async () => {

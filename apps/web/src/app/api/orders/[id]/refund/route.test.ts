@@ -102,6 +102,7 @@ describe('order refund route', () => {
       'refund_forbidden',
       'You do not have permission to manage this refund',
     ],
+    ['28000', 401, 'not_authenticated', 'Authentication required'],
     ['P0002', 404, 'order_not_found', 'Order not found'],
     [
       'P0001',

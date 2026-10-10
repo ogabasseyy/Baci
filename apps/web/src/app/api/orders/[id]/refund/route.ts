@@ -8,6 +8,7 @@ import { orderRefundSchema } from '@/schemas/order-refund';
 // exception text must never reach the client (CWE-209): unknown
 // identifiers fall back to the generic message.
 const KNOWN_REFUND_ERRORS: Record<string, string> = {
+  not_authenticated: 'Authentication required',
   refund_forbidden: 'You do not have permission to manage this refund',
   order_not_found: 'Order not found',
   cancelled_paid_order_required: 'Refunds require a cancelled, paid order',
@@ -71,13 +72,15 @@ async function handle(
     const status =
       error.code === '42501'
         ? 403
-        : error.code === 'P0002'
-          ? 404
-          : error.code === 'P0001'
-            ? 409
-            : error.code === '22023'
-              ? 400
-              : 500;
+        : error.code === '28000'
+          ? 401
+          : error.code === 'P0002'
+            ? 404
+            : error.code === 'P0001'
+              ? 409
+              : error.code === '22023'
+                ? 400
+                : 500;
     return NextResponse.json(
       {
         error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',

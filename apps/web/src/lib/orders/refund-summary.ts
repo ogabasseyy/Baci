@@ -17,6 +17,7 @@ export interface RefundSummary {
   retryRequests: number;
   canRetry: boolean;
   canRecordManual: boolean;
+  canManageRefunds: boolean;
   events?: Array<{
     id: string;
     action: string;

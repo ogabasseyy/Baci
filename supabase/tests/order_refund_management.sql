@@ -36,6 +36,7 @@ DO $$ BEGIN
 EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
 SELECT set_config('request.jwt.uid','00000000-0000-4000-8000-000000000098',false);
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000003')->>'status') IS NOT NULL,'edit-authorized staff can read refund status');
+SELECT assert_refund(NOT (manage_order_refund('00000000-0000-4000-8000-000000000003')->>'canManageRefunds')::boolean,'staff without refund permission is flagged');
 DO $$ BEGIN
   PERFORM manage_order_refund('00000000-0000-4000-8000-000000000003','manual',10,'2026-09-28','bank_transfer','staff-1');
   RAISE EXCEPTION 'edit-authorized staff recorded a manual refund';
@@ -68,6 +69,7 @@ SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020'
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'pending')::numeric=0,'legacy refunded rows are not pending');
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'remaining')::numeric=70,'legacy refunded rows reduce remaining');
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'canRecordManual')::boolean,'manual stays available beside legacy rows');
+SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000003')->>'canManageRefunds')::boolean,'owner can manage refunds');
 INSERT INTO orders VALUES ('00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001',100,100,'NGN','cancelled','paid',now(),now());
 INSERT INTO transactions(id,merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference) VALUES ('00000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000030','payment',100,'NGN','completed','paystack','capture-31');
 INSERT INTO customer_wallet_transactions VALUES ('00000000-0000-4000-8000-000000000030','order_reversal','00000000-0000-4000-8000-000000000001',40);
@@ -80,6 +82,11 @@ DO $$ BEGIN
 EXCEPTION WHEN SQLSTATE 'P0001' THEN IF SQLERRM<>'refund_exceeds_remaining' THEN RAISE; END IF; END $$;
 SELECT manage_order_refund('00000000-0000-4000-8000-000000000030','manual',50,'2026-09-28','bank_transfer','reversal-adjusted');
 SELECT assert_refund((SELECT payment_status='refunded' FROM orders WHERE id='00000000-0000-4000-8000-000000000030'),'reversal-adjusted manual completes the order');
+INSERT INTO orders VALUES ('00000000-0000-4000-8000-000000000050','00000000-0000-4000-8000-000000000001',100,100,'NGN','cancelled','paid',now(),now());
+INSERT INTO transactions(id,merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference) VALUES ('00000000-0000-4000-8000-000000000051','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000050','payment',100,'NGN','completed','paystack','capture-51');
+INSERT INTO customer_wallet_transactions VALUES ('00000000-0000-4000-8000-000000000050','order_reversal','00000000-0000-4000-8000-000000000001',40);
+INSERT INTO transactions(id,merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference,metadata) VALUES ('00000000-0000-4000-8000-000000000052','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000050','refund',60,'NGN','completed','paystack','777001',jsonb_build_object('payment_transaction_id','00000000-0000-4000-8000-000000000051'));
+SELECT assert_refund((SELECT payment_status='refunded' FROM orders WHERE id='00000000-0000-4000-8000-000000000050'),'trigger counts reversals toward fully refunded');
 SELECT assert_refund(NOT has_function_privilege('anon','public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)','EXECUTE'),'anonymous callers denied');
 SELECT 'refund integration tests passed';
 -- RPC authority is available to authenticated owners without granting ledger writes.
@@ -103,9 +110,12 @@ SELECT 'authenticated refund access tests passed';
 -- insert boundary, apply the restriction, and prove the split.
 CREATE FUNCTION public.has_merchant_access(uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT true $$;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY transactions_insert_policy ON public.transactions FOR INSERT TO authenticated WITH CHECK (public.has_merchant_access(merchant_id));
+CREATE POLICY transactions_insert_policy ON public.transactions FOR INSERT TO authenticated WITH CHECK (public.has_merchant_access(merchant_id) AND (order_id IS NULL OR EXISTS (SELECT 1 FROM public.orders AS o WHERE o.id=transactions.order_id AND o.merchant_id=transactions.merchant_id)));
 CREATE POLICY transactions_select_policy ON public.transactions FOR SELECT TO authenticated USING (true);
 GRANT INSERT, SELECT ON public.transactions TO authenticated;
+GRANT SELECT ON public.orders TO authenticated;
+INSERT INTO public.merchants VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000099');
+INSERT INTO public.orders VALUES ('00000000-0000-4000-8000-000000000040','00000000-0000-4000-8000-000000000002',10,0,'NGN','pending','unpaid',now(),now());
 \ir ../migrations/20261010120000_restrict_authenticated_refund_inserts.sql
 SET ROLE authenticated;
 DO $$ BEGIN
@@ -114,5 +124,9 @@ DO $$ BEGIN
 EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
 INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway) VALUES ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','payment',10,'NGN','completed','paystack');
 SELECT assert_refund((SELECT count(*)=1 FROM public.transactions WHERE transaction_type='payment' AND amount=10),'authenticated non-refund inserts still allowed');
+DO $$ BEGIN
+  INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway) VALUES ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000040','payment',10,'NGN','completed','paystack');
+  RAISE EXCEPTION 'cross-merchant order linkage allowed';
+EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
 RESET ROLE;
 SELECT 'refund insert policy tests passed';

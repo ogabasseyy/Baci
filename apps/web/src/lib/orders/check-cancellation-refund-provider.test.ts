@@ -116,7 +116,7 @@ describe('checkCancellationRefundProvider', () => {
           },
         ],
       })
-    ).rejects.toThrow('exceed provider-confirmed amounts');
+    ).rejects.toThrow('reconciliation');
     // No provider rows at all with a Paystack manual claim also quarantines.
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);
     await expect(
@@ -133,5 +133,46 @@ describe('checkCancellationRefundProvider', () => {
         ],
       })
     ).rejects.toThrow('exceed provider-confirmed amounts');
+  });
+  it('requires exact single-row correspondence for unmatched processed rows', async () => {
+    const manual = (reference: string, amount: number) => ({
+      gateway_reference: reference,
+      amount,
+      status: 'completed',
+      currency: 'NGN',
+      metadata: { method: 'paystack' },
+    });
+    // A+B same-amount case: one manual row cannot cover two provider rows.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [manual('merchant-ref-1', 1)],
+      })
+    ).rejects.toThrow('reconciliation');
+    // Two exact pairs pass.
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          manual('merchant-ref-1', 1),
+          manual('merchant-ref-2', 1),
+        ],
+      })
+    ).resolves.toBeUndefined();
+    // A combined manual cannot cover two smaller provider rows.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 60, currency: 'NGN', status: 'processed' },
+      { id: 8, amount: 40, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [manual('merchant-ref-1', 1)],
+      })
+    ).rejects.toThrow('reconciliation');
   });
 });

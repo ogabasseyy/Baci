@@ -64,6 +64,7 @@ DECLARE
   v_remaining numeric;
   v_reversed_internal numeric;
   v_leg_index integer;
+  v_can_manage boolean;
   v_allocation numeric;
   v_leg_remaining numeric;
   v_history jsonb;
@@ -75,9 +76,10 @@ BEGIN
   END IF;
   SELECT * INTO v_order FROM public.orders WHERE id=p_order_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'order_not_found' USING ERRCODE='P0002'; END IF;
-  IF NOT (EXISTS (SELECT 1 FROM public.merchants WHERE id=v_order.merchant_id AND user_id=v_actor)
-    OR public.check_staff_permission(v_actor,v_order.merchant_id,'orders',
-      CASE WHEN p_action='status' THEN 'view' ELSE 'refund' END)) THEN
+  v_can_manage := EXISTS (SELECT 1 FROM public.merchants WHERE id=v_order.merchant_id AND user_id=v_actor)
+    OR public.check_staff_permission(v_actor,v_order.merchant_id,'orders','refund');
+  IF NOT (v_can_manage OR (p_action='status'
+    AND public.check_staff_permission(v_actor,v_order.merchant_id,'orders','view'))) THEN
     RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501';
   END IF;
   SELECT * INTO v_step FROM public.order_cancellation_side_effects
@@ -211,7 +213,8 @@ BEGIN
       'details',e.details,'date',e.created_at,'actor',e.actor_id) ORDER BY e.created_at DESC)
       FROM public.order_refund_events e WHERE e.order_id=p_order_id AND e.merchant_id=v_order.merchant_id),'[]'::jsonb),
     'canRetry',v_step.status='failed' AND v_step.error IS NOT NULL AND v_remaining>0 AND v_pending=0,
-    'canRecordManual',v_remaining>0 AND v_pending=0
+    'canRecordManual',v_remaining>0 AND v_pending=0,
+    'canManageRefunds',v_can_manage
       AND COALESCE(v_step.status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;
 REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
@@ -245,7 +248,13 @@ BEGIN
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
         AND o.amount_paid <= (SELECT COALESCE(sum(t.amount),0) FROM public.transactions t
           WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
-            AND t.transaction_type='refund' AND t.status IN ('completed','refunded'));
+            AND t.transaction_type='refund' AND t.status IN ('completed','refunded'))
+        + (SELECT COALESCE(sum(w.amount),0) FROM public.customer_wallet_transactions w
+          WHERE w.source_id=o.id AND w.merchant_id=o.merchant_id
+            AND w.source_type='order_reversal')
+        + (SELECT COALESCE(sum(r.amount),0) FROM public.customer_savings_redemptions r
+          WHERE r.order_id=o.id AND r.merchant_id=o.merchant_id
+            AND r.metadata ? 'reversed_at');
   END IF;
   RETURN NEW;
 END; $$;

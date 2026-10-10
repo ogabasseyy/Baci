@@ -178,23 +178,34 @@ export function OrderRefundPanel({
               </p>
             )}
             <div className="flex flex-wrap gap-2">
-              {summary.canRetry && (
-                <Button disabled={busy} onClick={() => void submit('retry')}>
-                  Retry refund
-                </Button>
-              )}
-              {summary.canRecordManual && (
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => {
-                    setConfirmed(false);
-                    setAmount(String(summary.remaining));
-                    setShowForm(!showForm);
-                  }}
-                >
-                  Record manual refund
-                </Button>
+              {summary.canManageRefunds === false ? (
+                <p className="text-sm text-muted-foreground">
+                  You need refund permission to retry or record refunds.
+                </p>
+              ) : (
+                <>
+                  {summary.canRetry && (
+                    <Button
+                      disabled={busy}
+                      onClick={() => void submit('retry')}
+                    >
+                      Retry refund
+                    </Button>
+                  )}
+                  {summary.canRecordManual && (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmed(false);
+                        setAmount(String(summary.remaining));
+                        setShowForm(!showForm);
+                      }}
+                    >
+                      Record manual refund
+                    </Button>
+                  )}
+                </>
               )}
             </div>
             {showForm && (

@@ -72,11 +72,15 @@ export async function coordinateRelease(operations, coordinationId) {
     throw new Error('dispatch commit mismatch; cancellation requested');
   }
   // The lock is local, so a second coordinator on another machine can
-  // race this release: both would watch a dispatch and report a
-  // release. An in-flight sibling coordinated run for the same commit
-  // aborts loudly instead — cancelling our own run first so exactly
-  // one release can complete. Completed siblings are earlier releases
-  // of the same SHA, not racers, and are ignored.
+  // race this release. An in-flight sibling coordinated run for the
+  // same commit aborts loudly instead — cancelling our own run first.
+  // Best effort, not atomic: near-simultaneous dispatches can list
+  // before the other's run is API-visible, in which case both runs
+  // serialize in the workflow concurrency queue and may publish the
+  // same SHA sequentially. True mutual exclusion needs the single
+  // outer coordinator from the unattended integration boundary.
+  // Completed siblings are earlier releases of the same SHA, not
+  // racers, and are ignored.
   const siblings = selectSiblingCoordinatedRuns(await operations.listCoordinatedRuns(), baseline, coordinationId, commit);
   if (siblings.length > 0) {
     try {

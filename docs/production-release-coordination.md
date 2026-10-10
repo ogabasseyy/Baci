@@ -14,7 +14,9 @@ The fallback flag approves the existing GitHub-hosted prebuilt application build
 not a Vercel cloud build.
 
 The coordinator requires authenticated GitHub and Vercel CLIs, working SSH access
-to the approved VPS, and the existing worker deployment prerequisites. It refuses
+to the approved VPS, and the existing worker deployment prerequisites. The Vercel
+CLI must be >= 50.5.0, the first release shipping `vercel api` for live-alias
+verification; older CLIs are refused before dispatching. It refuses
 dirty or stale checkouts and concurrent deployments, rechecks main after worker
 preparation, verifies the dispatched SHA, rejects skipped publication, and checks
 the serving Vercel alias against the expected project, production state and SHA.
@@ -54,6 +56,8 @@ in the clean release checkout; do not disable global hooks to make an old checko
   payments explicitly controlled. Infrastructure automation cannot invent them.
 - Test stale commits, concurrent releases, worker failure, main advancement,
   dispatch ambiguity, skipped publishing and stale/wrong-project live aliases.
+- Create ops/gigl-promote-record orphan: a new branch validates its full
+  reachable history, so non-orphan creation from unrelated history is refused.
 
 ## Sources
 

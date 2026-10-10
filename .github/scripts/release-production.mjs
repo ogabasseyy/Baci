@@ -24,6 +24,14 @@ function gh(args) {
   return command('gh', args);
 }
 
+export function assertVercelApiSupport(probe) {
+  try {
+    probe();
+  } catch {
+    throw new Error('operator Vercel CLI must provide `vercel api` (>= 50.5.0); upgrade vercel and retry');
+  }
+}
+
 export function originRepoSlug(remoteUrl) {
   const withoutSuffix = String(remoteUrl ?? '').replace(/\.git$/, '');
   const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
@@ -46,6 +54,9 @@ async function main() {
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
   acquireReleaseLock(lockPath);
+  // Live-alias verification shells to `vercel api` (shipped in CLI
+  // 50.5.0); fail before dispatching rather than after watching a run.
+  assertVercelApiSupport(() => command('vercel', ['api', '--help']));
   try {
     const result = await coordinateRelease({
       verifyCheckout: async () => {

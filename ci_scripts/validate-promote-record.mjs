@@ -81,7 +81,10 @@ export function validateRecordCommit(commit, previous) {
   // Every new commit's tree, not just the tip: an intermediate commit
   // could smuggle an invalid blob that the tip then removes, leaving
   // the bad tree in operational history. A no-op push (previous ==
-  // commit) yields an empty range, so still validate the tip.
+  // commit) yields an empty range, so still validate the tip. A new
+  // branch (all-zero previous) validates its full reachable history,
+  // so create ops/gigl-promote-record orphan, or only from valid
+  // operational history.
   const range = /^0+$/.test(previous) ? [commit] : [`${previous}..${commit}`];
   const revisions = git(['rev-list', ...range])
     .split('\n')

@@ -183,6 +183,36 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
+  it('does not submit refunds when completed captures exceed the recorded amount paid', async () => {
+    const supabase = refundClient({
+      payments: [{ ...paystackPayment, amount: 101 }],
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).rejects.toThrow('no refundable amount');
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
+  it('requires review when a payment leg currency differs from the order currency', async () => {
+    const supabase = refundClient({
+      payments: [{ ...paystackPayment, currency: 'USD' }],
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).rejects.toThrow('Payment currency requires review before refund');
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
   it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 0 }],

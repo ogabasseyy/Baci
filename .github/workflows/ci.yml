@@ -462,6 +462,7 @@ jobs:
           .github/scripts/probe-blog-media-hook-reload.test.mjs
           .github/scripts/blog-hook-probe-gate.test.mjs
           .github/scripts/probe-guest-cart-hook-reload.test.mjs
+          .github/scripts/probe-guest-cart-hook-reload-binding.test.mjs
           .github/scripts/guest-cart-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs

@@ -20,7 +20,8 @@ const lower = '11111111-1111-4111-8111-111111111111';
 
 function unmanagedVariantProduct(
   variants: Record<string, unknown>[],
-  manageStock: boolean | null = false
+  manageStock: boolean | null = false,
+  hasOffers = false
 ): SupabaseClient {
   return {
     from: (table: string) =>
@@ -33,7 +34,7 @@ function unmanagedVariantProduct(
                 price: 100,
                 manage_stock: manageStock,
                 has_variants: true,
-                has_condition_offers: false,
+                has_condition_offers: hasOffers,
               },
               error: null,
             }
@@ -145,6 +146,38 @@ it('selects options for a null parent with a then-unlimited variant', async () =
     unmanagedVariantProduct(
       [{ stock_quantity: 0, effective_policy: 'serialized_then_unlimited' }],
       null
+    )
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('reports unavailable for combined offers when every variant is depleted', async () => {
+  // An offer cannot substitute for the paired variant that owns
+  // inventory, so combined-option products validate variants too —
+  // selection would otherwise dead-end on the PDP.
+  const result = await check(
+    unmanagedVariantProduct(
+      [{ stock_quantity: 0, effective_policy: 'serialized_strict' }],
+      false,
+      true
+    )
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
+it('selects options for combined offers when a variant passes', async () => {
+  const result = await check(
+    unmanagedVariantProduct(
+      [{ stock_quantity: 2, effective_policy: 'serialized_strict' }],
+      false,
+      true
     )
   );
   expect(result.structuredContent).toMatchObject({

@@ -56,6 +56,18 @@
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
       }
     },
+    "add_to_cart": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Deprecated alias of prepare_storefront_cart_link: returns a product handoff URL; the item is added only if the shopper opens that URL on Ogabassey.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
     "update_ogabassey_guest_cart": {
       "annotations": {
         "readOnlyHint": false,

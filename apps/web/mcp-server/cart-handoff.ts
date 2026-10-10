@@ -178,10 +178,7 @@ export async function prepareCartHandoff({
       const effectiveStock = Number(stockQuantity ?? 0);
       unavailable ||= !Number.isFinite(effectiveStock) || effectiveStock < quantity;
     }
-  } else if (
-    product?.has_variants === true &&
-    product?.has_condition_offers !== true
-  ) {
+  } else if (product?.has_variants === true) {
     // Unmanaged parents fail open to option selection — except an empty
     // or strict-only variant set with insufficient units: no option is
     // purchasable (mirrors isPublicVariantPurchasable, which gates
@@ -189,8 +186,11 @@ export async function prepareCartHandoff({
     // storefront cart provider, which cannot add a variant product
     // without a resolvable variant ID), so report unavailable instead
     // of sending the shopper to select options that cannot be
-    // fulfilled. Products with condition offers keep failing open:
-    // offers are not evaluated for unmanaged parents. (every on an
+    // fulfilled. The check runs even when condition offers are present:
+    // a paired variant owns purchasability (mirroring the managed
+    // variant-before-offer gate), so an offer cannot rescue depleted
+    // variants. Offers themselves stay unevaluated for unmanaged
+    // parents, so offers-only products keep failing open. (every on an
     // empty set is vacuously true, so no length guard is needed: zero
     // rows is zero purchasable options.)
     const { data: variants, error: variantsError } = await supabase.rpc(

@@ -81,6 +81,32 @@ _set_inflight_repo() {
     return 0
   fi
   inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
+  # Normalize credential-bearing and trailing-slash HTTPS spellings to
+  # the same canonical form the coordinator accepts. Credentials must
+  # never reach the match below or the error message after it.
+  case "$inflight_remote" in
+    https://* | http://*)
+      _remote_scheme="${inflight_remote%%://*}"
+      _remote_rest="${inflight_remote#*://}"
+      _remote_host="${_remote_rest%%/*}"
+      case "$_remote_host" in
+        *@*) _remote_host="${_remote_host##*@}" ;;
+      esac
+      _remote_path="${_remote_rest#*/}"
+      if [ "$_remote_path" = "$_remote_rest" ]; then
+        _remote_path=""
+      else
+        _remote_path="/${_remote_path}"
+      fi
+      inflight_remote="${_remote_scheme}://${_remote_host}${_remote_path}"
+      ;;
+  esac
+  while :; do
+    case "$inflight_remote" in
+      */) inflight_remote="${inflight_remote%/}" ;;
+      *) break ;;
+    esac
+  done
   inflight_repo=""
   case "$inflight_remote" in
     https://github.com/* | http://github.com/* | git@github.com:* | ssh://git@github.com/*)

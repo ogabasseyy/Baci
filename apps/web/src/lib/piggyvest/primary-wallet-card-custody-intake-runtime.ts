@@ -13,6 +13,12 @@ export type PrimaryCardCustodyIntakeSecrets = {
  * flags gate processing only, never verification: during a processing
  * rollback the keys stay available so legitimate deliveries retry
  * instead of being silently dropped as invalid.
+ *
+ * Malformed retained-key JSON throws instead of degrading to the
+ * current key alone: verifying with a partial key set would classify a
+ * retained-signed delivery as invalid (200-acked, provider stops
+ * retrying) before the intake's own 503 could save it. The union maps
+ * the throw to unconfigured so unmatched deliveries retry.
  */
 export function readPrimaryCardCustodyIntakeSecrets(
   env: NodeJS.ProcessEnv = process.env
@@ -29,9 +35,7 @@ export function readPrimaryCardCustodyIntakeSecrets(
         env.PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS
       );
   } catch {
-    // Malformed rotation config drops the retained list only; the full
-    // runtime still fails closed and the intake answers 503.
-    retainedWebhookSecrets = [];
+    throw new Error('Primary card custody secrets unavailable');
   }
   const webhookSecret = env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET;
   if (

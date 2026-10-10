@@ -15,8 +15,11 @@
 -- of crediting. No autonomous debit is attempted — a collected
 -- reversal needs an operator to reconcile the provider-side money
 -- movement against custody — but the evidence is durable and the
--- double-credit is structurally impossible. The function drains
--- post-expiry like the other existing-operation evidence paths.
+-- double-credit is structurally impossible. Dispute resolutions
+-- update the dispute's row (create and resolve share the dispute id):
+-- won lifts the fences, lost keeps them. Latest provider outcome wins.
+-- The function drains post-expiry like the other existing-operation
+-- evidence paths.
 BEGIN;
 CREATE TABLE piggyvest_primary_card.checkout_reversals (
   operation_id uuid NOT NULL REFERENCES piggyvest_primary_card.operations(id) ON DELETE RESTRICT,
@@ -24,10 +27,11 @@ CREATE TABLE piggyvest_primary_card.checkout_reversals (
   kind text NOT NULL CHECK(kind IN ('refund','dispute')),
   provider_event_id text NOT NULL CHECK(octet_length(provider_event_id) BETWEEN 1 AND 128),
   evidence jsonb NOT NULL,
+  resolution text CHECK(resolution IN ('won','lost')),
   recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY(operation_id,provider_event_id)
+  PRIMARY KEY(operation_id,kind,provider_event_id)
 );
-CREATE UNIQUE INDEX primary_card_checkout_reversals_event_idx ON piggyvest_primary_card.checkout_reversals(provider_event_id);
+CREATE UNIQUE INDEX primary_card_checkout_reversals_event_idx ON piggyvest_primary_card.checkout_reversals(kind,provider_event_id);
 CREATE INDEX primary_card_checkout_reversals_integration_idx ON piggyvest_primary_card.checkout_reversals(integration_id);
 ALTER TABLE piggyvest_primary_card.checkout_reversals ENABLE ROW LEVEL SECURITY;
 CREATE POLICY primary_card_checkout_reversals_deny ON piggyvest_primary_card.checkout_reversals AS RESTRICTIVE FOR ALL TO PUBLIC USING(false) WITH CHECK(false);
@@ -43,8 +47,8 @@ BEGIN
     AND integration_id=(scope->>'integrationId')::uuid AND merchant_id=(scope->>'merchantId')::uuid
     AND customer_id=(scope->>'customerId')::uuid AND user_id=(scope->>'userId')::uuid FOR UPDATE;
   IF kind NOT IN ('refund','dispute') OR provider_event_id IS NULL OR octet_length(provider_event_id) NOT BETWEEN 1 AND 128
-    OR jsonb_typeof(payload) IS DISTINCT FROM 'object' OR (SELECT count(*) FROM jsonb_object_keys(payload)) <> 6
-    OR payload->>'event' NOT IN ('refund.processed','charge.dispute.create')
+    OR jsonb_typeof(payload) IS DISTINCT FROM 'object' OR (SELECT count(*) FROM jsonb_object_keys(payload)) <> 7
+    OR payload->>'event' NOT IN ('refund.processed','charge.dispute.create','charge.dispute.resolve')
     OR payload->>'kind' IS DISTINCT FROM kind
     OR payload->>'transactionReference' IS DISTINCT FROM 'pvb-first-primary-'||operation_id::text
     THEN RAISE EXCEPTION 'invalid reversal evidence' USING ERRCODE='22023'; END IF;
@@ -57,13 +61,34 @@ BEGIN
     OR payload->>'currency' IS DISTINCT FROM 'NGN') THEN RAISE EXCEPTION 'invalid reversal currency' USING ERRCODE='22023'; END IF;
   IF payload->'status' IS DISTINCT FROM 'null'::jsonb AND (jsonb_typeof(payload->'status') IS DISTINCT FROM 'string'
     OR octet_length(payload->>'status') NOT BETWEEN 1 AND 64) THEN RAISE EXCEPTION 'invalid reversal status' USING ERRCODE='22023'; END IF;
-  SELECT * INTO existing FROM piggyvest_primary_card.checkout_reversals WHERE checkout_reversals.provider_event_id=record_checkout_reversal.provider_event_id;
+  IF payload->'resolution' IS DISTINCT FROM 'null'::jsonb AND payload->>'resolution' NOT IN ('won','lost')
+    THEN RAISE EXCEPTION 'invalid reversal resolution' USING ERRCODE='22023'; END IF;
+  SELECT * INTO existing FROM piggyvest_primary_card.checkout_reversals
+    WHERE checkout_reversals.operation_id=operation.id AND checkout_reversals.kind=record_checkout_reversal.kind
+    AND checkout_reversals.provider_event_id=record_checkout_reversal.provider_event_id;
   IF FOUND THEN
-    IF existing.operation_id IS DISTINCT FROM operation.id OR existing.kind IS DISTINCT FROM kind OR existing.evidence <> payload THEN
+    -- A dispute resolve shares its create's provider event id (both are
+    -- the dispute id): it updates the row's outcome instead of
+    -- inserting. Latest provider outcome wins; the create evidence is
+    -- preserved and the resolution column tracks the final state.
+    IF payload->>'event' = 'charge.dispute.resolve' THEN
+      UPDATE piggyvest_primary_card.checkout_reversals SET resolution=payload->>'resolution'
+        WHERE checkout_reversals.operation_id=operation.id AND checkout_reversals.kind=record_checkout_reversal.kind
+        AND checkout_reversals.provider_event_id=record_checkout_reversal.provider_event_id;
+      RETURN jsonb_build_object('outcome','resolved');
+    END IF;
+    IF existing.evidence <> payload THEN
       RAISE EXCEPTION 'reversal identity conflict' USING ERRCODE='22023';
     END IF;
     RETURN jsonb_build_object('outcome','duplicate');
   END IF;
+  -- The same provider event recorded against another operation is a
+  -- cross-operation conflict, never a second row (the unique index
+  -- would reject it anyway; raise the identity error instead).
+  PERFORM 1 FROM piggyvest_primary_card.checkout_reversals
+    WHERE checkout_reversals.kind=record_checkout_reversal.kind
+    AND checkout_reversals.provider_event_id=record_checkout_reversal.provider_event_id;
+  IF FOUND THEN RAISE EXCEPTION 'reversal identity conflict' USING ERRCODE='22023'; END IF;
   PERFORM collections.operation_id FROM piggyvest_primary_card.collections WHERE collections.operation_id=operation.id FOR SHARE;
   IF NOT FOUND THEN
     IF operation.state = 'reserved' THEN
@@ -83,8 +108,8 @@ BEGIN
       PERFORM piggyvest_primary_card.record_abandonment(scope,operation.id);
     END IF;
   END IF;
-  INSERT INTO piggyvest_primary_card.checkout_reversals(operation_id,integration_id,kind,provider_event_id,evidence)
-    VALUES(operation.id,operation.integration_id,kind,provider_event_id,payload);
+  INSERT INTO piggyvest_primary_card.checkout_reversals(operation_id,integration_id,kind,provider_event_id,evidence,resolution)
+    VALUES(operation.id,operation.integration_id,kind,provider_event_id,payload,payload->>'resolution');
   RETURN jsonb_build_object('outcome','recorded');
 END $$;
 CREATE OR REPLACE FUNCTION piggyvest_primary_card.record_collection(scope jsonb, operation_id uuid, collection jsonb)
@@ -123,8 +148,12 @@ BEGIN
     END IF;
     RETURN true;
   END IF;
+  -- Only open reversals fence collection: a dispute resolved in our
+  -- favor (won) proves no money moved, so the fence lifts. Lost or
+  -- unresolved rows keep it.
   IF to_regclass('piggyvest_primary_card.checkout_reversals') IS NOT NULL
-    AND EXISTS(SELECT 1 FROM piggyvest_primary_card.checkout_reversals WHERE checkout_reversals.operation_id=$2) THEN
+    AND EXISTS(SELECT 1 FROM piggyvest_primary_card.checkout_reversals
+      WHERE checkout_reversals.operation_id=$2 AND (resolution IS NULL OR resolution='lost')) THEN
     RAISE EXCEPTION 'reversed checkout collection' USING ERRCODE='22023';
   END IF;
   IF operation.state NOT IN ('initializing','init_unknown','ready') THEN
@@ -179,7 +208,8 @@ BEGIN
     RETURN 'duplicate';
   END IF;
   IF to_regclass('piggyvest_primary_card.checkout_reversals') IS NOT NULL
-    AND EXISTS(SELECT 1 FROM piggyvest_primary_card.checkout_reversals WHERE checkout_reversals.operation_id=operation.id) THEN RETURN 'conflict'; END IF;
+    AND EXISTS(SELECT 1 FROM piggyvest_primary_card.checkout_reversals
+      WHERE checkout_reversals.operation_id=operation.id AND (resolution IS NULL OR resolution='lost')) THEN RETURN 'conflict'; END IF;
   IF (proof->>'observedAt')::timestamptz<clock_timestamp()-interval '60 seconds' OR (proof->>'observedAt')::timestamptz>clock_timestamp()+interval '5 seconds' THEN RAISE EXCEPTION 'stale custody observation' USING ERRCODE='42501'; END IF;
   SELECT * INTO STRICT reservation FROM piggyvest_primary_card.reservations WHERE reservations.operation_id=operation.id AND state='reserved' FOR UPDATE;
   SELECT * INTO STRICT policy FROM piggyvest_primary_card.treasury_policy WHERE treasury_policy.integration_id=$1 AND enabled FOR SHARE;

@@ -1,3 +1,8 @@
+import {
+  isReversalEvent,
+  reversalTransactionReference,
+} from './primary-wallet-card-checkout-webhook-shape';
+
 export function primaryWalletCardCheckoutWebhookBoundary(
   input: unknown
 ): Response | null {
@@ -17,14 +22,16 @@ export function primaryWalletCardCheckoutWebhookBoundary(
       metadata = null;
     }
   }
-  // Reversal-shaped deliveries (original reference in transaction_reference)
-  // stay retryable when the durable record is unreachable: acking them as
-  // noise would lose money-out evidence on a transient.
+  // Reversal-shaped deliveries (original reference in the event's
+  // transaction slot) stay retryable when the durable record is
+  // unreachable: acking them as noise would lose money-out evidence on
+  // a transient.
   const event = root && typeof root.event === 'string' ? root.event : null;
-  const transactionReference =
-    'transaction_reference' in body ? body.transaction_reference : null;
+  const transactionReference = reversalTransactionReference(
+    body as Record<string, unknown>
+  );
   const isReversalShaped =
-    (event === 'refund.processed' || event === 'charge.dispute.create') &&
+    isReversalEvent(event) &&
     typeof transactionReference === 'string' &&
     /^pvb-first-primary-/i.test(transactionReference);
   if (

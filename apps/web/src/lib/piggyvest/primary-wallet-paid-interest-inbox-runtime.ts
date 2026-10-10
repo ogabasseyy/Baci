@@ -13,6 +13,12 @@ export type PrimaryWalletPaidInterestInboxSecrets = {
  * gates processing only, never verification: during a processing
  * rollback the keys stay available so legitimate deliveries retry
  * instead of being silently dropped as invalid.
+ *
+ * Malformed retained-key JSON throws instead of degrading to the
+ * current key alone: verifying with a partial key set would classify a
+ * retained-signed delivery as invalid (200-acked, provider stops
+ * retrying) before the intake's own 503 could save it. The union maps
+ * the throw to unconfigured so unmatched deliveries retry.
  */
 export function readPrimaryWalletPaidInterestInboxSecrets(
   env: NodeJS.ProcessEnv = process.env
@@ -24,7 +30,7 @@ export function readPrimaryWalletPaidInterestInboxSecrets(
       env.PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS ?? '[]'
     );
   } catch {
-    retainedWebhookSecrets = [];
+    throw new Error('Primary paid interest secrets unavailable');
   }
   const webhookSecret = env.PIGGYVEST_PRIMARY_PAID_INTEREST_WEBHOOK_SECRET;
   if (

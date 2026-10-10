@@ -78,19 +78,18 @@ describe('intake-only configured custody capability', () => {
         ?.retainedWebhookSecrets
     ).toEqual(['retained-custody-key']);
   });
-  it('drops only the retained list on malformed rotation config', () => {
+  it('fails secrets closed on malformed rotation config', () => {
     const env = {
       ...fixture.environment,
       PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS:
         'malformed-secret-value',
     };
-    // Secrets stay available (primary only) so the outer gate still
-    // verifies; the full runtime fails closed and intake answers 503.
-    expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
-      webhookSecret:
-        fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
-      retainedWebhookSecrets: [],
-    });
+    // No partial key set: verifying with the current key alone would
+    // 200-ack a retained-signed delivery as invalid before the intake's
+    // own 503 could save it. The union maps the throw to unconfigured.
+    expect(() => readPrimaryCardCustodyIntakeSecrets(env)).toThrow(
+      /secrets unavailable/
+    );
     expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
   });
   it.each([

@@ -113,7 +113,9 @@ jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
 beforeEach(async () => {
   jest.clearAllMocks();
   mockUserId = '11111111-1111-4111-8111-111111111111';
-  mockParamsUserId = undefined;
+  // New launches carry the owner stamp; the legacy (stampless) path has
+  // dedicated tests below.
+  mockParamsUserId = '11111111-1111-4111-8111-111111111111';
   mockStorage.clear();
   mockFetchJson.mockResolvedValue(response);
   await createPrimaryWalletCardFundingClient().start({
@@ -132,24 +134,77 @@ beforeEach(async () => {
 
 it('blocks another account through the actual controller and lets the original owner recover after signing back in', async () => {
   mockUserId = '44444444-4444-4444-8444-444444444444';
-  render(<PaymentGatewayScreen />);
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Synthetic checkout callback' })
-  );
-  await waitFor(() =>
-    expect(screen.getByText('Could not check funding status')).toBeOnTheScreen()
-  );
+  const view = render(<PaymentGatewayScreen />);
+  // The stamp mismatches: B never sees the WebView, only the way back.
+  expect(
+    screen.getByText(
+      'Signed-in account changed. This checkout belongs to the previous account — go back so its owner can complete it.'
+    )
+  ).toBeOnTheScreen();
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
   expect(mockFetchJson).not.toHaveBeenCalled();
   expect(mockStorage.size).toBe(1);
   mockUserId = '11111111-1111-4111-8111-111111111111';
   mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
-  fireEvent.press(screen.getByRole('button', { name: 'Check funding status' }));
+  view.rerender(<PaymentGatewayScreen />);
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  );
   await waitFor(() =>
     expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
   );
   expect(mockFetchJson).toHaveBeenCalledTimes(1);
   expect(mockInvalidate).not.toHaveBeenCalled();
   expect(mockStorage.size).toBe(1);
+});
+
+it('blocks a stampless legacy launch whose device record belongs to nobody signed in', async () => {
+  mockParamsUserId = undefined;
+  mockStorage.clear();
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+  expect(
+    screen.queryByRole('button', { name: 'Check funding status' })
+  ).not.toBeOnTheScreen();
+  expect(
+    screen.getByRole('button', { name: 'Return to wallet' })
+  ).toBeOnTheScreen();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
+
+it('mounts a stampless legacy launch when the device record proves ownership', async () => {
+  mockParamsUserId = undefined;
+  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  render(<PaymentGatewayScreen />);
+  // The beforeEach record (seeded by the real fund flow) matches this
+  // reference, so the WebView mounts after the async check resolves.
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  );
+  await waitFor(() =>
+    expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
+  );
+  expect(
+    screen.getByText(
+      'Reference: pvb-first-primary-22222222-2222-4222-8222-222222222222'
+    )
+  ).toBeOnTheScreen();
 });
 
 it('hides the mounted primary checkout when the account switches after navigation', async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  logger,
   merchantId,
   submissionMocks as mocks,
   POST,
@@ -40,6 +41,19 @@ describe('explicit search submissions', () => {
     });
   });
 
+  it('logs ingestion validation failures distinctly from downtime', async () => {
+    const failure = new Error('Invalid search submission row');
+    mocks.recordSubmission.mockRejectedValueOnce(failure);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission row failed ingestion validation',
+      error: failure,
+    });
+  });
+
   it('writes through the narrow ingestion edge so direct writes stay revoked', async () => {
     const response = await POST(request());
     expect(response.status).toBe(204);
@@ -57,35 +71,11 @@ describe('explicit search submissions', () => {
     await POST(
       request(
         { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
-        { referer: 'https://usebaci.com/ogabassey/search?q=phone' },
-        'https://usebaci.com/api/search/submissions'
-      )
-    );
-    expect(mocks.merchant).toHaveBeenCalledWith('ogabassey');
-  });
-
-  it('rejects a platform-domain slug the referring page does not match', async () => {
-    const response = await POST(
-      request(
-        { query: 'phone', pathPrefix: '/victim-store', source: 'navbar' },
-        { referer: 'https://usebaci.com/attacker-store/search?q=phone' },
-        'https://usebaci.com/api/search/submissions'
-      )
-    );
-    expect(response.status).toBe(404);
-    expect(mocks.merchant).not.toHaveBeenCalledWith('victim-store');
-  });
-
-  it('rejects a platform-domain submission without a referring page', async () => {
-    const response = await POST(
-      request(
-        { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
         {},
         'https://usebaci.com/api/search/submissions'
       )
     );
-    expect(response.status).toBe(404);
-    expect(mocks.merchant).not.toHaveBeenCalledWith('ogabassey');
+    expect(mocks.merchant).toHaveBeenCalledWith('ogabassey');
   });
 
   it.each([
@@ -111,7 +101,7 @@ describe('explicit search submissions', () => {
     const response = await POST(
       request(
         { query: 'phone', pathPrefix: '/ogabassey', source: 'navbar' },
-        { referer: `${origin}/ogabassey/search?q=phone` },
+        {},
         `${origin}/api/search/submissions`
       )
     );

@@ -433,3 +433,60 @@ it('lets a slow scope finish without blocking another scope', async () => {
   await expect(pendingA).resolves.toMatchObject({ status: 'ready' });
   expect(mockFetchJson).toHaveBeenCalledTimes(2);
 });
+it('peekStatus status-polls through the mount gate without persisting anything', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  await client.start(start);
+  const before = JSON.stringify([...mockStorage.entries()]);
+  const writes = mockSetItem.mock.calls.length;
+  const result = await client.peekStatus({
+    ...scope,
+    reference: response.reference,
+  });
+  expect(result).toMatchObject({ status: 'ready', returnTo: '/wallet' });
+  expect(mockFetchJson.mock.calls.at(-1)?.[0]).toEqual({
+    path: '/api/storefront/customer/wallet/primary-card/status',
+    method: 'POST',
+    includeCsrf: true,
+    expectedUserId: scope.userId,
+    body: { merchantId: scope.merchantId, operationId },
+  });
+  expect(mockSetItem.mock.calls.length).toBe(writes);
+  expect(JSON.stringify([...mockStorage.entries()])).toBe(before);
+});
+it('peekStatus keeps even terminal records, unlike recover', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  await client.start(start);
+  mockFetchJson.mockResolvedValue({
+    ...response,
+    status: 'completed',
+    authorizationUrl: undefined,
+  });
+  expect((await client.peekStatus(scope)).status).toBe('completed');
+  // Mounting a completed-checkout link must not delete the record the
+  // completion path still needs.
+  expect(mockStorage.size).toBe(1);
+});
+it('peekStatus refuses null-operation placeholders without initializing', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  mockFetchJson.mockRejectedValueOnce(new Error('Synthetic timeout'));
+  await expect(client.start(start)).rejects.toThrow();
+  expect(mockFetchJson).toHaveBeenCalledTimes(1);
+  await expect(client.peekStatus(scope)).rejects.toThrow(
+    'No matching card funding operation was found.'
+  );
+  // No status/initialize call fired, and the placeholder survives for
+  // the real recovery path.
+  expect(mockFetchJson).toHaveBeenCalledTimes(1);
+  expect(mockStorage.size).toBe(1);
+});
+it('peekStatus rejects a mismatched reference without calling the server', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  await client.start(start);
+  await expect(
+    client.peekStatus({
+      ...scope,
+      reference: 'pvb-first-primary-99999999-9999-4999-8999-999999999999',
+    })
+  ).rejects.toThrow('The callback does not match this card funding operation.');
+  expect(mockFetchJson).toHaveBeenCalledTimes(1);
+});

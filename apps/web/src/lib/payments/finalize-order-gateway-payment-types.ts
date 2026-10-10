@@ -11,6 +11,22 @@ export interface FinalizeOrderGatewayPaymentArgs {
   wonTransactionFlip: boolean;
   actor: string;
   scheduleAfter: (task: () => Promise<void>) => void;
+  // Aborts the awaited network leg (the paid-email send) when the caller
+  // runs under a pass deadline; unbounded callers leave it unset.
+  signal?: AbortSignal;
+  // Bounds the paid-email platform-sender fallback to the pass deadline
+  // so it declines unless its own attempt fits; unset when unbounded.
+  fallbackDeadlineMs?: number;
+  // Caps paid-email attempts per sender for short passes that cannot fit
+  // the full retry loop; unset keeps the default four attempts.
+  emailMaxAttemptsPerSender?: number;
+  /**
+   * Outstanding balance (minor units) the caller gated on. Forwarded
+   * to the atomic completion so a balance that moved between the
+   * gate and the order lock returns BALANCE_CHANGED instead of
+   * promoting. Unset preserves the legacy behavior.
+   */
+  expectedOutstandingMinor?: number | null;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =
@@ -26,7 +42,17 @@ export type FinalizeOrderGatewayPaymentOutcome =
       status: number;
     }
   | { kind: 'inventory_cleanup_failed' }
-  | { kind: 'completed'; healed: boolean; orderNumber: string | null };
+  | {
+      kind: 'completed';
+      healed: boolean;
+      orderNumber: string | null;
+      // True when the atomic completion found the order already paid by
+      // another transaction, so this capture settled without the normal
+      // side effects. Callers working from a possibly-stale order
+      // snapshot (cron sweeps) use this — not the snapshot — to decide
+      // whether the capture is a possible duplicate charge.
+      capturedOnPaidOrder?: boolean;
+    };
 
 export interface FinalizeOrderGatewayPaymentTransaction {
   id: string;

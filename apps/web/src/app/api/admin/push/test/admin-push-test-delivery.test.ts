@@ -10,6 +10,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('expo-server-sdk', () => ({
   default: class MockExpo {
+    static isExpoPushToken(token: unknown): boolean {
+      return (
+        typeof token === 'string' &&
+        (/^ExponentPushToken\[.+\]$/.test(token) ||
+          /^ExpoPushToken\[.+\]$/.test(token))
+      );
+    }
+
     constructor(options: unknown) {
       mocks.expo(options);
     }
@@ -56,7 +64,10 @@ describe('deliverAdminPushTest', () => {
       data: [{ token: 'ExponentPushToken[one]' }],
       error: null,
     });
-    mocks.sendChunks.mockResolvedValue([{ status: 'ok' }]);
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: false,
+      tickets: [{ status: 'ok' }],
+    });
     const supabase = { from: mocks.from };
 
     const result = await deliverAdminPushTest(
@@ -66,18 +77,22 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 0, sent: 1 });
+    expect(result).toEqual({ failed: 0, sent: 1, uncertain: 0 });
     expect(mocks.from).toHaveBeenCalledWith('push_tokens');
     expect(query.eq).toHaveBeenNthCalledWith(1, 'user_id', 'user-1');
     expect(query.eq).toHaveBeenNthCalledWith(2, 'is_active', true);
     expect(query.eq).toHaveBeenNthCalledWith(3, 'app_type', 'admin');
-    expect(mocks.sendChunks).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({
-        channelId: 'admin',
-        data: { source: 'admin_push_test', type: 'admin_push_test' },
-        to: 'ExponentPushToken[one]',
-      }),
-    ]);
+    expect(mocks.sendChunks).toHaveBeenCalledWith(
+      expect.anything(),
+      [
+        expect.objectContaining({
+          channelId: 'admin',
+          data: { source: 'admin_push_test', type: 'admin_push_test' },
+          to: 'ExponentPushToken[one]',
+        }),
+      ],
+      { onDeliveryStart: expect.any(Function) }
+    );
     expect(mocks.expo).toHaveBeenCalledWith({
       accessToken: 'expo-access-token',
     });
@@ -105,8 +120,172 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 0, sent: 0 });
+    expect(result).toEqual({ failed: 0, sent: 0, uncertain: 0 });
     expect(mocks.sendChunks).not.toHaveBeenCalled();
+  });
+
+  it('reports uncertain delivery instead of definitive failure', async () => {
+    mockTokenQuery({
+      data: [{ token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([0]),
+      tickets: [{ details: { error: 'ExpoError' }, status: 'error' }],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 0, sent: 0, uncertain: 1 });
+  });
+
+  it('keeps definitive token failures out of uncertain counts', async () => {
+    mockTokenQuery({
+      data: [{ token: 'bad-token' }, { token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([1]),
+      tickets: [
+        { status: 'error', details: { error: 'DeviceNotRegistered' } },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
+  });
+
+  it('keeps unknown codes and missing details as failures under batch uncertainty', async () => {
+    mockTokenQuery({
+      data: [
+        { token: 'ExponentPushToken[one]' },
+        { token: 'ExponentPushToken[two]' },
+        { token: 'ExponentPushToken[three]' },
+      ],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([2]),
+      tickets: [
+        { status: 'error', details: { error: 'FutureExpoCode' } },
+        { status: 'error' },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // Only producer-marked synthetic tickets convert: anything else is
+    // a real ticket the batch-level flag must not excuse.
+    expect(result).toEqual({ failed: 2, sent: 0, uncertain: 1 });
+  });
+
+  it("keeps Expo's own definitive ExpoError ticket out of uncertain counts", async () => {
+    mockTokenQuery({
+      data: [
+        { token: 'ExponentPushToken[one]' },
+        { token: 'ExponentPushToken[two]' },
+      ],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      syntheticTicketIndexes: new Set([1]),
+      tickets: [
+        { status: 'error', details: { error: 'ExpoError' } },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // Same public code on both tickets: index 0 is Expo's definitive
+    // rejection and stays failed; only the synthetic index converts.
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
+  });
+
+  it('reports a post-dispatch throw as uncertain', async () => {
+    mockTokenQuery({
+      data: [{ token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockImplementation(async (_expo, _messages, options) => {
+      await options?.onDeliveryStart?.();
+      throw new Error('fallback failed after partial send');
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 0, sent: 0, uncertain: 1 });
+  });
+
+  it('keeps never-dispatched invalid tokens out of post-dispatch uncertain counts', async () => {
+    mockTokenQuery({
+      data: [{ token: 'bad-token' }, { token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockImplementation(async (_expo, _messages, options) => {
+      await options?.onDeliveryStart?.();
+      throw new Error('fallback failed after partial send');
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // The invalid token never dispatched, so it is a definitive
+    // failure even though dispatch started for the eligible token.
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
+  });
+
+  it('reports a pre-dispatch throw as a definitive failure', async () => {
+    mockTokenQuery({
+      data: [{ token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockRejectedValue(new Error('chunking failed'));
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 0 });
   });
 
   it('reports provider failure only as a count', async () => {
@@ -125,6 +304,6 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 0 });
   });
 });

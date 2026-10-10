@@ -100,7 +100,7 @@ describe('GIGL tracking push delivery boundaries', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 't1' }])
       .mockResolvedValueOnce([{ status: 'ok', id: 't2' }]);
 
-    const tickets = await sendPushNotifications([msg1, msg2], {
+    const { tickets } = await sendPushNotifications([msg1, msg2], {
       onDeliveryStart,
     });
 

@@ -85,6 +85,20 @@ it.each([
   expect(router.replace).not.toHaveBeenCalled();
   expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
 });
+it.each([
+  'custody_pending',
+  'reconciliation_required',
+])('leaves the terminal directive unset for ambiguous %s so the guard stays visible', async (status) => {
+  const setTerminalDirective = jest.fn();
+  const input = { ...fixture(), setTerminalDirective };
+  mockRecover.mockResolvedValue({ status });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  // Cleared at run start, never set: the pending view keeps its
+  // retained-operation / do-not-pay-again guard for these states.
+  expect(setTerminalDirective).toHaveBeenCalledWith(null);
+  expect(setTerminalDirective).toHaveBeenCalledTimes(1);
+});
 it('lands the guarded error view when the terminal re-read throws synchronously', async () => {
   const setTerminalDirective = jest.fn();
   const input = { ...fixture(), setTerminalDirective };

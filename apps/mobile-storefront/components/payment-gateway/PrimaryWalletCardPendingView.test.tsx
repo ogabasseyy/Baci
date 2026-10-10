@@ -85,6 +85,24 @@ it('shows the terminal directive instead of retained-operation copy', () => {
   );
 });
 
+it('offers only the way back when no status check could succeed', () => {
+  render(
+    <PrimaryWalletCardPendingView
+      colors={Colors.light}
+      statusError
+      message={null}
+      terminalDirective="Signed-in account changed."
+      onBack={jest.fn()}
+    />
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Check funding status' })
+  ).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Return to wallet' })
+  ).toBeOnTheScreen();
+});
+
 it('shows only a confirmed operation reference, never an unverified one', () => {
   const { rerender } = render(
     <PrimaryWalletCardPendingView

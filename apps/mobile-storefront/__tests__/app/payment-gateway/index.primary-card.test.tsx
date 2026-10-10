@@ -170,6 +170,13 @@ it('hides the mounted primary checkout when the account switches after navigatio
   expect(
     screen.queryByRole('button', { name: 'Synthetic checkout callback' })
   ).not.toBeOnTheScreen();
+  // No status check for the non-owner: only the way back stays.
+  expect(
+    screen.queryByRole('button', { name: 'Check funding status' })
+  ).not.toBeOnTheScreen();
+  expect(
+    screen.getByRole('button', { name: 'Return to wallet' })
+  ).toBeOnTheScreen();
   expect(mockFetchJson).not.toHaveBeenCalled();
   // A signs back in: the owner's checkout returns.
   mockUserId = '11111111-1111-4111-8111-111111111111';
@@ -199,6 +206,9 @@ it('checks the same durable operation through the actual callback, pending butto
       path: '/api/storefront/customer/wallet/primary-card/status',
       method: 'POST',
       includeCsrf: true,
+      // The status poll binds the token to the record owner: a session
+      // switch mid-poll rejects before the request is sent.
+      expectedUserId: mockUserId,
       body: { merchantId, operationId },
     });
   }

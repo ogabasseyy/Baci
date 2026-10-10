@@ -69,6 +69,12 @@ VALUES (
   '03aa0000-0000-4000-8000-000000000101'
 );
 
+INSERT INTO public.merchants (id, email, business_name, slug)
+VALUES (
+  '03aa0000-0000-4000-8000-000000000001',
+  'search-contract@example.com', 'Search contract', 'search-contract'
+) ON CONFLICT (id) DO NOTHING;
+
 -- Fixture row goes through the service_role write path used by the new
 -- ingestion edge, proving it succeeds under the active RLS configuration.
 SET LOCAL ROLE service_role;

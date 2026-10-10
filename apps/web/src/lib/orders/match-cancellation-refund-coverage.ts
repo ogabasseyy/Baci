@@ -34,8 +34,9 @@ export function normalizeRefundMoneyField(value: unknown): string {
  * gate runs. Merchant-attested manual rows always link explicitly and
  * count as coverage in matching money, mirroring the aggregate claim;
  * legs carrying them never initiate (double-refund protection) and
- * never mismatch for the manual rows themselves, so a partial manual
- * record waits for the merchant instead of quarantining.
+ * never mismatch for the manual rows themselves; a partial manual
+ * record reports its leg pending so the caller defers (never
+ * quarantines, never completes) until the merchant finishes.
  */
 export function matchCancellationRefundCoverage({
   linkedPaymentId,
@@ -49,6 +50,7 @@ export function matchCancellationRefundCoverage({
   transactions: GatewayPaymentTransaction[];
 }): {
   manualLinkedLegIds: Set<string>;
+  manualPendingLegIds: Set<string>;
   mismatchedIds: Set<string>;
   mismatchedTransactions: GatewayPaymentTransaction[];
   refundedPaymentIds: Set<string>;
@@ -134,6 +136,7 @@ export function matchCancellationRefundCoverage({
     );
   }
   const refundedPaymentIds = new Set<string>();
+  const manualPendingLegIds = new Set<string>();
   const mismatchedTransactions: GatewayPaymentTransaction[] = [];
   for (const leg of transactions) {
     const legKobo = Math.round(Number(leg.amount) * 100);
@@ -144,16 +147,20 @@ export function matchCancellationRefundCoverage({
       badManualLegIds.has(leg.id)
     ) {
       mismatchedTransactions.push(leg);
+    } else if (manualLinkedLegIds.has(leg.id)) {
+      // A manual-linked leg with no other evidence waits for the
+      // merchant: the caller excludes it from initiation without
+      // quarantining, and defers the step so the drain reclaims the
+      // row instead of completing it before the merchant finishes.
+      manualPendingLegIds.add(leg.id);
     }
-    // A manual-linked leg with no other evidence waits for the
-    // merchant: the caller excludes it from initiation without
-    // quarantining, so partial manual records never strand.
   }
   const mismatchedIds = new Set(
     mismatchedTransactions.map((transaction) => transaction.id)
   );
   return {
     manualLinkedLegIds,
+    manualPendingLegIds,
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,

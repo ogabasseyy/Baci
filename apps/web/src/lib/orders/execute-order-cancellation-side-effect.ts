@@ -106,6 +106,7 @@ export async function executeOrderCancellationSideEffect({
     soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
   const {
     manualLinkedLegIds,
+    manualPendingLegIds,
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,
@@ -287,5 +288,11 @@ export async function executeOrderCancellationSideEffect({
     order,
     supabase,
   });
+  if (manualPendingLegIds.size > 0) {
+    // Never complete under a pending manual: the final record would
+    // land on a completed row no drain reselects, stranding finalization.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_manual_completion');
+  }
   return { refundIds };
 }

@@ -18,7 +18,10 @@ import {
   paystackPayment,
   refundClient,
 } from './execute-order-cancellation-side-effect.test-support';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
 describe('executeOrderCancellationSideEffect', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -277,10 +280,13 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
-  it('skips manual-linked legs without quarantining them', async () => {
+  it('defers a partial manual record instead of completing it', async () => {
     // A partial manual record waits for the merchant: the worker must
     // neither initiate the leg (double refund) nor quarantine it
-    // (which would lock the merchant out of finishing manually).
+    // (which would lock the merchant out of finishing manually) —
+    // and must not complete either, or the final manual record would
+    // land on a completed row no drain reselects, stranding the
+    // trusted aggregate finalization.
     const supabase = refundClient({
       payments: [paystackPayment],
       refundRows: [
@@ -293,16 +299,19 @@ describe('executeOrderCancellationSideEffect', () => {
         },
       ],
     });
-    await expect(
-      executeOrderCancellationSideEffect({
-        merchant,
-        order,
-        step: 'refund',
-        supabase: supabase as never,
-      })
-    ).resolves.toEqual({ refundIds: [] });
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: supabase as never,
+    }).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_manual_completion'
+    );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
     expect(supabase.insert).not.toHaveBeenCalled();
+    expect(supabase.update).toHaveBeenCalledWith({ attempts: 0 });
   });
   it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({

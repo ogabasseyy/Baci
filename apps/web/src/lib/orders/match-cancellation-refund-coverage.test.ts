@@ -224,6 +224,7 @@ describe('matchCancellationRefundCoverage', () => {
 
     expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
     expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualPendingLegIds).toEqual(new Set());
     expect(coverage.mismatchedTransactions).toEqual([]);
   });
 
@@ -242,6 +243,7 @@ describe('matchCancellationRefundCoverage', () => {
 
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualPendingLegIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
   });
 
@@ -261,6 +263,7 @@ describe('matchCancellationRefundCoverage', () => {
 
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualPendingLegIds).toEqual(new Set());
     expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
   });
 

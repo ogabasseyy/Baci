@@ -25,6 +25,7 @@ describe('normalizeStorefrontProductVariants', () => {
         {
           merchantId: 'fallback-merchant',
           productId: 'fallback-product',
+          parentStock: 0,
         }
       )
     ).toEqual([
@@ -59,6 +60,7 @@ describe('normalizeStorefrontProductVariants', () => {
         {
           merchantId: 'merchant-2',
           productId: 'product-2',
+          parentStock: 0,
         }
       )
     ).toEqual([
@@ -70,7 +72,7 @@ describe('normalizeStorefrontProductVariants', () => {
     ]);
   });
 
-  it('drops null numeric values instead of leaking invalid numbers', () => {
+  it('inherits parent stock for null quantities instead of leaking invalid numbers', () => {
     expect(
       normalizeStorefrontProductVariants(
         [
@@ -84,13 +86,14 @@ describe('normalizeStorefrontProductVariants', () => {
         {
           merchantId: 'merchant-3',
           productId: 'product-3',
+          parentStock: 7,
         }
       )
     ).toEqual([
       expect.objectContaining({
         id: 'variant-3',
         price_override: undefined,
-        stock_quantity: 0,
+        stock_quantity: 7,
       }),
     ]);
   });
@@ -109,6 +112,7 @@ describe('normalizeStorefrontProductVariants', () => {
     const normalizedVariants = normalizeStorefrontProductVariants(variants, {
       merchantId: 'merchant-5',
       productId: 'product-5',
+      parentStock: 0,
     });
 
     expect(normalizedVariants.map((variant) => variant.id)).toEqual([
@@ -117,10 +121,20 @@ describe('normalizeStorefrontProductVariants', () => {
     ]);
   });
 
+  it('keeps an explicit zero instead of inheriting parent stock', () => {
+    expect(
+      normalizeStorefrontProductVariants([{ id: 'zero', stock_quantity: 0 }], {
+        merchantId: 'merchant-7',
+        productId: 'product-7',
+        parentStock: 9,
+      })[0]?.stock_quantity
+    ).toBe(0);
+  });
+
   it('keeps sold-out variants available to generic selectors', () => {
     const normalizedVariants = normalizeStorefrontProductVariants(
       [{ id: 'untracked', stock_quantity: 0 }],
-      { merchantId: 'merchant-6', productId: 'product-6' }
+      { merchantId: 'merchant-6', productId: 'product-6', parentStock: 0 }
     );
 
     expect(normalizedVariants.map((variant) => variant.id)).toEqual([
@@ -149,6 +163,7 @@ describe('normalizeStorefrontProductVariants', () => {
         {
           merchantId: 'merchant-4',
           productId: 'product-4',
+          parentStock: 0,
         }
       )[0]?.condition
     ).toBe(expectedCondition);
@@ -163,11 +178,39 @@ describe('normalizeStorefrontProductVariants', () => {
             inventory_tracking_policy: 'serialized_strict',
           },
         ],
-        { merchantId: 'merchant', productId: 'product' }
+        { merchantId: 'merchant', productId: 'product', parentStock: 0 }
       )[0]
     ).toMatchObject({
       inventory_tracking_policy: 'serialized_strict',
       stock_quantity: 0,
+    });
+  });
+  it('maps the inherited effective policy and unit count into the variant model', () => {
+    const [mapped, unlimited] = normalizeStorefrontProductVariants(
+      [
+        {
+          id: 'strict-units',
+          stock_quantity: 0,
+          inventory_tracking_policy: 'serialized_strict',
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+        {
+          id: 'unlimited',
+          stock_quantity: 0,
+          effective_policy: 'serialized_then_unlimited',
+          available_units: 0,
+        },
+      ],
+      { merchantId: 'merchant', productId: 'product', parentStock: 9 }
+    );
+    expect(mapped).toMatchObject({
+      effective_policy: 'serialized_strict',
+      available_units: 3,
+    });
+    expect(unlimited).toMatchObject({
+      effective_policy: 'serialized_then_unlimited',
+      available_units: 0,
     });
   });
 });

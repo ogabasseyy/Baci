@@ -53,29 +53,40 @@ export function clearGroupNegotiation(items: CartItem[]): CartItem[] {
 }
 
 /**
- * Reconciles cart line prices against live catalog values keyed by cart line id,
- * returning the cart-store partial to apply. Lines within the ±₦1 parity
- * tolerance are treated as unchanged (so an accepted negotiated price is not
- * cleared for rounding noise). When a real drift clears any negotiation and a
- * cart-wide deal is active, the whole group is reset.
+ * Reconciles cart line prices (and refreshed offer conditions) against live
+ * catalog values keyed by cart line id, returning the cart-store partial to
+ * apply. Lines within the ±₦1 parity tolerance are treated as unchanged
+ * (so an accepted negotiated price is not cleared for rounding noise). A
+ * condition refresh counts as a real change (the line's economics moved),
+ * so it clears the line negotiation like a price drift does. When a real
+ * drift clears any negotiation and a cart-wide deal is active, the whole
+ * group is reset.
  */
 export function applyReprice(
   state: { items: CartItem[]; cartWideNegotiationActive: boolean },
-  priceById: Record<string, number>
+  priceById: Record<string, number>,
+  conditionById: Record<string, string> = {}
 ): { items: CartItem[]; cartWideNegotiationActive?: boolean } {
   let changed = false;
   let items = state.items.map((item) => {
     const livePrice = priceById[item.id];
-    if (typeof livePrice !== 'number' || !Number.isFinite(livePrice)) {
-      return item;
-    }
-    if (Math.abs(livePrice - item.price) <= 1) {
+    const liveCondition = conditionById[item.id];
+    const priceDrifted =
+      typeof livePrice === 'number' &&
+      Number.isFinite(livePrice) &&
+      Math.abs(livePrice - item.price) > 1;
+    const conditionDrifted =
+      typeof liveCondition === 'string' &&
+      liveCondition !== '' &&
+      liveCondition !== item.condition;
+    if (!priceDrifted && !conditionDrifted) {
       return item;
     }
     changed = true;
     return {
       ...item,
-      price: livePrice,
+      ...(priceDrifted ? { price: livePrice as number } : null),
+      ...(conditionDrifted ? { condition: liveCondition as string } : null),
       negotiatedPrice: undefined,
       negotiationStatus: undefined,
     };

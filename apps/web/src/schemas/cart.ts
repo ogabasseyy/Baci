@@ -4,10 +4,15 @@ const variantIdSchema = z.uuid({
   error: 'variantId/variant_id must be a UUID',
 });
 
+const offerIdSchema = z.uuid({
+  error: 'offerId must be a UUID',
+});
+
 const cartItemSchema = z
   .object({
     condition: z.string().optional(),
     id: z.string(),
+    offerId: offerIdSchema.optional(),
     price: z.number(),
     variant_attributes: z.record(z.string(), z.string()).optional(),
     variant_id: variantIdSchema.optional(),

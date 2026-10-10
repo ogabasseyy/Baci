@@ -14,11 +14,12 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
-import { getCachedProductStock } from './cart-query-cache';
+import { getCachedOptionStock } from './cart-query-cache';
 import {
   type AddToCartInput,
   checkStock,
-  getTotalRequestedQuantityForStock,
+  getExistingCartQuantityForStock,
+  getExistingProductQuantityForStock,
 } from './cart-stock';
 
 /**
@@ -71,13 +72,28 @@ export function useCart() {
    */
   const addToCartMutation = useMutation({
     mutationFn: async (item: AddToCartInput) => {
-      const totalQuantity = getTotalRequestedQuantityForStock(item);
+      // onMutate already applied this line to the store, so the store
+      // total IS the requested total; adding the incoming quantity again
+      // would double-count the optimistic line.
+      const totalQuantity = getExistingCartQuantityForStock(item);
 
-      // Validate stock in background, with cached fallback for offline
+      // Validate stock in background, with cached fallback for offline.
+      // The store already holds the optimistic line, so the product
+      // aggregate below is the post-add total strict sibling caps need.
       const stockCheck = await checkStock(
         item.product_id,
         totalQuantity,
-        getCachedProductStock(queryClient, item.product_id)
+        getCachedOptionStock(queryClient, item.product_id, {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }),
+        {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+          aggregateQuantity: getExistingProductQuantityForStock(
+            item.product_id
+          ),
+        }
       );
 
       if (!stockCheck.available) {
@@ -179,11 +195,24 @@ export function useCart() {
       const item = freshItems.find((i) => i.id === id);
       if (!item) throw new Error('Item not found');
 
-      // Validate stock for the new quantity, with cached fallback for offline
+      // Validate stock for the new quantity, with cached fallback for
+      // offline. onMutate already applied the new quantity to the store,
+      // so the product aggregate below is the post-update total strict
+      // sibling caps need.
       const stockCheck = await checkStock(
         item.product_id,
         quantity,
-        getCachedProductStock(queryClient, item.product_id)
+        getCachedOptionStock(queryClient, item.product_id, {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }),
+        {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+          aggregateQuantity: getExistingProductQuantityForStock(
+            item.product_id
+          ),
+        }
       );
 
       if (!stockCheck.available) {

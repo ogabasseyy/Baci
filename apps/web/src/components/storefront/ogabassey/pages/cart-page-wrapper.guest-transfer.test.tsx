@@ -87,7 +87,7 @@ describe('CartPageWrapper guest transfer', () => {
     vi.mocked(useSearchParams).mockReturnValue(params as ReturnType<typeof useSearchParams>);
     window.history.pushState({}, '', `/cart?${params}`);
     const addToCart = mockUseCart({ cart: [{ id: first, productId: first, quantity: 2, name: 'Phone', price: 10 }] });
-    setupProductsQuery({ data: [{ id: first, name: 'Phone', status: 'active', images: [] }, { id: second, name: 'Camera', status: 'active', images: [] }], error: null });
+    setupProductsQuery({ data: [{ id: first, name: 'Phone', status: 'active', images: [], manage_stock: true, stock_quantity: 10 }, { id: second, name: 'Camera', status: 'active', images: [], manage_stock: true, stock_quantity: 10 }], error: null });
     render(<CartPageWrapper merchantId="merchant-1" />);
     await waitFor(() => expect(addToCart).toHaveBeenCalledTimes(2));
     expect(addToCart).toHaveBeenCalledWith(expect.objectContaining({ id: first }), 1, undefined);
@@ -125,7 +125,7 @@ describe('CartPageWrapper guest transfer', () => {
     vi.mocked(useSearchParams).mockReturnValue(params as ReturnType<typeof useSearchParams>);
     window.history.pushState({}, '', `/cart?${params}`);
     const addToCart = mockUseCart();
-    setupProductsQuery({ data: [{ id: added, name: 'Phone', status: 'active', images: [] }], error: null });
+    setupProductsQuery({ data: [{ id: added, name: 'Phone', status: 'active', images: [], manage_stock: true, stock_quantity: 10 }], error: null });
     render(<CartPageWrapper merchantId="merchant-1" />);
     await waitFor(() => expect(addToCart).toHaveBeenCalledOnce());
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Some items unavailable', variant: 'destructive' }));

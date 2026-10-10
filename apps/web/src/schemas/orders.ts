@@ -141,6 +141,8 @@ const orderCreateSchemaBase = z
               ),
             variantId: z.string().optional(),
             variant_id: z.string().optional(),
+            offerId: z.string().optional(),
+            offer_id: z.string().optional(),
             variantName: optionalVariantNameSchema,
             variant_name: optionalVariantNameSchema,
             variantAttributes: z
@@ -170,6 +172,18 @@ const orderCreateSchemaBase = z
           .refine(matchingAliasFields('variantName', 'variant_name'), {
             error: aliasFieldsMismatchMessage('variantName', 'variant_name'),
           })
+          .refine(matchingAliasFields('offerId', 'offer_id'), {
+            error: aliasFieldsMismatchMessage('offerId', 'offer_id'),
+          })
+          .refine(
+            (data) =>
+              !(data.variantId || data.variant_id) ||
+              !(data.offerId || data.offer_id),
+            {
+              error:
+                'variantId/variant_id and offerId/offer_id cannot be combined on one order item',
+            }
+          )
           .refine(matchingAliasFields('voucherToken', 'voucher_token'), {
             error: aliasFieldsMismatchMessage('voucherToken', 'voucher_token'),
           })
@@ -179,8 +193,28 @@ const orderCreateSchemaBase = z
               'voucher_award_id'
             ),
           })
+          .refine(
+            (data) =>
+              !(
+                data.voucherAwardId ||
+                data.voucherToken ||
+                data.voucher_award_id ||
+                data.voucher_token
+              ) || !(data.offerId || data.offer_id),
+            {
+              // The voucher RPC's reserved-order branch ignores submitted
+              // item economics while the route recomputes VAT from the
+              // offer's live price: a cheaper same-product offer would
+              // understate the recorded tax on the prize order.
+              error:
+                'offerId/offer_id cannot be combined with a quiz-voucher redemption on one order item',
+            }
+          )
       )
-      .min(1),
+      // Matches admin-order-edit's order-items cap: bounds per-line offer
+      // verification fan-out (fetchLiveOrderOffers) on public requests.
+      .min(1)
+      .max(200),
     subtotal: z.coerce.number().nonnegative(),
     shipping_fee: z.coerce.number().nonnegative().prefault(0),
     discount_amount: z.coerce.number().nonnegative().prefault(0),

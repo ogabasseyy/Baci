@@ -170,4 +170,25 @@ describe('buildCheckoutOrderItems', () => {
       }),
     ]);
   });
+
+  it('carries the exact condition-offer id into the order payload', () => {
+    const items = buildCheckoutOrderItems([
+      {
+        id: 'prod_1',
+        name: 'Galaxy S22 Ultra',
+        quantity: 1,
+        price: 400000,
+        condition: 'used',
+        offerId: 'offer-used-b',
+      },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        product_id: 'prod_1',
+        condition: 'used',
+        offer_id: 'offer-used-b',
+      }),
+    ]);
+  });
 });

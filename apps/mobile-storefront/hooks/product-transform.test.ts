@@ -54,6 +54,56 @@ const variantProductRow = {
 };
 
 describe('product-transform', () => {
+  it('carries serialized policy and units through variant normalization', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      variants: [
+        {
+          ...variantProductRow.variants[0],
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+      ],
+    });
+    expect(product?.variants).toEqual([
+      expect.objectContaining({
+        effective_policy: 'serialized_strict',
+        available_units: 3,
+      }),
+    ]);
+  });
+
+  it('carries the offer-hydration failure marker onto the product', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      has_variants: false,
+      variant_model: 'legacy',
+      variants: [],
+      has_condition_offers: true,
+      offers_hydration_failed: true,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({ offers_hydration_failed: true })
+    );
+  });
+
+  it('carries hydrated base policy and units onto simple products', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      has_variants: false,
+      variant_model: 'legacy',
+      variants: [],
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 4,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({
+        base_effective_policy: 'serialized_strict',
+        base_available_units: 4,
+      })
+    );
+  });
+
   it('normalizes live variant attributes to selector strings only', () => {
     expect(
       normalizeProductVariants(variantProductRow.variants, {
@@ -103,6 +153,50 @@ describe('product-transform', () => {
       ],
     });
     expect(product?.variants?.[0]?.attributes).not.toHaveProperty('preorder');
+  });
+
+  it('keeps listing text and images usable before variant details arrive', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      variants: undefined,
+      images: ['https://example.com/phone.jpg'],
+    });
+    expect(product).toMatchObject({
+      name: variantProductRow.name,
+      price: 50000,
+      has_variants: true,
+      image: 'https://example.com/phone.jpg',
+      variants: [],
+    });
+  });
+
+  it('treats null manage_stock as managed inventory', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      manage_stock: null,
+      stock: 0,
+      stock_quantity: 0,
+    });
+
+    expect(product).toMatchObject({
+      manage_stock: true,
+      in_stock: false,
+      variants: [expect.objectContaining({ in_stock: false })],
+    });
+  });
+
+  it('keeps null manage_stock purchasable when stock exists', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      manage_stock: null,
+      stock: 3,
+      stock_quantity: 3,
+    });
+
+    expect(product).toMatchObject({
+      manage_stock: true,
+      in_stock: true,
+    });
   });
 
   it('treats sku_matrix products as variant-bearing when has_variants has drifted false', () => {

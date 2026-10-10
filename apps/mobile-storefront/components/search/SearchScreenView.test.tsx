@@ -1,8 +1,64 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import {
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  StyleSheet,
+} from 'react-native';
+
+const mockResultsEvents: {
+  bottomSpace?: number;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+} = {};
+
 import Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
 import SearchScreenView from './SearchScreenView';
+
+const mockKeyboard = {
+  isKeyboardVisible: false,
+  keyboardTop: null as number | null,
+  keyboardHeight: 0,
+  dismissKeyboard: jest.fn(),
+};
+jest.mock('@/hooks/use-keyboard', () => ({ useKeyboard: () => mockKeyboard }));
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: require('react-native').View,
+  useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+}));
+afterEach(() => {
+  mockKeyboard.isKeyboardVisible = false;
+  mockKeyboard.keyboardTop = null;
+  mockKeyboard.keyboardHeight = 0;
+});
+
+jest.mock('./SearchScreenTopBar', () => ({
+  SearchScreenTopBar: ({
+    showComparison,
+    onBack,
+  }: {
+    showComparison: boolean;
+    onBack: () => void;
+  }) => {
+    const { Text, View, Pressable } = jest.requireActual(
+      'react-native'
+    ) as typeof import('react-native');
+    return (
+      <View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={onBack}
+        >
+          <Text>Back</Text>
+        </Pressable>
+        <Text testID="comparison-navigation">
+          {showComparison ? 'available' : 'hidden'}
+        </Text>
+      </View>
+    );
+  },
+}));
 
 jest.mock('./SearchResultsEmptyState', () => ({
   __esModule: true,
@@ -18,11 +74,17 @@ jest.mock('./SearchResultsList', () => {
     __esModule: true,
     default: function MockSearchResultsList({
       listError,
+      bottomSpace,
       resultsKey,
+      onScroll,
     }: {
+      bottomSpace?: number;
+      onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
       listError?: string | null;
       resultsKey?: string;
     }) {
+      mockResultsEvents.onScroll = onScroll;
+      mockResultsEvents.bottomSpace = bottomSpace;
       return (
         <View testID="mock-results-list">
           <Text>{listError ?? 'no-list-error'}</Text>
@@ -46,6 +108,7 @@ function renderView(
     categoryNames: ['All', 'Phones'],
     colors: Colors.light,
     committedQuery: '',
+    hasMore: false,
     hasSearchQuery: false,
     isLoading: false,
     isLoadingMore: false,
@@ -142,6 +205,25 @@ describe('SearchScreenView', () => {
     expect(screen.queryByText("Couldn't load results")).toBeNull();
     expect(screen.getByTestId('mock-results-list')).toBeTruthy();
     expect(screen.getByText('Search failed')).toBeTruthy();
+    expect(screen.getByTestId('comparison-navigation').props.children).toBe(
+      'available'
+    );
+  });
+
+  it('keeps comparison navigation when a refinement returns zero rows', () => {
+    renderView({
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products: [],
+      query: 'iphone',
+      totalCount: 0,
+    });
+
+    // Selection count and session intent gate the action itself; an empty
+    // page must not remove the route to an active comparison.
+    expect(screen.getByTestId('comparison-navigation').props.children).toBe(
+      'available'
+    );
   });
 
   it('rekeys the results list when the committed query changes', () => {

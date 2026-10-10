@@ -4,6 +4,7 @@ import { CHECKOUT_MERCHANT_ID } from '@/components/checkout/checkout-screen.cons
 import { useMerchant } from '@/hooks/use-merchant';
 import {
   type CartPriceChange,
+  pickChangedConditionById,
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
@@ -72,7 +73,12 @@ export function useCartReprice() {
         if (result.changes.length > 0) {
           // Apply only the reported drifts (pickChangedPriceById) so a ≤₦1
           // tolerance line in priceById can't silently clear a negotiation.
-          repriceItems(pickChangedPriceById(result));
+          // Drifted offer conditions refresh alongside the price so the
+          // line matches what checkout will accept.
+          repriceItems(
+            pickChangedPriceById(result),
+            pickChangedConditionById(result)
+          );
           setPriceChanges(result.changes);
         }
       })

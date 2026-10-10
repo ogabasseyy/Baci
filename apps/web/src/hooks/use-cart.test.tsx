@@ -528,4 +528,85 @@ describe('useCart - Validation', () => {
 
     vi.useRealTimers();
   });
+
+  it('does not merge an exact-offer add into a V1 separator-format line', async () => {
+    localStorageMock.setItem(
+      'baci-cart-guest',
+      JSON.stringify([
+        {
+          ...mockProduct,
+          cartItemId: 'prod-1-used',
+          condition: 'used',
+          price: 500,
+          quantity: 1,
+        },
+      ])
+    );
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <CartProvider>{children}</CartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, price: 420 } as AddToCartProduct,
+        1,
+        { condition: 'used', offerId: 'offer-b' }
+      );
+    });
+
+    await waitFor(() => expect(result.current.cart).toHaveLength(2));
+    // The V1 line keeps its unknown-identity price basis untouched.
+    expect(result.current.cart[0]).toMatchObject({
+      cartItemId: 'prod-1-used',
+      price: 500,
+      quantity: 1,
+    });
+    expect(result.current.cart[1]).toMatchObject({
+      price: 420,
+      offerId: 'offer-b',
+      quantity: 1,
+    });
+  });
+
+  it('still merges a condition-only add into a V1 separator-format line', async () => {
+    localStorageMock.setItem(
+      'baci-cart-guest',
+      JSON.stringify([
+        {
+          ...mockProduct,
+          cartItemId: 'prod-1-used',
+          condition: 'used',
+          price: 500,
+          quantity: 1,
+        },
+      ])
+    );
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <CartProvider>{children}</CartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, price: 500 } as AddToCartProduct,
+        1,
+        { condition: 'used' }
+      );
+    });
+
+    await waitFor(() => expect(result.current.cart).toHaveLength(1));
+    expect(result.current.cart[0]).toMatchObject({
+      cartItemId: 'prod-1-used',
+      quantity: 2,
+    });
+  });
 });

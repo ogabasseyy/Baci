@@ -3656,6 +3656,34 @@ describe('[category]/[productSlug] page render', () => {
     // assertions above remain the load-bearing guarantee.
   });
 
+  it('preserves match selection params through canonical category redirects', async () => {
+    // Route control resolves from the LCP hint alone and redirects before
+    // the content fetch: queue only what this path consumes, since
+    // clearAllMocks does not drain Once queues.
+    mockGetCachedProductLcpHint.mockResolvedValueOnce(
+      toLegacyCachedProduct(categorizedDetailedProduct)
+    );
+
+    await expect(
+      CategoryProductPage({
+        params: Promise.resolve({
+          slug: 'teststore',
+          category: 'wrong-cat',
+          productSlug: 'hp-laptop-14-ep0063nia',
+        }),
+        searchParams: Promise.resolve({ variant_id: 'v1', match_base: '1' }),
+      })
+    ).rejects.toThrow('NEXT_REDIRECT');
+
+    const redirectTargets = mockPermanentRedirect.mock.calls.map(
+      ([url]) => url
+    );
+    expect(new Set(redirectTargets).size).toBe(1);
+    expect(redirectTargets[0]).toBe(
+      '/teststore/laptops/hp-laptop-14-ep0063nia?variant_id=v1&match_base=1'
+    );
+  });
+
   it('allows valid variantId query routes to stream product hints without redirecting', async () => {
     const productImage =
       'https://cdn.ogabassey.com/core-assets/products/variant-laptop.avif';

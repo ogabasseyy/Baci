@@ -294,4 +294,74 @@ describe('TransactionOrderCard', () => {
     });
     expect(screen.queryByText('Profit NGN -500')).not.toBeInTheDocument();
   });
+
+  it('renders the stored condition and offer ref so offer lines stay distinguishable', () => {
+    const offerItem = {
+      ...editableItem,
+      condition: 'refurbished',
+      offerId: '55555555-5555-4555-8555-555555555555',
+      offerGrade: 'B',
+      offerConditionNotes: 'Light wear',
+    };
+
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={vi.fn()}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [offerItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+
+    expect(screen.getByText(/Condition /)).toHaveTextContent(
+      'Condition Open Box · Grade B · Light wear · Offer 55555555-5555-4555-8555-555555555555'
+    );
+  });
+
+  it('omits the condition row when a line has neither condition nor offer', () => {
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={vi.fn()}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [editableItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+
+    expect(screen.queryByText(/Condition /)).not.toBeInTheDocument();
+  });
 });

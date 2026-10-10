@@ -23,6 +23,11 @@ const mockComparisonState = {
     variant_model?: 'legacy' | 'sku_matrix';
     available_conditions?: string[];
     has_condition_offers?: boolean;
+    searchMatch?: {
+      variantId?: string;
+      offerId?: string;
+      condition?: string;
+    };
   }>,
   removeProduct: mockRemoveProduct,
   clearComparison: mockClearComparison,
@@ -88,6 +93,14 @@ jest.mock('@/stores/cart-store', () => ({
   ) => selector({ addItem: mockAddItem }),
 }));
 
+jest.mock('@/hooks/use-comparison-products', () => ({
+  useComparisonProducts: (products: unknown[]) => ({
+    products,
+    status: 'Current product prices. Select options on the product page.',
+    unavailableIds: [],
+  }),
+}));
+
 import CompareScreen from '@/app/compare';
 
 describe('CompareScreen', () => {
@@ -110,7 +123,7 @@ describe('CompareScreen', () => {
 
     expect(screen.getByText('Test Product')).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Clear All'));
+    fireEvent.press(screen.getByRole('button', { name: 'Clear comparison' }));
     expect(mockClearComparison).toHaveBeenCalledTimes(1);
   });
 
@@ -139,13 +152,16 @@ describe('CompareScreen', () => {
 
     render(<CompareScreen />);
 
-    fireEvent.press(screen.getByText('Add'));
+    fireEvent.press(screen.getByText('View options'));
 
-    expect(mockPush).toHaveBeenCalledWith('/product/iphone-15');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15' },
+    });
     expect(mockAddItem).not.toHaveBeenCalled();
   });
 
-  it('adds simple comparison products directly when no selection is required', () => {
+  it('routes persisted simple products to current details without adding stale prices', () => {
     mockComparisonState.products = [
       {
         id: 'product-1',
@@ -161,15 +177,56 @@ describe('CompareScreen', () => {
 
     render(<CompareScreen />);
 
-    fireEvent.press(screen.getByText('Add'));
+    fireEvent.press(screen.getByText('View options'));
 
-    expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        product_id: 'product-1',
-        slug: 'test-product',
-        quantity: 1,
-      })
-    );
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockAddItem).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'test-product' },
+    });
+  });
+
+  it('opens matched rows with exact ids and omits the snapshot condition', () => {
+    mockComparisonState.products = [
+      {
+        id: 'product-1',
+        slug: 'iphone-15',
+        name: 'iPhone 15',
+        price: 900000,
+        searchMatch: { offerId: 'offer-open-box', condition: 'open_box' },
+      },
+    ];
+
+    render(<CompareScreen />);
+
+    // Refresh failure and unavailable rows fall back to the snapshot, so
+    // the forwarded condition can be stale; the PDP derives the live one.
+    fireEvent.press(screen.getByRole('button', { name: 'View iPhone 15' }));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15', offer_id: 'offer-open-box' },
+    });
+  });
+
+  it('marks ID-less base matches so the PDP keeps the base price', () => {
+    mockComparisonState.products = [
+      {
+        id: 'product-1',
+        slug: 'iphone-15',
+        name: 'iPhone 15',
+        price: 900000,
+        searchMatch: { condition: 'used' },
+      },
+    ];
+
+    render(<CompareScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'View iPhone 15' }));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15', condition: 'used', match_base: '1' },
+    });
   });
 });

@@ -1,4 +1,6 @@
+import { REFINED_SEARCH_MAX_OFFSET } from '@baci/shared/lib';
 import { sanitizeSearchQuery } from './sanitize-core';
+import { STOREFRONT_PRODUCTS_PER_PAGE } from './storefront-pagination';
 
 /**
  * Upper bound for the storefront `/search` page parameter. Keeps result
@@ -6,7 +8,8 @@ import { sanitizeSearchQuery } from './sanitize-core';
  * redirect to the last page with results instead of issuing a giant-offset
  * query.
  */
-export const STOREFRONT_SEARCH_MAX_PAGE = 100;
+export const STOREFRONT_SEARCH_MAX_PAGE =
+  REFINED_SEARCH_MAX_OFFSET / STOREFRONT_PRODUCTS_PER_PAGE + 1;
 
 /**
  * Maximum query every search entry point accepts and submits. Shared by

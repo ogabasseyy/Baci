@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "ba4576240aeaa1a49e02f0ba22c1917e0b75f878",
+  "originMainSha": "f13e6bc46b64211ce64e09668f15e59fd5fa2f83",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "c57afc5150ed7301e00eba105f8485cf1b6afdcdcc0ed0cb5f8b731059a98a24",
-  "routingProxyInputSha256": "e2611aa5358374a0c88a6f66c7151060ae278f1385522b06eb83dfc67361e006",
+  "routeTreeSha256": "7c8e0a7206a53396ac2bb083f0b77245ac311275ee295ab5560c9d70f7c12356",
+  "routingProxyInputSha256": "92607b7b0788e57d2aef3bc6af695fd018422bac3b0b6fbd2ef854a28e37e964",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1433,6 +1433,18 @@
       "routePattern": "/api/storefront/orders/{id}/receipt-bank-details",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/receipt-bank-details/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/product-requests/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/product-requests",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/product-requests/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8418,5 +8430,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "ccfefe9ebe6b6fd575b979b22fa552a57be12c0a3f75968f59efe60fa89a2c97"
+  "inventorySha256": "00b12231d7cd71cfd9bca6e2f7585525652565353abacd1d1839a7620b94394d"
 }

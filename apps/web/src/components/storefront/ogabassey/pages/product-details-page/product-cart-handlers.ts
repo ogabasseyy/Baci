@@ -82,6 +82,7 @@ export function createProductCartHandlers({
         : undefined,
     storage: selectedAttributes.storage,
     condition: selectedCondition,
+    offerId: currentOffer.offerId ?? undefined,
     variantId: selectedVariantId,
     variantAttributes: selectedVariantId ? selectedAttributes : undefined,
   });

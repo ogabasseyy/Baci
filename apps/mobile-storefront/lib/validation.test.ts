@@ -52,6 +52,26 @@ describe('ProductRowSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('keeps hydrated base inventory policy and units on simple rows', () => {
+    const result = ProductRowSchema.safeParse({
+      id: '953ba6ff-3e83-403a-a07c-8c5ff54ede98',
+      name: 'Xiaomi 18 Ultra',
+      slug: 'xiaomi-18-ultra',
+      price: 1200000,
+      status: 'active',
+      has_variants: false,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 4,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('Expected schema parse to succeed');
+    }
+    expect(result.data.base_effective_policy).toBe('serialized_strict');
+    expect(result.data.base_available_units).toBe(4);
+  });
+
   it('keeps optional created_at timestamps from product list rows', () => {
     const result = ProductRowSchema.safeParse({
       id: '953ba6ff-3e83-403a-a07c-8c5ff54ede98',

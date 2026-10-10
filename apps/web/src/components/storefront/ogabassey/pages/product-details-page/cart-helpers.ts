@@ -11,48 +11,7 @@ import type { ProductDetailsCurrentOffer } from './offer-resolution';
 import type { NormalizedProductDetails } from './product-normalization';
 import { toRelatedProductsProduct } from './related-product';
 
-export function buildCartItemId(
-  productId: Product['id'],
-  options?: {
-    color?: string;
-    secondaryColor?: string;
-    condition?: string;
-    storage?: string;
-    variantId?: string;
-    selectedAttributes?: Record<string, string>;
-  }
-) {
-  const parts = [String(productId)];
-  if (options?.variantId) {
-    parts.push(`variant=${options.variantId}`);
-  }
-  if (options?.color) {
-    parts.push(`color=${options.color}`);
-  }
-  if (options?.secondaryColor) {
-    parts.push(`secondaryColor=${options.secondaryColor}`);
-  }
-  if (options?.condition) {
-    parts.push(`condition=${options.condition}`);
-  }
-
-  // Include all selectedAttributes sorted by key for deterministic IDs
-  if (options?.selectedAttributes) {
-    for (const key of Object.keys(options.selectedAttributes).sort()) {
-      // Skip keys already handled explicitly above
-      if (key === 'color' || key === 'condition') continue;
-      const value = options.selectedAttributes[key];
-      if (value) {
-        parts.push(`${key}=${value}`);
-      }
-    }
-  } else if (options?.storage) {
-    // Fallback for callers not passing selectedAttributes
-    parts.push(`storage=${options.storage}`);
-  }
-
-  return parts.join('::');
-}
+export { buildCartItemId } from './cart-item-id';
 
 export function getEffectiveAxes(
   serverProduct: Product,
@@ -253,22 +212,10 @@ export function buildCartProduct(
   options?: { hasVariantPricing?: boolean }
 ): CartProduct {
   const baseProduct = toRelatedProductsProduct(productData);
-  // A non-variant condition offer prices the line below catalog, but the
-  // server verifies merchant-rate tiers against products.price. Retain the
-  // base catalog unit price so quote subtotals use the canonical basis.
-  // Variant-priced lines already match the server (price_override), so they
-  // carry no override.
-  const isConditionOffer =
-    selectedCondition.toLowerCase() !==
-    (productData.condition || 'new').toLowerCase();
-  const catalogPrice =
-    isConditionOffer &&
-    !options?.hasVariantPricing &&
-    typeof baseProduct.price === 'number' &&
-    Number.isFinite(baseProduct.price) &&
-    baseProduct.price >= 0
-      ? baseProduct.price
-      : undefined;
+  // A non-variant condition offer prices the line below catalog, and the
+  // server verifies merchant-rate tiers against the live offer price — so
+  // no parent catalog basis is retained: quotes must use the selected
+  // offer price or they would display a tier the order rejects.
 
   // Color is carried into the cart by the image: prefer the selected color's
   // own image so the cart always depicts the chosen color, even when the
@@ -284,7 +231,10 @@ export function buildCartProduct(
     ...baseProduct,
     ...selectedAttributes,
     price: currentOffer.rawPrice,
-    ...(catalogPrice === undefined ? {} : { catalogPrice }),
+    // The cart guard reads product stock: carry the resolved option
+    // availability (offer quantity or serialized units) so an exact
+    // selection on a zero-parent-stock product is not silently rejected.
+    stock: currentOffer.stock,
     image,
     imageLarge: image,
     description: productData.description,

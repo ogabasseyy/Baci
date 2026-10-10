@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
@@ -24,10 +25,11 @@ import {
 // Re-exported so existing importers keep working; the helper lives in ./cart/cart-persistence.
 export { clearCartStorage } from '@/hooks/cart/cart-persistence';
 
+import { resolveDefaultVariantSelection } from '@baci/shared/lib';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveDefaultVariantSelection } from '../../../../packages/shared/src/lib/product-default-variant';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 interface CartProviderProps {
   children: ReactNode;
@@ -338,7 +340,9 @@ export const CartProvider = ({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 
@@ -375,7 +379,15 @@ export const CartProvider = ({
         if (item.cartItemId === cartItemId) return true;
 
         // 2. Legacy V1 Match (old - separator format stored in cart)
-        if (item.cartItemId?.includes('-') && !item.cartItemId.includes('::')) {
+        // A V1 id encodes variant/color/storage/condition but never the
+        // exact condition offer, so its price basis is unknown: an
+        // exact-offer add must not merge into it (mirrors the offer guard
+        // on ID-less legacy lines below).
+        if (
+          item.cartItemId?.includes('-') &&
+          !item.cartItemId.includes('::') &&
+          !normalizedOptions?.offerId
+        ) {
           // Rebuild what the old generateCartItemId would have produced
           const legacyParts = [product.id];
           if (options?.variantId) legacyParts.push(options.variantId);
@@ -390,6 +402,7 @@ export const CartProvider = ({
           const itemVar = item.variantId;
           const newVar = normalizedOptions?.variantId;
           if (itemVar !== newVar) return false;
+          if (item.offerId !== normalizedOptions?.offerId) return false;
 
           // Check if V2 options are used (legacy items have none)
           // If adding item with V2 options, don't match legacy item
@@ -410,6 +423,18 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
+          hasAssurance: resolveAddedLineAssurance(
+            normalizedOptions?.hasAssurance,
+            item,
+            {
+              smartCartProEnabled: enableSmartCartPro,
+              merchantSlug,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId ||
+                  normalizedOptions?.quizVoucherToken
+              ),
+            }
+          ),
         };
         return newCart;
       }
@@ -434,8 +459,20 @@ export const CartProvider = ({
             | 'open_box'
             | 'refurbished'
             | undefined,
+          offerId: normalizedOptions?.offerId,
           negotiationStatus: 'none',
-          hasAssurance: false,
+          hasAssurance: resolveAddedLineAssurance(
+            normalizedOptions?.hasAssurance,
+            undefined,
+            {
+              smartCartProEnabled: enableSmartCartPro,
+              merchantSlug,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId ||
+                  normalizedOptions?.quizVoucherToken
+              ),
+            }
+          ),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];

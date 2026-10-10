@@ -112,6 +112,7 @@ export async function resolveCategoryProductForMerchant(
     variants: normalizeStorefrontProductVariants(product.product_variants, {
       merchantId: product.merchant_id || merchant.id,
       productId: product.id,
+      parentStock: getEffectiveStock(product),
     }),
     has_variant_matrix:
       Array.isArray(product.product_variants) &&

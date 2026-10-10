@@ -46,11 +46,64 @@ export function useProductDetailRouteData({
   const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
   const routeSelectionAttributes = (routeSelectionInput.attributes ??
     {}) as Record<string, string>;
+  const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
+  // Search/compare entry points mark ID-less base-row matches explicitly:
+  // without this identity the entry condition is indistinguishable from a
+  // condition-offer selection, and the PDP would adopt the offer's price.
+  const routeBaseMatch =
+    getFirstRouteParamValue(routeParams.match_base) === '1';
+  // ID-only offer links derive the condition from this product's live
+  // offer (mirrors web): the snapshot condition is deliberately omitted by
+  // entry points because it can be stale, and seeding from the live option
+  // keeps the identified offer honored instead of rejected.
   const routeCondition = normalizeRouteCondition(
     routeSelectionInput.condition ??
-      (!usesVariantRouteSelection ? routeConditionParam : undefined)
+      (!usesVariantRouteSelection
+        ? (routeConditionParam ??
+          product?.offers?.find(
+            (offer) => String(offer.id) === routeOfferIdParam
+          )?.condition)
+        : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
+  // Search/compare entry points forward the advertised matched offer id.
+  // Accept it only when it names one of this product's own offers; the
+  // condition-compatibility check happens at selection time so a later
+  // condition change on the PDP is never pinned to a stale offer.
+  const routeOfferId =
+    routeOfferIdParam &&
+    product?.offers?.some(
+      (offer) => String(offer.id) === String(routeOfferIdParam)
+    )
+      ? routeOfferIdParam
+      : null;
+  // An exact offer link whose offer fetch failed must not render as an
+  // offerless product: the requested identity would be silently dropped
+  // and the shopper could add a different price/condition than opened.
+  // Surface the existing error path (retry via refetch) instead.
+  const routeOfferHydrationFailed =
+    routeOfferIdParam != null &&
+    routeOfferIdParam.length > 0 &&
+    product?.offers_hydration_failed === true;
+  // Exact-match contract, second half: when offers hydrated successfully but
+  // the link's offer id is absent (removed or sold), the offer is unavailable
+  // — falling back to the parent default would silently advertise a live
+  // price for a dead link.
+  const routeOfferMissingFromHydratedOffers =
+    routeOfferIdParam != null &&
+    routeOfferIdParam.length > 0 &&
+    product?.offers_hydration_failed !== true &&
+    Array.isArray(product?.offers) &&
+    !product.offers.some(
+      (offer) => String(offer.id) === String(routeOfferIdParam)
+    );
+  const routeOfferUnavailable =
+    routeOfferHydrationFailed || routeOfferMissingFromHydratedOffers;
+  const routeOfferHydrationError = routeOfferUnavailable
+    ? routeOfferMissingFromHydratedOffers
+      ? 'This offer is no longer available. It may have been removed or sold.'
+      : 'This offer could not be loaded. Check your connection and try again.'
+    : null;
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(
       Object.entries(routeSelectionAttributes).sort(([a], [b]) =>
@@ -101,6 +154,17 @@ export function useProductDetailRouteData({
         (product?.offers?.length === 1
           ? (product.offers[0]?.condition ?? null)
           : null);
+  // A base-row entry keeps the advertised base price until the shopper
+  // picks a condition on the PDP (any explicit pick re-enables offers).
+  // The entry selection equals the route one, or the entry carries no
+  // condition at all (bare flag); ids-bearing links never suppress.
+  const suppressConditionOfferMatch =
+    routeBaseMatch &&
+    !routeOfferId &&
+    !routeVariantId &&
+    !selection.hasCustomizedSelection &&
+    (selection.effectiveSelectedCondition === routeCondition ||
+      routeCondition == null);
   const displayProduct = product
     ? {
         ...product,
@@ -120,9 +184,15 @@ export function useProductDetailRouteData({
       product?.slug &&
       product.slug !== slug
     ) {
-      router.replace(`/product/${product.slug}`);
+      // Canonicalize a legacy slug without dropping the saved selection
+      // (the invalid-selection effect below intentionally clears params;
+      // a mere slug change must keep variant/offer/base-match identity).
+      router.replace({
+        pathname: '/product/[slug]',
+        params: { ...routeParams, slug: product.slug },
+      } as const);
     }
-  }, [isValidSlug, product?.slug, slug]);
+  }, [isValidSlug, product?.slug, routeParams, slug]);
 
   useEffect(() => {
     if (!product?.slug || product.slug !== slug) return;
@@ -155,7 +225,7 @@ export function useProductDetailRouteData({
 
   return {
     displayProduct,
-    error,
+    error: error ?? routeOfferHydrationError,
     isLoading,
     isOnline,
     isValidSlug,
@@ -166,8 +236,11 @@ export function useProductDetailRouteData({
     refetch,
     resolvedColorImages,
     reviewsState,
+    routeOfferHydrationFailed,
+    routeOfferId,
     routeParams,
     slug,
+    suppressConditionOfferMatch,
     ...selection,
   };
 }

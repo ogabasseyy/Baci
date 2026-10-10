@@ -4,7 +4,7 @@ import { eventPipelineAuthorityServicePaths } from './event-pipeline-authority-s
 import { eventPipelineJumiaServicePaths } from './event-pipeline-jumia-service-paths';
 
 describe('eventPipelineAuthorityServicePaths', () => {
-  it('extends ads service paths with Jumia, wallet HMAC, and booking-economics edges', () => {
+  it('extends ads service paths with Jumia, wallet HMAC, booking-economics, and intake edges', () => {
     expect(eventPipelineAuthorityServicePaths).toEqual([
       ...eventPipelineAdsServicePaths,
       ...eventPipelineJumiaServicePaths,
@@ -56,6 +56,10 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/app/api/shipping/book/load-direct-booking-context.ts',
         'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
         'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/storefront/product-requests/route.ts',
+        'apps/web/src/lib/storefront/server-intake-client.ts',
       ],
     ]);
   });

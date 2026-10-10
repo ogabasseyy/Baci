@@ -9,6 +9,7 @@ export interface Category {
 }
 
 export interface UseProductsOptions {
+  refinements?: import('@baci/shared/lib').SearchRefinements;
   category?: string;
   limit?: number;
   sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popular';

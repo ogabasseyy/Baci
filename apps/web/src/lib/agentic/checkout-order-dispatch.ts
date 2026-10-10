@@ -4,8 +4,10 @@ import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
+import { prepareAgenticOfferEconomics } from '@/lib/agentic/prepare-agentic-offer-economics';
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
@@ -14,8 +16,10 @@ const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
   'invalid_quantity',
   'invalid_variant',
+  'invalid_offer',
   'insufficient_stock',
   'insufficient_variant_stock',
+  'insufficient_offer_stock',
   'merchant_not_found',
   'customer_email_required',
   'customer_name_required',
@@ -84,6 +88,7 @@ export async function createAgenticCheckoutOrder(
       has_assurance: hasAssurance,
       image_url: item.imageUrl ?? item.image_url ?? null,
       product_id: item.product_id || item.productId || item.id,
+      offer_id: item.offerId || item.offer_id,
       quantity: item.quantity,
       variant_attributes:
         item.variantAttributes || item.variant_attributes || {},
@@ -101,6 +106,22 @@ export async function createAgenticCheckoutOrder(
       statusText: 'Bad Request',
     };
   }
+
+  // Offer lines name a live offer of their own product: verify and
+  // reconcile exactly like /api/orders before computing economics, or
+  // the order would price and reserve the parent instead of the
+  // selected offer.
+  const preparedOffers = await prepareAgenticOfferEconomics(
+    (productId) =>
+      supabase.rpc('get_product_offers', {
+        p_product_id: productId,
+      }) as unknown as Promise<OrderOfferQueryResult>,
+    orderItemsPayload
+  );
+  if (!preparedOffers.ok) {
+    return preparedOffers.result;
+  }
+  const liveOfferPrices = preparedOffers.liveOfferPrices;
 
   // B3.5 round 5 (Codex P1, PR #1622): agentic
   // `calculateCheckoutSession` produces `tax: 0` for every line item,
@@ -130,6 +151,7 @@ export async function createAgenticCheckoutOrder(
     computedTaxAmount = await computeAgenticOrderTax({
       items: orderItemsPayload,
       merchantId: body.merchant_id,
+      offerPrices: liveOfferPrices,
       supabase,
     });
   } catch (taxError) {

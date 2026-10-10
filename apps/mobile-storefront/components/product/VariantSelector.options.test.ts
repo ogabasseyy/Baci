@@ -46,6 +46,58 @@ describe('normalizeVariantOptions', () => {
     ]);
   });
 
+  it('derives storage stock from serialized policy and units', () => {
+    const result = normalizeVariantOptions({
+      storage: ['128GB', '256GB', '512GB', '1TB'],
+      variants: [
+        {
+          id: 'variant-128',
+          name: '128GB',
+          price: 1000,
+          stock_quantity: 0,
+          effective_policy: 'serialized_then_unlimited',
+          attributes: { storage: '128GB' },
+        },
+        {
+          id: 'variant-256',
+          name: '256GB',
+          price: 1000,
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+          attributes: { storage: '256GB' },
+        },
+        {
+          id: 'variant-512',
+          name: '512GB',
+          price: 1000,
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+          attributes: { storage: '512GB' },
+        },
+        {
+          id: 'variant-1tb',
+          name: '1TB',
+          price: 1000,
+          stock_quantity: 0,
+          attributes: { storage: '1TB' },
+        },
+      ],
+    });
+
+    expect(result.normalizedStorage).toEqual([
+      // Unlimited: enabled with no finite count to display.
+      { value: '128GB', stock: undefined },
+      // Strict: exact serialized units.
+      { value: '256GB', stock: 3 },
+      // Strict with exhausted units: out of stock.
+      { value: '512GB', stock: 0 },
+      // Finite: raw quantity.
+      { value: '1TB', stock: 0 },
+    ]);
+  });
+
   it('omits storage from generic attributes when storage only comes from attributes', () => {
     const result = normalizeVariantOptions({
       attributes: {

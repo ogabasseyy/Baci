@@ -1,13 +1,19 @@
+import {
+  buildProductSearchQuery,
+  productRequestSchema,
+} from '@baci/shared/lib';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { Category } from '@/types/product';
+import ProductRequest from './ProductRequest';
 import styles from './search-screen.styles';
 
 interface SearchResultsEmptyStateProps {
   categories: Category[];
   colors: (typeof Colors)['light'];
   committedQuery: string;
+  hasActiveRefinements?: boolean;
   onCategoryPress: (slug: string) => void;
 }
 
@@ -15,8 +21,16 @@ export default function SearchResultsEmptyState({
   categories,
   colors,
   committedQuery,
+  hasActiveRefinements = false,
   onCategoryPress,
 }: SearchResultsEmptyStateProps) {
+  // The intake schema bounds queries at 2–120 trimmed chars plus a letter
+  // or number, while storefront queries allow 1–200 chars — so gate the
+  // form on the schema itself (mirroring web) instead of rendering an
+  // overlong prefill that only fails on submit until manually shortened.
+  const hasRequestableQuery =
+    buildProductSearchQuery(committedQuery).normalized !== '' &&
+    productRequestSchema.shape.query.safeParse(committedQuery).success;
   return (
     <View style={styles.emptyContainer}>
       <Ionicons name="search-outline" size={64} color={colors.textSecondary} />
@@ -28,6 +42,13 @@ export default function SearchResultsEmptyState({
           ? `No products match “${committedQuery}”. Try a different spelling or browse a category.`
           : 'Try searching for something else'}
       </Text>
+      {hasRequestableQuery && !hasActiveRefinements && (
+        <ProductRequest
+          key={committedQuery}
+          query={committedQuery}
+          colors={colors}
+        />
+      )}
       {categories.length > 0 && (
         <View style={styles.browseChipsRow}>
           {categories.slice(0, 4).map((category) => (

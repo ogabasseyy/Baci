@@ -79,6 +79,30 @@ export function OrderDetailsItemsCard({
                   Condition: {conditionLabel}
                 </Text>
               ) : null}
+              {(() => {
+                // The stored snapshot outlives the catalog row: when the
+                // offer was deleted after purchase, offer_id no longer
+                // resolves but the snapshotted grade/notes remain the
+                // creation-time truth, so render them without a ref.
+                const offerParts = [
+                  item.offer_grade ? `Grade ${item.offer_grade}` : null,
+                  item.offer_condition_notes ?? null,
+                  // Full id: an 8-char prefix can collide across offers
+                  // and this detail view is where admins resolve exactly
+                  // which condition offer a line refers to.
+                  item.offer_id ? `ref ${String(item.offer_id)}` : null,
+                ].filter(Boolean);
+                return offerParts.length > 0 ? (
+                  <Text
+                    style={[
+                      styles.itemVariant,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    Offer: {offerParts.join(' · ')}
+                  </Text>
+                ) : null;
+              })()}
               {item.variant_name ? (
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}

@@ -123,9 +123,11 @@ export function StickyAddToCart({
   };
 
   const handleAddToCart = () => {
+    // The cart guard reads product stock: carry the resolved selection
+    // stock (already serialized/offer-aware) instead of the parent stock.
     const productToAdd =
       selectedVariant || selectedCondition
-        ? { ...product, price: currentPrice }
+        ? { ...product, price: currentPrice, stock: currentStock }
         : product;
 
     addToCart(

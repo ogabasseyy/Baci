@@ -14,9 +14,41 @@ import Colors from '@/constants/Colors';
 import { useCartStore } from '@/stores/cart-store';
 import { type SavedItem, useSavedStore } from '@/stores/saved-store';
 
+// Forwards a saved search match's option identity to the PDP so the
+// displayed selection matches the saved price basis; plain string href
+// when no match basis was persisted (mirrors search.tsx PDP nav).
+const buildProductHref = (item: SavedItem) => {
+  if (!item.match_variant_id && !item.match_offer_id && !item.match_condition) {
+    return `/product/${item.slug}`;
+  }
+  // An exact option id resolves its own live condition on the PDP. A
+  // persisted snapshot condition can be stale (the merchant reconditioned
+  // the option after saving) and would poison the match: the offer
+  // resolver would reject the identified offer and fall through to a
+  // different offer still carrying the old condition.
+  const hasExactIdentity = Boolean(
+    item.match_variant_id || item.match_offer_id
+  );
+  // Match fields persist only from searchMatch, so a condition without
+  // ids is a base-row match: carry the base identity (mirroring search
+  // nav) so the PDP keeps the saved base price instead of resolving a
+  // same-condition offer.
+  const isBaseRowMatch = !hasExactIdentity && item.match_condition;
+  return {
+    pathname: '/product/[slug]',
+    params: {
+      slug: item.slug,
+      ...(item.match_variant_id ? { variant_id: item.match_variant_id } : {}),
+      ...(item.match_offer_id ? { offer_id: item.match_offer_id } : {}),
+      ...(isBaseRowMatch ? { condition: item.match_condition } : {}),
+      ...(isBaseRowMatch ? { match_base: '1' } : {}),
+    },
+  } as const;
+};
+
 const handleProductPress = (item: SavedItem): void => {
   if (!item.slug) return;
-  router.push(`/product/${item.slug}`);
+  router.push(buildProductHref(item));
 };
 
 export default function SavedItemsScreen() {
@@ -74,7 +106,7 @@ export default function SavedItemsScreen() {
       )
     ) {
       if (item.slug) {
-        router.push(`/product/${item.slug}`);
+        router.push(buildProductHref(item));
       }
       return;
     }

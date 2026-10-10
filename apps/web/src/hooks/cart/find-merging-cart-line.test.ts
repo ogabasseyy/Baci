@@ -116,4 +116,44 @@ describe('findMergingCartLineIndex', () => {
 
     expect(findMergingCartLineIndex(cart, product)).toBe(0);
   });
+
+  it('keeps two same-condition offers on separate lines', () => {
+    const product = makeProduct();
+    const cart = [
+      makeCartItem({
+        id: 'p1',
+        cartItemId: 'p1::condition=used::offerId=offer-a',
+        condition: 'used',
+        offerId: 'offer-a',
+      }),
+    ];
+
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-b',
+      })
+    ).toBe(-1);
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-a',
+      })
+    ).toBe(0);
+  });
+
+  it('does not merge an exact-offer add into a legacy line', () => {
+    const product = makeProduct();
+    const cart = [makeLegacyCartItem({ id: 'p1', condition: 'used' })];
+
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-a',
+      })
+    ).toBe(-1);
+    expect(findMergingCartLineIndex(cart, product, { condition: 'used' })).toBe(
+      0
+    );
+  });
 });

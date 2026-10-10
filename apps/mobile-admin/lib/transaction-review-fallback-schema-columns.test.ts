@@ -66,6 +66,33 @@ describe('omitUnavailableTransactionReviewSchemaColumns', () => {
     ).toBe('id, order_items(id)');
   });
 
+  it('removes the offer id when that column is unavailable', () => {
+    const selector =
+      'id, order_items(id, condition, offer_id, variant_attributes, name)';
+
+    expect(
+      omitUnavailableTransactionReviewSchemaColumns(selector, {
+        ...noUnavailableColumns,
+        offerIdUnavailable: true,
+      })
+    ).toBe('id, order_items(id, condition, variant_attributes, name)');
+  });
+
+  it('removes the offer label snapshot when those columns are unavailable', () => {
+    const selector =
+      'id, order_items(id, condition, offer_id, offer_grade, offer_condition_notes, variant_attributes, name)';
+
+    expect(
+      omitUnavailableTransactionReviewSchemaColumns(selector, {
+        ...noUnavailableColumns,
+        offerGradeUnavailable: true,
+        offerConditionNotesUnavailable: true,
+      })
+    ).toBe(
+      'id, order_items(id, condition, offer_id, variant_attributes, name)'
+    );
+  });
+
   it('keeps rich fields while removing a missing line id', () => {
     const selector =
       'id, order_items(id, line_id, variant_id, order_item_unit_costs(unit_index, cost_price))';

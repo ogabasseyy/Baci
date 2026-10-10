@@ -15,6 +15,8 @@ export const mockUseProduct = jest.fn();
 export const mockUseEffectivePrice = jest.fn();
 export const mockUseReviews = jest.fn();
 export const mockUseCartStore = jest.fn();
+export const mockValidatedUpdateQuantity = jest.fn();
+export const mockValidatedAddToCart = jest.fn();
 export const mockUseSavedStore = jest.fn();
 export const mockProductImageGallery = jest.fn();
 export const mockStickyBottomActions = jest.fn();
@@ -141,6 +143,17 @@ jest.mock('@/hooks/use-reviews', () => ({
 
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: (...args: unknown[]) => mockUseCartStore(...args),
+}));
+
+// PDP adds and quantity edits route through the validated useCart
+// mutations, which need a QueryClient: stub them here so screen tests
+// stay provider-free.
+jest.mock('@/hooks/use-cart', () => ({
+  useCart: () => ({
+    updateQuantity: (...args: unknown[]) =>
+      mockValidatedUpdateQuantity(...args),
+    addToCart: (...args: unknown[]) => mockValidatedAddToCart(...args),
+  }),
 }));
 
 jest.mock('@/stores/saved-store', () => ({

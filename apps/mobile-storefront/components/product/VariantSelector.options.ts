@@ -94,6 +94,25 @@ function getGenericAttributeAxis(axis: string) {
   return normalizedAxis === 'condition' ? 'condition' : axis;
 }
 
+/**
+ * Selector-facing variant stock, mirroring the PDP purchase check:
+ * unlimited tracking stays enabled with no count (there is no finite
+ * stock to display), strict tracking compares exact serialized units,
+ * and other policies use the raw quantity.
+ */
+function resolveVariantOptionStock(
+  variant: ProductVariant | undefined
+): number | undefined {
+  if (variant?.effective_policy === 'serialized_then_unlimited')
+    return undefined;
+  if (
+    variant?.effective_policy === 'serialized_strict' &&
+    typeof variant.available_units === 'number'
+  )
+    return variant.available_units;
+  return variant?.stock_quantity;
+}
+
 export function normalizeVariantOptions({
   attributes,
   colors,
@@ -143,7 +162,7 @@ export function normalizeVariantOptions({
       );
       normalizedStorage.push({
         value,
-        stock: variant?.stock_quantity,
+        stock: resolveVariantOptionStock(variant),
       });
     }
   }

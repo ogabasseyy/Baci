@@ -4,6 +4,10 @@ import type { PaymentStatus, ShippingStatus } from '@/hooks/useOrders';
 export interface OrderDetailsItem {
   condition?: string;
   display_condition?: string;
+  offer_id?: string;
+  offer_grade?: string;
+  offer_condition_notes?: string;
+  offer_labels_snapshotted?: boolean;
   display_image_url?: string;
   has_assurance?: boolean;
   id: string;

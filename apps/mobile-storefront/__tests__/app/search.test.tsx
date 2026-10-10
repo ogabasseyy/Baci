@@ -1,13 +1,16 @@
+let mockFocused = true;
+
 import { act, render } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
 import type SearchScreenView from '@/components/search/SearchScreenView';
+import type { Product } from '@/types/product';
 import SearchScreen from '../../app/search';
 
 type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;
 
 const mockUseLocalSearchParams = jest.fn();
 const mockUseProducts = jest.fn();
-const mockUseProductBrands = jest.fn();
+const mockUseSearchFacets = jest.fn();
 const mockUseCategories = jest.fn();
 const mockViewProps: { current: SearchScreenViewProps | null } = {
   current: null,
@@ -15,6 +18,7 @@ const mockViewProps: { current: SearchScreenViewProps | null } = {
 const mockStorageData: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => mockFocused,
   router: { back: jest.fn(), push: jest.fn() },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockUseLocalSearchParams(),
@@ -22,8 +26,16 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/hooks', () => ({
   useCategories: () => mockUseCategories(),
-  useProductBrands: () => mockUseProductBrands(),
   useProducts: (args: unknown) => mockUseProducts(args),
+}));
+
+jest.mock('@/hooks/use-search-facet-options', () => ({
+  useSearchFacetOptions: (query: string, enabled: boolean) =>
+    mockUseSearchFacets(query, enabled),
+}));
+
+jest.mock('@/hooks/use-merchant', () => ({
+  useMerchant: () => ({ data: { id: 'merchant-1' } }),
 }));
 
 jest.mock('@/hooks/use-network-state', () => ({
@@ -70,6 +82,7 @@ function mockProductState(overrides: Record<string, unknown> = {}) {
 
 describe('SearchScreen route', () => {
   beforeEach(() => {
+    mockFocused = true;
     jest.clearAllMocks();
     jest.useFakeTimers();
     for (const key of Object.keys(mockStorageData)) {
@@ -78,7 +91,11 @@ describe('SearchScreen route', () => {
     mockViewProps.current = null;
     mockUseLocalSearchParams.mockReturnValue({});
     mockUseProducts.mockReturnValue(mockProductState());
-    mockUseProductBrands.mockReturnValue({ brands: [] });
+    mockUseSearchFacets.mockReturnValue({
+      data: { brands: [], categories: [], conditions: [] },
+      error: null,
+      refetch: jest.fn(),
+    });
     mockUseCategories.mockReturnValue({ data: [] });
   });
 
@@ -87,6 +104,16 @@ describe('SearchScreen route', () => {
     jest.useRealTimers();
   });
 
+  it('cancels typing commits when navigating to a product or blurring', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone', brand: ['Apple'] });
+    const { rerender } = render(<SearchScreen />);
+    act(() => mockViewProps.current?.onQueryChange('laptop'));
+    mockFocused = false;
+    rerender(<SearchScreen />);
+    act(() => jest.advanceTimersByTime(300));
+    expect(mockViewProps.current?.committedQuery).toBe('iphone');
+    expect(mockViewProps.current?.refinements?.brands).toEqual(['Apple']);
+  });
   it('initializes from the route query and saves history once', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
 
@@ -182,109 +209,5 @@ describe('SearchScreen route', () => {
       query: 'pixel',
       committedQuery: 'pixel',
     });
-  });
-
-  it('clears stale results when the route query becomes invalid', () => {
-    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
-
-    const { rerender } = render(<SearchScreen />);
-    expect(mockViewProps.current).toMatchObject({
-      query: 'iphone',
-      hasSearchQuery: true,
-    });
-    expect(mockUseProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: 'iphone', enabled: true })
-    );
-
-    mockUseLocalSearchParams.mockReturnValue({});
-    rerender(<SearchScreen />);
-
-    expect(mockViewProps.current).toMatchObject({
-      query: '',
-      committedQuery: '',
-      hasSearchQuery: false,
-    });
-    expect(mockUseProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: undefined, enabled: false })
-    );
-  });
-
-  it('clears the validation hint when a valid recent search is selected', () => {
-    render(<SearchScreen />);
-
-    // Reject a normalization-empty commit so the hint explains itself.
-    act(() => {
-      mockViewProps.current?.onQueryChange('!!');
-    });
-    act(() => {
-      mockViewProps.current?.onSubmitQuery();
-    });
-    expect(mockViewProps.current).toMatchObject({ showMinLengthHint: true });
-
-    // Selecting a valid recent term resolves that rejection: the hint must
-    // clear instead of lingering over the incoming valid results.
-    act(() => {
-      mockViewProps.current?.onRecentSearch('iPhone 15 Pro');
-    });
-    expect(mockViewProps.current).toMatchObject({
-      query: 'iPhone 15 Pro',
-      showMinLengthHint: false,
-    });
-  });
-
-  it('clears a local search when an invalid route query arrives on a parameterless screen', () => {
-    mockUseLocalSearchParams.mockReturnValue({});
-
-    const { rerender } = render(<SearchScreen />);
-
-    // A locally entered and committed search with no route query behind it.
-    act(() => {
-      mockViewProps.current?.onQueryChange('shoes');
-    });
-    act(() => {
-      jest.advanceTimersByTime(250);
-    });
-    expect(mockViewProps.current).toMatchObject({
-      query: 'shoes',
-      committedQuery: 'shoes',
-    });
-    expect(mockUseProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: 'shoes', enabled: true })
-    );
-
-    // A deep-link update to a short (invalid) query must clear the local
-    // search even though no route query was ever applied.
-    mockUseLocalSearchParams.mockReturnValue({ q: 'i' });
-    rerender(<SearchScreen />);
-
-    expect(mockViewProps.current).toMatchObject({
-      query: '',
-      committedQuery: '',
-      hasSearchQuery: false,
-    });
-    expect(mockUseProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: undefined, enabled: false })
-    );
-
-    // Same for a repeated (ambiguous) param after searching locally again.
-    act(() => {
-      mockViewProps.current?.onQueryChange('shoes');
-    });
-    act(() => {
-      jest.advanceTimersByTime(250);
-    });
-    expect(mockViewProps.current).toMatchObject({ committedQuery: 'shoes' });
-
-    mockUseLocalSearchParams.mockReturnValue({ q: ['shoes', 'bags'] });
-    rerender(<SearchScreen />);
-
-    expect(mockViewProps.current).toMatchObject({
-      query: '',
-      committedQuery: '',
-      hasSearchQuery: false,
-    });
-    expect(mockUseProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: undefined, enabled: false })
-    );
   });
 });

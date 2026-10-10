@@ -129,6 +129,8 @@ export function normalizeProductVariants(
             ? stockQuantity > 0
             : (variant.in_stock ?? undefined),
         stock_quantity: stockQuantity,
+        effective_policy: variant.effective_policy ?? undefined,
+        available_units: variant.available_units ?? undefined,
         attributes,
       };
     }) ?? []
@@ -164,7 +166,10 @@ export function transformProduct(item: unknown): Product | null {
   const variants = normalizeProductVariants(product.variants, {
     basePrice: Number(product.price ?? 0),
     compareAtPrice: product.compare_at_price ?? undefined,
-    manageStock: (product.manage_stock as boolean | undefined) ?? false,
+    // Legacy NULL manage_stock is managed inventory (platform policy shared
+    // with the categorized web PDP and the search price projection): only an
+    // explicit false bypasses stock checks.
+    manageStock: (product.manage_stock as boolean | undefined) ?? true,
   });
   const legacyScalarColor =
     typeof product.color === 'string' ? product.color.trim() : '';
@@ -185,7 +190,7 @@ export function transformProduct(item: unknown): Product | null {
   const inventory = normalizeProductInventory({
     stock: product.stock,
     stock_quantity: product.stock_quantity,
-    manage_stock: product.manage_stock ?? false,
+    manage_stock: product.manage_stock ?? true,
   });
   const galleryImages =
     variantMetadata.galleryImages && variantMetadata.galleryImages.length > 0
@@ -220,8 +225,10 @@ export function transformProduct(item: unknown): Product | null {
           : formatProductConditionDisplay(product.condition),
     rating,
     review_count: reviewCount,
-    manage_stock: (product.manage_stock as boolean) ?? false,
+    manage_stock: (product.manage_stock as boolean) ?? true,
     stock_quantity: inventory.stock_quantity,
+    base_effective_policy: product.base_effective_policy ?? undefined,
+    base_available_units: product.base_available_units ?? undefined,
     colors: variantMetadata.colors,
     color_images: variantMetadata.colorImages,
     has_variants: isVariantBearingProduct(product),
@@ -235,6 +242,7 @@ export function transformProduct(item: unknown): Product | null {
     variant_attributes: variantMetadata.variantAttributes,
     variants,
     has_condition_offers: product.has_condition_offers ?? false,
+    offers_hydration_failed: product.offers_hydration_failed ?? undefined,
     offers: Array.isArray(product.offers)
       ? product.offers.map((offer) => ({
           id: offer.id,

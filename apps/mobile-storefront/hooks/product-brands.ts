@@ -3,6 +3,7 @@ import {
   extractProductSearchIds,
   orderRecordsByIds,
 } from '@baci/shared';
+import { getRefinedSearchArgs } from '@baci/shared/lib';
 import { withSupabaseRetry } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
@@ -15,8 +16,32 @@ export async function fetchAvailableBrands(
   merchantId: string,
   options: UseProductsOptions
 ): Promise<string[]> {
+  if (options.refinements && options.search) {
+    const {
+      brands_filter: _brands,
+      sort_by: _sort,
+      result_limit: _limit,
+      result_offset: _offset,
+      // The brands RPC has no processor parameter; forwarding it fails
+      // PostgREST resolution, so brand options stay processor-unscoped.
+      processor_filter: _processor,
+      ...args
+    } = getRefinedSearchArgs(
+      merchantId,
+      buildProductSearchQuery(options.search).normalized,
+      options.refinements,
+      20
+    );
+    const { data, error } = await withSupabaseRetry(
+      async () => await supabase.rpc('get_storefront_search_brands', args)
+    );
+    if (error) throw new Error('Filter options unavailable');
+    return (data ?? []).flatMap((row: { brand?: unknown }) =>
+      typeof row.brand === 'string' && row.brand.trim() ? [row.brand] : []
+    );
+  }
   const brands = new Set<string>();
-  const pageSize = 500;
+  const pageSize = options.search ? 100 : 500;
   let offset = 0;
 
   // Mirror fetchProductsPage: an explicitly provided search that
@@ -85,8 +110,8 @@ export async function fetchAvailableBrands(
         (data ?? []) as { id: string; brand?: string | null }[],
         productIds
       )) {
-        const brand = row?.brand?.trim();
-        if (brand) brands.add(brand);
+        const brand = row?.brand;
+        if (brand?.trim()) brands.add(brand);
       }
       if (productIds.length < pageSize) break;
       offset += pageSize;
@@ -126,8 +151,8 @@ export async function fetchAvailableBrands(
 
     const rows = result.data ?? [];
     for (const row of rows) {
-      const brand = row?.brand?.trim();
-      if (brand) brands.add(brand);
+      const brand = row?.brand;
+      if (brand?.trim()) brands.add(brand);
     }
     if (rows.length < pageSize) break;
     offset += pageSize;

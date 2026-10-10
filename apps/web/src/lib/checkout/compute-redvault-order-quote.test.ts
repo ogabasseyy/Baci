@@ -62,6 +62,78 @@ describe('computeRedvaultOrderQuote', () => {
       vatRateBp: 750,
     });
   });
+  it('prices offer lines from the verified live offer basis', async () => {
+    const offerId = '22222222-2222-4222-8222-222222222222';
+    const quote = await computeRedvaultOrderQuote({
+      merchantId: input.merchantId,
+      items: [
+        {
+          product_id: productId,
+          offer_id: offerId,
+          price: 1,
+          quantity: 1,
+          condition: 'new',
+        },
+      ],
+      offerConditions: new Map([[`${productId}::${offerId}`, 'used']]),
+      offerPrices: new Map([[`${productId}::${offerId}`, 80000]]),
+      supabase: client() as never,
+    });
+    expect(quote.lines[0]).toMatchObject({
+      condition: 'used',
+      unitPriceKobo: 8000000,
+    });
+    expect(quote.eligibleSubtotalKobo).toBe(8000000);
+  });
+  it('rejects offer lines without verified live offer economics', async () => {
+    const offerId = '22222222-2222-4222-8222-222222222222';
+    await expect(
+      computeRedvaultOrderQuote({
+        merchantId: input.merchantId,
+        items: [
+          {
+            product_id: productId,
+            offer_id: offerId,
+            price: 1,
+            quantity: 1,
+          },
+        ],
+        offerPrices: new Map([[`${productId}::${offerId}`, 80000]]),
+        supabase: client() as never,
+      })
+    ).rejects.toThrow('missing verified live offer economics');
+  });
+  it('prefers the variant basis when a line names both option ids', async () => {
+    const offerId = '22222222-2222-4222-8222-222222222222';
+    const variantId = '33333333-3333-4333-8333-333333333333';
+    const quote = await computeRedvaultOrderQuote({
+      merchantId: input.merchantId,
+      items: [
+        {
+          product_id: productId,
+          offer_id: offerId,
+          variant_id: variantId,
+          price: 1,
+          quantity: 1,
+        },
+      ],
+      offerConditions: new Map([[`${productId}::${offerId}`, 'used']]),
+      offerPrices: new Map([[`${productId}::${offerId}`, 80000]]),
+      supabase: client({}, [
+        {
+          id: variantId,
+          product_id: productId,
+          condition: 'open_box',
+          price_override: 90000,
+          attributes: {},
+        },
+      ]) as never,
+    });
+    expect(quote.lines[0]).toMatchObject({
+      condition: 'open_box',
+      unitPriceKobo: 9000000,
+    });
+  });
   it('quotes an eligible NGN 100 item at exactly 500 kobo discount', async () => {
     const quote = await computeRedvaultOrderQuote({
       ...input,

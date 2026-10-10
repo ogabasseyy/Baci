@@ -5,9 +5,11 @@ import type {
 import { calculateRedvaultPricing } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
+import { resolveRedvaultQuoteOffer } from './resolve-redvault-quote-offer';
 
 type CheckoutItem = {
   condition?: string | null;
+  offer_id?: string | null;
   price?: number;
   product_id?: string;
   quantity: number;
@@ -33,44 +35,9 @@ type VariantPrice = {
   product_id: string;
 };
 
-export type RedvaultOrderQuote = {
-  discountKobo: number;
-  eligibleSubtotalKobo: number;
-  groups: Array<{
-    condition: string | null;
-    discountKobo: number;
-    key: string;
-    lineSubtotalKobo: number;
-    members: Array<{
-      allocationKobo: number;
-      lineId: number;
-      quantity: number;
-    }>;
-    productId: string;
-    taxInclusive: false;
-    unitPriceKobo: number;
-    variantAttributes: Record<string, string>;
-    variantId: string | null;
-    vatCategoryCode: string;
-    vatRateBp: number;
-  }>;
-  lines: Array<{
-    brand: string | null;
-    name: string | null;
-    unitPriceKobo: number;
-    variantAttributes: Record<string, string> | null;
-    variantId: string | null;
-    vatCategoryCode: string;
-    vatRateBp: number;
-    condition: string | null;
-    discountKobo: number;
-    lineId: number;
-    productId: string;
-    quantity: number;
-    unitDiscountsKobo: number[];
-  }>;
-  productSubtotalKobo: number;
-};
+export type { RedvaultOrderQuote } from './redvault-order-quote-shape';
+
+import type { RedvaultOrderQuote } from './redvault-order-quote-shape';
 
 function asKobo(value: number | string | null): number {
   if (value === null || (typeof value === 'string' && !value.trim())) {
@@ -122,10 +89,16 @@ function readVariantAttributes(value: unknown): Record<string, string> {
 export async function computeRedvaultOrderQuote({
   items,
   merchantId,
+  offerConditions,
+  offerPrices,
   supabase,
 }: {
   items: CheckoutItem[];
   merchantId: string;
+  /** `${product_id}::${offer_id}` → live offer condition, when verified. */
+  offerConditions?: Map<string, string>;
+  /** `${product_id}::${offer_id}` → live offer price, when verified. */
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
 }): Promise<RedvaultOrderQuote> {
   const productIds = [
@@ -196,16 +169,22 @@ export async function computeRedvaultOrderQuote({
         throw new CanonicalOrderSubtotalLoadError(
           'Variant does not belong to requested product'
         );
+      const { offerCondition, offerPrice } = resolveRedvaultQuoteOffer(item, {
+        offerConditions,
+        offerPrices,
+      });
       return {
         brand: snapshotCatalogText(product.brand),
-        condition: variant?.condition ?? product.condition,
+        condition: variant?.condition ?? offerCondition ?? product.condition,
         itemId: `line-${index + 1}`,
         name: snapshotCatalogText(product.name),
         persistedItemOrder: index + 1,
         productId: product.id,
         quantity: item.quantity,
         taxBasis: 'exclusive',
-        unitPriceKobo: asKobo(variant?.price_override ?? product.price),
+        unitPriceKobo: asKobo(
+          variant?.price_override ?? offerPrice ?? product.price
+        ),
         // Attributes are variant dimensions: a line without a variant has
         // no authoritative attribute source, so client-supplied attributes
         // must not enter the quote. They feed the pricing group key (a

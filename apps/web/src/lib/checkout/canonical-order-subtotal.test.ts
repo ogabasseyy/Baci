@@ -150,4 +150,47 @@ describe('computeCanonicalOrderSubtotal', () => {
       })
     ).rejects.toThrow('Unable to load products for canonical subtotal parity');
   });
+
+  it('prices offer lines from verified live offer economics', async () => {
+    const { supabase } = buildSupabaseMock({
+      products: [{ id: 'p-1', price: 1000 }],
+    });
+
+    const subtotal = await computeCanonicalOrderSubtotal({
+      items: [
+        {
+          product_id: 'p-1',
+          offer_id: 'offer-1',
+          quantity: 2,
+          assurance_fee: 0,
+        },
+      ],
+      merchantId: 'merchant-1',
+      offerPrices: new Map([['p-1::offer-1', 800]]),
+      supabase: supabase as never,
+    });
+
+    expect(subtotal).toBe(1600);
+  });
+
+  it('throws when an offer line lacks verified live offer economics', async () => {
+    const { supabase } = buildSupabaseMock({
+      products: [{ id: 'p-1', price: 1000 }],
+    });
+
+    await expect(
+      computeCanonicalOrderSubtotal({
+        items: [
+          {
+            product_id: 'p-1',
+            offer_id: 'offer-1',
+            quantity: 1,
+            assurance_fee: 0,
+          },
+        ],
+        merchantId: 'merchant-1',
+        supabase: supabase as never,
+      })
+    ).rejects.toThrow('Offer line is missing verified live offer economics');
+  });
 });

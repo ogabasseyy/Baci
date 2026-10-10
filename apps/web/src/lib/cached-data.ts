@@ -143,8 +143,10 @@ export async function hydrateAndSanitizeProducts<T extends { id: string }>(
 
 interface PublicStorefrontProductVariant {
   attributes: Record<string, string> | null;
+  available_units?: number | null;
   condition?: string | null;
   created_at?: string | null;
+  effective_policy?: string | null;
   id: string;
   images?: unknown;
   price_override?: number | string | null;

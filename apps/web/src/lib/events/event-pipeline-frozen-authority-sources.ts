@@ -36,8 +36,31 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
+  // Re-pinned for exact condition-offer identity: the route accepts
+  // offerId/offer_id twins, passes them into the order RPC items, and
+  // verifies each line against live offers (400/500); notification and
+  // payment authority are unchanged. Re-pinned again for the offer
+  // economics errors: invalid_offer/insufficient_offer_stock map to 400
+  // beside the variant twins; no other route behavior changed. Re-pinned a
+  // third time for live-offer pricing: the route loads live offer prices
+  // once, recomputes offer-line assurance fees from them, and threads them
+  // into the negotiation catalog and VAT basis; authority unchanged.
+  // Re-pinned a fourth time: fee recompute moved after the negotiation
+  // preflight onto the validated charged basis; authority unchanged.
+  // Re-pinned a fifth time: offer lines bind the live offer condition
+  // (persist it, reject mismatches) and the canonical subtotal prices
+  // offer lines from verified live offer economics for discount and
+  // shipping-rate eligibility; notification and payment authority are
+  // unchanged. Re-pinned a sixth time: offer verification, condition
+  // reconciliation, and assurance recomputation move to focused route
+  // helpers with identical responses; authority unchanged. Re-pinned a
+  // seventh time: those helpers move to lib/checkout (import-only);
+  // authority unchanged. Re-pinned an eighth time: the savings fallback
+  // idempotency fingerprint includes the line offer id so two savings
+  // orders for different offers of one product mint distinct redemption
+  // keys; notification and payment authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '33166c90e60c3d9d0a2648abe4ba31df243205376696e1ceae6f9bfb0d9398b0',
+    'bb2583bfe08162cd76c81e8a221334e2c0a1d45393c068330dad2f59ab108065',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -7,7 +7,7 @@ type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;
 
 const mockUseLocalSearchParams = jest.fn();
 const mockUseProducts = jest.fn();
-const mockUseProductBrands = jest.fn();
+const mockUseSearchFacets = jest.fn();
 const mockUseCategories = jest.fn();
 const mockViewProps: { current: SearchScreenViewProps | null } = {
   current: null,
@@ -15,6 +15,7 @@ const mockViewProps: { current: SearchScreenViewProps | null } = {
 const mockStorageData: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   router: { back: jest.fn(), push: jest.fn() },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockUseLocalSearchParams(),
@@ -22,8 +23,16 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/hooks', () => ({
   useCategories: () => mockUseCategories(),
-  useProductBrands: () => mockUseProductBrands(),
   useProducts: (args: unknown) => mockUseProducts(args),
+}));
+
+jest.mock('@/hooks/use-search-facet-options', () => ({
+  useSearchFacetOptions: (query: string, enabled: boolean) =>
+    mockUseSearchFacets(query, enabled),
+}));
+
+jest.mock('@/hooks/use-merchant', () => ({
+  useMerchant: () => ({ data: { id: 'merchant-1' } }),
 }));
 
 jest.mock('@/hooks/use-network-state', () => ({
@@ -78,7 +87,11 @@ describe('SearchScreen route', () => {
     mockViewProps.current = null;
     mockUseLocalSearchParams.mockReturnValue({});
     mockUseProducts.mockReturnValue(mockProductState());
-    mockUseProductBrands.mockReturnValue({ brands: [] });
+    mockUseSearchFacets.mockReturnValue({
+      data: { brands: [], categories: [], conditions: [] },
+      error: null,
+      refetch: jest.fn(),
+    });
     mockUseCategories.mockReturnValue({ data: [] });
   });
 
@@ -89,22 +102,32 @@ describe('SearchScreen route', () => {
 
   it('resets refinements when a new route query arrives on a mounted screen', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
-    mockUseProductBrands.mockReturnValue({ brands: ['Apple'] });
+    mockUseSearchFacets.mockReturnValue({
+      data: { brands: ['Apple'], categories: [], conditions: ['used'] },
+      error: null,
+      refetch: jest.fn(),
+    });
 
     const { rerender } = render(<SearchScreen />);
+    expect(mockViewProps.current?.availableConditions).toEqual(['used']);
+    expect(mockViewProps.current?.filterCategories).toEqual([]);
+    expect(mockUseSearchFacets).toHaveBeenCalledWith('iphone', true);
 
     act(() => {
-      mockViewProps.current?.onCategorySelect('Phones');
-      mockViewProps.current?.onSelectBrand('Apple');
-      mockViewProps.current?.onSelectCondition('New');
-      mockViewProps.current?.onSelectRating(4);
-      mockViewProps.current?.onPriceChange(100, 500);
+      mockViewProps.current?.onRefinementsChange?.({
+        brands: ['Apple'],
+        condition: 'new',
+        sort: 'relevance',
+        minRating: 4,
+        minPrice: 100,
+        maxPrice: 500,
+      });
     });
     expect(mockUseProducts).toHaveBeenLastCalledWith(
       expect.objectContaining({
         search: 'iphone',
         brand: 'Apple',
-        condition: 'New',
+        condition: 'new',
         minPrice: 100,
         maxPrice: 500,
         minRating: 4,

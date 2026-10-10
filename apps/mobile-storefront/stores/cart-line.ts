@@ -1,3 +1,4 @@
+import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import type { CartItem } from './cart-store.types';
 
 export function createCartLineId(
@@ -53,7 +54,11 @@ function hasMatchingVoucherIdentifier(
 
 export function mergeExistingCartItem(
   existingItem: CartItem,
-  incomingItem: Omit<CartItem, 'id'>
+  incomingItem: Omit<CartItem, 'id'>,
+  policy: {
+    smartCartProEnabled: boolean;
+    merchantSlug: string | null | undefined;
+  }
 ): CartItem {
   const newQuantity = existingItem.quantity + incomingItem.quantity;
   const isVoucherLine =
@@ -63,6 +68,16 @@ export function mergeExistingCartItem(
     ...existingItem,
     ...incomingItem,
     id: existingItem.id,
+    // The matcher wildcards a missing dimension on either side, but the
+    // spread above would then let an explicit undefined blank the stored
+    // value. Matched lines agree wherever both sides are set, so keeping
+    // the existing value when the incoming add omits it is always safe.
+    color: incomingItem.color ?? existingItem.color,
+    storage: incomingItem.storage ?? existingItem.storage,
+    condition: incomingItem.condition ?? existingItem.condition,
+    voucher_award_id:
+      incomingItem.voucher_award_id ?? existingItem.voucher_award_id,
+    voucher_token: incomingItem.voucher_token ?? existingItem.voucher_token,
     quantity: isVoucherLine
       ? 1
       : existingItem.max_quantity
@@ -70,7 +85,11 @@ export function mergeExistingCartItem(
         : newQuantity,
     negotiatedPrice: existingItem.negotiatedPrice,
     negotiationStatus: existingItem.negotiationStatus,
-    hasAssurance: existingItem.hasAssurance,
+    hasAssurance: resolveAddedLineAssurance(
+      incomingItem.hasAssurance,
+      existingItem,
+      { ...policy, hasQuizVoucher: isVoucherLine }
+    ),
     assuranceRate: existingItem.assuranceRate,
   };
 }
@@ -114,6 +133,10 @@ export function isSameCartLine(
   const incomingVariantId = incomingItem.variant_id ?? null;
 
   if (existingVariantId !== incomingVariantId) {
+    return false;
+  }
+
+  if ((existingItem.offer_id ?? null) !== (incomingItem.offer_id ?? null)) {
     return false;
   }
 

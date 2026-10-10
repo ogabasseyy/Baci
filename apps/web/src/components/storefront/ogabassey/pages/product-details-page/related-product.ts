@@ -38,8 +38,12 @@ export function toRelatedProductsProduct(product: Product): CartProduct {
     description: product.description || '',
     status: 'active',
     price: parseRelatedProductPrice(product),
-    manage_stock: Boolean(product.manage_stock),
+    manage_stock: product.manage_stock ?? true,
     stock: product.stock ?? 0,
+    // Preserve the strict serialized pool: the cart aggregate cap reads
+    // these while stock carries the selected offer allocation.
+    inventory_tracking_policy: product.inventory_tracking_policy ?? undefined,
+    stock_quantity: product.stock_quantity,
     image: primaryImage,
     imageLarge: primaryImage,
     imageHint: product.brand || product.name,

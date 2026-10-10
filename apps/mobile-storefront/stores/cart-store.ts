@@ -6,6 +6,8 @@ import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
+import { nativeAssurancePolicy } from './cart-assurance-config';
+import { resolveNativeAddedLineAssurance } from './cart-assurance-default';
 import {
   createCartLineId,
   isSameCartLine,
@@ -87,13 +89,18 @@ export const useCartStore = create<CartState>()(
             items = [...state.items];
             items[existingIndex] = mergeExistingCartItem(
               items[existingIndex],
-              itemToAdd
+              itemToAdd,
+              nativeAssurancePolicy()
             );
           } else {
             lineSequence = state.lineSequence + 1;
             items = [
               ...state.items,
-              { ...itemToAdd, id: createCartLineId(itemToAdd, lineSequence) },
+              {
+                ...itemToAdd,
+                hasAssurance: resolveNativeAddedLineAssurance(itemToAdd),
+                id: createCartLineId(itemToAdd, lineSequence),
+              },
             ];
           }
 
@@ -244,8 +251,8 @@ export const useCartStore = create<CartState>()(
 
       ...createCheckoutGenerationActions(set),
 
-      repriceItems: (priceById) => {
-        set((state) => applyReprice(state, priceById));
+      repriceItems: (priceById, conditionById) => {
+        set((state) => applyReprice(state, priceById, conditionById));
       },
 
       toggleAssurance: (id) => {

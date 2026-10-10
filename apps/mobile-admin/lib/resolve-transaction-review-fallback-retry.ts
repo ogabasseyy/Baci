@@ -9,11 +9,14 @@ const RETRYABLE_FALLBACK_COLUMNS = [
   'quiz_award_id',
   'quiz_award_amount',
   'line_id',
+  'offer_id',
   'ad_tracking',
   'cancelled_at',
   'variant_attributes',
   'variant_id',
   'product_match_status',
+  'offer_grade',
+  'offer_condition_notes',
 ] as const;
 
 /** Marks newly missing columns and reports whether to retry the fallback query. */

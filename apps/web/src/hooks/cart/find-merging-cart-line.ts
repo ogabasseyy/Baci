@@ -41,6 +41,7 @@ export function findMergingCartLineIndex(
     if (item.cartItemId === cartItemId) return true;
     if (item.id !== product.id) return false;
     if (item.variantId !== normalizedOptions?.variantId) return false;
+    if (item.offerId !== normalizedOptions?.offerId) return false;
     if (normalizedOptions?.color || normalizedOptions?.storage) return false;
     return !item.cartItemId;
   });

@@ -191,7 +191,7 @@ describe('useProductDetailsState', () => {
     expect(mockToast).not.toHaveBeenCalled();
   });
 
-  it('keeps the buy-now checkout redirect scheduled across cart rerenders', () => {
+  it('keeps the buy-now cart redirect scheduled across cart rerenders', () => {
     vi.useFakeTimers();
     mockUseSearchParams.mockReturnValue(new URLSearchParams('action=buy'));
 
@@ -204,7 +204,9 @@ describe('useProductDetailsState', () => {
     });
 
     expect(mockAddToCart).toHaveBeenCalledOnce();
-    expect(mockRouterPush).toHaveBeenCalledWith('/checkout');
+    // The buy flow lands on the cart (assurance disclosure + opt-out),
+    // never straight at checkout.
+    expect(mockRouterPush).toHaveBeenCalledWith('/cart');
   });
 
   it('lets live selection move away from the seeded route variant', () => {

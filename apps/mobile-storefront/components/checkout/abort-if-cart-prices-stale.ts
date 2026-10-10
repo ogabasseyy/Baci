@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import {
+  pickChangedConditionById,
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
@@ -22,7 +23,12 @@ export async function abortIfCartPricesStale(
   if (reprice.changes.length === 0) {
     return false;
   }
-  useCartStore.getState().repriceItems(pickChangedPriceById(reprice));
+  useCartStore
+    .getState()
+    .repriceItems(
+      pickChangedPriceById(reprice),
+      pickChangedConditionById(reprice)
+    );
   Alert.alert(
     'Prices updated',
     'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',

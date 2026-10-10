@@ -1,20 +1,10 @@
 'use client';
 
-import {
-  type CanonicalProductCondition,
-  getVariantConditionOptions,
-  hasVariantConditionAxis,
-  normalizeCanonicalProductCondition,
-  resolveDefaultVariantSelection,
-  resolveVariantDisplaySelection,
-  resolveVariantSelection,
-  resolveVariantSelectionParamResolution,
-} from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { Check, Info, Minus, Plus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { DeferredStickyAddToCart } from '@/components/storefront/deferred-sticky-add-to-cart';
@@ -27,47 +17,17 @@ import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useRecentlyViewed } from '@/hooks/use-recently-viewed';
-import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
-
-// Placeholder image for products without images
-const PLACEHOLDER_IMAGE = '/placeholder.svg';
-
-const VALID_CONDITIONS = new Set<CanonicalProductCondition>([
-  'new',
-  'used',
-  'open_box',
-]);
-
-type ProductCondition = CanonicalProductCondition;
-
-function getValidConditionOptions(values: string[]) {
-  return values
-    .map((value) => normalizeCanonicalProductCondition(value))
-    .filter(
-      (value): value is ProductCondition =>
-        value !== '' && VALID_CONDITIONS.has(value)
-    );
-}
-
-function areSelectionAttributesEqual(
-  left: Record<string, string>,
-  right: Record<string, string>
-) {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  return leftEntries.every(([key, value]) => right[key] === value);
-}
+import type { ProductCondition } from './product-selection-condition';
+import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
+import { useProductCartSubmission } from './use-product-cart-submission';
+import { useProductOfferSelection } from './use-product-offer-selection';
 
 // Lazy load heavy components to reduce initial bundle size
 const ReviewsSection = dynamic(
@@ -112,29 +72,6 @@ const RecentlyViewedProducts = dynamic(
 );
 
 /**
- * Extract unique attribute types and their values from variants
- */
-function getAttributeOptions(
-  variants: ProductVariant[]
-): { key: string; values: string[] }[] {
-  const attributeMap = new Map<string, Set<string>>();
-
-  for (const variant of variants) {
-    for (const [key, value] of Object.entries(variant.attributes)) {
-      if (!attributeMap.has(key)) {
-        attributeMap.set(key, new Set());
-      }
-      attributeMap.get(key)?.add(value);
-    }
-  }
-
-  return Array.from(attributeMap.entries()).map(([key, values]) => ({
-    key,
-    values: Array.from(values).sort(),
-  }));
-}
-
-/**
  * Check if a variant with given attributes exists and has stock
  */
 function isVariantAvailable(
@@ -171,13 +108,18 @@ function isVariantAvailable(
     const matches = Object.entries(partialAttributes).every(
       ([key, value]) => variant.attributes[key] === value
     );
+    // Serialized tracking resolves from exact units (strict) or stays
+    // enabled with no finite count (unlimited); other variants use the
+    // scalar quantity with parent-stock inheritance.
+    const serializedStock = resolveSerializedVariantStock(variant);
     return (
       conditionMatches &&
       matches &&
-      getEffectiveStock({
-        stock: variant.stock_quantity ?? fallbackStock,
-        stock_quantity: variant.stock_quantity ?? fallbackStock,
-      }) > 0
+      (serializedStock ??
+        getEffectiveStock({
+          stock: variant.stock_quantity ?? fallbackStock,
+          stock_quantity: variant.stock_quantity ?? fallbackStock,
+        })) > 0
     );
   });
 }
@@ -193,155 +135,32 @@ export default function ProductDetailClient({
   const { merchant, basePath } = useMerchant();
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path}`;
-  const { cart, addToCart, updateQuantity, setMerchantSlug } = useCart();
-  const { toast } = useToast();
+  const { cart, updateQuantity } = useCart();
   const { formatCurrency, currencyCode } = useCurrency();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const [quantity, setQuantity] = useState(product.minimum_order_quantity || 1);
-  const [selectedImage, setSelectedImage] = useState(
-    product.imageLarge || product.image || PLACEHOLDER_IMAGE
-  );
-
-  // Variant selection state
-  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
-    null
-  );
-  const [selectedAttributes, setSelectedAttributes] = useState<
-    Record<string, string>
-  >({});
-
-  // Condition offer state
-  const searchParams = useSearchParams();
-  const conditionParam = searchParams.get('condition');
-  const usesVariantRouteSelection = Boolean(
-    product.has_variants && product.variants && product.variants.length > 0
-  );
-  const routeSelectionResolution = usesVariantRouteSelection
-    ? resolveVariantSelectionParamResolution(product, searchParams)
-    : null;
-  const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
-  const routeSelectionAttributes = (routeSelectionInput.attributes ??
-    {}) as Record<string, string>;
-  const routeConditionSource =
-    routeSelectionInput.condition ??
-    (!usesVariantRouteSelection ? conditionParam : undefined);
-  const routeCondition =
-    normalizeCanonicalProductCondition(routeConditionSource);
-  const routeVariantId = routeSelectionInput.variantId ?? undefined;
-  const defaultVariantSelection = usesVariantRouteSelection
-    ? resolveDefaultVariantSelection(product, { condition: routeCondition })
-    : null;
-  const usesVariantConditions = usesVariantRouteSelection
-    ? hasVariantConditionAxis(product)
-    : false;
-  const availableConditionOptions = usesVariantConditions
-    ? getValidConditionOptions(getVariantConditionOptions(product))
-    : [];
-  const [selectedCondition, setSelectedCondition] = useState<ProductCondition>(
-    (routeCondition as ProductCondition | undefined) ||
-      (defaultVariantSelection?.condition as ProductCondition | undefined) ||
-      normalizeCanonicalProductCondition(product.condition) ||
-      'new'
-  );
-
-  const selectedOffer =
-    !usesVariantConditions &&
-    selectedCondition !==
-      (normalizeCanonicalProductCondition(product.condition) || 'new')
-      ? product.offers?.find(
-          (o: { condition: string }) =>
-            normalizeCanonicalProductCondition(o.condition) ===
-            selectedCondition
-        )
-      : null;
-  const conditionLabels: Record<string, string> = {
-    new: 'New',
-    used: 'Premium Used',
-    open_box: 'Open Box',
-  };
-  const conditionDescriptions: Record<string, string> = {
-    new: 'Factory sealed with full manufacturer warranty',
-    open_box: 'Opened but unused, all accessories included',
-    used: 'Fully tested and inspected, 30-day warranty',
-  };
-
-  // Seed the selection state from the route-driven inputs inline during
-  // render with a prev-key comparison (react.dev: "Adjusting some state when
-  // a prop changes"). The previous useEffect version committed a stale frame
-  // before re-rendering with the seeded selection.
-  const routeSeedKey = [
-    product.id,
-    usesVariantRouteSelection ? 'variants' : 'simple',
-    routeCondition,
-    routeVariantId ?? '',
-    Object.entries(routeSelectionAttributes)
-      .map(([key, value]) => `${key}=${value}`)
-      .sort()
-      .join('&'),
-  ].join('|');
-  const [prevRouteSeedKey, setPrevRouteSeedKey] = useState<string | null>(null);
-  if (routeSeedKey !== prevRouteSeedKey) {
-    setPrevRouteSeedKey(routeSeedKey);
-
-    if (!usesVariantRouteSelection) {
-      if (routeCondition && routeCondition !== selectedCondition) {
-        setSelectedCondition(routeCondition);
-      }
-    } else {
-      const fallbackVariantSelection = resolveDefaultVariantSelection(product, {
-        condition: routeCondition,
-      });
-      const seedSelection =
-        resolveVariantDisplaySelection(product, {
-          attributes: routeSelectionAttributes,
-          condition: routeCondition,
-          variantId: routeVariantId,
-        }) ?? fallbackVariantSelection;
-
-      const nextCondition =
-        routeCondition ||
-        (seedSelection?.condition as ProductCondition | undefined) ||
-        normalizeCanonicalProductCondition(product.condition) ||
-        'new';
-      if (nextCondition !== selectedCondition) {
-        setSelectedCondition(nextCondition);
-      }
-
-      if (!seedSelection) {
-        if (selectedVariant !== null) {
-          setSelectedVariant(null);
-        }
-        if (Object.keys(selectedAttributes).length > 0) {
-          setSelectedAttributes({});
-        }
-        const fallbackImage =
-          product.imageLarge || product.image || PLACEHOLDER_IMAGE;
-        if (selectedImage !== fallbackImage) {
-          setSelectedImage(fallbackImage);
-        }
-      } else {
-        if (selectedVariant?.id !== seedSelection.variant.id) {
-          setSelectedVariant(seedSelection.variant);
-        }
-        if (
-          !areSelectionAttributesEqual(
-            selectedAttributes,
-            seedSelection.attributes
-          )
-        ) {
-          setSelectedAttributes(seedSelection.attributes);
-        }
-        const nextImage =
-          seedSelection.variant.primary_image ||
-          product.imageLarge ||
-          product.image ||
-          PLACEHOLDER_IMAGE;
-        if (selectedImage !== nextImage) {
-          setSelectedImage(nextImage);
-        }
-      }
-    }
-  }
+  const {
+    attributeOptions,
+    availableConditionOptions,
+    conditionDescriptions,
+    conditionLabels,
+    currentCompareAtPrice,
+    currentPrice,
+    currentStock,
+    currentVariantSelection,
+    effectiveVariant,
+    effectiveVariantAttributes,
+    effectiveVariantId,
+    handleAttributeChange,
+    handleConditionChange,
+    isOutOfStock,
+    isStockManaged,
+    selectedCondition,
+    selectedImage,
+    selectedOffer,
+    setSelectedImage,
+    usesVariantConditions,
+  } = useProductOfferSelection(product);
 
   // Track product view for recently viewed and analytics
   // Use product.id instead of product object to prevent duplicate tracking on reference changes
@@ -356,187 +175,24 @@ export default function ProductDetailClient({
     }
   }, [product?.id, merchant?.id, currencyCode, addToRecentlyViewed]);
 
+  const handleAddToCart = useProductCartSubmission({
+    product,
+    merchant,
+    currencyCode,
+    currentVariantSelection,
+    selectedOffer,
+    selectedCondition,
+    effectiveVariantAttributes,
+    currentPrice,
+    quantity,
+  });
+
   // Product is guaranteed to exist by server component, but guard against archived status
   // Note: Can't call notFound() after hooks in client components, so we render null
   // The server component already handles the notFound() case for missing products
   if (!product || product.status === 'archived') {
     return null;
   }
-
-  // Get variant options if product has variants
-  const attributeOptions = product.has_variants
-    ? getAttributeOptions(product.variants || [])
-    : [];
-  // Legacy `NULL` manage_stock rows are treated as unlimited inventory.
-  const isStockManaged = product.manage_stock ?? false;
-  const selectionAttributes = {
-    ...routeSelectionAttributes,
-    ...selectedAttributes,
-  };
-  const currentVariantDisplaySelection = usesVariantRouteSelection
-    ? resolveVariantDisplaySelection(product, {
-        attributes: selectionAttributes,
-        condition: usesVariantConditions ? selectedCondition : undefined,
-      })
-    : null;
-  const currentVariantSelection = usesVariantRouteSelection
-    ? resolveVariantSelection(product, {
-        attributes: selectionAttributes,
-        condition: usesVariantConditions ? selectedCondition : undefined,
-      })
-    : null;
-  const effectiveVariant =
-    currentVariantDisplaySelection?.variant ?? selectedVariant;
-  const effectiveVariantAttributes =
-    currentVariantDisplaySelection?.attributes ?? selectionAttributes;
-  const effectiveVariantId =
-    currentVariantSelection?.variant.id ?? effectiveVariant?.id;
-
-  // Get current price based on condition offer or variant selection
-  const currentPrice =
-    selectedOffer?.price != null
-      ? Number(selectedOffer.price)
-      : (currentVariantDisplaySelection?.price ??
-        effectiveVariant?.price_override ??
-        product.price);
-  const currentCompareAtPrice =
-    currentVariantDisplaySelection?.compareAtPrice ?? product.compare_at_price;
-  const currentStock = isStockManaged
-    ? getEffectiveStock(
-        effectiveVariant
-          ? {
-              stock:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-              stock_quantity:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-            }
-          : selectedOffer
-            ? {
-                stock: selectedOffer.stock_quantity ?? 0,
-                stock_quantity: selectedOffer.stock_quantity ?? 0,
-              }
-            : product
-      )
-    : Number.POSITIVE_INFINITY;
-  const isOutOfStock = isStockManaged ? currentStock === 0 : false;
-
-  const handleAttributeChange = (attributeKey: string, value: string) => {
-    const newAttributes = { ...selectedAttributes, [attributeKey]: value };
-    setSelectedAttributes(newAttributes);
-
-    if (!product.variants) {
-      return;
-    }
-
-    if (usesVariantRouteSelection) {
-      const nextSelection = resolveVariantDisplaySelection(product, {
-        attributes: {
-          ...routeSelectionAttributes,
-          ...newAttributes,
-        },
-        condition: usesVariantConditions ? selectedCondition : undefined,
-      });
-
-      if (nextSelection) {
-        setSelectedVariant(nextSelection.variant);
-        setSelectedAttributes(nextSelection.attributes);
-        if (nextSelection.variant.primary_image) {
-          setSelectedImage(nextSelection.variant.primary_image);
-        }
-      } else {
-        setSelectedVariant(null);
-      }
-      return;
-    }
-
-    const matchingVariant = product.variants.find((v) =>
-      Object.entries(newAttributes).every(
-        ([key, val]) => v.attributes[key] === val
-      )
-    );
-
-    if (matchingVariant) {
-      setSelectedVariant(matchingVariant);
-      if (matchingVariant.primary_image) {
-        setSelectedImage(matchingVariant.primary_image);
-      }
-    } else {
-      setSelectedVariant(null);
-    }
-  };
-
-  const handleConditionChange = (condition: ProductCondition) => {
-    setSelectedCondition(condition);
-
-    if (!usesVariantConditions) {
-      return;
-    }
-
-    const nextSelection = resolveVariantDisplaySelection(product, {
-      attributes: selectionAttributes,
-      condition,
-    });
-
-    if (nextSelection) {
-      setSelectedVariant(nextSelection.variant);
-      setSelectedAttributes(nextSelection.attributes);
-      if (nextSelection.variant.primary_image) {
-        setSelectedImage(nextSelection.variant.primary_image);
-      }
-    } else {
-      setSelectedVariant(null);
-    }
-  };
-
-  const handleAddToCart = () => {
-    const variantForCart = currentVariantSelection?.variant;
-    const productToAdd =
-      variantForCart || selectedOffer
-        ? { ...product, price: currentPrice }
-        : product;
-
-    // Store merchant slug for checkout
-    if (merchant?.slug) {
-      setMerchantSlug(merchant.slug);
-    }
-
-    if (product.has_variants && !variantForCart) {
-      toast({
-        title: 'Select a variant',
-        description: 'Please select a valid variant before adding this item.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    addToCart(
-      productToAdd,
-      quantity,
-      variantForCart
-        ? {
-            condition: selectedCondition,
-            variantId: variantForCart.id,
-            variantAttributes: effectiveVariantAttributes,
-          }
-        : selectedOffer
-          ? { condition: selectedCondition }
-          : undefined
-    );
-
-    // Track add to cart for merchant analytics
-    if (merchant?.id) {
-      trackEvent.addToCart(merchant.id, productToAdd, quantity, currencyCode);
-    }
-
-    const variantInfo = variantForCart
-      ? ` (${Object.values(effectiveVariantAttributes).join(', ')})`
-      : '';
-
-    toast({
-      title: 'Added to cart!',
-      description: `${quantity} x ${product.name}${variantInfo} has been added to your cart.`,
-    });
-  };
 
   const handleQuantityChange = (newQuantity: number) => {
     const moq = product.minimum_order_quantity || 1;
@@ -557,12 +213,17 @@ export default function ProductDetailClient({
     if (effectiveVariantId) {
       return item.id === product.id && item.variantId === effectiveVariantId;
     }
+    if (item.id !== product.id || item.variantId) return false;
+
+    // Two offers can share one displayed condition: match the selected
+    // offer by id, and require no offer id for the base line, or the
+    // quantity controls render for (and update) the wrong offer.
+    if (selectedOffer) return item.offerId === selectedOffer.id;
+    if (item.offerId) return false;
 
     // Base/simple products store no condition in cart. Only offer-driven
     // selections need an explicit condition match on non-variant rows.
     return (
-      item.id === product.id &&
-      !item.variantId &&
       (normalizeCanonicalProductCondition(
         item.condition ?? product.condition
       ) || 'new') === effectiveSelectedCondition
@@ -760,7 +421,10 @@ export default function ProductDetailClient({
                       }
                       className={cn(
                         'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                        selectedCondition === (product.condition || 'new')
+                        selectedCondition ===
+                          normalizeCanonicalProductCondition(
+                            product.condition || 'new'
+                          )
                           ? 'border-store-primary text-store-primary bg-store-primary/5'
                           : 'border-gray-200 text-gray-500 hover:border-gray-300'
                       )}
@@ -774,12 +438,16 @@ export default function ProductDetailClient({
                           type="button"
                           onClick={() =>
                             handleConditionChange(
-                              offer.condition as ProductCondition
+                              offer.condition as ProductCondition,
+                              offer.id
                             )
                           }
                           className={cn(
                             'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                            selectedCondition === offer.condition
+                            selectedCondition ===
+                              normalizeCanonicalProductCondition(
+                                offer.condition
+                              )
                               ? 'border-store-primary text-store-primary bg-store-primary/5'
                               : 'border-gray-200 text-gray-500 hover:border-gray-300'
                           )}
@@ -879,7 +547,7 @@ export default function ProductDetailClient({
                   </ThemedBadge>
                 )}
                 {isStockManaged ? (
-                  currentStock > 0 ? (
+                  currentStock > 0 && Number.isFinite(currentStock) ? (
                     <p
                       className={cn(
                         'text-sm mt-2',
@@ -981,7 +649,11 @@ export default function ProductDetailClient({
                         <Plus className="size-4" aria-hidden="true" />
                       </ThemedButton>
                     </div>
-                    <Link href={asRoute(getHref('/checkout'))}>
+                    {/* Route through the cart, not checkout: the cart carries
+                        the optional-service (assurance) disclosure and
+                        toggle, so a direct checkout link would let a
+                        default-on fee reach payment without an opt-out. */}
+                    <Link href={asRoute(getHref('/cart'))}>
                       <ThemedButton
                         size="lg"
                         colorRole="primary"

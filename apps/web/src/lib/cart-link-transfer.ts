@@ -203,7 +203,8 @@ export async function fetchAndAddCartItems({
           continue;
         }
         const anchor = anchorStock.projections.get(product.id.toLowerCase());
-        const managed = anchor?.manageStock ?? product.manage_stock;
+        // NULL manage_stock means managed: legacy rows predate the flag.
+        const managed = anchor?.manageStock ?? product.manage_stock ?? true;
         const effectiveStock = Number(
           anchor?.stockQuantity ?? product.stock_quantity ?? 0
         );

@@ -190,16 +190,29 @@ describe('cart-entitlement-sanitizer', () => {
       expect(calculateCartTotal(mockCart, true)).toBe(3680);
     });
 
-    it('prices condition-offer lines at the retained catalog basis', () => {
+    it('prices condition-offer lines at the live offer price, ignoring any retained catalog basis', () => {
       const offerLine: CartItem = {
         ...mockCart[0],
         price: 600,
         catalogPrice: 1000,
+        offerId: 'offer-1',
       };
-      // Goods use catalog (1000 x 2), not the offer price (600 x 2): a
-      // merchant-rate tier between 1200 and 2000 must see 2000. Assurance
-      // still tracks the negotiated basis: 800 x 2 x 0.05 = 80.
-      expect(calculateCartCatalogSubtotal([offerLine], true)).toBe(2080);
+      // Goods use the offer price (600 x 2 = 1200), matching the server
+      // canonical subtotal: quoting catalog (2000) would display a tier the
+      // order then rejects. Assurance still tracks the negotiated basis:
+      // 800 x 2 x 0.05 = 80. Line = 1280.
+      expect(calculateCartCatalogSubtotal([offerLine], true)).toBe(1280);
+    });
+
+    it('keeps the retained catalog basis for non-offer lines', () => {
+      const catalogLine: CartItem = {
+        ...mockCart[0],
+        price: 600,
+        catalogPrice: 1000,
+      };
+      // No offer identity: goods use catalog (1000 x 2 = 2000) plus the
+      // negotiated-basis assurance (80). Line = 2080.
+      expect(calculateCartCatalogSubtotal([catalogLine], true)).toBe(2080);
     });
 
     it('falls back to the line price when the retained basis is invalid', () => {

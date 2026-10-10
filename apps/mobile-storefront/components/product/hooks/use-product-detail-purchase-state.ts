@@ -17,47 +17,78 @@ export function useProductDetailPurchaseState(
       routeData.product ?? null,
       routeData.currentVariantDisplaySelection,
       routeData.effectiveSelectedCondition,
-      negotiatedPrice
+      negotiatedPrice,
+      routeData.routeOfferId,
+      routeData.suppressConditionOfferMatch
     );
   const { price: calculatedPrice } = useEffectivePrice(
     routeData.product ?? null,
     routeData.currentVariantDisplaySelection,
     routeData.effectiveSelectedCondition,
-    null
+    null,
+    routeData.routeOfferId,
+    routeData.suppressConditionOfferMatch
   );
   useTrackProductRouteViewed(routeData.product, effectivePrice);
 
   const selectedConditionOffer = !routeData.product?.has_variants
     ? findMatchingConditionOffer(
         routeData.product?.offers,
-        routeData.offerConditionKey
+        routeData.offerConditionKey,
+        routeData.routeOfferId,
+        routeData.suppressConditionOfferMatch
       )
     : null;
   const resolvedVariantPurchaseSelection =
     routeData.currentVariantSelection ??
     routeData.currentVariantDisplaySelection;
+  const selectedVariant = resolvedVariantPurchaseSelection?.variant;
   const selectedVariantCanPurchase =
     routeData.product?.has_variants === true
       ? resolvedVariantPurchaseSelection
-        ? routeData.product.manage_stock === false
+        ? selectedVariant?.effective_policy === 'serialized_then_unlimited'
           ? true
-          : typeof resolvedVariantPurchaseSelection.variant.stock_quantity ===
-              'number'
-            ? resolvedVariantPurchaseSelection.variant.stock_quantity >
-              quantityInCart
-            : resolvedVariantPurchaseSelection.variant.in_stock !== false
+          : selectedVariant?.effective_policy === 'serialized_strict'
+            ? (typeof selectedVariant.available_units === 'number'
+                ? selectedVariant.available_units
+                : 0) > quantityInCart
+            : routeData.product.manage_stock === false
+              ? true
+              : typeof selectedVariant?.stock_quantity === 'number'
+                ? selectedVariant.stock_quantity > quantityInCart
+                : selectedVariant?.in_stock !== false
         : false
       : false;
+  // An offer scalar never exceeds strict serialized base units (effective
+  // minimum shared with the cart guard and the price-options offer
+  // branch); other policies leave the scalar uncapped.
+  const baseStrictUnitCap =
+    routeData.product?.base_effective_policy === 'serialized_strict'
+      ? typeof routeData.product.base_available_units === 'number'
+        ? routeData.product.base_available_units
+        : 0
+      : Number.POSITIVE_INFINITY;
   const canPurchase =
     routeData.product?.has_variants === true
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
-        ? routeData.product.manage_stock === false ||
+        ? (!selectedConditionOffer &&
+            routeData.product.manage_stock === false) ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
-            ? selectedConditionOffer.stock_quantity > quantityInCart
-            : typeof routeData.product.stock_quantity === 'number'
-              ? routeData.product.stock_quantity > quantityInCart
-              : routeData.product.in_stock === true)
+            ? Math.min(
+                selectedConditionOffer.stock_quantity,
+                baseStrictUnitCap
+              ) > quantityInCart
+            : routeData.product.base_effective_policy ===
+                'serialized_then_unlimited'
+              ? true
+              : routeData.product.base_effective_policy === 'serialized_strict'
+                ? (typeof routeData.product.base_available_units === 'number'
+                    ? routeData.product.base_available_units
+                    : 0) > quantityInCart
+                : typeof routeData.product.stock_quantity === 'number'
+                  ? routeData.product.stock_quantity > quantityInCart
+                  : routeData.product.in_stock === true)
         : false;
 
   const conditionOffersForDisplay = getConditionOffersForDisplay(routeData);

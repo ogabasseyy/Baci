@@ -36,7 +36,10 @@ export interface CartState {
     checkoutGeneration?: string
   ) => Promise<void>;
   // Reconcile stored prices with the live catalog (keyed by cart line id).
-  repriceItems: (priceById: Record<string, number>) => void;
+  repriceItems: (
+    priceById: Record<string, number>,
+    conditionById?: Record<string, string>
+  ) => void;
   // Device assurance actions
   toggleAssurance: (id: string) => void;
 }

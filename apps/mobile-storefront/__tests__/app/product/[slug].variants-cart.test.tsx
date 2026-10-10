@@ -13,12 +13,12 @@ import {
 } from '@/lib/product-route/product-detail-screen.fixtures';
 import {
   getLastMockProps,
-  mockCartStoreState,
   mockProductDetailsBody,
   mockStickyBottomActions,
   mockUseEffectivePrice,
   mockUseLocalSearchParams,
   mockUseProduct,
+  mockValidatedAddToCart,
   ProductDetailScreen,
   resetProductDetailScreenMocks,
 } from '../../../test-support/product/product-detail-screen.test-utils';
@@ -89,7 +89,7 @@ describe('ProductDetailScreen variant cart behavior', () => {
       });
     });
 
-    expect(mockCartStoreState.addItem).toHaveBeenCalledWith(
+    expect(mockValidatedAddToCart).toHaveBeenCalledWith(
       expect.objectContaining({
         price: 552000,
         slug: 'samsung-galaxy-s24',
@@ -171,7 +171,7 @@ describe('ProductDetailScreen variant cart behavior', () => {
       });
     });
 
-    expect(mockCartStoreState.addItem).toHaveBeenCalledWith(
+    expect(mockValidatedAddToCart).toHaveBeenCalledWith(
       expect.objectContaining({
         condition: 'Open Box',
         price: 829000,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import { Alert, Dimensions } from 'react-native';
+import { useCart } from '@/hooks/use-cart';
 import { useHaptics } from '@/hooks/use-haptics';
 import { resolveCartItemImageUrl } from '@/lib/cart-display';
 import { findMatchingConditionOffer } from '@/lib/product-condition-offers';
@@ -21,6 +22,15 @@ export function useProductDetailCartActions(
   const haptics = useHaptics();
   const [localQty, setLocalQty] = useState(cartState.quantityInCart.toString());
   const [showAddedToast, setShowAddedToast] = useState(false);
+  // Adds and quantity edits route through the validated cart mutations
+  // (stock, offer allocation, and strict serialized caps with rollback),
+  // never the raw store writers: the PDP controls stay usable while an
+  // offer line sits in the cart, and direct writes would bypass every
+  // check, including the sibling aggregate an initial add must fit.
+  const {
+    updateQuantity: validatedUpdateQuantity,
+    addToCart: validatedAddToCart,
+  } = useCart();
   const [flyingParticles, setFlyingParticles] = useState<
     { id: number; startX: number; startY: number }[]
   >([]);
@@ -74,7 +84,7 @@ export function useProductDetailCartActions(
     setLocalQty(cleanText);
     const num = Number.parseInt(cleanText, 10);
     if (!Number.isNaN(num) && num > 0 && cartState.cartItem) {
-      cartState.updateQuantity(cartState.cartItem.id, num);
+      validatedUpdateQuantity(cartState.cartItem.id, num);
     }
   };
 
@@ -83,7 +93,7 @@ export function useProductDetailCartActions(
     if (Number.isNaN(num) || num <= 0) {
       setLocalQty(cartState.quantityInCart.toString());
     } else if (cartState.cartItem) {
-      cartState.updateQuantity(cartState.cartItem.id, num);
+      validatedUpdateQuantity(cartState.cartItem.id, num);
     }
   };
 
@@ -133,28 +143,28 @@ export function useProductDetailCartActions(
           Boolean
         )
       : undefined;
-    // Non-variant condition offers price the line below catalog, but the
-    // server verifies against products.price. Retain the catalog basis so
-    // quote subtotals match the canonical subtotal.
+    // Non-variant condition offers price the line below catalog. The
+    // server verifies offer lines against the live offer price, so no
+    // catalog basis is retained: shipping quotes must use the selected
+    // offer price or they would display a tier the order rejects.
     const conditionOffer = !product.has_variants
-      ? findMatchingConditionOffer(product.offers, routeData.offerConditionKey)
+      ? findMatchingConditionOffer(
+          product.offers,
+          routeData.offerConditionKey,
+          routeData.routeOfferId,
+          routeData.suppressConditionOfferMatch
+        )
       : null;
-    cartState.addItem({
+    validatedAddToCart({
       product_id: product.id,
       slug: product.slug,
       variant_id: routeData.effectiveSelectedVariantId || undefined,
+      offer_id: conditionOffer?.id ?? undefined,
       variant_attributes:
         Object.keys(variantAttrs).length > 0 ? variantAttrs : undefined,
       name: product.name,
       brand: product.brand,
       price: purchaseState.effectivePrice,
-      catalog_price:
-        conditionOffer != null &&
-        typeof product.price === 'number' &&
-        Number.isFinite(product.price) &&
-        product.price >= 0
-          ? product.price
-          : undefined,
       compare_at_price: purchaseState.effectiveComparePrice,
       quantity: 1,
       image_url: resolveCartItemImageUrl({
@@ -190,7 +200,7 @@ export function useProductDetailCartActions(
       triggerFlyToCart(event);
     if (cartState.cartItem) {
       if (newQuantity <= 0) cartState.removeItem(cartState.cartItem.id);
-      else cartState.updateQuantity(cartState.cartItem.id, newQuantity);
+      else validatedUpdateQuantity(cartState.cartItem.id, newQuantity);
     } else if (newQuantity > 0) {
       handleAddToCart();
     }

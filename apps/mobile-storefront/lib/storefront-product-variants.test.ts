@@ -21,9 +21,11 @@ const mockRpcQuery = {
   range: (...args: [number, number]) => mockRange(...args),
 };
 mockRpcQuery.order.mockReturnValue(mockRpcQuery);
-const mockRpc = jest.fn<(...args: unknown[]) => typeof mockRpcQuery>(
-  () => mockRpcQuery
-);
+const mockRpc = jest.fn<
+  (
+    ...args: unknown[]
+  ) => typeof mockRpcQuery | Promise<{ data: unknown; error: unknown }>
+>(() => mockRpcQuery);
 
 jest.mock('@/lib/api', () => ({
   withSupabaseRetry: (operation: () => Promise<unknown>, options?: unknown) =>

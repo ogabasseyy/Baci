@@ -164,6 +164,56 @@ describe('SavedItemsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/product/test-phone');
   });
 
+  it('forwards exact saved match ids without the snapshot condition', () => {
+    const matchedItem = makeSavedItem({
+      slug: 'iphone-15',
+      match_variant_id: 'variant-blue-128',
+      match_offer_id: 'offer-open-box',
+      match_condition: 'open_box',
+    });
+    mockItems.mockReturnValue([matchedItem]);
+
+    render(<SavedItemsScreen />);
+
+    fireEvent.press(screen.getByText('Test Phone'));
+
+    // The persisted condition can be stale (the merchant reconditioned the
+    // option after saving); the PDP derives the live condition from the
+    // exact id instead.
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: {
+        slug: 'iphone-15',
+        variant_id: 'variant-blue-128',
+        offer_id: 'offer-open-box',
+      },
+    });
+  });
+
+  it('forwards the saved condition when no exact id was persisted', () => {
+    const matchedItem = makeSavedItem({
+      slug: 'iphone-15',
+      match_condition: 'used',
+    });
+    mockItems.mockReturnValue([matchedItem]);
+
+    render(<SavedItemsScreen />);
+
+    fireEvent.press(screen.getByText('Test Phone'));
+
+    // A condition without ids is a base-row match (match fields persist
+    // only from searchMatch): the base marker keeps the PDP on the saved
+    // base price instead of a same-condition offer.
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: {
+        slug: 'iphone-15',
+        condition: 'used',
+        match_base: '1',
+      },
+    });
+  });
+
   it('routes saved SKU-matrix products to detail selection instead of direct cart add', () => {
     const skuMatrixItem = makeSavedItem({
       name: 'iPhone 15',

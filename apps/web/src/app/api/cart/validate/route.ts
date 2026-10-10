@@ -3,6 +3,16 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/server';
 import { cartValidateSchema } from '@/schemas/cart';
+import {
+  fetchCartOfferPrices,
+  type OfferQueryResult,
+} from './cart-offer-prices';
+import { prepareCartValidationItems } from './prepare-cart-validation-items';
+import {
+  getCartValidationKey,
+  getInvalidOfferLineKey,
+  isOfferParentEligible,
+} from './resolve-cart-validation-offer-line';
 
 type CartProductRow = {
   id: string;
@@ -12,6 +22,9 @@ type CartProductRow = {
   stock_quantity: number | null;
   status: string | null;
   manage_stock: boolean | null;
+  has_condition_offers: boolean | null;
+  has_variants: boolean | null;
+  variant_model: string | null;
 };
 
 type CartVariantRow = {
@@ -20,34 +33,15 @@ type CartVariantRow = {
   price_override: number | string | null;
 };
 
-type CartValidationItem = {
-  id: string;
-  price: number | null;
-  variantId?: string;
-};
-
-const uuidRegex =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function normalizeVariantId(
-  item: { variantId?: string; variant_id?: string } | undefined
-) {
-  return item?.variantId || item?.variant_id || undefined;
-}
-
 function toPriceNumber(value: number | string | null | undefined) {
   const price = Number(value ?? 0);
   return Number.isFinite(price) ? price : 0;
 }
 
-function getCartValidationKey(id: string, variantId?: string) {
-  return variantId ? `${id}::${variantId}` : id;
-}
-
 /**
  * POST /api/cart/validate
  *
- * Body: { productIds?: string[], cartItems?: { id, price, variantId? }[] }
+ * Body: { productIds?: string[], cartItems?: { id, price, variantId?, offerId? }[] }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -76,17 +70,14 @@ export async function POST(request: NextRequest) {
     }
 
     const { productIds, cartItems } = parsed.data;
-    const hasCartItems = Array.isArray(cartItems) && cartItems.length > 0;
-    const validationItems: CartValidationItem[] = hasCartItems
-      ? cartItems.map((item) => ({
-          id: item.id,
-          price: item.price,
-          variantId: normalizeVariantId(item),
-        }))
-      : (productIds ?? []).map((id) => ({ id, price: null }));
-    const idsToValidate = validationItems.map((item) => item.id);
+    const {
+      validationItems,
+      validFormatIds,
+      invalidFormatIds,
+      validVariantIds,
+    } = prepareCartValidationItems(cartItems, productIds);
 
-    if (!idsToValidate.length) {
+    if (!validationItems.length) {
       return NextResponse.json({
         validProducts: [],
         invalidProductIds: [],
@@ -94,43 +85,30 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const validFormatIds: string[] = [];
-    const invalidFormatIds: string[] = [];
-    const validVariantIds = Array.from(
-      new Set(
-        validationItems
-          .map((item) => item.variantId)
-          .filter(
-            (variantId): variantId is string =>
-              typeof variantId === 'string' && uuidRegex.test(variantId)
-          )
-      )
-    );
-
-    for (const id of idsToValidate) {
-      const strId = String(id);
-      if (uuidRegex.test(strId)) {
-        validFormatIds.push(strId);
-      } else {
-        const safeId = strId.replace(/[\r\n]/g, '').slice(0, 50);
-        console.warn(`Cart contains invalid product ID format: "${safeId}"`);
-        invalidFormatIds.push(strId);
-      }
-    }
-
     const supabase = await createClient();
 
-    const [productsResult, variantsResult] = await Promise.all([
+    // Public-catalog intent: this lookup is deliberately unscoped by
+    // merchant — prices/stock/status are public data (identical values
+    // render on unauthenticated PDPs) and carts carry no merchant session.
+    // Merchant-scoped price enforcement lives in the orders route
+    // (computeOrderNegotiationDiscount + the order RPC), so validating a
+    // foreign active ID here cannot discount or misprice an order.
+    // Offer lines need the variant list too: the parent gate rejects
+    // stale offers on products that gained live variants.
+    const needsVariantList =
+      validVariantIds.length > 0 ||
+      validationItems.some((item) => !item.variantId && item.offerId);
+    const [productsResult, variantsResult, offerMap] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
             .from('products')
             .select(
-              'id, name, price, stock, stock_quantity, status, manage_stock'
+              'id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model'
             )
             .in('id', validFormatIds)
             .returns<CartProductRow[]>()
         : Promise.resolve({ data: null, error: null }),
-      validVariantIds.length > 0 && validFormatIds.length > 0
+      needsVariantList && validFormatIds.length > 0
         ? (supabase.rpc('get_storefront_product_variants', {
             p_product_ids: Array.from(new Set(validFormatIds)),
           }) as unknown as Promise<{
@@ -138,6 +116,15 @@ export async function POST(request: NextRequest) {
             error: { message: string } | null;
           }>)
         : Promise.resolve({ data: null, error: null }),
+      fetchCartOfferPrices(
+        (productId) =>
+          supabase.rpc('get_product_offers', {
+            p_product_id: productId,
+          }) as unknown as Promise<OfferQueryResult>,
+        validationItems
+      ).catch((error: unknown) =>
+        error instanceof Error ? error : new Error('Offer query failed')
+      ),
     ]);
 
     if (productsResult.error) {
@@ -159,6 +146,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (offerMap instanceof Error) {
+      console.error('Cart validation offer query error:', offerMap);
+      return NextResponse.json(
+        { error: `Failed to validate cart: ${offerMap.message}` },
+        { status: 500 }
+      );
+    }
+
     const products = productsResult.data || [];
     const variants = variantsResult.data || [];
 
@@ -168,6 +163,9 @@ export async function POST(request: NextRequest) {
     const variantMap = new Map(
       variants.map((variant) => [String(variant.id), variant])
     );
+    const productsWithLiveVariants = new Set(
+      variants.map((variant) => String(variant.product_id))
+    );
 
     const validProducts: {
       id: string;
@@ -176,11 +174,13 @@ export async function POST(request: NextRequest) {
       manage_stock: boolean;
       name: string;
       variantId?: string;
+      offerId?: string;
     }[] = [];
     const invalidProductIds: string[] = [...invalidFormatIds];
     const priceChanges: {
       id: string;
       variantId?: string;
+      offerId?: string;
       oldPrice: number;
       newPrice: number;
     }[] = [];
@@ -191,7 +191,9 @@ export async function POST(request: NextRequest) {
       const product = productMap.get(strId);
 
       if (product?.status !== 'active') {
-        if (uuidRegex.test(strId) && !invalidProductIds.includes(strId)) {
+        // Malformed ids arrive pre-seeded from invalidFormatIds, so the
+        // includes check alone covers both shapes without re-testing.
+        if (!invalidProductIds.includes(strId)) {
           invalidProductIds.push(strId);
         }
         continue;
@@ -202,9 +204,38 @@ export async function POST(request: NextRequest) {
         variant && String(variant.product_id) === strId;
 
       if (item.variantId && !variantBelongsToProduct) {
-        const invalidVariantKey = getCartValidationKey(strId, item.variantId);
+        const invalidVariantKey = getCartValidationKey(
+          strId,
+          item.variantId,
+          item.offerId
+        );
         if (!invalidProductIds.includes(invalidVariantKey)) {
           invalidProductIds.push(invalidVariantKey);
+        }
+        continue;
+      }
+
+      // Non-variant offer lines price from the live condition offer, not
+      // the parent: pricing them from products.price would silently
+      // replace the advertised offer price on every validation pass.
+      const offer =
+        !item.variantId && item.offerId
+          ? offerMap.get(`${strId}::${item.offerId}`)
+          : undefined;
+      const invalidOfferKey = getInvalidOfferLineKey({
+        strId,
+        variantId: item.variantId,
+        offerId: item.offerId,
+        submittedCondition: item.condition,
+        offer,
+        parentEligible: isOfferParentEligible(
+          product,
+          productsWithLiveVariants.has(strId)
+        ),
+      });
+      if (invalidOfferKey) {
+        if (!invalidProductIds.includes(invalidOfferKey)) {
+          invalidProductIds.push(invalidOfferKey);
         }
         continue;
       }
@@ -212,7 +243,7 @@ export async function POST(request: NextRequest) {
       const currentPrice = toPriceNumber(
         variantBelongsToProduct
           ? (variant.price_override ?? product.price)
-          : product.price
+          : (offer?.price ?? product.price)
       );
 
       validProducts.push({
@@ -220,17 +251,23 @@ export async function POST(request: NextRequest) {
         price: currentPrice,
         stock: getEffectiveStock(product),
         name: product.name,
-        manage_stock: Boolean(product.manage_stock),
+        manage_stock: product.manage_stock ?? true,
         ...(item.variantId ? { variantId: item.variantId } : {}),
+        ...(item.offerId ? { offerId: item.offerId } : {}),
       });
 
       if (item.price !== null && item.price !== currentPrice) {
-        const priceChangeKey = getCartValidationKey(strId, item.variantId);
+        const priceChangeKey = getCartValidationKey(
+          strId,
+          item.variantId,
+          item.offerId
+        );
         if (!seenPriceChangeKeys.has(priceChangeKey)) {
           seenPriceChangeKeys.add(priceChangeKey);
           priceChanges.push({
             id: strId,
             variantId: item.variantId,
+            offerId: item.offerId,
             oldPrice: item.price,
             newPrice: currentPrice,
           });

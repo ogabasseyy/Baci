@@ -35,6 +35,15 @@ const mockRpc =
       params: { p_variant_ids: string[] }
     ) => Promise<VariantsResponse>
   >();
+const mockGetOffers =
+  jest.fn<
+    (
+      productIds: string[]
+    ) => Promise<Record<
+      string,
+      Array<{ id: string; price: number | null; condition?: string | null }>
+    > | null>
+  >();
 const productQuery = {} as ProductQuery;
 const mockFrom = jest.fn(() => productQuery);
 
@@ -62,6 +71,10 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
+jest.mock('@/lib/fetch-storefront-product-offers', () => ({
+  getStorefrontProductOffersByProductIds: mockGetOffers,
+}));
+
 function createCartItem(overrides: Partial<CartItem> = {}): CartItem {
   return {
     id: 'line-1',
@@ -81,14 +94,16 @@ describe('repriceCartItems', () => {
     productQuery.eq.mockClear();
     productQuery.in.mockReset();
     mockRpc.mockReset();
+    mockGetOffers.mockReset();
     productQuery.in.mockResolvedValue({ data: [], error: null });
     mockRpc.mockResolvedValue({ data: [], error: null });
+    mockGetOffers.mockResolvedValue({});
   });
 
   it('skips catalog reads when the merchant scope is missing', async () => {
     const result = await repriceCartItems([createCartItem()], '');
 
-    expect(result).toEqual({ priceById: {}, changes: [] });
+    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -96,7 +111,7 @@ describe('repriceCartItems', () => {
   it('skips catalog reads when the cart is empty even with a valid merchant', async () => {
     const result = await repriceCartItems([], 'merchant-1');
 
-    expect(result).toEqual({ priceById: {}, changes: [] });
+    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -185,7 +200,7 @@ describe('repriceCartItems', () => {
 
     const result = await repriceCartItems([createCartItem()], 'merchant-1');
 
-    expect(result).toEqual({ priceById: {}, changes: [] });
+    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockWarn).toHaveBeenCalledWith(
       'Reprice products lookup failed; keeping cart prices',
@@ -315,6 +330,175 @@ describe('repriceCartItems', () => {
     // The offer line is left untouched; the base line reprices to live price.
     expect(result.priceById).toEqual({ 'base-line': 410000 });
     expect(result.changes.map((change) => change.id)).toEqual(['base-line']);
+  });
+
+  it('reprices exact offer lines from the live offer price', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 280000 }],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(mockGetOffers).toHaveBeenCalledWith(['offer-product']);
+    expect(result.priceById).toEqual({ 'offer-line': 280000 });
+    expect(result.changes).toEqual([
+      {
+        id: 'offer-line',
+        name: 'iPhone 13',
+        oldPrice: 300000,
+        newPrice: 280000,
+      },
+    ]);
+  });
+
+  it('refreshes a drifted offer condition together with the price', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 280000,
+      condition: 'used',
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-7', price: 280000, condition: 'refurbished' },
+      ],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    // Same price, but the condition moved: checkout would reject the
+    // stale condition, so the line must surface as changed with the
+    // live condition ready to apply.
+    expect(result.priceById).toEqual({ 'offer-line': 280000 });
+    expect(result.conditionById).toEqual({ 'offer-line': 'refurbished' });
+    expect(result.changes).toEqual([
+      {
+        id: 'offer-line',
+        name: 'iPhone 13',
+        oldPrice: 280000,
+        newPrice: 280000,
+      },
+    ]);
+  });
+
+  it('accepts a zero live offer price', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 0 }],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({ 'offer-line': 0 });
+    expect(result.changes).toEqual([
+      {
+        id: 'offer-line',
+        name: 'iPhone 13',
+        oldPrice: 300000,
+        newPrice: 0,
+      },
+    ]);
+  });
+
+  it('skips offer lines (but not base lines) when the offer lookup fails', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+    });
+    const baseLine = createCartItem({ id: 'base-line', price: 390000 });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+        { id: 'product-1', price: 410000, has_condition_offers: false },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue(null);
+
+    const result = await repriceCartItems([offerLine, baseLine], 'merchant-1');
+
+    // The offer line keeps its cart price (no base-price corruption);
+    // the base line still reprices.
+    expect(result.priceById).toEqual({ 'base-line': 410000 });
+    expect(result.changes.map((change) => change.id)).toEqual(['base-line']);
+  });
+
+  it('skips an offer line whose offer vanished or belongs to another product', async () => {
+    const goneLine = createCartItem({
+      id: 'gone-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-gone',
+      price: 300000,
+    });
+    const foreignLine = createCartItem({
+      id: 'foreign-line',
+      product_id: 'other-product',
+      offer_id: 'offer-7',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+        { id: 'other-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 280000 }],
+      'other-product': [],
+    });
+
+    const result = await repriceCartItems(
+      [goneLine, foreignLine],
+      'merchant-1'
+    );
+
+    expect(result.priceById).toEqual({});
+    expect(result.changes).toEqual([]);
+  });
+
+  it('does not fetch offers when no lines carry an offer id', async () => {
+    const baseLine = createCartItem({ id: 'base-line', price: 390000 });
+    productQuery.in.mockResolvedValue({
+      data: [{ id: 'product-1', price: 410000, has_condition_offers: false }],
+      error: null,
+    });
+
+    await repriceCartItems([baseLine], 'merchant-1');
+
+    expect(mockGetOffers).not.toHaveBeenCalled();
   });
 
   it('still reprices a variant line even when its product has condition offers', async () => {

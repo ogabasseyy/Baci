@@ -93,6 +93,84 @@ describe('computeOrderNegotiationDiscount', () => {
     });
   });
 
+  it('prices offer lines from the live offer instead of the parent catalog', async () => {
+    // Parent catalog is 5000 but the live offer is 1000. Client offers 980 →
+    // reduction 20 = 2% floor; +7.5% VAT = 21.5. Against the parent price
+    // this would reject as negotiated_price_below_floor.
+    const { supabase } = buildSupabaseMock({
+      products: [
+        sProduct({
+          id: 'p-phone',
+          name: 'iPhone 13',
+          brand: 'Apple',
+          price: 5000,
+        }),
+      ],
+    });
+
+    await expect(
+      computeOrderNegotiationDiscount({
+        items: [
+          {
+            product_id: 'p-phone',
+            offer_id: 'o-used',
+            quantity: 1,
+            price: 980,
+          },
+        ],
+        merchantId: 'merchant-1',
+        offerPrices: new Map([['p-phone::o-used', 1000]]),
+        supabase: supabase as never,
+        vatRegistered: true,
+      })
+    ).resolves.toEqual({
+      lineDiscounts: [
+        {
+          lineId: 1,
+          merchandiseDiscount: 20,
+          productId: 'p-phone',
+          vatRelief: 1.5,
+          variantId: null,
+        },
+      ],
+      totalDiscount: 21.5,
+      rejectionCode: null,
+    });
+  });
+
+  it('rejects client prices below the live offer floor', async () => {
+    const { supabase } = buildSupabaseMock({
+      products: [
+        sProduct({
+          id: 'p-phone',
+          name: 'iPhone 13',
+          brand: 'Apple',
+          price: 5000,
+        }),
+      ],
+    });
+
+    await expect(
+      computeOrderNegotiationDiscount({
+        items: [
+          {
+            product_id: 'p-phone',
+            offer_id: 'o-used',
+            quantity: 1,
+            price: 900,
+          },
+        ],
+        merchantId: 'merchant-1',
+        offerPrices: new Map([['p-phone::o-used', 1000]]),
+        supabase: supabase as never,
+        vatRegistered: true,
+      })
+    ).resolves.toEqual({
+      totalDiscount: 0,
+      rejectionCode: 'negotiated_price_below_floor',
+    });
+  });
+
   it('throws a CanonicalOrderSubtotalLoadError preserving pgCode when the products load fails (22P02)', async () => {
     const { supabase } = buildSupabaseMock({
       products: null,

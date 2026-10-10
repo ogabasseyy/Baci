@@ -1,6 +1,7 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
+import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 type Parent = {
   price?: number | null;
@@ -15,6 +16,8 @@ type Variant = {
   compare_at_price?: number | null;
   condition?: string | null;
   inventory_tracking_policy?: string | null;
+  effective_policy?: string | null;
+  available_units?: number | null;
   stock_quantity?: number | null;
 };
 type Offer = { price?: number | null; stock_quantity?: number | null };
@@ -46,9 +49,9 @@ export function resolvePublicProductOption(
       price(parent.price))
     : (price(offer?.price) ?? price(parent.price));
   const stockQuantity = variant
-    ? variant.inventory_tracking_policy === 'serialized_strict'
-      ? (variant.stock_quantity ?? 0)
-      : (variant.stock_quantity ?? getEffectiveStock(parent))
+    ? (resolveSerializedVariantStock(variant) ??
+      variant.stock_quantity ??
+      getEffectiveStock(parent))
     : offer
       ? getEffectiveStock(offer)
       : getEffectiveStock(parent);

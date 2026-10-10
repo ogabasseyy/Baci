@@ -419,6 +419,24 @@ describe('orderCreateSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects offer IDs on quiz-voucher lines', () => {
+    for (const voucher of [
+      { voucher_token: 'quiz-token' },
+      { voucherToken: 'quiz-token' },
+      { voucher_award_id: 'quiz-award' },
+      { voucherAwardId: 'quiz-award' },
+    ]) {
+      for (const offer of [{ offer_id: 'o1' }, { offerId: 'o1' }]) {
+        const result = orderCreateSchema.safeParse({
+          ...validOrder,
+          items: [{ ...validOrder.items[0], ...voucher, ...offer }],
+        });
+
+        expect(result.success).toBe(false);
+      }
+    }
+  });
+
   it('rejects mismatched voucher award ID aliases', () => {
     const result = orderCreateSchema.safeParse({
       ...validOrder,
@@ -447,6 +465,67 @@ describe('orderCreateSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('rejects mismatched offer ID aliases', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      items: [
+        {
+          ...validOrder.items[0],
+          offerId: '55555555-5555-4555-8555-555555555555',
+          offer_id: '66666666-6666-4666-8666-666666666666',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts matching offer ID aliases', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      items: [
+        {
+          ...validOrder.items[0],
+          offerId: '55555555-5555-4555-8555-555555555555',
+          offer_id: '55555555-5555-4555-8555-555555555555',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects lines combining a variant with a condition offer', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      items: [
+        {
+          ...validOrder.items[0],
+          variantId: '77777777-7777-4777-8777-777777777777',
+          offerId: '55555555-5555-4555-8555-555555555555',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('caps order items at 200 lines', () => {
+    const line = validOrder.items[0];
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        items: Array.from({ length: 200 }, () => ({ ...line })),
+      }).success
+    ).toBe(true);
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        items: Array.from({ length: 201 }, () => ({ ...line })),
+      }).success
+    ).toBe(false);
   });
 
   it('accepts null variant name aliases as absent optional fields', () => {

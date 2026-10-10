@@ -1,32 +1,12 @@
 import { z } from 'zod';
-
-function toFiniteNumber(value: unknown) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : Number.NaN;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return value;
-    }
-
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : value;
-  }
-
-  return value;
-}
-
-const NumberLikeSchema = z.preprocess(toFiniteNumber, z.number());
-const NullableNumberLikeSchema = z.preprocess(
-  (value) => (value === null ? null : toFiniteNumber(value)),
-  z.number().nullable()
-);
-const NullableNonnegativeIntegerLikeSchema = z.preprocess(
-  (value) => (value === null ? null : toFiniteNumber(value)),
-  z.number().int().nonnegative().nullable()
-);
+import {
+  NullableNonnegativeIntegerLikeSchema,
+  NullableNumberLikeSchema,
+  NumberLikeSchema,
+} from './number-like-schemas';
+import { ProductConditionOfferSchema } from './product-condition-offer-schema';
+import { ProductImageEntrySchema } from './product-image-entry-schema';
+import { ProductVariantSchema } from './product-variant-schema';
 
 export const MerchantRowSchema = z.object({
   id: z.uuid(),
@@ -70,38 +50,6 @@ const VariantAttributeEntrySchema = z.object({
   options: z.array(z.string()),
 });
 
-const ProductImageEntrySchema = z.union([
-  z.string(),
-  z
-    .object({
-      url: z.string().optional(),
-      src: z.string().optional(),
-      uri: z.string().optional(),
-    })
-    .refine((value) => Boolean(value.url || value.src || value.uri), {
-      message: 'Expected at least one image source (url, src, or uri)',
-    }),
-]);
-
-const ProductVariantSchema = z.object({
-  id: z.string(),
-  product_id: z.string().optional(),
-  merchant_id: z.string().optional(),
-  name: z.string().optional(),
-  condition: z.string().nullable().optional(),
-  sku: z.string().nullable().optional(),
-  price: NumberLikeSchema.optional(),
-  compare_at_price: NullableNumberLikeSchema.optional(),
-  price_override: NullableNumberLikeSchema.optional(),
-  price_modifier: NullableNumberLikeSchema.optional(),
-  image: z.string().nullable().optional(),
-  primary_image: z.string().nullable().optional(),
-  images: z.array(ProductImageEntrySchema).nullable().optional(),
-  in_stock: z.boolean().nullable().optional(),
-  stock_quantity: NullableNonnegativeIntegerLikeSchema.optional(),
-  attributes: z.record(z.string(), z.unknown()).nullable().optional(),
-});
-
 const ProductColorSchema = z.union([
   z.string(),
   z.object({
@@ -109,17 +57,6 @@ const ProductColorSchema = z.union([
     value: z.string().optional(),
   }),
 ]);
-
-const ProductConditionOfferSchema = z.object({
-  id: z.string(),
-  condition: z.string(),
-  price: NumberLikeSchema,
-  compare_at_price: NullableNumberLikeSchema.optional(),
-  stock_quantity: NullableNonnegativeIntegerLikeSchema.optional(),
-  images: z.array(ProductImageEntrySchema).nullable().optional(),
-  condition_notes: z.string().nullable().optional(),
-  grade: z.enum(['A', 'B', 'C', 'D']).nullable().optional(),
-});
 
 const VariantAttributeRecordSchema = z.record(
   z.string(),
@@ -151,6 +88,8 @@ export const ProductRowSchema = z.object({
   manage_stock: z.boolean().nullable().optional(),
   stock: NullableNonnegativeIntegerLikeSchema.optional(),
   stock_quantity: NullableNonnegativeIntegerLikeSchema.optional(),
+  base_effective_policy: z.string().nullable().optional(),
+  base_available_units: NullableNonnegativeIntegerLikeSchema.optional(),
   status: z.string().optional(),
   specifications: z
     .union([
@@ -193,6 +132,7 @@ export const ProductRowSchema = z.object({
     .optional(),
   has_condition_offers: z.boolean().nullable().optional(),
   offers: z.array(ProductConditionOfferSchema).nullable().optional(),
+  offers_hydration_failed: z.boolean().nullable().optional(),
   categories: z
     .union([
       z.array(

@@ -21,6 +21,7 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(),
   },
 }));
 
@@ -43,9 +44,17 @@ describe('useCart stock validation', () => {
   });
 
   it('blocks add-to-cart when split voucher lines already consume available stock', async () => {
-    const single = jest
-      .fn()
-      .mockResolvedValue({ data: { manage_stock: true, stock_quantity: 2 } });
+    const single = jest.fn().mockResolvedValue({
+      data: {
+        manage_stock: true,
+        stock_quantity: 2,
+        merchant_id: 'merchant-1',
+      },
+    });
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [{ id: 'variant-128', stock_quantity: 2, effective_policy: 'off' }],
+      error: null,
+    });
     const eq = jest.fn(() => ({ single }));
     const select = jest.fn(() => ({ eq }));
     const productQuery = { select } as unknown as ReturnType<
@@ -104,6 +113,74 @@ describe('useCart stock validation', () => {
       expect(useCartStore.getState().items).toEqual(
         expect.not.arrayContaining([expect.objectContaining({ price: 220000 })])
       );
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('validates an offer add against the offer projection', async () => {
+    const single = jest.fn().mockResolvedValue({
+      data: {
+        manage_stock: true,
+        stock_quantity: 0,
+        merchant_id: 'merchant-1',
+      },
+    });
+    const eq = jest.fn(() => ({ single }));
+    const select = jest.fn(() => ({ eq }));
+    const productQuery = { select } as unknown as ReturnType<
+      typeof supabase.from
+    >;
+    jest.mocked(supabase.from).mockReturnValue(productQuery);
+    (supabase.rpc as jest.Mock).mockImplementation((fn: string) =>
+      Promise.resolve(
+        fn === 'get_storefront_product_base_inventory'
+          ? {
+              data: [{ product_id: 'product-1', effective_policy: 'legacy' }],
+              error: null,
+            }
+          : {
+              data: [{ offer_id: 'offer-7', stock_quantity: 2 }],
+              error: null,
+            }
+      )
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      act(() => {
+        result.current.addToCart({
+          product_id: 'product-1',
+          slug: 'redmi-note-14',
+          offer_id: 'offer-7',
+          name: 'Redmi Note 14',
+          price: 180000,
+          quantity: 1,
+        });
+      });
+
+      await waitFor(() => {
+        expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
+          p_product_id: 'product-1',
+        });
+      });
+      await waitFor(() => {
+        expect(result.current.isAddingToCart).toBe(false);
+      });
+      expect(useCartStore.getState().items).toEqual([
+        expect.objectContaining({ offer_id: 'offer-7', price: 180000 }),
+      ]);
     } finally {
       unmount();
       queryClient.clear();

@@ -43,6 +43,22 @@ describe('rate-limit route matching', () => {
     ).toBe(100);
   });
 
+  it('caps the expensive search-assist AI call below the default bucket', () => {
+    expect(getRateLimitConfig('/api/search/assist')).toMatchObject({
+      pattern: '/api/search/assist',
+      config: { maxRequests: 5, windowMs: 60_000 },
+    });
+  });
+
+  it('bounds product-request intake per IP below the merchant DB budget', () => {
+    expect(
+      getRateLimitConfig('/api/storefront/product-requests')
+    ).toMatchObject({
+      pattern: '/api/storefront/product-requests',
+      config: { maxRequests: 10, windowMs: 3_600_000 },
+    });
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

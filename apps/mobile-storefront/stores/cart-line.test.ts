@@ -63,6 +63,32 @@ describe('cart-line helpers', () => {
     ).toBe(true);
   });
 
+  it('splits cart lines by condition-offer identity', () => {
+    const nonVariantBase: CartItem = { ...baseItem, variant_id: undefined };
+    const nonVariantIncoming: Omit<CartItem, 'id'> = {
+      ...incomingBaseItem,
+      variant_id: undefined,
+    };
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming, offer_id: 'offer-8' }
+      )
+    ).toBe(false);
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming, offer_id: 'offer-7' }
+      )
+    ).toBe(true);
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming }
+      )
+    ).toBe(false);
+  });
+
   it('merges existing quantity while preserving negotiated and assurance state', () => {
     expect(
       mergeExistingCartItem(
@@ -83,7 +109,8 @@ describe('cart-line helpers', () => {
           price: 210000,
           quantity: 2,
           max_quantity: 3,
-        }
+        },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
       )
     ).toMatchObject({
       id: 'line-1',
@@ -93,6 +120,48 @@ describe('cart-line helpers', () => {
       negotiationStatus: 'accepted',
       hasAssurance: true,
       assuranceRate: 0.05,
+    });
+  });
+
+  it('forces voucher merges to opt out without an explicit choice', () => {
+    expect(
+      mergeExistingCartItem(
+        { ...baseItem, voucher_award_id: 'award-1', hasAssurance: true },
+        { ...incomingBaseItem, voucher_award_id: 'award-1' },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
+      )
+    ).toMatchObject({ quantity: 1, hasAssurance: false });
+    expect(
+      mergeExistingCartItem(
+        { ...baseItem, voucher_award_id: 'award-1', hasAssurance: true },
+        {
+          ...incomingBaseItem,
+          voucher_award_id: 'award-1',
+          hasAssurance: true,
+        },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
+      )
+    ).toMatchObject({ quantity: 1, hasAssurance: true });
+  });
+
+  it('preserves stored attributes when a wildcard-matched add omits them', () => {
+    const incoming: Omit<CartItem, 'id'> = {
+      ...incomingBaseItem,
+      color: undefined,
+      storage: undefined,
+      condition: undefined,
+    };
+    expect(isSameCartLine(baseItem, incoming)).toBe(true);
+    expect(
+      mergeExistingCartItem(baseItem, incoming, {
+        smartCartProEnabled: false,
+        merchantSlug: 'ogabassey',
+      })
+    ).toMatchObject({
+      quantity: 2,
+      color: 'Midnight Black',
+      storage: '128GB',
+      condition: 'New',
     });
   });
 });

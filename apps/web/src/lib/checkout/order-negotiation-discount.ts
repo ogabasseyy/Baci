@@ -34,6 +34,7 @@ type NegotiationCatalogRow = {
 type NegotiationDiscountItem = {
   condition?: string | null;
   product_id?: string;
+  offer_id?: string | null;
   variant_attributes?: Record<string, string> | null;
   variant_id?: string | null;
   quantity: number;
@@ -140,11 +141,16 @@ function applyPersistedLineOccurrenceKeys(
 export async function computeOrderNegotiationDiscount({
   items,
   merchantId,
+  offerPrices,
   supabase,
   vatRegistered,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
+  // Live offer prices by `${product_id}::${offer_id}`, loaded once by the
+  // route alongside offer verification. Offer lines price from the live
+  // offer (what the RPC charges), not the parent catalog price.
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
@@ -241,8 +247,18 @@ export async function computeOrderNegotiationDiscount({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
+    // Mirror the RPC precedence (variant override, then live offer, then
+    // parent): the key pins the offer to this line's product, so a
+    // cross-product offer_id falls through to the parent price and the
+    // mismatch fails at the RPC's invalid_offer guard instead.
+    const offerPrice =
+      item.offer_id && item.product_id
+        ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
+        : undefined;
     lines.push({
-      catalogUnitPrice: Number(variant?.price_override ?? product.price ?? 0),
+      catalogUnitPrice: Number(
+        variant?.price_override ?? offerPrice ?? product.price ?? 0
+      ),
       clientUnitPrice: Number(item.price),
       lineId,
       productId: item.product_id,

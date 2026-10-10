@@ -3,9 +3,10 @@ import { Image } from 'expo-image';
 import { Platform, Pressable, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Colors, { BRAND, withAlpha } from '@/constants/Colors';
-import { formatPrice, formatProductConditionDisplay } from '@/types/product';
+import { formatProductConditionDisplay } from '@/types/product';
 import { getProductCardShadowStyles } from '../ProductCard.shadows';
 import styles from '../ProductCard.styles';
+import { formatSearchCardPrice } from './search-price';
 import type { GridProductCardProps } from './types';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -61,7 +62,7 @@ export default function GridProductCard({
       onPress={handlePress}
       onPressIn={handleAnimateIn}
       onPressOut={handleAnimateOut}
-      accessibilityLabel={`${product.name}, ${formatPrice(product.price)}`}
+      accessibilityLabel={`${product.name}, ${formatSearchCardPrice(product)}`}
       accessibilityRole="button"
     >
       <View style={[styles.imageWrapper, { backgroundColor: colors.muted }]}>
@@ -202,7 +203,7 @@ export default function GridProductCard({
 
         <View style={[styles.priceRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.gridPrice, { color: BRAND.primary }]}>
-            {formatPrice(product.price)}
+            {formatSearchCardPrice(product)}
           </Text>
           <Text style={[styles.detailsText, { color: colors.text }]}>
             Details

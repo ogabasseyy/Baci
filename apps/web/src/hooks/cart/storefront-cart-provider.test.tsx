@@ -132,6 +132,26 @@ describe('StorefrontCartProvider', () => {
     expect(result.current.cart[0]?.quizAwardId).toBe('award-1');
   });
 
+  it('treats a null manage_stock product as managed by the out-of-stock guard', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // Legacy NULL rows are managed inventory: a zero-stock line is blocked.
+    // The NULL arrives at runtime though the product type is boolean.
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, manage_stock: null as unknown as boolean, stock: 0 },
+        1
+      );
+    });
+    expect(result.current.totalItems).toBe(0);
+  });
+
   it('prunes expired voucher lines during mount hydration and persists the result', async () => {
     localStorageMock.setItem(
       'baci-cart-ogabassey-guest',
@@ -343,6 +363,152 @@ describe('StorefrontCartProvider', () => {
     ).toBe(3);
   });
 
+  it('caps merged offer adds at the carried allocation', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const offerProduct = { ...mockProduct, stock: 1 };
+    act(() => {
+      result.current.addToCart(offerProduct, 1, { offerId: 'offer-1' });
+      result.current.addToCart(offerProduct, 1, { offerId: 'offer-1' });
+    });
+
+    // Two successive adds must not exceed the single-unit allocation
+    // checkout will reserve.
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cart[0]?.quantity).toBe(1);
+  });
+
+  it('caps fresh offer adds and offer updates at the carried allocation', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const offerProduct = { ...mockProduct, stock: 2 };
+    act(() => {
+      result.current.addToCart(offerProduct, 5, { offerId: 'offer-1' });
+    });
+    expect(result.current.cart[0]?.quantity).toBe(2);
+
+    const targetId = result.current.cart[0]?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetId as string, 9);
+    });
+    expect(
+      result.current.cart.find((item) => item.cartItemId === targetId)?.quantity
+    ).toBe(2);
+  });
+
+  it('rejects a strict serialized sibling once the shared pool is claimed', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // One base unit, two offers each advertising one: the second line
+    // must not land or order creation rejects it at checkout.
+    const strictProduct = {
+      ...mockProduct,
+      stock: 1,
+      stock_quantity: 1,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+    });
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+    });
+
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cart[0]?.offerId).toBe('offer-a');
+    expect(result.current.cart[0]?.quantity).toBe(1);
+  });
+
+  it('shares strict pool headroom across merged adds and updates', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const strictProduct = {
+      ...mockProduct,
+      stock: 2,
+      stock_quantity: 2,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+    });
+    expect(result.current.cart).toHaveLength(2);
+
+    // Merging into A cannot exceed the pool minus B's unit.
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+    });
+    expect(
+      result.current.cart.find((item) => item.offerId === 'offer-a')?.quantity
+    ).toBe(1);
+
+    // Bumping B cannot exceed the pool minus A's unit either.
+    const targetB = result.current.cart.find(
+      (item) => item.offerId === 'offer-b'
+    )?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetB as string, 2);
+    });
+    expect(
+      result.current.cart.find((item) => item.offerId === 'offer-b')?.quantity
+    ).toBe(1);
+  });
+
+  it('caps unmanaged offer lines at the carried allocation', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // Order creation enforces finite offer scalars even when the parent
+    // is unmanaged, so the cart must cap these lines too — only
+    // non-offer unmanaged lines skip stock caps.
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, manage_stock: false, stock: 1 },
+        3,
+        { offerId: 'offer-1' }
+      );
+    });
+
+    expect(result.current.cart[0]?.quantity).toBe(1);
+
+    const targetId = result.current.cart[0]?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetId as string, 5);
+    });
+    expect(
+      result.current.cart.find((item) => item.cartItemId === targetId)?.quantity
+    ).toBe(1);
+  });
+
   it('defers validation until interaction when requested', async () => {
     vi.useFakeTimers();
 
@@ -509,5 +675,88 @@ describe('StorefrontCartProvider', () => {
       },
       variantId: 'iphone15-openbox-128-black-esim',
     });
+  });
+
+  it('gates a quick add on the default serialized variant units, not parent stock', async () => {
+    const serializedProduct = {
+      ...mockProduct,
+      id: 'serial-1',
+      has_variants: true,
+      manage_stock: true,
+      stock: 0,
+      price: 900000,
+      variants: [
+        {
+          id: 'serial-1-strict',
+          product_id: 'serial-1',
+          merchant_id: 'merch-1',
+          condition: 'new' as const,
+          attributes: { storage: '128GB' },
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 2,
+        },
+      ],
+    };
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(serializedProduct, 1);
+    });
+
+    expect(result.current.totalItems).toBe(1);
+    expect(result.current.cart[0]).toMatchObject({
+      id: 'serial-1',
+      variantId: 'serial-1-strict',
+      stock: 2,
+    });
+  });
+
+  it('still rejects a quick add when the default serialized variant has no units', async () => {
+    const depletedProduct = {
+      ...mockProduct,
+      id: 'serial-2',
+      has_variants: true,
+      manage_stock: true,
+      stock: 9,
+      price: 900000,
+      variants: [
+        {
+          id: 'serial-2-strict',
+          product_id: 'serial-2',
+          merchant_id: 'merch-1',
+          condition: 'new' as const,
+          attributes: { storage: '128GB' },
+          stock_quantity: 9,
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+        },
+      ],
+    };
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(depletedProduct, 1);
+    });
+
+    expect(result.current.totalItems).toBe(0);
   });
 });

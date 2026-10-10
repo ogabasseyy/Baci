@@ -36,6 +36,12 @@ export {
   toSentenceCaseSupplierName,
 } from './transaction-review-inputs';
 export { getSupplierNameFromMetadata } from './transaction-review-row-helpers';
+export {
+  filterTransactionOrders,
+  splitTransactionSearchTerms,
+  TRANSACTION_REVIEW_MAX_SEARCH_TERM_LENGTH,
+  TRANSACTION_REVIEW_MAX_SEARCH_TERMS,
+} from './transaction-review-search-terms';
 export type {
   TransactionReviewItem,
   TransactionReviewOrder,
@@ -160,6 +166,9 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
           item.quantity,
           item.product_id,
           item.variant_id,
+          item.offer_id,
+          item.offer_grade,
+          item.offer_condition_notes,
           variant?.sku,
           variant?.condition,
           collectStrings(variant?.attributes),
@@ -188,6 +197,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
           });
 
           return {
+            condition: item.condition ?? null,
             costPrice: resolvedUnit.costPrice,
             costSource: resolvedUnit.costSource,
             id:
@@ -197,6 +207,9 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
             identifierValue: resolvedUnit.identifierValue,
             imeiValues: resolvedUnit.imeiValues,
             name: item.name ?? 'Product',
+            offerId: item.offer_id ?? null,
+            offerGrade: item.offer_grade ?? null,
+            offerConditionNotes: item.offer_condition_notes ?? null,
             orderItemId: item.id,
             productId: item.product_id,
             productMatchStatus: item.product_match_status ?? null,
@@ -251,49 +264,4 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
       total: toFiniteNumberOrNull(order.total) ?? 0,
     };
   });
-}
-
-// Mirror of the search RPC's normalization
-// (20261008174300_search_mobile_admin_transaction_review_orders.sql): the
-// server distinct-caps terms to bound planning cost, so the client applies
-// the same terms before sending AND before refining. Otherwise the server
-// would match a weakened subset, fill its cap with newer subset matches,
-// and hide an older order matching the full query. Both callers of this
-// splitter (the RPC sender and the refinement filter) stay aligned by
-// construction. Terms are case-folded before dedup, mirroring the
-// server's lower() DISTINCT; sort-order parity with the server holds for
-// ASCII terms, so non-ASCII queries past the term cap may still select a
-// different subset (database collation vs JS sort).
-export const TRANSACTION_REVIEW_MAX_SEARCH_TERMS = 10;
-export const TRANSACTION_REVIEW_MAX_SEARCH_TERM_LENGTH = 60;
-
-export function splitTransactionSearchTerms(searchQuery: string) {
-  const terms = [
-    ...new Set(
-      searchQuery
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((term) =>
-          term.slice(0, TRANSACTION_REVIEW_MAX_SEARCH_TERM_LENGTH).toLowerCase()
-        )
-    ),
-  ];
-  terms.sort();
-  return terms.slice(0, TRANSACTION_REVIEW_MAX_SEARCH_TERMS);
-}
-
-export function filterTransactionOrders(
-  orders: TransactionReviewOrder[],
-  searchQuery: string
-) {
-  const terms = splitTransactionSearchTerms(searchQuery.toLowerCase());
-
-  if (terms.length === 0) {
-    return orders;
-  }
-
-  return orders.filter((order) =>
-    terms.every((term) => order.searchText.includes(term))
-  );
 }

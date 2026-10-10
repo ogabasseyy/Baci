@@ -19,6 +19,12 @@ vi.mock('@/lib/storefront-search', () => ({
   getStorefrontSearchProducts: vi.fn(),
 }));
 
+vi.mock('@/lib/storefront-search-refined-products', () => ({
+  getStorefrontSearchFacets: vi.fn(),
+}));
+
+import { getStorefrontSearchFacets } from '@/lib/storefront-search-refined-products';
+
 const mockHeaders = vi.fn();
 vi.mock('next/headers', () => ({
   headers: () => mockHeaders(),
@@ -74,7 +80,47 @@ describe('loadSearchPageData', () => {
     vi.mocked(getRequestScopedMerchant).mockReset();
     mockGetStorefrontSearchProducts.mockReset();
     mockHeaders.mockReset();
+    vi.mocked(getStorefrontSearchFacets).mockReset();
+    vi.mocked(getStorefrontSearchFacets).mockResolvedValue({
+      brands: [],
+      categories: [],
+      conditions: [],
+      minPrice: null,
+      maxPrice: null,
+    });
     mockNotFound.mockReset();
+  });
+
+  it('starts filters while products are still loading', async () => {
+    mockStorefrontContext();
+    let resolveProducts!: (value: never) => void;
+    mockGetStorefrontSearchProducts.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveProducts = resolve;
+      })
+    );
+    const loading = loadSearch({ q: 'iphone' });
+    await vi.waitFor(() =>
+      expect(getStorefrontSearchFacets).toHaveBeenCalled()
+    );
+    resolveProducts(searchPage() as never);
+    const data = await loading;
+    expect(data.searchResult?.products).toHaveLength(20);
+    expect(data.facetError).toBe(false);
+  });
+
+  it('keeps results available when filters fail', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce(
+      searchPage() as never
+    );
+    vi.mocked(getStorefrontSearchFacets).mockRejectedValueOnce(
+      new Error('offline')
+    );
+    const data = await loadSearch({ q: 'iphone' });
+    expect(data.searchFailed).toBe(false);
+    expect(data.searchResult?.products).toHaveLength(20);
+    expect(data.facetError).toBe(true);
   });
 
   it('loads a page-less URL without tracking a new search', async () => {
@@ -175,6 +221,24 @@ describe('loadSearchPageData', () => {
     const data = await loadSearch({ q: 'iphon', page: '2' });
 
     expect(data.redirectHref).toBe('/ogabassey/search?q=iphon&page=1');
+  });
+
+  it('clamps overbound pages on the unadjusted probe total', async () => {
+    mockStorefrontContext();
+    // One first-page row vanished mid-read: the visible count is a full
+    // page short of the ranked total, but the last page still holds rows.
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce(
+      searchPage({
+        count: 20,
+        totalCount: 21,
+        products: [],
+        productIds: [],
+      }) as never
+    );
+
+    const data = await loadSearch({ q: 'iphone', page: '101' });
+
+    expect(data.redirectHref).toBe('/ogabassey/search?q=iphone&page=2');
   });
 
   it('steps an invalid page back instead of looping on it', async () => {

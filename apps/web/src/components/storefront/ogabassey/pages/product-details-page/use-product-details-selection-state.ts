@@ -3,6 +3,7 @@
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
 import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
+import { resolveProductDetailsRouteSelection } from './product-details-route-selection';
 import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
@@ -11,7 +12,6 @@ import {
   resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
-  resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
 import type { Product } from '../../types';
 import {
@@ -83,29 +83,23 @@ export function useProductDetailsSelectionState(
         ],
         normalizeCanonicalProductCondition
       );
-  const rawConditionParam = searchParams.get('condition');
   const usesVariantRouteSelection = Boolean(productData.variants?.length);
-  const routeSelectionResolution = usesVariantRouteSelection
-    ? resolveVariantSelectionParamResolution(
-        {
-          ...variantResolutionProduct,
-          attributeAxes: effectiveAxes,
-          variant_attributes: serverProduct.variant_attributes,
-        },
-        searchParams
-      )
-    : null;
-  const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
-  const routeSelectionAttributes = routeSelectionInput.attributes || {};
-  const routeSelectionAttributesKey = JSON.stringify(routeSelectionAttributes);
-  const routeConditionSource =
-    routeSelectionInput.condition ??
-    (!usesVariantRouteSelection ? rawConditionParam : undefined);
-  const routeCondition = normalizeCanonicalProductCondition(routeConditionSource);
-  const routeVariantId =
-    usesVariantRouteSelection && routeSelectionInput.variantId
-      ? routeSelectionInput.variantId
-      : undefined;
+  const {
+    routeCondition,
+    routeOfferId,
+    routeSelectionAttributes,
+    routeSelectionAttributesKey,
+    routeVariantId,
+  } = resolveProductDetailsRouteSelection({
+    offers: productData.offers,
+    resolutionProduct: {
+      ...variantResolutionProduct,
+      attributeAxes: effectiveAxes,
+      variant_attributes: serverProduct.variant_attributes,
+    },
+    searchParams,
+    usesVariantRouteSelection,
+  });
   const productColorsKey = JSON.stringify(
     productData.colors.map((color) => color.name)
   );
@@ -131,6 +125,7 @@ export function useProductDetailsSelectionState(
     routeCondition,
     routeSelectionAttributesKey,
     routeVariantId ?? null,
+    routeOfferId,
   ]);
   // Render-time seed keeps SSR/pre-hydration selection purchasable.
   const resolveInitialSeed = () =>
@@ -293,6 +288,7 @@ export function useProductDetailsSelectionState(
     setSelectedAttributes,
     setSelectedColor,
     setSelectedCondition,
+    routeOfferId,
     routeResolvedVariantSelection,
     setSelectedImage,
     variantSelectionAttributes,

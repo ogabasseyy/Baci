@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const normalizeVariantsMock = vi.hoisted(() => vi.fn(() => []));
 vi.mock('@/lib/storefront-product-variants', () => ({
-  normalizeStorefrontProductVariants: () => [],
+  normalizeStorefrontProductVariants: normalizeVariantsMock,
 }));
 
 vi.mock('@/lib/seo-utils', () => {
@@ -41,10 +42,29 @@ vi.mock('@/lib/seo-utils', () => {
   };
 });
 
+import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import { mapDetailedCachedProductToProduct } from './detailed-product-mapper';
 
 describe('mapDetailedCachedProductToProduct', () => {
-  it('defaults detailed products to manage_stock false while keeping stock', () => {
+  it('passes parent effective stock so null variant quantities inherit', () => {
+    normalizeVariantsMock.mockClear();
+    mapDetailedCachedProductToProduct(
+      {
+        id: 'product-1',
+        merchant_id: 'merchant-1',
+        name: 'Widget',
+        stock_quantity: 6,
+        product_variants: [{ id: 'variant-1', stock_quantity: null }],
+      } as never,
+      'merchant-1'
+    );
+    expect(normalizeStorefrontProductVariants).toHaveBeenCalledWith(
+      [{ id: 'variant-1', stock_quantity: null }],
+      expect.objectContaining({ parentStock: 6 })
+    );
+  });
+
+  it('defaults detailed products to manage_stock true while keeping stock', () => {
     const product = mapDetailedCachedProductToProduct(
       {
         id: 'prod-2',
@@ -98,7 +118,7 @@ describe('mapDetailedCachedProductToProduct', () => {
       compare_at_price: 650000,
       min_variant_price: 590000,
       max_variant_price: 740000,
-      manage_stock: false,
+      manage_stock: true,
       stock: 7,
       category: 'Smart Phones',
       category_slug: 'smart-phones',
@@ -296,5 +316,56 @@ describe('mapDetailedCachedProductToProduct', () => {
         status: 'active',
       },
     ]);
+  });
+
+  it('inherits parent stock for null offer quantities, keeps explicit zeros', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'prod-inherit',
+        merchant_id: 'merchant-1',
+        name: 'Inherit Phone',
+        stock_quantity: 6,
+        images: [],
+        offers: [
+          {
+            id: 'null-stock',
+            condition: 'used',
+            price: 100,
+            stock_quantity: null,
+            status: 'active',
+          },
+          {
+            id: 'zero-stock',
+            condition: 'open_box',
+            price: 90,
+            stock_quantity: 0,
+            status: 'active',
+          },
+        ],
+      } as never,
+      'merchant-1'
+    );
+
+    expect(product.offers).toEqual([
+      expect.objectContaining({ id: 'null-stock', stock_quantity: 6 }),
+      expect.objectContaining({ id: 'zero-stock', stock_quantity: 0 }),
+    ]);
+  });
+
+  it('threads the snapshot inventory policy for serialized offer caps', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'product-1',
+        merchant_id: 'merchant-1',
+        name: 'Strict Phone',
+        price: 100,
+        stock: 0,
+        manage_stock: true,
+        inventory_tracking_policy: 'serialized_strict',
+      } as never,
+      'merchant-1'
+    );
+
+    expect(product.inventory_tracking_policy).toBe('serialized_strict');
   });
 });

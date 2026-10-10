@@ -17,9 +17,11 @@ export interface StorefrontProductVariantRow {
   sku?: string | null;
   stock_quantity?: number | null;
   updated_at?: string | null;
+  effective_policy?: string | null;
+  available_units?: number | null;
 }
 
-interface ProductRowWithId {
+export interface ProductRowWithId {
   id?: unknown;
   variants?: unknown;
 }

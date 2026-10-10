@@ -60,6 +60,7 @@ import {
   getCachedProductRoutePrimaryImage,
 } from './category-product-lcp-projection';
 import { buildCategoryProductMetadata } from './category-product-metadata';
+import { serializeRedirectSearchParams } from './category-product-redirect-query';
 import {
   type CategoryProductRouteControl,
   getProductRouteControl,
@@ -191,10 +192,14 @@ function getRedirectTargetPath(
     category?: string | null;
     categories?: { name?: string; slug?: string } | null;
     category_slug?: string;
-  }
+  },
+  searchParams?: Record<string, string | string[] | undefined>
 ) {
   const productPath = getProductUrl(product);
-  return `${getCategoryProductBasePath(storeSlug)}${productPath}` as `/${string}`;
+  const base = `${getCategoryProductBasePath(storeSlug)}${productPath}`;
+  if (!searchParams) return base as `/${string}`;
+  const serialized = serializeRedirectSearchParams(searchParams);
+  return (serialized ? `${base}?${serialized}` : base) as `/${string}`;
 }
 
 function redirectInvalidVariantSelectionParams(
@@ -387,8 +392,15 @@ async function getRenderableCategoryProductResult({
     notFound();
   }
 
+  const resolvedSearchParams = await searchParams;
   if (!('product' in result)) {
-    permanentRedirect(getRedirectTargetPath(slug, result.legacyRedirectTarget));
+    permanentRedirect(
+      getRedirectTargetPath(
+        slug,
+        result.legacyRedirectTarget,
+        resolvedSearchParams
+      )
+    );
   }
 
   const { product, merchant, categoryMismatch, needsValuesRedirect } = result;
@@ -397,10 +409,11 @@ async function getRenderableCategoryProductResult({
   // 1. If we found via case-insensitive fallback -> Redirect to lowercase canonical
   // 2. If the URL category doesn't match the product's actual category -> Redirect
   if (categoryMismatch || needsValuesRedirect) {
-    permanentRedirect(getRedirectTargetPath(slug, product));
+    permanentRedirect(
+      getRedirectTargetPath(slug, product, resolvedSearchParams)
+    );
   }
 
-  const resolvedSearchParams = await searchParams;
   redirectInvalidVariantSelectionParams(slug, product, resolvedSearchParams);
 
   return { merchant, product };
@@ -582,10 +595,15 @@ export default async function CategoryProductPage({
   }
 
   const { result: productResult, loadProductResult } = routeControl;
+  const resolvedSearchParams = await searchParams;
 
   if (!('product' in productResult)) {
     permanentRedirect(
-      getRedirectTargetPath(slug, productResult.legacyRedirectTarget)
+      getRedirectTargetPath(
+        slug,
+        productResult.legacyRedirectTarget,
+        resolvedSearchParams
+      )
     );
   }
 
@@ -593,7 +611,9 @@ export default async function CategoryProductPage({
     productResult;
 
   if (categoryMismatch || needsValuesRedirect) {
-    permanentRedirect(getRedirectTargetPath(slug, product));
+    permanentRedirect(
+      getRedirectTargetPath(slug, product, resolvedSearchParams)
+    );
   }
 
   const primaryProductImage = product.imageLarge || product.image || null;
@@ -620,7 +640,6 @@ export default async function CategoryProductPage({
         variants: commerceProduct.variants,
       })
     : null;
-  const resolvedSearchParams = await searchParams;
   const criticalInitialVariantSelection = criticalProduct
     ? getInitialCriticalVariantSelection(commerceProduct, resolvedSearchParams)
     : undefined;

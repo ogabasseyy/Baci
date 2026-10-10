@@ -23,7 +23,9 @@ interface UseProductDetailsBuyActionParams {
   basePath: string;
   checkoutRedirectTimeoutRef: RefObject<number | null>;
   productData: NormalizedProductDetails;
+  routeOfferId?: string | null;
   routeResolvedVariantSelection: ProductVariantSelection;
+  selectedCondition: ConditionType;
   routerPush: (href: Route) => void;
   searchParams: { get(name: string): string | null };
   serverProduct: Product;
@@ -35,7 +37,9 @@ export function useProductDetailsBuyAction({
   basePath,
   checkoutRedirectTimeoutRef,
   productData,
+  routeOfferId,
   routeResolvedVariantSelection,
+  selectedCondition,
   routerPush,
   searchParams,
   serverProduct,
@@ -60,6 +64,13 @@ export function useProductDetailsBuyAction({
 
     buyActionHandled.current = true;
     const selectedVariantSelection = routeResolvedVariantSelection;
+    // The resolved selection condition (derived from a live offer id for
+    // ID-only links) seeds non-variant buys: falling back to 'new' would
+    // reject the route offer in the condition-gated resolver and add the
+    // parent/default instead of the advertised option.
+    const buyCondition =
+      (selectedVariantSelection?.condition as ConditionType | undefined) ??
+      selectedCondition;
     const selectedAttributesForBuy = selectedVariantSelection?.attributes || {};
     const defaultColorIndex =
       selectedVariantSelection?.color != null
@@ -68,19 +79,21 @@ export function useProductDetailsBuyAction({
           )
         : -1;
 
+    // Capture the resolved offer once: its id identifies the cart line
+    // so two offers that canonicalize alike never merge into one line.
+    const resolvedBuyOffer = resolveCurrentOffer(
+      productData,
+      buyCondition,
+      selectedAttributesForBuy,
+      selectedVariantSelection,
+      routeOfferId
+    );
     addToCart(
       buildCartProduct(
         productData,
-        resolveCurrentOffer(
-          productData,
-          (selectedVariantSelection?.condition as ConditionType | undefined) ||
-            'new',
-          selectedAttributesForBuy,
-          selectedVariantSelection
-        ),
+        resolvedBuyOffer,
         defaultColorIndex >= 0 ? defaultColorIndex : 0,
-        (selectedVariantSelection?.condition as ConditionType | undefined) ||
-          'new',
+        buyCondition,
         selectedAttributesForBuy,
         selectedVariantSelection?.color,
         { hasVariantPricing: selectedVariantSelection?.variant != null }
@@ -92,9 +105,8 @@ export function useProductDetailsBuyAction({
         variantAttributes: selectedAttributesForBuy,
         color: selectedVariantSelection?.color,
         storage: selectedVariantSelection?.storage,
-        condition:
-          (selectedVariantSelection?.condition as ConditionType | undefined) ||
-          'new',
+        condition: buyCondition,
+        offerId: resolvedBuyOffer.offerId ?? undefined,
       }
     );
     toast({
@@ -104,17 +116,23 @@ export function useProductDetailsBuyAction({
     if (checkoutRedirectTimeoutRef.current !== null) {
       window.clearTimeout(checkoutRedirectTimeoutRef.current);
     }
+    // Route through the cart, not checkout (mirrors the generic PDP): the
+    // cart carries the optional-service (assurance) disclosure and toggle,
+    // so a direct checkout redirect would let a default-on fee reach
+    // payment without presenting the choice.
     checkoutRedirectTimeoutRef.current = window.setTimeout(() => {
       checkoutRedirectTimeoutRef.current = null;
-      routerPush(asRoute(basePath ? `${basePath}/checkout` : '/checkout'));
+      routerPush(asRoute(basePath ? `${basePath}/cart` : '/cart'));
     }, 500);
   }, [
     addToCart,
     basePath,
     checkoutRedirectTimeoutRef,
     productData,
+    routeOfferId,
     routeResolvedVariantSelection,
     routerPush,
+    selectedCondition,
     searchParams,
     serverProduct,
     toast,

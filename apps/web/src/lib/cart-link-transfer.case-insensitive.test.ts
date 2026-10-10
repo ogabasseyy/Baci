@@ -74,7 +74,16 @@ it('transfers the handoff quantity when the catalog id differs in case', async (
   // resolveGuestCartTransfer keys quantities lowercase; a raw-case lookup
   // would miss and fall back to the generic qty param (under-adding).
   setupProductsQuery({
-    data: [{ id: upper, name: 'Phone', status: 'active', images: [] }],
+    data: [
+      {
+        id: upper,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        manage_stock: true,
+        stock_quantity: 10,
+      },
+    ],
     error: null,
   });
   const options = setupOptions({

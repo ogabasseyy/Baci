@@ -49,6 +49,7 @@ jest.mock('@/services/cart-reprice', () => ({
     }
     return out;
   },
+  pickChangedConditionById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -224,6 +225,7 @@ describe('useCheckoutSubmit recovery', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
     });
     mockCreateOrder.mockImplementation(async () => {
       cartItems = [];
@@ -243,6 +245,7 @@ describe('useCheckoutSubmit recovery', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
     });
     const checkoutError = new Error('payment init failed');
     mockCreateOrder.mockImplementation(async () => {
@@ -272,6 +275,7 @@ describe('useCheckoutSubmit recovery', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({
@@ -309,6 +313,7 @@ describe('useCheckoutSubmit recovery', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
     });
     const order = {
       created_at: '2026-07-09T12:00:00.000Z',

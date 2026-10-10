@@ -28,14 +28,17 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { resolveOrderOfferEconomics } from '@/lib/checkout/resolve-order-offer-economics';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
+import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
@@ -113,6 +116,7 @@ function getSavingsRedemptionIdempotencyKey({
     product_id: string;
     quantity: number;
     variant_id?: string | null;
+    offer_id?: string | null;
   }>;
   merchantId: string;
   requestIdempotencyKey: string | null;
@@ -123,9 +127,15 @@ function getSavingsRedemptionIdempotencyKey({
     return `order:${requestIdempotencyKey}:savings`;
   }
 
+  // The offer id distinguishes two savings orders for different offers of
+  // the same product (same quantity/goal/amount): without it both
+  // requests generate the same redemption key and the second fails on the
+  // unique (merchant_id, idempotency_key) constraint. Mirrors the main
+  // checkout idempotency payload, which carries the raw body offer ids.
   const itemFingerprint = items
     .map(
-      (item) => `${item.product_id}:${item.variant_id ?? ''}:${item.quantity}`
+      (item) =>
+        `${item.product_id}:${item.variant_id ?? ''}:${item.offer_id ?? ''}:${item.quantity}`
     )
     .join('|');
   return [
@@ -951,6 +961,7 @@ export async function POST(request: NextRequest) {
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
+        offer_id: item.offerId || item.offer_id,
         variant_name: variantName ?? undefined,
         variant_attributes:
           item.variantAttributes || item.variant_attributes || {},
@@ -968,6 +979,36 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Exact condition offers must name a live offer of their own product:
+    // two offers can share one condition, so the stored id is the only
+    // thing distinguishing them at fulfillment time.
+    const offerEconomics = await resolveOrderOfferEconomics(
+      (productId) =>
+        supabase.rpc('get_product_offers', {
+          p_product_id: productId,
+        }) as unknown as Promise<OrderOfferQueryResult>,
+      orderItemsPayload
+    );
+    if (!offerEconomics.ok) {
+      if (offerEconomics.reason === 'verification_failed') {
+        console.error('Order offer verification failed:', offerEconomics.error);
+        return NextResponse.json(
+          { error: 'Failed to verify order offers' },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(
+        { error: 'Invalid condition offer for order item' },
+        { status: 400 }
+      );
+    }
+    const liveOfferPrices = offerEconomics.liveOfferPrices;
+    const liveOfferConditions = offerEconomics.liveOfferConditions;
+
+    // Offer assurance fees recompute below, after the negotiation preflight
+    // validates (and possibly prices) the client basis: the fee follows the
+    // server-validated charged unit price, never the raw client price.
 
     let quizVoucherRouteProof: ReturnType<
       typeof createQuizRpcServerProof
@@ -1138,8 +1179,10 @@ export async function POST(request: NextRequest) {
           product_id: item.product_id || item.productId || item.id,
           quantity: item.quantity,
           variant_id: item.variantId || item.variant_id,
+          offer_id: item.offerId || item.offer_id,
         })),
         merchantId: merchant_id,
+        offerPrices: liveOfferPrices,
         supabase,
       });
     } catch (taxError) {
@@ -1193,11 +1236,10 @@ export async function POST(request: NextRequest) {
     const redvaultRequested = payment_method === 'uba_redvault';
 
     // ALWAYS validate per-line client prices — even for non-entitled merchants
-    // and callers that omit expected_total. The RPC charges the catalog line
-    // price, but it adds the route-recomputed `assurance_fee` (derived from the
-    // client line price) into the subtotal, so an unvalidated below-catalog
-    // price would leak an uncapped assurance discount. The derived discount is
-    // only APPLIED below.
+    // and callers that omit expected_total. The RPC charges the catalog (or
+    // live offer) line price, but it adds the route-recomputed `assurance_fee`
+    // into the subtotal, so an unvalidated below-catalog price would leak an
+    // uncapped assurance discount. The derived discount is only APPLIED below.
     let negotiationDiscount: Awaited<
       ReturnType<typeof computeOrderNegotiationDiscount>
     >;
@@ -1205,6 +1247,7 @@ export async function POST(request: NextRequest) {
       negotiationDiscount = await computeOrderNegotiationDiscount({
         items: orderItemsPayload,
         merchantId: merchant_id,
+        offerPrices: liveOfferPrices,
         supabase,
         vatRegistered,
       });
@@ -1259,6 +1302,11 @@ export async function POST(request: NextRequest) {
     const serverDerivedDiscountAmount = shouldApplyServerDerivedDiscount
       ? (negotiationDiscount?.totalDiscount ?? 0)
       : 0;
+
+    recomputeOfferAssuranceFees(orderItemsPayload, liveOfferPrices, {
+      applied: shouldApplyServerDerivedDiscount,
+      negotiation: negotiationDiscount ?? null,
+    });
 
     let redvaultQuote: Awaited<
       ReturnType<typeof computeRedvaultOrderQuote>
@@ -1552,6 +1600,8 @@ export async function POST(request: NextRequest) {
             : await computeRedvaultOrderQuote({
                 items: orderItemsPayload,
                 merchantId: merchant_id,
+                offerConditions: liveOfferConditions,
+                offerPrices: liveOfferPrices,
                 supabase: redvaultOrderRpcClient,
               });
       } catch (error) {
@@ -1653,6 +1703,7 @@ export async function POST(request: NextRequest) {
         canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
           items: orderItemsPayload,
           merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
           supabase,
         });
       } catch (subtotalError) {
@@ -1746,6 +1797,7 @@ export async function POST(request: NextRequest) {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
             items: orderItemsPayload,
             merchantId: merchant_id,
+            offerPrices: liveOfferPrices,
             supabase,
           });
         } catch (subtotalError) {
@@ -1986,6 +2038,7 @@ export async function POST(request: NextRequest) {
             product_id: item.product_id ?? '',
             quantity: item.quantity,
             variant_id: item.variant_id ?? null,
+            offer_id: item.offer_id ?? null,
           })),
           merchantId: merchant_id,
           requestIdempotencyKey,
@@ -2280,8 +2333,10 @@ export async function POST(request: NextRequest) {
         'invalid_items',
         'invalid_quantity',
         'invalid_variant',
+        'invalid_offer',
         'insufficient_stock',
         'insufficient_variant_stock',
+        'insufficient_offer_stock',
         'merchant_not_found',
         'customer_email_required',
         'customer_name_required',

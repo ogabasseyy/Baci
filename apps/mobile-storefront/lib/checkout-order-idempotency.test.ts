@@ -162,6 +162,72 @@ describe('checkout-order-idempotency', () => {
     expect(second).toBe(first);
   });
 
+  it('omits offerId from pre-offer fingerprints so stored keys stay identical', () => {
+    expect(buildMobileCheckoutFingerprint(baseInput)).not.toContain('offerId');
+  });
+
+  it('distinguishes two condition offers on the same product line', () => {
+    const firstOfferLine = {
+      assuranceFee: 0,
+      hasAssurance: false,
+      id: 'prod-a',
+      offerId: '55555555-5555-4555-8555-555555555555',
+      price: 1000,
+      productId: 'prod-a',
+      quantity: 1,
+      variantId: 'variant-a',
+    };
+    const secondOfferLine = {
+      ...firstOfferLine,
+      offerId: '66666666-6666-4666-8666-666666666666',
+    };
+
+    const first = buildMobileCheckoutFingerprint({
+      ...baseInput,
+      items: [firstOfferLine],
+    });
+    const second = buildMobileCheckoutFingerprint({
+      ...baseInput,
+      items: [secondOfferLine],
+    });
+
+    expect(first).not.toBe(second);
+  });
+
+  it('forwards stored offer ids into the order fingerprint', () => {
+    const withoutOffer = buildMobileCheckoutOrderFingerprint({
+      ...baseInput,
+      items: [
+        {
+          assurance_fee: 0,
+          has_assurance: false,
+          id: 'prod-a',
+          name: 'Phone',
+          price: 1000,
+          product_id: 'prod-a',
+          quantity: 1,
+        },
+      ],
+    });
+    const withOffer = buildMobileCheckoutOrderFingerprint({
+      ...baseInput,
+      items: [
+        {
+          assurance_fee: 0,
+          has_assurance: false,
+          id: 'prod-a',
+          name: 'Phone',
+          offer_id: '55555555-5555-4555-8555-555555555555',
+          price: 1000,
+          product_id: 'prod-a',
+          quantity: 1,
+        },
+      ],
+    });
+
+    expect(withOffer).not.toBe(withoutOffer);
+  });
+
   it('builds order payload items with negotiated prices and assurance fees', () => {
     const orderItems = buildMobileCheckoutOrderItems(
       [

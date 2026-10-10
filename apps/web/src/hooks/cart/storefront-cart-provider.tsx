@@ -1,12 +1,22 @@
 'use client';
 
+import {
+  resolveAddedLineAssurance,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
+import {
+  applyOfferAllocationCap,
+  capQuantityToStrictPool,
+  getStrictSerializedPool,
+  resolveCappedOfferAllocation,
+} from './cart-stock-caps';
 import {
   DEFAULT_ASSURANCE_RATE,
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
@@ -341,7 +351,9 @@ export function StorefrontCartProvider({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 
@@ -355,7 +367,7 @@ export function StorefrontCartProvider({
     );
     if (
       !isQuizPrizeVoucherLine &&
-      productForCart.manage_stock &&
+      (productForCart.manage_stock ?? true) &&
       (productForCart.stock ?? 0) <= 0
     ) {
       logger.warn({
@@ -366,6 +378,25 @@ export function StorefrontCartProvider({
       });
       return;
     }
+
+    // The offer identity travels on the add options (merging matches
+    // it), so the same allocation cap covers fresh and merged adds.
+    const cappedOfferAllocation = resolveCappedOfferAllocation({
+      isVoucherLine: isQuizPrizeVoucherLine,
+      offerId: normalizedOptions?.offerId,
+      stock: productForCart.stock,
+    });
+
+    // Strict serialized siblings share one base-unit pool: each offer
+    // line also passes its own scalar cap, so without an aggregate the
+    // cart could hold two units against a single available unit that
+    // order creation then rejects on the second line. Variant adds
+    // resolve their own units and voucher lines redeem pre-reserved
+    // units, so the aggregate covers simple base/offer adds only.
+    const strictPool =
+      !isQuizPrizeVoucherLine && normalizedOptions?.variantId == null
+        ? getStrictSerializedPool(productForCart)
+        : undefined;
 
     if (product.has_variants && !normalizedOptions?.variantId) {
       logger.warn({
@@ -387,24 +418,72 @@ export function StorefrontCartProvider({
         product,
         normalizedOptions
       );
-
       let result: CartItem[];
       if (existingIndex >= 0) {
         const nextCart = [...previousCart];
         const existingItem = nextCart[existingIndex];
+        const mergedQuantity =
+          cappedOfferAllocation !== undefined
+            ? Math.min(existingItem.quantity + quantity, cappedOfferAllocation)
+            : existingItem.quantity + quantity;
+        if (cappedOfferAllocation !== undefined && mergedQuantity <= 0) {
+          return previousCart;
+        }
+        // Sibling units outside the merging line: the merged line may
+        // only take remaining pool headroom.
+        const poolCappedMerged = capQuantityToStrictPool({
+          strictPool,
+          cart: previousCart,
+          productId: productForCart.id,
+          excludeIndex: existingIndex,
+          quantity: mergedQuantity,
+        });
+        if (strictPool !== undefined && poolCappedMerged <= 0) {
+          return previousCart;
+        }
         nextCart[existingIndex] = {
           ...existingItem,
-          quantity: existingItem.quantity + quantity,
+          quantity: poolCappedMerged,
           cartItemId: existingItem.cartItemId || cartItemId,
+          hasAssurance: resolveAddedLineAssurance(
+            normalizedOptions?.hasAssurance,
+            existingItem,
+            {
+              smartCartProEnabled: enableSmartCartPro,
+              merchantSlug: merchantSlugRef.current,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId ||
+                  normalizedOptions?.quizVoucherToken
+              ),
+            }
+          ),
         };
         result = nextCart;
       } else {
+        const freshQuantity =
+          cappedOfferAllocation !== undefined
+            ? Math.min(quantity, cappedOfferAllocation)
+            : quantity;
+        if (cappedOfferAllocation !== undefined && freshQuantity <= 0) {
+          return previousCart;
+        }
+        // Fresh siblings share the pool with every existing simple line:
+        // the new line may only take remaining headroom.
+        const poolCappedFresh = capQuantityToStrictPool({
+          strictPool,
+          cart: previousCart,
+          productId: productForCart.id,
+          quantity: freshQuantity,
+        });
+        if (strictPool !== undefined && poolCappedFresh <= 0) {
+          return previousCart;
+        }
         result = [
           ...previousCart,
           {
             ...productForCart,
             cartItemId,
-            quantity,
+            quantity: poolCappedFresh,
             variantId: normalizedOptions?.variantId,
             variantAttributes: normalizedOptions?.variantAttributes,
             selectedColor: normalizedOptions?.color,
@@ -418,10 +497,22 @@ export function StorefrontCartProvider({
               | 'open_box'
               | 'refurbished'
               | undefined,
+            offerId: normalizedOptions?.offerId,
             quizAwardId: normalizedOptions?.quizAwardId,
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',
-            hasAssurance: false,
+            hasAssurance: resolveAddedLineAssurance(
+              normalizedOptions?.hasAssurance,
+              undefined,
+              {
+                smartCartProEnabled: enableSmartCartPro,
+                merchantSlug: merchantSlugRef.current,
+                hasQuizVoucher: Boolean(
+                  normalizedOptions?.quizAwardId ||
+                    normalizedOptions?.quizVoucherToken
+                ),
+              }
+            ),
             assuranceRate: DEFAULT_ASSURANCE_RATE,
           },
         ];
@@ -532,10 +623,46 @@ export function StorefrontCartProvider({
       const nextCart = [...previousCart];
       const item = nextCart[targetIndex];
       const minimumOrderQuantity = item.minimum_order_quantity || 1;
+      let nextQuantity =
+        quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
+      const allocationCap = applyOfferAllocationCap({
+        offerId: item.offerId,
+        stock: item.stock,
+        quantity: nextQuantity,
+      });
+      if (allocationCap) {
+        if ('keepPrevious' in allocationCap) {
+          return previousCart;
+        }
+        nextQuantity = allocationCap.quantity;
+      }
+      // Strict serialized siblings share one base-unit pool: a quantity
+      // bump must also fit the pool headroom outside this line, or the
+      // cart could hold units order creation rejects. Variant and
+      // voucher lines are outside the aggregate, same as adds.
+      if (
+        item.variantId == null &&
+        item.quizAwardId == null &&
+        item.quizVoucherToken == null
+      ) {
+        const strictPool = getStrictSerializedPool(item);
+        if (strictPool !== undefined) {
+          const poolCapped = capQuantityToStrictPool({
+            strictPool,
+            cart: previousCart,
+            productId: item.id,
+            excludeIndex: targetIndex,
+            quantity: nextQuantity,
+          });
+          if (poolCapped <= 0) {
+            return previousCart;
+          }
+          nextQuantity = poolCapped;
+        }
+      }
       nextCart[targetIndex] = {
         ...item,
-        quantity:
-          quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity,
+        quantity: nextQuantity,
       };
       // A quantity change alters the cart total, so an active cart-wide
       // negotiation no longer represents the agreed total — clear the group

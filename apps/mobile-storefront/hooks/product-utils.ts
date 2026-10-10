@@ -6,7 +6,11 @@ import { normalizeVariantAttributes } from '@/lib/product-normalization';
 import { removeProductSlugFromProductsCache } from '@/lib/product-query-cache';
 import { getProductSlugFallbackCandidates } from '@/lib/product-slug-fallback';
 import { supabase } from '@/lib/supabase';
-import { hydrateRowsNeedingStorefrontVariants } from './product-hydration';
+import {
+  hydrateRowsNeedingBaseInventory,
+  hydrateRowsNeedingConditionOffers,
+  hydrateRowsNeedingStorefrontVariants,
+} from './product-hydration';
 import { PRODUCT_DETAIL_SELECT } from './product-select';
 
 export { fetchAvailableBrands } from './product-brands';
@@ -65,9 +69,11 @@ export async function resolveProductRow(merchantId: string, slug: string) {
   const exact = await fetchProductRow(merchantId, slug, 'Product');
   if (exact.error) throw exact.error;
   if (exact.data) {
-    const [hydratedProduct] = await hydrateRowsNeedingStorefrontVariants([
-      exact.data,
-    ]);
+    const [hydratedProduct] = await hydrateRowsNeedingConditionOffers(
+      await hydrateRowsNeedingBaseInventory(
+        await hydrateRowsNeedingStorefrontVariants([exact.data])
+      )
+    );
     return hydratedProduct ?? exact.data;
   }
   if (isUuid(slug)) return null;
@@ -80,9 +86,11 @@ export async function resolveProductRow(merchantId: string, slug: string) {
     );
     if (fallback.error) throw fallback.error;
     if (fallback.data) {
-      const [hydratedFallback] = await hydrateRowsNeedingStorefrontVariants([
-        fallback.data,
-      ]);
+      const [hydratedFallback] = await hydrateRowsNeedingConditionOffers(
+        await hydrateRowsNeedingBaseInventory(
+          await hydrateRowsNeedingStorefrontVariants([fallback.data])
+        )
+      );
       log.warn(`Resolved legacy product slug "${slug}" to "${fallbackSlug}"`);
       return hydratedFallback ?? fallback.data;
     }

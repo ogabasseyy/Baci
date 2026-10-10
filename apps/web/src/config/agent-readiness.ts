@@ -61,7 +61,7 @@ Use this skill when helping a user browse, compare, or buy from Ogabassey, a Bac
 ## Safety
 
 - Read catalog, product, policy, and availability information before taking actions.
-- Use add_to_cart only when the user asks to add a specific product to cart.
+- Use update_ogabassey_guest_cart only when the user asks to add, change or remove a specific product. Reuse the returned cart token for the same guest cart; quantities are absolute totals.
 - Do not submit checkout, payment, account, wallet, or order-management actions.
 - Use the current storefront host as canonical when resolving product and cart URLs.
 - For device repairs, read the repairs services feed and link users to the
@@ -70,7 +70,8 @@ Use this skill when helping a user browse, compare, or buy from Ogabassey, a Bac
 ## Useful MCP Tools
 
 - search_products: search product names, categories, brands, conditions, and price ranges.
-- add_to_cart: add a specific product ID to the user's cart after the user asks.
+- prepare_storefront_cart_link: prepare a website cart link without saving a server cart.
+- update_ogabassey_guest_cart: persist an Ogabassey guest cart without login; use quantity 0 to remove a line. Transfer the returned cart URL to website guest checkout; saving customer information there is optional.
 - get_product: fetch detailed product information by product_id or exact product_name.
 - get_product_variants: fetch available colors, storage options, SIM options, and condition offers.
 - get_store_info: answer contact, shipping, returns, payment, general, and policy questions.

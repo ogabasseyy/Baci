@@ -3,7 +3,7 @@
 \ir ../20261002090046_storefront_search_refinements.sql
 \ir ../20261003230000_storefront_search_refinement_fixes.sql
 \ir ../20261004151000_search_price_options_offer_scope_null_stock.sql
-\ir ../20261008130000_search_price_options_null_stock_managed.sql
+\ir ../20261008130001_search_price_options_null_stock_managed.sql
 \ir ../20261008140000_search_price_options_sku_matrix_drift.sql
 \ir ../20261003193000_storefront_processor_filters.sql
 \ir ../20261003194500_storefront_category_facets.sql

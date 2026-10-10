@@ -27,12 +27,13 @@ export default function PaymentGatewayScreen() {
   const controller = usePaymentGatewayController();
   const user = useAuthStore((state) => state.user);
   const customer = useAuthStore((state) => state.customer);
+  const authReady = useAuthStore((state) => state.isInitialized);
   const paramsData = controller.validatedParams.data;
   // Deep-link params are caller-controlled: the stamp alone proves
   // nothing, and the reference alone does not bind the payment (a
   // caller knowing it could pair it with any live Paystack URL). Every
   // primary launch resolves ownership from the device record, then
-  // recovers the operation from the server and requires the exact
+  // peek-polls the operation from the server and requires the exact
   // server-issued checkout URL and amount. The WebView stays unmounted
   // until both proofs pass (or the launch is blocked).
   const needsOwnershipCheck =
@@ -41,8 +42,21 @@ export default function PaymentGatewayScreen() {
   const [ownership, setOwnership] = useState<
     'pending' | 'verified' | 'blocked' | 'mismatch'
   >('pending');
+  // Mount-bind retry token: re-runs the ownership effect. Safe because
+  // the bind below is read-only (peekStatus persists nothing).
+  const [bindRetry, setBindRetry] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies(bindRetry): `bindRetry` is an intentional retrigger — the mismatch view bumps it to force a fresh ownership bind.
   useEffect(() => {
     if (!needsOwnershipCheck) return;
+    // Wait for auth hydration before the lookup: querying with an
+    // unresolved user would scope-parse-fail into a 'blocked' flash on
+    // a legitimate checkout. The spinner stays up until auth resolves.
+    if (!authReady) return;
+    // Auth resolved with no signed-in user: no record can be owned.
+    if (user?.id == null) {
+      setOwnership('blocked');
+      return;
+    }
     let cancelled = false;
     setOwnership('pending');
     (async () => {
@@ -65,15 +79,17 @@ export default function PaymentGatewayScreen() {
         if (!cancelled) setOwnership('blocked');
         return;
       }
-      // Server bind: recover() status-polls the record's operation
-      // (never re-initializes: operationId is non-null here) and
-      // already enforces the record amount. Mount only when the
-      // server confirms this exact checkout URL and amount — a stale
-      // URL for an advanced operation, a forged URL, a tampered
-      // amount, or an unreachable server all fail closed. The WebView
-      // needs network regardless, so offline has no legitimate mount.
+      // Server bind: peekStatus() status-polls the record's operation
+      // without persisting anything (never re-initializes: operationId
+      // is non-null here) and already enforces the record amount. Mount
+      // only when the server confirms this exact checkout URL and
+      // amount — a stale URL for an advanced operation, a forged URL,
+      // a tampered amount, or an unreachable server all fail closed.
+      // The WebView needs network regardless, so offline has no
+      // legitimate mount; the mismatch view offers a retry for
+      // transient network failures.
       try {
-        const status = await client.recover({
+        const status = await client.peekStatus({
           merchantId: record.merchantId,
           userId: record.userId,
           reference: paramsData?.reference,
@@ -92,6 +108,8 @@ export default function PaymentGatewayScreen() {
     };
   }, [
     needsOwnershipCheck,
+    authReady,
+    bindRetry,
     paramsData?.merchantId,
     paramsData?.reference,
     paramsData?.authorizationUrl,
@@ -133,7 +151,10 @@ export default function PaymentGatewayScreen() {
     // owner; going back returns to this device's wallet. This stamp
     // comparison is only a fast path for account switches — the
     // persisted-record check below is the authority for every launch.
+    // Gated on auth hydration: an unresolved user must not flash the
+    // account-changed dead end on a legitimate checkout.
     if (
+      authReady &&
       controller.paymentKind === 'primary_wallet_card' &&
       controller.validatedParams.data?.userId &&
       user?.id !== controller.validatedParams.data.userId
@@ -172,7 +193,9 @@ export default function PaymentGatewayScreen() {
       // checkout URL and amount — a forged or stale link, or an
       // unreachable server. Never mount the WebView on unconfirmed
       // payment bytes; the wallet fund action resumes the true pending
-      // operation.
+      // operation. Mismatch offers a re-check: the bind is read-only,
+      // so retrying a transient network failure is safe, and a forged
+      // link simply fails the bind again.
       if (ownership === 'blocked' || ownership === 'mismatch') {
         return (
           <PrimaryWalletCardPendingView
@@ -182,7 +205,12 @@ export default function PaymentGatewayScreen() {
             terminalDirective={
               ownership === 'blocked'
                 ? 'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
-                : 'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+                : 'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
+            }
+            onCheck={
+              ownership === 'mismatch'
+                ? () => setBindRetry((count) => count + 1)
+                : undefined
             }
             onBack={() =>
               router.replace(getWalletReturnHref(controller.returnTo))

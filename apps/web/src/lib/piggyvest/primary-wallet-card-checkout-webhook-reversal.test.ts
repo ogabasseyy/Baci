@@ -4,21 +4,29 @@ import { reconcilePrimaryWalletCardCheckoutReversal } from './primary-wallet-car
 
 vi.mock('server-only', () => ({}));
 
-// Paystack's documented refund shape: no metadata, the original charge
-// reference in transaction_reference, the event's own id in id.
+// Paystack's documented refund shape: no metadata, no id, no
+// reference — the original charge reference in
+// transaction_reference, the refund's own identity in
+// refund_reference, and the amount as a decimal kobo string.
 function body(overrides: Record<string, unknown> = {}) {
   return {
     event: 'refund.processed',
     data: {
-      id: 1234567,
-      amount: 25000,
-      currency: 'NGN',
       status: 'processed',
       transaction_reference: fixture.intent.reference,
-      reference: 'rtn-refund-event-id',
+      refund_reference: 'rtn-25431-xyz',
+      amount: '25000',
+      currency: 'NGN',
       ...overrides,
     },
   };
+}
+
+// Disputes identify with the numeric/string dispute id (not the
+// refund's refund_reference); the charge reference rides along for
+// the operation tail.
+function disputeBody(overrides: Record<string, unknown> = {}) {
+  return body({ id: 7654321, ...overrides });
 }
 
 function setup(status = 'completed') {
@@ -61,7 +69,11 @@ describe('primary card checkout webhook reversal', () => {
     const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
     expect(reversalParams[1]).toBe(fixture.intent.operationId);
     expect(reversalParams[2]).toBe('refund');
-    expect(reversalParams[3]).toBe('1234567');
+    expect(reversalParams[3]).toBe('rtn-25431-xyz');
+    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
+      amountKobo: 25000,
+      currency: 'NGN',
+    });
     expect(response?.status).toBe(200);
     expect(await response?.json()).toEqual({ received: true });
   });
@@ -136,7 +148,7 @@ describe('primary card checkout webhook reversal', () => {
   it('records disputes with the dispute kind', async () => {
     const { execute, runtime } = setup('completed');
     const response = await reconcilePrimaryWalletCardCheckoutReversal({
-      body: { ...body(), event: 'charge.dispute.create' },
+      body: { ...disputeBody(), event: 'charge.dispute.create' },
       runtime,
       execute: execute as never,
     });
@@ -154,7 +166,7 @@ describe('primary card checkout webhook reversal', () => {
     expected,
   }) => {
     const { execute, runtime } = setup('completed');
-    const payload = body();
+    const payload = disputeBody();
     const data = payload.data as Record<string, unknown>;
     delete data.transaction_reference;
     data.transaction_ref = fixture.intent.reference;
@@ -178,10 +190,10 @@ describe('primary card checkout webhook reversal', () => {
     const { execute, runtime } = setup('completed');
     const response = await reconcilePrimaryWalletCardCheckoutReversal({
       body: {
-        ...body(),
+        ...disputeBody(),
         event: 'charge.dispute.resolve',
         data: {
-          ...(body().data as Record<string, unknown>),
+          ...(disputeBody().data as Record<string, unknown>),
           status: 'pending',
         },
       },
@@ -197,7 +209,7 @@ describe('primary card checkout webhook reversal', () => {
 
   it('resolves the original reference from nested dispute payloads', async () => {
     const { execute, runtime } = setup('completed');
-    const payload = body();
+    const payload = disputeBody();
     delete (payload.data as Record<string, unknown>).transaction_reference;
     (payload.data as Record<string, unknown>).transaction = {
       reference: fixture.intent.reference,
@@ -270,5 +282,39 @@ describe('primary card checkout webhook reversal', () => {
       })
     ).toBeNull();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { refund_reference: null },
+    { refund_reference: '' },
+  ])('stays retryable when a processed refund names no refund reference: %j', async (change) => {
+    const { execute, runtime } = setup('completed');
+    expect(
+      await reconcilePrimaryWalletCardCheckoutReversal({
+        body: body(change),
+        runtime,
+        execute: execute as never,
+      })
+    ).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '10.5',
+    '-3',
+    '',
+    '25,000',
+  ])('records a refund with an unreadable amount as null instead of misreading it: %s', async (amount) => {
+    const { execute, runtime } = setup('completed');
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: body({ amount }),
+      runtime,
+      execute: execute as never,
+    });
+    expect(response?.status).toBe(200);
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
+      amountKobo: null,
+    });
   });
 });

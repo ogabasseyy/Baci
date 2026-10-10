@@ -11,6 +11,44 @@ import {
 
 type Executor = ReturnType<typeof createPrimaryWalletCardCheckoutExecutor>;
 
+// Paystack's documented refund webhook identifies the refund with
+// `refund_reference` and carries neither `data.id` nor
+// `data.reference`; disputes keep the numeric/string id fallback.
+function reversalProviderEventId(
+  event: string,
+  data: Record<string, unknown>
+): string | null {
+  if (event === 'refund.processed') {
+    const reference = data.refund_reference;
+    return typeof reference === 'string' &&
+      reference.length >= 1 &&
+      reference.length <= 128
+      ? reference
+      : null;
+  }
+  if (typeof data.id === 'number') return String(data.id);
+  if (typeof data.id === 'string') return data.id;
+  if (typeof data.reference === 'string') return data.reference;
+  return null;
+}
+
+// Refund amounts arrive as decimal kobo strings ("10000"); disputes
+// carry numbers. Accept both, strictly: unsigned integer text only,
+// so "10.5", "-3", or "" stay retryable instead of settling on a
+// misread amount.
+function reversalAmountKobo(data: Record<string, unknown>): number | null {
+  const amount = data.amount;
+  if (typeof amount === 'number' && Number.isInteger(amount) && amount >= 1)
+    return amount;
+  if (
+    typeof amount === 'string' &&
+    /^[0-9]{1,10}$/.test(amount) &&
+    Number(amount) >= 1
+  )
+    return Number(amount);
+  return null;
+}
+
 function disputeResolution(
   event: string,
   data: Record<string, unknown>
@@ -90,14 +128,7 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
   try {
     reversal = schemas.reversal.parse({
       operationId,
-      providerEventId:
-        typeof data.id === 'number'
-          ? String(data.id)
-          : typeof data.id === 'string'
-            ? data.id
-            : typeof data.reference === 'string'
-              ? data.reference
-              : null,
+      providerEventId: reversalProviderEventId(body.event, data),
       evidence: {
         event: body.event,
         kind: body.event === 'refund.processed' ? 'refund' : 'dispute',
@@ -105,12 +136,7 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
         // Informational fields coerce to null rather than rejecting the
         // delivery: an authentic event with an absent amount still
         // records, and the amounts reconcile from the provider.
-        amountKobo:
-          typeof data.amount === 'number' &&
-          Number.isInteger(data.amount) &&
-          data.amount >= 1
-            ? data.amount
-            : null,
+        amountKobo: reversalAmountKobo(data),
         currency:
           typeof data.currency === 'string' && /^[A-Z]{3}$/.test(data.currency)
             ? data.currency

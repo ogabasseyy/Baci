@@ -146,6 +146,14 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
   if (verification.status === 'invalid') {
+    // Monitoring surface: every other terminal rejection in this route
+    // warns, and a silent invalid-signature path would hide both a
+    // provider-side signing outage and an active forgery campaign from
+    // the log drain alerts key on. Presence only — never the signature
+    // value or body bytes.
+    console.warn(
+      `[PiggyVest Webhook] Rejected delivery with invalid signature (signature header ${signature === null ? 'absent' : 'present'})`
+    );
     return NextResponse.json(
       { received: false, code: 'PIGGYVEST_INVALID_SIGNATURE' },
       { status: 200, headers: noStore }

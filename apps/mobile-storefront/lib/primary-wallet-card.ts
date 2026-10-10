@@ -71,7 +71,10 @@ export function createPrimaryWalletCardFundingClient() {
         'Could not safely save card funding. No new payment was started.'
       );
   };
-  const request = async (record: Pending) => {
+  // Read-only server check shared by the mutating request() below and
+  // the mount-gate peekStatus(): fetches initialize/status, parses, and
+  // enforces the amount/operation binding. Persists nothing.
+  const queryStatus = async (record: Pending) => {
     const {
       data: { user },
       error,
@@ -80,55 +83,59 @@ export function createPrimaryWalletCardFundingClient() {
       throw new Error(
         'Please sign in to the account that started this card funding operation.'
       );
-    try {
-      const initialize = record.operationId === null;
-      const client = createStorefrontCustomerApiClient();
-      const response = schemas.response.parse(
-        await client.fetchJson({
-          path: `/api/storefront/customer/wallet/primary-card/${initialize ? 'initialize' : 'status'}`,
-          method: 'POST',
-          includeCsrf: true,
-          // Bind the token to the record owner inside the client's own
-          // session read: the getUser check above cannot cover a switch
-          // landing between it and this send, which would otherwise
-          // reserve a checkout for the new account under the previous
-          // account's stored record.
-          expectedUserId: record.userId,
-          body: initialize
-            ? {
-                merchantId: record.merchantId,
-                idempotencyKey: record.idempotencyKey,
-                amountKobo: record.amountKobo,
-                consent: record.consent,
-              }
-            : {
-                merchantId: record.merchantId,
-                operationId: record.operationId,
-              },
-        })
+    const initialize = record.operationId === null;
+    const client = createStorefrontCustomerApiClient();
+    const response = schemas.response.parse(
+      await client.fetchJson({
+        path: `/api/storefront/customer/wallet/primary-card/${initialize ? 'initialize' : 'status'}`,
+        method: 'POST',
+        includeCsrf: true,
+        // Bind the token to the record owner inside the client's own
+        // session read: the getUser check above cannot cover a switch
+        // landing between it and this send, which would otherwise
+        // reserve a checkout for the new account under the previous
+        // account's stored record.
+        expectedUserId: record.userId,
+        body: initialize
+          ? {
+              merchantId: record.merchantId,
+              idempotencyKey: record.idempotencyKey,
+              amountKobo: record.amountKobo,
+              consent: record.consent,
+            }
+          : {
+              merchantId: record.merchantId,
+              operationId: record.operationId,
+            },
+      })
+    );
+    // Adoption: when device storage was lost and the customer re-entered
+    // a different amount or consent, the server returns its stored
+    // unresolved operation instead of failing. Persist the stored
+    // operation ID, amount, and save-card choice so the possibly charged
+    // checkout stays recoverable, and flag it so the UI confirms the
+    // adopted amount/consent before any payment. Status polls keep the
+    // strict binding: a different operation or amount there is a real
+    // inconsistency, not a recovery.
+    const adopted =
+      initialize &&
+      (response.amountKobo !== record.amountKobo ||
+        (response.saveCard !== undefined &&
+          response.saveCard !== record.consent.saveCard));
+    if (
+      !adopted &&
+      (response.amountKobo !== record.amountKobo ||
+        (record.operationId !== null &&
+          response.operationId !== record.operationId))
+    )
+      throw new Error(
+        'Card funding could not be confirmed. Keep the pending operation for review.'
       );
-      // Adoption: when device storage was lost and the customer re-entered
-      // a different amount or consent, the server returns its stored
-      // unresolved operation instead of failing. Persist the stored
-      // operation ID, amount, and save-card choice so the possibly charged
-      // checkout stays recoverable, and flag it so the UI confirms the
-      // adopted amount/consent before any payment. Status polls keep the
-      // strict binding: a different operation or amount there is a real
-      // inconsistency, not a recovery.
-      const adopted =
-        initialize &&
-        (response.amountKobo !== record.amountKobo ||
-          (response.saveCard !== undefined &&
-            response.saveCard !== record.consent.saveCard));
-      if (
-        !adopted &&
-        (response.amountKobo !== record.amountKobo ||
-          (record.operationId !== null &&
-            response.operationId !== record.operationId))
-      )
-        throw new Error(
-          'Card funding could not be confirmed. Keep the pending operation for review.'
-        );
+    return { response, adopted };
+  };
+  const request = async (record: Pending) => {
+    try {
+      const { response, adopted } = await queryStatus(record);
       // Terminal states drop the saved record so a fresh operation can
       // start: an abandoned checkout can never complete, and keeping it
       // would pin every later funding attempt to the dead operation.
@@ -224,6 +231,33 @@ export function createPrimaryWalletCardFundingClient() {
             'The callback does not match this card funding operation.'
           );
         return request(pending);
+      });
+    },
+    // Mount-gate bind: same server status check as recover(), but
+    // strictly read-only — mounting a checkout must never rewrite,
+    // adopt, or drop the device record, and must never initialize.
+    // Null-operation placeholders are refused outright (a launch with
+    // no server operation has no checkout URL to confirm). Because
+    // this persists nothing, the mount gate can safely offer a retry
+    // on transient failures.
+    peekStatus: (input: Scope & { reference?: string }) => {
+      const scope = schemas.scope.parse({
+        merchantId: input.merchantId,
+        userId: input.userId,
+      });
+      return serialize(key(scope), async () => {
+        const pending = await read(scope);
+        if (!pending || pending.operationId === null)
+          throw new Error('No matching card funding operation was found.');
+        if (
+          input.reference &&
+          input.reference !== `pvb-first-primary-${pending.operationId}`
+        )
+          throw new Error(
+            'The callback does not match this card funding operation.'
+          );
+        const { response } = await queryStatus(pending);
+        return { ...response, returnTo: pending.returnTo };
       });
     },
   };

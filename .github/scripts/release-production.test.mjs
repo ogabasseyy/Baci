@@ -49,6 +49,10 @@ if (process.env.FAKE_GH_ERROR) {
   process.stdout.write(process.env.FAKE_GH_ERROR);
   process.exit(0);
 }
+if (process.env.FAKE_GH_EXIT) {
+  process.stdout.write(process.env.FAKE_GH_STDOUT ?? '');
+  process.exit(Number(process.env.FAKE_GH_EXIT));
+}
 const page = Number(/[?&]page=(\\d+)/.exec(endpoint)[1]);
 const counts = process.env.FAKE_GH_PAGES.split(',').map(Number);
 const runs = Array.from({ length: counts[page - 1] ?? 0 }, (_, i) => ({
@@ -62,6 +66,8 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
   const savedPath = process.env.PATH;
   const savedPages = process.env.FAKE_GH_PAGES;
   const savedError = process.env.FAKE_GH_ERROR;
+  const savedExit = process.env.FAKE_GH_EXIT;
+  const savedStdout = process.env.FAKE_GH_STDOUT;
   process.env.PATH = `${directory}${delimiter}${savedPath}`;
   try {
     process.env.FAKE_GH_PAGES = '100,3';
@@ -84,12 +90,23 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 
     process.env.FAKE_GH_ERROR = '{"message":"rate limited"}';
     assert.throws(() => readRuns('status=queued', true), /no runs payload/);
+    delete process.env.FAKE_GH_ERROR;
+
+    process.env.FAKE_GH_EXIT = '1';
+    process.env.FAKE_GH_STDOUT = 'HTTP 403: abuse detected';
+    assert.throws(() => readRuns('status=queued', true), {
+      message: `gh api repos/ogabasseyy/Baci/actions/workflows/deploy.yml/runs?branch=main&per_page=100&page=1&status=queued failed with status 1: HTTP 403: abuse detected; inspect preceding diagnostics`,
+    });
   } finally {
     process.env.PATH = savedPath;
     if (savedPages === undefined) delete process.env.FAKE_GH_PAGES;
     else process.env.FAKE_GH_PAGES = savedPages;
     if (savedError === undefined) delete process.env.FAKE_GH_ERROR;
     else process.env.FAKE_GH_ERROR = savedError;
+    if (savedExit === undefined) delete process.env.FAKE_GH_EXIT;
+    else process.env.FAKE_GH_EXIT = savedExit;
+    if (savedStdout === undefined) delete process.env.FAKE_GH_STDOUT;
+    else process.env.FAKE_GH_STDOUT = savedStdout;
     rmSync(directory, { recursive: true, force: true });
   }
 });

@@ -9,10 +9,14 @@ const refund = {
   amount: 100,
   currency: 'NGN',
   status: 'processed',
-  transaction: { reference: 'capture-1' },
+  transaction: { id: 5, reference: 'capture-1' },
 };
 function response(data: unknown, ok = true) {
   return { ok, json: async () => ({ status: true, data }) } as Response;
+}
+function verifiedLister(fetcher: ReturnType<typeof vi.fn>) {
+  fetcher.mockResolvedValueOnce(response({ id: 5, reference: 'capture-1' }));
+  vi.stubGlobal('fetch', fetcher);
 }
 describe('listPaystackRefunds', () => {
   beforeEach(() => vi.stubEnv('PAYSTACK_SECRET_KEY', 'test-secret'));
@@ -20,58 +24,70 @@ describe('listPaystackRefunds', () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
-  it('reads verified refunds and resolves numeric transaction identities', async () => {
+  it('resolves the transaction ID before listing refunds', async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(response([{ ...refund, transaction: 5 }]))
-      .mockResolvedValueOnce(response({ reference: 'capture-1' }));
+      .mockResolvedValueOnce(response({ id: 5, reference: 'capture-1' }))
+      .mockResolvedValueOnce(response([refund]));
     vi.stubGlobal('fetch', fetcher);
     expect(await listPaystackRefunds('capture-1')).toEqual([
       { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
     ]);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/transaction/verify/capture-1'),
+      expect.anything()
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/refund?transaction=5&'),
+      expect.anything()
+    );
   });
-  it('resolves several numeric transaction identities on one page', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        response([
-          { ...refund, id: 1, transaction: 5 },
-          { ...refund, id: 2, transaction: 6 },
-          { ...refund, id: 3, transaction: 7 },
-        ])
-      )
-      .mockResolvedValue(response({ reference: 'capture-1' }));
-    vi.stubGlobal('fetch', fetcher);
-    expect(await listPaystackRefunds('capture-1')).toEqual([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
-      { id: 2, amount: 100, currency: 'NGN', status: 'processed' },
-      { id: 3, amount: 100, currency: 'NGN', status: 'processed' },
-    ]);
-    expect(fetcher).toHaveBeenCalledTimes(4);
+  it('matches bare numeric and legacy string transaction identities', async () => {
+    const fetcher = vi.fn();
+    verifiedLister(fetcher);
+    fetcher.mockResolvedValueOnce(
+      response([
+        { ...refund, id: 1, transaction: 5 },
+        { ...refund, id: 2, transaction: 'capture-1' },
+        { ...refund, id: 3, transaction: '5' },
+      ])
+    );
+    expect(await listPaystackRefunds('capture-1')).toHaveLength(3);
+    // Numeric identities compare against the resolved ID directly: no
+    // per-row transaction lookups.
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it('reads another page after a full page', async () => {
-    const fetcher = vi
-      .fn()
+    const fetcher = vi.fn();
+    verifiedLister(fetcher);
+    fetcher
       .mockResolvedValueOnce(
         response(
           Array.from({ length: 100 }, (_, i) => ({ ...refund, id: i + 1 }))
         )
       )
       .mockResolvedValueOnce(response([]));
-    vi.stubGlobal('fetch', fetcher);
     expect(await listPaystackRefunds('capture-1')).toHaveLength(100);
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it('blocks mismatched and malformed provider records', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response([{ ...refund, transaction: { reference: 'other' } }])
-        )
+    const fetcher = vi.fn();
+    verifiedLister(fetcher);
+    fetcher.mockResolvedValue(
+      response([{ ...refund, transaction: { id: 9, reference: 'other' } }])
     );
     await expect(listPaystackRefunds('capture-1')).rejects.toThrow('mismatch');
+  });
+  it('rejects unverified refund transactions', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(response({ id: 'not-a-number' }))
+    );
+    await expect(listPaystackRefunds('capture-1')).rejects.toThrow(
+      'Unverified refund transaction'
+    );
   });
   it('rejects failed transport and missing configuration', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(null, false)));
@@ -80,5 +96,28 @@ describe('listPaystackRefunds', () => {
     await expect(listPaystackRefunds('capture-1')).rejects.toThrow(
       'unavailable'
     );
+  });
+  it('accepts punctuation references but rejects unsafe ones', async () => {
+    const fetcher = vi.fn();
+    verifiedLister(fetcher);
+    fetcher.mockResolvedValueOnce(response([]));
+    await expect(
+      listPaystackRefunds('ref/with?special&chars#f')
+    ).resolves.toEqual([]);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        '/transaction/verify/ref%2Fwith%3Fspecial%26chars%23f'
+      ),
+      expect.anything()
+    );
+    const rejected = vi.fn();
+    vi.stubGlobal('fetch', rejected);
+    for (const bad of ['', 'x'.repeat(101), 'bad\x01ref', 'bad\x7fref']) {
+      await expect(listPaystackRefunds(bad)).rejects.toThrow(
+        'Invalid payment reference'
+      );
+    }
+    expect(rejected).not.toHaveBeenCalled();
   });
 });

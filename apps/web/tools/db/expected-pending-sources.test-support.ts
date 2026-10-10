@@ -44,7 +44,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090000_order_refund_management.sql',
-    sha256: '1c790d5ab9765ac50221f25152b5f75578555c6153210f2d19e33eb876c18d4a',
+    sha256: '7d5d3659627a0db89db331696a24199fae3e13ec6fe18e580d51ea45d3719325',
   },
   {
     repositoryPath:

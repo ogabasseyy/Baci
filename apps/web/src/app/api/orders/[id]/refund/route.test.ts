@@ -95,6 +95,28 @@ describe('order refund route', () => {
       })
     );
   });
+  it('normalizes empty manual-refund notes to null', async () => {
+    const body = {
+      action: 'manual',
+      amount: 10,
+      refundedAt: '2026-09-28T12:00:00Z',
+      reference: 'bank-1',
+      method: 'bank_transfer',
+      note: '',
+      confirmed: true,
+    };
+    expect((await POST(request(body), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'manage_order_refund',
+      expect.objectContaining({ p_note: null })
+    );
+    const noted = { ...body, note: 'called the bank' };
+    expect((await POST(request(noted), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'manage_order_refund',
+      expect.objectContaining({ p_note: 'called the bank' })
+    );
+  });
   it.each([
     [
       '42501',
@@ -109,6 +131,12 @@ describe('order refund route', () => {
       409,
       'refund_processing_or_requires_review',
       'Refund is processing or requires review',
+    ],
+    [
+      'P0001',
+      409,
+      'manual_completion_required',
+      'Finish the remaining balance as a manual refund before retrying',
     ],
     ['P0001', 409, 'internal_detail', 'Unable to manage refund'],
     ['unexpected', 500, 'internal_detail', 'Unable to manage refund'],

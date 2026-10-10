@@ -21,6 +21,8 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
   manual_reference_conflict:
     'This reference was already used for a different refund',
   unallocated_refund_requires_review: 'Refund requires review before recording',
+  manual_completion_required:
+    'Finish the remaining balance as a manual refund before retrying',
   payment_currency_requires_review: 'Refund requires review before recording',
   payment_ledger_requires_review: 'Refund requires review before recording',
   invalid_refund_action: 'Invalid refund request',
@@ -64,7 +66,7 @@ async function handle(
         p_refunded_at: body.refundedAt,
         p_method: body.method,
         p_reference: body.reference,
-        p_note: body.note ?? null,
+        p_note: body.note ? body.note : null,
       });
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);

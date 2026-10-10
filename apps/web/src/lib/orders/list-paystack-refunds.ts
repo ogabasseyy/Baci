@@ -10,7 +10,14 @@ interface ProviderRefund {
 export async function listPaystackRefunds(
   reference: string
 ): Promise<ProviderRefund[]> {
-  if (!/^[A-Za-z0-9.=_-]{1,100}$/.test(reference))
+  // The reference travels only through encodeURIComponent into a query
+  // string, so punctuation is safe: reject empties, oversize values, and
+  // control characters that could smuggle log or cache-key forgeries.
+  const hasControlCharacter = [...reference].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f;
+  });
+  if (reference.length < 1 || reference.length > 100 || hasControlCharacter)
     throw new Error('Invalid payment reference');
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('Paystack refund verification unavailable');
@@ -27,18 +34,29 @@ export async function listPaystackRefunds(
       throw new Error('Paystack refund verification failed');
     return payload;
   }
+  // List Refunds filters by numeric transaction ID, not by reference: an
+  // alphanumeric reference in that filter matches zero rows, blinding the
+  // pre-check to existing provider refunds. Resolve the ID first.
+  const verified = await request(
+    `/transaction/verify/${encodeURIComponent(reference)}`
+  );
+  const verifiedId = (verified.data as { id?: unknown } | null)?.id;
+  if (
+    typeof verifiedId !== 'number' ||
+    !Number.isSafeInteger(verifiedId) ||
+    verifiedId <= 0
+  )
+    throw new Error('Unverified refund transaction');
+  const transactionId: number = verifiedId;
   const refunds: ProviderRefund[] = [];
   for (let page = 1; page <= 20; page++) {
     const envelope = await request(
-      `/refund?transaction=${encodeURIComponent(reference)}&perPage=100&page=${page}`
+      `/refund?transaction=${transactionId}&perPage=100&page=${page}`
     );
     if (!Array.isArray(envelope.data))
       throw new Error('Unverified refund list');
     const rows = envelope.data;
-    const linkedReferences: Array<string | undefined> = new Array(rows.length);
-    const unresolved: number[] = [];
-    for (let index = 0; index < rows.length; index++) {
-      const candidate = rows[index];
+    for (const candidate of rows) {
       if (
         !candidate ||
         !Number.isSafeInteger(candidate.id) ||
@@ -55,40 +73,19 @@ export async function listPaystackRefunds(
         ].includes(candidate.status)
       )
         throw new Error('Unverified refund record');
-      if (typeof candidate.transaction === 'string') {
-        linkedReferences[index] = candidate.transaction;
-      } else if (
-        typeof candidate.transaction === 'number' &&
-        Number.isSafeInteger(candidate.transaction) &&
-        candidate.transaction > 0
-      ) {
-        unresolved.push(index);
-      } else {
-        linkedReferences[index] = candidate.transaction?.reference;
-      }
-    }
-    // Numeric transaction identities resolve with bounded concurrency: a
-    // page of 100 sequential 15s-timeout lookups would stall the worker.
-    const workers = Array.from(
-      { length: Math.min(5, unresolved.length) },
-      async () => {
-        while (unresolved.length > 0) {
-          const index = unresolved.shift();
-          if (index === undefined) return;
-          const candidate = rows[index];
-          const transaction = await request(
-            `/transaction/${candidate.transaction}`
-          );
-          const data = transaction.data as { reference?: string } | null;
-          linkedReferences[index] = data?.reference;
-        }
-      }
-    );
-    await Promise.all(workers);
-    for (let index = 0; index < rows.length; index++) {
-      const candidate = rows[index];
-      if (linkedReferences[index] !== reference)
-        throw new Error('Refund transaction mismatch');
+      // The server-side filter already scopes rows to this transaction;
+      // this identity check only guards against a provider filter fault.
+      // Rows carry the transaction as an expanded object, a bare numeric
+      // ID, or (legacy) the reference string.
+      const linked = candidate.transaction;
+      const matches =
+        linked === transactionId ||
+        linked === reference ||
+        linked === String(transactionId) ||
+        (typeof linked === 'object' &&
+          linked !== null &&
+          (linked.id === transactionId || linked.reference === reference));
+      if (!matches) throw new Error('Refund transaction mismatch');
       refunds.push({
         id: candidate.id,
         amount: candidate.amount,

@@ -183,10 +183,13 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
-  it('does not submit refunds when completed captures exceed the recorded amount paid', async () => {
+  it('quarantines overfunded ledgers instead of retrying them', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 101 }],
     });
+    // An overfunded ledger cannot be repaired by retrying, so the step
+    // files durable reconciliation evidence and ends delivery_uncertain
+    // instead of burning the five-attempt budget on a plain error.
     await expect(
       executeOrderCancellationSideEffect({
         merchant,
@@ -194,7 +197,13 @@ describe('executeOrderCancellationSideEffect', () => {
         step: 'refund',
         supabase: supabase as never,
       })
-    ).rejects.toThrow('no refundable amount');
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(supabase.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        reason: expect.stringContaining('exceed the recorded amount paid'),
+      })
+    );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 

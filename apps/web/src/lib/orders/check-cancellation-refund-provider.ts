@@ -1,4 +1,5 @@
 import { listPaystackRefunds } from './list-paystack-refunds';
+import { normalizeRefundMoneyField } from './match-cancellation-refund-coverage';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 export async function checkCancellationRefundProvider({
@@ -41,7 +42,11 @@ export async function checkCancellationRefundProvider({
   for (const item of knownRefunds) {
     if (item.status !== 'completed') continue;
     if (item.metadata?.method !== 'paystack') continue;
-    if (item.currency !== currency) continue;
+    if (
+      normalizeRefundMoneyField(item.currency) !==
+      normalizeRefundMoneyField(currency)
+    )
+      continue;
     if (
       item.gateway_reference != null &&
       processedIds.has(item.gateway_reference)
@@ -56,7 +61,8 @@ export async function checkCancellationRefundProvider({
       (item) => item.gateway_reference === String(row.id)
     );
     if (
-      row.currency !== currency ||
+      normalizeRefundMoneyField(row.currency) !==
+        normalizeRefundMoneyField(currency) ||
       (known && Math.round(Number(known.amount) * 100) !== row.amount)
     )
       throw new DeliveryUncertainError(

@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { orderRefundStatusLabels } from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
+import { OrderRefundManualForm } from './order-refund-manual-form';
 
 export function OrderRefundPanel({
   orderId,
@@ -209,78 +208,24 @@ export function OrderRefundPanel({
               )}
             </div>
             {showForm && (
-              <form
-                className="space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submit('manual');
-                }}
-              >
-                <p className="text-sm">
-                  Record money already returned to the customer. This action
-                  does not send money.
-                </p>
-                <Label htmlFor="refund-amount">
-                  Amount ({summary.currency})
-                </Label>
-                <Input
-                  id="refund-amount"
-                  type="number"
-                  min="0.01"
-                  max={summary.remaining}
-                  step="0.01"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-                <Label htmlFor="refund-date">Refund date and time</Label>
-                <Input
-                  id="refund-date"
-                  type="datetime-local"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-                <Label htmlFor="refund-method">Method</Label>
-                <select
-                  id="refund-method"
-                  className="w-full rounded-md border p-2"
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value)}
-                >
-                  <option value="bank_transfer">Bank transfer</option>
-                  <option value="paystack">Paystack</option>
-                  <option value="cash">Cash</option>
-                  <option value="other">Other</option>
-                </select>
-                <Label htmlFor="refund-reference">Reference</Label>
-                <Input
-                  id="refund-reference"
-                  required
-                  maxLength={100}
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                />
-                <Label htmlFor="refund-note">Note (optional)</Label>
-                <Input
-                  id="refund-note"
-                  maxLength={500}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <Label className="flex gap-2">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={confirmed}
-                    onChange={(e) => setConfirmed(e.target.checked)}
-                  />
-                  I confirm this money has already been refunded.
-                </Label>
-                <Button type="submit" disabled={busy || !confirmed}>
-                  {busy ? 'Saving…' : 'Save manual refund'}
-                </Button>
-              </form>
+              <OrderRefundManualForm
+                amount={amount}
+                busy={busy}
+                confirmed={confirmed}
+                currency={summary.currency}
+                date={date}
+                method={method}
+                note={note}
+                onAmountChange={setAmount}
+                onConfirmedChange={setConfirmed}
+                onDateChange={setDate}
+                onMethodChange={setMethod}
+                onNoteChange={setNote}
+                onReferenceChange={setReference}
+                onSubmit={() => void submit('manual')}
+                reference={reference}
+                remaining={summary.remaining}
+              />
             )}
             {summary.events && summary.events.length > 0 && (
               <details>

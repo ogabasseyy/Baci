@@ -175,4 +175,23 @@ describe('checkCancellationRefundProvider', () => {
       })
     ).rejects.toThrow('reconciliation');
   });
+  it('compares currencies case-insensitively like the claim gate', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 1, amount: 100, currency: 'ngn', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        currency: ' NGN ',
+        knownRefunds: [
+          {
+            gateway_reference: '1',
+            amount: 1,
+            currency: 'ngn',
+            status: 'completed',
+          },
+        ],
+      })
+    ).resolves.toBeUndefined();
+  });
 });

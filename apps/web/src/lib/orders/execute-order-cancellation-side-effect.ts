@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import { classifyCancellationRefundLinks } from '@/lib/orders/classify-cancellation-refund-links';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
@@ -12,12 +11,13 @@ import type {
   CancellationMerchant,
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
+import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-cancellation-refund-initiation';
 import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
-  DeliveryUncertainError,
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
@@ -72,17 +72,6 @@ export async function executeOrderCancellationSideEffect({
   );
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
-  }
-  const refundAmount = Number(order.amount_paid) || 0;
-  if (
-    transactions.some(
-      (transaction) =>
-        !transaction.currency || transaction.currency !== order.currency
-    )
-  ) {
-    throw new DeliveryUncertainError(
-      'Payment currency requires review before refund'
-    );
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
@@ -270,45 +259,17 @@ export async function executeOrderCancellationSideEffect({
   // same way: their provider refund may already exist. Clean legs still
   // move below. Fully refunded legs need no quarantine: nothing will be
   // initiated for them, so terminalizing would only strand the rest.
-  const auditBlockedTransactions = transactions.filter(
-    (transaction) =>
-      auditBlockedLegIds.has(transaction.id) &&
-      !refundedPaymentIds.has(transaction.id)
-  );
-  const initiationTransactions = transactions.filter(
-    (transaction) =>
-      !mismatchedIds.has(transaction.id) &&
-      !auditBlockedLegIds.has(transaction.id)
-  );
-  // Captures may legitimately exceed the recorded amount paid when
-  // superseded legs exist (their completed refunds already cover them),
-  // but the outstanding initiation itself must never exceed it.
-  const outstandingRefundKobo = initiationTransactions
-    .filter((transaction) => !refundedPaymentIds.has(transaction.id))
-    .reduce(
-      (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
-      0
-    );
-  if (outstandingRefundKobo > Math.round(refundAmount * 100)) {
-    throw new Error('Completed payment transaction has no refundable amount');
-  }
-  // Pre-initiation provider guard: an existing Paystack refund the ledger
-  // cannot account for must quarantine for review (delivery_uncertain)
-  // instead of initiating a duplicate provider refund.
-  for (const transaction of initiationTransactions) {
-    if (
-      normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' ||
-      !transaction.gateway_reference
-    )
-      continue;
-    await checkCancellationRefundProvider({
-      currency: transaction.currency || order.currency || 'NGN',
-      knownRefunds: (refundRows ?? []).filter(
-        (row) => linkedPaymentId(row) === transaction.id
-      ),
-      reference: transaction.gateway_reference,
+  const { auditBlockedTransactions, initiationTransactions } =
+    await preflightCancellationRefundInitiation({
+      auditBlockedLegIds,
+      linkedPaymentId,
+      mismatchedIds,
+      order,
+      refundedPaymentIds,
+      refundRows,
+      supabase,
+      transactions,
     });
-  }
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -318,27 +279,11 @@ export async function executeOrderCancellationSideEffect({
     supabase,
     transactions: initiationTransactions,
   });
-  if (auditBlockedTransactions.length > 0) {
-    await quarantineRefund({
-      metadata: { audit_blocked_leg_count: auditBlockedTransactions.length },
-      order,
-      preflight: true,
-      reason:
-        'A provider refund event for this leg has no verified local audit row; verify it before another provider refund',
-      supabase,
-      transactions: auditBlockedTransactions,
-    });
-  }
-  if (mismatchedTransactions.length > 0) {
-    await quarantineRefund({
-      metadata: { mismatched_leg_count: mismatchedTransactions.length },
-      order,
-      preflight: true,
-      reason:
-        'Completed cancellation refunds do not cover their payment legs; verify amounts before another provider refund',
-      supabase,
-      transactions: mismatchedTransactions,
-    });
-  }
+  await quarantineWithheldCancellationRefundLegs({
+    auditBlockedTransactions,
+    mismatchedTransactions,
+    order,
+    supabase,
+  });
   return { refundIds };
 }

@@ -9,6 +9,17 @@ interface CancellationRefundRow {
 }
 
 /**
+ * Claim-gate money comparison: legacy rows pad or re-case ISO codes
+ * (`ngn`, ` NGN `), so every currency/gateway equality trims and
+ * uppercases instead of comparing raw text.
+ */
+export function normalizeRefundMoneyField(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase();
+}
+
+/**
  * Match completed refund rows against their payment legs. A completed row
  * marks its leg refunded only when it matches the leg's own gateway and
  * currency and the matched rows cover the full leg amount: a partial or
@@ -39,10 +50,7 @@ export function matchCancellationRefundCoverage({
   unattributedUnlinkedCount: number;
   unverifiedLinkedLegIds: Set<string>;
 } {
-  const normalizeMoneyField = (value: unknown): string =>
-    String(value ?? '')
-      .trim()
-      .toUpperCase();
+  const normalizeMoneyField = normalizeRefundMoneyField;
   const legById = new Map(transactions.map((leg) => [leg.id, leg]));
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();

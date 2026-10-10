@@ -135,26 +135,35 @@ describe('Expo compliance', () => {
       'utf-8'
     );
     // Split-config indirection: app.config.ts now delegates to the
-    // production builder, which imports the nested helpers relatively.
-    // Follow the delegation so the no-type-stripping pin still covers
-    // the helpers actually loaded in production.
+    // production builder, which loads the nested helpers relatively
+    // (ES imports in the .ts builder, CJS require in the plain-CJS
+    // .js builder). Follow the delegation so the no-type-stripping
+    // pin still covers the helpers actually loaded in production.
     const builderMatch = configSource.match(/require\('(\.\/config\/[^']+)'\)/);
     const builderSource = builderMatch
       ? readFileSync(path.join(ROOT, builderMatch[1]), 'utf-8')
       : '';
+    const helperPattern =
+      'android-intent-filters|expo-plugins|resolve-update-channel|sentry-expo-config|sentry-required-environment|tiktok-constants';
     const helperPaths = [
       ...configSource.matchAll(
-        /require\('(\.\/config\/(?:expo-plugins|resolve-update-channel)[^']*)'\)/g
+        new RegExp(
+          `require\\('(\\.\\/config\\/(?:${helperPattern})[^']*)'\\)`,
+          'g'
+        )
       ),
     ].map((match) => match[1]);
     const builderHelperPaths = [
       ...builderSource.matchAll(
-        /from\s+'(\.\/(?:expo-plugins|resolve-update-channel)[^']*)'/g
+        new RegExp(
+          `(?:from\\s+'|require\\(')(\\.\\/(?:${helperPattern})[^']*)`,
+          'g'
+        )
       ),
     ].map((match) => `./config/${match[1].slice(2)}`);
     const allHelperPaths = [...helperPaths, ...builderHelperPaths];
 
-    expect(allHelperPaths).toHaveLength(2);
+    expect(allHelperPaths).toHaveLength(6);
 
     const result = spawnSync(
       process.execPath,

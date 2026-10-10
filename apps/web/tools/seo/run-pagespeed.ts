@@ -32,6 +32,17 @@ function evaluatePageSpeedResult(
     inp: fieldInp ?? labInp,
   };
   const failures: PageSpeedFailure[] = [];
+  const runtimeCode = readSafeApiToken(
+    payload.lighthouseResult?.runtimeError?.code
+  );
+  if (runtimeCode) {
+    failures.push({
+      metric: 'request',
+      actual: null,
+      threshold: 0,
+      message: `Lighthouse runtime error: ${runtimeCode}`,
+    });
+  }
   for (const metric of [
     'performance',
     'accessibility',
@@ -41,7 +52,28 @@ function evaluatePageSpeedResult(
     const actual = scores[metric];
     const threshold = CATEGORY_THRESHOLDS[metric];
     if (actual === null || actual < threshold) {
-      failures.push({ metric, actual, threshold });
+      const failedAudits = payload.lighthouseResult?.categories?.[
+        metric
+      ]?.auditRefs
+        ?.filter(
+          (ref) =>
+            ref.weight > 0 &&
+            typeof payload.lighthouseResult?.audits?.[ref.id]?.score ===
+              'number' &&
+            (payload.lighthouseResult?.audits?.[ref.id]?.score ?? 1) < 1
+        )
+        .map((ref) => readSafeApiToken(ref.id))
+        .filter(Boolean);
+      failures.push({
+        metric,
+        actual,
+        threshold,
+        ...(failedAudits?.length
+          ? {
+              message: `Failing Lighthouse audits: ${[...new Set(failedAudits)].join(', ')}`,
+            }
+          : {}),
+      });
     }
   }
   for (const metric of ['lcp', 'cls', 'tbt'] as const) {

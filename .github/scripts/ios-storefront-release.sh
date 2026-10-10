@@ -16,7 +16,12 @@ case "$operation" in
     fi
 
     mkdir -p "$HOME/.posthog"
-    ln -sf "$POSTHOG_CLI_PATH" "$HOME/.posthog/posthog-cli"
+    # Retry upload transport failures without rerunning Metro/Hermes or Sentry.
+    export POSTHOG_RELEASE_CLI="$POSTHOG_CLI_PATH"
+    if [ -n "${GITHUB_ENV:-}" ]; then
+      echo "POSTHOG_RELEASE_CLI=$POSTHOG_RELEASE_CLI" >> "$GITHUB_ENV"
+    fi
+    ln -sf "$GITHUB_WORKSPACE/.github/scripts/posthog-release-cli.sh" "$HOME/.posthog/posthog-cli"
     "$HOME/.posthog/posthog-cli" --version
     ;;
   resolve-build)

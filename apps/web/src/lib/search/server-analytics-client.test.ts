@@ -95,6 +95,35 @@ describe('recordSearchSubmission', () => {
     });
   });
 
+  it('sanitizes content instead of trusting the caller', async () => {
+    await recordSearchSubmission({
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: ' <script>alert(1)</script> phone ',
+      results_count: 27,
+      search_method: 'client',
+    });
+
+    expect(mockInsert).toHaveBeenCalledExactlyOnceWith({
+      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+      search_query: 'scriptalert1/script phone',
+      results_count: 27,
+      search_method: 'client',
+    });
+  });
+
+  it('rejects queries that sanitize to empty', async () => {
+    await expect(
+      recordSearchSubmission({
+        merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+        search_query: '<>',
+        results_count: 27,
+        search_method: 'client',
+      })
+    ).rejects.toThrow('Invalid search submission row');
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it('propagates insert errors', async () => {
     mockInsert.mockResolvedValue({ error: { message: 'db down' } });
 

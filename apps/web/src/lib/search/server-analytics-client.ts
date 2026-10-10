@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { PostgrestError } from '@supabase/supabase-js';
+import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { SEARCH_SUBMISSION_QUERY_MAX_LENGTH } from '@/lib/search-submission-query';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -63,13 +64,22 @@ export async function recordSearchSubmission(
   if (!isIngestibleRow(row)) {
     throw new Error('Invalid search submission row');
   }
+  // Sanitize content here too: shape validation above cannot tell
+  // '<script>…' from a real query, and the sole route caller is not the
+  // only possible future importer. sanitizeSearchQuery is idempotent
+  // (strip/trim/cap), so re-sanitizing the route's already-clean value
+  // is a no-op; a value that sanitizes to empty is rejected, not stored.
+  const sanitizedQuery = sanitizeSearchQuery(row.search_query);
+  if (sanitizedQuery.length < 1) {
+    throw new Error('Invalid search submission row');
+  }
   // Allowlist the insert payload: validation above checks types/ranges but
   // a future importer could pass extra keys (clicked_product_id, created_at,
   // ...) that would otherwise flow verbatim through the RLS-bypassing
   // branded client into an arbitrary tenant row.
   const payload: SearchSubmissionRow = {
     merchant_id: row.merchant_id,
-    search_query: row.search_query.trim(),
+    search_query: sanitizedQuery,
     results_count: row.results_count,
     search_method: row.search_method,
   };

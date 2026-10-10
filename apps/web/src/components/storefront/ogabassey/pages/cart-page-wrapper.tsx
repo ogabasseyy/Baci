@@ -132,11 +132,11 @@ async function fetchAndAddCartItems({
           ...product,
           image: resolvedImage,
           imageLarge: resolvedImage,
-          stock: product.manage_stock ? effectiveStock : product.stock,
+          stock: (product.manage_stock ?? true) ? effectiveStock : product.stock,
         };
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
+        if (!hasQuizPrizeVoucher && (product.manage_stock ?? true) && existingQuantity + quantity > effectiveStock) {
           rejectedIds.push(product.id);
           toast({
             title: 'Not enough stock',

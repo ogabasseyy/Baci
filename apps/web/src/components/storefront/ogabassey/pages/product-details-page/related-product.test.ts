@@ -57,6 +57,15 @@ describe('toRelatedProductsProduct', () => {
     expect(result.mpn).toBe('');
   });
 
+  it('normalizes a null manage_stock row to managed inventory', () => {
+    // Legacy rows carry a NULL flag at runtime though the type is boolean.
+    const result = toRelatedProductsProduct(
+      makeProduct({ manage_stock: null as unknown as boolean })
+    );
+
+    expect(result.manage_stock).toBe(true);
+  });
+
   it('maps categories object including optional parent_id', () => {
     const product = makeProduct({
       categories: {

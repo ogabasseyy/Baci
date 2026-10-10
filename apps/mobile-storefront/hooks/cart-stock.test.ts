@@ -1,7 +1,7 @@
 import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
-import { checkStock, getTotalRequestedQuantityForStock } from './cart-stock';
+import { checkStock, getExistingCartQuantityForStock } from './cart-stock';
 
 const mockNetInfoFetch = jest.fn();
 
@@ -51,7 +51,7 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('counts existing voucher lines plus the incoming paid quantity', () => {
+  it('counts existing voucher lines plus the optimistic paid line', () => {
     const voucherItem = {
       product_id: 'product-1',
       slug: 'redmi-note-14',
@@ -67,9 +67,18 @@ describe('cart-stock helpers', () => {
       ...voucherItem,
       voucher_award_id: 'voucher-award-2',
     });
+    // onMutate already applied the incoming paid line before validation.
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      variant_id: 'variant-128',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 2,
+    });
 
     expect(
-      getTotalRequestedQuantityForStock({
+      getExistingCartQuantityForStock({
         product_id: 'product-1',
         slug: 'redmi-note-14',
         variant_id: 'variant-128',
@@ -760,13 +769,47 @@ describe('cart-stock helpers', () => {
       lineSequence: 2,
     });
 
+    // onMutate already applied the incoming offer line before validation.
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'slug',
+      name: 'Item',
+      price: 100,
+      quantity: 1,
+      offer_id: 'offer-7',
+    });
+
     expect(
-      getTotalRequestedQuantityForStock({
+      getExistingCartQuantityForStock({
         product_id: 'product-1',
         slug: 'slug',
         name: 'Item',
         price: 100,
         quantity: 1,
+        offer_id: 'offer-7',
+      })
+    ).toBe(3);
+  });
+
+  it('does not double-count the optimistic offer line', () => {
+    // Fresh add: the store holds only the optimistic line when validation
+    // runs, so the requested total equals that line alone.
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'slug',
+      name: 'Item',
+      price: 100,
+      quantity: 3,
+      offer_id: 'offer-7',
+    });
+
+    expect(
+      getExistingCartQuantityForStock({
+        product_id: 'product-1',
+        slug: 'slug',
+        name: 'Item',
+        price: 100,
+        quantity: 3,
         offer_id: 'offer-7',
       })
     ).toBe(3);

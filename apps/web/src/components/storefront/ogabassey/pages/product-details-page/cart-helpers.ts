@@ -212,22 +212,10 @@ export function buildCartProduct(
   options?: { hasVariantPricing?: boolean }
 ): CartProduct {
   const baseProduct = toRelatedProductsProduct(productData);
-  // A non-variant condition offer prices the line below catalog, but the
-  // server verifies merchant-rate tiers against products.price. Retain the
-  // base catalog unit price so quote subtotals use the canonical basis.
-  // Variant-priced lines already match the server (price_override), so they
-  // carry no override.
-  const isConditionOffer =
-    selectedCondition.toLowerCase() !==
-    (productData.condition || 'new').toLowerCase();
-  const catalogPrice =
-    isConditionOffer &&
-    !options?.hasVariantPricing &&
-    typeof baseProduct.price === 'number' &&
-    Number.isFinite(baseProduct.price) &&
-    baseProduct.price >= 0
-      ? baseProduct.price
-      : undefined;
+  // A non-variant condition offer prices the line below catalog, and the
+  // server verifies merchant-rate tiers against the live offer price — so
+  // no parent catalog basis is retained: quotes must use the selected
+  // offer price or they would display a tier the order rejects.
 
   // Color is carried into the cart by the image: prefer the selected color's
   // own image so the cart always depicts the chosen color, even when the
@@ -247,7 +235,6 @@ export function buildCartProduct(
     // availability (offer quantity or serialized units) so an exact
     // selection on a zero-parent-stock product is not silently rejected.
     stock: currentOffer.stock,
-    ...(catalogPrice === undefined ? {} : { catalogPrice }),
     image,
     imageLarge: image,
     description: productData.description,

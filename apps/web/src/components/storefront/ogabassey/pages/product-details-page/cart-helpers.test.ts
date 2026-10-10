@@ -179,8 +179,8 @@ describe('cart helpers', () => {
 
 const offer = { rawPrice: 600000 } as Parameters<typeof buildCartProduct>[1];
 
-describe('buildCartProduct catalog basis', () => {
-  it('retains the catalog price for a non-variant condition offer', () => {
+describe('buildCartProduct offer pricing', () => {
+  it('quotes a non-variant condition offer at the offer price with no catalog basis', () => {
     const product = buildCartProduct(
       makeProductData({ condition: 'new' }),
       offer,
@@ -189,8 +189,11 @@ describe('buildCartProduct catalog basis', () => {
       {}
     );
 
+    // The server canonical subtotal prices offer lines from the live offer,
+    // so retaining the parent catalog price would display a tier the order
+    // then rejects.
     expect(product.price).toBe(600000);
-    expect(product.catalogPrice).toBe(650000);
+    expect(product.catalogPrice).toBeUndefined();
   });
 
   it('carries the resolved option stock for the cart guard', () => {

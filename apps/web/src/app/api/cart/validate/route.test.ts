@@ -134,6 +134,39 @@ describe('POST /api/cart/validate', () => {
     ]);
   });
 
+  it('normalizes a null manage_stock row to managed inventory', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'Legacy Phone',
+        price: 370_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: null,
+      },
+    ];
+
+    const response = await postCartValidate({
+      productIds: [PRODUCT_ID],
+      cartItems: [],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.validProducts).toEqual([
+      {
+        id: PRODUCT_ID,
+        price: 370_000,
+        stock: 0,
+        name: 'Legacy Phone',
+        manage_stock: true,
+      },
+    ]);
+  });
+
   it('reports stale selected-variant prices against the variant override', async () => {
     const { supabase, productsQuery } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

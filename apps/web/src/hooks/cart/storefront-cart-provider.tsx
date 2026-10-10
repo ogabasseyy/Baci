@@ -361,7 +361,7 @@ export function StorefrontCartProvider({
     );
     if (
       !isQuizPrizeVoucherLine &&
-      productForCart.manage_stock &&
+      (productForCart.manage_stock ?? true) &&
       (productForCart.stock ?? 0) <= 0
     ) {
       logger.warn({

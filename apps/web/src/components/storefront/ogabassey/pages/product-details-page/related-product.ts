@@ -38,7 +38,7 @@ export function toRelatedProductsProduct(product: Product): CartProduct {
     description: product.description || '',
     status: 'active',
     price: parseRelatedProductPrice(product),
-    manage_stock: Boolean(product.manage_stock),
+    manage_stock: product.manage_stock ?? true,
     stock: product.stock ?? 0,
     image: primaryImage,
     imageLarge: primaryImage,

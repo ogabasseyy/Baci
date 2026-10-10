@@ -257,7 +257,7 @@ export async function POST(request: NextRequest) {
         price: currentPrice,
         stock: getEffectiveStock(product),
         name: product.name,
-        manage_stock: Boolean(product.manage_stock),
+        manage_stock: product.manage_stock ?? true,
         ...(item.variantId ? { variantId: item.variantId } : {}),
         ...(item.offerId ? { offerId: item.offerId } : {}),
       });

@@ -86,11 +86,12 @@ export function calculateCartTotal(
  * 400 for a legitimate checkout. Sending this basis keeps them aligned.
  *
  * Only the GOODS basis differs from `calculateCartTotal`: goods use the catalog
- * `item.price` (which already reflects any selected variant's override), or
- * the retained `item.catalogPrice` for condition-offer lines priced below
- * catalog, while the quantity-aware assurance fee stays on the negotiated
- * checkout unit price exactly as the server recomputes it (`assurance_fee`
- * derives from the negotiated line price in `/api/orders`).
+ * `item.price` (which already reflects any selected variant's override),
+ * except offer lines, which quote from the selected offer price exactly
+ * as the server canonical subtotal prices them. The quantity-aware
+ * assurance fee stays on the negotiated checkout unit price exactly as
+ * the server recomputes it (`assurance_fee` derives from the negotiated
+ * line price in `/api/orders`).
  *
  * Residual divergences vs. the server — all advisory, since the server always
  * re-derives the authoritative fee at order time:
@@ -107,9 +108,12 @@ export function calculateCartCatalogSubtotal(
       typeof item.quantity === 'number' && !Number.isNaN(item.quantity)
         ? item.quantity
         : 0;
-    // Condition-offer lines price below catalog; prefer the retained catalog
-    // basis so merchant-rate tiers match the server's canonical subtotal.
+    // Condition-offer lines quote from the selected offer price: the
+    // server canonical subtotal prices them from the live offer, so the
+    // retained parent catalog basis would display a tier the order then
+    // rejects. Non-offer lines keep the catalog basis.
     const catalogUnitPrice =
+      item.offerId == null &&
       typeof item.catalogPrice === 'number' &&
       Number.isFinite(item.catalogPrice) &&
       item.catalogPrice >= 0

@@ -22,7 +22,14 @@ async function checkNetwork(): Promise<boolean> {
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 
-function getExistingCartQuantityForStock(item: AddToCartInput): number {
+/**
+ * Total units in the store for this product/variant/offer identity.
+ * The add-to-cart mutation validates this store total (not store plus
+ * incoming): onMutate already applied the incoming line optimistically
+ * before mutationFn runs, so adding the incoming quantity again would
+ * double-count it and reject in-stock adds.
+ */
+export function getExistingCartQuantityForStock(item: AddToCartInput): number {
   const variantId = item.variant_id ?? null;
   const offerId = item.offer_id ?? null;
   return useCartStore
@@ -36,17 +43,6 @@ function getExistingCartQuantityForStock(item: AddToCartInput): number {
           : total,
       0
     );
-}
-
-function getIncomingCartQuantityForStock(item: AddToCartInput): number {
-  return item.voucher_token || item.voucher_award_id ? 1 : item.quantity;
-}
-
-export function getTotalRequestedQuantityForStock(item: AddToCartInput) {
-  return (
-    getExistingCartQuantityForStock(item) +
-    getIncomingCartQuantityForStock(item)
-  );
 }
 
 /**

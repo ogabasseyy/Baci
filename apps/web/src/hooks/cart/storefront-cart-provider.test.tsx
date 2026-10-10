@@ -132,6 +132,26 @@ describe('StorefrontCartProvider', () => {
     expect(result.current.cart[0]?.quizAwardId).toBe('award-1');
   });
 
+  it('treats a null manage_stock product as managed by the out-of-stock guard', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // Legacy NULL rows are managed inventory: a zero-stock line is blocked.
+    // The NULL arrives at runtime though the product type is boolean.
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, manage_stock: null as unknown as boolean, stock: 0 },
+        1
+      );
+    });
+    expect(result.current.totalItems).toBe(0);
+  });
+
   it('prunes expired voucher lines during mount hydration and persists the result', async () => {
     localStorageMock.setItem(
       'baci-cart-ogabassey-guest',

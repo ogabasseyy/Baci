@@ -18,7 +18,7 @@ import { getCachedOptionStock } from './cart-query-cache';
 import {
   type AddToCartInput,
   checkStock,
-  getTotalRequestedQuantityForStock,
+  getExistingCartQuantityForStock,
 } from './cart-stock';
 
 /**
@@ -71,7 +71,10 @@ export function useCart() {
    */
   const addToCartMutation = useMutation({
     mutationFn: async (item: AddToCartInput) => {
-      const totalQuantity = getTotalRequestedQuantityForStock(item);
+      // onMutate already applied this line to the store, so the store
+      // total IS the requested total; adding the incoming quantity again
+      // would double-count the optimistic line.
+      const totalQuantity = getExistingCartQuantityForStock(item);
 
       // Validate stock in background, with cached fallback for offline
       const stockCheck = await checkStock(

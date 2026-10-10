@@ -21,6 +21,7 @@ function loyaltyStateWithReward(reward: Record<string, unknown>) {
     tier: 'gold',
     availableRewards: [reward],
     redeemReward: vi.fn(),
+    refetch: vi.fn(),
     getTierInfo: () => ({
       colors: { text: 'text-amber-800' },
       benefits: [],
@@ -173,5 +174,60 @@ describe('RewardsCatalog', () => {
       expect(mockRedeemReward).toHaveBeenCalledWith('reward-5');
     });
     expect(onRedeemed).not.toHaveBeenCalled();
+  });
+
+  it('refetches loyalty data when redemption fails so a stale balance clears', async () => {
+    const mockRedeemReward = vi
+      .fn()
+      .mockResolvedValue({ success: false, error: 'nope' });
+    const mockRefetch = vi.fn();
+    mockUseLoyalty.mockReturnValue({
+      ...loyaltyStateWithReward({
+        id: 'reward-6',
+        name: 'Anything',
+        description: 'Redeemable',
+        points_required: 100,
+        reward_type: 'discount',
+        discount_type: 'fixed',
+        discount_value: 100,
+      }),
+      redeemReward: mockRedeemReward,
+      refetch: mockRefetch,
+    });
+
+    render(<RewardsCatalog merchantId="merchant-1" customerId="customer-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
+
+    await waitFor(() => {
+      expect(mockRefetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not refetch on success because the hook already refreshed', async () => {
+    const mockRedeemReward = vi.fn().mockResolvedValue({ success: true });
+    const mockRefetch = vi.fn();
+    mockUseLoyalty.mockReturnValue({
+      ...loyaltyStateWithReward({
+        id: 'reward-7',
+        name: 'Anything',
+        description: 'Redeemable',
+        points_required: 100,
+        reward_type: 'discount',
+        discount_type: 'fixed',
+        discount_value: 100,
+      }),
+      redeemReward: mockRedeemReward,
+      refetch: mockRefetch,
+    });
+
+    render(<RewardsCatalog merchantId="merchant-1" customerId="customer-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
+
+    await waitFor(() => {
+      expect(mockRedeemReward).toHaveBeenCalledWith('reward-7');
+    });
+    expect(mockRefetch).not.toHaveBeenCalled();
   });
 });

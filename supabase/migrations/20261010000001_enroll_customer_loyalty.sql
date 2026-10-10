@@ -118,6 +118,26 @@ BEGIN
     pg_catalog.hashtext(p_merchant_id::text || ':' || p_customer_id::text)
   );
 
+  -- Post-lock recheck: a first purchase racing enrollment may have
+  -- created the row after the pre-lock check above (the award takes this
+  -- same key, so the winner committed before this lock was granted).
+  -- Return already_enrolled explicitly instead of falling through to the
+  -- insert's unique-violation handler. Bonuses attach only to rows this
+  -- function creates: an award-created row keeps the sequential
+  -- purchase-first outcome (no signup/referral bonus), so the race
+  -- resolves exactly like award-then-enroll run in order. Crediting
+  -- bonuses onto pre-existing rows would be a contract change for
+  -- already_enrolled, not a race fix. The unique-violation handler below
+  -- stays as a net for writers that bypass the advisory lock.
+  PERFORM 1
+  FROM public.customer_loyalty
+  WHERE merchant_id = p_merchant_id
+    AND customer_id = p_customer_id;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
+  END IF;
+
   -- Resolve the referrer. Unknown codes are ignored so a bad code never
   -- blocks enrollment (matches previous route behavior). A self-referral
   -- cannot match: the enrolling customer has no loyalty row yet (double

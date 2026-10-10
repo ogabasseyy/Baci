@@ -5,6 +5,76 @@
 -- Split from 20261010000001 (repository 300-line limit); applies right
 -- after it. Exhausted finite rewards (stock_quantity = 0) are excluded so
 -- the catalog never offers an unredeemable reward; NULL means unlimited.
+-- Rewards the caller already exhausted under usage_limit_per_customer are
+-- excluded the same way, and the returned balance is the spendable
+-- projection (materialized balance minus unreconciled expired lots), so
+-- the storefront never advertises expired points or capped rewards.
+--
+-- The expiry math lives in calculate_unspent_expired_points below, shared
+-- with the redemption RPC: FIFO lot accounting deducts only each expired
+-- earning's unspent remainder instead of the gross earn sum.
+CREATE OR REPLACE FUNCTION public.calculate_unspent_expired_points(
+  p_merchant_id uuid,
+  p_customer_id uuid
+) RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  WITH ledger AS (
+    SELECT
+      points_transactions.points,
+      points_transactions.type,
+      points_transactions.expires_at,
+      points_transactions.expired,
+      -- FIFO position: credits stacked before this row in ledger order.
+      SUM(
+        CASE WHEN points_transactions.points > 0
+          THEN points_transactions.points
+          ELSE 0
+        END
+      ) OVER (
+        ORDER BY points_transactions.created_at, points_transactions.id
+        ROWS UNBOUNDED PRECEDING
+      ) - CASE WHEN points_transactions.points > 0
+        THEN points_transactions.points
+        ELSE 0
+      END AS credits_before
+    FROM public.points_transactions
+    WHERE points_transactions.merchant_id = p_merchant_id
+      AND points_transactions.customer_id = p_customer_id
+  ),
+  total_consumed AS (
+    -- Every balance-reducing row consumes the oldest lots first. Prior
+    -- expiry write-offs are included: each one consumed the remainder of
+    -- the lots it wrote off, so excluding them would under-allocate
+    -- consumption to already-settled lots and overstate the remainder.
+    SELECT COALESCE(SUM(-ledger.points), 0) AS consumed
+    FROM ledger
+    WHERE ledger.points < 0
+  )
+  SELECT COALESCE(SUM(
+    GREATEST(
+      expired_lot.points
+        - GREATEST(total_consumed.consumed - expired_lot.credits_before, 0),
+      0
+    )
+  ), 0)::integer
+  FROM ledger AS expired_lot
+  CROSS JOIN total_consumed
+  WHERE expired_lot.type = 'earn'
+    AND expired_lot.expired IS DISTINCT FROM true
+    AND expired_lot.expires_at IS NOT NULL
+    AND expired_lot.expires_at < pg_catalog.now()
+$$;
+
+-- Helper with no ownership check: only the SECURITY DEFINER loyalty RPCs
+-- may call it (definer's rights), never direct session callers.
+REVOKE ALL ON FUNCTION public.calculate_unspent_expired_points(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.calculate_unspent_expired_points(uuid, uuid)
+  TO service_role;
+
 CREATE OR REPLACE FUNCTION public.get_loyalty_status(
   p_merchant_id uuid,
   p_customer_id uuid
@@ -17,6 +87,7 @@ DECLARE
   v_settings record;
   v_loyalty record;
   v_enrolled boolean := false;
+  v_spendable integer := 0;
   v_rewards jsonb;
   v_transactions jsonb;
 BEGIN
@@ -55,6 +126,16 @@ BEGIN
 
   v_enrolled := FOUND;
 
+  -- Spendable projection: the materialized balance still holds expired
+  -- lots until a redemption reconciles them, so project the same FIFO
+  -- remainder the redemption RPC would deduct. Read-only: nothing is
+  -- marked expired here.
+  v_spendable := GREATEST(
+    0,
+    COALESCE(v_loyalty.points_balance, 0)
+      - public.calculate_unspent_expired_points(p_merchant_id, p_customer_id)
+  );
+
   SELECT COALESCE(jsonb_agg(reward ORDER BY (reward->>'points_cost')::integer), '[]'::jsonb)
   INTO v_rewards
   FROM (
@@ -72,6 +153,17 @@ BEGIN
       AND (start_date IS NULL OR start_date <= pg_catalog.now())
       AND (end_date IS NULL OR end_date >= pg_catalog.now())
       AND (stock_quantity IS NULL OR stock_quantity > 0)
+      -- Hide rewards this caller already exhausted: without this the
+      -- post-redemption refetch re-advertises a capped reward (and the
+      -- status card counts it redeemable) although every further redeem
+      -- is rejected with usage_limit_reached.
+      AND (usage_limit_per_customer IS NULL OR (
+        SELECT COUNT(*)
+        FROM public.reward_redemptions AS exhausted
+        WHERE exhausted.merchant_id = p_merchant_id
+          AND exhausted.customer_id = p_customer_id
+          AND exhausted.reward_id = loyalty_rewards.id
+      ) < usage_limit_per_customer)
   ) AS rewards;
 
   SELECT COALESCE(jsonb_agg(txn ORDER BY txn->>'created_at' DESC), '[]'::jsonb)
@@ -112,7 +204,7 @@ BEGIN
   RETURN jsonb_build_object(
     'success', true,
     'enrolled', true,
-    'points_balance', COALESCE(v_loyalty.points_balance, 0),
+    'points_balance', v_spendable,
     'lifetime_points', COALESCE(v_loyalty.lifetime_points, 0),
     'current_tier', COALESCE(v_loyalty.current_tier, 'Bronze'),
     'referral_code', v_loyalty.referral_code,

@@ -15,5 +15,7 @@
 \ir enroll_customer_loyalty_referrals.sql
 \ir enroll_customer_loyalty_status.sql
 \ir enroll_customer_loyalty_redemption.sql
+\ir enroll_customer_loyalty_reconciliation.sql
+\ir enroll_customer_loyalty_projection.sql
 
 ROLLBACK;

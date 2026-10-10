@@ -233,7 +233,7 @@ describe('POST /api/storefront/loyalty/redeem', () => {
         success: false,
         error: 'minimum_not_met',
         required: 500,
-        available: 150,
+        available: 100,
       },
       error: null,
     });
@@ -249,9 +249,9 @@ describe('POST /api/storefront/loyalty/redeem', () => {
 
     expect(response.status).toBe(400);
     expect(body).toEqual({
-      error: 'Minimum points balance not met for redemption',
+      error: 'Minimum redemption amount not met',
       required: 500,
-      available: 150,
+      available: 100,
     });
   });
 

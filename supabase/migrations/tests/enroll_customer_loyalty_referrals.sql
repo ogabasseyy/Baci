@@ -171,6 +171,21 @@ SELECT pg_temp.assert_true(
   'enrollment and purchase awards do not share one creation lock'
 );
 
+-- 10b. Enrollment rechecks existence after acquiring the creation lock: a
+-- first purchase racing enrollment may commit the row between the
+-- pre-lock check and the lock grant, and without a recheck the loser
+-- falls into the insert's unique-violation handler. (Same single-session
+-- limit as case 10: pin the mechanism on the function definition.)
+SELECT pg_temp.assert_true(
+  (SELECT position('pg_advisory_xact_lock' IN definition) > 0
+     AND position('Post-lock recheck' IN definition)
+       > position('pg_advisory_xact_lock' IN definition)
+   FROM pg_get_functiondef(
+     'public.enroll_customer_loyalty(uuid,uuid,text)'::regprocedure
+   ) AS definition),
+  'enrollment does not recheck existence after the creation lock'
+);
+
 -- 11. A soft-deleted referrer's code is ignored: enrollment succeeds
 -- without the referee bonus and the deleted account is untouched.
 INSERT INTO public.customer_loyalty (

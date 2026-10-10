@@ -11,9 +11,9 @@
 -- This SECURITY DEFINER RPC performs the whole redemption in one
 -- transaction against the real schema (baseline 20260418000000):
 -- expiry reconciliation, availability (enabled, dates, finite stock with
--- atomic decrement), per-customer usage cap, program minimum balance,
--- store_credit fulfillment, balance check, redemption insert, points
--- deduction, and ledger row.
+-- atomic decrement), per-customer usage cap, program minimum redemption
+-- amount, valued-reward guard, store_credit fulfillment, balance check,
+-- redemption insert, points deduction, and ledger row.
 -- The caller must own the customer row (customers.user_id = auth.uid()).
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,
@@ -76,17 +76,15 @@ BEGIN
 
   -- Reconcile expired purchase credits before the balance check: award
   -- stamps expires_at on earn transactions but nothing ever subtracts
-  -- them, so without this expired points stay spendable forever. The
-  -- member-row lock above serializes concurrent redemptions, so a second
-  -- redeem sees expired = true already committed and cannot double-count.
-  SELECT COALESCE(SUM(points), 0) INTO v_expired_points
-  FROM public.points_transactions
-  WHERE merchant_id = p_merchant_id
-    AND customer_id = p_customer_id
-    AND type = 'earn'
-    AND expired IS DISTINCT FROM true
-    AND expires_at IS NOT NULL
-    AND expires_at < pg_catalog.now();
+  -- them, so without this expired points stay spendable forever. Only
+  -- each expired lot's unspent remainder is deducted (FIFO: spends
+  -- consume the oldest lots first), so partly-spent lots and newer
+  -- permanent points survive. The member-row lock above serializes
+  -- concurrent redemptions, so a second redeem sees expired = true
+  -- already committed and cannot double-count.
+  v_expired_points := public.calculate_unspent_expired_points(
+    p_merchant_id, p_customer_id
+  );
 
   IF v_expired_points > 0 THEN
     UPDATE public.points_transactions
@@ -143,20 +141,30 @@ BEGIN
   END IF;
 
   -- Program minimum: the dashboard's "Minimum Redemption Points" is the
-  -- balance a member must hold before any redemption is allowed.
-  IF v_minimum IS NOT NULL AND v_minimum > 0 AND v_balance < v_minimum THEN
+  -- smallest single redemption the merchant allows (a 100-point reward
+  -- cannot be redeemed when the minimum is 500, even with a 600-point
+  -- balance). Matches the sibling redeem_loyalty_points / redeem_points
+  -- contracts, which compare the requested amount, not the balance.
+  IF v_minimum IS NOT NULL AND v_minimum > 0
+     AND v_reward.points_cost < v_minimum THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'minimum_not_met',
       'required', v_minimum,
-      'available', v_balance
+      'available', v_reward.points_cost
     );
   END IF;
 
-  -- store_credit rewards credit the customer balance below; a missing or
+  -- Valued rewards must carry a positive value: store_credit credits the
+  -- customer balance below, and discount_fixed / discount_percentage
+  -- redemptions advertise the value at checkout, so a missing or
   -- non-positive value is a misconfigured reward, failed closed here
-  -- before any write (stock, redemption, deduction).
-  IF v_reward.reward_type = 'store_credit'
+  -- before any write (stock, redemption, deduction). Plain 'discount'
+  -- rewards without a value stay redeemable: the catalog renders them
+  -- with a zero label and the suite pins that behavior.
+  IF v_reward.reward_type IN (
+       'store_credit', 'discount_fixed', 'discount_percentage'
+     )
      AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;

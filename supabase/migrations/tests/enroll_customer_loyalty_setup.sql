@@ -78,6 +78,27 @@ SELECT pg_temp.assert_true(
   'redeem_loyalty_reward grants are incorrect'
 );
 
+-- The FIFO expiry helper has no ownership check, so only the SECURITY
+-- DEFINER loyalty RPCs may reach it (definer's rights): no PUBLIC grant,
+-- no anon EXECUTE, no authenticated EXECUTE, service_role only.
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.calculate_unspent_expired_points(uuid,uuid)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.calculate_unspent_expired_points(uuid,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated',
+    'public.calculate_unspent_expired_points(uuid,uuid)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.calculate_unspent_expired_points(uuid,uuid)', 'EXECUTE'),
+  'calculate_unspent_expired_points grants are incorrect'
+);
+
 -- Fixtures.
 INSERT INTO auth.users (
   id, instance_id, aud, role, email, encrypted_password,

@@ -2,7 +2,9 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import { createLoyaltyRecordWithRetry } from '@/lib/loyalty-manual-record';
 import { createClient } from '@/lib/supabase/server';
+import { loyaltyManualPointsSchema } from '@/schemas/loyalty-manual-points';
 
 /**
  * Points Management API
@@ -137,22 +139,24 @@ export async function POST(request: NextRequest) {
     }
     const merchantId = merchantContext.merchantId;
 
-    const body = await request.json();
-    const { customerId, points, reason, type = 'adjust' } = body;
+    let rawBody: unknown = {};
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
 
-    if (!customerId || points === undefined) {
+    const parsed = loyaltyManualPointsSchema.safeParse(rawBody);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'customerId and points are required' },
+        {
+          error:
+            'customerId must be a UUID and points must be a non-zero integer',
+        },
         { status: 400 }
       );
     }
-
-    if (typeof points !== 'number' || points === 0) {
-      return NextResponse.json(
-        { error: 'points must be a non-zero number' },
-        { status: 400 }
-      );
-    }
+    const { customerId, points, reason, type } = parsed.data;
 
     // Get current loyalty record (or create one)
     const { data: initialLoyalty, error: loyaltyError } = await supabase
@@ -165,32 +169,19 @@ export async function POST(request: NextRequest) {
     let loyalty = initialLoyalty;
 
     if (loyaltyError && loyaltyError.code === 'PGRST116') {
-      // Create new loyalty record
-      const { data: newLoyalty, error: createError } = await supabase
-        .from('customer_loyalty')
-        .insert({
-          customer_id: customerId,
-          merchant_id: merchantId,
-          points_balance: 0,
-          lifetime_points: 0,
-          referral_code: crypto
-            .randomUUID()
-            .replace(/-/g, '')
-            .slice(0, 20)
-            .toUpperCase(),
-        })
-        // PERFORMANCE: Use explicit column selection instead of .select() to prevent overfetching full rows
-        .select('id, points_balance, lifetime_points, current_tier')
-        .single();
-
-      if (createError) {
-        console.error('Error creating loyalty record:', createError);
+      // Create new loyalty record, retrying referral-code collisions.
+      const created = await createLoyaltyRecordWithRetry(
+        supabase,
+        merchantId,
+        customerId
+      );
+      if (!created) {
         return NextResponse.json(
           { error: 'Failed to create loyalty record' },
           { status: 500 }
         );
       }
-      loyalty = newLoyalty;
+      loyalty = created;
     } else if (loyaltyError) {
       console.error('Error fetching loyalty:', loyaltyError);
       return NextResponse.json(

@@ -34,7 +34,7 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   not_enrolled: 'Customer is not enrolled in the loyalty program',
   reward_unavailable: 'Reward not found or no longer available',
   insufficient_points: 'Insufficient points',
-  minimum_not_met: 'Minimum points balance not met for redemption',
+  minimum_not_met: 'Minimum redemption amount not met',
   usage_limit_reached: 'Redemption limit reached for this reward',
   invalid_input: 'Invalid redemption input',
 };

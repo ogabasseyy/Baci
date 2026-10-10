@@ -186,11 +186,13 @@ SELECT pg_temp.assert_true(
 
 -- 19. Per-customer usage caps bind repeats: a limit-1 reward redeems once,
 -- then rejects with usage_limit_reached even though global stock remains.
+-- Cost 100 clears the setup program minimum of 100 (the minimum compares
+-- against the redeemed cost, not the balance).
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, enabled, stock_quantity,
   usage_limit_per_customer
 ) VALUES (
-  '01aa0000-0000-4000-8000-000000000001', 'One-time perk', 50, 'discount',
+  '01aa0000-0000-4000-8000-000000000001', 'One-time perk', 100, 'discount',
   true, 10, 1
 );
 
@@ -231,10 +233,17 @@ SELECT pg_temp.assert_true(
   'rejected capped redemption left a partial mutation'
 );
 
--- 20. The program minimum gates redemption: with minimum 200, member 012
--- (balance 100 after case 19) is rejected with required/available even
--- for a reward it could otherwise afford. Reset after: later cases run
--- under the setup minimum of 100.
+-- 20. The program minimum gates the redeemed cost, not the balance: with
+-- minimum 200, a 50-cost reward is rejected with required/available even
+-- though member 012 (balance 50 after case 19) can afford it. Like the
+-- sibling redeem_loyalty_points contract, available reports the attempted
+-- cost. Reset after: later cases run under the setup minimum of 100.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Small perk', 50, 'discount', true
+);
+
 UPDATE public.loyalty_settings
 SET minimum_redemption_points = 200
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -243,15 +252,23 @@ SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
      AND result ->> 'error' = 'minimum_not_met'
      AND (result ->> 'required')::integer = 200
-     AND (result ->> 'available')::integer = 100
+     AND (result ->> 'available')::integer = 50
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000012',
      (SELECT id FROM public.loyalty_rewards
       WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Free shipping')
+        AND name = 'Small perk')
    ) AS result),
   'sub-minimum redemption was not rejected'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT points_balance = 50
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
+  'rejected sub-minimum redemption mutated the balance'
 );
 
 UPDATE public.loyalty_settings

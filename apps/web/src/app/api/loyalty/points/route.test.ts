@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     },
     mockCheckCsrfProtection: vi.fn(),
     mockGetMerchant: vi.fn(),
+    mockCreateRecord: vi.fn(),
   };
 });
 
@@ -49,6 +50,11 @@ vi.mock('@/lib/csrf', () => ({
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: (...args: unknown[]) =>
     mocks.mockGetMerchant(...args),
+}));
+
+vi.mock('@/lib/loyalty-manual-record', () => ({
+  createLoyaltyRecordWithRetry: (...args: unknown[]) =>
+    mocks.mockCreateRecord(...args),
 }));
 
 const { POST } = await import('./route');
@@ -129,6 +135,59 @@ describe('POST /api/loyalty/points', () => {
     >;
     expect(updateArg).not.toHaveProperty('current_tier');
     expect(updateArg).not.toHaveProperty('tier_updated_at');
+  });
+
+  it('rejects malformed input with 400 instead of 500ing', async () => {
+    for (const body of [
+      { customerId: 'not-a-uuid', points: 200 },
+      { customerId: CUSTOMER_ID, points: 10.5 },
+      { customerId: CUSTOMER_ID, points: 0 },
+      { customerId: CUSTOMER_ID },
+      { customerId: CUSTOMER_ID, points: 200, type: 'earn' },
+    ]) {
+      const response = await POST(createRequest(body));
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('rejects an invalid JSON body with 400', async () => {
+    const response = await POST(
+      new NextRequest('https://usebaci.com/api/loyalty/points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{bad json',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toEqual({ error: 'Invalid JSON body' });
+  });
+
+  it('creates the loyalty record through the retry helper on first award', async () => {
+    mocks.mockSingle.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST116' },
+    });
+    mocks.mockCreateRecord.mockResolvedValue({
+      id: 'loyalty-9',
+      points_balance: 0,
+      lifetime_points: 0,
+      current_tier: 'Bronze',
+    });
+
+    const response = await POST(
+      createRequest({ customerId: CUSTOMER_ID, points: 200 })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.mockCreateRecord).toHaveBeenCalledWith(
+      expect.anything(),
+      MERCHANT_ID,
+      CUSTOMER_ID
+    );
+    const body = await response.json();
+    expect(body.newBalance).toBe(200);
   });
 
   it('still awards points when the tier lookup fails', async () => {

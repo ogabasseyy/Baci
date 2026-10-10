@@ -16,7 +16,6 @@ interface LoyaltyReward {
     | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
-  min_tier?: string;
   active: boolean;
 }
 

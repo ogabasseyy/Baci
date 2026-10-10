@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '140038df68af930e99a7a19b128b482aed73a567d8303814e15aa21ef9e5c2f9',
+      'caf2a2bf01adcdbd7c2ab566b2f67fe236f0ce4c04272fef73befc6b9c13faf6',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational

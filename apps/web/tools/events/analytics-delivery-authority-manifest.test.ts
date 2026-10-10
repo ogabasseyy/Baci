@@ -27,7 +27,7 @@ describe('analytics delivery authority manifest', () => {
       'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
         '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
       'apps/web/src/lib/supabase/service.ts':
-        '140038df68af930e99a7a19b128b482aed73a567d8303814e15aa21ef9e5c2f9',
+        'caf2a2bf01adcdbd7c2ab566b2f67fe236f0ce4c04272fef73befc6b9c13faf6',
     });
   });
 

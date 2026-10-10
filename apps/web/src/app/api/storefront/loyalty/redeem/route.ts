@@ -155,6 +155,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // No guest re-link hint here (unlike enroll): redemption requires
+    // enrollment first, so an unlinked guest is correctly not-found
+    // until they enroll, where the hint fires.
     if (!customer || customer.id !== parsed.data.customer_id) {
       return NextResponse.json(
         { error: 'Customer not found for this merchant' },

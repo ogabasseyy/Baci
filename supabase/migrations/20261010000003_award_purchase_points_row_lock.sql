@@ -18,7 +18,7 @@
 -- award would only fail mid-transaction on the tier call.
 CREATE OR REPLACE FUNCTION "public"."award_purchase_points"("p_customer_id" "uuid", "p_merchant_id" "uuid", "p_order_id" "uuid", "p_order_total" numeric) RETURNS integer
     LANGUAGE "plpgsql"
-    SET "search_path" TO 'public'
+    SET "search_path" TO ''
     AS $$
 DECLARE
     v_settings RECORD;

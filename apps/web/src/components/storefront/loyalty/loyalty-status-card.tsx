@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowRight, Sparkles, Trophy } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -11,12 +12,16 @@ interface LoyaltyStatusCardProps {
   merchantId: string;
   customerId: string;
   compact?: boolean;
+  /** Bumped by the parent after external mutations (e.g. a redemption in
+   * the catalog) so this independent loyalty instance refetches too. */
+  refreshToken?: number;
 }
 
 export function LoyaltyStatusCard({
   merchantId,
   customerId,
   compact = false,
+  refreshToken = 0,
 }: LoyaltyStatusCardProps) {
   const {
     data,
@@ -27,7 +32,19 @@ export function LoyaltyStatusCard({
     nextTier,
     pointsToNextTier,
     getTierInfo,
+    refetch,
   } = useLoyalty(merchantId, customerId);
+
+  // Token-driven refetch via a ref: refetch is a new function identity
+  // every render by design, so depending on it directly would refetch in
+  // a loop. The effect only fires when the parent bumps refreshToken.
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useEffect(() => {
+    if (refreshToken > 0) {
+      void refetchRef.current();
+    }
+  }, [refreshToken]);
 
   if (loading) {
     return (
@@ -48,20 +65,10 @@ export function LoyaltyStatusCard({
   }
 
   const tierInfo = getTierInfo(tier);
-  const progressPercentage = nextTier
-    ? Math.min(
-        100,
-        ((data.lifetime_points -
-          (data.tier_thresholds[tier as keyof typeof data.tier_thresholds] ||
-            0)) /
-          (pointsToNextTier +
-            (data.lifetime_points -
-              (data.tier_thresholds[
-                tier as keyof typeof data.tier_thresholds
-              ] || 0)))) *
-          100
-      )
-    : 100;
+  // Server-computed against the merchant ladder: lifetime can sit below a
+  // raised current threshold, which local subtraction turns into negative
+  // or NaN progress.
+  const progressPercentage = nextTier ? data.tier_progress : 100;
 
   if (compact) {
     return (
@@ -137,6 +144,17 @@ export function LoyaltyStatusCard({
             </span>
           </div>
         </div>
+
+        {data.referral_code && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Your referral code</span>
+              <span className="font-mono font-medium">
+                {data.referral_code}
+              </span>
+            </div>
+          </div>
+        )}
 
         {data.redeemable_rewards.length > 0 && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg">

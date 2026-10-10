@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  AlertCircle,
-  Check,
-  Copy,
-  Gift,
-  Lock,
-  Sparkles,
-  Truck,
-} from 'lucide-react';
+import { AlertCircle, Gift, Sparkles, Truck, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,18 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLoyalty } from '@/hooks/use-loyalty';
 import { useToast } from '@/hooks/use-toast';
 import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
+import {
+  RedemptionSuccessDialog,
+  type RedemptionSuccessResult,
+} from './redemption-success-dialog';
 
 interface RewardsCatalogProps {
   merchantId: string;
@@ -40,8 +28,15 @@ interface RewardsCatalogProps {
    * hardcoded ₦. */
   merchantCountry?: string | null;
   merchantPayoutCurrency?: string | null;
+  /** Fired after a redemption attempt (success or failure) so embedding
+   * views (page-level history, status card) can refetch their own loyalty
+   * instances. Failures fire too: the RPC commits expiry reconciliation
+   * before validating, so a failed attempt can still mutate the balance. */
+  onRedeemed?: () => void;
 }
 
+// The status route never sends min_tier and the redemption RPC enforces no
+// tier gate, so redeemability here is purely "can afford it".
 interface Reward {
   id: string;
   name: string;
@@ -51,10 +46,10 @@ interface Reward {
     | 'discount'
     | 'free_shipping'
     | 'free_product'
-    | 'exclusive_access';
+    | 'exclusive_access'
+    | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
-  min_tier?: string;
 }
 
 const rewardIcons = {
@@ -62,6 +57,7 @@ const rewardIcons = {
   free_shipping: Truck,
   free_product: Gift,
   exclusive_access: Sparkles,
+  store_credit: Wallet,
 };
 
 export function RewardsCatalog({
@@ -69,25 +65,22 @@ export function RewardsCatalog({
   customerId,
   merchantCountry,
   merchantPayoutCurrency,
+  onRedeemed,
 }: RewardsCatalogProps) {
   const { toast } = useToast();
   const {
     loading,
     enrolled,
     pointsBalance,
-    tier,
     availableRewards,
     redeemReward,
-    getTierInfo,
+    refetch,
   } = useLoyalty(merchantId, customerId);
 
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [redemptionResult, setRedemptionResult] = useState<{
-    code: string;
-    instructions: string;
-    expiresAt: string;
-  } | null>(null);
+  const [redemptionResult, setRedemptionResult] =
+    useState<RedemptionSuccessResult | null>(null);
 
   const handleRedeem = (reward: Reward) => {
     setRedeeming(reward.id);
@@ -100,9 +93,16 @@ export function RewardsCatalog({
             code: result.redemption_code || '',
             instructions: result.instructions || '',
             expiresAt: result.expires_at || '',
+            rewardType: result.reward_type,
           });
           setShowSuccessDialog(true);
+          onRedeemed?.();
         } else {
+          // The RPC commits expiry reconciliation before validating, so a
+          // failed attempt can still mutate the balance: refresh every
+          // view, not just this catalog's own instance.
+          void refetch();
+          onRedeemed?.();
           toast({
             title: 'Redemption Failed',
             description: result.error || 'Unable to redeem reward',
@@ -115,28 +115,8 @@ export function RewardsCatalog({
       });
   };
 
-  const copyCode = () => {
-    if (redemptionResult?.code) {
-      navigator.clipboard.writeText(redemptionResult.code);
-      toast({
-        title: 'Copied!',
-        description: 'Redemption code copied to clipboard',
-      });
-    }
-  };
-
-  const canRedeem = (reward: Reward): boolean => {
-    if (pointsBalance < reward.points_required) return false;
-
-    if (reward.min_tier) {
-      const tierOrder = ['bronze', 'silver', 'gold', 'platinum'];
-      const customerTierIndex = tierOrder.indexOf(tier);
-      const requiredTierIndex = tierOrder.indexOf(reward.min_tier);
-      if (customerTierIndex < requiredTierIndex) return false;
-    }
-
-    return true;
-  };
+  const canRedeem = (reward: Reward): boolean =>
+    pointsBalance >= reward.points_required;
 
   const getRewardLabel = (reward: Reward): string => {
     if (reward.reward_type === 'discount') {
@@ -155,6 +135,14 @@ export function RewardsCatalog({
     }
     if (reward.reward_type === 'free_product') {
       return 'Free Product';
+    }
+    if (reward.reward_type === 'store_credit') {
+      const formattedValue = formatMerchantCurrency(
+        reward.discount_value ?? 0,
+        { country: merchantCountry, payout_currency: merchantPayoutCurrency },
+        { maximumFractionDigits: 0 }
+      );
+      return `${formattedValue} Store Credit`;
     }
     return 'Exclusive Access';
   };
@@ -222,9 +210,6 @@ export function RewardsCatalog({
           {availableRewards.map((reward) => {
             const Icon = rewardIcons[reward.reward_type];
             const isRedeemable = canRedeem(reward);
-            const tierInfo = reward.min_tier
-              ? getTierInfo(reward.min_tier)
-              : null;
 
             return (
               <Card
@@ -253,20 +238,6 @@ export function RewardsCatalog({
                     </span>
                   </div>
 
-                  {reward.min_tier && tierInfo && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
-                      <Lock className="size-3" />
-                      <span>
-                        Requires{' '}
-                        <span className={tierInfo.colors.text}>
-                          {reward.min_tier.charAt(0).toUpperCase() +
-                            reward.min_tier.slice(1)}
-                        </span>{' '}
-                        tier
-                      </span>
-                    </div>
-                  )}
-
                   <Button
                     className="w-full"
                     disabled={!isRedeemable || redeeming === reward.id}
@@ -275,9 +246,7 @@ export function RewardsCatalog({
                     {redeeming === reward.id
                       ? 'Redeeming...'
                       : !isRedeemable
-                        ? pointsBalance < reward.points_required
-                          ? `Need ${(reward.points_required - pointsBalance).toLocaleString()} more pts`
-                          : `${reward.min_tier} tier required`
+                        ? `Need ${(reward.points_required - pointsBalance).toLocaleString()} more pts`
                         : 'Redeem'}
                   </Button>
                 </CardContent>
@@ -287,62 +256,11 @@ export function RewardsCatalog({
         </div>
       </div>
 
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Check className="size-5 text-green-600" />
-              Reward Redeemed!
-            </DialogTitle>
-            <DialogDescription>
-              Your reward has been successfully redeemed. Use the code below at
-              checkout.
-            </DialogDescription>
-          </DialogHeader>
-
-          {redemptionResult && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center justify-between">
-                  <code className="text-lg font-mono font-bold">
-                    {redemptionResult.code}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={copyCode}
-                    aria-label="Copy redemption code"
-                  >
-                    <Copy className="size-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <p className="text-sm text-muted-foreground">
-                {redemptionResult.instructions}
-              </p>
-
-              {redemptionResult.expiresAt && (
-                <p className="text-xs text-muted-foreground">
-                  Expires:{' '}
-                  {new Date(redemptionResult.expiresAt).toLocaleDateString(
-                    'en-NG',
-                    {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    }
-                  )}
-                </p>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button onClick={() => setShowSuccessDialog(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RedemptionSuccessDialog
+        open={showSuccessDialog}
+        onOpenChange={setShowSuccessDialog}
+        result={redemptionResult}
+      />
     </>
   );
 }

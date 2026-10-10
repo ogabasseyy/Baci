@@ -379,6 +379,7 @@ jobs:
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
+          --sql-check supabase/migrations/tests/enroll_customer_loyalty.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

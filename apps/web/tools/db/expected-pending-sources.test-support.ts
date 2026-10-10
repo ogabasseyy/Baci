@@ -9,6 +9,7 @@ import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
+import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -196,6 +197,7 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_PENDING_TAIL_SOURCES.late,
   ...EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES,
   ...EXPECTED_JUMIA_PENDING_SOURCES,
+  ...EXPECTED_LOYALTY_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260825154500_persist_shipment_shipping_quote.sql',

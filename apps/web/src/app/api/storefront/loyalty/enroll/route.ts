@@ -1,119 +1,117 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
+import {
+  storefrontLoyaltyEnrollResultSchema,
+  storefrontLoyaltyEnrollSchema,
+} from '@/schemas/storefront-loyalty-enroll';
 
-// POST - Enroll a customer in loyalty program
+type EnrollRpcResult = {
+  success: boolean;
+  error?: string;
+  points_balance?: number;
+  current_tier?: string;
+  referral_code?: string;
+};
+
+const RPC_ERROR_STATUS: Record<string, number> = {
+  already_enrolled: 409,
+  program_unavailable: 404,
+  customer_not_found: 404,
+  guest_link_required: 409,
+  invalid_input: 400,
+  out_of_range: 400,
+  referral_code_collision: 503,
+};
+
+const RPC_ERROR_MESSAGE: Record<string, string> = {
+  already_enrolled: 'Customer is already enrolled in the loyalty program',
+  program_unavailable: 'Loyalty program not available for this merchant',
+  customer_not_found: 'Customer not found for this merchant',
+  guest_link_required:
+    'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
+  invalid_input: 'Invalid enrollment input',
+  out_of_range: 'Enrollment bonus is out of range',
+  referral_code_collision:
+    'Enrollment is temporarily unavailable, please try again',
+};
+
+// POST - Enroll a customer in loyalty program.
+//
+// The caller must own the customer row. Ownership is verified inside the
+// RPC (definer's rights): a route-side lookup cannot see unlinked guest
+// rows under RLS, so it cannot distinguish re-linkable guests from
+// missing rows. Missing, foreign, and soft-deleted rows all map to the
+// same 404 so callers cannot probe which customer IDs exist. The
+// response shape is kept stable for the use-loyalty.ts enroll() caller.
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { merchant_id, customer_id, referral_code } = body;
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
 
-    if (!merchant_id || !customer_id) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
       return NextResponse.json(
-        { error: 'merchant_id and customer_id are required' },
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Cookie-authenticated browsers: reject forged cross-site POSTs before
+    // the bonus-bearing enrollment RPC runs (AGENTS.md CSRF rule).
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+
+    let rawBody: unknown = {};
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    const parsed = storefrontLoyaltyEnrollSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const body =
+        typeof rawBody === 'object' && rawBody !== null
+          ? (rawBody as Record<string, unknown>)
+          : {};
+      const hasIds =
+        typeof body.merchant_id === 'string' &&
+        typeof body.customer_id === 'string';
+      return NextResponse.json(
+        {
+          error: hasIds
+            ? 'Invalid enrollment input'
+            : 'merchant_id and customer_id are required',
+        },
         { status: 400 }
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    // Ownership, liveness, and the guest re-link hint are all evaluated
+    // inside the RPC: it sees rows the caller's RLS grants hide. Never
+    // short-circuit here — every mismatch shape flows through the same
+    // mapping below.
+    const { data, error } = await supabase.rpc('enroll_customer_loyalty', {
+      p_merchant_id: parsed.data.merchant_id,
+      p_customer_id: parsed.data.customer_id,
+      p_referral_code: parsed.data.referral_code ?? null,
+    });
 
-    // Get loyalty settings
-    const { data: settings, error: settingsError } = await supabase
-      .from('loyalty_settings')
-      .select(
-        'id, merchant_id, enabled, welcome_bonus, referral_bonus_referee, referral_bonus_referrer'
-      )
-      .eq('merchant_id', merchant_id)
-      .single();
-
-    if (settingsError || !settings || !settings.enabled) {
-      return NextResponse.json(
-        { error: 'Loyalty program not available for this merchant' },
-        { status: 404 }
-      );
-    }
-
-    // Check if already enrolled
-    const { data: existing, error: existingError } = await supabase
-      .from('customer_loyalty')
-      .select('id')
-      .eq('merchant_id', merchant_id)
-      .eq('customer_id', customer_id)
-      .maybeSingle();
-
-    if (existingError) {
+    if (error) {
       logger.error({
-        message: 'Error checking existing enrollment',
-        error: existingError,
-      });
-      return NextResponse.json(
-        { error: 'Failed to verify enrollment status' },
-        { status: 500 }
-      );
-    }
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Customer is already enrolled in the loyalty program' },
-        { status: 409 }
-      );
-    }
-
-    // Calculate initial bonus
-    let initialPoints = settings.welcome_bonus || 0;
-
-    // Handle referral if provided
-    let referrerId: string | null = null;
-    if (referral_code) {
-      // Find the referrer by their referral code
-      const { data: referrer, error: referrerError } = await supabase
-        .from('customer_loyalty')
-        .select('customer_id')
-        .eq('merchant_id', merchant_id)
-        .eq('referral_code', referral_code)
-        .maybeSingle();
-
-      if (referrerError) {
-        logger.error({
-          message: 'Error fetching referrer',
-          error: referrerError,
-        });
-        return NextResponse.json(
-          { error: 'Database error verifying referral code' },
-          { status: 500 }
-        );
-      }
-
-      if (referrer) {
-        referrerId = referrer.customer_id;
-        initialPoints += settings.referral_bonus_referee || 0;
-      }
-    }
-
-    // Generate unique referral code for the new customer
-    const newReferralCode = `${customer_id.substring(0, 8).toUpperCase()}${Date.now().toString(36).toUpperCase()}`;
-
-    // Create loyalty record
-    const { data: loyalty, error: createError } = await supabase
-      .from('customer_loyalty')
-      .insert({
-        merchant_id,
-        customer_id,
-        points_balance: initialPoints,
-        lifetime_points: initialPoints,
-        tier: 'bronze',
-        referral_code: newReferralCode,
-        referred_by: referrerId,
-      })
-      .select()
-      .single();
-
-    if (createError) {
-      logger.error({
-        message: 'Error creating loyalty record',
-        error: createError,
+        message: 'Error enrolling in loyalty program',
+        error,
       });
       return NextResponse.json(
         { error: 'Failed to enroll in loyalty program' },
@@ -121,72 +119,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Record welcome bonus transaction
-    if (initialPoints > 0) {
-      const { error: transactionError } = await supabase
-        .from('points_transactions')
-        .insert({
-          merchant_id,
-          customer_id,
-          points: initialPoints,
-          type: 'bonus',
-          description: referral_code
-            ? 'Welcome bonus + Referral bonus'
-            : 'Welcome bonus',
-        });
-
-      if (transactionError) {
+    const result = data as EnrollRpcResult | null;
+    if (!result?.success) {
+      const code = result?.error ?? 'enrollment_failed';
+      const status = RPC_ERROR_STATUS[code] ?? 500;
+      if (status === 500) {
         logger.error({
-          message: 'Error recording welcome bonus',
-          error: transactionError,
+          message: 'Unexpected loyalty enrollment result',
+          error: { code, result },
         });
       }
+      return NextResponse.json(
+        {
+          error:
+            RPC_ERROR_MESSAGE[code] ?? 'Failed to enroll in loyalty program',
+        },
+        { status }
+      );
     }
 
-    // Award referrer bonus if applicable
-    if (referrerId && settings.referral_bonus_referrer) {
-      // Update referrer's points
-      const { error: referrerUpdateError } = await supabase.rpc(
-        'increment_loyalty_points',
-        {
-          p_merchant_id: merchant_id,
-          p_customer_id: referrerId,
-          p_points: settings.referral_bonus_referrer,
-        }
+    const validated = storefrontLoyaltyEnrollResultSchema.safeParse(result);
+    if (!validated.success) {
+      logger.error({
+        message: 'Malformed loyalty enrollment result',
+        error: { result },
+      });
+      return NextResponse.json(
+        { error: 'Failed to enroll in loyalty program' },
+        { status: 500 }
       );
-
-      if (referrerUpdateError) {
-        logger.error({
-          message: 'Error awarding referrer bonus',
-          error: referrerUpdateError,
-        });
-      } else {
-        // Record referrer transaction
-        const { error: referrerTxError } = await supabase
-          .from('points_transactions')
-          .insert({
-            merchant_id,
-            customer_id: referrerId,
-            points: settings.referral_bonus_referrer,
-            type: 'referral',
-            description: 'Referral bonus - new customer signup',
-          });
-        if (referrerTxError) {
-          logger.error({
-            message: 'Error recording referrer points transaction',
-            error: referrerTxError,
-          });
-        }
-      }
     }
 
     return NextResponse.json({
       success: true,
       message: 'Successfully enrolled in loyalty program',
       data: {
-        points_balance: loyalty.points_balance,
-        tier: loyalty.tier,
-        referral_code: loyalty.referral_code,
+        points_balance: validated.data.points_balance,
+        tier: validated.data.current_tier.toLowerCase(),
+        referral_code: validated.data.referral_code,
       },
     });
   } catch (error) {

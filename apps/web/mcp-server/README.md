@@ -318,6 +318,9 @@ is an absolute total (0 removes a line), so retrying with the returned cart toke
 does not add duplicates. Keep that opaque token with this conversation. It grants
 access only to this guest cart; it is not a customer login. Do not put it in logs
 or website URLs. Cart rows contain product IDs and quantities, with no buyer details.
+Product IDs are UUIDs: `products.id` is a `uuid` column, so the input
+schema's `z.string().uuid()` covers the whole catalog and no legacy
+non-UUID ID can reach cart storage.
 
 Carts persist in the `mcp_guest_carts` Postgres table, reachable only through
 the version-gated `get/upsert/delete_mcp_guest_cart` RPCs; concurrent writers

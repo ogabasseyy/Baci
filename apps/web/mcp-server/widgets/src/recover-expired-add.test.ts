@@ -262,6 +262,45 @@ it('refuses a full tokenless cart without replaying', async () => {
   expect(callTool).not.toHaveBeenCalled();
 });
 
+it('passes typed failures through a full local cart instead of masking them', async () => {
+  const token = 'a'.repeat(64);
+  const selecting = {
+    structuredContent: {
+      success: false,
+      requires_variant_selection: true,
+      product_id: product.id,
+      product_url: 'https://ogabassey.com/products/phone',
+    },
+  };
+  const denied = {
+    structuredContent: {
+      success: false,
+      quota_exceeded: true,
+      retry_after_seconds: 60,
+    },
+  };
+  const callTool = vi.fn();
+  const survivors = Array.from({ length: 20 }, (_, index) =>
+    survivorAt(index)
+  );
+  // Active token, option-bearing product: the selection page must open,
+  // not a spurious remove-a-line refusal.
+  await expect(
+    recoverCartAdd(callTool, selecting, product.id, 1, token, [
+      { product, quantity: 1 },
+      ...survivors,
+    ])
+  ).resolves.toEqual({ result: selecting, skippedSurvivors: [] });
+  // Tokenless quota denial: the retry-after must surface, not cart_full.
+  await expect(
+    recoverCartAdd(callTool, denied, product.id, 1, undefined, [
+      { product, quantity: 1 },
+      ...survivors,
+    ])
+  ).resolves.toEqual({ result: denied, skippedSurvivors: [] });
+  expect(callTool).not.toHaveBeenCalled();
+});
+
 it('recovers a cart with one free slot', async () => {
   const token = 'a'.repeat(64);
   const expired = { structuredContent: { success: false, cart_expired: true } };

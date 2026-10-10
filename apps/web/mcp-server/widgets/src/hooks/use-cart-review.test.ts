@@ -82,6 +82,23 @@ it('refuses navigation without reviewable lines', () => {
   }
 });
 
+it('reports a rejected review URL instead of silently doing nothing', () => {
+  for (const cartUrl of [
+    'https://evil.example/cart',
+    'https://ogabassey.com/checkout',
+  ]) {
+    const { result, openExternal, setCartError } = setup({ cart, cartUrl });
+    expect(result.current.canReviewCart).toBe(true);
+    act(() => {
+      result.current.handleViewCart();
+    });
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(setCartError).toHaveBeenCalledWith(
+      'This guest cart link is no longer valid.'
+    );
+  }
+});
+
 it('holds navigation while a handoff is in flight', () => {
   const { result, openExternal } = setup({
     cart,

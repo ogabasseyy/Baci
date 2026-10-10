@@ -61,18 +61,18 @@ function offersTable(rows: OfferRow[]) {
   return { chain, state };
 }
 
-function offer(index: number, stock: number): OfferRow {
+function offer(index: number, stock: number, condition = 'new'): OfferRow {
   return {
     product_id: lower,
     merchant_id: 'merchant',
     status: 'active',
-    condition: 'new',
+    condition,
     id: `offer-${String(index).padStart(2, '0')}`,
     stock_quantity: stock,
   };
 }
 
-function product() {
+function product(condition?: string) {
   return {
     data: {
       name: 'Phone',
@@ -82,16 +82,20 @@ function product() {
       stock_quantity: 0,
       has_variants: false,
       has_condition_offers: true,
+      ...(condition === undefined ? {} : { condition }),
     },
     error: null,
   };
 }
 
-function clientFor(offers: ReturnType<typeof offersTable>['chain']) {
+function clientFor(
+  offers: ReturnType<typeof offersTable>['chain'],
+  parentCondition?: string
+) {
   return {
     from: (table: string) => {
       if (table === 'products')
-        return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ single: async () => product() }) }) }) }) };
+        return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ single: async () => product(parentCondition) }) }) }) }) };
       return offers;
     },
     rpc: async () => ({ data: [], error: null }),
@@ -129,11 +133,47 @@ it('reports unavailable when only the 17th offer is stocked', async () => {
 
 it('selects options when a windowed offer is stocked', async () => {
   const rows = Array.from({ length: 15 }, (_, index) => offer(index + 1, 0));
-  rows.push(offer(16, 5));
+  // First row of its own canonical condition: a same-condition stocked
+  // 16th row would be a later duplicate the PDP never resolves.
+  rows.push(offer(16, 5, 'used'));
   const result = await check(clientFor(offersTable(rows).chain));
   expect(result.structuredContent).toMatchObject({
     success: false,
     requires_variant_selection: true,
     product_id: lower,
+  });
+});
+
+it('ignores a stocked same-condition offer the PDP cannot resolve', async () => {
+  // PDP parity: the detail resolver drops offers whose canonical
+  // condition matches the parent's, so a stocked same-condition row is
+  // unselectable there and must not advertise selection here.
+  const rows = [offer(1, 5, 'New')];
+  const result = await check(clientFor(offersTable(rows).chain, 'new'));
+  expect(result.structuredContent).toEqual({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
+it('selects options when a stocked offer differs from the parent condition', async () => {
+  const rows = [offer(1, 0, 'New'), offer(2, 5, 'Used')];
+  const result = await check(clientFor(offersTable(rows).chain, 'new'));
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('ignores a stocked later duplicate the PDP never resolves', async () => {
+  // PDP parity: selection claims the condition on the first row per
+  // canonical condition and drops it on stock, so a stocked second
+  // row for the same condition is unselectable.
+  const rows = [offer(1, 0, 'used'), offer(2, 5, 'used')];
+  const result = await check(clientFor(offersTable(rows).chain, 'new'));
+  expect(result.structuredContent).toEqual({
+    success: false,
+    product_unavailable: true,
   });
 });

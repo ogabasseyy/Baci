@@ -274,7 +274,7 @@ export async function fetchAndAddCartItems({
       toast({
         title: 'Kept your cart quantities',
         description:
-          'Your cart already had higher quantities for some items, so those were kept instead of the chat amounts.',
+          'Your cart already had higher quantities for some items, so those were kept instead of the chat amounts. Chat decreases never lower website quantities.',
       });
     }
 

@@ -89,23 +89,22 @@ export async function recoverCartAdd(
   cart: CartItem[]
 ): Promise<RecoveredCartAdd> {
   const survivors = cart.filter((item) => item.product.id !== productId);
-  // Local capacity gate: twenty survivors plus one more line can never
-  // fit the server cap, so refuse before minting — minting first would
-  // orphan a partial cart and burn a creation-quota slot on every retry,
-  // while the shopper only needs to remove a line. (A dead survivor that
-  // would have freed a slot resolves the same way: the shopper removes
-  // any line and the retry fits.) The synthetic result flows into the
-  // existing full-cart UX, which names the remedy.
-  if (survivors.length >= SERVER_CART_CAPACITY)
-    return {
-      result: { structuredContent: { success: false, cart_full: true } },
-      skippedSurvivors: [],
-    };
   if (cartToken) {
     if (
       parseCartToolOutput(readStructuredContent(result))?.cart_expired !== true
     )
       return { result, skippedSurvivors: [] };
+    // Local capacity gate, after the typed-failure passthrough: twenty
+    // survivors plus one more line can never fit the server cap, so
+    // refuse before minting — minting first would orphan a partial cart
+    // and burn a creation-quota slot on every retry, while the shopper
+    // only needs to remove a line. (A dead survivor that would have
+    // freed a slot resolves the same way: the shopper removes any line
+    // and the retry fits.) The gate must not run first: an active
+    // token's variant-selection, unavailable, quota, or storage
+    // response would be masked as cart_full and its remedy lost. The
+    // synthetic result flows into the existing full-cart UX.
+    if (survivors.length >= SERVER_CART_CAPACITY) return fullCartRecovery();
     return recoverExpiredAdd(callCartTool, productId, quantity, survivors);
   }
   const minted = parseCartToolOutput(readStructuredContent(result));
@@ -113,6 +112,9 @@ export async function recoverCartAdd(
     minted?.success === true ? minted.cart_token : undefined;
   if (!freshToken || survivors.length === 0)
     return { result, skippedSurvivors: [] };
+  // Same gate before replaying into a tokenless mint: the mint holds
+  // one line already, so twenty survivors can never fit either.
+  if (survivors.length >= SERVER_CART_CAPACITY) return fullCartRecovery();
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,
@@ -121,6 +123,13 @@ export async function recoverCartAdd(
   return {
     result: replayed.result ?? result,
     skippedSurvivors: replayed.skippedSurvivors,
+  };
+}
+
+function fullCartRecovery(): RecoveredCartAdd {
+  return {
+    result: { structuredContent: { success: false, cart_full: true } },
+    skippedSurvivors: [],
   };
 }
 

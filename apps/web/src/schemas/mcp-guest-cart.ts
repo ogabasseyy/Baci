@@ -8,7 +8,7 @@ export const mcpGuestCartInputSchema = z
     product_id: z
       .string()
       .uuid()
-      .describe('The public product ID to add, update or remove'),
+      .describe('The public product ID (UUID) to add, update or remove'),
     quantity: z
       .number()
       .int()

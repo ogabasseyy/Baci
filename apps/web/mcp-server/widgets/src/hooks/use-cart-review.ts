@@ -27,7 +27,11 @@ export function useCartReview(options: CartReviewOptions) {
     if (busy.current || !canReviewCart) return;
     try {
       const reviewUrl = cartUrl ? buildReviewCartUrl(cartUrl) : null;
+      // A rejected URL (wrong path, foreign origin) must surface: the
+      // button is enabled by the local lines, so silence would strand
+      // the shopper behind a Review that neither navigates nor errors.
       if (reviewUrl) openOgabasseyUrl(reviewUrl);
+      else setCartError('This guest cart link is no longer valid.');
     } catch {
       setCartError('Could not open your guest cart. Please try again.');
     }

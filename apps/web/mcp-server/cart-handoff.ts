@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getEffectiveStock } from '../src/lib/product-stock';
 import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import {
+  type HandoffOfferRow,
+  hasSelectableStockedOffer,
+} from './cart-handoff-offer-availability';
+import { isVariantRowPurchasable } from './cart-handoff-variant-availability';
 import {
   STOREFRONT_SNAPSHOT_OFFER_WINDOW,
   STOREFRONT_SNAPSHOT_VARIANT_WINDOW,
@@ -51,7 +57,7 @@ export async function prepareCartHandoff({
   }
   const { data: product, error: productError } = await supabase
     .from('products')
-    .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers')
+    .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers, condition')
     .eq('id', productId)
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
@@ -111,11 +117,9 @@ export async function prepareCartHandoff({
       // PDP parity: the snapshot keeps 16 offers by (condition, id), so a
       // stocked 17th offer is unpurchasable — window before the stock
       // check or selection advertises an option the PDP cannot fulfill.
-      // (Search additionally claims first-row-per-condition because it
-      // attributes stock to conditions; this boolean needs no attribution.)
       const { data: offers, error: offersError } = await supabase
         .from('product_offers')
-        .select('stock_quantity')
+        .select('condition, stock_quantity')
         .eq('merchant_id', merchantId)
         .eq('product_id', productId)
         .eq('status', 'active')
@@ -123,7 +127,13 @@ export async function prepareCartHandoff({
         .order('id')
         .limit(STOREFRONT_SNAPSHOT_OFFER_WINDOW);
       if (offersError) transient = true;
-      optionAvailable ||= !offersError && Boolean(offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
+      optionAvailable ||=
+        !offersError &&
+        hasSelectableStockedOffer(
+          offers as HandoffOfferRow[] | null,
+          product.condition,
+          quantity
+        );
     }
     if (product.has_variants === true) {
       // The search-shaped RPC projects each variant's effective inventory
@@ -144,15 +154,13 @@ export async function prepareCartHandoff({
       // unavailable: fail closed instead of offering selection the PDP
       // cannot present.
       if (own.length > STOREFRONT_SNAPSHOT_VARIANT_WINDOW) unavailable = true;
-      optionAvailable ||= own.some((variant) => {
-        // Mirrors isPublicVariantPurchasable for the serialized
-        // policies: then-unlimited is purchasable at any units, strict
-        // gates on exact units, and unprojected rows keep the existing
-        // raw-stock comparison for the requested quantity.
-        if (variant.effective_policy === 'serialized_then_unlimited')
-          return true;
-        return Number(variant.stock_quantity ?? 0) >= quantity;
+      const parentStock = getEffectiveStock({
+        stock: product.stock,
+        stock_quantity: stockQuantity,
       });
+      optionAvailable ||= own.some((variant) =>
+        isVariantRowPurchasable(variant, parentStock, quantity)
+      );
     }
     if (product.has_condition_offers === true || product.has_variants === true) {
       unavailable ||= !optionAvailable;
@@ -201,10 +209,15 @@ export async function prepareCartHandoff({
       // Strictly null only: an absent (undefined) policy stays fail-open.
       if (
         manageStock === null &&
-        !own.some(
-          (variant) =>
-            variant.effective_policy === 'serialized_then_unlimited' ||
-            Number(variant.stock_quantity ?? 0) >= quantity
+        !own.some((variant) =>
+          isVariantRowPurchasable(
+            variant,
+            getEffectiveStock({
+              stock: product.stock,
+              stock_quantity: stockQuantity,
+            }),
+            quantity
+          )
         )
       ) {
         unavailable = true;

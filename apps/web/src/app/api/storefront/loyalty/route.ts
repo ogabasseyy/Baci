@@ -69,7 +69,10 @@ export async function GET(request: NextRequest) {
     // Resolve the caller's own live customer row for this merchant.
     // A mismatch returns the same 404 as a missing customer so callers
     // cannot probe which customer IDs exist. Soft-deleted rows are
-    // non-readable here, matching the enrollment route.
+    // non-readable here. Unlinked guest rows also land here with no
+    // re-link hint (unlike enroll): enrollment is the only endpoint
+    // where linking is actionable, and a guest is correctly
+    // not-enrolled until they enroll, where the hint fires.
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('id')

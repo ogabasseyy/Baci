@@ -46,7 +46,10 @@ interface LoyaltyData {
   enrolled: boolean;
   points_balance: number;
   lifetime_points: number;
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  // Merchant-defined ladder names flow through lowercased (Starter, VIP,
+  // ...), not just the default bronze/silver/gold/platinum rungs:
+  // getTierInfo falls back to bronze styling for unknown names.
+  tier: string;
   next_tier: string | null;
   points_to_next_tier: number;
   tier_thresholds: Record<string, number>;

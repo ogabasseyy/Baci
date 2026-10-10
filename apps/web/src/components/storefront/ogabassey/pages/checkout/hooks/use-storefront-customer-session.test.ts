@@ -3,7 +3,10 @@ import type { AuthChangeEvent } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 
-type AuthChangeHandler = (event: AuthChangeEvent) => void;
+type AuthChangeHandler = (
+  event: AuthChangeEvent,
+  session?: { user?: { id?: string } | null } | null
+) => void;
 
 // Captured `onAuthStateChange` handler so tests can emit the storefront login
 // signal (Supabase auth transition) deterministically — no timers, no polling.
@@ -21,8 +24,11 @@ vi.mock('@/lib/supabase/client', () => ({
   })),
 }));
 
-function emitAuthChange(event: AuthChangeEvent) {
-  authChangeHandler?.(event);
+function emitAuthChange(
+  event: AuthChangeEvent,
+  session?: { user?: { id?: string } | null } | null
+) {
+  authChangeHandler?.(event, session);
 }
 
 function stubFetch(response: { body: unknown; ok?: boolean }) {

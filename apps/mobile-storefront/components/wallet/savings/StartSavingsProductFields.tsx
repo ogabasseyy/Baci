@@ -1,59 +1,90 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { SafeImage } from '@/components/ui/SafeImage';
 import { BRAND, palette } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { SAVINGS_FREQUENCIES, themedInputStyle } from './start-savings.helpers';
+import { StartSavingsProductSuggestions } from './StartSavingsProductSuggestions';
+import { StartSavingsVariantOptions } from './StartSavingsVariantOptions';
+import { savingsCardAccent } from './savings-card-accent';
+import { savingsProductImage } from './savings-product-image';
+import { themedInputStyle } from './start-savings.helpers';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type {
   SavingsProductChoice,
   StartSavingsColors,
 } from './start-savings.types';
-import type { StartSavingsController } from './start-savings-controller.types';
-import { toProductChoice } from './start-savings-controller.utils';
+import type {
+  StartSavingsController,
+  StartSavingsProductController,
+} from './start-savings-controller.types';
+import type { SavingsVariantOptionGroup } from './start-savings-variant-options';
 
 type StartSavingsProductFieldsProps = {
+  onSearchFocusChange?: (focused: boolean) => void;
   colors: StartSavingsColors;
   controller: StartSavingsController;
 };
 
-const MAX_PRODUCT_SUGGESTIONS = 5;
-
-export function StartSavingsProductFields({
-  colors,
-  controller,
-}: StartSavingsProductFieldsProps) {
+export function StartSavingsProductFields(
+  props:
+    | (StartSavingsProductFieldsProps & { mode?: 'plan' })
+    | {
+        mode: 'draft';
+        onSearchFocusChange?: (focused: boolean) => void;
+        colors: StartSavingsColors;
+        controller: StartSavingsProductController;
+      }
+) {
   return (
-    <>
-      <ProductSearchSection colors={colors} controller={controller} />
-      <TargetAndFrequencySection colors={colors} controller={controller} />
-    </>
+    <View style={[styles.setupCard, savingsCardAccent(props.colors)]}>
+      <ProductSearchSection
+        onSearchFocusChange={props.onSearchFocusChange}
+        colors={props.colors}
+        controller={props.controller}
+        variantPicker={
+          props.mode !== 'draft'
+            ? {
+                groups: props.controller.variantOptionGroups,
+                onSelect: props.controller.selectVariantOption,
+              }
+            : null
+        }
+      />
+    </View>
   );
 }
 
 function ProductSearchSection({
   colors,
   controller,
-}: StartSavingsProductFieldsProps) {
+  variantPicker,
+  onSearchFocusChange,
+}: {
+  onSearchFocusChange?: (focused: boolean) => void;
+  colors: StartSavingsColors;
+  controller: StartSavingsProductController;
+  variantPicker: {
+    groups: SavingsVariantOptionGroup[];
+    onSelect: (axis: string, value: string) => void;
+  } | null;
+}) {
   return (
     <View style={styles.section}>
       <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        What are you saving for?
+        01 · Pick your next upgrade
       </Text>
-      <TextInput
-        accessibilityRole="search"
-        accessibilityLabel="Savings product search"
-        value={controller.searchValue}
-        onChangeText={controller.setSearchValue}
-        placeholder="Search product"
-        placeholderTextColor={colors.placeholder}
-        style={[styles.input, themedInputStyle(colors)]}
-      />
+      {!controller.selectedProduct ? (
+        <TextInput
+          accessibilityRole="search"
+          accessibilityLabel="Savings product search"
+          onFocus={() => onSearchFocusChange?.(true)}
+          onBlur={() => onSearchFocusChange?.(false)}
+          value={controller.searchValue}
+          onChangeText={controller.setSearchValue}
+          placeholder="Find your phone, laptop, wish-list fave…"
+          placeholderTextColor={colors.placeholder}
+          style={[styles.input, themedInputStyle(colors)]}
+        />
+      ) : null}
       {controller.selectedProduct ? (
         <View
           style={[
@@ -67,73 +98,168 @@ function ProductSearchSection({
               { color: colors.textSecondary },
             ]}
           >
-            Selected product
+            THE ONE YOU’RE SAVING FOR
           </Text>
-          <Text style={[styles.selectedProductName, { color: colors.text }]}>
-            {controller.selectedProduct.name}
-          </Text>
-          <Text
-            style={[styles.selectedProductPrice, { color: colors.primary }]}
-          >
-            {formatNgnCurrency(controller.selectedProduct.price)}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={[styles.selectedProductName, { color: colors.text }]}
+              >
+                {controller.selectedProduct.name}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Change savings device"
+                onPress={() => controller.setSearchValue('')}
+                style={{ paddingVertical: 12, alignSelf: 'flex-start' }}
+              >
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontSize: 12,
+                    textDecorationLine: 'underline',
+                  }}
+                >
+                  Change device
+                </Text>
+              </Pressable>
+            </View>
+            <View style={{ alignItems: 'center', gap: 8, maxWidth: '45%' }}>
+              <SafeImage
+                source={{
+                  uri: savingsProductImage(
+                    controller.selectedCatalogProduct,
+                    variantPicker?.groups ?? [],
+                    controller.selectedProduct.image
+                  ),
+                }}
+                style={{ width: 76, height: 76, flexShrink: 0 }}
+                contentFit="contain"
+              />
+              {!controller.selectedProduct.requiresVariantSelection &&
+              controller.selectedProduct.price > 0 ? (
+                <Text
+                  style={[
+                    styles.selectedProductPrice,
+                    { color: colors.primary, textAlign: 'center' },
+                  ]}
+                >
+                  {formatNgnCurrency(controller.selectedProduct.price)}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          {controller.selectedProduct.requiresVariantSelection ? (
+            <Text
+              style={[styles.selectedProductPrice, { color: colors.primary }]}
+            >
+              {controller.selectedCatalogProduct?.searchPreview
+                ? 'Loading current options…'
+                : controller.selectedProduct.requiresVariantSelection
+                  ? 'Make it yours — choose your options'
+                  : formatNgnCurrency(controller.selectedProduct.price)}
+            </Text>
+          ) : null}
+          {!controller.selectedProduct.requiresVariantSelection &&
+          controller.selectedProduct.price > 0 ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.textSecondary }}
+            >
+              ✓ Your goal is set
+            </Text>
+          ) : null}
           <ProductMeta colors={colors} product={controller.selectedProduct} />
+          {variantPicker ? (
+            <VariantOptions
+              colors={colors}
+              groups={variantPicker.groups}
+              onSelect={variantPicker.onSelect}
+            />
+          ) : null}
         </View>
       ) : null}
-      {!controller.selectedProduct && controller.debouncedSearch.trim() ? (
-        <View style={styles.productSuggestions}>
-          {controller.isProductsLoading ? (
-            <ActivityIndicator
-              accessibilityLabel="Loading savings products"
-              size="small"
-              color={BRAND.primary}
-            />
-          ) : controller.products.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              No matching products found.
-            </Text>
-          ) : (
-            controller.products
-              .slice(0, MAX_PRODUCT_SUGGESTIONS)
-              .map((product) => (
+      {controller.selectedProduct && !variantPicker?.groups.length ? (
+        <StartSavingsVariantOptions colors={colors} controller={controller} />
+      ) : null}
+      {!controller.selectedProduct ? (
+        <StartSavingsProductSuggestions
+          colors={colors}
+          controller={controller}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function VariantOptions({
+  colors,
+  groups,
+  onSelect,
+}: {
+  onSearchFocusChange?: (focused: boolean) => void;
+  colors: StartSavingsColors;
+  groups: SavingsVariantOptionGroup[];
+  onSelect: (axis: string, value: string) => void;
+}) {
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.variantGroups}>
+      {groups.map((group) => (
+        <View key={group.key} style={styles.variantGroup}>
+          <Text
+            style={[
+              styles.selectedProductLabel,
+              { color: colors.textSecondary },
+            ]}
+          >
+            {group.label}
+          </Text>
+          <View
+            style={styles.variantGrid}
+            testID={`variant-options-${group.key}`}
+          >
+            {group.values.map((option) => (
+              <View
+                key={`${group.key}:${option.value}`}
+                style={[
+                  styles.variantOption,
+                  {
+                    backgroundColor: option.selected
+                      ? BRAND.primary
+                      : colors.card,
+                    borderColor: option.selected
+                      ? BRAND.primary
+                      : colors.border,
+                  },
+                ]}
+              >
                 <Pressable
-                  key={product.id}
+                  accessibilityLabel={`Select ${group.label} ${option.label}`}
                   accessibilityRole="button"
-                  accessibilityLabel={`Select ${product.name}`}
-                  onPress={() => controller.selectProduct(product)}
-                  style={[
-                    styles.productSuggestionRow,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
+                  accessibilityState={{ selected: option.selected }}
+                  onPress={() => onSelect(group.key, option.value)}
+                  style={styles.variantOptionPressable}
                 >
                   <Text
                     style={[
-                      styles.productSuggestionName,
-                      { color: colors.text },
+                      styles.variantOptionText,
+                      {
+                        color: option.selected ? palette.white : colors.text,
+                      },
                     ]}
                   >
-                    {product.name}
+                    {option.label}
                   </Text>
-                  <Text
-                    style={[
-                      styles.productSuggestionPrice,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    {formatNgnCurrency(product.price)}
-                  </Text>
-                  <ProductMeta
-                    colors={colors}
-                    product={toProductChoice(product)}
-                  />
                 </Pressable>
-              ))
-          )}
+              </View>
+            ))}
+          </View>
         </View>
-      ) : null}
+      ))}
     </View>
   );
 }
@@ -142,6 +268,7 @@ function ProductMeta({
   colors,
   product,
 }: {
+  onSearchFocusChange?: (focused: boolean) => void;
   colors: StartSavingsColors;
   product: SavingsProductChoice;
 }) {
@@ -157,98 +284,5 @@ function ProductMeta({
     <Text style={[styles.productMetaText, { color: colors.textSecondary }]}>
       {meta.join(' · ')}
     </Text>
-  );
-}
-
-function TargetAndFrequencySection({
-  colors,
-  controller,
-}: StartSavingsProductFieldsProps) {
-  return (
-    <>
-      <View style={styles.section}>
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          Target amount
-        </Text>
-        <TextInput
-          accessibilityLabel="Savings target amount"
-          value={controller.targetAmount}
-          onChangeText={controller.setTargetAmount}
-          keyboardType="number-pad"
-          placeholder="Enter amount"
-          placeholderTextColor={colors.placeholder}
-          style={[styles.input, themedInputStyle(colors)]}
-        />
-      </View>
-      <View style={styles.section}>
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          How will you prefer to save?
-        </Text>
-        <View style={styles.frequencyRow}>
-          {SAVINGS_FREQUENCIES.map((option) => {
-            const isActive = controller.frequency === option;
-            return (
-              <Pressable
-                key={option}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose ${option} savings frequency`}
-                onPress={() => controller.setFrequency(option)}
-                style={[
-                  styles.frequencyOption,
-                  {
-                    backgroundColor: isActive ? BRAND.primary : colors.card,
-                    borderColor: isActive ? BRAND.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.frequencyOptionLabel,
-                    { color: isActive ? palette.white : colors.text },
-                  ]}
-                >
-                  {option.charAt(0).toUpperCase() + option.slice(1)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      <DateAndAmountInputs colors={colors} controller={controller} />
-    </>
-  );
-}
-
-function DateAndAmountInputs({
-  colors,
-  controller,
-}: StartSavingsProductFieldsProps) {
-  return (
-    <View style={styles.row}>
-      <DateTimePickerField
-        accessibilityLabel="Savings debit time"
-        fallbackDisplay="06:20"
-        fieldStyle={[styles.pickerField, themedInputStyle(colors)]}
-        label="Preferred debit time"
-        labelStyle={[styles.sectionLabel, { color: colors.text }]}
-        mode="time"
-        onChangeText={controller.setPreferredDebitTime}
-        textStyle={[styles.pickerFieldText, { color: colors.text }]}
-        value={controller.preferredDebitTime}
-        wrapperStyle={styles.rowItem}
-      />
-      <DateTimePickerField
-        accessibilityLabel="Savings start date"
-        fallbackDisplay="YYYY-MM-DD"
-        fieldStyle={[styles.pickerField, themedInputStyle(colors)]}
-        label="Start date"
-        labelStyle={[styles.sectionLabel, { color: colors.text }]}
-        mode="date"
-        onChangeText={controller.setStartDate}
-        textStyle={[styles.pickerFieldText, { color: colors.text }]}
-        value={controller.startDate}
-        wrapperStyle={styles.rowItem}
-      />
-    </View>
   );
 }

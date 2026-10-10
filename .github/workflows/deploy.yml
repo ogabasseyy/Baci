@@ -25,6 +25,8 @@ jobs:
     outputs:
       web: ${{ steps.filter.outputs.web }}
       migrations: ${{ steps.filter.outputs.migrations }}
+      tracking: ${{ steps.filter.outputs.tracking }}
+      manifests: ${{ steps.filter.outputs.manifests }}
       cwv_runner: ${{ steps.filter.outputs.cwv_runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,28 +56,118 @@ jobs:
       - name: Run CWV workflow actionlint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
 
-  # Enqueue-capable migrations must never land until the production VPS has
-  # the matching cache-invalidation drain schedule. Verify live crontab state
-  # on the VPS-hosted deploy runner first; missing worker files and
-  # missing/duplicate entries fail closed before database credentials are
-  # exposed to a job.
+  # Enqueue-capable migrations and Vercel cron removals must never land until
+  # its matching VPS schedule is live. Verify it on the VPS-hosted deploy
+  # runner first; missing worker files or schedule entries fail closed before
+  # database credentials are exposed to a job.
   vps-drain-readiness:
-    if: github.ref == 'refs/heads/main'
+    needs: [changes]
+    # always() so a skipped changes job (manual dispatch) still runs the
+    # cache-invalidation and GIGL cutover-marker verifications below; only
+    # the exact-SHA GIGL step gates itself on the tracking changeset.
+    if: always() && github.ref == 'refs/heads/main'
+    outputs:
+      cutover_latched: ${{ steps.gigl-cutover-latch.outputs.latched }}
+      tracking_stale: ${{ steps.gigl-cutover-latch.outputs.tracking_stale }}
+      manifest_drift: ${{ steps.gigl-cutover-latch.outputs.manifest_drift }}
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
       contents: read
+    # Production identity is file-authoritative: the latch resolver must
+    # fingerprint the installed dotenv, never a runner export (a runner
+    # variable would otherwise certify one token while cron runs another).
+    env:
+      GIGL_ENV_FILE_AUTHORITATIVE: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: .readiness-checkout
           persist-credentials: false
-          sparse-checkout: vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+          sparse-checkout: |
+            vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+            vps-workers/bin/verify-gigl-direct-workers-installed.sh
+            .github/scripts/check-gigl-cutover-latch.sh
+            .github/scripts/resolve-gigl-latch-identity.sh
+            .github/scripts/gigl-dotenv.sh
+            .github/filters/deploy.yml
           sparse-checkout-cone-mode: false
       - name: Verify production cache-invalidation drain installation
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+      - name: Verify GIGL tracking cutover marker
+        # Runs on EVERY main push with no changeset condition: the marker
+        # proves deploy.sh has installed the worker and its schedule at
+        # least once since the cutover. Diff-scoped gates alone cannot do
+        # this — after a blocked tracking push, the next unrelated web push
+        # reports tracking == 'false' and would otherwise deploy the cron
+        # removal with no worker live. Until the first post-merge deploy.sh
+        # run, this step fails and blocks all production deploys; that
+        # bounded freeze is the announced first-rollout procedure. There is
+        # deliberately no GIGL-disabled bypass: readiness cannot see prod
+        # env by design (no Vercel pull before credentials are exposed),
+        # GIGL defaults to enabled, and installing the worker once is the
+        # safe default even for a currently-disabled provider.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker
+      - name: Check GIGL cutover latch
+        id: gigl-cutover-latch
+        # Signal, not gate: reports whether ANY capability smoke has yet
+        # succeeded (the Persist step writes the latch file) and whether
+        # tracking paths changed since that revision. The marker above
+        # proves install; the latch proves FUNCTION at a revision — but a
+        # later unsmoked tracking commit must still block the bypass, so
+        # the gate requires latched AND NOT tracking_stale. The latch is
+        # bound to the installed SHA: a manual promote of a different
+        # tree invalidates it until a fresh smoke re-latches. It also
+        # records the enablement scope and credential fingerprint the smoke
+        # observed: flips, rotations, and endpoint moves invalidate until
+        # re-smoked. The third signal, manifest_drift, diffs the installed
+        # tree against HEAD over the manifests group: the poller executes
+        # that dependency tree, so a manifest-only push must not bypass
+        # while the installed tree predates HEAD's manifests. This
+        # step never fails: every error reports latched=false / stale=true
+        # / drift=true.
+        # Tracking pushes don't need the signal (they run the smoke).
+        # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch
+        # only), not a production credential.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: .readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout
+      - name: Warn on manifest-only worker dependency drift
+        # Signal, not gate (this step never fails): manifests are
+        # deliberately outside the tracking filter, so a manifest-only
+        # push (e.g. a transitive security fix the VPS poller executes)
+        # would deploy without refreshing the worker. The enforcement
+        # lives in the bypass term (manifest_drift closes it until
+        # deploy.sh converges); this warning explains the resulting
+        # skip. The operator converges with a manual deploy.sh from
+        # current main.
+        if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
+        run: >-
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed — production deploys stay gated until deploy.sh converges from current main plus a tracking push or dispatch re-smokes.'
+      - name: Verify production GIGL direct-worker installation
+        # The verifier requires the VPS worker's exact checkout SHA to equal
+        # the pushed commit, and the worker is deployed manually via
+        # vps-workers/deploy.sh — so this step runs only when the changeset
+        # can affect tracking. Otherwise every web-only commit after a worker
+        # deploy would fail readiness and freeze migrations and releases.
+        # `tracking` only, never the broad `migrations` output: GIGL
+        # migrations already ride inside the tracking filter
+        # (supabase/migrations/*gigl*), so gating on every migration
+        # would freeze unrelated wallet/ads releases on worker drift.
+        # Manual dispatches run it too: the changes job is skipped on
+        # dispatch, so its outputs are unset and `!= 'false'` is true —
+        # a dispatch can never land the cron removal with a stale worker.
+        # Deploy procedure: run vps-workers/deploy.sh before dispatching.
+        if: needs.changes.outputs.tracking != 'false'
+        env:
+          BACI_EXPECTED_APP_SHA: ${{ github.sha }}
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
 
   # Apply any pending Supabase migrations AFTER drain readiness and BEFORE the
   # Vercel deploy so application code never lands ahead of the schema it depends on. Migrations
@@ -96,13 +188,28 @@ jobs:
   # same query payload as the SQL run; migrations that opt into
   # `-- disable-transaction` are split into top-level statements first so
   # CREATE INDEX CONCURRENTLY can run without blocking production writes.
+  #
+  # The apply runs in TWO passes around a hook-reload probe: the first pass
+  # caps at the GIGL hook restore, the probe requires PostgREST to actually
+  # serve the hook's reload canary, and only then does the second pass apply
+  # the isolate grant. PostgreSQL exposes membership at commit while
+  # PostgREST reloads asynchronously, so an unwitnessed grant could commit
+  # while PostgREST still serves the pre-hook config; the probe makes that
+  # state unreachable instead of merely unlikely.
   db-migrations:
     needs: [vps-drain-readiness]
-    if: github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success'
+    # A skipped changes ancestor on manual dispatch must not skip this job.
+    # Readiness must still succeed before migrations can run.
+    if: always() && github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: production
-    timeout-minutes: 10
+    # 35 minutes covers both hook-reload probes' unanimity windows on
+    # the first deploy (later deploys skip each probe in seconds once
+    # its isolate migration is recorded), with headroom so a slow
+    # double-probe path fails by the probe's explicit error rather
+    # than by job timeout.
+    timeout-minutes: 35
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -110,18 +217,161 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Apply pending migrations via Management API
+      - name: Apply pending migrations through the GIGL hook restore
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20260805113000
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe GIGL hook reload acknowledgement
+        # No grant without a witness (see the job comment): fails while
+        # the isolate migration is still unapplied when PostgREST never
+        # serves the hook, so the grant can never commit unconfined.
+        # Skips fast once the isolate migration is recorded.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-gigl-hook-reload.sh
+      - name: Apply pending migrations through the blog scope hook
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20261009230000
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe blog hook reload acknowledgement
+        # Same no-grant-without-a-witness rule as GIGL: the isolate
+        # grant below must never commit while any PostgREST replica
+        # still serves the pre-blog hook, so unanimity on the blog
+        # canary gates the remaining apply. Skips fast once the blog
+        # isolate migration is recorded.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-blog-media-hook-reload.sh
+      - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
+      - name: Verify GIGL worker least-privilege final state
+        # Production is currently mid-rollout (worker role LOGIN-capable with
+        # a password, hook and isolate grant pending on this PR's migrations).
+        # The cron removal must never land while that interim window is open,
+        # so assert the final state explicitly after every apply: NOLOGIN, no
+        # password, scope hook installed, authenticator membership held.
+        # Failing here fails db-migrations, which blocks deploy-production.
+        run: .github/scripts/verify-gigl-worker-final-state.sh
+
+  # Live-smoke the restricted GIGL wrapper capability only AFTER migrations:
+  # the gigl_worker_* RPCs do not exist on a parent schema, so running this
+  # smoke in vps-drain-readiness would fail every first deploy from a schema
+  # that predates the wrappers.
+  gigl-worker-capability:
+    needs: [changes, db-migrations]
+    # Run only when the changeset can affect tracking: an unconditional live
+    # smoke would turn worker-secret drift into a full release freeze for
+    # unrelated web deploys — so the condition is `tracking` only. GIGL
+    # migrations are inside the tracking filter already; the broad
+    # `migrations` output must never gate this job. always() so a skipped
+    # changes job (manual dispatch) still runs the smoke — unset outputs
+    # fail closed — instead of landing the cron removal unverified. Deploy
+    # procedure: run vps-workers/deploy.sh before dispatching a tracking
+    # deploy.
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && needs.changes.outputs.tracking != 'false'
+    runs-on: baci-deploy
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # Production identity is file-authoritative: the latch resolver must
+    # fingerprint the installed dotenv, never a runner export (the smoke
+    # entry sets the same mode for the filter it execs through).
+    env:
+      GIGL_ENV_FILE_AUTHORITATIVE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Recheck installed SHA before smoke
+        # A manual deploy.sh run may have replaced the worker between the
+        # readiness check and this post-migration job; smoking (and
+        # latching) a different revision than readiness verified would
+        # record the workflow SHA against an unverified worker. Recheck
+        # install identity immediately before the smoke/latch sequence.
+        env:
+          BACI_EXPECTED_APP_SHA: ${{ github.sha }}
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
+      - name: Capture pre-smoke latch identity
+        # The smoke and the latch persist below are separate steps: an
+        # operator edit to the worker .env between them would otherwise
+        # latch a fingerprint the live probe never smoked. Capture the
+        # identity now; the persist step re-resolves and refuses to write
+        # on any drift, forcing a clean re-run.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: |
+          echo "GIGL_PRE_SMOKE_IDENTITY=$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")" >> "$GITHUB_ENV"
+      - name: Smoke the live GIGL wrapper capability
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: .github/scripts/smoke-gigl-worker-capability.sh
+      - name: Persist GIGL cutover latch
+        # Runs only after the smoke above succeeds (same job, no if): the
+        # latch file proves a live smoke verified token+hook+provider
+        # function at this revision. The gate requires it for
+        # tracking=false pushes,
+        # so a web push after a smoke-failed tracking push cannot deploy
+        # the cron removal with a broken worker. The latch records
+        # `<scope>:<sha>:<credential-fingerprint>` for the environment the smoke
+        # just observed: a GIGL-disabled skip (exit 0 no-op) latches a
+        # DISABLED scope, which authorizes the bypass only while the worker
+        # is still disabled — a disabled run can never certify future
+        # enabled function, and any enablement flip or token change since
+        # the smoke invalidates. The identity must also be unchanged
+        # since the pre-smoke capture: a token rotated or removed between
+        # the smoke and this persist was never probed, so a drifted
+        # identity fails the job instead of latching it. deploy.sh
+        # preserves this file on promote.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: |
+          identity="$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")"
+          if [ "$identity" != "${GIGL_PRE_SMOKE_IDENTITY:-}" ]; then
+            echo "::error::GIGL latch identity changed between the capability smoke and the latch persist; refusing to latch an unsmoked token." >&2
+            exit 1
+          fi
+          printf '%s:%s:%s' "${identity%% *}" '${{ github.sha }}' "${identity#* }" \
+            > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
 
   deploy-production:
-    needs: [changes, cwv-runner-contracts, db-migrations]
+    needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability, vps-drain-readiness]
     # Hard-require db-migrations success — `result == 'success'` excludes both
     # 'skipped' and 'failure', so a skipped migrations job (e.g. if its `if`
     # condition becomes false in a future change) cannot let a web deploy
-    # land against an out-of-date schema.
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
+    # land against an out-of-date schema. The GIGL capability smoke gates
+    # tracking deploys directly, and the cutover latch gates the
+    # tracking=false bypass: install presence alone (the marker) cannot
+    # prove the worker FUNCTIONS, so a web push after a smoke-failed
+    # tracking push must stay blocked until some smoke succeeds and writes
+    # the latch — and the latch revision must still cover the tree, so
+    # tracking changes since the last successful smoke also block the
+    # bypass (recover with deploy.sh plus a tracking push or dispatch,
+    # which re-smokes at HEAD). The bypass also requires manifest_drift
+    # == 'false': manifests are deliberately outside the tracking smoke,
+    # but the poller executes that dependency tree, so a manifest-only
+    # push must not bypass while the installed tree predates HEAD's
+    # manifests. Recover the same way (deploy.sh from current main plus
+    # a tracking push or dispatch): the converge promote moves the
+    # installed SHA, which invalidates the latch binding until a fresh
+    # smoke re-proves the new tree — so manifest changes end up
+    # smoke-verified too, just outside the tracking gate. Steady-state
+    # drift still
+    # doesn't freeze web deploys — the latch persists once proven — but
+    # the cron removal can never land before the first proven-function
+    # smoke. Manual
+    # dispatches are NOT exempt: the changes outputs are unset there, so
+    # `tracking == 'false'` is false and the smoke result is required — a
+    # dispatch can never land the cron removal unverified. (The trailing
+    # dispatch term only keeps the pre-existing "dispatch always deploys"
+    # scope behavior.)
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true' && needs.vps-drain-readiness.outputs.tracking_stale == 'false' && needs.vps-drain-readiness.outputs.manifest_drift == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so
@@ -159,6 +409,7 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      OVERLAP_PRODUCTION_ALIAS: ogabassey.com
       VERCEL_CLI_VERSION: "57.0.0"
       # Next/Vercel prebuilt Skew Protection needs a stable custom deployment ID
       # at build time so old clients keep requesting assets/actions from the
@@ -190,6 +441,17 @@ jobs:
       # Bumping the pin requires re-checking that the new CLI's bundled
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
+      - name: Verify GIGL fallback token presence (defined, not validity) in Vercel Production
+        # Presence-only: Vercel pulls sensitive values blank, so this
+        # proves the Production key is DEFINED and injects a build-time
+        # stand-in; it cannot prove the value is real or unexpired. An
+        # expired or mismatched token passes this gate and surfaces
+        # only at runtime (500 from the retained manual fallback
+        # route). The real gate is the pre-merge decode/match checklist
+        # (`role` claim `gigl_tracking_worker`, >=14 days runway, same
+        # JWT in Vercel Production and the VPS worker .env); rotation
+        # procedure: vps-workers/docs/gigl-tracking-worker-token-rotation.md.
+        run: .github/scripts/verify-gigl-fallback-token.sh .vercel/.env.production.local
       - name: Ensure wallet recovery HMAC Production configuration exists
         # `vercel pull` omits undefined keys and writes blank placeholders for
         # defined sensitive values. CLI 57.0.0 can exit 0 after an empty
@@ -252,11 +514,35 @@ jobs:
           key: prebuilt-static-union-${{ github.run_id }}-${{ github.run_attempt }}
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
       # Do NOT remove it — without it, each deploy uploads thousands of individual files.
+      - name: Refuse publish when a worker promote overlapped this run
+        # The deploy.sh-side inflight check is fail-fast; this is the
+        # early correctness backstop and must stay the last step before
+        # the publish step: deploy.sh records every promote (SHA +
+        # in-flight run ids) in the ops/gigl-promote-record branch, and
+        # a promote that landed mid-run invalidates this run's early
+        # latch/SHA read. On overlap the step fails and the operator
+        # re-runs the workflow off fresh reads. The publish step's retry
+        # wrapper re-runs this same refusal immediately before every
+        # promote attempt, covering records written during the deploy
+        # itself. The read uses the contents API under this job's
+        # contents:read (GITHUB_TOKEN cannot be granted the Variables
+        # permission a variable-backed record would need).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - name: Deploy to Vercel (with retry)
         # Backstop for stuck deploys; the retry budget fits the 150-minute job timeout.
         timeout-minutes: 55
         env:
           DEPLOY_CURRENT_MAIN_GUARD: .github/scripts/current-main-deploy-guard.mjs
+          # The pre-publish overlap step above is point-in-time; the retry
+          # wrapper re-runs the same refusal immediately before EVERY
+          # promote attempt, so a record written during this 55-minute
+          # step still blocks the promotion. GH_TOKEN feeds the overlap
+          # script's contents-API read (GITHUB_RUN_ID/REPOSITORY are
+          # automatic).
+          DEPLOY_PROMOTE_OVERLAP_CHECK: .github/scripts/refuse-publish-on-promote-overlap.sh
+          GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         # Stage without production domains; deploy-with-retry verifies exact-main authority.
         run: .github/scripts/deploy-with-retry.sh .github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --prod --skip-domain --archive=tgz

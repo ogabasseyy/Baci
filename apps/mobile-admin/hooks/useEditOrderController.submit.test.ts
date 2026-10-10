@@ -67,6 +67,8 @@ function createBaseController(
       phone: '',
       state: '',
     },
+    date: new Date('2024-01-02T10:00:00.000Z'),
+    setDate: vi.fn(),
     discount: 0,
     notes: '',
     orderItems,
@@ -131,6 +133,34 @@ describe('useEditOrderController submit', () => {
       }),
     });
     expect(setShowSuccessModal).toHaveBeenCalledWith(true);
+    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
+      'transaction_date'
+    );
+  });
+
+  it.each([
+    'cancelled',
+    'returned',
+  ] as const)('blocks submission for %s orders', async (shipping_status) => {
+    const mutateAsync = vi.fn();
+    useNewOrderControllerMock.mockReturnValue(createBaseController());
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: { id: 'order-1', shipping_status },
+      isLoading: false,
+    });
+
+    const { result } = renderHook(() => useEditOrderController());
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(alertMock).toHaveBeenCalledWith(
+      'Order closed',
+      'This order is cancelled or returned and cannot be edited.'
+    );
   });
 
   it('blocks submission when a customer has not been selected', async () => {

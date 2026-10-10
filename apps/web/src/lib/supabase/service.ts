@@ -17,6 +17,9 @@ const walletFundingRecoveryClientBrand: unique symbol = Symbol(
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
 );
+const piggyvestIntakeClientBrand: unique symbol = Symbol(
+  'baci.piggyvest-intake.service-role-client'
+);
 const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
   'baci.immediate-notification-completion.service-role-client'
 );
@@ -73,6 +76,18 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
+ * A service-role client reserved for the PiggyVest webhook intake edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the intake call graph
+ * (inbox record, quarantine record, event processing) cannot be driven by a
+ * generic service client from any other edge. Only the HMAC-authenticated
+ * `/api/webhooks/piggyvest` route may construct it, via
+ * `createPiggyvestIntakeServiceClient`.
+ */
+export type PiggyvestIntakeServiceClient = SupabaseClient<Database> & {
+  readonly [piggyvestIntakeClientBrand]: true;
+};
+/**
  * A service-role client reserved for immediate-notification completion
  * HMAC provisioning.
  *
@@ -110,6 +125,9 @@ export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
 export function createServiceClient(
+  sentinel: 'piggyvest-intake'
+): PiggyvestIntakeServiceClient;
+export function createServiceClient(
   sentinel: 'immediate-notification-completion'
 ): ImmediateNotificationCompletionServiceClient;
 export function createServiceClient(): SupabaseClient;
@@ -120,6 +138,7 @@ export function createServiceClient(
     | 'jumia-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
+    | 'piggyvest-intake'
     | 'immediate-notification-completion'
 ) {
   const url = getSupabaseUrl();
@@ -181,6 +200,11 @@ export function createServiceClient(
   if (sentinel === 'shipping-quote-booking-economics') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [shippingQuoteBookingEconomicsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'piggyvest-intake') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

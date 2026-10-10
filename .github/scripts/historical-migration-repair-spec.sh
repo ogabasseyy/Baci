@@ -68,6 +68,15 @@ historical_collision_repair_spec() {
     20260805090000:complete_merchant_invoice_partial_payments)
       printf '%s\t%s\n' '20260805090002' 'reapply_complete_merchant_invoice_partial_payment'
       ;;
+    # Production recorded the interim LOGIN revision under this version.
+    # These are different role contracts, not spelling aliases: require the
+    # later NOLOGIN + scope-hook repair before treating history as reconciled.
+    # The applier preserves the old row; deploy still probes the loaded hook
+    # before the separate isolate migration grants authenticator membership.
+    20260805091000:enable_least_privilege_gigl_tracking_login | \
+    20260805091000:converge_gigl_tracking_worker_nologin)
+      printf '%s\t%s\n' '20260805113000' 'restore_gigl_tracking_postgrest_capability'
+      ;;
     20260811120000:quiz_leaderboard_and_claim_projections_v2 | \
     20260811120000:allow_reviewed_paystack_email_mismatch)
       printf '%s\t%s\n' '20260813144355' 'reapply_allow_reviewed_paystack_email_mismatch'
@@ -78,7 +87,7 @@ historical_collision_repair_spec() {
 
 historical_collision_version_is_known() {
   case "$1" in
-    20260615120000 | 20260713130000 | 20260805090000 | 20260811120000) return 0 ;;
+    20260615120000 | 20260713130000 | 20260805090000 | 20260805091000 | 20260811120000) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -91,6 +100,8 @@ historical_collision_name_is_valid() {
     20260713130000:quiz_finalize_rank_winners | \
     20260805090000:add_least_privilege_gigl_tracking_worker | \
     20260805090000:complete_merchant_invoice_partial_payments | \
+    20260805091000:enable_least_privilege_gigl_tracking_login | \
+    20260805091000:converge_gigl_tracking_worker_nologin | \
     20260811120000:quiz_leaderboard_and_claim_projections_v2 | \
     20260811120000:allow_reviewed_paystack_email_mismatch)
       return 0

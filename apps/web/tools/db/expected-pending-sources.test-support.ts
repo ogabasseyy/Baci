@@ -1,5 +1,8 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
+import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
+import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
+import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending-sources.test-support';
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
@@ -17,6 +20,8 @@ import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.t
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
+import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
+import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
@@ -34,6 +39,8 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 });
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_CONNECTOR_PENDING_SOURCES,
+  ...EXPECTED_BLOG_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20261002090000_order_refund_management.sql',
@@ -170,6 +177,26 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '34d9b431e3d16cfac0765c43d4c62fc9cd4421d295636245594cb1e2a1f8b9e3',
   },
   ...EXPECTED_QUIZ_LIVE_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql',
+    sha256: '428d5dbcd1de46aa145882c9911b87ff8311ad51d407bfa40155044c1be0b9ab',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql',
+    sha256: '905c85dbec6badd8d2d2246f7283a5df97bb6511e61b5751a09687a0cf2f7aad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',
+    sha256: 'a639ded915cb661e199187c31381c85c75b07930dbab9aa61cc29e4290f85ae7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql',
+    sha256: 'c8073d92cb844bb9569c59e5c52b8a46a15d03e3e5c03f4e152c692a04311877',
+  },
   ...EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES,
   ...EXPECTED_PAYSTACK_PENDING_SOURCES,
   ...ADMIN_PLATFORM_PENDING_SOURCES,
@@ -258,6 +285,14 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
+  },
+  ...EXPECTED_DISCOVERY_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
+    sha256: 'e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4',
   },
 ]
   .sort((left, right) =>

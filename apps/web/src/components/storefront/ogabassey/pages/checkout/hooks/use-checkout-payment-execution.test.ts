@@ -1,6 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutPaymentExecutionOptions } from './use-checkout-payment-execution';
+import {
+  createOptions,
+  crypto,
+  dva,
+  handlePlaceOrder,
+  waitForResolvedCustomerAuth,
+  walletTransfer,
+} from './use-checkout-payment-execution.test-support';
+import type { WalletFundedOrderPaidPayload } from './use-wallet-funded-bank-transfer';
 
 const mocks = vi.hoisted(() => ({
   clearIdempotencyKey: vi.fn(),
@@ -9,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   useCrypto: vi.fn(),
   useCustomer: vi.fn(),
   useDva: vi.fn(),
+  useRedvault: vi.fn(),
   useSubmission: vi.fn(),
   useTransfer: vi.fn(),
 }));
@@ -29,6 +39,9 @@ vi.mock('./use-checkout-dva-session', () => ({
 vi.mock('./use-checkout-order-submission', () => ({
   useCheckoutOrderSubmission: mocks.useSubmission,
 }));
+vi.mock('./use-checkout-redvault-availability', () => ({
+  useCheckoutRedvaultAvailability: mocks.useRedvault,
+}));
 vi.mock('./use-storefront-customer-session', () => ({
   useStorefrontCustomerSession: mocks.useCustomer,
 }));
@@ -39,119 +52,30 @@ vi.mock('./use-wallet-funded-bank-transfer', () => ({
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
-import { useStorefrontCustomerSession } from './use-storefront-customer-session';
-import {
-  useWalletFundedBankTransfer,
-  type WalletFundedOrderPaidPayload,
-} from './use-wallet-funded-bank-transfer';
 import { useCheckoutPaymentExecution } from './use-checkout-payment-execution';
+import { useCheckoutRedvaultAvailability } from './use-checkout-redvault-availability';
+import { useStorefrontCustomerSession } from './use-storefront-customer-session';
+import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 
-const dva = {
-  closeDvaModal: vi.fn(),
-  dvaData: null,
-  handleDvaConfirmTransfer: vi.fn(),
-  isInitializingDva: false,
-  isVerifyingDva: false,
-  setDvaData: vi.fn(),
-  setIsInitializingDva: vi.fn(),
-};
-const crypto = {
-  setPendingCryptoOrder: vi.fn(),
-  setShowCryptoSelector: vi.fn(),
-  setCryptoPaymentData: vi.fn(),
-};
-const walletTransfer = { start: vi.fn(), account: null, intent: null };
-const handlePlaceOrder = vi.fn();
-const waitForResolvedCustomerAuth = vi.fn(async () => true);
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.useDva.mockReturnValue(dva);
+  mocks.useCrypto.mockReturnValue(crypto);
+  mocks.useCustomer.mockReturnValue({
+    waitForResolvedAuthenticated: waitForResolvedCustomerAuth,
+  });
+  mocks.useTransfer.mockReturnValue(walletTransfer);
+  mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
+  mocks.useRedvault.mockReturnValue({
+    availability: { available: false, reason: 'unavailable' },
+  });
+});
 
-function createOptions(
-  resumed: CheckoutPaymentExecutionOptions['attempt']['resumed'] = {
-    order: null,
-    preferredGateway: null,
-    trackingToken: null,
-    merchantSlugFromResume: null,
-  },
-  identity: CheckoutPaymentExecutionOptions['identity'] = {
-    merchantId: 'merchant-1',
-    merchantSlug: 'test-store',
-    currencyCode: 'NGN',
-  }
-): CheckoutPaymentExecutionOptions {
-  return {
-    identity,
-    form: {
-      account: {
-        createAccount: false,
-        password: '',
-        user: null,
-      },
-      contact: {
-        customerEmail: 'ada@example.test',
-        customerPhone: '+2348031234567',
-        firstName: 'Ada',
-        lastName: 'Okafor',
-        newsletterOptIn: false,
-      },
-    },
-    cart: {
-      cart: [],
-      checkoutCart: [],
-      checkoutCartTotal: 5000,
-      clearCart: vi.fn(),
-      removeFromCart: vi.fn(),
-    },
-    delivery: {} as unknown as CheckoutPaymentExecutionOptions['delivery'],
-    merchant: null,
-    navigation: {
-      setCurrentStep: vi.fn(),
-      setCompletedSteps: vi.fn(),
-      pushSuccessRoute: vi.fn(),
-      getHref: (path) => `/shop${path}`,
-    },
-    order: {
-      pending: null,
-      clearPending: vi.fn(),
-      setPending: vi.fn(),
-      setOrderCreated: vi.fn(),
-      clearCheckoutSession: vi.fn(),
-    },
-    payment: {
-      session: { method: 'bank_transfer' } as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
-      bankTransferAvailable: true,
-      paystackAvailable: true,
-      korapayAvailable: false,
-      redvaultAvailable: false,
-      currencyCode: 'NGN',
-    },
-    attempt: {
-      resumed,
-      processing: {
-        setIsProcessing: vi.fn(),
-        isOrderInFlightRef: { current: false },
-        tryBeginSubmission: vi.fn(() => true),
-        releaseSubmission: vi.fn(),
-        handleSubmissionError: vi.fn(),
-      },
-    },
-  };
-}
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('useCheckoutPaymentExecution', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.useDva.mockReturnValue(dva);
-    mocks.useCrypto.mockReturnValue(crypto);
-    mocks.useCustomer.mockReturnValue({
-      waitForResolvedAuthenticated: waitForResolvedCustomerAuth,
-    });
-    mocks.useTransfer.mockReturnValue(walletTransfer);
-    mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('composes fresh checkout resources, authenticated resolution, and overlay sessions', async () => {
     const options = createOptions();
     const { result } = renderHook(() => useCheckoutPaymentExecution(options));
@@ -174,7 +98,7 @@ describe('useCheckoutPaymentExecution', () => {
     expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
       expect.objectContaining({
         merchantId: 'merchant-1',
-        isOrderInFlightRef: options.attempt.processing.isOrderInFlightRef,
+        isOrderInFlightRef: options.attempt.isOrderInFlightRef,
       })
     );
     expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
@@ -206,12 +130,12 @@ describe('useCheckoutPaymentExecution', () => {
     vi.useFakeTimers();
     const resumedOrder = {
       id: 'order-resume-1',
-    } as unknown as CheckoutPaymentExecutionOptions['attempt']['resumed']['order'];
+    } as unknown as CheckoutPaymentExecutionOptions['attempt']['resumedOrder'];
     const options = createOptions({
-      order: resumedOrder,
+      resumedOrder,
       preferredGateway: 'credpal',
-      trackingToken: 'tracking-1',
-      merchantSlugFromResume: 'test-store',
+      resumeTrackingToken: 'tracking-1',
+      resumeMerchantSlug: 'test-store',
     });
     const { result } = renderHook(() => useCheckoutPaymentExecution(options));
     const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
@@ -227,7 +151,12 @@ describe('useCheckoutPaymentExecution', () => {
       trackingToken: 'paid-track-1',
     };
 
-    expect(submission?.resumed).toBe(options.attempt.resumed);
+    expect(submission?.resumed).toEqual({
+      order: options.attempt.resumedOrder,
+      preferredGateway: options.attempt.preferredGateway,
+      trackingToken: options.attempt.resumeTrackingToken,
+      merchantSlugFromResume: options.attempt.resumeMerchantSlug,
+    });
     expect(result.current.walletFundedTransfer).toBe(walletTransfer);
     expect(completion).toBeTypeOf('function');
     act(() => completion?.(payload));
@@ -240,9 +169,9 @@ describe('useCheckoutPaymentExecution', () => {
       reference: 'intent-1',
       total: 5000,
     });
-    expect(options.order.clearPending).toHaveBeenCalledOnce();
+    expect(options.attempt.clearPendingCheckoutOrder).toHaveBeenCalledOnce();
     expect(mocks.clearIdempotencyKey).toHaveBeenCalledWith('fingerprint-1');
-    expect(options.order.clearCheckoutSession).toHaveBeenCalledOnce();
+    expect(options.form.session.clear).toHaveBeenCalledOnce();
     expect(mocks.push).toHaveBeenCalledWith(
       '/shop/order-success?orderId=order-paid-1&wallet=true&trackingToken=paid-track-1'
     );
@@ -250,38 +179,98 @@ describe('useCheckoutPaymentExecution', () => {
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });
 
-  it.each([null, undefined])(
-    'keeps unresolved merchant identity safe and preserves submission guards (%s)',
-    (merchantId) => {
-      const options = createOptions(undefined, {
-        merchantId,
-        merchantSlug: undefined,
-        currencyCode: 'NGN',
-      });
-      const { result } = renderHook(() => useCheckoutPaymentExecution(options));
-      const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+  it.each([
+    null,
+    undefined,
+  ])('keeps unresolved merchant identity safe and preserves submission guards (%s)', (merchantId) => {
+    const options = createOptions(undefined, {
+      merchantId,
+      merchantSlug: undefined,
+      currencyCode: 'NGN',
+    });
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
 
-      expect(vi.mocked(useStorefrontCustomerSession)).toHaveBeenCalledWith(undefined);
-      expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
-        expect.objectContaining({ merchantId })
-      );
-      expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
-        expect.objectContaining({ merchantId: undefined, merchantSlug: undefined })
-      );
-      expect(submission?.account.waitForResolvedCustomerAuth).toBe(
-        waitForResolvedCustomerAuth
-      );
-      expect(submission?.processing).toBe(options.attempt.processing);
-      expect(submission?.processing.tryBeginSubmission).toBe(
-        options.attempt.processing.tryBeginSubmission
-      );
-      expect(submission?.processing.releaseSubmission).toBe(
-        options.attempt.processing.releaseSubmission
-      );
-      expect(submission?.processing.handleSubmissionError).toBe(
-        options.attempt.processing.handleSubmissionError
-      );
-      expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
-    }
-  );
+    expect(vi.mocked(useStorefrontCustomerSession)).toHaveBeenCalledWith(
+      undefined
+    );
+    expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId })
+    );
+    expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: undefined,
+        merchantSlug: undefined,
+      })
+    );
+    expect(submission?.account.waitForResolvedCustomerAuth).toBe(
+      waitForResolvedCustomerAuth
+    );
+    expect(submission?.processing.tryBeginSubmission).toBe(
+      options.attempt.tryBeginSubmission
+    );
+    expect(submission?.processing.releaseSubmission).toBe(
+      options.attempt.releaseSubmission
+    );
+    expect(submission?.processing.handleSubmissionError).toBe(
+      options.attempt.handleSubmissionError
+    );
+    expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
+  });
+
+  it('derives REDVAULT availability from the sanitized checkout cart', () => {
+    const rawItem = {
+      id: 'line-1',
+      quantity: 1,
+      price: 100,
+      negotiatedPrice: 90,
+    };
+    const sanitizedItem = { id: 'line-1', quantity: 1, price: 100 };
+    const options = createOptions();
+    options.cart.cart = [rawItem] as never;
+    options.cart.checkoutCart = [sanitizedItem] as never;
+    mocks.useRedvault.mockReturnValue({
+      availability: { available: true, reason: 'private_live_pilot' },
+    });
+
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    const hook = vi.mocked(useCheckoutRedvaultAvailability);
+    const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cartItems: options.cart.checkoutCart,
+        merchantId: 'merchant-1',
+        merchantSlug: 'test-store',
+      })
+    );
+    expect(hook.mock.calls[0]?.[0].cartItems).not.toBe(options.cart.cart);
+    expect(hook.mock.calls[0]?.[0].cartItems).toEqual([sanitizedItem]);
+    expect(submission?.payment.redvaultAvailable).toBe(true);
+    expect(result.current.redvaultAvailable).toBe(true);
+  });
+
+  it('passes pilot fee blockers from assurance, shipping, and gift state', () => {
+    const options = createOptions();
+    options.cart.checkoutCart = [
+      { id: 'line-1', quantity: 1, hasAssurance: true },
+    ] as never;
+    options.delivery = {
+      session: { cost: 1500 },
+      giftWrappingCost: 500,
+    } as never;
+
+    renderHook(() => useCheckoutPaymentExecution(options));
+    const hook = vi.mocked(useCheckoutRedvaultAvailability);
+
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pilotFeeBlockers: {
+          hasAssurance: true,
+          shippingFee: 1500,
+          giftWrappingCost: 500,
+        },
+      })
+    );
+  });
 });

@@ -113,8 +113,8 @@ describe('repairPickupClient', () => {
     jest.useFakeTimers();
     const original = global.fetch;
     global.fetch = jest.fn(
-      (_url, options) =>
-        new Promise((_resolve, reject) => {
+      (_url: RequestInfo | URL, options?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
           options?.signal?.addEventListener('abort', () =>
             reject(new Error('Aborted'))
           );

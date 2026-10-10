@@ -53,6 +53,37 @@ describe('wallet notification payloads', () => {
     ).toEqual({ screen: 'wallet', params: { action: 'savings' } });
   });
 
+  it('forwards a savings reminder goalId as savingsGoalId', () => {
+    expect(
+      getStorefrontNotificationNavigationTarget({
+        type: 'customer_savings_reminder',
+        goalId: 'goal-older',
+        screen: 'wallet',
+      })
+    ).toEqual({
+      screen: 'wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-older' },
+    });
+    expect(
+      getStorefrontNotificationNavigationTarget({
+        type: 'customer_savings_reminder',
+        goal_id: 'goal-older',
+      })
+    ).toEqual({
+      screen: 'wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-older' },
+    });
+  });
+
+  it('omits savingsGoalId when a savings reminder names no goal', () => {
+    expect(
+      getStorefrontNotificationNavigationTarget({
+        type: 'customer_savings_reminder',
+        goalId: '   ',
+      })
+    ).toEqual({ screen: 'wallet', params: { action: 'savings' } });
+  });
+
   it('builds a wallet_credited payload that carries an onward returnTo', () => {
     expect(
       buildWalletCreditedPushPayload({

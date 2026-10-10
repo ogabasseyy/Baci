@@ -27,6 +27,15 @@ web:
   - '.github/scripts/storefront-release-marker.mjs'
   - '.github/scripts/storefront-sitemap-purge.mjs'
   - '.github/scripts/deploy-with-retry.sh'
+  - '.github/scripts/deploy-with-retry-overlap.sh'
+  - '.github/scripts/refuse-publish-on-promote-overlap.sh'
+  - '.github/scripts/probe-gigl-hook-reload.sh'
+  - '.github/scripts/check-gigl-cutover-latch.sh'
+  - '.github/scripts/resolve-gigl-latch-identity.sh'
+  - '.github/scripts/smoke-gigl-worker-capability.sh'
+  - '.github/scripts/verify-gigl-fallback-token.sh'
+  - '.github/scripts/verify-gigl-worker-final-state.sh'
+  - '.github/scripts/gigl-dotenv.sh'
   - '.github/scripts/deferred-production-migrations.sh'
   - '.github/scripts/pending-postdeploy-migrations.sh'
   - '.github/scripts/apply-atomic-migration-group.sh'
@@ -42,12 +51,118 @@ web:
   - '.github/scripts/run-pinned-vercel.sh'
   - '.npmrc'
   - 'pnpm-workspace.yaml'
+manifests:
+  - 'package.json'
+  - 'pnpm-lock.yaml'
+  - 'pnpm-workspace.yaml'
+  - '.npmrc'
+  - 'apps/web/package.json'
+tracking:
+  - 'vercel.json'
+  # GIGL-owned worker paths only — never a vps-workers/** glob, which
+  # would let unrelated import-job/Petrock/remediator edits inherit the
+  # GIGL install/SHA/smoke gates and freeze releases on worker drift.
+  # deploy.sh installs the tracking schedule, prepare-worker-release.sh
+  # stages the release SHA, the bin/jobs entries are the poller +
+  # capability chain, and the manifests feed the VPS preflight. The
+  # provision/flip helpers are the checkout half of
+  # prepare-worker-release.sh: they decide which revision cron executes.
+  # The monorepo manifests (the manifests group below) are excluded
+  # from the tracking SMOKE on purpose: the VPS poller runs its own
+  # older code + dependency tree self-consistently, so demanding a
+  # capability smoke per lockfile PR would freeze main for no cutover
+  # benefit; any tracking code change triggers through the paths above.
+  # But manifest drift is still ENFORCED, not warned: the latch check
+  # diffs the installed tree against HEAD over the manifests group and
+  # the bypass term requires manifest_drift == 'false', so a
+  # manifest-only push blocks the bypass until deploy.sh from current
+  # main converges the worker (plus a tracking push or dispatch to
+  # re-smoke the new tree). A transitive security fix the poller
+  # executes therefore cannot sit undeployed silently.
+  # On-call triage for this window: the cutover runbook's
+  # "Manifest-only drift triage (worker-stale-first)" section.
+  # Deliberately untracked: apps/web/src/env.ts and
+  # apps/web/src/lib/is-non-agentic-worker-profile.ts are never loaded
+  # by the worker graph (pinned by deploy-tracking-graph.test.mjs), so
+  # their staleness cannot affect the poller or the smoke.
+  - 'vps-workers/deploy.sh'
+  - 'vps-workers/bin/gigl-tracking-scoped-env.sh'
+  - 'vps-workers/bin/process-gigl-tracking.sh'
+  - 'vps-workers/bin/run-web-script.sh'
+  - 'vps-workers/bin/verify-gigl-direct-workers-installed.sh'
+  - 'vps-workers/bin/verify-gigl-tracking-worker-capability.sh'
+  - 'vps-workers/jobs/preflight-direct-web-workers.mjs'
+  - 'vps-workers/jobs/preflight-dotenv-assignments.mjs'
+  - 'vps-workers/lib/prepare-worker-release.sh'
+  - 'vps-workers/lib/provision-immutable-checkout.sh'
+  - 'vps-workers/lib/flip-immutable-checkout.sh'
+  - 'vps-workers/package.json'
+  - 'vps-workers/pnpm-lock.yaml'
+  - 'vps-workers/pnpm-workspace.yaml'
+  # No gigl-tracking/** glob: the VPS poller imports only the monitor
+  # batch/worker (plus the shared nullable-arg helper), while
+  # notifications stay on the Vercel service-role route — a
+  # notification-only fix must not demand a poller rollout. Exact
+  # entries, kept complete by deploy-tracking-graph.test.mjs.
+  - 'apps/web/src/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch.ts'
+  - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker.ts'
+  - 'apps/web/src/app/api/cron/gigl-tracking/nullable-supabase-rpc-argument.ts'
+  - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
+  - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
+  - 'apps/web/src/lib/shipping/gigl*'
+  - 'apps/web/src/lib/shipping/providers/gigl*'
+  - 'apps/web/src/lib/shipping/providers/base.ts'
+  # Shared runtime dependencies of the files above: the poller executes
+  # them from the VPS checkout, so a change must refresh the worker like
+  # any other worker file (a logger redaction fix, for example, must
+  # reach the poller). Exact entries, kept complete by
+  # deploy-tracking-graph.test.mjs, which covers the full runtime graph
+  # (type-only imports are erased and stay untracked).
+  - 'apps/web/src/lib/logger.ts'
+  - 'apps/web/src/lib/shipping/build-order-shipment-receiver.ts'
+  - 'apps/web/src/lib/shipping/matches-gigl-provider-rate.ts'
+  - 'apps/web/src/lib/shipping/merchant-location.ts'
+  - 'apps/web/src/lib/shipping/merchant-sender-comparison.ts'
+  - 'apps/web/src/lib/shipping/merchant-rates/subdivisions.ts'
+  - 'apps/web/src/lib/shipping/order-shipment-booking-error.ts'
+  - 'apps/web/src/lib/shipping/order-shipment-booking-utils.ts'
+  - 'apps/web/src/lib/shipping/package-dimensions.ts'
+  - 'apps/web/src/lib/shipping/quote-provider-failure.ts'
+  - 'apps/web/src/lib/shipping/shipping-config.ts'
+  - 'apps/web/src/lib/shipping/surviving-shipment-quantity.ts'
+  - 'apps/web/src/lib/shipping/tracking-types.ts'
+  - 'apps/web/src/lib/shipping/types.ts'
+  - 'apps/web/src/lib/storefront-build-read-fetch.ts'
+  - 'apps/web/src/lib/storefront-public-read-fetch.ts'
+  - 'apps/web/src/lib/supabase/compose-fetch-signal.ts'
+  - 'apps/web/src/lib/supabase/public.ts'
+  - 'packages/shared/src/lib/gigl-tracking-status.ts'
+  - 'packages/shared/src/lib/filter-by-location-phrase.ts'
+  # The poller imports the leaves above through workspace subpath
+  # exports, resolved through this map: redirecting an export swaps
+  # the executed module without touching the importer.
+  - 'packages/shared/package.json'
+  # The tsx poller resolves @/* and @baci/shared/* through the app
+  # tsconfig paths map: redirecting an alias swaps the executed module
+  # without touching the importer, so the map is tracked like the
+  # exports map above. (The app tsconfig has no extends, so the root
+  # tsconfig cannot affect poller resolution.)
+  - 'apps/web/tsconfig.json'
+  - 'apps/web/src/scripts/process-gigl-tracking.ts'
+  - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
+  - 'supabase/migrations/*gigl*'
+  # Shipped to the VPS by prepare-worker-release.sh and sourced on every
+  # poll: a reader change is a behavioral worker change and must trigger
+  # the install/SHA/smoke gates like any other worker file.
+  - '.github/scripts/gigl-dotenv.sh'
+  - '.github/filters/deploy.yml'
 migrations:
   - 'supabase/migrations/**'
   - '.github/filters/deploy.yml'
   - '.github/workflows/deploy.yml'
   - '.github/scripts/apply-pending-migrations.sh'
   - '.github/scripts/apply-pending-migration.sh'
+  - '.github/scripts/probe-gigl-hook-reload.sh'
   - '.github/scripts/repair-sales-migration-collision.sh'
   - '.github/actions/postdeploy-migrations/**'
   - '.github/scripts/apply-atomic-migration-group.sh'

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -26,6 +27,11 @@ const XCODE_PROJECT_PATH = path.join(
   'project.pbxproj'
 );
 const FASTFILE_PATH = path.join(PROJECT_ROOT, 'fastlane', 'Fastfile');
+const PRODUCTION_CONFIG_PATH = path.join(
+  PROJECT_ROOT,
+  'config',
+  'development-storefront-expo-config-production.ts'
+);
 
 function copyRequiredProjectFiles(tempRoot: string) {
   mkdirSync(path.join(tempRoot, 'ios', 'Ogabassey.xcodeproj'), {
@@ -33,7 +39,18 @@ function copyRequiredProjectFiles(tempRoot: string) {
   });
   mkdirSync(path.join(tempRoot, 'ios', 'Ogabassey'), { recursive: true });
   mkdirSync(path.join(tempRoot, 'fastlane'), { recursive: true });
+  mkdirSync(path.join(tempRoot, 'config'), { recursive: true });
   copyFileSync(APP_CONFIG_PATH, path.join(tempRoot, 'app.config.ts'));
+  if (existsSync(PRODUCTION_CONFIG_PATH)) {
+    copyFileSync(
+      PRODUCTION_CONFIG_PATH,
+      path.join(
+        tempRoot,
+        'config',
+        'development-storefront-expo-config-production.ts'
+      )
+    );
+  }
   copyFileSync(
     INFO_PLIST_PATH,
     path.join(tempRoot, 'ios', 'Ogabassey', 'Info.plist')
@@ -75,7 +92,20 @@ describe('check-ad-tracking-native-config', () => {
     try {
       copyRequiredProjectFiles(tempRoot);
 
-      const appConfigSource = readFileSync(APP_CONFIG_PATH, 'utf8')
+      // Declarations live in the production config module on split-config
+      // trees (app.config.ts is a dispatcher); rewrite quotes there.
+      const splitConfig = existsSync(PRODUCTION_CONFIG_PATH);
+      const declarationsPath = splitConfig
+        ? PRODUCTION_CONFIG_PATH
+        : APP_CONFIG_PATH;
+      const tempDeclarationsPath = splitConfig
+        ? path.join(
+            tempRoot,
+            'config',
+            'development-storefront-expo-config-production.ts'
+          )
+        : path.join(tempRoot, 'app.config.ts');
+      const appConfigSource = readFileSync(declarationsPath, 'utf8')
         .replace(
           /NSUserTrackingUsageDescription:\s*\n\s*'([^']+)'/,
           'NSUserTrackingUsageDescription: "$1"'
@@ -86,7 +116,7 @@ describe('check-ad-tracking-native-config', () => {
         );
       expect(appConfigSource).toContain('NSUserTrackingUsageDescription: "');
       expect(appConfigSource).toContain('SKAdNetworkIdentifier: "');
-      writeFileSync(path.join(tempRoot, 'app.config.ts'), appConfigSource);
+      writeFileSync(tempDeclarationsPath, appConfigSource);
 
       const result = runNativeAdConfigCheck(tempRoot);
 

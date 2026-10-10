@@ -1,5 +1,6 @@
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import { getPublicBlogMediaCdnOrigin } from '@/lib/blog-public-config';
+import { getTrustedBlogImageOrigins } from '@/lib/get-trusted-blog-image-origins';
 
 export const BLOG_FEATURED_VARIANT_KEYS = [
   'landscape_16x9',
@@ -55,6 +56,12 @@ function getConfiguredBlogMediaCdnOrigin(origin?: string): string {
   }
 }
 
+function getTrustedBlogMediaOrigins(): string[] {
+  // One trust set with the rest of the media pipeline: the deploy
+  // override, the default CDN, and Supabase Storage.
+  return getTrustedBlogImageOrigins();
+}
+
 export function isManagedBlogStoragePath(
   path: string,
   scopeOrMerchantId: string | BlogStorageScope
@@ -100,10 +107,19 @@ export function isManagedBlogStoragePath(
 
 export function extractManagedBlogStoragePath(
   publicUrl: string,
-  scopeOrMerchantId: string | BlogStorageScope
+  scopeOrMerchantId: string | BlogStorageScope,
+  options?: { trustedOrigins?: readonly string[] }
 ): string | null {
   try {
     const parsed = new URL(publicUrl);
+    // Pathname matching alone would treat an external lookalike (an
+    // attacker- or user-controlled host serving /media/platform/blog/*)
+    // as a managed object, so only the configured CDN and Supabase
+    // origins extract. Callers without env access pass explicit origins.
+    const trusted = options?.trustedOrigins ?? getTrustedBlogMediaOrigins();
+    if (!trusted.includes(parsed.origin)) {
+      return null;
+    }
     const path = decodeURIComponent(parsed.pathname);
     const bucketPathMarker = '/storage/v1/object/public/media/';
     const directMediaMarker = '/media/';

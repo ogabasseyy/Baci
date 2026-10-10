@@ -86,6 +86,7 @@ function renderFormatInvocation(payload) {
 
   let argumentIndex = 1;
   let hasUnknownArguments = false;
+  let hasUnknownRawArguments = false;
   const text = template.replace(
     /%%|%(?:([1-9][0-9]*)\$)?([sIL])/g,
     (match, positionalIndex, specifier) => {
@@ -97,6 +98,7 @@ function renderFormatInvocation(payload) {
       );
       if (argument === null) {
         hasUnknownArguments = true;
+        if (specifier === 's') hasUnknownRawArguments = true;
         return '__DYNAMIC_FORMAT_ARGUMENT__';
       }
       if (specifier === 'I') {
@@ -106,7 +108,7 @@ function renderFormatInvocation(payload) {
       return argument;
     }
   );
-  return { text, hasUnknownArguments };
+  return { text, hasUnknownArguments, hasUnknownRawArguments };
 }
 
 export const serializedInventoryDynamicRender = {

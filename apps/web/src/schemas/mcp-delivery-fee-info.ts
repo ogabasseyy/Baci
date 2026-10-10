@@ -1,0 +1,41 @@
+import { z } from 'zod';
+
+export const MCP_DELIVERY_MAX_UNIT_WEIGHT_KG = 100;
+
+export const MCP_DELIVERY_FEE_INFO_DESCRIPTION =
+  'Get live GIG Logistics delivery estimates for selected Ogabassey catalog products and quantities to a Nigerian city/state. Ask for products, quantity, city and any missing packed weight of one unit of each product before quoting. Weight is per unit and is multiplied by quantity; if given a combined package weight, ask for the per-unit packed weight. Never invent rates or weights. Returns door or station-pickup estimates with expiry; final address, eligibility and price must be confirmed at checkout. This tool does not modify a cart, place an order, book shipping or take payment.';
+
+export const mcpDeliveryFeeInfoInputSchema = z.object({
+  state: z.string().min(2).max(50).describe('Nigerian delivery state'),
+  city: z.string().min(2).max(100).optional().describe('Delivery city'),
+  items: z
+    .array(
+      z.object({
+        product_id: z
+          .uuid()
+          .describe('Exact Ogabassey product ID from catalog search'),
+        quantity: z.number().int().min(1).max(10),
+        variant_id: z
+          .uuid()
+          .optional()
+          .describe(
+            'Selected catalog variant ID when the product has variants'
+          ),
+        weight_kg: z
+          .number()
+          .positive()
+          .max(MCP_DELIVERY_MAX_UNIT_WEIGHT_KG)
+          .optional()
+          .describe(
+            'Packed weight in kilograms of one unit of this product, explicitly confirmed by the buyer when catalog weight is unavailable. GIG multiplies it by quantity. If the buyer supplies a combined package weight, ask for the per-unit packed weight instead; never guess'
+          ),
+      })
+    )
+    .min(1)
+    .max(5)
+    .optional()
+    .describe(
+      'Products to ship. Ask the buyer which products and quantities if missing; never infer an existing cart.'
+    ),
+  delivery_preference: z.enum(['door', 'pickup_station']).optional(),
+});

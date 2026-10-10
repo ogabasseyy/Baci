@@ -1,0 +1,83 @@
+{
+  "source": "Actual configured Gemini model planning calls; not ChatGPT/browser or executed MCP results",
+  "model": "gemini-2.5-flash",
+  "head": "d1ae19be3d9fc1fcddc687804f650f68141bdc1f",
+  "transportNote": "Gemini transport represents numeric const 0 as equal bounds and materializes inherited conditional schema types/properties; published MCP schema/guidance unchanged",
+  "transportSchemaSha256": "29e3255ca4a678f1cc1fb157e113b11ff1f1d4605e86c7f811ab703e9df7a35b",
+  "schemaSha256": "25111c440228b7c97ebb944ed65f7ceab2ba26e167271fd5cb788fdaa531ff87",
+  "cases": [
+    {
+      "caseId": "camera",
+      "prompt": "Find the Xiaomi Smart Camera C300 and show its photo and current listed price. Do not add it to cart.",
+      "calls": [
+        {
+          "toolName": "search_products",
+          "input": {
+            "query": "Xiaomi Smart Camera C300",
+            "intent": {
+              "alternatives": [
+                {
+                  "product_type": "security_camera",
+                  "brands": [
+                    "Xiaomi"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "finishReason": "tool-calls"
+    },
+    {
+      "caseId": "tecno",
+      "prompt": "Show the Tecno Spark 50 photo and current listed price. Do not add it to cart.",
+      "calls": [
+        {
+          "toolName": "search_products",
+          "input": {
+            "intent": {
+              "alternatives": [
+                {
+                  "model": "Spark 50",
+                  "product_type": "phone",
+                  "brands": [
+                    "Tecno"
+                  ]
+                }
+              ]
+            },
+            "query": "Tecno Spark 50"
+          }
+        }
+      ],
+      "finishReason": "tool-calls"
+    },
+    {
+      "caseId": "explicitCategory",
+      "prompt": "Find the Xiaomi Smart Camera C300 in the Cameras catalog category. Show its photo and current listed price. Do not add it to cart.",
+      "calls": [
+        {
+          "toolName": "search_products",
+          "input": {
+            "intent": {
+              "alternatives": [
+                {}
+              ]
+            },
+            "category": "Cameras",
+            "query": "Xiaomi Smart Camera C300"
+          }
+        }
+      ],
+      "finishReason": "tool-calls"
+    }
+  ],
+  "provenance": {
+    "baseHead": "d1ae19be3d9fc1fcddc687804f650f68141bdc1f",
+    "candidateGuidance": false,
+    "model": "gemini-2.5-flash",
+    "scope": "Actual API model-planning calls only; no MCP tool execution or ChatGPT browser proof",
+    "samplesPerCase": 1
+  }
+}

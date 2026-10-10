@@ -44,6 +44,7 @@ import { confirmPaystackMerchantWalletDva } from '@/lib/payments/confirm-paystac
 import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-wallet-dva-top-up';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
@@ -52,8 +53,10 @@ import {
   calculatePlatformFee,
   verifyTransaction as verifyPaystackPayment,
 } from '@/lib/paystack';
+import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
+import { prefundedCardWebhookBoundary } from '@/lib/piggyvest/prefunded-card-webhook-boundary';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
@@ -70,6 +73,7 @@ import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,
 } from '@/schemas/payments';
+import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
 
 type PaymentGateway = 'paystack' | 'korapay';
 
@@ -659,6 +663,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (
+      gateway === 'paystack' &&
+      typeof body.event === 'string' &&
+      body.event.startsWith('refund.')
+    ) {
+      const parsed = paystackRefundEventSchema.safeParse(body);
+      if (!parsed.success) {
+        logger.error({
+          message: 'Invalid Paystack refund webhook payload',
+          error: parsed.error.message,
+        });
+        return NextResponse.json(
+          { error: 'Invalid refund event payload' },
+          { status: 400 }
+        );
+      }
+      return handlePaystackCancellationRefundEvent(
+        createServiceClient(),
+        parsed.data as unknown as Record<string, unknown>
+      );
+    }
+
     // Extract reference and check event type based on gateway
     let reference: string;
     let isSuccessEvent = false;
@@ -696,6 +722,20 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ message: 'Event ignored' });
       }
+    }
+
+    // First-card prefunded payments reconcile through dedicated first-card
+    // handling, which is not active: ask Paystack to retry instead of
+    // letting the legacy flow file the webhook as a zero-candidate review
+    // (whose 200 would stop retries while the money stays unreconciled).
+    // Designed completion path while the webhook worker is absent: the
+    // client PATCHes card-checkout, which verifies with the provider and
+    // durably records via store.promoteVerifiedCollection (or raises
+    // store.flagReconciliation on mismatch). Mutations stay disabled by
+    // default and require PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED=true.
+    if (gateway === 'paystack') {
+      const firstCardBoundary = prefundedCardWebhookBoundary(body);
+      if (firstCardBoundary) return firstCardBoundary;
     }
 
     // Input validation - intentional guard, not a bypass
@@ -1340,7 +1380,8 @@ export async function POST(request: NextRequest) {
       if (
         expectedCurrency &&
         verifiedAmount.currency &&
-        expectedCurrency.toUpperCase() !== verifiedAmount.currency.toUpperCase()
+        normalizeCurrencyCode(expectedCurrency) !==
+          normalizeCurrencyCode(verifiedAmount.currency)
       ) {
         logger.error({
           message: 'Payment currency mismatch',

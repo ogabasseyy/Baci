@@ -14,6 +14,7 @@ import {
   sanitizePhone,
   sanitizeText,
 } from '@/lib/sanitize';
+import { formatPickerDateInput } from '@/lib/transaction-review-inputs';
 
 const PAID_LIKE_STATUSES: ReadonlySet<string> = new Set<PaymentStatus>([
   'paid',
@@ -48,6 +49,9 @@ interface EditabilityOrderState {
 
 export type EditableOrderRecord = Record<string, unknown> & {
   amount_paid?: number | null;
+  transaction_date?: string | null;
+  invoice_issue_date?: string | null;
+  created_at?: string;
   customer_email?: string | null;
   customer_id?: string | null;
   customer_name?: string | null;
@@ -73,6 +77,7 @@ export interface EditOrderPayloadDraft {
   customerSelectionChanged?: boolean;
   deliveryInfo: DeliveryInfo;
   discount: number;
+  orderDate?: Date;
   notes: string;
   notifyCustomer: boolean;
   orderItems: OrderItem[];
@@ -121,6 +126,7 @@ export function buildEditOrderPayload({
   discount,
   notes,
   notifyCustomer,
+  orderDate,
   orderItems,
   sameAsCustomer,
   selectedBranchId,
@@ -166,6 +172,16 @@ export function buildEditOrderPayload({
       };
 
   return {
+    // Mirror order creation: the picked calendar day is explicit user
+    // intent, sent alongside the UTC instant so the server never has to
+    // re-derive the day in the merchant timezone (which can shift it when
+    // device and merchant timezones straddle midnight).
+    ...(orderDate
+      ? {
+          transaction_date: orderDate.toISOString(),
+          transaction_date_day: formatPickerDateInput(orderDate),
+        }
+      : {}),
     branch_id: selectedBranchId || null,
     customer: {
       email: sanitizedCustomerEmail,

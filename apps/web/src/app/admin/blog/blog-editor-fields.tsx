@@ -2,6 +2,7 @@
 // Client component: renders interactive editor controls and rich-text input.
 
 import { Loader2, Upload } from 'lucide-react';
+import type { RefObject } from 'react';
 import { BlogEditor } from '@/components/blog/blog-editor';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,15 +15,25 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { applyCoverUrlChange } from './apply-cover-url-change';
+import { BlogEditorialMetadataFields } from './blog-editorial-metadata-fields';
 import type {
+  PlatformAdminBlogCoverState,
   PlatformAdminBlogFormState,
   PlatformAdminBlogStatus,
 } from './blog-types';
 
 type BlogEditorFieldsProps = {
+  contentResetKey?: number;
+  contentGenerationRef?: RefObject<number>;
+  coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
+  initialCover?: PlatformAdminBlogCoverState;
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
+  onAltEdit: () => void;
   onContentChange: (value: string) => void;
+  onContentDirty?: () => void;
+  onCoverUrlEdit: () => void;
   onFormChange: (
     updater:
       | PlatformAdminBlogFormState
@@ -36,9 +47,16 @@ type BlogEditorFieldsProps = {
 };
 
 export function BlogEditorFields({
+  contentResetKey,
+  contentGenerationRef,
+  coverStashRef,
+  initialCover,
   form,
   isEditMode,
+  onAltEdit,
   onContentChange,
+  onContentDirty,
+  onCoverUrlEdit,
   onFormChange,
   onInlineImageUpload,
   onSubmit,
@@ -127,6 +145,7 @@ export function BlogEditorFields({
           }
         />
 
+        <BlogEditorialMetadataFields form={form} onFormChange={onFormChange} />
         <Label htmlFor="excerpt">Excerpt</Label>
         <Textarea
           id="excerpt"
@@ -141,12 +160,33 @@ export function BlogEditorFields({
         <Input
           id="featured-image-url"
           value={form.featured_image_url}
-          onChange={(event) =>
+          onChange={(event) => {
+            // A manual URL edit takes over from any pending upload: the
+            // in-flight result (and alt typed for this URL) must not be
+            // claimed by the abandoned request when it resolves.
+            onCoverUrlEdit();
+            setForm((current) =>
+              applyCoverUrlChange({
+                coverStashRef,
+                current,
+                initialCover,
+                nextUrl: event.target.value,
+              })
+            );
+          }}
+        />
+        <Label htmlFor="featured-image-alt">Featured image alt text</Label>
+        <Input
+          id="featured-image-alt"
+          value={form.featured_image_alt}
+          onChange={(event) => {
+            onAltEdit();
             setForm((current) => ({
               ...current,
-              featured_image_url: event.target.value,
-            }))
-          }
+              featured_image_alt: event.target.value,
+              featured_image_alt_edited: true,
+            }));
+          }}
         />
         <div>
           <Button
@@ -200,8 +240,11 @@ export function BlogEditorFields({
 
         <Label>Content</Label>
         <BlogEditor
+          contentResetKey={contentResetKey}
           content={form.content}
+          contentGenerationRef={contentGenerationRef}
           onChange={onContentChange}
+          onContentDirty={onContentDirty}
           onImageUpload={onInlineImageUpload}
         />
 

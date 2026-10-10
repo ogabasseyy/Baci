@@ -23,7 +23,7 @@ const PUBLIC_MCP_TOOL_NAMES = [
   'get_store_info',
   'browse_categories',
   'get_brands',
-  'get_shipping_quote',
+  'get_delivery_fee_info',
 ];
 
 function importAgentReadiness(
@@ -54,6 +54,12 @@ afterEach(() => {
 });
 
 describe('agent readiness config', () => {
+  it('publishes bounded live delivery guidance', async () => {
+    const config = await importAgentReadiness({});
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('live GIG estimates');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('per-unit');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('product IDs');
+  });
   it('uses production Ogabassey discovery defaults', async () => {
     const config = await importAgentReadiness({});
 

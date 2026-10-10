@@ -39,21 +39,41 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION public.test_assert_atomic_blog_media_error(
+  p_post_id uuid, p_merchant_id uuid, p_payload jsonb, p_media_paths text[],
+  p_expected_state text, p_expected_prefix text
+) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  BEGIN
+    PERFORM id FROM public.mutate_merchant_blog_post_with_product_links(
+      p_post_id, p_merchant_id, p_payload, NULL, p_media_paths);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLSTATE = p_expected_state AND SQLERRM LIKE p_expected_prefix || '%' THEN
+      RETURN;
+    END IF;
+    RAISE EXCEPTION
+      'unexpected atomic blog media error: expected [%] %, received [%] %',
+      p_expected_state, p_expected_prefix, SQLSTATE, SQLERRM;
+  END;
+  RAISE EXCEPTION 'atomic blog media verify unexpectedly succeeded: %', p_expected_prefix;
+END;
+$$;
+
 SELECT pg_temp.assert_true(
   NOT EXISTS (
     SELECT 1
     FROM pg_proc AS procedure,
       LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
-    WHERE procedure.oid = 'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[])'::regprocedure
+    WHERE procedure.oid = 'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[],text[])'::regprocedure
       AND acl_entry.grantee = 0
       AND acl_entry.privilege_type = 'EXECUTE'
   )
   AND NOT has_function_privilege('anon',
-    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[])', 'EXECUTE')
+    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[],text[])', 'EXECUTE')
   AND NOT has_function_privilege('service_role',
-    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[])', 'EXECUTE')
+    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[],text[])', 'EXECUTE')
   AND has_function_privilege('authenticated',
-    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[])', 'EXECUTE'),
+    'public.mutate_merchant_blog_post_with_product_links(uuid,uuid,jsonb,uuid[],text[])', 'EXECUTE'),
   'atomic blog product-link RPC grants are incorrect'
 );
 
@@ -114,6 +134,8 @@ VALUES ('01ac0000-0000-4000-8000-000000000006', '01ac0000-0000-4000-8000-0000000
 ALTER TABLE public.blog_posts ENABLE TRIGGER USER;
 
 GRANT EXECUTE ON FUNCTION public.test_assert_atomic_blog_error(uuid, uuid, jsonb, uuid[], text, text)
+  TO authenticated;
+GRANT EXECUTE ON FUNCTION public.test_assert_atomic_blog_media_error(uuid, uuid, jsonb, text[], text, text)
   TO authenticated;
 
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -191,5 +213,19 @@ RESET ROLE;
 SELECT pg_temp.assert_true((SELECT title = 'Before rollback' FROM public.blog_posts
   WHERE id = :'post_id'::uuid) AND (SELECT count(*) = 1 FROM public.blog_post_products
   WHERE blog_post_id = :'post_id'::uuid), 'atomic blog product-link RPC left a partial mutation');
+
+-- The scope trigger forces fresh inserts unclaimed, so the claimed
+-- fixture lands in two steps like the sweep itself would.
+INSERT INTO public.blog_media_delete_tombstones (path)
+VALUES ('platform/blog/atomic-swept.webp');
+UPDATE public.blog_media_delete_tombstones SET claimed = TRUE
+WHERE path = 'platform/blog/atomic-swept.webp';
+SET LOCAL ROLE authenticated;
+SELECT public.test_assert_atomic_blog_media_error(:'post_id'::uuid,
+  '01ac0000-0000-4000-8000-000000000001', '{"title":"Must abort on swept media"}'::jsonb,
+  ARRAY['platform/blog/atomic-swept.webp'], 'P0001', 'merchant_blog_media_swept_during_save');
+RESET ROLE;
+SELECT pg_temp.assert_true((SELECT title = 'Before rollback' FROM public.blog_posts
+  WHERE id = :'post_id'::uuid), 'atomic media verify left a partial mutation');
 
 ROLLBACK;

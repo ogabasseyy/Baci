@@ -20,6 +20,19 @@ const mockInitializeSavingsAuthorization =
   >();
 const mockSetClipboardString =
   jest.fn<(...args: unknown[]) => Promise<boolean>>();
+const mockAddSavingsContribution =
+  jest.fn<
+    (...args: unknown[]) => Promise<{
+      contributionId: string;
+      goalCurrentAmount: number;
+      goalStatus: string;
+      success: boolean;
+      walletBalance: number;
+      walletTransactionId: string | null;
+    }>
+  >();
+const mockCancelSavingsReminderNotification =
+  jest.fn<(...args: unknown[]) => Promise<boolean>>();
 
 jest.mock('expo-router', () => ({
   router: {
@@ -33,6 +46,8 @@ jest.mock('expo-crypto', () => ({
 }));
 
 jest.mock('@/lib/customer-savings', () => ({
+  addSavingsContribution: (...args: unknown[]) =>
+    mockAddSavingsContribution(...args),
   createSavingsGoal: (...args: unknown[]) => mockCreateSavingsGoal(...args),
   initializeSavingsAuthorization: (...args: unknown[]) =>
     mockInitializeSavingsAuthorization(...args),
@@ -43,7 +58,8 @@ jest.mock('@/lib/clipboard', () => ({
 }));
 
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  cancelSavingsReminderNotification: jest.fn(async () => true),
+  cancelSavingsReminderNotification: (...args: unknown[]) =>
+    mockCancelSavingsReminderNotification(...args),
   scheduleSavingsReminderNotification: jest.fn(async () => 'reminder-1'),
 }));
 
@@ -56,8 +72,9 @@ function createInput(overrides = {}) {
     frequency: 'daily' as const,
     fundingAccount: { account_number: '0123456789' },
     initialContributionIdempotencyKey: null,
+    goalIdempotencyKey: null,
+    setGoalIdempotencyKey: jest.fn(),
     maturityDate: '2026-06-30',
-    normalizedVariantId: undefined,
     preferredDebitTime: '06:20',
     refetch: jest.fn(async () => undefined),
     requiredTopUpAmount: 50000,
@@ -68,6 +85,8 @@ function createInput(overrides = {}) {
       name: 'iPhone 13 Pro Max',
       price: 800000,
       slug: 'iphone-13-pro-max',
+      requiresVariantSelection: false,
+      variantId: null,
     },
     setFormError: jest.fn(),
     setInitialContributionIdempotencyKey: jest.fn(),
@@ -78,6 +97,7 @@ function createInput(overrides = {}) {
     sourceMode: 'manual' as const,
     startDate: '2026-05-22',
     targetValue: 800000,
+    variantId: undefined,
     ...overrides,
   };
 }
@@ -93,6 +113,15 @@ describe('useStartSavingsSubmit actions', () => {
       success: true,
     });
     mockSetClipboardString.mockResolvedValue(true);
+    mockCancelSavingsReminderNotification.mockResolvedValue(true);
+    mockAddSavingsContribution.mockResolvedValue({
+      contributionId: 'contrib-1',
+      goalCurrentAmount: 20000,
+      goalStatus: 'active',
+      success: true,
+      walletBalance: 0,
+      walletTransactionId: 'txn-1',
+    });
   });
 
   it('opens Paystack authorization route with correct params', async () => {
@@ -164,7 +193,7 @@ describe('useStartSavingsSubmit actions', () => {
     });
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to authorize card',
+      'Unable to add card',
       'Paystack unavailable'
     );
   });
@@ -258,5 +287,49 @@ describe('useStartSavingsSubmit actions', () => {
       'Unable to copy',
       'Unable to copy account number.'
     );
+  });
+
+  it('cancels the retained reminder when the deferred contribution completes the goal', async () => {
+    mockAddSavingsContribution.mockResolvedValue({
+      contributionId: 'contrib-1',
+      goalCurrentAmount: 800000,
+      goalStatus: 'completed',
+      success: true,
+      walletBalance: 0,
+      walletTransactionId: 'txn-1',
+    });
+    const input = createInput({
+      createdGoalId: 'goal-1',
+      effectiveInitialContribution: 800000,
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+
+    await act(async () => {
+      await result.current.submitBankTransferContribution();
+    });
+
+    expect(mockAddSavingsContribution).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 800000, goalId: 'goal-1' })
+    );
+    expect(mockCancelSavingsReminderNotification).toHaveBeenCalledWith(
+      'goal-1'
+    );
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+  });
+
+  it('retains the reminder when the deferred contribution leaves the goal active', async () => {
+    const input = createInput({
+      createdGoalId: 'goal-1',
+      effectiveInitialContribution: 20000,
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+
+    await act(async () => {
+      await result.current.submitBankTransferContribution();
+    });
+
+    expect(mockAddSavingsContribution).toHaveBeenCalledTimes(1);
+    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 });

@@ -1,9 +1,11 @@
 import type { fetchTransactionReviewRows } from './fetch-transaction-review-rows';
 
 export interface TransactionReviewFallbackQuery {
+  fetchAll?: boolean;
   endDateFilter?: string;
   endDateIso?: string;
   merchantId: string;
+  orderIds?: string[];
   startDateFilter?: string;
   startDateIso?: string;
 }

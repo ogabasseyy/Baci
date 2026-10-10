@@ -43,8 +43,66 @@ const validPayload = {
 };
 
 describe('adminOrderEditSchema', () => {
+  it('preserves backdated transaction dates', () => {
+    const transaction_date = '2024-01-02T10:00:00.000Z';
+    expect(
+      adminOrderEditSchema.parse({ ...validPayload, transaction_date })
+        .transaction_date
+    ).toBe(transaction_date);
+  });
+
+  it.each([
+    'not-a-date',
+    '2024-02-31T10:00:00.000Z',
+    '2999-01-01T00:00:00.000Z',
+    null,
+  ])('rejects invalid or future order dates: %s', (transaction_date) => {
+    expect(
+      adminOrderEditSchema.safeParse({ ...validPayload, transaction_date })
+        .success
+    ).toBe(false);
+  });
+
   it('accepts the mobile-admin edit payload', () => {
     expect(adminOrderEditSchema.safeParse(validPayload).success).toBe(true);
+  });
+
+  it('accepts an explicit device calendar day', () => {
+    const parsed = adminOrderEditSchema.parse({
+      ...validPayload,
+      transaction_date: '2024-01-02T10:00:00.000Z',
+      transaction_date_day: '2024-01-02',
+    });
+
+    expect(parsed.transaction_date_day).toBe('2024-01-02');
+  });
+
+  it.each([
+    '01/02/2024',
+    '2024-02-31',
+    '2024-1-2',
+    20240102,
+  ])('rejects malformed calendar days: %s', (transaction_date_day) => {
+    expect(
+      adminOrderEditSchema.safeParse({
+        ...validPayload,
+        transaction_date_day,
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects a lone calendar day without the instant', () => {
+    const parsed = adminOrderEditSchema.safeParse({
+      ...validPayload,
+      transaction_date_day: '2024-01-02',
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.message)).toContain(
+        'Order date is required when the order day is present'
+      );
+    }
   });
 
   it('accepts legacy edit payloads that omit hidden gift wrapping', () => {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCreateDedicatedVirtualAccount = vi.fn();
 const mockPersistPaystackDvaAssignment = vi.fn();
+const mockCreatePaymentTransaction = vi.fn();
 
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
@@ -57,7 +58,7 @@ const orderId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 function createAdminClientMock() {
   return {
-    rpc: vi.fn((name: string) => {
+    rpc: vi.fn((name: string, args?: unknown) => {
       if (name === 'get_order_payment_snapshot') {
         return Promise.resolve({
           data: [
@@ -67,6 +68,7 @@ function createAdminClientMock() {
         });
       }
       if (name === 'create_payment_transaction') {
+        mockCreatePaymentTransaction(args);
         return Promise.resolve({ data: null, error: null });
       }
       return Promise.resolve({ data: null, error: null });
@@ -156,6 +158,11 @@ describe('POST /api/payments/initialize DVA reservation', () => {
         customerEmail: 'customer@example.com',
         orderId,
       }
+    );
+    expect(mockCreatePaymentTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_metadata: { paystack_payment_type: 'dva' },
+      })
     );
   });
 

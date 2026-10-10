@@ -1,0 +1,116 @@
+export function purchaseFixture() {
+  const goalId = '11111111-1111-4111-8111-111111111111';
+  const operationId = '22222222-2222-4222-8222-222222222222';
+  const quote = {
+    quoteId: operationId,
+    revisionId: operationId,
+    productId: goalId,
+    variantId: operationId,
+    condition: 'new',
+    currency: 'NGN',
+    quantity: 1,
+    termsVersion: 'synthetic',
+    termsHash: 'a'.repeat(64),
+    deviceKobo: 10000,
+    deliveryKobo: 100,
+    taxKobo: 750,
+    feeKobo: 50,
+    totalKobo: 10900,
+    savingsKobo: 10000,
+    otherPaymentKobo: 900,
+    principalKobo: 9500,
+    paidInterestKobo: 500,
+    surplusKobo: 100,
+    expiresAt: '2099-01-01T00:00:00Z',
+  };
+  const published = {
+    status: 'quote_available',
+    goalId,
+    fulfilmentMode: 'pickup',
+    shippingRateId: operationId,
+    pickupName: 'Merchant pickup',
+    pickupAddress: {
+      address: 'Synthetic address',
+      city: 'Lagos',
+      countryCode: 'NG',
+    },
+    taxTreatment: 'exclusive_device',
+    includedTaxKobo: 0,
+    feePolicyVersion: 'synthetic',
+    quote,
+  };
+  const receipt = {
+    status: 'purchase_pending',
+    goalId,
+    operationId,
+    quoteId: quote.quoteId,
+    savingsKobo: 10000,
+    otherPaymentKobo: 900,
+    principalKobo: 9500,
+    paidInterestKobo: 500,
+    surplusKobo: 100,
+    collectionPaused: true,
+    dispatch: 'contract_gap',
+    fulfilment: 'disabled',
+  };
+  const current = {
+    observedAt: '2026-09-12T00:00:00Z',
+    evidence: 'internal_ledger_only',
+    fundsUse: 'not_authorized',
+    retry: 'not_authorized',
+    status: 'observed',
+    reservation: 'retained',
+    balances: {
+      unreservedPrincipalKobo: 200,
+      unreservedPaidInterestKobo: 100,
+      pendingInterestKobo: 300,
+    },
+  };
+  return {
+    goalId,
+    operationId,
+    published,
+    receipt,
+    status: { ...receipt, current },
+    selection: {
+      goalId,
+      quoteId: quote.quoteId,
+      shippingRateId: operationId,
+      savingsKobo: 10000,
+      fulfilmentMode: 'pickup',
+    },
+    command: {
+      goalId,
+      operationId,
+      accepted: true,
+      fulfilmentMode: 'pickup',
+      quote,
+    },
+    source: {
+      environment: 'staging',
+      status: 'ready',
+      sessionKey: 'synthetic-session',
+      goalId,
+      policy: {
+        status: 'draft',
+        goalId,
+        revisionId: quote.revisionId,
+        device: {
+          productName: 'Synthetic phone',
+          variant: '256GB',
+          condition: 'new',
+        },
+        terms: {
+          version: 'synthetic',
+          hash: quote.termsHash,
+          text: 'Synthetic only',
+        },
+        consent: 'accepted',
+        durationMonths: 1,
+      },
+      eligibility: { status: 'unavailable' },
+      funding: { status: 'unavailable' },
+      progress: { status: 'unavailable' },
+    },
+  };
+}

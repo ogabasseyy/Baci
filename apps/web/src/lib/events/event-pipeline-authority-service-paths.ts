@@ -4,6 +4,12 @@ import { eventPipelineJumiaServicePaths } from '@/lib/events/event-pipeline-jumi
 export const eventPipelineAuthorityServicePaths = [
   ...eventPipelineAdsServicePaths,
   ...eventPipelineJumiaServicePaths,
+  // Only the HMAC-authenticated PiggyVest webhook may drive the branded
+  // intake client (see server-intake-client.ts boundary doc).
+  [
+    'apps/web/src/app/api/webhooks/piggyvest/route.ts',
+    'apps/web/src/lib/piggyvest/server-intake-client.ts',
+  ],
   [
     'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
     'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',

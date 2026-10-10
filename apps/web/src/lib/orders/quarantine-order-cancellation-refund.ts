@@ -1,0 +1,143 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
+import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
+
+function toReviewCandidates(
+  order: { currency: string | null },
+  transactions: GatewayPaymentTransaction[]
+) {
+  return transactions.map((transaction) => ({
+    amount: Number(transaction.amount),
+    currency: transaction.currency ?? order.currency ?? 'NGN',
+    gateway: transaction.gateway,
+    gatewayReference: transaction.gateway_reference,
+    paymentTransactionId: transaction.id,
+  }));
+}
+
+export async function quarantineRefund({
+  metadata,
+  order,
+  preflight = false,
+  reason,
+  supabase,
+  transactions,
+}: {
+  metadata?: Record<string, unknown>;
+  order: { currency: string | null; id: string; merchant_id: string };
+  /**
+   * Set when no provider refund was initiated in this run, so a transient
+   * review-write failure stays retryable instead of quarantining the step.
+   */
+  preflight?: boolean;
+  reason: string;
+  supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
+  transactions: GatewayPaymentTransaction[];
+}): Promise<never> {
+  const firstTransaction = transactions[0];
+  const { error: reviewError } = await supabase
+    .from('reconciliation_review')
+    .insert({
+      candidates: toReviewCandidates(order, transactions),
+      issue_type: 'order_cancellation_refund_requires_review',
+      merchant_id: order.merchant_id,
+      metadata: metadata ?? {},
+      order_id: order.id,
+      // Deliberately unset: the open-by-paystack-ref index is global,
+      // so a reference shared by two legacy orders would make this
+      // order's insert collide with the other order's review — and the
+      // merge RPCs below only search this order, failing redelivery
+      // with no durable evidence. Same-order redeliveries still merge
+      // via the open-by-order index; per-leg references stay in
+      // candidates for operations.
+      paystack_ref: null,
+      reason,
+      txn_id: firstTransaction?.id ?? null,
+    });
+  const duplicateReview =
+    (reviewError as { code?: string } | null)?.code === '23505';
+  if (duplicateReview) {
+    // An open review already covers this order. When this quarantine carries
+    // provider-accepted refund evidence with no local row, merge it into the
+    // existing review instead of dropping the recovery metadata.
+    const providerRefundId = metadata?.provider_refund_id;
+    const paymentTransactionId = metadata?.payment_transaction_id;
+    if (
+      typeof providerRefundId === 'number' &&
+      Number.isSafeInteger(providerRefundId) &&
+      providerRefundId > 0 &&
+      typeof paymentTransactionId === 'string' &&
+      paymentTransactionId.length > 0
+    ) {
+      const { data: merged, error: mergeError } = await supabase.rpc(
+        'merge_paystack_cancellation_refund_provider_evidence_v1',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_provider_refund_id: providerRefundId,
+          p_payment_transaction_id: paymentTransactionId,
+          p_reason: reason,
+        }
+      );
+      if (mergeError || merged !== true) {
+        if (preflight) {
+          throw new Error(
+            'Refund requires reconciliation, but merging its recovery evidence failed'
+          );
+        }
+        throw new DeliveryUncertainError(
+          'Refund requires reconciliation, but merging its recovery evidence failed'
+        );
+      }
+    }
+    // Merge leg-level evidence (reason, accepted IDs, candidates) keyed by
+    // the failed leg — or the first leg when the caller names none — so a
+    // second quarantine is not discarded when another leg already opened
+    // the order-level review.
+    const failedPaymentTransactionId = metadata?.failed_payment_transaction_id;
+    const legTransactionId =
+      typeof failedPaymentTransactionId === 'string' &&
+      failedPaymentTransactionId.length > 0
+        ? failedPaymentTransactionId
+        : transactions[0]?.id;
+    if (typeof legTransactionId === 'string' && legTransactionId.length > 0) {
+      const acceptedRefundIds = metadata?.accepted_refund_ids;
+      const { data: legMerged, error: legMergeError } = await supabase.rpc(
+        'merge_paystack_cancellation_refund_leg_evidence_v1',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_payment_transaction_id: legTransactionId,
+          p_reason: reason,
+          p_accepted_refund_ids: Array.isArray(acceptedRefundIds)
+            ? acceptedRefundIds
+            : null,
+          p_candidates: toReviewCandidates(order, transactions),
+          p_ambiguous: metadata?.ambiguous_initiation === true,
+        }
+      );
+      if (legMergeError || legMerged !== true) {
+        if (preflight) {
+          throw new Error(
+            'Refund requires reconciliation, but merging its recovery evidence failed'
+          );
+        }
+        throw new DeliveryUncertainError(
+          'Refund requires reconciliation, but merging its recovery evidence failed'
+        );
+      }
+    }
+  }
+  if (reviewError && !duplicateReview) {
+    if (preflight) {
+      throw new Error(
+        'Refund requires reconciliation, but filing the review failed'
+      );
+    }
+    // A provider refund may already exist; never make review-write failure retryable.
+    throw new DeliveryUncertainError(
+      'Refund requires reconciliation, but filing the review failed'
+    );
+  }
+  throw new DeliveryUncertainError(reason);
+}

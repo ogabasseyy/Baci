@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const routeMocks = vi.hoisted(() => ({
   authenticateApiRequest: vi.fn(),
   getRedvaultPaymentAvailability: vi.fn(),
+  getRedvaultLivePilotPolicy: vi.fn(),
+  getRedvaultCheckoutSummary: vi.fn(),
 }));
 
 vi.mock('@/env', () => ({
@@ -25,6 +27,15 @@ vi.mock('@/lib/api-auth', () => ({
 
 vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
   getRedvaultPaymentAvailability: routeMocks.getRedvaultPaymentAvailability,
+}));
+
+vi.mock('@/lib/checkout/redvault-live-pilot', () => ({
+  getRedvaultLivePilotPolicy: routeMocks.getRedvaultLivePilotPolicy,
+  REDVAULT_PILOT_USER_ID: '70261bce-d358-45a4-9ede-8b9d71fb3bd9',
+}));
+
+vi.mock('@/lib/checkout/get-redvault-checkout-summary', () => ({
+  getRedvaultCheckoutSummary: routeMocks.getRedvaultCheckoutSummary,
 }));
 
 // Juicyway mocks
@@ -780,13 +791,18 @@ describe('POST /api/payments/initialize', () => {
       expect(json.code).toBe('MERCHANT_MISMATCH');
     });
 
-    it('rejects starting a payment for a cancelled order', async () => {
+    it.each([
+      'cancelled',
+      'canceled',
+      'Cancelled',
+      'CANCELED',
+    ])('rejects starting a payment for a %s order', async (shipping_status) => {
       rpcResult = {
         data: [
           {
             merchant_id: MERCHANT_ID,
             total: 5000,
-            shipping_status: 'cancelled',
+            shipping_status,
           },
         ],
         error: null,

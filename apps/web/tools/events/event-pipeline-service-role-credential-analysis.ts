@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '6aaad249f5e1635f1ea590d9736b3313f9df0367df1ea02bf6011530d0c309bb',
+      '140038df68af930e99a7a19b128b482aed73a567d8303814e15aa21ef9e5c2f9',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -66,7 +66,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'apps/web/src/app/api/shipping/webhooks/[provider]/route.ts':
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     'apps/web/src/env.ts':
-      '462a4db0dd7b1f1706084d9888fadcb0ee50501296c11cbe7b71dbe2b53dfa9c',
+      'b64ccc83d744d5eee1ec347690fe9bbed125a4a514e9bef40596aeb778112b2f',
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       '47bea3bc3ac77a939febb07b99c4ec4edf6f16f33f310dddd23ec2a4cbe2c0ad',
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':

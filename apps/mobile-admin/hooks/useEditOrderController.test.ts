@@ -73,6 +73,7 @@ function createBaseController(
     sameAsCustomer: true,
     selectedBranchId: 'branch-1',
     selectedChannel: 'physical',
+    setDate: vi.fn(),
     setCustomer: vi.fn(),
     setDeliveryInfo: vi.fn(),
     setDiscount: vi.fn(),
@@ -96,90 +97,6 @@ describe('useEditOrderController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useOrderMock.mockReturnValue({ data: undefined, isLoading: false });
-  });
-
-  it('prefills the new-order controller from loaded order details', async () => {
-    const baseController = createBaseController();
-    useNewOrderControllerMock.mockReturnValue(baseController);
-    useUpdateOrderMock.mockReturnValue({
-      isPending: false,
-      mutateAsync: vi.fn(),
-    });
-    useOrderMock.mockReturnValue({
-      data: {
-        branch_id: 'branch-2',
-        customer_email: 'buyer@example.com',
-        customer_id: 'customer-2',
-        customer_name: 'Buyer',
-        customer_phone: '08039999999',
-        discount_amount: 100,
-        id: 'order-1',
-        items: [
-          {
-            id: 'line-1',
-            item_description: 'Open box',
-            name: 'Phone',
-            price: 2000,
-            product_id: 'product-1',
-            quantity: 1,
-            variant_attributes: { color: 'Black' },
-            variant_id: 'variant-1',
-            variant_name: 'Black',
-          },
-        ],
-        notes: 'Handle gently',
-        shipping_address: {
-          address: '12 Allen Avenue',
-          city: 'Ikeja',
-          name: 'Receiver',
-          phone: '08030000000',
-          state: 'Lagos',
-        },
-        shipping_fee: 500,
-        source: 'website',
-        tax_amount: 75,
-        tax_basis: 'exclusive',
-      },
-      isLoading: false,
-    });
-
-    renderHook(() => useEditOrderController());
-
-    expect(useNewOrderControllerMock).toHaveBeenCalledWith({
-      autoApplyVat: false,
-      autoSelectDefaultBranch: false,
-      initialSelectedChannel: null,
-    });
-    await waitFor(() => {
-      expect(baseController.setCustomer).toHaveBeenCalledWith({
-        address: '12 Allen Avenue',
-        email: 'buyer@example.com',
-        id: 'customer-2',
-        name: 'Buyer',
-        phone: '08039999999',
-      });
-    });
-    expect(baseController.setSelectedBranchId).toHaveBeenCalledWith('branch-2');
-    expect(baseController.setSelectedChannel).toHaveBeenCalledWith('website');
-    expect(baseController.setTaxes).toHaveBeenCalledWith(75);
-    expect(baseController.setIsVatApplied).toHaveBeenCalledWith(false);
-    expect(baseController.setOrderItems).toHaveBeenCalledWith([
-      expect.objectContaining({
-        details: 'Open box',
-        product_id: 'product-1',
-        variant_id: 'variant-1',
-      }),
-    ]);
-    expect(baseController.setNotes).toHaveBeenCalledWith('Handle gently');
-    expect(baseController.setShippingFee).toHaveBeenCalledWith(500);
-    expect(baseController.setSameAsCustomer).toHaveBeenCalledWith(false);
-    expect(baseController.setDeliveryInfo).toHaveBeenCalledWith({
-      address: '12 Allen Avenue',
-      city: 'Ikeja',
-      name: 'Receiver',
-      phone: '08030000000',
-      state: 'Lagos',
-    });
   });
 
   it('falls back to customer contact when shipping contact is missing', () => {

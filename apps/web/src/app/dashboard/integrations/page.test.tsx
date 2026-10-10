@@ -119,6 +119,16 @@ describe('dashboard social platforms page', () => {
     expect(within(merchantCenterCard).queryByText('Connected')).toBeNull();
   });
 
+  it('links the owners-only Muse connector without claiming a state', async () => {
+    render(await SocialPlatformsPage());
+
+    const museCard = screen.getByLabelText('Muse integration');
+    expect(within(museCard).getByText('Owners only')).toBeInTheDocument();
+    expect(
+      within(museCard).getByRole('link', { name: /open/i })
+    ).toHaveAttribute('href', '/dashboard/integrations/muse');
+  });
+
   it('redirects to login when no merchant is available', async () => {
     vi.mocked(getMerchantForUser).mockResolvedValue({
       merchant: null,

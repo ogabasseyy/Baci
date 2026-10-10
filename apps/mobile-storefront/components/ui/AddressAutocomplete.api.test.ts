@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { fetchPlaceDetails } from './AddressAutocomplete.api';
 import type { PlacePrediction } from './AddressAutocomplete.types';
 
@@ -12,7 +13,7 @@ const prediction: PlacePrediction = {
   placeId: 'place-1',
   secondaryText: 'Port Harcourt, Nigeria',
 };
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = jest.fn<FetchImplementation>();
 
 function mockDetails(location?: unknown) {
   fetchMock.mockResolvedValueOnce({

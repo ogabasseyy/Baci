@@ -231,3 +231,15 @@ jq -e -s \
   "$deferred_postdeploy_log" >/dev/null
 
 echo 'Deferred migration phase tests passed'
+
+# Discovery source guard, revision reader and authorization must commit together.
+discovery_dir="$fixture_root/discovery"
+mkdir -p "$discovery_dir"
+for base in 20261002191000_guarded_discovery_metadata_update 20261002222000_guard_discovery_research_source 20261002233000_lossless_discovery_research_revision 20261003021500_authorize_discovery_research_reader; do
+  printf "SELECT '%s';\n" "$base" >"$discovery_dir/$base.sql"
+done
+PATH="$fake_bin:$PATH" MIGRATIONS_DIR="$discovery_dir" MIGRATION_PHASE=predeploy \
+ SUPABASE_ACCESS_TOKEN=test SUPABASE_PROJECT_REF=test \
+ FAKE_QUERY_LOG="$fixture_root/discovery.log" FAKE_INITIAL_RESPONSE='[]' \
+ bash "$applier" >"$fixture_root/discovery-output.log"
+jq -e -s '[.[].query | select(contains("20261002233000_lossless_discovery_research_revision"))] | length == 1 and (.[0] | contains("20261002191000_guarded_discovery_metadata_update") and contains("20261002222000_guard_discovery_research_source") and contains("20261003021500_authorize_discovery_research_reader") and startswith("BEGIN;"))' "$fixture_root/discovery.log" >/dev/null

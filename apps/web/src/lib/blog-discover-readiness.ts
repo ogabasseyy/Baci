@@ -1,28 +1,15 @@
-import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import {
-  BLOG_FEATURED_VARIANT_KEYS,
-  type BlogFeaturedVariantKey,
   type BlogStorageScope,
   extractManagedBlogStoragePath,
 } from '@/lib/blog-managed-storage-paths';
+import { isBlogFeaturedVariantKey } from './is-blog-featured-variant-key';
+import { isTrustedGeneratedCodexBlogImageUrl } from './is-trusted-generated-codex-blog-image-url';
+import { isTrustedGeneratedCodexBlogVariantUrl } from './is-trusted-generated-codex-blog-variant-url';
+import { isTrustedManagedBlogImageUrl } from './is-trusted-managed-blog-image-url';
 
 const MIN_DISCOVER_IMAGE_WIDTH = 1200;
 const MIN_DISCOVER_IMAGE_HEIGHT = 675;
 const MIN_EXCLUSIVE_DISCOVER_IMAGE_PIXELS = 300_000;
-const GENERATED_CODEX_BLOG_IMAGE_PREFIX = '/core-assets/blog/codex/';
-const TRANSFORMED_CDN_IMAGE_PREFIX = '/image/';
-const GENERATED_CODEX_BLOG_IMAGE_EXTENSION_PATTERN =
-  /\.(avif|jpe?g|png|webp)$/i;
-const GENERATED_CODEX_BLOG_IMAGE_EXTENSIONS = [
-  '.avif',
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-] as const;
-const BLOG_FEATURED_VARIANT_KEY_SET = new Set<string>(
-  BLOG_FEATURED_VARIANT_KEYS
-);
 
 export type BlogDiscoverImageReadinessCode =
   | 'BLOG_FEATURED_IMAGE_NOT_DISCOVER_READY'
@@ -54,26 +41,6 @@ type BlogDiscoverImageFields = {
   featured_image_variants?: Record<string, unknown> | null;
 };
 
-const trustedOriginCandidates = [
-  process.env.NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN ||
-    DEFAULT_BLOG_MEDIA_CDN_ORIGIN,
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-];
-
-const TRUSTED_BLOG_IMAGE_ORIGINS = new Set(
-  trustedOriginCandidates.flatMap((value) => {
-    if (!value) {
-      return [];
-    }
-
-    try {
-      return [new URL(value).origin];
-    } catch {
-      return [];
-    }
-  })
-);
-
 function notReady(
   code: BlogDiscoverImageReadinessCode,
   details: Record<string, unknown>
@@ -95,87 +62,12 @@ function getVariantMap(
   return value;
 }
 
-function isBlogFeaturedVariantKey(
-  value: string
-): value is BlogFeaturedVariantKey {
-  return BLOG_FEATURED_VARIANT_KEY_SET.has(value);
-}
-
 function isManagedOriginalBlogPath(path: string | null): path is string {
   return Boolean(path && path.split('/').length === 3);
 }
 
 function isManagedVariantBlogPath(path: string | null): path is string {
   return Boolean(path && path.split('/').length === 4);
-}
-
-function isTrustedManagedBlogImageUrl(raw: string): boolean {
-  try {
-    const url = new URL(raw);
-    return (
-      url.protocol === 'https:' && TRUSTED_BLOG_IMAGE_ORIGINS.has(url.origin)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function getTrustedCdnSourcePath(raw: string): string | null {
-  try {
-    const url = new URL(raw);
-    if (
-      url.protocol !== 'https:' ||
-      !TRUSTED_BLOG_IMAGE_ORIGINS.has(url.origin)
-    ) {
-      return null;
-    }
-
-    const path = decodeURIComponent(url.pathname);
-    if (!path.startsWith(TRANSFORMED_CDN_IMAGE_PREFIX)) {
-      return path;
-    }
-
-    const transformPath = path.slice(TRANSFORMED_CDN_IMAGE_PREFIX.length);
-    const sourcePathIndex = transformPath.indexOf('/');
-    if (sourcePathIndex <= 0) {
-      return null;
-    }
-
-    return `/${transformPath.slice(sourcePathIndex + 1)}`;
-  } catch {
-    return null;
-  }
-}
-
-function isTrustedGeneratedCodexBlogImageUrl(raw: string): boolean {
-  const sourcePath = getTrustedCdnSourcePath(raw);
-  return Boolean(
-    sourcePath?.startsWith(GENERATED_CODEX_BLOG_IMAGE_PREFIX) &&
-      !sourcePath.includes('..') &&
-      GENERATED_CODEX_BLOG_IMAGE_EXTENSION_PATTERN.test(sourcePath)
-  );
-}
-
-function isTrustedGeneratedCodexBlogVariantUrl(
-  raw: string,
-  variantKey: BlogFeaturedVariantKey
-): boolean {
-  const sourcePath = getTrustedCdnSourcePath(raw);
-  if (
-    !sourcePath?.startsWith(GENERATED_CODEX_BLOG_IMAGE_PREFIX) ||
-    sourcePath.includes('..') ||
-    !GENERATED_CODEX_BLOG_IMAGE_EXTENSION_PATTERN.test(sourcePath)
-  ) {
-    return false;
-  }
-
-  const filename = sourcePath.split('/').at(-1)?.toLowerCase() ?? '';
-  const variantFilename = variantKey.toLowerCase();
-  return GENERATED_CODEX_BLOG_IMAGE_EXTENSIONS.some(
-    (extension) =>
-      filename === `${variantFilename}${extension}` ||
-      filename.endsWith(`-${variantFilename}${extension}`)
-  );
 }
 
 export function validateBlogImageVariantIntegrity(

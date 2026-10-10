@@ -50,6 +50,14 @@ function allowsCredentialPath(path: readonly string[]): boolean {
   );
 }
 
+function allowsAdminPath(path: readonly string[]): boolean {
+  return manifest.authority.adminPaths.some(
+    (candidate) =>
+      candidate.length === path.length &&
+      candidate.every((segment, index) => segment === path[index])
+  );
+}
+
 function allowsServicePath(path: readonly string[]): boolean {
   return manifest.authority.servicePaths.some(
     (candidate) =>
@@ -190,6 +198,7 @@ function collectAuthorityEdges(
           continue;
         }
         if (kind === 'credential' && allowsCredentialPath(path)) continue;
+        if (kind === 'admin' && allowsAdminPath(path)) continue;
         const message = pathMessage(root, kind, target, path);
         for (let index = 1; index < path.length; index += 1) {
           edges.push({

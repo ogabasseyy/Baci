@@ -177,7 +177,8 @@ export async function verifyPayment(paymentId: string): Promise<
  * Used to poll for crypto address after capture returns 'pending'
  */
 export async function getPaymentSession(
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<JuicywayResult<JuicywayCryptoPaymentResponse>> {
   if (!UUID_REGEX.test(sessionId)) {
     return {
@@ -189,7 +190,7 @@ export async function getPaymentSession(
 
   const result = await juicywayRequest<JuicywayCryptoPaymentResponse>(
     `/payment-sessions/${sessionId}`,
-    { method: 'GET' }
+    { method: 'GET', signal }
   );
 
   if (!result.success) {

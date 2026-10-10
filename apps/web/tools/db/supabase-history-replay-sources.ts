@@ -1,6 +1,10 @@
 // Raw frozen replay-source data; update migration hashes in lockstep.
+
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
+import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
+import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
+import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
 import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-pending-sources';
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
@@ -9,9 +13,16 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
+import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
 import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
+import {
+  SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
+  SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
+} from './supabase-history-replay-savings-pending-sources';
+import { SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-savings-runtime-pending-sources';
 import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-search-pending-sources';
 import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-replay-storefront-cluster-guide-pending-sources';
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
@@ -39,6 +50,7 @@ const VERIFY_PAYMENT_REFERENCE_TOKEN_PENDING_SOURCES = `16fee07c93035f58783ea0dc
 const GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES = `1c8a5b5eaa76aa70b3f14f8d4772f013e53d3275bd6aec4b9608ab2a5f3c77d3 20260922210000_guest_payment_reference_snapshot.sql`;
 const GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES = `02eeeffc747952e75c15025baa6556ae1013da364c698cd8e3261df43a706d38 20260922220000_guest_payment_reference_snapshot_minimal.sql`;
 const GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES = `3864292ba62afad64de22549f334e2080fc558602bc31a94c6cdc9d233974614 20260923120000_guest_snapshot_inventory_proof.sql`;
+const TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES = `e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4 20261008174300_search_mobile_admin_transaction_review_orders.sql`;
 const PIPELINE_SOURCES = `4f31649ba4c9c3d6b5eb4110dbb0d144237502642d61c0606e15a9b1ba39556b 20260712150001_domain_event_pipeline_tables.sql
 3a3018fcd2e0daea0dec918d953e1dadf314ea1f88698e336a72a97da8ddcd1c 20260712150050_eventing_internal_schema.sql
 dcb23009b30f1970359737ccfc1e34f3b63b952a59e6854d1352a98b4fbdc21b 20260712150075_domain_event_idempotency_guard.sql
@@ -211,14 +223,16 @@ da62c84ff85648b528894dbcbb75fd344f1acfcd450e356e7018f114c6815490 20260823010000_
 `; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
   'ab72c43d3c3d94dd3e700deb59e13db4fcf4f35e9cd898d45c4ccac8a5fdbc20 20261002090000_order_refund_management.sql',
-  '09cd689aee1afff975769008b0af4e9a05b3c3e158a254b7c588c706b527010c 20261002090100_partial_cancellation_refund_claims.sql',
+  CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',
   'ad1b4afac28db2099449ef0f63208ef0401ea9bad9e9f0dfbee1041effd83bd2 20260924090000_quiz_start_guard_context_v2.sql',
   'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
-  '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add 20260928080000_product_discovery_embeddings.sql',
+  DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,
@@ -256,8 +270,13 @@ const PENDING_SOURCES = [
   GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES,
   GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES,
   GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES,
+  TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES,
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
+  BLOG_PENDING_REPLAY_SOURCE_ROWS,
+  SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
+  SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
+  SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })

@@ -52,7 +52,6 @@
     "dotenv",
     "embla-carousel-autoplay",
     "embla-carousel-react",
-    "firebase-admin",
     "framer-motion",
     "fuse.js",
     "iconoir-react",

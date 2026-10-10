@@ -13,6 +13,7 @@ export interface Product {
   in_stock?: boolean | null;
   brand?: string;
   category?: string;
+  url?: string;
 }
 
 export interface CartItem {

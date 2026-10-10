@@ -6,8 +6,9 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = jest.fn<FetchImplementation>();
 const mockGetSession = jest.fn(() =>
   Promise.resolve({ data: { session: { access_token: 'token-123' } } })
 );

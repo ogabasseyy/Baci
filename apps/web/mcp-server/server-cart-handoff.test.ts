@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { describe, expect, it, vi } from 'vitest';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { prepareCartHandoff } from './cart-handoff';
 import { mcpServerTestSupport } from './server-test-support';
 
 const { getResultRecord, postMcpJsonRpc, startMcpServerWithPostgrest } = mcpServerTestSupport;
@@ -173,4 +176,64 @@ describe('MCP cart handoff', () => {
       await server.close();
     }
   });
+
+  it.each([false, true])('downgrades null-name catalog rows with has_variants=%s to a safe cart error', async (hasVariants) => {
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      single: vi.fn(async () => ({
+        data: { name: null, slug: 'null-name', price: 100, manage_stock: false, stock_quantity: 0, has_variants: hasVariants, has_condition_offers: false },
+        error: null,
+      })),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const supabase = { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient;
+    const result = await prepareCartHandoff({
+      supabase, merchantId: 'merchant-1', productId: 'null-name-product', quantity: 1, formatPrice: String,
+    });
+    expect(result.content[0].text).not.toContain('null');
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('rejects corrupt simple-product price %s before formatting', async (price) => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const formatPrice = vi.fn(String);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice });
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(result.structuredContent).not.toHaveProperty('cart_url');
+    expect(formatPrice).not.toHaveBeenCalled();
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+  });
+
+  it('preserves a zero-price simple-product handoff', async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price: 0, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice: String });
+    expect(result.structuredContent).toMatchObject({ success: true, quantity: 1 });
+  });
+
+  it('marks corrupt simple-product stock unavailable instead of comparing NaN', async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price: 100, manage_stock: true, stock_quantity: 'plenty', has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice: String });
+    expect(result.structuredContent).toMatchObject({ success: false });
+    expect(result.structuredContent).not.toHaveProperty('cart_url');
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+  });
+
+  it.each([0, 11, 1.5, Number.NaN])('rejects out-of-range quantity %s before touching catalog stock', async (quantity) => {
+    const supabase = { from: vi.fn(), rpc: vi.fn() } as unknown as SupabaseClient;
+    const result = await prepareCartHandoff({
+      supabase, merchantId: 'merchant-1', productId: 'any-product', quantity, formatPrice: String,
+    });
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
 });

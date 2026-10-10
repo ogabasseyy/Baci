@@ -21,6 +21,7 @@ import {
   BLOG_POST_PRERENDER_LIMIT,
   BLOG_POST_PRERENDER_PLACEHOLDER_POST_SLUG,
   BLOG_POST_PRERENDER_PLACEHOLDER_STORE_SLUG,
+  BLOG_POST_PREVIEW_PRERENDER_LIMIT,
   resolveBlogPostStaticParams,
 } from './blog-post-static-params';
 
@@ -140,6 +141,51 @@ describe('resolveBlogPostStaticParams', () => {
       );
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+
+  it('pins the preview ceiling to one listing page per tenant', () => {
+    expect(BLOG_POST_PREVIEW_PRERENDER_LIMIT).toBe(12);
+    expect(BLOG_POST_PREVIEW_PRERENDER_LIMIT % 12).toBe(0);
+    expect(BLOG_POST_PREVIEW_PRERENDER_LIMIT).toBeLessThan(
+      BLOG_POST_PRERENDER_LIMIT
+    );
+  });
+
+  it('caps each preview tenant to one listing page', async () => {
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    try {
+      mockGetCachedBlogListing.mockImplementation(
+        async (_tenant: string, options: { page: number }) =>
+          listingForPage(options.page, 12)
+      );
+
+      const params = await resolveBlogPostStaticParams();
+
+      // Preview ceiling per tenant × 2 tenants, one fetch per tenant. The
+      // full ceiling would emit tens of thousands of cold files that never
+      // finish the preview finalize step.
+      expect(params).toHaveLength(BLOG_POST_PREVIEW_PRERENDER_LIMIT * 2);
+      expect(mockGetCachedBlogListing).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the full ceiling when VERCEL_ENV is production', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    try {
+      mockGetCachedBlogListing.mockImplementation(
+        async (_tenant: string, options: { page: number }) =>
+          listingForPage(options.page, 12)
+      );
+
+      const params = await resolveBlogPostStaticParams();
+
+      // Production must never see the preview cap: full ceiling per tenant.
+      expect(params).toHaveLength(BLOG_POST_PRERENDER_LIMIT * 2);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

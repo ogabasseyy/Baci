@@ -22,6 +22,8 @@ export interface UpdateOrderItemPayload {
 }
 
 export interface UpdateOrderPayload {
+  transaction_date?: string;
+  transaction_date_day?: string;
   branch_id: string | null;
   customer: {
     email: string | null;
@@ -127,6 +129,13 @@ export function useUpdateOrder() {
       });
       queryClient.invalidateQueries({
         queryKey: ['order-counts', merchant?.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['transaction-review', merchant?.id],
+      });
+      // Date edits can move a paid order into or out of the current month.
+      queryClient.invalidateQueries({
+        queryKey: ['monthly-transaction-count', merchant?.id],
       });
     },
   });

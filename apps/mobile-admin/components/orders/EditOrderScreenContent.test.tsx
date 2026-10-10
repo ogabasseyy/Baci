@@ -115,7 +115,15 @@ vi.mock('./NewOrderCustomerSheet', () => ({
   NewOrderCustomerSheet: () => null,
 }));
 vi.mock('./NewOrderDetailsSection', () => ({
-  NewOrderDetailsSection: () => <div>Details</div>,
+  NewOrderDetailsSection: ({
+    showDateField = true,
+  }: {
+    showDateField?: boolean;
+  }) => (
+    <div>
+      Details{showDateField && <button type="button">Select order date</button>}
+    </div>
+  ),
 }));
 vi.mock('./NewOrderEditItemSheet', () => ({
   NewOrderEditItemSheet: () => null,
@@ -175,12 +183,40 @@ describe('EditOrderScreenContent', () => {
     render(<EditOrderScreenContent controller={controller} />);
 
     expect(screen.getByText('Edit Order')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Select order date' })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel edit order' }));
 
     expect(controller.viewOrder).toHaveBeenCalledTimes(1);
     expect(routerState.back).not.toHaveBeenCalled();
     expect(screen.getByText('Edit footer')).toBeInTheDocument();
     expect(screen.getByText('Items')).toBeInTheDocument();
+  });
+
+  it.each([
+    'cancelled',
+    'returned',
+  ] as const)('hides the date picker for %s orders', (shipping_status) => {
+    const controller = createController({
+      order: { id: 'order-1', shipping_status },
+    });
+
+    render(<EditOrderScreenContent controller={controller} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Select order date' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides the date picker while the order is loading', () => {
+    const controller = createController({ order: undefined });
+
+    render(<EditOrderScreenContent controller={controller} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Select order date' })
+    ).not.toBeInTheDocument();
   });
 
   it('disables the cancel action while submitting', () => {

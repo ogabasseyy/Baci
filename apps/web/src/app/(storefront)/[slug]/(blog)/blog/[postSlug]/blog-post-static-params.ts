@@ -1,5 +1,6 @@
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import { getCachedBlogListing } from '@/lib/cached-data';
+import { isPreviewPrerenderBuild } from '@/lib/prerender-preview-cap';
 import { OGABASSEY_BLOG_STATIC_TENANTS } from '../blog-category-routing';
 
 /**
@@ -15,6 +16,14 @@ import { OGABASSEY_BLOG_STATIC_TENANTS } from '../blog-category-routing';
  * titles). Mirrors the PDP `OGABASSEY_PRERENDER_LIMIT` rationale.
  */
 export const BLOG_POST_PRERENDER_LIMIT = 1200;
+
+/**
+ * Preview-target ceiling per static blog tenant: one listing page. The full
+ * ceiling emits tens of thousands of cold files that never finish the preview
+ * finalize step, so preview builds prerender a small newest sample per tenant.
+ * Production is unaffected — the gate is an exact `VERCEL_ENV=preview` match.
+ */
+export const BLOG_POST_PREVIEW_PRERENDER_LIMIT = 12;
 
 // cacheComponents requires generateStaticParams to return >= 1 param. When the
 // listing is empty/unavailable at build, this placeholder keeps the build valid
@@ -88,16 +97,13 @@ export async function resolveBlogPostStaticParams(): Promise<
   // Fetch every tenant's newest-post slugs concurrently — the per-tenant lookups
   // are independent, so paging them serially only adds build latency. Ordering
   // and dedup are preserved by walking the resolved tuples in tenant order.
+  const limit = isPreviewPrerenderBuild()
+    ? BLOG_POST_PREVIEW_PRERENDER_LIMIT
+    : BLOG_POST_PRERENDER_LIMIT;
   const tenantPostSlugs = await Promise.all(
     OGABASSEY_BLOG_STATIC_TENANTS.map(
       async (tenant) =>
-        [
-          tenant,
-          await collectNewestPublishedPostSlugs(
-            tenant,
-            BLOG_POST_PRERENDER_LIMIT
-          ),
-        ] as const
+        [tenant, await collectNewestPublishedPostSlugs(tenant, limit)] as const
     )
   );
 

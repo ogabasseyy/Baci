@@ -45,6 +45,12 @@ describe('GET /api/storefront/loyalty', () => {
         platinum: 10000,
       },
       tier_progress: 50,
+      tiers: [
+        { name: 'bronze', minPoints: 0, multiplier: null, perks: [] },
+        { name: 'silver', minPoints: 1000, multiplier: null, perks: [] },
+        { name: 'gold', minPoints: 5000, multiplier: null, perks: [] },
+        { name: 'platinum', minPoints: 10000, multiplier: null, perks: [] },
+      ],
       referral_code: 'ABCD1234',
       available_rewards: [
         {

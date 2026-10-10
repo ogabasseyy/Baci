@@ -8,6 +8,7 @@ import {
   Lock,
   Sparkles,
   Truck,
+  Wallet,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,9 @@ interface RewardsCatalogProps {
    * hardcoded ₦. */
   merchantCountry?: string | null;
   merchantPayoutCurrency?: string | null;
+  /** Fired after a successful redemption so embedding views (page-level
+   * history, status card) can refetch their own loyalty instances. */
+  onRedeemed?: () => void;
 }
 
 interface Reward {
@@ -51,7 +55,8 @@ interface Reward {
     | 'discount'
     | 'free_shipping'
     | 'free_product'
-    | 'exclusive_access';
+    | 'exclusive_access'
+    | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
   min_tier?: string;
@@ -62,6 +67,7 @@ const rewardIcons = {
   free_shipping: Truck,
   free_product: Gift,
   exclusive_access: Sparkles,
+  store_credit: Wallet,
 };
 
 export function RewardsCatalog({
@@ -69,6 +75,7 @@ export function RewardsCatalog({
   customerId,
   merchantCountry,
   merchantPayoutCurrency,
+  onRedeemed,
 }: RewardsCatalogProps) {
   const { toast } = useToast();
   const {
@@ -102,6 +109,7 @@ export function RewardsCatalog({
             expiresAt: result.expires_at || '',
           });
           setShowSuccessDialog(true);
+          onRedeemed?.();
         } else {
           toast({
             title: 'Redemption Failed',
@@ -155,6 +163,14 @@ export function RewardsCatalog({
     }
     if (reward.reward_type === 'free_product') {
       return 'Free Product';
+    }
+    if (reward.reward_type === 'store_credit') {
+      const formattedValue = formatMerchantCurrency(
+        reward.discount_value ?? 0,
+        { country: merchantCountry, payout_currency: merchantPayoutCurrency },
+        { maximumFractionDigits: 0 }
+      );
+      return `${formattedValue} Store Credit`;
     }
     return 'Exclusive Access';
   };

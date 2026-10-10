@@ -242,4 +242,20 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'Failed to enroll in loyalty program' });
   });
+
+  it('returns 403 without calling the RPC when CSRF validation fails', async () => {
+    mocks.mockCheckCsrfProtection.mockResolvedValueOnce({
+      valid: false,
+      response: null,
+    });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({ error: 'CSRF validation failed' });
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
+  });
 });

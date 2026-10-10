@@ -12,6 +12,8 @@ export type StorefrontLoyaltyStatusQuery = z.infer<
 const loyaltyTierSchema = z.object({
   name: z.string(),
   minPoints: z.number(),
+  multiplier: z.number().nullable().optional(),
+  perks: z.array(z.string()).nullable().optional(),
 });
 
 const loyaltyStatusRewardSchema = z.object({

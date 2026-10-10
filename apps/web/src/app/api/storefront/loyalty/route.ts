@@ -132,8 +132,15 @@ export async function GET(request: NextRequest) {
     // accepts arbitrary tier JSON, so minPoints can arrive null (which would
     // 500 below) while the route needs finite numbers for threshold
     // arithmetic. Clamp to 0, the same floor as the default ladder.
-    const rawTiers: Array<{ name?: unknown; minPoints?: unknown }> =
-      Array.isArray(result.tiers) ? result.tiers : [];
+    // Multiplier/perks ride through for benefit display (null/empty when
+    // the merchant never set them); non-arrays and non-strings are dropped
+    // rather than failing the whole status read.
+    const rawTiers: Array<{
+      name?: unknown;
+      minPoints?: unknown;
+      multiplier?: unknown;
+      perks?: unknown;
+    }> = Array.isArray(result.tiers) ? result.tiers : [];
     const normalizedResult = {
       ...result,
       tiers: rawTiers.map((entry) => ({
@@ -144,6 +151,16 @@ export async function GET(request: NextRequest) {
           Number.isFinite(entry.minPoints)
             ? entry.minPoints
             : 0,
+        multiplier:
+          typeof entry.multiplier === 'number' &&
+          Number.isFinite(entry.multiplier)
+            ? entry.multiplier
+            : null,
+        perks: Array.isArray(entry.perks)
+          ? entry.perks.filter(
+              (perk): perk is string => typeof perk === 'string'
+            )
+          : [],
       })),
     };
     const validated =
@@ -175,6 +192,8 @@ export async function GET(request: NextRequest) {
       .map((entry) => ({
         name: entry.name.toLowerCase(),
         minPoints: entry.minPoints,
+        multiplier: entry.multiplier ?? null,
+        perks: entry.perks ?? [],
       }))
       .sort((a, b) => a.minPoints - b.minPoints);
     const currentPosition = ladder.findIndex((entry) => entry.name === tier);
@@ -243,6 +262,7 @@ export async function GET(request: NextRequest) {
       points_to_next_tier: pointsToNextTier,
       tier_thresholds: thresholds,
       tier_progress: tierProgress,
+      tiers: ladder,
       referral_code: status.referral_code,
       available_rewards: availableRewards,
       redeemable_rewards: redeemableRewards,

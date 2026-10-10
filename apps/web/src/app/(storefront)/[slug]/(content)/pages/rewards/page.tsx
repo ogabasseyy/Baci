@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { LoyaltyEnrollmentForm } from '@/components/storefront/loyalty/loyalty-enrollment-form';
 import { LoyaltyStatusCard } from '@/components/storefront/loyalty/loyalty-status-card';
 import { RewardsCatalog } from '@/components/storefront/loyalty/rewards-catalog';
@@ -51,6 +52,15 @@ export default function RewardsPage() {
 
   const { enrolled, loading, recentTransactions, getTierInfo, tier, refetch } =
     useLoyalty(merchantId || undefined, customerId || undefined);
+
+  // The page, status card, and catalog each own a useLoyalty instance: a
+  // redemption inside the catalog must refresh the other two as well, or
+  // the balance and history go stale until a reload.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const handleRedeemed = () => {
+    void refetch();
+    setRefreshToken((token) => token + 1);
+  };
 
   // Loading state
   if (!merchantId) {
@@ -173,7 +183,11 @@ export default function RewardsPage() {
       ) : (
         <div className="space-y-6">
           {/* Status Card */}
-          <LoyaltyStatusCard merchantId={merchantId} customerId={customerId} />
+          <LoyaltyStatusCard
+            merchantId={merchantId}
+            customerId={customerId}
+            refreshToken={refreshToken}
+          />
 
           {/* Tier Benefits */}
           {tierInfo && (
@@ -229,6 +243,7 @@ export default function RewardsPage() {
                 customerId={customerId}
                 merchantCountry={merchantCountry}
                 merchantPayoutCurrency={merchantPayoutCurrency}
+                onRedeemed={handleRedeemed}
               />
             </TabsContent>
 

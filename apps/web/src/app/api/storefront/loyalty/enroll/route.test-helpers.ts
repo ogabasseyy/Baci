@@ -5,6 +5,13 @@ const mocks = vi.hoisted(() => {
   const mockRpc = vi.fn();
   const mockGetUser = vi.fn();
   const mockMaybeSingle = vi.fn();
+  const mockCheckCsrfProtection = vi.fn(
+    async (..._args: unknown[]) =>
+      ({
+        valid: true as boolean,
+        response: null as null,
+      }) as { valid: boolean; response: null }
+  );
   const chain = {
     select: vi.fn(),
     eq: vi.fn(),
@@ -19,6 +26,7 @@ const mocks = vi.hoisted(() => {
     mockRpc,
     mockGetUser,
     mockMaybeSingle,
+    mockCheckCsrfProtection,
     mockSupabase: {
       auth: { getUser: mockGetUser },
       from: vi.fn(() => chain),
@@ -42,6 +50,11 @@ vi.mock('@/lib/logger', () => ({
   logger: {
     error: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: (...args: unknown[]) =>
+    mocks.mockCheckCsrfProtection(...args),
 }));
 
 // Import the handler AFTER mocks so the route binds the mocked modules.

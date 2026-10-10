@@ -205,10 +205,25 @@ describe('deliverMerchantRefundNotification', () => {
     );
   });
 
-  it('collapses an email-send throw to delivery_uncertain', async () => {
+  it('retries an email-send throw when dispatch never started', async () => {
     const sendEmail = emailSender(new Error('smtp down'));
 
     await expect(deliver({ sendEmail })).resolves.toEqual({
+      lastError: 'smtp down',
+      outcome: 'failed',
+    });
+  });
+
+  it('collapses an email-send throw to delivery_uncertain once dispatched', async () => {
+    const sendEmail = vi.fn().mockImplementation(async (message: never) => {
+      const { beforeTransportDispatch } = message as unknown as {
+        beforeTransportDispatch?: () => Promise<void>;
+      };
+      await beforeTransportDispatch?.();
+      throw new Error('smtp down');
+    });
+
+    await expect(deliver({ sendEmail: sendEmail as never })).resolves.toEqual({
       lastError: 'smtp down',
       outcome: 'delivery_uncertain',
     });

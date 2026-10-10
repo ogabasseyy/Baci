@@ -21,6 +21,12 @@ export type RefundEmailSender = (message: {
   maxAttemptsPerSender?: number;
   signal?: AbortSignal;
   fallbackDeadlineMs?: number;
+  // Dispatch boundary probes (mirroring zeptomail.ts): the sender
+  // invokes beforeTransportDispatch ahead of the first transport
+  // attempt, so a throw with no probe call never sent and stays
+  // retryable instead of terminalizing as delivery_uncertain.
+  beforeTransportDispatch?: () => Promise<void>;
+  resetTransportDispatch?: () => Promise<void>;
   auditContext: {
     merchantId: string;
     orderId: string;
@@ -166,44 +172,59 @@ export async function deliverClaimedRefundNotification({
         deadlineMs,
         zeptomailSendAdmissionBudgetMs()
       );
-      // A thrown mail call has unknown delivery outcome; do not auto-retry it.
+      // A thrown mail call is genuinely uncertain only once
+      // dispatch started: a pre-dispatch throw (sender resolution,
+      // missing token) never sent, so the probe keeps it retryable
+      // instead of terminalizing a healthy notification.
+      let emailDispatchStarted = false;
       outcome = 'delivery_uncertain';
-      const result = await awaitRefundNotificationDeadline(
-        sendEmail({
-          ...(deadlineMs !== undefined && {
-            signal: AbortSignal.timeout(
-              Math.max(1, deadlineMs - Date.now() - 10_000)
-            ),
-            // Match the signal's 10s buffer: the platform-sender
-            // fallback is a single shot that declines unless one
-            // attempt fits.
-            fallbackDeadlineMs: deadlineMs - 10_000,
+      try {
+        const result = await awaitRefundNotificationDeadline(
+          sendEmail({
+            ...(deadlineMs !== undefined && {
+              signal: AbortSignal.timeout(
+                Math.max(1, deadlineMs - Date.now() - 10_000)
+              ),
+              // Match the signal's 10s buffer: the platform-sender
+              // fallback is a single shot that declines unless one
+              // attempt fits.
+              fallbackDeadlineMs: deadlineMs - 10_000,
+            }),
+            beforeTransportDispatch: () => {
+              emailDispatchStarted = true;
+              return Promise.resolve();
+            },
+            to: order.customer_email,
+            toName: order.customer_name ?? undefined,
+            subject: `Refund processed for order #${orderNumber}`,
+            textContent: text,
+            htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${escapeHtmlText(merchant.support_email || merchant.email)}.</p>`,
+            replyTo: merchant.support_email || merchant.email,
+            fromName: merchant.email_sender_name || merchant.business_name,
+            emailType: 'orders',
+            auditContext: {
+              merchantId: merchant.id,
+              orderId: order.id,
+              customerId: order.customer_id,
+              metadata: { trigger: 'paystack_refund_processed' },
+            },
           }),
-          to: order.customer_email,
-          toName: order.customer_name ?? undefined,
-          subject: `Refund processed for order #${orderNumber}`,
-          textContent: text,
-          htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${escapeHtmlText(merchant.support_email || merchant.email)}.</p>`,
-          replyTo: merchant.support_email || merchant.email,
-          fromName: merchant.email_sender_name || merchant.business_name,
-          emailType: 'orders',
-          auditContext: {
-            merchantId: merchant.id,
-            orderId: order.id,
-            customerId: order.customer_id,
-            metadata: { trigger: 'paystack_refund_processed' },
-          },
-        }),
-        deadlineMs
-      );
-      if (result.success) {
-        outcome = 'sent';
-      } else if (result.deliveryOutcome === 'unknown') {
-        outcome = 'delivery_uncertain';
-        lastError = 'refund_customer_email_unknown';
-      } else {
-        outcome = 'failed';
-        lastError = 'refund_customer_email_rejected';
+          deadlineMs
+        );
+        if (result.success) {
+          outcome = 'sent';
+        } else if (result.deliveryOutcome === 'unknown') {
+          outcome = 'delivery_uncertain';
+          lastError = 'refund_customer_email_unknown';
+        } else {
+          outcome = 'failed';
+          lastError = 'refund_customer_email_rejected';
+        }
+      } catch (mailError) {
+        // A reset never un-sends: once the probe fired, the throw
+        // stays uncertain however the retry loop reset it.
+        if (!emailDispatchStarted) outcome = 'failed';
+        throw mailError;
       }
     } else {
       ({ lastError, outcome } = await deliverMerchantRefundNotification(

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { finalizeVerifiedWedge } from '@/lib/payments/finalize-verified-wedge';
+import { interleaveWedgeCandidates } from '@/lib/payments/interleave-wedge-candidates';
 import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import type {
@@ -112,22 +113,12 @@ export async function reconcileWedgedGatewayOrders({
     throw new Error(`wedged_order_lookup_failed: ${pendingError.message}`);
   }
 
-  // Interleave mains with filing-only retries (mains first): transient
-  // mains repeat with the same updated_at every sweep, so appending all
-  // retries after a full main batch lets the deadline stop the pass
-  // before any filing-only retry runs, and completed captures carrying
-  // the retry marker never file their operations review.
-  const mains = (mainCandidates ?? []) as unknown[];
-  const retries = (pendingRetries ?? []) as unknown[];
-  const candidates: unknown[] = [];
-  for (
-    let index = 0;
-    index < Math.max(mains.length, retries.length);
-    index += 1
-  ) {
-    if (index < mains.length) candidates.push(mains[index]);
-    if (index < retries.length) candidates.push(retries[index]);
-  }
+  // Mains first: a full main batch must not starve filing-only
+  // retries past the deadline (see interleaveWedgeCandidates).
+  const candidates = interleaveWedgeCandidates(
+    (mainCandidates ?? []) as unknown[],
+    (pendingRetries ?? []) as unknown[]
+  );
 
   for (const raw of candidates) {
     const candidate = raw as unknown as WedgedCandidate;

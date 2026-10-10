@@ -149,6 +149,46 @@ describe('deliverClaimedRefundNotification', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('retries a customer email throw when dispatch never started', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi
+      .fn()
+      .mockRejectedValue(new Error('sender resolution failed'));
+
+    await expect(
+      deliverClaimedRefundNotification({
+        row: claimed('processed_customer_email'),
+        sendEmail,
+        supabase,
+      })
+    ).resolves.toEqual({
+      lastError: 'sender resolution failed',
+      outcome: 'failed',
+    });
+  });
+
+  it('collapses a customer email throw to uncertain once dispatched', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn().mockImplementation(async (message: never) => {
+      const { beforeTransportDispatch } = message as unknown as {
+        beforeTransportDispatch?: () => Promise<void>;
+      };
+      await beforeTransportDispatch?.();
+      throw new Error('smtp down');
+    });
+
+    await expect(
+      deliverClaimedRefundNotification({
+        row: claimed('processed_customer_email'),
+        sendEmail: sendEmail as never,
+        supabase,
+      })
+    ).resolves.toEqual({
+      lastError: 'smtp down',
+      outcome: 'delivery_uncertain',
+    });
+  });
+
   it('reports failed when the customer email is rejected', async () => {
     const { supabase } = buildSupabase();
     const sendEmail = vi.fn().mockResolvedValue({ success: false });

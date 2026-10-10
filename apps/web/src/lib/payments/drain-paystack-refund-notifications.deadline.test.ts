@@ -35,14 +35,22 @@ describe('refund notification cron deadline', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const db = database('processed_customer_email');
-    const sendEmail = vi.fn(() => new Promise<never>(() => {}));
+    // The hang starts mid-dispatch (probe fired): the deadline race
+    // aborts a send the provider may have accepted, so uncertainty
+    // — not a retryable failure — is the only honest outcome.
+    const sendEmail = vi.fn(
+      async (message: { beforeTransportDispatch?: () => Promise<void> }) => {
+        await message.beforeTransportDispatch?.();
+        await new Promise<never>(() => {});
+      }
+    );
 
     // 200s budget: above the full 135s four-attempt sender budget, so
     // the hanging send starts and the race persists uncertainty at the
     // deadline instead of reaching the route timeout.
     const draining = drainPaystackRefundNotifications(
       db as never,
-      sendEmail,
+      sendEmail as never,
       1,
       undefined,
       1_200_000

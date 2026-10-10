@@ -4,6 +4,8 @@ import { reconcilePrimaryWalletCardCheckoutReversal } from './primary-wallet-car
 
 vi.mock('server-only', () => ({}));
 
+// Paystack's documented refund shape: no metadata, the original charge
+// reference in transaction_reference, the event's own id in id.
 function body(overrides: Record<string, unknown> = {}) {
   return {
     event: 'refund.processed',
@@ -14,15 +16,6 @@ function body(overrides: Record<string, unknown> = {}) {
       status: 'processed',
       transaction_reference: fixture.intent.reference,
       reference: 'rtn-refund-event-id',
-      metadata: {
-        transaction_type: 'primary_wallet_card_checkout',
-        operation_id: fixture.intent.operationId,
-        integration_id: fixture.settings.integrationId,
-        merchant_id: fixture.settings.merchantId,
-        customer_id: '10000000-0000-4000-8000-000000000002',
-        user_id: '10000000-0000-4000-8000-000000000003',
-        environment: 'staging',
-      },
       ...overrides,
     },
   };
@@ -31,7 +24,7 @@ function body(overrides: Record<string, unknown> = {}) {
 function setup(status = 'completed') {
   const execute = vi.fn(
     async (action: string, _params?: readonly string[]): Promise<unknown> => {
-      if (action === 'read') return { ...fixture.intent, status };
+      if (action === 'reversal_intent') return { ...fixture.intent, status };
       if (action === 'reversal') return { outcome: 'recorded' };
       throw new Error(`Invalid test action ${action}`);
     }
@@ -53,13 +46,32 @@ describe('primary card checkout webhook reversal', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('rejects a metadata operation ID that does not match the original transaction reference', async () => {
+  it('derives the operation from the reference without webhook metadata', async () => {
+    const { execute, runtime } = setup('completed');
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: body(),
+      runtime,
+      execute: execute as never,
+    });
+    expect(execute.mock.calls.map(([action]) => action)).toEqual([
+      'reversal_intent',
+      'reversal',
+    ]);
+    expect(execute.mock.calls[0]?.[1]).toEqual([fixture.intent.reference]);
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(reversalParams[1]).toBe(fixture.intent.operationId);
+    expect(reversalParams[2]).toBe('refund');
+    expect(reversalParams[3]).toBe('1234567');
+    expect(response?.status).toBe(200);
+    expect(await response?.json()).toEqual({ received: true });
+  });
+
+  it('rejects a reference that names no checkout instead of recording', async () => {
     const { execute, runtime } = setup();
     expect(
       await reconcilePrimaryWalletCardCheckoutReversal({
         body: body({
-          transaction_reference:
-            'pvb-first-primary-20000000-0000-4000-8000-000000000005',
+          transaction_reference: 'WAL-unrelated-reference',
         }),
         runtime,
         execute: execute as never,
@@ -68,23 +80,57 @@ describe('primary card checkout webhook reversal', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('reads the stored intent and records the reversal before acknowledging', async () => {
+  it('keeps retryable when present metadata contradicts the reference', async () => {
+    const { execute, runtime } = setup();
+    const payload = body();
+    (payload.data as Record<string, unknown>).metadata = {
+      operation_id: '20000000-0000-4000-8000-000000000005',
+    };
+    expect(
+      await reconcilePrimaryWalletCardCheckoutReversal({
+        body: payload,
+        runtime,
+        execute: execute as never,
+      })
+    ).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('accepts agreeing metadata as a cross-check', async () => {
     const { execute, runtime } = setup('completed');
+    const payload = body();
+    (payload.data as Record<string, unknown>).metadata = {
+      operation_id: fixture.intent.operationId,
+    };
     const response = await reconcilePrimaryWalletCardCheckoutReversal({
-      body: body(),
+      body: payload,
       runtime,
       execute: execute as never,
     });
-    expect(execute.mock.calls.map(([action]) => action)).toEqual([
-      'read',
-      'reversal',
-    ]);
-    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
-    expect(reversalParams[1]).toBe(fixture.intent.operationId);
-    expect(reversalParams[2]).toBe('refund');
-    expect(reversalParams[3]).toBe('1234567');
     expect(response?.status).toBe(200);
-    expect(await response?.json()).toEqual({ received: true });
+  });
+
+  it('refuses a stored intent from another deployment', async () => {
+    const { execute, runtime } = setup('completed');
+    execute.mockImplementation(async (action: string): Promise<unknown> => {
+      if (action === 'reversal_intent')
+        return {
+          ...fixture.intent,
+          status: 'completed',
+          merchantId: '20000000-0000-4000-8000-000000000001',
+        };
+      throw new Error('Invalid test action');
+    });
+    expect(
+      await reconcilePrimaryWalletCardCheckoutReversal({
+        body: body(),
+        runtime,
+        execute: execute as never,
+      })
+    ).toBeNull();
+    expect(execute.mock.calls.map(([action]) => action)).toEqual([
+      'reversal_intent',
+    ]);
   });
 
   it('records disputes with the dispute kind', async () => {
@@ -96,24 +142,6 @@ describe('primary card checkout webhook reversal', () => {
     });
     const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
     expect(reversalParams[2]).toBe('dispute');
-    expect(response?.status).toBe(200);
-  });
-
-  it('coerces absent informational fields to null instead of dropping authentic events', async () => {
-    const { execute, runtime } = setup('completed');
-    const payload = body({ amount: undefined, currency: undefined });
-    delete (payload.data as Record<string, unknown>).amount;
-    delete (payload.data as Record<string, unknown>).currency;
-    const response = await reconcilePrimaryWalletCardCheckoutReversal({
-      body: payload,
-      runtime,
-      execute: execute as never,
-    });
-    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
-    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
-      amountKobo: null,
-      currency: null,
-    });
     expect(response?.status).toBe(200);
   });
 
@@ -180,16 +208,35 @@ describe('primary card checkout webhook reversal', () => {
       execute: execute as never,
     });
     expect(execute.mock.calls.map(([action]) => action)).toEqual([
-      'read',
+      'reversal_intent',
       'reversal',
     ]);
+    expect(response?.status).toBe(200);
+  });
+
+  it('coerces absent informational fields to null instead of dropping authentic events', async () => {
+    const { execute, runtime } = setup('completed');
+    const payload = body({ amount: undefined, currency: undefined });
+    delete (payload.data as Record<string, unknown>).amount;
+    delete (payload.data as Record<string, unknown>).currency;
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: payload,
+      runtime,
+      execute: execute as never,
+    });
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
+      amountKobo: null,
+      currency: null,
+    });
     expect(response?.status).toBe(200);
   });
 
   it('stays retryable when the reversal write fails instead of losing money-out evidence', async () => {
     const { execute, runtime } = setup('completed');
     execute.mockImplementation(async (action: string): Promise<unknown> => {
-      if (action === 'read') return { ...fixture.intent, status: 'completed' };
+      if (action === 'reversal_intent')
+        return { ...fixture.intent, status: 'completed' };
       throw new Error('private storage failure');
     });
     expect(
@@ -201,16 +248,16 @@ describe('primary card checkout webhook reversal', () => {
     ).toBeNull();
   });
 
-  it('stays retryable when the scope disagrees instead of acks', async () => {
+  it('stays retryable when the intent lookup fails instead of acking', async () => {
     const { execute, runtime } = setup('completed');
+    execute.mockRejectedValue(new Error('private storage failure'));
     expect(
       await reconcilePrimaryWalletCardCheckoutReversal({
-        body: body({ metadata: undefined }),
+        body: body(),
         runtime,
         execute: execute as never,
       })
     ).toBeNull();
-    expect(execute).not.toHaveBeenCalled();
   });
 
   it('does not read storage for unshaped deliveries', async () => {

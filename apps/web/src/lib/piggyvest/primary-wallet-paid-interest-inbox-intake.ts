@@ -1,5 +1,5 @@
 import 'server-only';
-import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
+import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
 import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
@@ -26,7 +26,7 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   )
     return 'invalid_signature' as const;
   try {
-    schemas.event.parse(
+    schemas.envelope.parse(
       JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawBody))
     );
   } catch {

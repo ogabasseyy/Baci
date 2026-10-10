@@ -2,6 +2,7 @@
 \ir primary-wallet-card-custody-settlement-fence.integration.sql
 \ir ../../../../../supabase/migrations/20261008092300_primary_card_expiry_drain.sql
 \ir ../../../../../supabase/migrations/20261008094500_primary_card_checkout_reversals.sql
+\ir ../../../../../supabase/migrations/20261008094600_primary_card_reversal_intent_lookup.sql
 -- Reversal conformance: Paystack refund/dispute webhooks land in
 -- checkout_reversals and fence the ledger. The fence chain above ends
 -- post-expiry ('third' settled, 'fourth' collected-but-unsettled), so
@@ -109,6 +110,29 @@ END $$;
 RESET SESSION AUTHORIZATION;
 UPDATE piggyvest_primary_card.settings SET expires_at='2020-01-01T00:00:00Z'
   WHERE integration_id='10000000-0000-4000-8000-000000000004';
+-- The reversal intent lookup resolves the reference tail without a
+-- scope: documented refund webhooks carry no metadata, so ownership
+-- binds stored IDs against the runtime instead of webhook fields.
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  fixture record;
+  intent jsonb;
+BEGIN
+  SELECT * INTO fixture FROM public.custody_fixture WHERE label='fourth@example.test';
+  intent := piggyvest_primary_card.read_reversal_intent('pvb-first-primary-'||fixture.operation_id);
+  IF intent->>'operationId'<>fixture.operation_id::text OR intent->>'customerId'<>'40000000-0000-4000-8000-000000000002' THEN
+    RAISE EXCEPTION 'reversal intent lookup wrong';
+  END IF;
+  BEGIN
+    PERFORM piggyvest_primary_card.read_reversal_intent('WAL-unrelated-reference');
+    RAISE EXCEPTION 'foreign reference resolved an intent';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  BEGIN
+    PERFORM piggyvest_primary_card.read_reversal_intent('pvb-first-primary-90000000-0000-4000-8000-000000000001');
+    RAISE EXCEPTION 'unknown reference resolved an intent';
+  EXCEPTION WHEN no_data_found THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
 -- Collected reversal: a dispute against the custody-pending 'fourth'
 -- checkout records without mutating it, and settlement returns
 -- 'conflict' instead of crediting — no wallet movement, no treasury

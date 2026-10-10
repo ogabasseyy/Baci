@@ -43,6 +43,11 @@ const statements = {
     sql: 'SELECT piggyvest_primary_card.record_checkout_reversal($1::jsonb,$2::uuid,$3::text,$4::text,$5::jsonb) AS result',
     count: 5,
   },
+  reversal_intent: {
+    role: 'evidence',
+    sql: 'SELECT piggyvest_primary_card.read_reversal_intent($1::text) AS result',
+    count: 1,
+  },
   selectStaleReady: {
     role: 'evidence',
     sql: 'SELECT piggyvest_primary_card.select_stale_ready_checkouts($1::jsonb,$2::timestamptz,$3::integer) AS result',

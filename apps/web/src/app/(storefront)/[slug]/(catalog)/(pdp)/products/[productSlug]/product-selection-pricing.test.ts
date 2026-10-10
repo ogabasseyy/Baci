@@ -69,6 +69,37 @@ describe('resolveSelectionPricing', () => {
     });
   });
 
+  it('honors the offer scalar on unmanaged parents', () => {
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: { price: 80, stock_quantity: 0 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: false,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 0,
+      isOutOfStock: true,
+    });
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: { price: 80, stock_quantity: 3 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: false,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 3,
+      isOutOfStock: false,
+    });
+  });
+
   it('flags zero managed stock as out of stock', () => {
     expect(
       resolveSelectionPricing({

@@ -66,29 +66,33 @@ export function resolveSelectionPricing({
     !effectiveVariant && selectedOffer
       ? resolveSerializedOfferStock(selectedOffer, product)
       : undefined;
-  const managedStock = !isStockManaged
-    ? Number.POSITIVE_INFINITY
-    : (serializedVariantStock ??
-      getEffectiveStock(
-        effectiveVariant
-          ? {
-              stock:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-              stock_quantity:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-            }
-          : selectedOffer
+  // Offer selections bypass the unmanaged short-circuit: order creation
+  // checks the offer allocation even on unmanaged parents, so an
+  // unmanaged infinite here would advertise what checkout refuses.
+  const managedStock =
+    !isStockManaged && !selectedOffer
+      ? Number.POSITIVE_INFINITY
+      : (serializedVariantStock ??
+        getEffectiveStock(
+          effectiveVariant
             ? {
-                // A null offer quantity inherits parent stock (mirroring
-                // the variants branch and the price-options CTE): the
-                // offer is purchasable, not out of stock.
                 stock:
-                  selectedOffer.stock_quantity ?? product.stock ?? undefined,
+                  effectiveVariant.stock_quantity ?? product.stock ?? undefined,
                 stock_quantity:
-                  selectedOffer.stock_quantity ?? product.stock ?? undefined,
+                  effectiveVariant.stock_quantity ?? product.stock ?? undefined,
               }
-            : product
-      ));
+            : selectedOffer
+              ? {
+                  // A null offer quantity inherits parent stock (mirroring
+                  // the variants branch and the price-options CTE): the
+                  // offer is purchasable, not out of stock.
+                  stock:
+                    selectedOffer.stock_quantity ?? product.stock ?? undefined,
+                  stock_quantity:
+                    selectedOffer.stock_quantity ?? product.stock ?? undefined,
+                }
+              : product
+        ));
   const currentStock = serializedOfferStock ?? managedStock;
   // A zero allocation disables purchase even when the snapshot folds the
   // product unmanaged (unlimited offers still bind their scalar).

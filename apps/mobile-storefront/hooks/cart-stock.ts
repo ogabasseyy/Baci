@@ -111,7 +111,9 @@ export async function checkStock(
 
   // Only an explicit false bypasses stock checks: legacy NULL rows are
   // managed inventory (platform policy shared with search and the PDPs).
-  if (data?.manage_stock === false) {
+  // Offer lines still resolve their own allocation: order creation
+  // checks the offer scalar even on unmanaged parents.
+  if (data?.manage_stock === false && !options?.offerId) {
     return {
       available: true,
       currentStock: Number.MAX_SAFE_INTEGER,

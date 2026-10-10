@@ -418,6 +418,30 @@ describe('cart-stock helpers', () => {
     });
   });
 
+  it('honors the offer scalar on explicitly unmanaged parents', async () => {
+    mockProductAndRpc(parent({ manage_stock: false }), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 2 }],
+      get_storefront_product_base_inventory: [
+        { product_id: 'product-1', effective_policy: 'legacy' },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 2, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 2,
+      requestedQuantity: 2,
+    });
+    await expect(
+      checkStock('product-1', 3, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+  });
+
   it('lets a null offer quantity inherit the parent stock', async () => {
     mockProductAndRpc(parent({ stock_quantity: 5 }), {
       get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],

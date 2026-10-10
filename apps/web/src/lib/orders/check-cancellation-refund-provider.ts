@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { listPaystackRefunds } from './list-paystack-refunds';
-import { normalizeRefundMoneyField } from './match-cancellation-refund-coverage';
+import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 export async function checkCancellationRefundProvider({

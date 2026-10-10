@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
-import { normalizeRefundMoneyField } from '@/lib/orders/match-cancellation-refund-coverage';
+import { normalizeRefundMoneyField } from '@/lib/orders/normalize-refund-money-field';
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';

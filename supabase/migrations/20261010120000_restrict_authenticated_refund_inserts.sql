@@ -13,6 +13,15 @@ ALTER POLICY transactions_insert_policy ON public.transactions
   WITH CHECK (
     public.has_merchant_access(merchant_id)
     AND transaction_type <> 'refund'
+    -- Refund-state payment rows are trusted-provider territory: a
+    -- forged refund_pending leg blocks manual recovery via
+    -- v_payment_pending, and a forged refunded leg flips cancelled
+    -- orders refunded through the sync trigger without returning
+    -- money. Only pre-refund states stay directly insertable.
+    AND (
+      transaction_type <> 'payment'
+      OR status NOT IN ('refund_pending', 'refunded')
+    )
     AND (
       order_id IS NULL
       OR EXISTS (

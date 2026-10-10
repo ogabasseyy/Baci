@@ -106,7 +106,17 @@ BEGIN
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
-    AND upper(btrim(currency))=upper(btrim(v_order.currency));
+    AND upper(btrim(currency))=upper(btrim(v_order.currency))
+    -- Count only validated links: a row claiming a leg outside this
+    -- order (or otherwise unresolvable) is corrupt evidence the
+    -- worker quarantines, so counting it would understate the
+    -- remainder while the order flips refunded. Compared as text so
+    -- a malformed link excludes instead of raising.
+    AND (metadata->>'payment_transaction_id' IS NULL
+      OR EXISTS (SELECT 1 FROM public.transactions leg
+        WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
+          AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
+          AND leg.transaction_type='payment'));
   -- Self-terminal payment legs (e.g. PayPal flips the payment row
   -- itself instead of inserting a refund row) count toward their side:
   -- refunded legs are returned money, refund_pending legs are
@@ -291,12 +301,18 @@ BEGIN
         RETURNING status,error,attempts,retry_requests INTO v_step;
     END IF;
   END IF;
-  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'amount',amount,'status',status,
-    'method',COALESCE(metadata->>'method',gateway),
-    'reference',COALESCE(metadata->>'reference',gateway_reference),
-    'date',COALESCE(metadata->>'refunded_at',to_json(created_at)#>>'{}'),'recorded_by',metadata->>'recorded_by')
-    ORDER BY created_at DESC),'[]') INTO v_history FROM public.transactions
-    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
+  -- Bound like the audit events: one row per partial manual with 30s
+  -- status polling would otherwise grow every response unbounded.
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'amount',h.amount,'status',h.status,
+    'method',COALESCE(h.metadata->>'method',h.gateway),
+    'reference',COALESCE(h.metadata->>'reference',h.gateway_reference),
+    'date',COALESCE(h.metadata->>'refunded_at',to_json(h.created_at)#>>'{}'),
+    'recorded_by',h.metadata->>'recorded_by')
+    ORDER BY h.created_at DESC),'[]') INTO v_history
+    FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at
+      FROM public.transactions
+      WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
+      ORDER BY created_at DESC LIMIT 50) h;
   RETURN jsonb_build_object('currency',v_order.currency,'amountPaid',v_order.amount_paid,
     'refunded',v_refunded,'remaining',v_remaining,'pending',v_pending,
     'reversedInternal',v_reversed_internal,
@@ -365,7 +381,12 @@ BEGIN
         AND o.amount_paid <= (SELECT COALESCE(sum(t.amount),0) FROM public.transactions t
           WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
             AND t.transaction_type='refund' AND t.status IN ('completed','refunded')
-            AND upper(btrim(t.currency))=upper(btrim(o.currency)))
+            AND upper(btrim(t.currency))=upper(btrim(o.currency))
+            AND (t.metadata->>'payment_transaction_id' IS NULL
+              OR EXISTS (SELECT 1 FROM public.transactions leg
+                WHERE leg.id::text = t.metadata->>'payment_transaction_id'
+                  AND leg.order_id=o.id AND leg.merchant_id=o.merchant_id
+                  AND leg.transaction_type='payment')))
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
           WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
             AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0

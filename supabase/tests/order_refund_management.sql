@@ -235,7 +235,14 @@ BEGIN
     -- still collides: the twin-race rescue reports the conflict.
     ('9ef12000-0000-4000-8000-000000000024', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000017', 'refund', 5, 'NGN',
-      'failed', 'paystack', 'race-17#1', '{}'::jsonb);
+      'failed', 'paystack', 'race-17#1', '{}'::jsonb),
+    -- A completed row claiming another order's leg: corrupt evidence
+    -- the worker quarantines, never coverage.
+    ('9ef12000-0000-4000-8000-000000000025', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000017', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'badlink-1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -303,6 +310,7 @@ DO $refund_manager$
 DECLARE
   v_result jsonb;
   v_rejected boolean;
+  v_label text;
 BEGIN
   -- Failed refunds are retryable, and a retry requeues exhausted work.
   SELECT public.manage_order_refund(
@@ -595,6 +603,23 @@ BEGIN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
 
+  -- Corrupt links never count: a completed row claiming another
+  -- order's leg is excluded from the remainder and cannot flip the
+  -- payment label (the worker quarantines it separately).
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000017'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'corrupt link counted in coverage, got %/%',
+      v_result->>'refunded', v_result->>'remaining';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000017';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'corrupt link flipped payment label to %', v_label;
+  END IF;
+
   -- Legacy rows without a cancellation timestamp route to review: the
   -- trusted finalization cannot run without one.
   BEGIN
@@ -684,6 +709,48 @@ BEGIN
   END IF;
 END;
 $refund_manager$;
+
+-- Refund history stays bounded: bulk ledger rows cap the payload at
+-- 50 like the audit events.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_history_bulk$
+BEGIN
+  INSERT INTO public.transactions
+    (merchant_id, order_id, transaction_type, amount, currency, status,
+     gateway, gateway_reference, metadata)
+  SELECT '9ef10100-0000-4000-8000-000000000001',
+    '9ef11000-0000-4000-8000-000000000017', 'refund', 1, 'NGN', 'completed',
+    'manual', 'bulk-' || g || '#1',
+    jsonb_build_object(
+      'payment_transaction_id', '9ef12000-0000-4000-8000-000000000023',
+      'reference', 'bulk-' || g)
+  FROM pg_catalog.generate_series(1, 55) g;
+END;
+$refund_history_bulk$;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000002',
+  true
+);
+
+DO $refund_history_bound$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000017'
+  ) INTO v_result;
+  IF pg_catalog.jsonb_array_length(v_result->'history') <> 50 THEN
+    RAISE EXCEPTION 'refund history unbounded, got %',
+      pg_catalog.jsonb_array_length(v_result->'history');
+  END IF;
+END;
+$refund_history_bound$;
 
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub',
@@ -790,6 +857,28 @@ BEGIN
   ) VALUES ('9ef10100-0000-4000-8000-000000000001',
     '9ef11000-0000-4000-8000-000000000001', 'payment', 10, 'NGN',
     'completed', 'paystack', 'policy-pay-1');
+  -- Refund-state payment rows are trusted-provider territory: forged
+  -- legs would poison the pending aggregate or the sync trigger.
+  BEGIN
+    INSERT INTO public.transactions (
+      merchant_id, order_id, transaction_type, amount, currency,
+      status, gateway, gateway_reference
+    ) VALUES ('9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000001', 'payment', 10, 'NGN',
+      'refunded', 'paystack', 'policy-forge-1');
+    RAISE EXCEPTION 'forged refunded payment insert allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.transactions (
+      merchant_id, order_id, transaction_type, amount, currency,
+      status, gateway, gateway_reference
+    ) VALUES ('9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000001', 'payment', 10, 'NGN',
+      'refund_pending', 'paystack', 'policy-forge-2');
+    RAISE EXCEPTION 'forged refund-pending payment insert allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   BEGIN
     INSERT INTO public.transactions (
       merchant_id, order_id, transaction_type, amount, currency,

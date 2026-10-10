@@ -36,9 +36,12 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     isAuthLoading: false,
     isAuthenticated: true,
     merchantSlug: 'ogabassey',
+    refreshWallet: vi.fn(),
     setWalletBalance: vi.fn(),
     user,
     walletBalance: 5000,
+    walletError: false,
+    walletLoading: false,
     ...overrides,
   };
 }
@@ -125,12 +128,107 @@ describe('useUtilityPurchase', () => {
     });
 
     expect(mockSubmit).not.toHaveBeenCalled();
-    expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Insufficient wallet balance' })
-    );
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Insufficient wallet balance',
+      description:
+        'Fund your wallet with at least ₦500 more to complete this purchase.',
+      variant: 'destructive',
+    });
     expect(onInsufficientWalletBalance).toHaveBeenCalledTimes(1);
     expect(result.current.step).toBe('details');
     expect(result.current.loading).toBe(false);
+  });
+
+  it('waits (does not submit) while the wallet balance is still loading', async () => {
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ walletLoading: true, walletBalance: 0 }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Checking wallet balance' })
+    );
+    expect(result.current.step).toBe('details');
+  });
+
+  it('retries the wallet fetch instead of submitting when the balance lookup failed', async () => {
+    const refreshWallet = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(
+        baseParams({ refreshWallet, walletError: true, walletBalance: 0 })
+      )
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Wallet unavailable' })
+    );
+    expect(refreshWallet).toHaveBeenCalledTimes(1);
+    expect(result.current.step).toBe('details');
+  });
+
+  it('retains the idempotency key while a purchase is processing so a resubmit replays', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-PROC',
+          amount: 1000,
+          processing: true,
+        };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).toBe(seenKeys[1]);
+  });
+
+  it('rotates the idempotency key after a terminal success so buy-again is a fresh purchase', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-OK',
+          amount: 1000,
+          processing: false,
+        };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).not.toBe(seenKeys[1]);
   });
 
   it('surfaces an error toast and stays on the form when checkout fails', async () => {

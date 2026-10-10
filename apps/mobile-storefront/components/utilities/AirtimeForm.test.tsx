@@ -10,7 +10,7 @@ import { Alert } from 'react-native';
 import type { ExtractState } from 'zustand/vanilla';
 import { BRAND } from '@/constants/Colors';
 import type { UtilityRepeatRecipient } from '@/lib/utility-repeat';
-import { promptUtilityWalletFunding } from '@/lib/utility-wallet-funding-prompt';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import type { useAuthStore as useAuthStoreType } from '@/stores/auth-store';
 import { AirtimeForm } from './AirtimeForm';
 
@@ -86,12 +86,12 @@ jest.mock('@/lib/vtu-checkout', () => {
   };
 });
 
-jest.mock('@/lib/utility-wallet-funding-prompt', () => ({
-  promptUtilityWalletFunding: jest.fn(),
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
 }));
 
-const mockPromptUtilityWalletFunding =
-  promptUtilityWalletFunding as unknown as jest.Mock;
+const mockEnsureUtilityWalletReady =
+  ensureUtilityWalletReady as unknown as jest.Mock;
 
 jest.mock('./UtilityPaymentOptions', () => {
   const { Text } =
@@ -355,25 +355,19 @@ describe('AirtimeForm', () => {
     });
   });
 
-  it('prompts wallet funding instead of charging when the balance is short', async () => {
+  it('checks wallet readiness before charging and skips the charge when not ready', async () => {
     const onSuccessMock = jest.fn();
-    mockUseUtilityPayment.mockReturnValue({
-      canFundByBankTransfer: true,
-      walletBalance: 200,
-      walletError: null,
-      walletIsLoading: false,
-      getWalletIdempotencyKey: jest.fn(() => 'test-key'),
-      resetWalletIdempotencyKey: jest.fn(),
-    });
+    mockEnsureUtilityWalletReady.mockReturnValueOnce(false);
     render(<AirtimeForm onSuccess={onSuccessMock} />);
 
     fillValidAirtimeForm();
     fireEvent.press(screen.getByText('Pay ₦1,000'));
 
     await waitFor(() => {
-      expect(mockPromptUtilityWalletFunding).toHaveBeenCalledWith({
+      expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
         amount: 1000,
-        balance: 200,
+        customer: null,
+        payment: expect.objectContaining({ walletBalance: 5000 }),
         returnToHref: expect.any(String),
       });
     });

@@ -19,9 +19,12 @@ interface UseUtilityPurchaseParams {
   isAuthenticated: boolean;
   merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
+  refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
   walletBalance: number;
+  walletError: boolean;
+  walletLoading: boolean;
 }
 
 interface AirtimeDataSubmit {
@@ -61,7 +64,9 @@ interface UseUtilityPurchaseReturn {
  * (loading/success step, transaction reference, wallet-only idempotency) so the
  * modal only wires props and renders. Wallet-only: blocks the submit when the
  * balance cannot cover the bill and notifies the caller so it can open the
- * funding panel.
+ * funding panel. Loading/error wallet states block separately (never reported
+ * as insufficient funds), and the idempotency key is retained while a purchase
+ * is processing so a resubmit replays instead of double-charging.
  */
 export function useUtilityPurchase({
   activeTab,
@@ -71,9 +76,12 @@ export function useUtilityPurchase({
   isAuthenticated,
   merchantSlug,
   onInsufficientWalletBalance,
+  refreshWallet,
   setWalletBalance,
   user,
   walletBalance,
+  walletError,
+  walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'details' | 'success'>('details');
@@ -114,13 +122,37 @@ export function useUtilityPurchase({
       return;
     }
 
+    // A failed or still-loading wallet fetch also reads as balance 0 — never
+    // report that as insufficient funds. Loading asks for patience; an error
+    // retries the fetch so the customer is not stuck until remount.
+    if (walletLoading) {
+      toast({
+        title: 'Checking wallet balance',
+        description: 'Please wait while we confirm your wallet balance.',
+      });
+      return;
+    }
+
+    if (walletError) {
+      toast({
+        title: 'Wallet unavailable',
+        description:
+          "We couldn't load your wallet balance. Trying again now.",
+        variant: 'destructive',
+      });
+      refreshWallet();
+      return;
+    }
+
     // Wallet-only checkout: the wallet must cover the full bill — there is
     // no card fallback. Stop here (before any network call) and let the
-    // caller open the funding panel so the customer can top up.
+    // caller open the funding panel so the customer can top up. Report only
+    // the remaining shortfall so partial balances don't overfund.
     if (walletBalance < payload.amount) {
+      const shortfall = payload.amount - walletBalance;
       toast({
         title: 'Insufficient wallet balance',
-        description: `Fund your wallet with at least ₦${payload.amount.toLocaleString()} to complete this purchase.`,
+        description: `Fund your wallet with at least ₦${shortfall.toLocaleString()} more to complete this purchase.`,
         variant: 'destructive',
       });
       onInsufficientWalletBalance?.();
@@ -142,7 +174,14 @@ export function useUtilityPurchase({
     });
 
     if (result.kind === 'wallet-success') {
-      walletIdempotencyAttemptRef.current = null;
+      // Terminal success rotates the key so a buy-again gets a fresh dedupe
+      // slot. 'processing' is non-terminal — the vend is still in flight, so
+      // the key MUST stay: the modal tabs reset to details, and a resubmit
+      // with a fresh key would bypass the route's dedupe row and create a
+      // second debit. Same key + same payload replays the same transaction.
+      if (!result.processing) {
+        walletIdempotencyAttemptRef.current = null;
+      }
       clearIntent();
       setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
       setTransactionRef(result.reference);

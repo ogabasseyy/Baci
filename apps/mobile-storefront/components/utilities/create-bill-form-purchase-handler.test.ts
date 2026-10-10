@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
-import { promptUtilityWalletFunding } from '@/lib/utility-wallet-funding-prompt';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -30,12 +30,12 @@ jest.mock('@/lib/vtu-checkout', () => {
   };
 });
 
-jest.mock('@/lib/utility-wallet-funding-prompt', () => ({
-  promptUtilityWalletFunding: jest.fn(),
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
 }));
 
-const mockPromptUtilityWalletFunding =
-  promptUtilityWalletFunding as unknown as jest.Mock;
+const mockEnsureUtilityWalletReady =
+  ensureUtilityWalletReady as unknown as jest.Mock;
 
 function createPaymentState(
   overrides: Partial<PaymentState> = {}
@@ -131,20 +131,27 @@ describe('createBillFormPurchaseHandler', () => {
     );
   });
 
-  it('prompts wallet funding instead of charging when the balance is short', async () => {
+  it('checks wallet readiness before charging and skips the charge when not ready', async () => {
+    const payment = createPaymentState({ walletBalance: 200 });
     const handlePurchase = createValidHandler({
-      payment: createPaymentState({ walletBalance: 200 }),
+      payment,
       returnToHref: '/utilities/power?repeatAmount=1000' as never,
     });
 
     await handlePurchase();
 
-    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
-    expect(mockPromptUtilityWalletFunding).toHaveBeenCalledWith({
+    expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
       amount: 1000,
-      balance: 200,
+      customer: null,
+      payment,
       returnToHref: '/utilities/power?repeatAmount=1000',
     });
+    expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
+
+    mockEnsureUtilityWalletReady.mockReturnValueOnce(false);
+    await handlePurchase();
+
+    expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
   });
 
   it('uses a generic checkout error message for unsafe exceptions', async () => {

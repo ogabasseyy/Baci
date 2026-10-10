@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
-import { promptUtilityWalletFunding } from '@/lib/utility-wallet-funding-prompt';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
   shouldRotateWalletIdempotencyKeyForError,
@@ -73,14 +73,14 @@ export function createDataFormPurchaseHandler({
       );
       return;
     }
-    // Wallet-only checkout: the wallet must cover the full bundle price —
-    // there is no card or gateway fallback.
-    if (payment.walletBalance < planAmount) {
-      promptUtilityWalletFunding({
+    if (
+      !ensureUtilityWalletReady({
         amount: planAmount,
-        balance: payment.walletBalance,
+        customer,
+        payment,
         returnToHref,
-      });
+      })
+    ) {
       return;
     }
 

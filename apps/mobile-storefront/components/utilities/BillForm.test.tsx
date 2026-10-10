@@ -102,6 +102,10 @@ jest.mock('./UtilityPaymentOptions', () => {
   };
 });
 
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
+}));
+
 jest.mock('@/lib/vtu-checkout', () => {
   const actual =
     jest.requireActual<typeof import('@/lib/vtu-checkout')>(

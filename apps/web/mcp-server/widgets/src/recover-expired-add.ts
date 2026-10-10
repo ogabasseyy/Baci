@@ -114,8 +114,14 @@ export async function recoverCartAdd(
   if (!freshToken || survivors.length === 0)
     return { result, skippedSurvivors: [] };
   // Same gate before replaying into a tokenless mint: the mint holds
-  // one line already, so twenty survivors can never fit either.
-  if (survivors.length >= SERVER_CART_CAPACITY) return fullCartRecovery();
+  // one line already, so twenty survivors can never fit either. Unlike
+  // the expired-token gate above, the caller's initial call already
+  // minted this cart, so retire it before reporting full — otherwise
+  // every retry orphans another row and burns another creation slot.
+  if (survivors.length >= SERVER_CART_CAPACITY) {
+    await retirePartialCart(callCartTool, freshToken, [productId]);
+    return fullCartRecovery();
+  }
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,

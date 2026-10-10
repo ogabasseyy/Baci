@@ -53,6 +53,21 @@ describe('rewriteCartLinkUrl', () => {
     ).toBe('/cart');
   });
 
+  it('resolves retry quantities case-insensitively', () => {
+    // Rejected ids keep catalog case; the quantities map is keyed
+    // lowercase. A case-variant retry line must keep its quantity,
+    // not drop out of the retry URL and be silently consumed.
+    const rewritten = rewriteCartLinkUrl(
+      `${base}&guest_cart=%5B%5D`,
+      quantities,
+      [line.product_id.toUpperCase()]
+    );
+    const url = new URL(rewritten, 'https://ogabassey.com');
+    expect(JSON.parse(url.searchParams.get('guest_cart') ?? '[]')).toEqual([
+      { product_id: line.product_id.toUpperCase(), quantity: line.quantity },
+    ]);
+  });
+
   it('drops rejected lines missing a handoff quantity', () => {
     const rewritten = rewriteCartLinkUrl(
       `${base}&guest_cart=%5B%5D`,

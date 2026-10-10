@@ -220,7 +220,7 @@ export async function fetchAndAddCartItems({
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity =
           existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        const guestTarget = guestQuantities?.get(product.id);
+        const guestTarget = guestQuantities?.get(product.id.toLowerCase());
         const quantityToAdd = resolveGuestQuantityToAdd(
           guestTarget,
           existingQuantity,

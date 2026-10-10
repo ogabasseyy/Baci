@@ -9,10 +9,13 @@ export function rewriteCartLinkUrl(
 ): string {
   const url = new URL(href);
   if (guestQuantities && rejectedIds.length > 0) {
+    // The quantities map is keyed by lowercased handoff ids while rejected
+    // ids keep catalog/URL case: compare canonically or a case-variant
+    // retry line drops its quantity and is silently consumed.
     const retryLines = rejectedIds
       .map((product_id) => ({
         product_id,
-        quantity: guestQuantities.get(product_id),
+        quantity: guestQuantities.get(product_id.toLowerCase()),
       }))
       // A rejected id without a handoff quantity would serialize without
       // `quantity` and poison the whole retry URL; drop it instead.

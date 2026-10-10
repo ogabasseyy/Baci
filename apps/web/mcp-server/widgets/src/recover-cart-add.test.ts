@@ -183,7 +183,31 @@ it('refuses a full tokenless cart without replaying', async () => {
     result: { structuredContent: { success: false, cart_full: true } },
     skippedSurvivors: [],
   });
-  expect(callTool).not.toHaveBeenCalled();
+  // The caller's initial mint already landed before the gate ran: retire
+  // its single line so the retry does not orphan another seven-day row.
+  expect(callTool).toHaveBeenCalledTimes(1);
+  expect(callTool).toHaveBeenCalledWith({
+    product_id: product.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
+});
+
+it('still reports full when the tokenless retire fails', async () => {
+  const minted = success(fresh, [product.id]);
+  const callTool = vi.fn().mockRejectedValueOnce(new Error('down'));
+  const survivors = Array.from({ length: 20 }, (_, index) =>
+    survivorAt(index)
+  );
+  await expect(
+    recoverCartAdd(callTool, minted, product.id, 1, undefined, [
+      { product, quantity: 1 },
+      ...survivors,
+    ])
+  ).resolves.toEqual({
+    result: { structuredContent: { success: false, cart_full: true } },
+    skippedSurvivors: [],
+  });
 });
 
 it('passes typed failures through a full local cart instead of masking them', async () => {

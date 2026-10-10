@@ -31,6 +31,11 @@ const UUID_PATTERN =
 
 function isIngestibleRow(row: SearchSubmissionRow): boolean {
   if (!row || typeof row !== 'object') return false;
+  if (
+    typeof row.merchant_id !== 'string' ||
+    typeof row.search_query !== 'string'
+  )
+    return false;
   return (
     UUID_PATTERN.test(row.merchant_id) &&
     row.search_query.length >= 1 &&

@@ -124,7 +124,8 @@ overrides:
   # Pin to 14.3.1 to mitigate GHSA-253c-mchw-3w2r (linkify quadratic
   # event-loop blocking) while staying on the Markdown-it 14 line.
   markdown-it: "14.3.1"
-  "@modelcontextprotocol/sdk": "^1.25.2"
+  # Pin to ^1.31.0 for GHSA-6qxp-vccf-f47h (OAuth client credential leak).
+  "@modelcontextprotocol/sdk": "^1.31.0"
   # SDK 57 worklets 0.10.1; keep lockstep with react-native-reanimated (#2960).
   react-native-worklets: "0.10.1"
   # Pin to 4.13.7 for the parseBody nesting, fragment query-parser, toSSG
@@ -198,9 +199,11 @@ overrides:
   # parse-diagnostic DoS, and GHSA-rpw4-54j3-4h4q / GHSA-2vr4-cq9g-pvrc SSRF
   # trust-boundary advisories.
   ip-address: "10.7.1"
-  # Keep every workspace package on the reviewed Next.js 16.3.6 release.
-  # 16.3.6 closes GHSA-vcvr-r3jv-pc5j (critical RCE in next/og ImageResponse).
-  next: "16.3.6"
+  # Keep every workspace package on the reviewed Next.js 16.3.8 release.
+  # 16.3.6 closed GHSA-vcvr-r3jv-pc5j (critical RCE in next/og ImageResponse);
+  # 16.3.8 closes GHSA-cjq9-62q9-8jv4 (SSRF in Image Optimization) plus five
+  # medium and one low cache-poisoning/disclosure advisories.
+  next: "16.3.8"
   flatted: "3.4.2"
   lodash: "4.18.1"
   lodash-es: "4.18.1"
@@ -287,8 +290,8 @@ overrides:
   "@grpc/grpc-js@>=1.14.0 <1.14.5": "1.14.5"
   # google-gax: prefer patched grpc-js 1.14.x over the 1.10.x floor.
   "google-gax>@grpc/grpc-js": "1.14.5"
-  # Pin to 1.9.0 to mitigate GHSA-395f-4hp3-45gv / CVE-2026-9277.
-  shell-quote: "1.9.0"
+  # Pin to 1.11.0 to mitigate GHSA-pqg4-j6r4-53mv (quote() command injection).
+  shell-quote: "1.11.0"
   # Pin each body-parser major to its first patched release for GHSA-v422-hmwv-36x6.
   "body-parser@<2": "1.20.6"
   "body-parser@>=2 <2.3.0": "2.3.0"
@@ -356,6 +359,6 @@ patchedDependencies:
   # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
   "expo-modules-core@57.0.12": "patches/expo-modules-core@57.0.12.patch"
   image-size@1.2.1: patches/image-size@1.2.1.patch
-  "next@16.3.6": "patches/next@16.3.6.patch"
+  "next@16.3.8": "patches/next@16.3.8.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   node-forge@1.4.0: patches/node-forge@1.4.0.patch

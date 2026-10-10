@@ -17,9 +17,11 @@ export type SearchSubmissionRow = {
  * Only the public `/api/search/submissions` route may call this, after the
  * Origin check and storefront resolution pass. This module is the only
  * importer of the `search-analytics` brand, and it exposes a single insert
- * with fully server-derived values — importers never receive the
- * RLS-bypassing client itself. Anon/authenticated table writes stay
- * revoked. Server-only: must never enter a client graph.
+ * with bounded values — merchant from the snapshot lookup, count from the
+ * search RPC, and the caller-supplied query only after sanitize/trim/cap —
+ * importers never receive the RLS-bypassing client itself.
+ * Anon/authenticated table writes stay revoked. Server-only: must never
+ * enter a client graph.
  *
  * Owner-approved temporary exception (repo NEVER rule, AGENTS.md 2026-10-09;
  * expires 2027-01-07 or when a restricted worker role exists): remove this
@@ -36,12 +38,17 @@ function isIngestibleRow(row: SearchSubmissionRow): boolean {
     typeof row.search_query !== 'string'
   )
     return false;
+  // Trimmed length: the route path can never produce a whitespace-only
+  // query (sanitizeSearchQuery trims), so a direct caller must not either.
+  // Count is capped at the int4 column maximum, not just safe-integer.
+  const trimmedQuery = row.search_query.trim();
   return (
     UUID_PATTERN.test(row.merchant_id) &&
-    row.search_query.length >= 1 &&
+    trimmedQuery.length >= 1 &&
     row.search_query.length <= SEARCH_SUBMISSION_QUERY_MAX_LENGTH &&
     Number.isInteger(row.results_count) &&
     row.results_count >= 0 &&
+    row.results_count <= 2147483647 &&
     row.search_method === 'client'
   );
 }
@@ -49,7 +56,7 @@ function isIngestibleRow(row: SearchSubmissionRow): boolean {
 export async function recordSearchSubmission(
   row: SearchSubmissionRow
 ): Promise<{ error: PostgrestError | null }> {
-  // Defense in depth: the sole route caller passes server-derived values,
+  // Defense in depth: the sole route caller passes bounded values,
   // but this privileged client must never write an arbitrary tenant row if
   // a future importer passes caller-supplied data. Reject before touching
   // the service-role client so misuse fails loudly instead of misattributing.
@@ -62,7 +69,7 @@ export async function recordSearchSubmission(
   // branded client into an arbitrary tenant row.
   const payload: SearchSubmissionRow = {
     merchant_id: row.merchant_id,
-    search_query: row.search_query,
+    search_query: row.search_query.trim(),
     results_count: row.results_count,
     search_method: row.search_method,
   };

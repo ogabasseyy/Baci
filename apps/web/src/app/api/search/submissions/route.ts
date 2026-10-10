@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     // even Host for direct HTTP clients) is forgeable. No header check can
     // prove which public page issued an anonymous same-origin request, so
     // none is attempted: the enforced controls are the revoked direct
-    // writes, the server-derived query/count, and the per-IP proxy budget,
+    // writes, the bounded query/count, and the per-IP proxy budget,
     // which bound the residual cross-slug pollution to noisy analytics.
     const identifier = isPlatformHost(host)
       ? parsed.data.pathPrefix.slice(1)
@@ -165,12 +165,13 @@ export async function POST(request: NextRequest) {
       limit: 1,
       includeDidYouMean: false,
     });
-    // Narrow ingestion edge: every value is server-derived (merchant from
-    // the snapshot lookup, query/count from the bounded search RPC), and
-    // anon / authenticated table writes are revoked (#3581) so the endpoint
-    // gates cannot be bypassed with a direct table write. The wrapper
-    // throws only on a programming error (its asserts accept every value
-    // built here), so log it distinctly from DB downtime.
+    // Narrow ingestion edge: merchant from the snapshot lookup, count
+    // from the bounded search RPC, and the caller-supplied query only
+    // after sanitize/trim/cap; anon / authenticated table writes are
+    // revoked (#3581) so the endpoint gates cannot be bypassed with a
+    // direct table write. The wrapper throws only on a programming error
+    // (its asserts accept every value built here), so log it distinctly
+    // from DB downtime.
     try {
       const { error } = await recordSearchSubmission({
         merchant_id: merchant.id,

@@ -60,10 +60,34 @@ function getResultRecord(payload: JsonRpcResponse): Record<string, unknown> {
   return payload.result as Record<string, unknown>;
 }
 
-async function startPostgrestStub(merchantAvailable = true, productQueryFails = false) {
+async function startPostgrestStub(
+  merchantAvailable = true,
+  productQueryFails = false,
+  workerRpcFails = false
+) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
+    // The startup capability probe (and any cart read) arrives with the
+    // worker JWT, not the anon key: answer the cart-get RPC with the
+    // empty set for any Bearer credential like the anchor-policies fixture
+    // does, or with a gateway-style 403 when the test stages a
+    // mis-issued capability.
+    if (
+      url.pathname.endsWith('/rest/v1/rpc/get_mcp_guest_cart') &&
+      (request.headers.authorization ?? '').startsWith('Bearer ')
+    ) {
+      request.on('data', () => {});
+      request.on('end', () => {
+        if (workerRpcFails) {
+          response.statusCode = 403;
+          response.end(JSON.stringify({ message: 'Invalid worker JWT' }));
+          return;
+        }
+        response.end(JSON.stringify([]));
+      });
+      return;
+    }
     if (request.headers.authorization !== 'Bearer test-anon-key') {
       response.statusCode = 403;
       response.end(JSON.stringify({ message: 'Expected anonymous client' }));
@@ -107,9 +131,17 @@ async function startPostgrestStub(merchantAvailable = true, productQueryFails = 
 
 async function startMcpServerWithPostgrest(
   envOverrides: NodeJS.ProcessEnv,
-  options: { merchantAvailable?: boolean; productQueryFails?: boolean } = {}
+  options: {
+    merchantAvailable?: boolean;
+    productQueryFails?: boolean;
+    workerRpcFails?: boolean;
+  } = {}
 ): Promise<StartedMcpServer & { close: () => Promise<void> }> {
-  const postgrest = await startPostgrestStub(options.merchantAvailable, options.productQueryFails);
+  const postgrest = await startPostgrestStub(
+    options.merchantAvailable,
+    options.productQueryFails,
+    options.workerRpcFails
+  );
   let server: StartedMcpServer;
   try {
     server = await startMcpServer({

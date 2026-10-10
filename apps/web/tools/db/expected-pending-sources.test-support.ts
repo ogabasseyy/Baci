@@ -271,7 +271,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath: 'supabase/migrations/20261008230000_mcp_guest_carts.sql',
-    sha256: '30734756d6da1238515568ffd0434c23b3335bdf7334d50415ded51ea04a3db5',
+    sha256: '38f31ccdcb3edae48fa6e46013565941926c1372d303cfdb13692bcbb177bc62',
   },
   {
     repositoryPath:

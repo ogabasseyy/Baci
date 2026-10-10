@@ -332,7 +332,10 @@ JWT minted offline with the `mcp_guest_cart_worker` role claim; the project
 anon key stays in the gateway `apikey` position and the worker JWT travels
 in the `Authorization` header. The server validates the token once at
 startup — role, expiry, and a minimum 24-hour remaining lifetime — and
-never refreshes it, so rotation is a deploy operation:
+then proves it authenticates with one read-only RPC before listening, so
+a mis-signed or wrong-project token fails the deploy instead of promoting
+a release whose carts are dead. The token is never refreshed at runtime,
+so rotation is a deploy operation:
 
 1. Mint a new JWT with the same role claim and a fresh `exp` (ES256, RS256,
    or HS256, signed by the project's JWT keys).

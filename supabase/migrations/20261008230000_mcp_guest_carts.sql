@@ -126,6 +126,16 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'guest cart expiry exceeds retention';
   END IF;
   IF p_expected_version IS NULL THEN
+    -- Serialize creations against the capacity gate: without this, two
+    -- transactions racing near the ceiling both observe the same
+    -- pre-insert count and both insert, breaching the bound. The lock is
+    -- transaction-scoped (auto-released; a single key cannot deadlock)
+    -- and create-path-only — updates and deletes never change the row
+    -- count. Arrival is already quota-bounded (600/hr/IP), so the
+    -- critical section stays short.
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('baci_mcp_guest_cart_capacity', 0)
+    );
     -- Global capacity gate: per-IP quotas cannot bound a botnet, and the
     -- hourly sweep reclaims at most 1000 rows, so the table itself must
     -- refuse creations past budget. The count covers dead rows too: under

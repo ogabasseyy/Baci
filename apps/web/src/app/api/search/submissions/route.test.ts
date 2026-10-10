@@ -54,6 +54,20 @@ describe('explicit search submissions', () => {
     });
   });
 
+  it('logs DB insert errors with a secret-free classification', async () => {
+    mocks.recordSubmission.mockResolvedValueOnce({
+      error: { code: 'XX000', message: 'db down' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submissions insert failed',
+      errorCode: 'XX000',
+    });
+  });
+
   it('writes through the narrow ingestion edge so direct writes stay revoked', async () => {
     const response = await POST(request());
     expect(response.status).toBe(204);

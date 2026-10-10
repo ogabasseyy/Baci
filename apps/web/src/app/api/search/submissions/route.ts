@@ -179,7 +179,15 @@ export async function POST(request: NextRequest) {
         results_count: result.count,
         search_method: 'client',
       });
-      if (error) return unavailable();
+      if (error) {
+        // Fixed classification only (PG error code, no payload): operators
+        // must be able to distinguish shedding from a DB outage.
+        logger.error({
+          message: 'Search submissions insert failed',
+          errorCode: error.code,
+        });
+        return unavailable();
+      }
     } catch (validationError) {
       // Log a fixed classification only: the caught object may carry
       // provider response details that must never reach application logs.

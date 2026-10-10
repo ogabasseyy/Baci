@@ -62,6 +62,8 @@ DECLARE
   v_refunded numeric;
   v_pending numeric;
   v_remaining numeric;
+  v_reversed_internal numeric;
+  v_leg_index integer;
   v_allocation numeric;
   v_leg_remaining numeric;
   v_history jsonb;
@@ -75,15 +77,28 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'order_not_found' USING ERRCODE='P0002'; END IF;
   IF NOT (EXISTS (SELECT 1 FROM public.merchants WHERE id=v_order.merchant_id AND user_id=v_actor)
     OR public.check_staff_permission(v_actor,v_order.merchant_id,'orders',
-      CASE WHEN p_action='status' THEN 'view' ELSE 'edit' END)) THEN
+      CASE WHEN p_action='status' THEN 'view' ELSE 'refund' END)) THEN
     RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501';
   END IF;
   SELECT * INTO v_step FROM public.order_cancellation_side_effects
     WHERE order_id=p_order_id AND step='refund' FOR UPDATE;
-  SELECT COALESCE(sum(amount) FILTER (WHERE status='completed'),0),
-    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','failed')),0)
+  SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')),0),
+    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
+  -- Internal redemptions return outside the refund ledger: wallet reversals
+  -- credit customer_wallets and savings reversals restore the goal, so the
+  -- outstanding balance excludes already-reversed internal amounts.
+  SELECT COALESCE((
+    SELECT sum(t.amount) FROM public.customer_wallet_transactions t
+    WHERE t.source_id=p_order_id AND t.merchant_id=v_order.merchant_id
+      AND t.source_type='order_reversal'),0)
+    + COALESCE((
+    SELECT sum(r.amount) FROM public.customer_savings_redemptions r
+    WHERE r.order_id=p_order_id AND r.merchant_id=v_order.merchant_id
+      AND r.metadata ? 'reversed_at'),0)
+    INTO v_reversed_internal;
+  v_refunded := v_refunded + v_reversed_internal;
   v_remaining := GREATEST(COALESCE(v_order.amount_paid,0)-v_refunded,0);
 
   IF p_action <> 'status' THEN
@@ -101,7 +116,7 @@ BEGIN
       SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
         'refunded_at',min(metadata->>'refunded_at')) INTO v_replay
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
-        AND gateway='manual' AND gateway_reference=btrim(p_reference);
+        AND gateway='manual' AND metadata->>'reference'=btrim(p_reference);
       IF (v_replay->>'amount') IS NOT NULL THEN
         IF (v_replay->>'amount')::numeric<>p_amount OR v_replay->>'method'<>p_method
           OR (v_replay->>'refunded_at')::timestamptz<>p_refunded_at THEN
@@ -129,7 +144,7 @@ BEGIN
   ELSIF p_action='manual' THEN
     IF p_amount>v_remaining THEN RAISE EXCEPTION 'refund_exceeds_remaining' USING ERRCODE='P0001'; END IF;
     IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
-      AND transaction_type='refund' AND status='completed'
+      AND transaction_type='refund' AND status IN ('completed','refunded')
       AND metadata->>'payment_transaction_id' IS NULL) THEN
       RAISE EXCEPTION 'unallocated_refund_requires_review' USING ERRCODE='P0001';
     END IF;
@@ -139,21 +154,29 @@ BEGIN
       RAISE EXCEPTION 'payment_currency_requires_review' USING ERRCODE='P0001';
     END IF;
     v_allocation := p_amount;
+    v_leg_index := 0;
     FOR v_payment IN SELECT id,amount,currency FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id
       AND transaction_type='payment' AND status='completed' ORDER BY created_at,id
     LOOP
       SELECT GREATEST(v_payment.amount-COALESCE(sum(amount),0),0) INTO v_leg_remaining
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
-        AND status='completed' AND metadata->>'payment_transaction_id'=v_payment.id::text;
+        AND status IN ('completed','refunded')
+        AND metadata->>'payment_transaction_id'=v_payment.id::text;
       v_leg_remaining := LEAST(v_leg_remaining,v_allocation);
       IF v_leg_remaining>0 THEN
+        -- One manual transfer can span several payment legs, but the
+        -- (order_id, gateway_reference) unique index rejects a repeated
+        -- reference: each allocation row gets a unique ledger identifier
+        -- while the merchant reference stays queryable in metadata.
+        v_leg_index := v_leg_index + 1;
         INSERT INTO public.transactions (merchant_id,order_id,transaction_type,amount,currency,
           status,gateway,gateway_reference,description,metadata)
         VALUES (v_order.merchant_id,p_order_id,'refund',v_leg_remaining,v_payment.currency,
-          'completed','manual',btrim(p_reference),'Manual refund recorded by merchant',
+          'completed','manual',btrim(p_reference)||'#'||v_leg_index,'Manual refund recorded by merchant',
           jsonb_build_object('payment_transaction_id',v_payment.id,'recorded_by',v_actor,
-            'refunded_at',p_refunded_at,'method',p_method,'note',p_note));
+            'refunded_at',p_refunded_at,'method',p_method,'note',p_note,
+            'reference',btrim(p_reference)));
         v_allocation := v_allocation-v_leg_remaining;
       END IF;
       EXIT WHEN v_allocation=0;
@@ -169,12 +192,14 @@ BEGIN
     END IF;
   END IF;
   SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'amount',amount,'status',status,
-    'method',COALESCE(metadata->>'method',gateway),'reference',gateway_reference,
+    'method',COALESCE(metadata->>'method',gateway),
+    'reference',COALESCE(metadata->>'reference',gateway_reference),
     'date',COALESCE(metadata->>'refunded_at',created_at::text),'recorded_by',metadata->>'recorded_by')
     ORDER BY created_at DESC),'[]') INTO v_history FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
   RETURN jsonb_build_object('currency',v_order.currency,'amountPaid',v_order.amount_paid,
     'refunded',v_refunded,'remaining',v_remaining,'pending',v_pending,
+    'reversedInternal',v_reversed_internal,
     'status',CASE WHEN v_remaining=0 AND v_refunded>0 THEN 'refunded'
       WHEN v_pending>0 THEN 'processing' WHEN v_step.status='claimed' THEN 'processing'
       WHEN v_step.status='delivery_uncertain' THEN 'requires_review'
@@ -209,17 +234,18 @@ GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamp
 CREATE OR REPLACE FUNCTION private.sync_cancelled_order_refund_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 BEGIN
-  IF NEW.transaction_type='refund' AND NEW.status='completed' THEN
+  IF NEW.transaction_type='refund' AND NEW.status IN ('completed','refunded') THEN
     INSERT INTO public.order_refund_events(order_id,merchant_id,actor_id,action,details)
     VALUES (NEW.order_id,NEW.merchant_id,auth.uid(),
       CASE WHEN NEW.gateway='manual' THEN 'manual_recorded' ELSE 'provider_confirmed' END,
-      jsonb_build_object('amount',NEW.amount,'reference',NEW.gateway_reference));
+      jsonb_build_object('amount',NEW.amount,
+        'reference',COALESCE(NEW.metadata->>'reference',NEW.gateway_reference)));
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
         AND o.amount_paid <= (SELECT COALESCE(sum(t.amount),0) FROM public.transactions t
           WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
-            AND t.transaction_type='refund' AND t.status='completed');
+            AND t.transaction_type='refund' AND t.status IN ('completed','refunded'));
   END IF;
   RETURN NEW;
 END; $$;

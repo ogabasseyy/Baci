@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
+import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { createClient } from '@/lib/supabase/server';
 import {
   type StorefrontLoyaltyRedeemResult,
@@ -40,17 +41,36 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   invalid_input: 'Invalid redemption input',
 };
 
-function getRedemptionInstructions(reward: {
-  reward_type: string;
-  discount_type?: string;
-  discount_value?: number;
-}): string {
+function getRedemptionInstructions(
+  reward: {
+    reward_type: string;
+    discount_type?: string;
+    discount_value?: number;
+  },
+  merchantCurrency: { country?: string | null; payout_currency?: string | null }
+): string {
   switch (reward.reward_type) {
     case 'discount':
+      // Plain discounts without a positive value stay redeemable (the
+      // RPC's valued guard covers only the valued types), so render a
+      // generic label instead of "undefined"/zero off.
+      if (reward.discount_value == null || reward.discount_value <= 0) {
+        return 'Apply this code at checkout to receive your discount.';
+      }
       if (reward.discount_type === 'percentage') {
         return `Apply this code at checkout to receive ${reward.discount_value}% off your order.`;
       }
-      return `Apply this code at checkout to receive ₦${reward.discount_value?.toLocaleString()} off your order.`;
+      // Same formatter as the rewards catalog: fixed-value labels render
+      // in the merchant's own payout currency (NGN fallback matches the
+      // previous hardcoded symbol when the merchant row is unreadable).
+      return `Apply this code at checkout to receive ${formatMerchantCurrency(
+        reward.discount_value ?? 0,
+        {
+          country: merchantCurrency.country ?? null,
+          payout_currency: merchantCurrency.payout_currency ?? null,
+        },
+        { maximumFractionDigits: 0 }
+      )} off your order.`;
     case 'free_shipping':
       return 'Apply this code at checkout to receive free shipping on your order.';
     case 'free_product':
@@ -210,6 +230,15 @@ export async function POST(request: NextRequest) {
       reward_value: redemption.reward_value,
     });
 
+    // Merchant currency for fixed-value instruction labels (country and
+    // payout_currency are anon-granted published columns, so this read
+    // is safe under RLS; failures fall back to the NGN default below).
+    const { data: merchantRow } = await supabase
+      .from('merchants')
+      .select('country, payout_currency')
+      .eq('id', parsed.data.merchant_id)
+      .maybeSingle();
+
     return NextResponse.json({
       success: true,
       message: 'Reward redeemed successfully',
@@ -222,11 +251,14 @@ export async function POST(request: NextRequest) {
         points_spent: redemption.points_spent,
         new_balance: redemption.new_balance,
         expires_at: redemption.expires_at,
-        instructions: getRedemptionInstructions({
-          reward_type: catalog.reward_type,
-          discount_type: catalog.discount_type,
-          discount_value: redemption.reward_value ?? undefined,
-        }),
+        instructions: getRedemptionInstructions(
+          {
+            reward_type: catalog.reward_type,
+            discount_type: catalog.discount_type,
+            discount_value: redemption.reward_value ?? undefined,
+          },
+          merchantRow ?? {}
+        ),
       },
     });
   } catch (error) {

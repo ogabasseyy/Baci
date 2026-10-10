@@ -40,22 +40,18 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  -- Caller must own this merchant or be active staff on it (mirrors
-  -- getMerchantForApiRequest's owner-or-staff resolution; the route
-  -- performs no finer permission check today, so neither does this).
+  -- Caller must own this merchant. The RLS write policies on
+  -- customer_loyalty and points_transactions admit owners only, and the
+  -- pre-RPC session-client writes rejected staff through them; matching
+  -- that bound here keeps this DEFINER function from minting a broader
+  -- privilege than the tables allow. (The route resolves staff too, but
+  -- performs no finer permission check, so staff fail closed here.)
   PERFORM 1
   FROM public.merchants
   WHERE id = p_merchant_id
     AND user_id = auth.uid();
   IF NOT FOUND THEN
-    PERFORM 1
-    FROM public.staff_members
-    WHERE merchant_id = p_merchant_id
-      AND user_id = auth.uid()
-      AND status = 'active';
-    IF NOT FOUND THEN
-      RETURN jsonb_build_object('success', false, 'error', 'merchant_not_found');
-    END IF;
+    RETURN jsonb_build_object('success', false, 'error', 'merchant_not_found');
   END IF;
 
   -- The customer must exist under this merchant and be writable.

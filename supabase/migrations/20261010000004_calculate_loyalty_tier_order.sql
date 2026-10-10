@@ -9,6 +9,8 @@
 -- default sorted ladder is unchanged; NULL thresholds sort last and never
 -- match, as before. Non-numeric minPoints (merchant JSON is arbitrary)
 -- is treated the same as NULL instead of raising mid-transaction.
+-- Thresholds compare as NUMERIC so digit strings past the integer range
+-- simply never match instead of raising integer out of range.
 CREATE OR REPLACE FUNCTION "public"."calculate_loyalty_tier"("p_lifetime_points" integer, "p_merchant_id" "uuid") RETURNS character varying
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -32,13 +34,13 @@ BEGIN
         ORDER BY
             CASE
                 WHEN t.value->>'minPoints' ~ '^-?[0-9]+$'
-                THEN (t.value->>'minPoints')::INTEGER
+                THEN (t.value->>'minPoints')::NUMERIC
                 ELSE NULL
             END ASC NULLS LAST,
             t.ord
     LOOP
         IF (v_tier->>'minPoints') ~ '^-?[0-9]+$'
-           AND p_lifetime_points >= (v_tier->>'minPoints')::INTEGER THEN
+           AND p_lifetime_points >= (v_tier->>'minPoints')::NUMERIC THEN
             v_result := v_tier->>'name';
         END IF;
     END LOOP;
@@ -48,9 +50,11 @@ END;
 $$;
 
 -- Close the baseline's anon grant: tier names and thresholds are merchant
--- configuration, enumerable with arbitrary merchant IDs. Same shape as
--- the sibling loyalty RPCs (the DEFINER RPCs call this with owner
--- rights; direct callers must hold an authenticated session).
+-- configuration, enumerable with arbitrary merchant IDs. The
+-- authenticated grant stays (accepted tier-ladder enumeration): the
+-- invoker's-rights award_purchase_points calls this with the caller's
+-- rights, so revoking authenticated would break direct purchase awards.
+-- Same shape as the sibling loyalty RPCs.
 REVOKE ALL ON FUNCTION public.calculate_loyalty_tier(integer, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.calculate_loyalty_tier(integer, uuid)
   TO authenticated, service_role;

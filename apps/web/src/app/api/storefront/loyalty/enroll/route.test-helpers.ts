@@ -4,7 +4,6 @@ import { vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const mockRpc = vi.fn();
   const mockGetUser = vi.fn();
-  const mockMaybeSingle = vi.fn();
   const mockCheckCsrfProtection = vi.fn(
     async (..._args: unknown[]) =>
       ({
@@ -12,24 +11,13 @@ const mocks = vi.hoisted(() => {
         response: null as null,
       }) as { valid: boolean; response: null }
   );
-  const chain = {
-    select: vi.fn(),
-    eq: vi.fn(),
-    is: vi.fn(),
-    maybeSingle: mockMaybeSingle,
-  };
-  chain.select.mockReturnValue(chain);
-  chain.eq.mockReturnValue(chain);
-  chain.is.mockReturnValue(chain);
 
   return {
     mockRpc,
     mockGetUser,
-    mockMaybeSingle,
     mockCheckCsrfProtection,
     mockSupabase: {
       auth: { getUser: mockGetUser },
-      from: vi.fn(() => chain),
       rpc: mockRpc,
     },
   };
@@ -83,10 +71,6 @@ export function createSuccessResult() {
   };
 }
 
-export function mockOwnedCustomer() {
+export function mockSession() {
   mocks.mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
-  mocks.mockMaybeSingle.mockResolvedValue({
-    data: { id: CUSTOMER_ID },
-    error: null,
-  });
 }

@@ -20,7 +20,9 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   already_enrolled: 409,
   program_unavailable: 404,
   customer_not_found: 404,
+  guest_link_required: 409,
   invalid_input: 400,
+  out_of_range: 400,
   referral_code_collision: 503,
 };
 
@@ -28,16 +30,21 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   already_enrolled: 'Customer is already enrolled in the loyalty program',
   program_unavailable: 'Loyalty program not available for this merchant',
   customer_not_found: 'Customer not found for this merchant',
+  guest_link_required:
+    'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
   invalid_input: 'Invalid enrollment input',
+  out_of_range: 'Enrollment bonus is out of range',
   referral_code_collision:
     'Enrollment is temporarily unavailable, please try again',
 };
 
 // POST - Enroll a customer in loyalty program.
 //
-// The caller must own the customer row: the session user must match the
-// customer resolved for this merchant. The RPC re-verifies ownership, so
-// direct invocation with another customer's IDs fails closed too. The
+// The caller must own the customer row. Ownership is verified inside the
+// RPC (definer's rights): a route-side lookup cannot see unlinked guest
+// rows under RLS, so it cannot distinguish re-linkable guests from
+// missing rows. Missing, foreign, and soft-deleted rows all map to the
+// same 404 so callers cannot probe which customer IDs exist. The
 // response shape is kept stable for the use-loyalty.ts enroll() caller.
 export async function POST(request: NextRequest) {
   try {
@@ -91,72 +98,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve the caller's own live customer row for this merchant.
-    // A mismatch returns the same 404 as a missing customer so callers
-    // cannot probe which customer IDs exist. Soft-deleted rows are
-    // non-writable.
-    const { data: customer, error: customerError } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('merchant_id', parsed.data.merchant_id)
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
-      .maybeSingle();
-
-    if (customerError) {
-      logger.error({
-        message: 'Error resolving enrollment customer',
-        error: customerError,
-      });
-      return NextResponse.json(
-        { error: 'Failed to enroll in loyalty program' },
-        { status: 500 }
-      );
-    }
-
-    if (!customer || customer.id !== parsed.data.customer_id) {
-      // Guest-checkout rows carry a NULL user_id, so a logged-in shopper
-      // whose account predates their login misses the lookup above. Point
-      // them at re-linking (owned by the auth-session upsert flow) instead
-      // of a bare 404 — this reveals only the caller's own linkage state.
-      // Never auto-link here: enrollment writes bonus-bearing state. The
-      // hint requires a verified email (else anyone could probe it with an
-      // unverified address) and only matches the requested row when it is
-      // still unlinked, so it cannot confirm or deny other customers.
-      if (user.email && user.email_confirmed_at) {
-        // Look the requested row up by id and compare emails in code:
-        // a case-sensitive .eq('email') misses guest rows stored with
-        // different casing, and ilike would treat %/_ in the address as
-        // wildcards. The id match below keeps this a self-linkage hint.
-        const { data: guestRow } = await supabase
-          .from('customers')
-          .select('id, email')
-          .eq('merchant_id', parsed.data.merchant_id)
-          .eq('id', parsed.data.customer_id)
-          .is('user_id', null)
-          .is('deleted_at', null)
-          .maybeSingle();
-        if (
-          guestRow &&
-          guestRow.id === parsed.data.customer_id &&
-          typeof guestRow.email === 'string' &&
-          guestRow.email.toLowerCase() === user.email.toLowerCase()
-        ) {
-          return NextResponse.json(
-            {
-              error:
-                'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
-            },
-            { status: 409 }
-          );
-        }
-      }
-      return NextResponse.json(
-        { error: 'Customer not found for this merchant' },
-        { status: 404 }
-      );
-    }
-
+    // Ownership, liveness, and the guest re-link hint are all evaluated
+    // inside the RPC: it sees rows the caller's RLS grants hide. Never
+    // short-circuit here — every mismatch shape flows through the same
+    // mapping below.
     const { data, error } = await supabase.rpc('enroll_customer_loyalty', {
       p_merchant_id: parsed.data.merchant_id,
       p_customer_id: parsed.data.customer_id,

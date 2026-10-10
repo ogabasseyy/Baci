@@ -59,7 +59,11 @@ DECLARE
   v_referral_bonus integer := 0;
   v_referrer_customer_id uuid := NULL;
   v_referrer_balance integer := 0;
+  v_referrer_lifetime integer := 0;
   v_initial_points integer := 0;
+  v_initial_total bigint := 0;
+  v_referrer_new_balance bigint := 0;
+  v_referrer_new_lifetime bigint := 0;
   v_initial_tier text := 'Bronze';
   v_loyalty_id uuid;
   v_referral_code text;
@@ -97,6 +101,26 @@ BEGIN
     AND user_id = auth.uid();
 
   IF NOT FOUND THEN
+    -- Guest-checkout rows carry a NULL user_id, so a shopper whose row
+    -- predates their login misses the ownership check above. Shoppers
+    -- cannot read unlinked rows under RLS, so the re-link hint is
+    -- evaluated here with the definer's rights instead of the route.
+    -- Self-linkage only: the row must be unlinked, live, and email-match
+    -- the caller's own verified login address, else this stays a plain
+    -- customer_not_found (no oracle: the match key is server-side).
+    PERFORM 1
+    FROM public.customers AS guest
+    JOIN auth.users AS login ON login.id = auth.uid()
+    WHERE guest.id = p_customer_id
+      AND guest.merchant_id = p_merchant_id
+      AND guest.user_id IS NULL
+      AND guest.deleted_at IS NULL
+      AND guest.email IS NOT NULL
+      AND login.email_confirmed_at IS NOT NULL
+      AND pg_catalog.lower(guest.email) = pg_catalog.lower(login.email);
+    IF FOUND THEN
+      RETURN jsonb_build_object('success', false, 'error', 'guest_link_required');
+    END IF;
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
@@ -145,8 +169,9 @@ BEGIN
   -- Soft-deleted referrers are treated as unknown: their code must not
   -- credit a non-writable account.
   IF p_referral_code IS NOT NULL AND pg_catalog.btrim(p_referral_code) <> '' THEN
-    SELECT referrer.customer_id, referrer.points_balance
-    INTO v_referrer_customer_id, v_referrer_balance
+    SELECT referrer.customer_id, referrer.points_balance,
+      referrer.lifetime_points
+    INTO v_referrer_customer_id, v_referrer_balance, v_referrer_lifetime
     FROM public.customer_loyalty AS referrer
     WHERE referrer.merchant_id = p_merchant_id
       AND pg_catalog.upper(referrer.referral_code)
@@ -161,13 +186,31 @@ BEGIN
     FOR UPDATE;
 
     v_referrer_balance := COALESCE(v_referrer_balance, 0);
+    v_referrer_lifetime := COALESCE(v_referrer_lifetime, 0);
   END IF;
 
+  -- Totals are computed in bigint and range-checked (mirroring
+  -- adjust_loyalty_points): the settings columns are unbounded integers,
+  -- so two individually valid bonuses can sum past 2147483647 and would
+  -- otherwise overflow mid-write into a 500 instead of a clean reject.
+  -- Bonuses clamp non-negative above, so only the upper bound needs
+  -- checking. The referrer row stays locked from the resolution above,
+  -- so these verified addends also cover the settlement below.
   IF v_referrer_customer_id IS NOT NULL THEN
-    v_initial_points := v_signup_bonus + v_referral_bonus;
+    v_initial_total := v_signup_bonus::bigint + v_referral_bonus::bigint;
+    v_referrer_new_balance :=
+      v_referrer_balance::bigint + v_referral_bonus::bigint;
+    v_referrer_new_lifetime :=
+      v_referrer_lifetime::bigint + v_referral_bonus::bigint;
   ELSE
-    v_initial_points := v_signup_bonus;
+    v_initial_total := v_signup_bonus::bigint;
   END IF;
+  IF v_initial_total > 2147483647
+     OR v_referrer_new_balance > 2147483647
+     OR v_referrer_new_lifetime > 2147483647 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'out_of_range');
+  END IF;
+  v_initial_points := v_initial_total::integer;
   v_initial_tier := public.calculate_loyalty_tier(v_initial_points, p_merchant_id);
 
   -- Mint a referral code for the new member. The probe avoids the exception
@@ -223,52 +266,15 @@ BEGIN
     );
   END IF;
 
-  -- Referee half of "you both get X".
-  IF v_referrer_customer_id IS NOT NULL AND v_referral_bonus > 0 THEN
-    INSERT INTO public.points_transactions (
-      customer_id, merchant_id, type, points, balance_after,
-      source, source_id, description
-    ) VALUES (
-      p_customer_id, p_merchant_id, 'referral', v_referral_bonus, v_initial_points,
-      'loyalty_referral', v_loyalty_id::text, 'Referral bonus - new member signup'
-    );
-  END IF;
-
-  -- Referrer half, atomically with the enrollment. Balances are nullable
-  -- in the schema, so coalesce before crediting (legacy rows predate the
-  -- DEFAULT 0 backfill path). referral_count tracks code usage
-  -- (attribution), not paid bonuses: it increments even when the
-  -- configured bonus is zero.
+  -- Referral settlement lives in credit_loyalty_referral (migration 07):
+  -- straight-line writes, extracted because this file sits at the
+  -- repository's 300-line limit. Totals were range-checked above, so the
+  -- additions there cannot overflow.
   IF v_referrer_customer_id IS NOT NULL THEN
-    UPDATE public.customer_loyalty
-    SET
-      points_balance = COALESCE(points_balance, 0) + v_referral_bonus,
-      lifetime_points = COALESCE(lifetime_points, 0) + v_referral_bonus,
-      current_tier = public.calculate_loyalty_tier(
-        COALESCE(lifetime_points, 0) + v_referral_bonus, p_merchant_id
-      ),
-      tier_updated_at = CASE
-        WHEN public.calculate_loyalty_tier(
-          COALESCE(lifetime_points, 0) + v_referral_bonus, p_merchant_id
-        ) IS DISTINCT FROM current_tier
-        THEN pg_catalog.now()
-        ELSE tier_updated_at
-      END,
-      referral_count = COALESCE(referral_count, 0) + 1,
-      updated_at = pg_catalog.now()
-    WHERE merchant_id = p_merchant_id
-      AND customer_id = v_referrer_customer_id;
-
-    IF v_referral_bonus > 0 THEN
-      INSERT INTO public.points_transactions (
-        customer_id, merchant_id, type, points, balance_after,
-        source, source_id, description
-      ) VALUES (
-        v_referrer_customer_id, p_merchant_id, 'referral', v_referral_bonus,
-        v_referrer_balance + v_referral_bonus,
-        'loyalty_referral', v_loyalty_id::text, 'Referral bonus - friend joined'
-      );
-    END IF;
+    PERFORM public.credit_loyalty_referral(
+      p_merchant_id, p_customer_id, v_referrer_customer_id,
+      v_referral_bonus, v_initial_points, v_loyalty_id
+    );
   END IF;
 
   RETURN jsonb_build_object(

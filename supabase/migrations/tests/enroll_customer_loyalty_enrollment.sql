@@ -1,4 +1,4 @@
--- Enrollment cases for the enroll_customer_loyalty suite (cases 1-5b).
+-- Enrollment cases for the enroll_customer_loyalty suite (cases 1-5c).
 
 -- 1. Disabled program fail-closes.
 UPDATE public.loyalty_settings
@@ -68,6 +68,89 @@ SELECT pg_temp.assert_true(
      NULL
    ) AS result),
   'soft-deleted customer was allowed to enroll'
+);
+
+-- Guest-link fixtures: the hint is evaluated inside the RPC with the
+-- definer's rights (shoppers cannot read unlinked rows under RLS), so
+-- these logins need auth.users rows, not just JWT claims.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data
+)
+VALUES
+  ('01aa0000-0000-4000-8000-000000000109',
+   '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'guest-link@example.com',
+   'test', now(), now(), now(), '{}', '{}'),
+  ('01aa0000-0000-4000-8000-000000000110',
+   '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'guest-unverified@example.com',
+   'test', NULL, now(), now(), '{}', '{}');
+
+INSERT INTO public.customers (id, merchant_id, email, user_id)
+VALUES
+  ('01aa0000-0000-4000-8000-000000000019',
+   '01aa0000-0000-4000-8000-000000000001',
+   'Guest-Link@Example.COM', NULL),
+  ('01aa0000-0000-4000-8000-000000000020',
+   '01aa0000-0000-4000-8000-000000000001',
+   'guest-unverified@example.com', NULL),
+  ('01aa0000-0000-4000-8000-000000000021',
+   '01aa0000-0000-4000-8000-000000000001',
+   'someone-else@example.com', NULL);
+
+-- 3c. A logged-in shopper whose row predates their login gets a re-link
+-- hint instead of a bare 404: the unlinked row's email matches the
+-- caller's verified login address case-insensitively. No row is written.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000109');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'guest_link_required'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000019',
+     NULL
+   ) AS result),
+  'owned unlinked guest row did not return the re-link hint'
+);
+
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000019'
+  ),
+  'guest-link hint wrote an enrollment row'
+);
+
+-- 3d. The hint requires a verified login email: an unverified address
+-- stays a plain customer_not_found so it cannot probe linkage.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000110');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000020',
+     NULL
+   ) AS result),
+  'unverified guest login did not fail closed to customer_not_found'
+);
+
+-- 3e. The hint never confirms or denies other customers: a verified
+-- login asking about an unlinked row with a different email gets the
+-- same customer_not_found as a missing row.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000109');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000021',
+     NULL
+   ) AS result),
+  'foreign unlinked row did not fail closed to customer_not_found'
 );
 
 -- 4. Plain enrollment as the owning customer.
@@ -156,6 +239,8 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 -- 5c. Non-numeric minPoints never matches and never raises: merchant tier
 -- JSON is arbitrary, so 'abc' is treated like NULL (sorts last, matches
 -- nothing) instead of aborting the enrollment transaction on the cast.
+-- Digit strings past the integer range compare as NUMERIC: they simply
+-- never match instead of raising integer out of range.
 UPDATE public.loyalty_settings
 SET tiers = '[{"name": "Silver", "minPoints": "abc"}, {"name": "Bronze", "minPoints": 0}]'::jsonb
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -168,114 +253,17 @@ SELECT pg_temp.assert_true(
 );
 
 UPDATE public.loyalty_settings
-SET tiers = DEFAULT
+SET tiers = '[{"name": "Silver", "minPoints": 99999999999}, {"name": "Bronze", "minPoints": 0}]'::jsonb
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
--- 5d. Purchase awards coalesce NULL balances: legacy member rows predate
--- the DEFAULT 0 backfill, and without COALESCE the NULL propagates into
--- the UPDATE and the NOT NULL balance_after ledger, aborting checkout.
--- (Isolated second merchant: earning-config mutations must not leak into
--- the referral/status cases below.)
-SET LOCAL ROLE service_role;
-INSERT INTO public.merchants (id, email, business_name, slug)
-VALUES (
-  '02aa0000-0000-4000-8000-000000000001',
-  'loyalty-award-merchant@example.com',
-  'Loyalty Award Merchant',
-  'loyalty-award-merchant'
-);
-RESET ROLE;
-
-INSERT INTO public.customers (id, merchant_id, email)
-VALUES (
-  '02aa0000-0000-4000-8000-000000000011',
-  '02aa0000-0000-4000-8000-000000000001',
-  'award-a@example.com'
-);
-
-INSERT INTO public.loyalty_settings (
-  merchant_id, enabled, points_currency_unit, points_per_currency,
-  points_expiry_days
-) VALUES (
-  '02aa0000-0000-4000-8000-000000000001', true, 100, 1, 30
-);
-
-INSERT INTO public.customer_loyalty (
-  merchant_id, customer_id, points_balance, lifetime_points, current_tier
-) VALUES (
-  '02aa0000-0000-4000-8000-000000000001',
-  '02aa0000-0000-4000-8000-000000000011',
-  NULL, NULL, 'Bronze'
-);
-
 SELECT pg_temp.assert_true(
-  public.award_purchase_points(
-    '02aa0000-0000-4000-8000-000000000011',
-    '02aa0000-0000-4000-8000-000000000001',
-    '02aa0000-0000-4000-8000-0000000000a1',
-    250
-  ) = 2,
-  'award on NULL balances returned the wrong points'
-);
-
-SELECT pg_temp.assert_true(
-  (SELECT points_balance = 2 AND lifetime_points = 2
-   FROM public.customer_loyalty
-   WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
-     AND customer_id = '02aa0000-0000-4000-8000-000000000011')
-  AND (SELECT count(*) = 1
-   FROM public.points_transactions
-   WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
-     AND customer_id = '02aa0000-0000-4000-8000-000000000011'
-     AND type = 'earn'
-     AND points = 2
-     AND balance_after = 2),
-  'award on NULL balances wrote NULLs or skipped the ledger'
-);
-
--- 5e. NULL or zero earning divisors award 0 instead of erroring: NULL
--- points would slip past the <= 0 check and a zero divisor raises
--- division-by-zero, failing checkout.
-UPDATE public.loyalty_settings
-SET points_currency_unit = 0
-WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
-
-SELECT pg_temp.assert_true(
-  public.award_purchase_points(
-    '02aa0000-0000-4000-8000-000000000011',
-    '02aa0000-0000-4000-8000-000000000001',
-    '02aa0000-0000-4000-8000-0000000000a2',
-    250
-  ) = 0,
-  'zero divisor did not award 0'
+  public.calculate_loyalty_tier(
+    1500, '01aa0000-0000-4000-8000-000000000001'
+  ) = 'Bronze',
+  'out-of-range minPoints matched or raised'
 );
 
 UPDATE public.loyalty_settings
-SET points_currency_unit = NULL
-WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
-
-SELECT pg_temp.assert_true(
-  public.award_purchase_points(
-    '02aa0000-0000-4000-8000-000000000011',
-    '02aa0000-0000-4000-8000-000000000001',
-    '02aa0000-0000-4000-8000-0000000000a3',
-    250
-  ) = 0,
-  'NULL divisor did not award 0'
-);
-
--- 5f. First-purchase enrollment retries referral-code collisions like the
--- enrollment RPC: a blindly generated code can hit the case-insensitive
--- unique index and must not lose the award. (Forcing a real RNG collision
--- deterministically is infeasible in one session; pin the retry loop on
--- the function definition like the creation-lock assertions do.)
-SELECT pg_temp.assert_true(
-  pg_get_functiondef(
-    'public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure
-  ) LIKE '%EXCEPTION WHEN unique_violation%'
-  AND pg_get_functiondef(
-    'public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure
-  ) LIKE '%v_attempt >= 5%',
-  'award_purchase_points does not retry referral-code collisions'
-);
+SET tiers = DEFAULT
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 

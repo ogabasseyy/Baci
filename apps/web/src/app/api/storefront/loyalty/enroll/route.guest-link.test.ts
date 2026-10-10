@@ -3,37 +3,26 @@ import {
   CUSTOMER_ID,
   createRequest,
   MERCHANT_ID,
-  mockOwnedCustomer,
+  mockSession,
   enrollMocks as mocks,
   POST,
 } from './route.test-helpers';
 
-function mockGuestLogin(emailConfirmedAt: string | null) {
-  mocks.mockGetUser.mockResolvedValue({
-    data: {
-      user: {
-        id: 'new-login-id',
-        email: 'guest@example.com',
-        email_confirmed_at: emailConfirmedAt,
-      },
-    },
-  });
-}
-
+// The re-link hint is evaluated inside enroll_customer_loyalty with the
+// definer's rights (shoppers cannot read unlinked rows under RLS), so
+// these tests pin the route's mapping only. The email-match, casing,
+// and verified-email rules live in the SQL suite (cases 3c-3e).
 describe('POST /api/storefront/loyalty/enroll guest linkage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOwnedCustomer();
+    mockSession();
   });
 
-  it('returns 409 when the caller owns an unlinked guest row', async () => {
-    mockGuestLogin('2026-10-09T00:00:00.000Z');
-    mocks.mockMaybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: { id: CUSTOMER_ID, email: 'guest@example.com' },
-        error: null,
-      });
+  it('returns 409 with the re-link message when the RPC reports guest_link_required', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'guest_link_required' },
+      error: null,
+    });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
@@ -45,56 +34,21 @@ describe('POST /api/storefront/loyalty/enroll guest linkage', () => {
       error:
         'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
     });
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns 409 when the guest email differs only by casing', async () => {
-    mockGuestLogin('2026-10-09T00:00:00.000Z');
-    mocks.mockMaybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: { id: CUSTOMER_ID, email: 'Guest@Example.COM' },
-        error: null,
-      });
-
-    const response = await POST(
-      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
-    );
-
-    expect(response.status).toBe(409);
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 for an unverified email instead of the link hint', async () => {
-    mockGuestLogin(null);
-    mocks.mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+  it('returns 404 when the RPC reports customer_not_found for an unlinked row', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'customer_not_found' },
+      error: null,
+    });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
     );
     const body = await response.json();
 
+    expect(mocks.mockRpc).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 when the guest row email does not match', async () => {
-    mockGuestLogin('2026-10-09T00:00:00.000Z');
-    mocks.mockMaybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: { id: CUSTOMER_ID, email: 'someone-else@example.com' },
-        error: null,
-      });
-
-    const response = await POST(
-      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(404);
-    expect(body).toEqual({ error: 'Customer not found for this merchant' });
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 });

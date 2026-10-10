@@ -114,6 +114,72 @@ SELECT pg_temp.assert_true(
   'negative bonus config wrote negative balances or ledger rows'
 );
 
+-- 8b. Combined bonuses are range-checked in bigint: two individually
+-- valid settings summing past 2147483647 reject with out_of_range
+-- instead of overflowing mid-write into a 500, and a near-limit
+-- referrer rejects the same way. Neither attempt writes. (Fresh
+-- members 022/023 stay out of every other case.)
+INSERT INTO public.customers (id, merchant_id, email, user_id)
+VALUES
+  ('01aa0000-0000-4000-8000-000000000022', '01aa0000-0000-4000-8000-000000000001', 'overflow-r@example.com', '01aa0000-0000-4000-8000-000000000111'),
+  ('01aa0000-0000-4000-8000-000000000023', '01aa0000-0000-4000-8000-000000000001', 'overflow-e@example.com', '01aa0000-0000-4000-8000-000000000112');
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000111');
+SELECT public.enroll_customer_loyalty(
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000022', NULL);
+
+UPDATE public.customer_loyalty
+SET points_balance = 2147483600, lifetime_points = 2147483600
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000022';
+
+SELECT referral_code AS refcode FROM public.customer_loyalty
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000022' \gset
+
+UPDATE public.loyalty_settings
+SET signup_bonus_points = 1500000000, referral_bonus_points = 1500000000
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000112');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'out_of_range'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000023', :'refcode'
+   ) AS result)
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000023'
+  ),
+  'overflowing combined bonus was not rejected without a write'
+);
+
+UPDATE public.loyalty_settings
+SET signup_bonus_points = 50, referral_bonus_points = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'out_of_range'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000023', :'refcode'
+   ) AS result)
+  AND (SELECT points_balance = 2147483600 AND lifetime_points = 2147483600
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000022')
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000023'
+  ),
+  'overflowing referrer credit was not rejected without mutation'
+);
+
 -- 9. A signup bonus crossing a tier threshold enrolls above Bronze.
 UPDATE public.loyalty_settings
 SET signup_bonus_points = 1500, referral_bonus_points = 100

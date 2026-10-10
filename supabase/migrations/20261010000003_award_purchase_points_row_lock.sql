@@ -10,8 +10,12 @@
 -- shared with enroll_customer_loyalty, projecting only the columns the
 -- award consumes. First-purchase enrollment retries referral-code
 -- collisions like the enrollment RPC; NULL balances coalesce to 0 and a
--- NULL/zero earning divisor awards 0 instead of erroring. Grants are
--- preserved by CREATE OR REPLACE.
+-- NULL/zero earning divisor awards 0 instead of erroring. Invoker's
+-- rights are preserved (no SECURITY DEFINER): this function accepts
+-- arbitrary IDs and writes loyalty data. Anonymous execution is revoked
+-- below: the award calls calculate_loyalty_tier with the caller's
+-- rights, and that function no longer grants anon, so an advertised anon
+-- award would only fail mid-transaction on the tier call.
 CREATE OR REPLACE FUNCTION "public"."award_purchase_points"("p_customer_id" "uuid", "p_merchant_id" "uuid", "p_order_id" "uuid", "p_order_total" numeric) RETURNS integer
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
@@ -150,3 +154,8 @@ BEGIN
     RETURN v_points_earned;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
+  TO authenticated, service_role;

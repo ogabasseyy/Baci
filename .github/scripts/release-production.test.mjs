@@ -202,6 +202,11 @@ test('refuses inherited worker-deploy safety overrides', () => {
     () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_WORKFLOW_REPO: 'fork/other' }),
     /BACI_DEPLOY_WORKFLOW_REPO/
   );
+  assert.doesNotThrow(() => assertCleanWorkerDeployEnv({ GH_HOST: 'github.com' }));
+  assert.throws(
+    () => assertCleanWorkerDeployEnv({ GH_HOST: 'ghe.example.com' }),
+    /GH_HOST/
+  );
 });
 
 test('requires a stable serving deployment across verification reads', () => {

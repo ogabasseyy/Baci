@@ -5,7 +5,7 @@ import test from 'node:test';
 const script = new URL('./verify-coordinated-release.sh', import.meta.url);
 const sha = 'b'.repeat(40);
 const run = overrides => spawnSync('bash', [script.pathname], {
-  env: { ...process.env, GITHUB_SHA: sha, EXPECTED_RELEASE_SHA: '', COORDINATION_ID: '', ...overrides },
+  env: { ...process.env, GITHUB_SHA: sha, GITHUB_EVENT_NAME: '', EXPECTED_RELEASE_SHA: '', COORDINATION_ID: '', ...overrides },
   encoding: 'utf8',
 });
 

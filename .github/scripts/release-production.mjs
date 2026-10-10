@@ -120,6 +120,12 @@ export function assertCleanWorkerDeployEnv(env = process.env) {
   if (env.BACI_DEPLOY_WORKFLOW_REPO) {
     throw new Error(`refusing release with BACI_DEPLOY_WORKFLOW_REPO=${env.BACI_DEPLOY_WORKFLOW_REPO}; unset it so promotion queries the canonical repository`);
   }
+  // gh resolves unqualified repos against GH_HOST, so an inherited
+  // enterprise host would silently redirect every run query and
+  // dispatch away from the canonical repository validated above.
+  if (env.GH_HOST && String(env.GH_HOST).toLowerCase() !== 'github.com') {
+    throw new Error(`refusing release with GH_HOST=${env.GH_HOST}; unset it so gh queries github.com`);
+  }
 }
 
 export function shouldHoldReleaseLock(error) {

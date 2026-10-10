@@ -22,7 +22,7 @@ export interface CartReviewOptions {
 export function useCartReview(options: CartReviewOptions) {
   const { cart, cartUrl, busy, setCartError } = options;
   const canReviewCart =
-    cart.length > 0 || hasReviewableHandoffLines(cartUrl);
+    (cart.length > 0 && !!cartUrl) || hasReviewableHandoffLines(cartUrl);
   const handleViewCart = () => {
     if (busy.current || !canReviewCart) return;
     try {

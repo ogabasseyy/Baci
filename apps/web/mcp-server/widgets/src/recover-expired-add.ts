@@ -26,6 +26,11 @@ export interface RecoveredCartAdd {
   skippedSurvivors: SkippedSurvivor[];
 }
 
+// Server cart capacity, mirrored from the store/migration 20-line cap:
+// the served widget must stay dependency-free, so this cannot be
+// imported — keep it in lockstep with guest-cart-store MAX_LINES.
+const SERVER_CART_CAPACITY = 20;
+
 /**
  * Recovers an add against an expired or evicted cart: retries once without
  * the stale token so the server mints a fresh cart, then replays the
@@ -84,6 +89,18 @@ export async function recoverCartAdd(
   cart: CartItem[]
 ): Promise<RecoveredCartAdd> {
   const survivors = cart.filter((item) => item.product.id !== productId);
+  // Local capacity gate: twenty survivors plus one more line can never
+  // fit the server cap, so refuse before minting — minting first would
+  // orphan a partial cart and burn a creation-quota slot on every retry,
+  // while the shopper only needs to remove a line. (A dead survivor that
+  // would have freed a slot resolves the same way: the shopper removes
+  // any line and the retry fits.) The synthetic result flows into the
+  // existing full-cart UX, which names the remedy.
+  if (survivors.length >= SERVER_CART_CAPACITY)
+    return {
+      result: { structuredContent: { success: false, cart_full: true } },
+      skippedSurvivors: [],
+    };
   if (cartToken) {
     if (
       parseCartToolOutput(readStructuredContent(result))?.cart_expired !== true

@@ -143,19 +143,11 @@
       "expected_output_url": null
     },
     {
-      "description": "Save a guest cart and review it on the website.",
-      "user_prompt": "Using Ogabassey, add one Apple 20W fast charger to my cart and let me review it on the website.",
+      "description": "Share a cart handoff link, then save it to the persistent guest cart.",
+      "user_prompt": "Using Ogabassey, give me a link that adds one Apple 20W fast charger to my cart on the website, then save it to my guest cart so I can keep shopping in chat.",
       "file_attachment_urls": null,
-      "tools_triggered": "update_ogabassey_guest_cart",
-      "expected_output": "Saves one item to the guest cart and opens an Ogabassey review URL; the shopper can review the cart on Ogabassey before checkout.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Prepare a cart handoff link for a simple physical product.",
-      "user_prompt": "Using Ogabassey, give me a link that adds one Apple 20W fast charger to my cart on the website.",
-      "file_attachment_urls": null,
-      "tools_triggered": "prepare_storefront_cart_link",
-      "expected_output": "Returns an Ogabassey handoff URL for one item; the item is added only if the shopper opens that URL and reviews the cart before checkout.",
+      "tools_triggered": "prepare_storefront_cart_link, update_ogabassey_guest_cart",
+      "expected_output": "Returns an Ogabassey handoff URL for one item, then saves it to the guest cart with a review URL; the shopper can review the cart on Ogabassey before checkout.",
       "expected_output_url": null
     },
     {

@@ -215,3 +215,69 @@ it('passes a live token result through without replaying', async () => {
   ).resolves.toEqual({ result: current, skippedSurvivors: [] });
   expect(callTool).not.toHaveBeenCalled();
 });
+
+function survivorAt(index: number) {
+  return {
+    product: { ...product, id: `33333333-3333-4333-8333-${index.toString(16).padStart(12, '0')}` },
+    quantity: 1,
+  };
+}
+
+it('refuses a full local cart before minting instead of orphaning one', async () => {
+  const token = 'a'.repeat(64);
+  const expired = { structuredContent: { success: false, cart_expired: true } };
+  const callTool = vi.fn();
+  const survivors = Array.from({ length: 20 }, (_, index) =>
+    survivorAt(index)
+  );
+  await expect(
+    recoverCartAdd(callTool, expired, product.id, 1, token, [
+      { product, quantity: 1 },
+      ...survivors,
+    ])
+  ).resolves.toEqual({
+    result: { structuredContent: { success: false, cart_full: true } },
+    skippedSurvivors: [],
+  });
+  // No retry mint: every mint here would orphan a partial cart and burn a
+  // creation-quota slot while the shopper only needs to remove a line.
+  expect(callTool).not.toHaveBeenCalled();
+});
+
+it('refuses a full tokenless cart without replaying', async () => {
+  const minted = success(fresh, [product.id]);
+  const callTool = vi.fn();
+  const survivors = Array.from({ length: 20 }, (_, index) =>
+    survivorAt(index)
+  );
+  await expect(
+    recoverCartAdd(callTool, minted, product.id, 1, undefined, [
+      { product, quantity: 1 },
+      ...survivors,
+    ])
+  ).resolves.toEqual({
+    result: { structuredContent: { success: false, cart_full: true } },
+    skippedSurvivors: [],
+  });
+  expect(callTool).not.toHaveBeenCalled();
+});
+
+it('recovers a cart with one free slot', async () => {
+  const token = 'a'.repeat(64);
+  const expired = { structuredContent: { success: false, cart_expired: true } };
+  const survivors = Array.from({ length: 19 }, (_, index) =>
+    survivorAt(index)
+  );
+  const ids = [product.id, ...survivors.map((item) => item.product.id)];
+  const callTool = vi.fn();
+  for (let filled = 1; filled <= ids.length; filled += 1) {
+    callTool.mockResolvedValueOnce(success(fresh, ids.slice(0, filled)));
+  }
+  const result = await recoverCartAdd(callTool, expired, product.id, 1, token, [
+    { product, quantity: 1 },
+    ...survivors,
+  ]);
+  expect(result.result).toEqual(success(fresh, ids));
+  expect(result.skippedSurvivors).toEqual([]);
+  expect(callTool).toHaveBeenCalledTimes(20);
+});

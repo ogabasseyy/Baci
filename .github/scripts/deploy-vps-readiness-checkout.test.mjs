@@ -28,6 +28,7 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
       '.github/scripts/check-gigl-cutover-latch.sh\n' +
       '.github/scripts/resolve-gigl-latch-identity.sh\n' +
       '.github/scripts/gigl-dotenv.sh\n' +
+      '.github/scripts/verify-coordinated-release.sh\n' +
       '.github/filters/deploy.yml\n'
   );
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);

@@ -8,20 +8,21 @@ function productionTypeScriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return productionTypeScriptFiles(path);
-    return /\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')
-      ? [path]
-      : [];
+    // Test files take several spellings: *.test.ts, *.spec.ts, and support
+    // modules such as *.test-helpers.ts / *.test-support.ts / *.test-fixture.ts.
+    const isTestFile =
+      /\.test([.-]|$)/.test(entry.name) || /\.spec\.[jt]sx?$/.test(entry.name);
+    return /\.tsx?$/.test(entry.name) && !isTestFile ? [path] : [];
   });
 }
 
 describe('search analytics service-role boundary', () => {
   it('allows only the submissions route to import the ingestion edge', () => {
+    // Match any specifier resolving to the edge module: alias or relative,
+    // either quote style, static or dynamic import, including re-exports.
+    const edgeSpecifierPattern = /server-analytics-client['"`]/;
     const importers = productionTypeScriptFiles(sourceRoot)
-      .filter((path) =>
-        readFileSync(path, 'utf8').includes(
-          "from '@/lib/search/server-analytics-client'"
-        )
-      )
+      .filter((path) => edgeSpecifierPattern.test(readFileSync(path, 'utf8')))
       .map((path) => relative(sourceRoot, path));
 
     expect(importers).toEqual(['app/api/search/submissions/route.ts']);
@@ -32,7 +33,7 @@ describe('search analytics service-role boundary', () => {
       .filter((path) => {
         const source = readFileSync(path, 'utf8');
         return (
-          source.includes("'search-analytics'") &&
+          /['"`]search-analytics['"`]/.test(source) &&
           !path.endsWith('lib/supabase/service.ts')
         );
       })

@@ -25,6 +25,38 @@ function unavailable() {
   );
 }
 
+/**
+ * Platform-host tenant binding (#3581). On shared platform hosts the request
+ * URL carries no merchant identity, so the body's pathPrefix alone confers no
+ * authority: any same-origin page could attribute searches to another
+ * merchant's slug. Bind it to the page the submission came from instead —
+ * browsers forbid scripts from setting Referer, so a same-origin attacker's
+ * fetch carries the attacker's own page (never the victim slug path), while
+ * legitimate storefront pages always submit from /<slug>/... under the app's
+ * strict-origin-when-cross-origin policy. Returns '' when the binding fails
+ * so the lookup below sheds the telemetry as an unknown storefront.
+ */
+function resolvePlatformSlug(
+  request: NextRequest,
+  requestHost: string,
+  bodyPrefix: string
+): string {
+  const claimed = bodyPrefix.slice(1);
+  if (!claimed) return '';
+  const referer = request.headers.get('referer');
+  if (!referer) return '';
+  let refererUrl: URL;
+  try {
+    refererUrl = new URL(referer);
+  } catch {
+    return '';
+  }
+  if (refererUrl.host !== requestHost) return '';
+  const segment = refererUrl.pathname.split('/').filter(Boolean)[0];
+  if (!segment || segment.toLowerCase() !== claimed.toLowerCase()) return '';
+  return claimed;
+}
+
 // Same crawler tokens as the shared proxy regex, but token-boundaried: the
 // shared bare-substring match would shed real shoppers whose device model
 // merely contains "bot" (e.g. CUBOT Android phones). Kept local so proxy
@@ -124,7 +156,7 @@ export async function POST(request: NextRequest) {
       ? extractLocalhostSubdomain(host)
       : extractSubdomain(host, ROOT_DOMAIN);
     const identifier = isPlatformHost(host)
-      ? parsed.data.pathPrefix.slice(1)
+      ? resolvePlatformSlug(request, requestHost, parsed.data.pathPrefix)
       : subdomain
         ? RESERVED_SUBDOMAINS.has(subdomain)
           ? ''

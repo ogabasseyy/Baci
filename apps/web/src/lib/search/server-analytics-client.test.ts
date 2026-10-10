@@ -37,6 +37,27 @@ describe('recordSearchSubmission', () => {
     expect(result).toEqual({ error: null });
   });
 
+  it.each([
+    ['non-uuid merchant', { merchant_id: 'not-a-uuid' }],
+    ['empty query', { search_query: '' }],
+    ['oversized query', { search_query: 'q'.repeat(201) }],
+    ['negative count', { results_count: -1 }],
+    ['fractional count', { results_count: 1.5 }],
+    ['wrong method', { search_method: 'server' }],
+  ])('rejects %s before touching the service client', async (_label, override) => {
+    await expect(
+      recordSearchSubmission({
+        merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+        search_query: 'phone',
+        results_count: 27,
+        search_method: 'client',
+        ...override,
+      } as never)
+    ).rejects.toThrow('Invalid search submission row');
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it('propagates insert errors', async () => {
     mockInsert.mockResolvedValue({ error: { message: 'db down' } });
 

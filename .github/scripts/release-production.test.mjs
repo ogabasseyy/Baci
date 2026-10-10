@@ -12,6 +12,7 @@ import {
   originRepoSlug,
   readRuns,
   RUNS_MAX_PAGES,
+  shouldHoldReleaseLock,
 } from './release-production.mjs';
 
 test('accepts every canonical GitHub remote spelling', () => {
@@ -138,6 +139,13 @@ test('refuses inherited worker-deploy safety overrides', () => {
     () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_WORKFLOW_REPO: 'fork/other' }),
     /BACI_DEPLOY_WORKFLOW_REPO/
   );
+});
+
+test('holds the lock only on indeterminate dispatches', () => {
+  assert.equal(shouldHoldReleaseLock(Object.assign(new Error('x'), { indeterminateDispatch: true })), true);
+  assert.equal(shouldHoldReleaseLock(new Error('x')), false);
+  assert.equal(shouldHoldReleaseLock(null), false);
+  assert.equal(shouldHoldReleaseLock(undefined), false);
 });
 
 test('removes only the leaf lock directory', () => {

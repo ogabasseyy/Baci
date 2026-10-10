@@ -21,7 +21,7 @@ dirty or stale checkouts and concurrent deployments, rechecks main after worker
 preparation, verifies the dispatched SHA, rejects skipped publication, and checks
 the serving Vercel alias against the expected project, production state and SHA.
 It does not retry indeterminate dispatches or remove production overlap barriers.
-If it crashes, reconcile the existing release before removing its local lock.
+If it crashes or reports an indeterminate dispatch, reconcile the existing release before removing its local lock.
 
 ## Unattended integration boundary
 

@@ -15,6 +15,7 @@ test('dispatch correlation ignores unrelated or previously observed operator run
   assert.equal(selectCoordinatedRun([prior, unrelated, expected], [prior], 'unique'), expected);
   assert.equal(selectCoordinatedRun([prior, unrelated], [prior], 'unique'), null);
   assert.throws(() => selectCoordinatedRun([expected, { ...expected, databaseId: 4 }], [], 'unique'), /ambiguous/);
+  assert.equal(selectCoordinatedRun([expected, { ...expected }], [], 'unique'), expected);
 });
 
 test('in-flight enumeration covers approval-gated runs', () => {
@@ -186,6 +187,23 @@ test('an indeterminate dispatch is not retried', async () => {
   const setup = fixture({ dispatch: async () => { throw new Error('response lost'); } });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /response lost/);
   assert.equal(setup.calls.filter(name => name === 'dispatch').length, 1);
+});
+
+test('tags findRun failures as indeterminate dispatches', async () => {
+  for (const findRun of [async () => { throw new Error('dispatch outcome unknown'); }, async () => null]) {
+    const setup = fixture({ findRun });
+    const error = await coordinateRelease(setup.operations, coordinationId).then(
+      () => { throw new Error('expected rejection'); },
+      rejection => rejection
+    );
+    assert.equal(error.indeterminateDispatch, true);
+  }
+  const setup = fixture({ verifyLive: async () => { throw new Error('stale live alias'); } });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.equal(error.indeterminateDispatch, undefined);
 });
 
 test('refuses a successful workflow whose live alias remains stale', async () => {

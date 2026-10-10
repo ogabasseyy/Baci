@@ -3,6 +3,7 @@ import {
   sanitizeWalletReturnTo,
   type WalletReturnHref,
 } from '@/lib/sanitize-wallet-return-to';
+import { PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME } from '@/schemas/primary-wallet-card';
 
 const trimmedRequiredString = (message: string) =>
   z.string().trim().min(1, message);
@@ -20,7 +21,7 @@ function isPaystackCheckoutUrl(value: string): boolean {
     const parsed = new URL(value);
     return (
       parsed.protocol === 'https:' &&
-      parsed.hostname === 'checkout.paystack.com'
+      parsed.hostname === PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME
     );
   } catch {
     return false;

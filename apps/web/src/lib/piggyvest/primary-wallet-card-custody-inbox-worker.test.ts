@@ -165,6 +165,35 @@ describe('leased durable custody receipt worker', () => {
       'conflict',
     ]);
   });
+  it('blocks a receipt that omits the mapping reference without deferred retries', async () => {
+    const { pvb_reference: _dropped, ...envelope } = fixture.envelope;
+    const rawBody = Buffer.from(JSON.stringify(envelope));
+    const signature = createHmac(
+      'sha512',
+      fixture.configuration.webhookSecret
+    )
+      .update(rawBody)
+      .digest('hex');
+    const input = setup({
+      claims: [
+        {
+          ...fixture.claim,
+          rawHex: rawBody.toString('hex'),
+          signature,
+        },
+      ],
+    });
+    const totals = await input.run();
+    expect(totals.blocked).toBe(1);
+    expect(totals.deferred).toBe(0);
+    expect(input.resolveOperation).not.toHaveBeenCalled();
+    expect(input.execute).toHaveBeenLastCalledWith('inboxFinish', [
+      fixture.capability,
+      fixture.claim.eventId,
+      fixture.claim.token,
+      'conflict',
+    ]);
+  });
   it('rejects duplicate claims and unavailable capability before mapping', async () => {
     const input = setup();
     input.execute

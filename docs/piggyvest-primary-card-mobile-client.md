@@ -53,6 +53,34 @@ custody settlement, webhook delivery or availability of deployed restricted
 capabilities. Backend/card owners must verify those independently before an
 authorized end-to-end financial test. Card saving/reuse UI is outside this slice.
 
+## Reinstall / second-device recovery
+
+Every primary launch — stamped or stampless — mounts its checkout WebView
+only when this device's persisted record proves the signed-in user owns the
+URL reference. After a reinstall, cleared storage, or on a second device,
+that record is absent, so the launch fails closed to a blocked view that
+names the wallet return and states a completed checkout will still be found
+and credited. No funds are lost: the server still holds the operation, and
+the completion path re-validates server-side via `recover()`.
+
+Recovery for the owner:
+
+1. Return to the wallet on the original device if it still holds the
+   record — the pending funding resumes from the fund action.
+2. Otherwise start a new funding from the wallet on the current device.
+   One pending operation per merchant/user is enforced, and the server
+   binds completion to the operation that was actually charged, so the
+   new attempt cannot double-charge the old checkout.
+3. If the old checkout was completed (charged) before the device was
+   lost, its funds settle through the normal custody path and appear
+   after a wallet refresh — no re-entry of card details is needed.
+
+Deliberately not built: a server-backed mount-time ownership lookup.
+It would trade the offline fail-closed guarantee for availability in a
+case the blocked copy plus server-side recovery already covers. Revisit
+only with explicit product approval and a dedicated abuse analysis (the
+lookup input is caller-controlled deep-link params).
+
 ## Phone acceptance checklist (not executed)
 
 The earlier production primary-route 404 observation is a reported deployment

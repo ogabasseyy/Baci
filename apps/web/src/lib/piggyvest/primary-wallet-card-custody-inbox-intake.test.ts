@@ -107,6 +107,30 @@ describe('private signed raw-byte custody intake', () => {
       input.accept(fixture.rawBody, fixture.signature)
     ).rejects.toThrow();
   });
+  it('enqueues a minimally attributable receipt that omits the mapping reference', async () => {
+    const { pvb_reference: _dropped, ...envelope } = fixture.envelope;
+    const rawBody = Buffer.from(JSON.stringify(envelope));
+    const signature = createHmac(
+      'sha512',
+      fixture.configuration.webhookSecret
+    )
+      .update(rawBody)
+      .digest('hex');
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(fixture.ready)
+      .mockResolvedValueOnce('accepted');
+    const accept = createPrimaryCardCustodyInboxIntake({
+      configuration: fixture.configuration,
+      capability: fixture.capability,
+      execute,
+    });
+    expect(await accept(rawBody, signature)).toBe('accepted');
+    expect(execute.mock.calls[1]).toEqual([
+      'inboxEnqueue',
+      [fixture.capability, rawBody.toString('hex'), signature],
+    ]);
+  });
   it('does not take an unrelated owner source event from another source wallet', async () => {
     const input = setup();
     input.execute.mockReset().mockResolvedValue({

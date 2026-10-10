@@ -99,6 +99,11 @@ Operator-only readiness/once additionally require owner-approved secure environm
 configuration and `PIGGYVEST_PRIMARY_PAID_INTEREST_WORKER_APPROVED=true`.
 Both `PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED` and existing
 `PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED` must be true for the CLI worker.
+Intake additionally requires
+`PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED=true` (same rule as
+the bank inbox): set it only after installing and enabling the drain
+timer, or intake fails closed and the provider redelivers instead of
+queueing payouts nobody drains.
 Intake can persist receipts without API credentials; readiness/worker require
 the existing dedicated provider token/business/signing configuration and restricted
 evidence DB host/port/name/password/CA. Never use service-role credentials.

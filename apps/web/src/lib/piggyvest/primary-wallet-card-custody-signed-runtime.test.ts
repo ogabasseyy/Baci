@@ -77,4 +77,20 @@ describe('minimal signature-verified webhook and durable worker hook', () => {
     mocks.drain.mockRejectedValue(new Error('worker failed'));
     await expect(runtime().runWorker()).rejects.toThrow('worker failed');
   });
+  it('keeps draining queued receipts after rollback while new deliveries 503 loudly', async () => {
+    mocks.drain.mockResolvedValue({ claimed: 1, receiptsProcessed: 1 });
+    const input = runtime({
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+      PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false',
+    });
+    expect(
+      (await input.handleWebhook(fixture.rawBody, fixture.signature))?.status
+    ).toBe(503);
+    expect(mocks.acceptSigned).not.toHaveBeenCalled();
+    await expect(input.runWorker()).resolves.toEqual({
+      claimed: 1,
+      receiptsProcessed: 1,
+    });
+  });
 });

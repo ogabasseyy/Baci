@@ -2,7 +2,7 @@
 \ir primary-wallet-card-custody-inbox.integration.sql
 \ir ../../../../../supabase/migrations/20261008092000_primary_card_signed_inbox_conflict_block.sql
 SET SESSION AUTHORIZATION baci_primary_card_custody;
-UPDATE public.signed_inbox_fixture SET envelope=envelope||'{"eventId":"conflict-custody-receipt"}';
+UPDATE public.signed_inbox_fixture SET envelope=envelope||'{"eventId":"conflict-custody-receipt","pvb_reference":"canonical-conflict"}';
 UPDATE public.signed_inbox_fixture SET raw_hex=encode(convert_to(envelope::text,'UTF8'),'hex');
 DO $$ DECLARE fixture record; claim jsonb; element jsonb; BEGIN
  SELECT * INTO fixture FROM public.signed_inbox_fixture;

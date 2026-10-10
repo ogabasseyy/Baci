@@ -10,6 +10,7 @@ const env = {
   NODE_ENV: 'test' as const,
   VERCEL_ENV: 'production',
   PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED: 'true',
+  PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED: 'true',
   PIGGYVEST_PRIMARY_INTEGRATION_ID: fixture.config.integrationId,
   PIGGYVEST_PRIMARY_ENVIRONMENT: 'production',
   PIGGYVEST_PRIMARY_PAID_INTEREST_BUSINESS_ID: fixture.config.businessId,
@@ -59,6 +60,21 @@ it('keeps signing keys available while intake processing is rolled back', () => 
   expect(
     readPrimaryWalletPaidInterestInboxRuntime('intake', disabled)
   ).toBeNull();
+});
+it('refuses intake while no drain timer is attested, without blocking the worker', () => {
+  const unattested = {
+    ...env,
+    PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED: 'false',
+  };
+  expect(
+    readPrimaryWalletPaidInterestInboxRuntime('intake', unattested)
+  ).toBeNull();
+  expect(
+    readPrimaryWalletPaidInterestInboxRuntime('intake', env)?.businessId
+  ).toBe(fixture.config.businessId);
+  expect(
+    readPrimaryWalletPaidInterestInboxRuntime('worker', unattested)?.businessId
+  ).toBe(fixture.config.businessId);
 });
 it('drains queued receipts in worker mode after the inbox is disabled', () => {
   const config = readPrimaryWalletPaidInterestInboxRuntime('worker', {

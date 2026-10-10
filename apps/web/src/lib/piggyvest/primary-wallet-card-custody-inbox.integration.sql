@@ -144,3 +144,18 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM piggyvest_primary_card.signed_inbox WHERE event_id='deferred-signed-receipt' AND state='pending' AND reason='io_retry' AND attempts=50) THEN RAISE EXCEPTION 'deferred receipt exhausted'; END IF;
  IF (SELECT count(*) FROM public.customer_wallet_transactions)<>2 THEN RAISE EXCEPTION 'deferred retry credited funds'; END IF;
 END $$;
+\ir ../../../../../supabase/migrations/20261008094800_primary_card_signed_inbox_minimal_receipt.sql
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+UPDATE public.signed_inbox_fixture SET envelope=(envelope||'{"eventId":"minimal-signed-receipt"}')-'pvb_reference';
+UPDATE public.signed_inbox_fixture SET raw_hex=encode(convert_to(envelope::text,'UTF8'),'hex');
+DO $$ DECLARE fixture record; outcome text; BEGIN
+ SELECT * INTO fixture FROM public.signed_inbox_fixture;
+ outcome := piggyvest_primary_card.enqueue_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,fixture.raw_hex,repeat('a',128));
+ IF outcome<>'accepted' THEN RAISE EXCEPTION 'minimal receipt not durable'; END IF;
+ IF piggyvest_primary_card.enqueue_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,fixture.raw_hex,repeat('a',128))<>'duplicate' THEN RAISE EXCEPTION 'minimal redelivery not deduped'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary_card.signed_inbox WHERE event_id='minimal-signed-receipt' AND state='pending') THEN RAISE EXCEPTION 'minimal receipt lost'; END IF;
+ IF (SELECT count(*) FROM public.customer_wallet_transactions)<>2 THEN RAISE EXCEPTION 'minimal receipt credited funds'; END IF;
+END $$;

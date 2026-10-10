@@ -20,13 +20,35 @@ describe('approved issuer transfer policy (internal, not a provider signing cont
         fixture.now
       )
     ).toThrow());
-  it('drains pre-expiry transfers past the integration deadline', () =>
-    expect(
-      assertPrimaryCardTransferPolicy(
-        fixture.configuration,
-        Date.parse('2027-01-01T00:00:00Z')
-      )
-    ).toEqual(parsed));
+  it('drains past the integration deadline only with a freshly signed policy', () => {
+    const resign = (expiresAt: string) => {
+      const policyBytes = JSON.stringify({
+        ...fixture.policy,
+        expiresAt,
+      });
+      return {
+        ...fixture.configuration,
+        runtime: { ...fixture.configuration.runtime, expiresAt: '2026-10-07T20:00:30Z' },
+        policyBytes,
+        policySignature: createHmac(
+          'sha256',
+          fixture.configuration.policyIssuerKey
+        )
+          .update(policyBytes)
+          .digest('hex'),
+      };
+    };
+    const now = Date.parse('2027-01-01T00:00:00Z');
+    // Fresh authorization covering now: drains despite the lapsed
+    // integration deadline.
+    expect(assertPrimaryCardTransferPolicy(resign('2028-01-01T00:00:00Z'), now))
+      .toBeDefined();
+    // Lapsed authorization: the worker stops instead of transferring
+    // on a stale policy.
+    expect(() =>
+      assertPrimaryCardTransferPolicy(resign('2026-10-07T20:00:30Z'), now)
+    ).toThrow();
+  });
   it.each([
     { reusableBindingReady: false },
     { exhaustiveAliasContractApproved: false },

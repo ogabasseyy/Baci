@@ -76,8 +76,13 @@ export function createPrimaryCardCustodyInboxWorker(input: {
             parsed.data.eventCategory !== 'wallet-transfer' ||
             parsed.data.pvb_wallet !== readiness.sourceWalletId ||
             parsed.data.customer_id !==
-              config.crosswalkAuthority.treasuryWebhookCustomerId
+              config.crosswalkAuthority.treasuryWebhookCustomerId ||
+            !parsed.data.pvb_reference
           )
+            // A receipt without a mapping reference can never resolve
+            // to an operation, so it blocks immediately with its signed
+            // evidence retained instead of burning deferred retries
+            // until attempts exhaust.
             outcome = 'conflict';
           else {
             const operationId = await input.resolveOperation(parsed.data);

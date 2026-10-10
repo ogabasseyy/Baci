@@ -35,6 +35,9 @@ export const PiggyvestPrimarySavingsSchemas = {
     })
     .strict(),
   response: z
-    .object({ status: z.enum(['pending', 'confirmed']), operationId: z.uuid() })
+    .object({
+      status: z.enum(['pending', 'confirmed', 'cancelled']),
+      operationId: z.uuid(),
+    })
     .strict(),
 };

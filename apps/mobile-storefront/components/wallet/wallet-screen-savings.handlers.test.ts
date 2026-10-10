@@ -44,6 +44,36 @@ describe('wallet-screen-savings.handlers', () => {
       expect.stringContaining('PiggyVest confirms')
     );
   });
+  it('clears the operation without announcing success for a terminal cancellation', async () => {
+    const clearSavingsContributionAmount = jest.fn();
+    const clearIdempotencyKey = jest.fn();
+    const cancelSavingsReminder = jest.fn(async () => true);
+    const refetchWallet = jest.fn(async () => ({}));
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ status: 'cancelled' }),
+      clearSavingsContributionAmount,
+      clearIdempotencyKey,
+      cancelSavingsReminder,
+      createIdempotencyKey: () => 'cancelled-operation',
+      goal,
+      rawAmount: '4500',
+      refetchWallet,
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
+    expect(cancelSavingsReminder).not.toHaveBeenCalled();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Contribution cancelled',
+      expect.stringContaining('funds were released')
+    );
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Savings updated',
+      expect.any(String)
+    );
+  });
   beforeEach(() => {
     jest.clearAllMocks();
   });

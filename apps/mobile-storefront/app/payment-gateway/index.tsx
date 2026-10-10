@@ -28,22 +28,24 @@ export default function PaymentGatewayScreen() {
   const user = useAuthStore((state) => state.user);
   const customer = useAuthStore((state) => state.customer);
   const paramsData = controller.validatedParams.data;
-  // Launches without the user stamp predate it: resolve ownership from
-  // the device record instead of the params, so a second user cannot
-  // enter card details into the first user's checkout. The WebView
-  // stays unmounted until the record proves the current user owns this
-  // reference (or the launch is blocked).
-  const needsLegacyOwnershipCheck =
+  // Deep-link params are caller-controlled, so the user stamp alone
+  // proves nothing: an attacker can stamp the victim's own id next to
+  // another customer's authorization URL and reference. Every primary
+  // launch — stamped or stampless — resolves ownership from the device
+  // record instead of the params, so nobody can enter card details
+  // into a checkout they do not own. The WebView stays unmounted
+  // until the record proves the current user owns this reference (or
+  // the launch is blocked).
+  const needsOwnershipCheck =
     controller.validatedParams.isValid &&
-    controller.paymentKind === 'primary_wallet_card' &&
-    !paramsData?.userId;
-  const [legacyOwnership, setLegacyOwnership] = useState<
+    controller.paymentKind === 'primary_wallet_card';
+  const [ownership, setOwnership] = useState<
     'pending' | 'verified' | 'blocked'
   >('pending');
   useEffect(() => {
-    if (!needsLegacyOwnershipCheck) return;
+    if (!needsOwnershipCheck) return;
     let cancelled = false;
-    setLegacyOwnership('pending');
+    setOwnership('pending');
     (async () => {
       try {
         const record = await createPrimaryWalletCardFundingClient().readPending(
@@ -55,16 +57,16 @@ export default function PaymentGatewayScreen() {
         const owns =
           record?.operationId != null &&
           `pvb-first-primary-${record.operationId}` === paramsData?.reference;
-        if (!cancelled) setLegacyOwnership(owns ? 'verified' : 'blocked');
+        if (!cancelled) setOwnership(owns ? 'verified' : 'blocked');
       } catch {
-        if (!cancelled) setLegacyOwnership('blocked');
+        if (!cancelled) setOwnership('blocked');
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [
-    needsLegacyOwnershipCheck,
+    needsOwnershipCheck,
     paramsData?.merchantId,
     paramsData?.reference,
     user?.id,
@@ -101,9 +103,9 @@ export default function PaymentGatewayScreen() {
     // longer matches the stamp, block the whole primary screen — WebView
     // included — instead of letting another user enter card details into
     // the previous account's charge. The operation stays saved for its
-    // owner; going back returns to this device's wallet. Launches
-    // without the stamp (legacy links) keep only the completion-time
-    // ownership guard below.
+    // owner; going back returns to this device's wallet. This stamp
+    // comparison is only a fast path for account switches — the
+    // persisted-record check below is the authority for every launch.
     if (
       controller.paymentKind === 'primary_wallet_card' &&
       controller.validatedParams.data?.userId &&
@@ -125,11 +127,11 @@ export default function PaymentGatewayScreen() {
       );
     }
 
-    // Stampless legacy launches carry no identity to compare, so the
-    // device record is the authority: the WebView mounts only for a
-    // record that proves the current user owns this reference.
-    if (needsLegacyOwnershipCheck) {
-      if (legacyOwnership === 'pending') {
+    // Params carry no trustworthy identity, so the device record is
+    // the authority: the WebView mounts only for a record that proves
+    // the current user owns this reference.
+    if (needsOwnershipCheck) {
+      if (ownership === 'pending') {
         return (
           <PaymentProcessingView
             colors={colors}
@@ -138,7 +140,7 @@ export default function PaymentGatewayScreen() {
           />
         );
       }
-      if (legacyOwnership === 'blocked') {
+      if (ownership === 'blocked') {
         return (
           <PrimaryWalletCardPendingView
             colors={colors}

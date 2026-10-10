@@ -1,5 +1,8 @@
 import { expect, it } from '@jest/globals';
-import { primaryWalletCardSchemas as schemas } from './primary-wallet-card';
+import {
+  PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME,
+  primaryWalletCardSchemas as schemas,
+} from './primary-wallet-card';
 
 const operationId = '22222222-2222-4222-8222-222222222222';
 const response = {
@@ -74,4 +77,12 @@ it('requires explicit versioned financial consent and rejects arbitrary metadata
       saveCard: false,
     }).success
   ).toBe(false);
+});
+it('pins the Paystack checkout hostname in one constant', () => {
+  // Deliberate pin: a provider hostname migration must update this
+  // constant (and both schema call sites follow it), not slip through
+  // an unnoticed literal.
+  expect(PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME).toBe(
+    'checkout.paystack.com'
+  );
 });

@@ -54,7 +54,13 @@ export function createPrimaryCardCustodyInboxIntake(input: {
     if (!routing.ready) return 'not_ready' as const;
     if (event.pvb_wallet !== routing.sourceWalletId)
       return 'not_handled' as const;
-    if (!event.pvb_reference) return 'invalid_payload' as const;
+    // No reference gate: an authentic envelope with a verified type,
+    // category, wallet, and customer is attributable evidence even when
+    // the provider omits pvb_reference. Rejecting it here would 503
+    // every redelivery until retries exhaust with no durable receipt,
+    // while a completed treasury transfer may already exist. Enqueue
+    // the bytes; the worker blocks the unprocessable receipt for
+    // review with its evidence intact.
     return schemas.enqueue.parse(
       await input.execute('inboxEnqueue', [
         input.capability,

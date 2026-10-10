@@ -172,6 +172,41 @@ describe('launch to existing signed custody dispatcher', () => {
       mocks.query.mock.calls.filter(([sql]) => sql.includes('settle_custody'))
     ).toHaveLength(1);
   });
+  it('drains acknowledged receipts after the intake flags roll back', async () => {
+    const fetchImplementation = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        expect(init?.method).toBe('GET');
+        const parsed = new URL(String(url));
+        const payload = parsed.pathname.endsWith('/verify')
+          ? fixture.verification
+          : parsed.pathname.includes('/transaction/')
+            ? fixture.single
+            : parsed.pathname.endsWith(fixture.context.sourceWalletId)
+              ? fixture.sourceWallet
+              : fixture.destinationWallet;
+        return Response.json(payload);
+      }
+    );
+    const result = await runPrimaryCardCustodyLaunch({
+      mode: 'once',
+      environment: {
+        ...environment,
+        PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+        PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false',
+      },
+      readBinding: async () => bytes,
+      fetchImplementation,
+      now: () => fixture.now,
+    });
+    expect(result).toMatchObject({
+      status: 'batch_finished',
+      claimed: 1,
+      receiptsProcessed: 1,
+    });
+    expect(
+      mocks.query.mock.calls.filter(([sql]) => sql.includes('settle_custody'))
+    ).toHaveLength(1);
+  });
   it('does not finish successfully when independent provider observation fails', async () => {
     const fetchImplementation = vi.fn(async () => {
       throw new Error('private-provider-failure');

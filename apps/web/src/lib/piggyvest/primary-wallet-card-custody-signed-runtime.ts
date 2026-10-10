@@ -11,10 +11,19 @@ export function createPrimaryCardCustodySignedRuntime(input: {
   environment?: NodeJS.ProcessEnv;
   now?: () => number;
 }) {
+  // The inbox is constructed from the drain-capable config so the
+  // worker keeps settling queued receipts after an intake rollback;
+  // handleWebhook separately re-checks intake-mode availability so new
+  // deliveries still 503 loudly while the flags are off.
+  const nowMs = (input.now ?? Date.now)();
   const config = readPrimaryCardCustodyInboxRuntime(
     input.environment,
-    (input.now ?? Date.now)()
+    nowMs,
+    'drain'
   );
+  const intakeReady =
+    config !== null &&
+    readPrimaryCardCustodyInboxRuntime(input.environment, nowMs) !== null;
   const inbox = config
     ? createPrimaryCardCustodyInbox({ ...input, configuration: config })
     : null;
@@ -36,7 +45,7 @@ export function createPrimaryCardCustodySignedRuntime(input: {
       rawBody: Uint8Array,
       signature: string | null
     ): Promise<Response | null> {
-      if (!inbox)
+      if (!inbox || !intakeReady)
         return response(
           {
             error: 'Signed custody unavailable',

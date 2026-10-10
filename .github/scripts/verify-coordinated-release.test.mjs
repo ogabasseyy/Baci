@@ -21,3 +21,13 @@ test('coordinated releases require an exact matching SHA', () => {
 test('an optional expected SHA cannot be ignored on manual releases', () => {
   assert.notEqual(run({ EXPECTED_RELEASE_SHA: 'c'.repeat(40) }).status, 0);
 });
+test('uncoordinated manual dispatches fail closed', () => {
+  assert.notEqual(run({ GITHUB_EVENT_NAME: 'workflow_dispatch' }).status, 0);
+  assert.equal(
+    run({ GITHUB_EVENT_NAME: 'workflow_dispatch', COORDINATION_ID: 'unique', EXPECTED_RELEASE_SHA: sha }).status,
+    0
+  );
+});
+test('push releases without identifiers retain existing behavior', () => {
+  assert.equal(run({ GITHUB_EVENT_NAME: 'push' }).status, 0);
+});

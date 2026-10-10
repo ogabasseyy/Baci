@@ -474,6 +474,10 @@ jobs:
           .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
+          .github/scripts/coordinate-production-release.test.mjs
+          .github/scripts/release-production.test.mjs
+          .github/scripts/verify-coordinated-release.test.mjs
+          ci_scripts/validate-promote-record.test.mjs
           && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'

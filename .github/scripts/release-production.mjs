@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertLiveDeployment, coordinateRelease, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 
@@ -24,6 +24,12 @@ function gh(args) {
   return command('gh', args);
 }
 
+export function originRepoSlug(remoteUrl) {
+  const withoutSuffix = String(remoteUrl ?? '').replace(/\.git$/, '');
+  const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
+  return match ? match[1].toLowerCase() : '';
+}
+
 function readRuns(filter, paginate = false) {
   const output = gh(['api', `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=100&${filter}`,
     ...(paginate ? ['--paginate', '--slurp'] : [])]);
@@ -44,7 +50,7 @@ async function main() {
     const result = await coordinateRelease({
       verifyCheckout: async () => {
         if (command('git', ['status', '--porcelain', '--untracked-files=all'])) throw new Error('release checkout must be clean');
-        if (command('git', ['remote', 'get-url', 'origin']).replace(/\.git$/, '') !== `https://github.com/${repository}`) {
+        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'])) !== repository.toLowerCase()) {
           throw new Error('release checkout must use the canonical repository');
         }
         return command('git', ['rev-parse', 'HEAD']);
@@ -52,6 +58,7 @@ async function main() {
       readMain: async () => gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha']),
       listRuns: async () => ['queued', 'in_progress', 'waiting', 'requested', 'pending']
         .flatMap(status => readRuns(`status=${status}`, true)),
+      listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
       updateWorkers: async () => command('bash', ['vps-workers/deploy.sh'], false),
       verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
         `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false),
@@ -59,7 +66,10 @@ async function main() {
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
       findRun: async (_commit, baseline) => {
         for (let attempt = 0; attempt < 24; attempt++) {
-          const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch'), baseline, coordinationId);
+          // Paginated like listRuns: with 100+ recent dispatches the new
+          // run can fall outside the first page, which would wrongly
+          // report 'dispatch outcome unknown' on a healthy run.
+          const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch', true), baseline, coordinationId);
           if (candidate) return candidate;
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
@@ -76,14 +86,24 @@ async function main() {
         const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${alias.deploymentId}?${scope}`, '--method', 'GET']));
         assertLiveDeployment(deployment, commit, projectId);
       },
-    });
+    }, coordinationId);
     process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);
   } finally {
     rmSync(lockPath, { recursive: true });
   }
 }
 
-main().catch(error => {
-  process.stderr.write(`${error.message}\n`);
-  process.exitCode = 1;
-});
+const invokedDirectly = (() => {
+  try {
+    return !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  main().catch(error => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
+}

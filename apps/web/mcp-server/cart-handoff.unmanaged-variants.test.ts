@@ -19,7 +19,8 @@ function chainable(result: QueryResult) {
 const lower = '11111111-1111-4111-8111-111111111111';
 
 function unmanagedVariantProduct(
-  variants: Record<string, unknown>[]
+  variants: Record<string, unknown>[],
+  manageStock: boolean | null = false
 ): SupabaseClient {
   return {
     from: (table: string) =>
@@ -30,7 +31,7 @@ function unmanagedVariantProduct(
                 name: 'Phone',
                 slug: 'phone',
                 price: 100,
-                manage_stock: false,
+                manage_stock: manageStock,
                 has_variants: true,
                 has_condition_offers: false,
               },
@@ -97,6 +98,43 @@ it('fails open when strict and ordinary variants mix', async () => {
       { stock_quantity: 0, effective_policy: 'serialized_strict' },
       { stock_quantity: 0 },
     ])
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('reports unavailable for a null parent with zero-stock ordinary variants', async () => {
+  // Legacy null parents are managed inventory (isPublicVariantPurchasable):
+  // no purchasable option means unavailable, not a dead-end PDP.
+  const result = await check(
+    unmanagedVariantProduct([{ stock_quantity: 0 }], null)
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
+it('selects options for a null parent with a stocked ordinary variant', async () => {
+  const result = await check(
+    unmanagedVariantProduct([{ stock_quantity: 2 }], null)
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('selects options for a null parent with a then-unlimited variant', async () => {
+  const result = await check(
+    unmanagedVariantProduct(
+      [{ stock_quantity: 0, effective_policy: 'serialized_then_unlimited' }],
+      null
+    )
   );
   expect(result.structuredContent).toMatchObject({
     success: false,

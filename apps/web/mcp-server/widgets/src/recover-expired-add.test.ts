@@ -37,7 +37,8 @@ it('retries without the token and replays survivors into the fresh cart', async 
   const result = await recoverExpiredAdd(callTool, product.id, 1, [
     { product: second, quantity: 1 },
   ]);
-  expect(result).toEqual(success(fresh, [product.id, second.id]));
+  expect(result.result).toEqual(success(fresh, [product.id, second.id]));
+  expect(result.skippedSurvivors).toEqual([]);
   expect(callTool).toHaveBeenNthCalledWith(1, {
     product_id: product.id,
     quantity: 1,
@@ -57,7 +58,7 @@ it('returns the retry result untouched when it fails or selects variants', async
     recoverExpiredAdd(callTool, product.id, 1, [
       { product: second, quantity: 1 },
     ])
-  ).resolves.toBe(expired);
+  ).resolves.toEqual({ result: expired, skippedSurvivors: [] });
   expect(callTool).toHaveBeenCalledTimes(1);
 });
 
@@ -92,7 +93,12 @@ it('skips unavailable survivors and resolves with the last good replay', async (
     { product: second, quantity: 1 },
     { product: third, quantity: 1 },
   ]);
-  expect(result).toEqual(success(fresh, [product.id, third.id]));
+  expect(result.result).toEqual(success(fresh, [product.id, third.id]));
+  // The authoritative merge drops the skipped line from widget state, so
+  // the skip must be reported for the removal notice — never silent.
+  expect(result.skippedSurvivors).toEqual([
+    { productId: second.id, requiresVariantSelection: false },
+  ]);
   expect(callTool).toHaveBeenCalledTimes(3);
 });
 
@@ -115,7 +121,10 @@ it('skips stale survivors and resolves with the last good replay', async () => {
     { product: second, quantity: 1 },
     { product: third, quantity: 1 },
   ]);
-  expect(result).toEqual(success(fresh, [product.id, third.id]));
+  expect(result.result).toEqual(success(fresh, [product.id, third.id]));
+  expect(result.skippedSurvivors).toEqual([
+    { productId: second.id, requiresVariantSelection: true },
+  ]);
   expect(callTool).toHaveBeenCalledTimes(3);
 });
 
@@ -161,7 +170,8 @@ it('replays local survivors into a tokenless mint', async () => {
     undefined,
     [{ product, quantity: 1 }, { product: second, quantity: 2 }]
   );
-  expect(result).toEqual(success(fresh, [product.id, second.id]));
+  expect(result.result).toEqual(success(fresh, [product.id, second.id]));
+  expect(result.skippedSurvivors).toEqual([]);
   expect(callTool).toHaveBeenCalledTimes(1);
   expect(callTool).toHaveBeenCalledWith({
     product_id: second.id,
@@ -184,12 +194,12 @@ it('passes tokenless quota and failure responses through untouched', async () =>
     recoverCartAdd(callTool, denied, product.id, 1, undefined, [
       { product: second, quantity: 1 },
     ])
-  ).resolves.toBe(denied);
+  ).resolves.toEqual({ result: denied, skippedSurvivors: [] });
   await expect(
     recoverCartAdd(callTool, failed, product.id, 1, undefined, [
       { product: second, quantity: 1 },
     ])
-  ).resolves.toBe(failed);
+  ).resolves.toEqual({ result: failed, skippedSurvivors: [] });
   expect(callTool).not.toHaveBeenCalled();
 });
 
@@ -202,6 +212,6 @@ it('passes a live token result through without replaying', async () => {
       { product, quantity: 1 },
       { product: second, quantity: 1 },
     ])
-  ).resolves.toBe(current);
+  ).resolves.toEqual({ result: current, skippedSurvivors: [] });
   expect(callTool).not.toHaveBeenCalled();
 });

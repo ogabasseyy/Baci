@@ -20,6 +20,10 @@ describe('production MCP proxy configuration', () => {
     expect(compose).toContain(
       'MCP_GUEST_CART_WORKER_TOKEN=${MCP_GUEST_CART_WORKER_TOKEN}'
     );
+    // The above-the-line comment must agree: a stale service-role claim
+    // would mislead an operator into expecting service-role access.
+    expect(compose).toContain('worker-role-executable');
+    expect(compose).not.toContain('service-role-executable');
     expect(dockerfile).not.toContain('MCP_GUEST_CART_DIRECTORY');
     expect(dockerfile).not.toContain('/var/lib/baci/guest-carts');
     expect(dockerfile).toContain('USER node');

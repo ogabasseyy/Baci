@@ -338,7 +338,10 @@ never refreshes it, so rotation is a deploy operation:
    or HS256, signed by the project's JWT keys).
 2. Update the secret and redeploy before the old token's `exp`.
 3. A token with under 24 hours left refuses to start, so a stale secret
-   fails the deploy instead of dying silently mid-run.
+   fails the deploy instead of dying silently mid-run. Rotation is a
+   full-availability event: the token is required at startup, so a missing
+   or invalid secret stops catalog tools too until it is fixed. Runtime
+   storage failures, by contrast, degrade only the cart tool.
 
 If rotation is missed, cart RPCs start failing: the tool logs
 `storage_unavailable` with a token-free code and `/health` reports the

@@ -1,4 +1,26 @@
-import type { WidgetState } from './widget-types';
+import type { CartItem, WidgetState } from './widget-types';
+
+/**
+ * Reconciles displayed lines with a server response: another widget or a
+ * direct tool call may have changed sibling lines under the token, so keep
+ * only lines the server still holds (minus the just-handled product) and
+ * take the server quantities. Shared by the add and remove merges.
+ */
+export function reconcileCartLineQuantities(
+  previousCart: CartItem[] | undefined,
+  quantities: ReadonlyMap<string, number>,
+  excludeId: string
+): CartItem[] {
+  return (previousCart ?? [])
+    .filter(
+      (item) =>
+        item.product.id !== excludeId && quantities.has(item.product.id)
+    )
+    .map((item) => ({
+      ...item,
+      quantity: quantities.get(item.product.id) ?? item.quantity,
+    }));
+}
 
 /**
  * Drops one line from persisted widget state without a server round trip and

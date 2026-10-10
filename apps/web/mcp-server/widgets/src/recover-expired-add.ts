@@ -12,13 +12,29 @@ export interface CartUpdateCall {
   }): Promise<unknown>;
 }
 
+/** A survivor replay skipped as unrestorable: gone, or needs option choices. */
+export interface SkippedSurvivor {
+  productId: string;
+  /** True when the survivor needs option selection; false when the product is gone. */
+  requiresVariantSelection: boolean;
+}
+
+export interface RecoveredCartAdd {
+  /** The tool result for the normal authoritative merge. */
+  result: unknown;
+  /** Survivors skipped as unrestorable during replay, for the removal notice. */
+  skippedSurvivors: SkippedSurvivor[];
+}
+
 /**
  * Recovers an add against an expired or evicted cart: retries once without
  * the stale token so the server mints a fresh cart, then replays the
  * surviving widget lines into it so recovery preserves the shopper's cart
  * instead of dropping every other displayed item. Returns the last usable
- * tool result for the normal merge: the retry result when the retry failed
- * or found variant selection, otherwise the newest successful replay.
+ * tool result for the normal merge — the retry result when the retry failed
+ * or found variant selection, otherwise the newest successful replay —
+ * plus the survivors skipped as unrestorable, so the caller can surface
+ * their removal instead of silently dropping them from widget state.
  * Throws when a replay cannot complete: the caller merges the returned
  * result as authoritative, so a partial cart would silently drop the
  * unreplayed lines from widget state. The caller keeps local state and
@@ -29,7 +45,7 @@ export async function recoverExpiredAdd(
   productId: string,
   quantity: number,
   survivors: CartItem[]
-): Promise<unknown> {
+): Promise<RecoveredCartAdd> {
   const retry = await callCartTool({
     product_id: productId,
     quantity,
@@ -38,13 +54,17 @@ export async function recoverExpiredAdd(
   const retryContent = parseCartToolOutput(readStructuredContent(retry));
   const freshToken =
     retryContent?.success === true ? retryContent.cart_token : undefined;
-  if (!freshToken || survivors.length === 0) return retry;
+  if (!freshToken || survivors.length === 0)
+    return { result: retry, skippedSurvivors: [] };
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,
     survivors
   );
-  return replayed ?? retry;
+  return {
+    result: replayed.result ?? retry,
+    skippedSurvivors: replayed.skippedSurvivors,
+  };
 }
 
 /**
@@ -62,33 +82,41 @@ export async function recoverCartAdd(
   quantity: number,
   cartToken: string | undefined,
   cart: CartItem[]
-): Promise<unknown> {
+): Promise<RecoveredCartAdd> {
   const survivors = cart.filter((item) => item.product.id !== productId);
   if (cartToken) {
     if (
       parseCartToolOutput(readStructuredContent(result))?.cart_expired !== true
     )
-      return result;
+      return { result, skippedSurvivors: [] };
     return recoverExpiredAdd(callCartTool, productId, quantity, survivors);
   }
   const minted = parseCartToolOutput(readStructuredContent(result));
   const freshToken =
     minted?.success === true ? minted.cart_token : undefined;
-  if (!freshToken || survivors.length === 0) return result;
+  if (!freshToken || survivors.length === 0)
+    return { result, skippedSurvivors: [] };
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,
     survivors
   );
-  return replayed ?? result;
+  return {
+    result: replayed.result ?? result,
+    skippedSurvivors: replayed.skippedSurvivors,
+  };
 }
 
 async function replaySurvivorsIntoCart(
   callCartTool: CartUpdateCall,
   freshToken: string,
   survivors: CartItem[]
-): Promise<unknown | null> {
+): Promise<{
+  result: unknown | null;
+  skippedSurvivors: SkippedSurvivor[];
+}> {
   let result: unknown | null = null;
+  const skippedSurvivors: SkippedSurvivor[] = [];
   for (const survivor of survivors) {
     let response: unknown;
     try {
@@ -115,14 +143,22 @@ async function replaySurvivorsIntoCart(
     // needs option choices and a dead product is gone. Every other
     // failure shape (full cart, transient merchant/catalog/filesystem
     // error, unexpected token) is generic, so abort and preserve local
-    // state instead of merging a partial cart.
+    // state instead of merging a partial cart. Skips are reported, never
+    // silent: the caller merges the result as authoritative, which drops
+    // the skipped lines from widget state.
     if (
       content?.success === false &&
       (content.requires_variant_selection === true ||
         content.product_unavailable === true)
-    )
+    ) {
+      skippedSurvivors.push({
+        productId: survivor.product.id,
+        requiresVariantSelection:
+          content.requires_variant_selection === true,
+      });
       continue;
+    }
     throw new Error('Guest cart recovery did not complete; retry the add.');
   }
-  return result;
+  return { result, skippedSurvivors };
 }

@@ -209,9 +209,13 @@ export async function fetchAndAddCartItems({
         );
         const productForCart = {
           ...product,
+          // The anchor overrides stored policy (then-unlimited unmanages
+          // the line): addToCart gates on manage_stock, so a stale stored
+          // flag would silently reject a purchasable line. Stock follows.
+          manage_stock: managed,
           image: resolvedImage,
           imageLarge: resolvedImage,
-          stock: managed ? effectiveStock : product.stock,
+          stock: anchor || managed ? effectiveStock : product.stock,
         };
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity =

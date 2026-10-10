@@ -254,9 +254,11 @@ export function registerGuestCartTool(
             },
           };
         }
-        // Cart storage is misconfigured, so the server registered this tool
-        // degraded to keep catalog tools up: say the outage plainly instead
-        // of sending the model chasing product availability.
+        // Cart storage fails at runtime (outage, capacity gate, expired
+        // capability): degrade this call to keep catalog tools up, and say
+        // the outage plainly instead of sending the model chasing product
+        // availability. Startup stays fail-closed on a bad token — a secret
+        // bug must block the deploy — so only runtime calls degrade here.
         if (error instanceof GuestCartStorageUnavailableError) {
           // Storage outages are otherwise silent at the call site: log the
           // token-free errno for the ops alert trail (messages embed file

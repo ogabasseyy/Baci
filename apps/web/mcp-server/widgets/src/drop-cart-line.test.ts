@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { dropLineFromCartState } from './drop-cart-line';
+import {
+  dropLineFromCartState,
+  reconcileCartLineQuantities,
+} from './drop-cart-line';
 
 const product = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -41,4 +44,26 @@ it('clears the handoff URL when no lines survive', () => {
   expect(next.cart).toEqual([]);
   expect(next.cartUrl).toBeUndefined();
   expect(next.cartToken).toBeUndefined();
+});
+
+it('keeps server-held siblings with server quantities, minus the handled line', () => {
+  expect(
+    reconcileCartLineQuantities(
+      [
+        { product, quantity: 1 },
+        { product: second, quantity: 1 },
+      ],
+      new Map([
+        [product.id, 3],
+        ['33333333-3333-4333-8333-333333333333', 1],
+      ]),
+      second.id
+    )
+  ).toEqual([{ product, quantity: 3 }]);
+});
+
+it('reconciles to an empty cart when no sibling survives', () => {
+  expect(
+    reconcileCartLineQuantities(undefined, new Map(), product.id)
+  ).toEqual([]);
 });

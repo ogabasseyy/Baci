@@ -199,4 +199,86 @@ describe('Ogabassey cart handoff widget', () => {
     expect(screen.getByText('Phone One', { selector: '.cart-item-name' })).toBeTruthy();
     expect(screen.queryByText('Phone Two', { selector: '.cart-item-name' })).toBeNull();
   });
+
+  it('names a survivor the recovery had to drop instead of hiding it', async () => {
+    const fresh = 'b'.repeat(64);
+    const mintUrl = new URL('https://ogabassey.com/cart');
+    mintUrl.searchParams.set(
+      'guest_cart',
+      JSON.stringify([{ product_id: products[0].id, quantity: 1 }])
+    );
+    const callTool = vi
+      .fn()
+      .mockResolvedValueOnce({
+        structuredContent: { success: false, cart_expired: true },
+      })
+      .mockResolvedValueOnce({
+        structuredContent: {
+          success: true,
+          cart_url: mintUrl.toString(),
+          cart_token: fresh,
+        },
+      })
+      .mockResolvedValueOnce({
+        structuredContent: {
+          success: false,
+          product_unavailable: true,
+          product_id: products[1].id,
+        },
+      });
+    window.openai = {
+      toolOutput: { products },
+      widgetState: {
+        cart: [{ product: products[1], quantity: 1 }],
+        cartUrl: 'https://ogabassey.com/cart?item_id=phone-2',
+        cartToken: 'a'.repeat(64),
+      },
+      setWidgetState: vi.fn(),
+      callTool,
+      openExternal: vi.fn(),
+    };
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add to cart' })[0]);
+    });
+
+    expect(callTool).toHaveBeenCalledTimes(3);
+    expect(
+      screen.getByText(
+        'Phone Two is no longer available and was removed from your guest cart.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Phone One', { selector: '.cart-item-name' })
+    ).toBeTruthy();
+    expect(
+      screen.queryByText('Phone Two', { selector: '.cart-item-name' })
+    ).toBeNull();
+  });
+
+  it('explains a removal when the tool bridge is unavailable', () => {
+    window.openai = {
+      toolOutput: { products },
+      widgetState: {
+        cart: [{ product: products[0], quantity: 1 }],
+        cartUrl: 'https://ogabassey.com/cart?item_id=phone-1',
+        cartToken: 'a'.repeat(64),
+      },
+      // No callTool: a restored token-backed state the host cannot serve.
+    };
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Phone One' }));
+
+    expect(
+      screen.getByText(
+        'ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.'
+      )
+    ).toBeTruthy();
+    // Nothing was removed anywhere, so the line stays put.
+    expect(
+      screen.getByText('Phone One', { selector: '.cart-item-name' })
+    ).toBeTruthy();
+  });
 });

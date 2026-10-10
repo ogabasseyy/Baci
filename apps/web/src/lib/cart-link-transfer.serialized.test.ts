@@ -157,6 +157,14 @@ it('adds a then-unlimited line the stored stock would reject', async () => {
 
   await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
   expect(options.addToCart).toHaveBeenCalledTimes(1);
+  // The projected policy must reach addToCart: with stored
+  // manage_stock:true + stock 0 the provider guard would silently drop
+  // this purchasable line while the transfer reports success.
+  expect(options.addToCart).toHaveBeenCalledWith(
+    expect.objectContaining({ manage_stock: false, stock: 9999 }),
+    1,
+    undefined
+  );
 });
 
 it('keeps stored stock when the anchor lookup fails', async () => {

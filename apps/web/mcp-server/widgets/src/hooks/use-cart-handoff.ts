@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react';
-import { dropLineFromCartState } from '../drop-cart-line';
+import {
+  dropLineFromCartState,
+  reconcileCartLineQuantities,
+} from '../drop-cart-line';
 import { openOgabasseyUrl } from '../open-ogabassey-url';
 import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
@@ -84,7 +87,7 @@ export function useCartHandoff() {
       // merge: a stale token retries once without it, and a tokenless mint
       // replays pre-existing local lines into the fresh cart.
       const callTool = window.openai.callTool.bind(window.openai);
-      result = await recoverCartAdd(
+      const recovered = await recoverCartAdd(
         (args) => callTool('update_ogabassey_guest_cart', args),
         result,
         product.id,
@@ -92,6 +95,7 @@ export function useCartHandoff() {
         widgetState?.cartToken,
         widgetState?.cart ?? []
       );
+      result = recovered.result;
       if (requestId !== handoffRequestId.current) {
         pendingTab?.close();
         return;
@@ -164,22 +168,24 @@ export function useCartHandoff() {
       setWidgetState((previous) => ({
         ...previous!,
         cart: [
-          ...(previous?.cart
-            .filter(
-              (item) =>
-                item.product.id !== product.id &&
-                quantities.has(item.product.id)
-            )
-            .map((item) => ({
-              ...item,
-              quantity: quantities.get(item.product.id) ?? item.quantity,
-            })) || []),
+          ...reconcileCartLineQuantities(
+            previous?.cart,
+            quantities,
+            product.id
+          ),
           { product, quantity: quantities.get(product.id) ?? 1 },
         ],
         cartUrl,
         cartToken: content.cart_token,
       }));
-      syncCartNotice(lines, widgetState?.cart ?? [], product.id);
+      // The merge drops recovery-skipped survivors: name their removal.
+      // widgetState is pre-merge here, so it still holds the skipped lines.
+      syncCartNotice(
+        lines,
+        widgetState?.cart ?? [],
+        product.id,
+        recovered.skippedSurvivors
+      );
     } catch {
       pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;
@@ -200,7 +206,14 @@ export function useCartHandoff() {
       setWidgetState((previous) => dropLineFromCartState(previous, productId));
       return;
     }
-    if (!window.openai?.callTool) return;
+    // No tool bridge: say so like the add path instead of silently
+    // keeping a line the shopper asked to remove.
+    if (!window.openai?.callTool) {
+      setCartError(
+        'ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.'
+      );
+      return;
+    }
     busy.current = true;
     setIsSavingCart(true);
     setCartError(null);
@@ -238,27 +251,16 @@ export function useCartHandoff() {
         remaining.some((line) => line.product_id === productId)
       )
         throw new Error('Cart update failed');
-      // Another widget or direct tool call may have changed sibling lines
-      // under this token: reconcile displayed survivors with the server
-      // response like the add path does, instead of only dropping the
-      // clicked product.
       const remainingQuantities = new Map(
         remaining.map((line) => [line.product_id, line.quantity])
       );
       setWidgetState((previous) => ({
         ...previous!,
-        cart:
-          previous?.cart
-            .filter(
-              (item) =>
-                item.product.id !== productId &&
-                remainingQuantities.has(item.product.id)
-            )
-            .map((item) => ({
-              ...item,
-              quantity:
-                remainingQuantities.get(item.product.id) ?? item.quantity,
-            })) || [],
+        cart: reconcileCartLineQuantities(
+          previous?.cart,
+          remainingQuantities,
+          productId
+        ),
         cartUrl: content.cart_url,
         // An emptied cart deletes its server file, so the returned token is
         // dead: forget it now so the next add mints directly instead of

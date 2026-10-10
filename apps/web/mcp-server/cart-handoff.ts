@@ -194,6 +194,21 @@ export async function prepareCartHandoff({
       ) {
         unavailable = true;
       }
+      // Legacy null parents are managed inventory: isPublicVariantPurchasable
+      // gates ordinary rows on stock under a null parent instead of failing
+      // open, so mirror it — otherwise zero-stock ordinary variants return
+      // requires_variant_selection and send the shopper to a dead-end PDP.
+      // Strictly null only: an absent (undefined) policy stays fail-open.
+      if (
+        manageStock === null &&
+        !own.some(
+          (variant) =>
+            variant.effective_policy === 'serialized_then_unlimited' ||
+            Number(variant.stock_quantity ?? 0) >= quantity
+        )
+      ) {
+        unavailable = true;
+      }
     }
   }
 

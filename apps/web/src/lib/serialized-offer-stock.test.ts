@@ -56,6 +56,21 @@ describe('resolveSerializedOfferStock', () => {
     ).toBe(5);
   });
 
+  it('ignores dwindling base units for unlimited offers with a scalar', () => {
+    expect(
+      resolveSerializedOfferStock(
+        { stock_quantity: 5 },
+        { inventory_tracking_policy: 'serialized_then_unlimited', stock: 1 }
+      )
+    ).toBe(5);
+    expect(
+      resolveSerializedOfferStock(
+        { stock_quantity: 5 },
+        { inventory_tracking_policy: 'serialized_then_unlimited', stock: 0 }
+      )
+    ).toBe(5);
+  });
+
   it('inherits the folded base count when the unlimited offer quantity is null', () => {
     expect(
       resolveSerializedOfferStock(

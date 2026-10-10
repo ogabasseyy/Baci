@@ -202,6 +202,27 @@ describe('OrderDetailsItemsCard', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders snapshot labels without a ref when the offer was deleted', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: undefined,
+            offer_grade: 'A',
+            offer_condition_notes: 'Mint',
+            offer_labels_snapshotted: true,
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
+  });
+
   it('renders only the full ref when the offer labels are unresolved', () => {
     render(
       <OrderDetailsItemsCard

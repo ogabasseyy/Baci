@@ -20,9 +20,13 @@ function toFiniteStock(
  * Effective purchasable stock for a selected condition offer on a simple
  * product. Serialized policies fold exact units into product stock at the
  * snapshot layer (strict: units; unlimited: units when positive, else an
- * unbounded sentinel), so cap the finite advertised offer allocation by
- * that base count; a null offer quantity inherits it. Other policies
- * return undefined so callers apply their scalar/parent logic.
+ * unbounded sentinel). Only strict caps the finite advertised offer
+ * allocation by that base count: the unlimited policy permits sales
+ * after serialized inventory is exhausted and order creation binds
+ * only the offer allocation, so a dwindling positive unit count must
+ * not shrink the offer below its scalar. A null offer quantity
+ * inherits the base count under both policies. Other policies return
+ * undefined so callers apply their scalar/parent logic.
  */
 export function resolveSerializedOfferStock(
   offer: SerializedOfferStockLike,
@@ -40,7 +44,7 @@ export function resolveSerializedOfferStock(
   if (scalar === null) {
     return baseUnits === null ? undefined : Math.max(0, baseUnits);
   }
-  if (baseUnits === null) {
+  if (policy === 'serialized_then_unlimited' || baseUnits === null) {
     return Math.max(0, scalar);
   }
   return Math.min(Math.max(0, scalar), Math.max(0, baseUnits));

@@ -12,6 +12,12 @@ import type { Product } from '@/lib/products';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
 import {
+  applyOfferAllocationCap,
+  capQuantityToStrictPool,
+  getStrictSerializedPool,
+  resolveCappedOfferAllocation,
+} from './cart-stock-caps';
+import {
   DEFAULT_ASSURANCE_RATE,
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   generateCartItemId,
@@ -35,59 +41,6 @@ interface StorefrontCartProviderProps {
   merchantSlug?: string | null;
   deferValidationUntilIdle?: boolean;
   validationActivationTimeoutMs?: number;
-}
-
-type StrictPoolProductLike = Pick<
-  Product,
-  'inventory_tracking_policy' | 'stock_quantity'
->;
-
-/**
- * Shared base-unit pool for a strict serialized product. Hydration folds
- * exact units into stock_quantity while each offer add carries its own
- * allocation on stock, so sibling offer lines must aggregate against
- * this pool — not just their own scalar — mirroring the native
- * getExistingProductQuantityForStock check. Non-strict, unmanaged, and
- * non-finite shapes return undefined so callers keep scalar logic.
- */
-function getStrictSerializedPool(
-  product: StrictPoolProductLike
-): number | undefined {
-  if (product.inventory_tracking_policy !== 'serialized_strict') {
-    return undefined;
-  }
-  if (
-    typeof product.stock_quantity !== 'number' ||
-    !Number.isFinite(product.stock_quantity) ||
-    product.stock_quantity < 0
-  ) {
-    return undefined;
-  }
-  return Math.floor(product.stock_quantity);
-}
-
-/**
- * Units already in the cart for a simple (non-variant) product across
- * the base line and every sibling offer line. Voucher lines redeem
- * pre-reserved award units outside the shared pool, so they are
- * excluded from both the sum and the cap.
- */
-function getSimpleProductCartTotal(
-  cart: CartItem[],
-  productId: string,
-  excludeIndex = -1
-): number {
-  return cart.reduce(
-    (total, line, index) =>
-      index !== excludeIndex &&
-      line.id === productId &&
-      line.variantId == null &&
-      line.quizAwardId == null &&
-      line.quizVoucherToken == null
-        ? total + line.quantity
-        : total,
-    0
-  );
 }
 
 export function StorefrontCartProvider({
@@ -426,22 +379,13 @@ export function StorefrontCartProvider({
       return;
     }
 
-    // Offer lines carry their selected allocation on stock (unlimited
-    // offers carry a 9999 sentinel): cap the resulting line at it so two
-    // successive adds cannot exceed what checkout will reserve. The
-    // offer identity travels on the add options (merging matches it), so
-    // the same cap covers fresh and merged adds. Only voucher and
-    // non-finite-allocation lines skip the cap: order creation enforces
-    // finite offer scalars even on unmanaged parents (M24), so unmanaged
-    // offer lines keep the cap exactly like managed ones.
-    const cappedOfferAllocation =
-      !isQuizPrizeVoucherLine &&
-      normalizedOptions?.offerId != null &&
-      typeof productForCart.stock === 'number' &&
-      Number.isFinite(productForCart.stock) &&
-      productForCart.stock >= 0
-        ? Math.floor(productForCart.stock)
-        : undefined;
+    // The offer identity travels on the add options (merging matches
+    // it), so the same allocation cap covers fresh and merged adds.
+    const cappedOfferAllocation = resolveCappedOfferAllocation({
+      isVoucherLine: isQuizPrizeVoucherLine,
+      offerId: normalizedOptions?.offerId,
+      stock: productForCart.stock,
+    });
 
     // Strict serialized siblings share one base-unit pool: each offer
     // line also passes its own scalar cap, so without an aggregate the
@@ -487,21 +431,13 @@ export function StorefrontCartProvider({
         }
         // Sibling units outside the merging line: the merged line may
         // only take remaining pool headroom.
-        const poolCappedMerged =
-          strictPool === undefined
-            ? mergedQuantity
-            : Math.min(
-                mergedQuantity,
-                Math.max(
-                  0,
-                  strictPool -
-                    getSimpleProductCartTotal(
-                      previousCart,
-                      productForCart.id,
-                      existingIndex
-                    )
-                )
-              );
+        const poolCappedMerged = capQuantityToStrictPool({
+          strictPool,
+          cart: previousCart,
+          productId: productForCart.id,
+          excludeIndex: existingIndex,
+          quantity: mergedQuantity,
+        });
         if (strictPool !== undefined && poolCappedMerged <= 0) {
           return previousCart;
         }
@@ -533,17 +469,12 @@ export function StorefrontCartProvider({
         }
         // Fresh siblings share the pool with every existing simple line:
         // the new line may only take remaining headroom.
-        const poolCappedFresh =
-          strictPool === undefined
-            ? freshQuantity
-            : Math.min(
-                freshQuantity,
-                Math.max(
-                  0,
-                  strictPool -
-                    getSimpleProductCartTotal(previousCart, productForCart.id)
-                )
-              );
+        const poolCappedFresh = capQuantityToStrictPool({
+          strictPool,
+          cart: previousCart,
+          productId: productForCart.id,
+          quantity: freshQuantity,
+        });
         if (strictPool !== undefined && poolCappedFresh <= 0) {
           return previousCart;
         }
@@ -694,20 +625,16 @@ export function StorefrontCartProvider({
       const minimumOrderQuantity = item.minimum_order_quantity || 1;
       let nextQuantity =
         quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
-      // Cap offer lines at their carried allocation (same rule as adds):
-      // silent over-quantity updates would otherwise sail past checkout
-      // reservation. A zero allocation keeps the previous quantity
-      // instead of deleting the line; validation prunes dead lines.
-      if (
-        item.offerId != null &&
-        typeof item.stock === 'number' &&
-        Number.isFinite(item.stock)
-      ) {
-        const allocation = Math.floor(item.stock);
-        if (allocation <= 0) {
+      const allocationCap = applyOfferAllocationCap({
+        offerId: item.offerId,
+        stock: item.stock,
+        quantity: nextQuantity,
+      });
+      if (allocationCap) {
+        if ('keepPrevious' in allocationCap) {
           return previousCart;
         }
-        nextQuantity = Math.min(nextQuantity, allocation);
+        nextQuantity = allocationCap.quantity;
       }
       // Strict serialized siblings share one base-unit pool: a quantity
       // bump must also fit the pool headroom outside this line, or the
@@ -720,15 +647,17 @@ export function StorefrontCartProvider({
       ) {
         const strictPool = getStrictSerializedPool(item);
         if (strictPool !== undefined) {
-          const headroom = Math.max(
-            0,
-            strictPool -
-              getSimpleProductCartTotal(previousCart, item.id, targetIndex)
-          );
-          if (headroom <= 0) {
+          const poolCapped = capQuantityToStrictPool({
+            strictPool,
+            cart: previousCart,
+            productId: item.id,
+            excludeIndex: targetIndex,
+            quantity: nextQuantity,
+          });
+          if (poolCapped <= 0) {
             return previousCart;
           }
-          nextQuantity = Math.min(nextQuantity, headroom);
+          nextQuantity = poolCapped;
         }
       }
       nextCart[targetIndex] = {

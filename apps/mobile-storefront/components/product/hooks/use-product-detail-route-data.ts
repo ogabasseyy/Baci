@@ -85,8 +85,24 @@ export function useProductDetailRouteData({
     routeOfferIdParam != null &&
     routeOfferIdParam.length > 0 &&
     product?.offers_hydration_failed === true;
-  const routeOfferHydrationError = routeOfferHydrationFailed
-    ? 'This offer could not be loaded. Check your connection and try again.'
+  // Exact-match contract, second half: when offers hydrated successfully but
+  // the link's offer id is absent (removed or sold), the offer is unavailable
+  // — falling back to the parent default would silently advertise a live
+  // price for a dead link.
+  const routeOfferMissingFromHydratedOffers =
+    routeOfferIdParam != null &&
+    routeOfferIdParam.length > 0 &&
+    product?.offers_hydration_failed !== true &&
+    Array.isArray(product?.offers) &&
+    !product.offers.some(
+      (offer) => String(offer.id) === String(routeOfferIdParam)
+    );
+  const routeOfferUnavailable =
+    routeOfferHydrationFailed || routeOfferMissingFromHydratedOffers;
+  const routeOfferHydrationError = routeOfferUnavailable
+    ? routeOfferMissingFromHydratedOffers
+      ? 'This offer is no longer available. It may have been removed or sold.'
+      : 'This offer could not be loaded. Check your connection and try again.'
     : null;
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(

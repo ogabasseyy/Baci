@@ -193,6 +193,23 @@ const orderCreateSchemaBase = z
               'voucher_award_id'
             ),
           })
+          .refine(
+            (data) =>
+              !(
+                data.voucherAwardId ||
+                data.voucherToken ||
+                data.voucher_award_id ||
+                data.voucher_token
+              ) || !(data.offerId || data.offer_id),
+            {
+              // The voucher RPC's reserved-order branch ignores submitted
+              // item economics while the route recomputes VAT from the
+              // offer's live price: a cheaper same-product offer would
+              // understate the recorded tax on the prize order.
+              error:
+                'offerId/offer_id cannot be combined with a quiz-voucher redemption on one order item',
+            }
+          )
       )
       // Matches admin-order-edit's order-items cap: bounds per-line offer
       // verification fan-out (fetchLiveOrderOffers) on public requests.

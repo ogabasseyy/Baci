@@ -76,11 +76,16 @@ it('keeps an explicit condition authoritative over the live offer', () => {
   expect(mockCapturedRouteCondition).toBe('new');
 });
 
-it('clears the route condition when the offer id names no live offer', () => {
+it('fails closed when the offer id is absent from hydrated offers', () => {
   const { result } = setup({ slug: 'phone', offer_id: 'nope' });
 
+  // The offers array hydrated successfully, so a missing id means the offer
+  // is gone (removed/sold) — not a transient fetch failure. Do not fall back
+  // to the parent default's price; surface the unavailable path instead.
   expect(mockCapturedRouteCondition).toBeNull();
   expect(result.current.routeOfferId).toBeNull();
+  expect(result.current.routeOfferHydrationFailed).toBe(false);
+  expect(result.current.error).toMatch(/no longer available/);
 });
 
 it('fails closed when an exact offer link meets a hydration failure', () => {

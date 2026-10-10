@@ -419,6 +419,24 @@ describe('orderCreateSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects offer IDs on quiz-voucher lines', () => {
+    for (const voucher of [
+      { voucher_token: 'quiz-token' },
+      { voucherToken: 'quiz-token' },
+      { voucher_award_id: 'quiz-award' },
+      { voucherAwardId: 'quiz-award' },
+    ]) {
+      for (const offer of [{ offer_id: 'o1' }, { offerId: 'o1' }]) {
+        const result = orderCreateSchema.safeParse({
+          ...validOrder,
+          items: [{ ...validOrder.items[0], ...voucher, ...offer }],
+        });
+
+        expect(result.success).toBe(false);
+      }
+    }
+  });
+
   it('rejects mismatched voucher award ID aliases', () => {
     const result = orderCreateSchema.safeParse({
       ...validOrder,

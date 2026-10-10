@@ -6,7 +6,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261009120000_search_analytics_service_role_only_insert.sql',
+      'supabase/migrations/20261010000000_search_analytics_service_role_only_insert.sql',
     sha256: 'd140cb867145075c65b5f261293a363c7132b5a81b7c09579c4157fa176106eb',
   },
 ] as const;

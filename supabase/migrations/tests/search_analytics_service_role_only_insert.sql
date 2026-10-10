@@ -1,4 +1,4 @@
--- Regression contract for 20261009120000_search_analytics_service_role_only_insert.sql.
+-- Regression contract for 20261010000000_search_analytics_service_role_only_insert.sql.
 -- Proves the submissions endpoint is the only ingestion path: direct writes
 -- are denied for anon/authenticated while the owning merchant can still read.
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \

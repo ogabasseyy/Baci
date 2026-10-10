@@ -71,6 +71,7 @@ export const primaryBankInboxFixture = {
     NODE_ENV: 'test' as const,
     VERCEL_ENV: 'preview',
     PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true',
+    PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED: 'true',
     PIGGYVEST_PRIMARY_INTEGRATION_ID: config.integrationId,
     PIGGYVEST_PRIMARY_ENVIRONMENT: config.environment,
     PIGGYVEST_PRIMARY_MERCHANT_ID: config.scope.merchantId,

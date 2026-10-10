@@ -42,4 +42,29 @@ describe('primary card legacy webhook isolation', () => {
       })
     ).toBeNull();
   });
+  it.each([
+    'refund.processed',
+    'charge.dispute.create',
+  ])('keeps reversal-shaped %s deliveries retryable instead of acking them as noise', (event) => {
+    expect(
+      primaryWalletCardCheckoutWebhookBoundary({
+        event,
+        data: {
+          reference: 'provider-event-id',
+          transaction_reference: fixture.intent.reference,
+        },
+      })?.status
+    ).toBe(503);
+  });
+  it('acks reversal events against foreign references without effect', () => {
+    expect(
+      primaryWalletCardCheckoutWebhookBoundary({
+        event: 'refund.processed',
+        data: {
+          reference: 'provider-event-id',
+          transaction_reference: 'WAL-fixture',
+        },
+      })
+    ).toBeNull();
+  });
 });

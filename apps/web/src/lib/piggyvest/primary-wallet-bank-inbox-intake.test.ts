@@ -29,6 +29,19 @@ it('preserves old-deployment legacy continuation without a new secret or databas
   expect(result).toEqual({ outcome: 'disabled', response: null });
   expect(mocks.create).not.toHaveBeenCalled();
 });
+it('answers retryable 503 while the drain schedule is unattested', async () => {
+  const result = await dispatchPrimaryWalletBankInboxIntake({
+    rawBody: fixture.rawBody,
+    signature: fixture.signature,
+    env: {
+      ...fixture.env,
+      PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED: 'false',
+    },
+  });
+  expect(result.outcome).toBe('unavailable');
+  expect(result.response?.status).toBe(503);
+  expect(mocks.create).not.toHaveBeenCalled();
+});
 it.each([
   'accepted',
   'duplicate',

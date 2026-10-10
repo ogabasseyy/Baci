@@ -91,8 +91,12 @@ Regression tests first reproduced shared intake-role selection and mandatory tra
 
 The primary-card rail must stay disabled until this worker's systemd timer
 instance is installed and enabled; signed custody receipts would otherwise sit
-in the inbox with no settlement drain. The activation suite makes that ordering
-verifiable:
+in the inbox with no settlement drain. The checkout runtime enforces this:
+new reservations require `PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED=true`
+(and the transfer worker's `PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED=true`),
+each set only after that worker's timer is installed and enabled — without
+them initialize answers `PRIMARY_CARD_NOT_READY` while status recovery still
+drains. The activation suite makes that ordering verifiable:
 
 - `primary-wallet-card-custody-package.mjs` builds the sealed offline bundle
   (`custody.cjs`, `baci-primary-card-custody@.service`/`.timer` templates for

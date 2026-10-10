@@ -67,6 +67,56 @@ it('explains when a read-only refresh still has no verified account', async () =
   expect(screen.queryByLabelText('BVN')).toBeNull();
 });
 
+it('binds onboarding and refresh to the submitting account', async () => {
+  jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue({
+    provisioningStatus: 'pending',
+    requiresConsent: false,
+    account: null,
+  });
+  jest.mocked(piggyvestPrimaryWalletApi.read).mockResolvedValue({
+    provisioningStatus: 'pending',
+    requiresConsent: false,
+    account: null,
+  });
+  jest.mocked(piggyvestPrimaryWalletApi.create).mockClear();
+  jest.mocked(piggyvestPrimaryWalletApi.read).mockClear();
+  render(
+    <PiggyvestWalletSetupPanel
+      colors={Colors.dark}
+      merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+      needsPhone={false}
+      onSubmitPhone={async () => ({ success: true })}
+      onRefresh={jest.fn()}
+      onClose={jest.fn()}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Refresh PiggyVest account' })
+    ).toBeOnTheScreen()
+  );
+  // The client rejects a mismatched session before the BVN leaves the
+  // device, so a mid-flight switch cannot onboard the new account.
+  expect(piggyvestPrimaryWalletApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({ bvn: '12345678901' }),
+    'user-a-id'
+  );
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Refresh PiggyVest account' })
+  );
+  await waitFor(() =>
+    expect(piggyvestPrimaryWalletApi.read).toHaveBeenCalledWith(
+      '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      'user-a-id'
+    )
+  );
+});
+
 it('keeps the form actionable with input preserved when creation fails', async () => {
   // A rejected creation (profile/ownership/transport) must not strand
   // the user on a pending screen: the form stays mounted with its BVN

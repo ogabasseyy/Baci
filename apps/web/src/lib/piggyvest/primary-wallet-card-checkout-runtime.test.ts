@@ -8,6 +8,8 @@ import {
 const env: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
   PIGGYVEST_PRIMARY_CARD_ENABLED: 'true',
+  PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED: 'true',
+  PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED: 'true',
   PIGGYVEST_PRIMARY_CARD_ENVIRONMENT: 'staging',
   PIGGYVEST_PRIMARY_CARD_INTEGRATION_ID: fixture.settings.integrationId,
   PIGGYVEST_PRIMARY_CARD_MERCHANT_ID: fixture.settings.merchantId,
@@ -34,10 +36,24 @@ describe('primary card trusted deployment configuration', () => {
     { VERCEL_ENV: 'production' },
     { PIGGYVEST_PRIMARY_CARD_ENVIRONMENT: 'production' },
     { PIGGYVEST_PRIMARY_CARD_EVIDENCE_PASSWORD: '' },
+    { PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED: 'false' },
+    { PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED: undefined },
   ])('fails closed for invalid config %j', (override) => {
     expect(
       readPrimaryWalletCardCheckoutRuntime({ ...env, ...override })
     ).toBeNull();
+  });
+  it('drains scheduled-created operations after the workers are stood down', () => {
+    const stoodDown = {
+      ...env,
+      PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED: 'false',
+      PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED: 'false',
+    };
+    expect(readPrimaryWalletCardCheckoutRuntime(stoodDown)).toBeNull();
+    expect(
+      readPrimaryWalletCardCheckoutRuntimeDrain(stoodDown)?.settings
+        .integrationId
+    ).toBe(fixture.settings.integrationId);
   });
   it('rejects non-finite time', () => {
     expect(readPrimaryWalletCardCheckoutRuntime(env, Number.NaN)).toBeNull();

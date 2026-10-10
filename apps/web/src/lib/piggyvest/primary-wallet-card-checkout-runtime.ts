@@ -23,7 +23,19 @@ export function readPrimaryWalletCardCheckoutRuntimeDrain(
 }
 
 function parseRuntime(env: NodeJS.ProcessEnv, now: number, drain: boolean) {
-  if (!drain && env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true') return null;
+  // New checkouts require both downstream workers scheduled: a charge
+  // with no transfer dispatch or no custody settlement would sit
+  // custody-pending with no autonomous path to credit. The operator
+  // sets each attestation only after installing and enabling that
+  // worker's timer. Recovery still drains: operations created while
+  // scheduled must resolve even after the rail is stood down.
+  if (
+    !drain &&
+    (env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true' ||
+      env.PIGGYVEST_PRIMARY_CARD_TRANSFER_SCHEDULED !== 'true' ||
+      env.PIGGYVEST_PRIMARY_CARD_CUSTODY_SCHEDULED !== 'true')
+  )
+    return null;
   const environment = env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT;
   if ((env.VERCEL_ENV === 'production') !== (environment === 'production'))
     return null;

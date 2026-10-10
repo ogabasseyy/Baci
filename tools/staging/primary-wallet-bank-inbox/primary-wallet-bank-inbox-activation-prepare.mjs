@@ -7,7 +7,7 @@ import { buildPrimaryBankInboxPackage } from './primary-wallet-bank-inbox-packag
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const flags = ['VERCEL_ENV=production','PIGGYVEST_PRIMARY_ENVIRONMENT=production',
-  'PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED=true'];
+  'PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED=true','PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED=true'];
 const required = ['PIGGYVEST_PRIMARY_INTEGRATION_ID','PIGGYVEST_PRIMARY_MERCHANT_ID','PIGGYVEST_PRIMARY_BUSINESS_ID',
   'PIGGYVEST_PRIMARY_BANK_INBOX_EXPIRES_AT','PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET',
   'PIGGYVEST_PRIMARY_DB_HOST','PIGGYVEST_PRIMARY_DB_PORT','PIGGYVEST_PRIMARY_DB_NAME',

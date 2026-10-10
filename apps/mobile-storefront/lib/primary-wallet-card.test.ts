@@ -78,6 +78,7 @@ it('persists immutable consent and idempotency before POST initialize with authe
       path: '/api/storefront/customer/wallet/primary-card/initialize',
       method: 'POST',
       includeCsrf: true,
+      expectedUserId: scope.userId,
       body: {
         merchantId: scope.merchantId,
         idempotencyKey: mockUuid(),
@@ -123,6 +124,7 @@ it('recovers a known operation after process death using status only and retains
     path: '/api/storefront/customer/wallet/primary-card/status',
     method: 'POST',
     includeCsrf: true,
+    expectedUserId: scope.userId,
     body: { merchantId: scope.merchantId, operationId },
   });
   expect(mockStorage.size).toBe(1);
@@ -371,6 +373,17 @@ it('drops only the null-operation placeholder on authoritative not-ready', async
   });
   expect(mockStorage.size).toBe(0);
   expect(await client.readPending(scope)).toBeNull();
+});
+it('binds every funding request token to the record owner', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  mockFetchJson.mockResolvedValue(response);
+  await client.start(start);
+  // The client rejects a mismatched session inside its own session
+  // read, so a switch landing between the getUser check and this send
+  // cannot reserve a checkout for the new account under this record.
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: scope.userId })
+  );
 });
 it('drops the null-operation placeholder on the pre-reservation email 409', async () => {
   const client = createPrimaryWalletCardFundingClient();

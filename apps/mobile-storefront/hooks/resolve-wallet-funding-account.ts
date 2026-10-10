@@ -72,7 +72,10 @@ export async function readPrimaryFundingAccount(
     }
   }
   try {
-    const { account } = await piggyvestPrimaryWalletApi.read(merchantId);
+    const { account } = await piggyvestPrimaryWalletApi.read(
+      merchantId,
+      userId
+    );
     return settleBoundAccount(userId, account);
   } catch {
     return { status: 'unavailable' };

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { primaryWalletCardCheckoutWebhookBoundary } from '@/lib/piggyvest/primary-wallet-card-checkout-webhook-boundary';
 import { reconcilePrimaryWalletCardCheckoutWebhook } from '@/lib/piggyvest/primary-wallet-card-checkout-webhook-reconcile';
+import { reconcilePrimaryWalletCardCheckoutReversal } from '@/lib/piggyvest/primary-wallet-card-checkout-webhook-reversal';
 
 export interface PaystackKeyMatch {
   legacy: boolean;
@@ -71,14 +72,19 @@ export function matchPaystackWebhookSecrets(
  * Handle a delivery verified solely by the primary-card checkout key.
  * Key-to-handler scoping: the card reconcile path runs exclusively —
  * legacy handlers (merchant wallets, invoices, savings) never see the
- * delivery. A recognizable primary-card charge that reconciliation
- * cannot resolve yet (runtime, database, or provider transiently
- * unavailable) returns the retry boundary so Paystack redelivers;
- * only genuinely unrelated events ack without effect.
+ * delivery. Reversals (refunds, disputes) route first to their durable
+ * record: they carry the original reference in transaction_reference,
+ * which the charge path never reads. A recognizable primary-card event
+ * that reconciliation cannot resolve yet (runtime, database, or
+ * provider transiently unavailable) returns the retry boundary so
+ * Paystack redelivers; only genuinely unrelated events ack without
+ * effect.
  */
 export async function dispatchPaystackCheckoutOnlyWebhook(
   body: unknown
 ): Promise<Response> {
+  const reversed = await reconcilePrimaryWalletCardCheckoutReversal({ body });
+  if (reversed) return reversed;
   const reconciled = await reconcilePrimaryWalletCardCheckoutWebhook({ body });
   if (reconciled) return reconciled;
   return (

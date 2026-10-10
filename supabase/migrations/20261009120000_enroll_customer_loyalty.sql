@@ -110,10 +110,20 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
   END IF;
 
+  -- Serialize account creation with purchase awards: award_purchase_points
+  -- takes this same key before its own check-then-insert, so a first
+  -- purchase racing enrollment cannot create a duplicate row or lose an
+  -- award to a unique violation. Released at transaction end.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext(p_merchant_id::text || ':' || p_customer_id::text)
+  );
+
   -- Resolve the referrer. Unknown codes are ignored so a bad code never
   -- blocks enrollment (matches previous route behavior). A self-referral
   -- cannot match: the enrolling customer has no loyalty row yet (double
   -- enrollment is rejected above), so no self-row exists to resolve.
+  -- Soft-deleted referrers are treated as unknown: their code must not
+  -- credit a non-writable account.
   IF p_referral_code IS NOT NULL AND pg_catalog.btrim(p_referral_code) <> '' THEN
     SELECT referrer.customer_id, referrer.points_balance
     INTO v_referrer_customer_id, v_referrer_balance
@@ -121,6 +131,13 @@ BEGIN
     WHERE referrer.merchant_id = p_merchant_id
       AND pg_catalog.upper(referrer.referral_code)
         = pg_catalog.upper(pg_catalog.btrim(p_referral_code))
+      AND EXISTS (
+        SELECT 1
+        FROM public.customers AS referrer_customer
+        WHERE referrer_customer.id = referrer.customer_id
+          AND referrer_customer.merchant_id = p_merchant_id
+          AND referrer_customer.deleted_at IS NULL
+      )
     FOR UPDATE;
 
     v_referrer_balance := COALESCE(v_referrer_balance, 0);

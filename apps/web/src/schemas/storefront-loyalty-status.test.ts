@@ -33,6 +33,7 @@ describe('storefrontLoyaltyStatusResultSchema', () => {
       points_balance: 150,
       lifetime_points: 500,
       current_tier: 'Bronze',
+      referral_code: 'ABCD1234',
       tiers: [
         { name: 'Bronze', minPoints: 0 },
         { name: 'Silver', minPoints: 1000 },

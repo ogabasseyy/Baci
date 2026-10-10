@@ -47,7 +47,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
-  SELECT points_balance, lifetime_points, current_tier
+  SELECT points_balance, lifetime_points, current_tier, referral_code
   INTO v_loyalty
   FROM public.customer_loyalty
   WHERE merchant_id = p_merchant_id
@@ -98,6 +98,7 @@ BEGIN
       'points_balance', 0,
       'lifetime_points', 0,
       'current_tier', 'Bronze',
+      'referral_code', NULL,
       'tiers', COALESCE(v_settings.tiers, '[]'::jsonb),
       'signup_bonus_points', COALESCE(v_settings.signup_bonus_points, 0),
       'referral_bonus_points', COALESCE(v_settings.referral_bonus_points, 0),
@@ -114,6 +115,7 @@ BEGIN
     'points_balance', COALESCE(v_loyalty.points_balance, 0),
     'lifetime_points', COALESCE(v_loyalty.lifetime_points, 0),
     'current_tier', COALESCE(v_loyalty.current_tier, 'Bronze'),
+    'referral_code', v_loyalty.referral_code,
     'tiers', COALESCE(v_settings.tiers, '[]'::jsonb),
     'signup_bonus_points', COALESCE(v_settings.signup_bonus_points, 0),
     'referral_bonus_points', COALESCE(v_settings.referral_bonus_points, 0),

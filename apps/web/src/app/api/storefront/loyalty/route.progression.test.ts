@@ -96,6 +96,7 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
     expect(body.tier).toBe('silver');
     expect(body.next_tier).toBe('gold');
     expect(body.points_to_next_tier).toBe(4500);
+    expect(body.tier_progress).toBe(0);
   });
 
   it('progresses along a merchant-defined tier ladder', async () => {
@@ -121,6 +122,9 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
     expect(body.tier).toBe('starter');
     expect(body.next_tier).toBe('vip');
     expect(body.points_to_next_tier).toBe(700);
+    expect(body.tier_progress).toBe(30);
+    expect(body.tier_thresholds.starter).toBe(0);
+    expect(body.tier_thresholds.vip).toBe(1000);
   });
 
   it('clamps null tier thresholds to zero instead of failing', async () => {

@@ -1,4 +1,4 @@
--- Enrollment cases for the enroll_customer_loyalty suite (cases 1-5).
+-- Enrollment cases for the enroll_customer_loyalty suite (cases 1-5b).
 
 -- 1. Disabled program fail-closes.
 UPDATE public.loyalty_settings
@@ -134,4 +134,22 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000011'),
   'rejected double enrollment left a partial mutation'
 );
+
+-- 5b. Tier assignment follows thresholds, not stored array order: with
+-- Silver stored before Bronze, last-match-wins over stored order would
+-- wrongly assign Bronze at 1500 lifetime points.
+UPDATE public.loyalty_settings
+SET tiers = '[{"name": "Silver", "minPoints": 1000}, {"name": "Bronze", "minPoints": 0}]'::jsonb
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    1500, '01aa0000-0000-4000-8000-000000000001'
+  ) = 'Silver',
+  'unsorted tier JSON assigned the wrong tier'
+);
+
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 

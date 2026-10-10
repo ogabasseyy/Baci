@@ -60,6 +60,24 @@ SELECT pg_temp.assert_true(
   'get_loyalty_status grants are incorrect'
 );
 
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.redeem_loyalty_reward(uuid,uuid,uuid)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE')
+  AND has_function_privilege('authenticated',
+    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.redeem_loyalty_reward(uuid,uuid,uuid)', 'EXECUTE'),
+  'redeem_loyalty_reward grants are incorrect'
+);
+
 -- Fixtures.
 INSERT INTO auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -72,7 +90,7 @@ SELECT
   'authenticated', 'authenticated',
   'enroll-user-' || seq || '@example.com',
   'test', now(), now(), now(), '{}', '{}'
-FROM generate_series(1, 7) AS seq;
+FROM generate_series(1, 8) AS seq;
 
 INSERT INTO public.merchants (id, email, business_name, slug)
 VALUES (
@@ -90,7 +108,8 @@ VALUES
   ('01aa0000-0000-4000-8000-000000000014', '01aa0000-0000-4000-8000-000000000001', 'enroll-d@example.com', '01aa0000-0000-4000-8000-000000000104'),
   ('01aa0000-0000-4000-8000-000000000015', '01aa0000-0000-4000-8000-000000000001', 'enroll-e@example.com', '01aa0000-0000-4000-8000-000000000105'),
   ('01aa0000-0000-4000-8000-000000000016', '01aa0000-0000-4000-8000-000000000001', 'enroll-f@example.com', '01aa0000-0000-4000-8000-000000000106'),
-  ('01aa0000-0000-4000-8000-000000000017', '01aa0000-0000-4000-8000-000000000001', 'enroll-g@example.com', '01aa0000-0000-4000-8000-000000000107');
+  ('01aa0000-0000-4000-8000-000000000017', '01aa0000-0000-4000-8000-000000000001', 'enroll-g@example.com', '01aa0000-0000-4000-8000-000000000107'),
+  ('01aa0000-0000-4000-8000-000000000018', '01aa0000-0000-4000-8000-000000000001', 'enroll-h@example.com', '01aa0000-0000-4000-8000-000000000108');
 
 INSERT INTO public.loyalty_settings (
   merchant_id, enabled, signup_bonus_points, referral_bonus_points

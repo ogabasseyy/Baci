@@ -48,20 +48,10 @@ export function LoyaltyStatusCard({
   }
 
   const tierInfo = getTierInfo(tier);
-  const progressPercentage = nextTier
-    ? Math.min(
-        100,
-        ((data.lifetime_points -
-          (data.tier_thresholds[tier as keyof typeof data.tier_thresholds] ||
-            0)) /
-          (pointsToNextTier +
-            (data.lifetime_points -
-              (data.tier_thresholds[
-                tier as keyof typeof data.tier_thresholds
-              ] || 0)))) *
-          100
-      )
-    : 100;
+  // Server-computed against the merchant ladder: lifetime can sit below a
+  // raised current threshold, which local subtraction turns into negative
+  // or NaN progress.
+  const progressPercentage = nextTier ? data.tier_progress : 100;
 
   if (compact) {
     return (
@@ -137,6 +127,17 @@ export function LoyaltyStatusCard({
             </span>
           </div>
         </div>
+
+        {data.referral_code && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Your referral code</span>
+              <span className="font-mono font-medium">
+                {data.referral_code}
+              </span>
+            </div>
+          </div>
+        )}
 
         {data.redeemable_rewards.length > 0 && (
           <div className="mt-4 p-3 bg-green-50 rounded-lg">

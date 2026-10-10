@@ -37,6 +37,7 @@ export const storefrontLoyaltyStatusResultSchema = z.object({
   points_balance: z.number(),
   lifetime_points: z.number(),
   current_tier: z.string(),
+  referral_code: z.string().nullable(),
   tiers: z.array(loyaltyTierSchema),
   signup_bonus_points: z.number(),
   referral_bonus_points: z.number(),

@@ -6,9 +6,10 @@
 -- landing before a referral credit (and writing after) silently overwrote
 -- the credited balance even though the referral ledger recorded success.
 --
--- Redefine the writer with a row lock; the body is otherwise byte-identical
--- to baseline 20260418000000 so behavior (tiers, ledger, returns) is
--- unchanged. Grants are preserved by CREATE OR REPLACE.
+-- Redefine the writer with a row lock plus an advisory creation lock
+-- shared with enroll_customer_loyalty, projecting only the columns the
+-- award consumes. Award behavior (tiers, ledger, returns) is unchanged.
+-- Grants are preserved by CREATE OR REPLACE.
 CREATE OR REPLACE FUNCTION "public"."award_purchase_points"("p_customer_id" "uuid", "p_merchant_id" "uuid", "p_order_id" "uuid", "p_order_total" numeric) RETURNS integer
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
@@ -23,8 +24,17 @@ DECLARE
     v_new_tier VARCHAR(50);
     v_expiry_date TIMESTAMPTZ;
 BEGIN
-    -- Get loyalty settings
-    SELECT * INTO v_settings
+    -- Serialize account creation with enrollments: enroll_customer_loyalty
+    -- takes this same key before its own check-then-insert, so a first
+    -- purchase racing enrollment cannot create a duplicate row or lose an
+    -- award to a unique violation. Released at transaction end.
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtext(p_merchant_id::text || ':' || p_customer_id::text)
+    );
+
+    -- Get loyalty settings (project only the fields the award uses).
+    SELECT points_currency_unit, points_per_currency, points_expiry_days, tiers
+    INTO v_settings
     FROM public.loyalty_settings
     WHERE merchant_id = p_merchant_id AND enabled = TRUE;
 
@@ -35,7 +45,8 @@ BEGIN
     -- Get or create customer loyalty account. Lock the row: concurrent
     -- writers (referral credits, other purchases) must serialize on the
     -- read-modify-write below instead of overwriting each other.
-    SELECT * INTO v_loyalty
+    SELECT id, points_balance, lifetime_points, current_tier
+    INTO v_loyalty
     FROM public.customer_loyalty
     WHERE customer_id = p_customer_id AND merchant_id = p_merchant_id
     FOR UPDATE;
@@ -47,7 +58,8 @@ BEGIN
             p_merchant_id,
             UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8))
         )
-        RETURNING * INTO v_loyalty;
+        RETURNING id, points_balance, lifetime_points, current_tier
+        INTO v_loyalty;
     END IF;
 
     -- Get tier multiplier

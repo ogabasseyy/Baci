@@ -46,9 +46,20 @@ jobs:
           restore-keys: ops-promote-last-tip-
       - name: Validate promote-record history
         run: |
-          if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
+          # ls-remote separates a confirmed-missing ref (success, empty)
+          # from auth/transport/server failures (nonzero): only the
+          # former may exit green without validating anything.
+          if ! ref_info="$(git ls-remote --heads origin ops/gigl-promote-record 2>/dev/null)"; then
+            echo 'cannot reach origin to query ops/gigl-promote-record; failing closed.' >&2
+            exit 1
+          fi
+          if [ -z "$ref_info" ]; then
             echo 'ops/gigl-promote-record does not exist yet; nothing to validate.'
             exit 0
+          fi
+          if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
+            echo 'ops/gigl-promote-record exists but cannot be fetched; failing closed.' >&2
+            exit 1
           fi
           tip="$(git rev-parse FETCH_HEAD)"
           previous='0000000000000000000000000000000000000000'

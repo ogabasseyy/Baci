@@ -7,10 +7,12 @@ import test from 'node:test';
 import {
   assertCanonicalOriginPushUrls,
   assertCleanWorkerDeployEnv,
+  originRepoSlug,
+} from './release-remote-validation.mjs';
+import {
   assertRemovableLockPath,
   assertServingDeploymentStable,
   assertVercelAccess,
-  originRepoSlug,
   parseGhJqString,
   parseJobsPayload,
   readRuns,
@@ -34,6 +36,7 @@ test('accepts every canonical GitHub remote spelling', () => {
     'git@github.com:ogabasseyy/Baci.git/',
     'https://x-access-token:sekret@github.com/ogabasseyy/Baci.git',
     'https://ogabasseyy:sekret@github.com/ogabasseyy/Baci',
+    'https://GitHub.com/ogabasseyy/Baci.git',
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }

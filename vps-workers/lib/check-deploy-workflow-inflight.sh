@@ -98,6 +98,11 @@ _set_inflight_repo() {
       case "$_remote_host" in
         *@*) _remote_host="${_remote_host##*@}" ;;
       esac
+      # Hostnames are case-insensitive and the coordinator matches
+      # github.com case-insensitively: lowercase (via tr, since macOS
+      # ships bash 3 without ${var,,}) or a GitHub.com remote passes
+      # validation then aborts the worker deploy as unresolvable.
+      _remote_host="$(printf '%s' "$_remote_host" | tr '[:upper:]' '[:lower:]')"
       _remote_path="${_remote_rest#*/}"
       if [ "$_remote_path" = "$_remote_rest" ]; then
         _remote_path=""

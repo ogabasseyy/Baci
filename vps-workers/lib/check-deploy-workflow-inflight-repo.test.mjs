@@ -58,6 +58,20 @@ test('resolves credential-bearing remotes without leaking the credential', () =>
   assert.ok(!result.stdout.includes('s3krit-value'));
 });
 
+test('resolves mixed-case github.com hosts like the coordinator', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://GitHub.com/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
 test('resolves trailing-slash remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

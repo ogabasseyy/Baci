@@ -77,6 +77,17 @@ export function useProductDetailRouteData({
     )
       ? routeOfferIdParam
       : null;
+  // An exact offer link whose offer fetch failed must not render as an
+  // offerless product: the requested identity would be silently dropped
+  // and the shopper could add a different price/condition than opened.
+  // Surface the existing error path (retry via refetch) instead.
+  const routeOfferHydrationFailed =
+    routeOfferIdParam != null &&
+    routeOfferIdParam.length > 0 &&
+    product?.offers_hydration_failed === true;
+  const routeOfferHydrationError = routeOfferHydrationFailed
+    ? 'This offer could not be loaded. Check your connection and try again.'
+    : null;
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(
       Object.entries(routeSelectionAttributes).sort(([a], [b]) =>
@@ -198,7 +209,7 @@ export function useProductDetailRouteData({
 
   return {
     displayProduct,
-    error,
+    error: error ?? routeOfferHydrationError,
     isLoading,
     isOnline,
     isValidSlug,
@@ -209,6 +220,7 @@ export function useProductDetailRouteData({
     refetch,
     resolvedColorImages,
     reviewsState,
+    routeOfferHydrationFailed,
     routeOfferId,
     routeParams,
     slug,

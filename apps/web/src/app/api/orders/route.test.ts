@@ -3561,6 +3561,77 @@ describe('POST /api/orders — checkout idempotency', () => {
     );
   });
 
+  it('includes the offer id in the savings fallback idempotency fingerprint', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn();
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase({
+        create_storefront_order_with_savings: {
+          data: [
+            {
+              ...baseOrderRow,
+              idempotency_replayed: true,
+              savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+              savings_goal_status: 'paused',
+              savings_redeemed_amount: 500,
+              savings_redemption_id: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+              savings_redemption_success: true,
+            },
+          ],
+          error: null,
+        },
+      });
+      const originalRpc = sb.rpc;
+      sb.rpc = vi.fn((name: string, params?: unknown) => {
+        rpcSpy(name, params);
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
+            error: null,
+          });
+        }
+        return originalRpc(name);
+      });
+      return sb;
+    }) as unknown as never);
+
+    // No Idempotency-Key header: the fallback fingerprint must still
+    // distinguish two savings orders for different offers of the same
+    // product, or the second fails on the unique redemption constraint.
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              product_id: OFFER_PRODUCT_ID,
+              quantity: 1,
+              price: 400_000,
+              name: 'Used Phone',
+              offerId: LIVE_OFFER_ID,
+            },
+          ],
+          savings_amount: 500,
+          savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+          use_savings_credit: true,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(rpcSpy).toHaveBeenCalledWith(
+      'create_storefront_order_with_savings',
+      expect.objectContaining({
+        p_savings_idempotency_key: `order_savings:${MERCHANT_ID}:customer@example.com:123e4567-e89b-12d3-a456-426614174555:500:${OFFER_PRODUCT_ID}::${LIVE_OFFER_ID}:1`,
+      })
+    );
+  });
+
   it('does not pass checkout idempotency params through the quiz voucher wrapper RPC', async () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');

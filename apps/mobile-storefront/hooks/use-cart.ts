@@ -19,6 +19,7 @@ import {
   type AddToCartInput,
   checkStock,
   getExistingCartQuantityForStock,
+  getExistingProductQuantityForStock,
 } from './cart-stock';
 
 /**
@@ -76,7 +77,9 @@ export function useCart() {
       // would double-count the optimistic line.
       const totalQuantity = getExistingCartQuantityForStock(item);
 
-      // Validate stock in background, with cached fallback for offline
+      // Validate stock in background, with cached fallback for offline.
+      // The store already holds the optimistic line, so the product
+      // aggregate below is the post-add total strict sibling caps need.
       const stockCheck = await checkStock(
         item.product_id,
         totalQuantity,
@@ -87,6 +90,9 @@ export function useCart() {
         {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,
+          aggregateQuantity: getExistingProductQuantityForStock(
+            item.product_id
+          ),
         }
       );
 
@@ -189,7 +195,10 @@ export function useCart() {
       const item = freshItems.find((i) => i.id === id);
       if (!item) throw new Error('Item not found');
 
-      // Validate stock for the new quantity, with cached fallback for offline
+      // Validate stock for the new quantity, with cached fallback for
+      // offline. onMutate already applied the new quantity to the store,
+      // so the product aggregate below is the post-update total strict
+      // sibling caps need.
       const stockCheck = await checkStock(
         item.product_id,
         quantity,
@@ -200,6 +209,9 @@ export function useCart() {
         {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,
+          aggregateQuantity: getExistingProductQuantityForStock(
+            item.product_id
+          ),
         }
       );
 

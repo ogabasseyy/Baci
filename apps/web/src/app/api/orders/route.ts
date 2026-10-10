@@ -116,6 +116,7 @@ function getSavingsRedemptionIdempotencyKey({
     product_id: string;
     quantity: number;
     variant_id?: string | null;
+    offer_id?: string | null;
   }>;
   merchantId: string;
   requestIdempotencyKey: string | null;
@@ -126,9 +127,15 @@ function getSavingsRedemptionIdempotencyKey({
     return `order:${requestIdempotencyKey}:savings`;
   }
 
+  // The offer id distinguishes two savings orders for different offers of
+  // the same product (same quantity/goal/amount): without it both
+  // requests generate the same redemption key and the second fails on the
+  // unique (merchant_id, idempotency_key) constraint. Mirrors the main
+  // checkout idempotency payload, which carries the raw body offer ids.
   const itemFingerprint = items
     .map(
-      (item) => `${item.product_id}:${item.variant_id ?? ''}:${item.quantity}`
+      (item) =>
+        `${item.product_id}:${item.variant_id ?? ''}:${item.offer_id ?? ''}:${item.quantity}`
     )
     .join('|');
   return [
@@ -2031,6 +2038,7 @@ export async function POST(request: NextRequest) {
             product_id: item.product_id ?? '',
             quantity: item.quantity,
             variant_id: item.variant_id ?? null,
+            offer_id: item.offer_id ?? null,
           })),
           merchantId: merchant_id,
           requestIdempotencyKey,

@@ -3,8 +3,8 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
-import { resolveBaseEffectiveStock } from './cart-stock-base';
-import { resolveOfferEffectiveStock } from './cart-stock-offers';
+import { resolveBaseStock } from './cart-stock-base';
+import { resolveOfferStock } from './cart-stock-offers';
 import { resolveVariantEffectiveStock } from './cart-stock-variant';
 
 const log = createLogger('Cart');
@@ -46,6 +46,22 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
 }
 
 /**
+ * Total units in the store for this product across the base line and
+ * every variant/offer line. Under strict serialized tracking all of
+ * those lines claim the same hidden-anchor units, so the aggregate —
+ * not just the per-identity total — must fit the pool.
+ */
+export function getExistingProductQuantityForStock(productId: string): number {
+  return useCartStore
+    .getState()
+    .items.reduce(
+      (total, cartItem) =>
+        cartItem.product_id === productId ? total + cartItem.quantity : total,
+      0
+    );
+}
+
+/**
  * Check stock availability from the database.
  *
  * @param cachedStock - Last known stock from TanStack Query cache, used as
@@ -60,12 +76,23 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
  *   against the offer's own effective stock capped by strict serialized
  *   base units; a null offer quantity inherits the base effective stock,
  *   mirroring the PDP predicate.
+ * @param options.aggregateQuantity - Post-optimistic store total for the
+ *   product across the base line and every sibling offer. Under strict
+ *   serialized tracking this aggregate must also fit the shared units;
+ *   without it each sibling would independently validate against the
+ *   same pool and over-claim. The offline estimate keeps the
+ *   per-identity comparison (no live units available) and revalidates
+ *   online; order creation enforces the cap regardless.
  */
 export async function checkStock(
   productId: string,
   requestedQuantity: number,
   cachedStock?: number,
-  options?: { variantId?: string | null; offerId?: string | null }
+  options?: {
+    variantId?: string | null;
+    offerId?: string | null;
+    aggregateQuantity?: number;
+  }
 ): Promise<StockCheckResult> {
   const isOnline = await checkNetwork();
   if (!isOnline) {
@@ -133,23 +160,32 @@ export async function checkStock(
 
   // Offers exist only for non-variant products, so a variant identity
   // always wins when both are present (defensive: callers never send both).
-  const currentStock = options?.variantId
-    ? await resolveVariantEffectiveStock(
-        productId,
-        options.variantId,
-        parentStock,
-        data?.manage_stock === false
-      )
-    : options?.offerId
-      ? await resolveOfferEffectiveStock(
-          productId,
-          options.offerId,
-          parentStock
-        )
-      : await resolveBaseEffectiveStock(productId, parentStock);
+  if (options?.variantId) {
+    const currentStock = await resolveVariantEffectiveStock(
+      productId,
+      options.variantId,
+      parentStock,
+      data?.manage_stock === false
+    );
+    return {
+      available: currentStock >= requestedQuantity,
+      currentStock,
+      requestedQuantity,
+    };
+  }
+  const resolved = options?.offerId
+    ? await resolveOfferStock(productId, options.offerId, parentStock)
+    : await resolveBaseStock(productId, parentStock);
+  // Under strict serialized tracking the per-identity total keeps its
+  // scalar allocation, but the base line and every sibling offer draw
+  // from one shared pool: the aggregate must fit the live units too.
+  const aggregateFits =
+    resolved.strictUnits === null ||
+    options?.aggregateQuantity === undefined ||
+    resolved.strictUnits >= options.aggregateQuantity;
   return {
-    available: currentStock >= requestedQuantity,
-    currentStock,
+    available: resolved.stock >= requestedQuantity && aggregateFits,
+    currentStock: resolved.stock,
     requestedQuantity,
   };
 }

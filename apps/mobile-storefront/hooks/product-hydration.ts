@@ -11,6 +11,7 @@ export interface HydratableProductRow extends Record<string, unknown> {
   has_variants?: unknown;
   id?: unknown;
   offers?: unknown;
+  offers_hydration_failed?: unknown;
   variant_model?: unknown;
   variants?: unknown;
 }

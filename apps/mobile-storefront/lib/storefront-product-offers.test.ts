@@ -64,14 +64,18 @@ describe('storefront-product-offers', () => {
     ]);
   });
 
-  it('keeps the original rows when the offer lookup fails', async () => {
+  it('marks the original rows when the offer lookup fails', async () => {
     mockRpc.mockReturnValueOnce(
       Promise.resolve({ data: null, error: { message: 'boom' } })
     );
 
     const rows = [{ id: 'product-1', offers: [{ id: 'nested' }] }];
-    await expect(hydrateProductRowsWithConditionOffers(rows)).resolves.toEqual(
-      rows
-    );
+    await expect(hydrateProductRowsWithConditionOffers(rows)).resolves.toEqual([
+      {
+        id: 'product-1',
+        offers: [{ id: 'nested' }],
+        offers_hydration_failed: true,
+      },
+    ]);
   });
 });

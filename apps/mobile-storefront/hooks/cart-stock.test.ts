@@ -1,7 +1,11 @@
 import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
-import { checkStock, getExistingCartQuantityForStock } from './cart-stock';
+import {
+  checkStock,
+  getExistingCartQuantityForStock,
+  getExistingProductQuantityForStock,
+} from './cart-stock';
 
 const mockNetInfoFetch = jest.fn();
 
@@ -589,6 +593,107 @@ describe('cart-stock helpers', () => {
     });
   });
 
+  it('caps strict sibling offers at the shared serialized units', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 1,
+        },
+      ],
+    });
+
+    // The per-offer total fits its scalar, but a sibling line already
+    // claims the single shared unit.
+    await expect(
+      checkStock('product-1', 1, undefined, {
+        offerId: 'offer-7',
+        aggregateQuantity: 2,
+      })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 1,
+      requestedQuantity: 1,
+    });
+    await expect(
+      checkStock('product-1', 1, undefined, {
+        offerId: 'offer-7',
+        aggregateQuantity: 1,
+      })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 1,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('keeps the per-offer scalar binding under shared strict units', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 1 }],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 5,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 2, undefined, {
+        offerId: 'offer-7',
+        aggregateQuantity: 2,
+      })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 1,
+      requestedQuantity: 2,
+    });
+  });
+
+  it('caps the strict base line by sibling offer quantities', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [],
+      get_storefront_product_base_inventory: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_strict',
+          available_units: 1,
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { aggregateQuantity: 2 })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 1,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('ignores the product aggregate without strict serialized units', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
+      get_storefront_product_base_inventory: [
+        { product_id: 'product-1', effective_policy: 'legacy' },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 2, undefined, {
+        offerId: 'offer-7',
+        aggregateQuantity: 99,
+      })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 5,
+      requestedQuantity: 2,
+    });
+  });
+
   it('throws when a strict offer has no unit count', async () => {
     mockProductAndRpc(parent(), {
       get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
@@ -789,6 +894,43 @@ describe('cart-stock helpers', () => {
         offer_id: 'offer-7',
       })
     ).toBe(3);
+  });
+
+  it('totals the product aggregate across base and sibling offer lines', () => {
+    useCartStore.setState({
+      items: [
+        {
+          id: 'line-1',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 2,
+        },
+        {
+          id: 'line-2',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 90,
+          quantity: 1,
+          offer_id: 'offer-7',
+        },
+        {
+          id: 'line-3',
+          product_id: 'product-2',
+          slug: 'other',
+          name: 'Other',
+          price: 50,
+          quantity: 4,
+        },
+      ],
+      isLoading: false,
+      lineSequence: 3,
+    });
+
+    expect(getExistingProductQuantityForStock('product-1')).toBe(3);
+    expect(getExistingProductQuantityForStock('product-2')).toBe(4);
   });
 
   it('does not double-count the optimistic offer line', () => {

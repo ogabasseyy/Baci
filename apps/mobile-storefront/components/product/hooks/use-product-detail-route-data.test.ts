@@ -83,6 +83,49 @@ it('clears the route condition when the offer id names no live offer', () => {
   expect(result.current.routeOfferId).toBeNull();
 });
 
+it('fails closed when an exact offer link meets a hydration failure', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  const marked = {
+    ...product,
+    offers: undefined,
+    offers_hydration_failed: true,
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: marked,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  // The requested identity must not silently degrade to the parent: the
+  // screen shows its retry/unavailable path instead.
+  expect(result.current.routeOfferHydrationFailed).toBe(true);
+  expect(result.current.routeOfferId).toBeNull();
+  expect(result.current.error).toMatch(/could not be loaded/);
+});
+
+it('ignores the hydration marker without an exact offer link', () => {
+  mockParams = { slug: 'phone' };
+  const marked = {
+    ...product,
+    offers: undefined,
+    offers_hydration_failed: true,
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: marked,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferHydrationFailed).toBe(false);
+  expect(result.current.error).toBeNull();
+});
+
 it('honors an ID-only offer through the synced selection on product load', () => {
   mockParams = { slug: 'phone', offer_id: 'o1' };
   const { result, rerender } = renderHook(

@@ -24,12 +24,13 @@ function findProductInList(
   );
 }
 
-function findCachedProduct(
+function collectListCachedProducts(
   queryClient: QueryClient,
   productId: string
-): Product | undefined {
+): Product[] {
   // List queries are infinite: ['products', merchantId, options] holds
   // { pages: [{ products }] }, not a top-level array.
+  const matches: Product[] = [];
   const listQueries = queryClient.getQueriesData<unknown>({
     queryKey: ['products'],
   });
@@ -44,25 +45,83 @@ function findCachedProduct(
           (page as { products?: unknown } | null)?.products,
           productId
         );
-        if (found) return found;
+        if (found) matches.push(found);
       }
     }
     // Flat arrays: the launch-carousel pins writer
     // (['products', merchantId, 'launch-by-slugs', slugs]).
     const flat = findProductInList(data, productId);
-    if (flat) return flat;
+    if (flat) matches.push(flat);
   }
+  return matches;
+}
 
+function findDetailCachedProduct(
+  queryClient: QueryClient,
+  productId: string,
+  options?: { variantId?: string | null; offerId?: string | null }
+): Product | undefined {
   // Detail queries hold one augmented product:
   // ['product', version, slug, merchantId].
   const detailQueries = queryClient.getQueriesData<unknown>({
     queryKey: ['product'],
   });
   for (const [, data] of detailQueries) {
-    if (isProductLike(data) && String(data.id) === productId) return data;
+    if (!isProductLike(data) || String(data.id) !== productId) continue;
+    if (!options || productHasOption(data, options)) return data;
   }
-
   return undefined;
+}
+
+function productHasOption(
+  product: Product,
+  options: { variantId?: string | null; offerId?: string | null }
+): boolean {
+  if (options.variantId != null) {
+    return (
+      product.variants?.some((entry) => entry.id === options.variantId) ?? false
+    );
+  }
+  if (options.offerId != null) {
+    return (
+      product.offers?.some(
+        (entry) => String(entry.id) === String(options.offerId)
+      ) ?? false
+    );
+  }
+  return true;
+}
+
+function findCachedProduct(
+  queryClient: QueryClient,
+  productId: string
+): Product | undefined {
+  return (
+    collectListCachedProducts(queryClient, productId)[0] ??
+    findDetailCachedProduct(queryClient, productId)
+  );
+}
+
+/**
+ * Option-aware lookup: list rows use PRODUCT_SELECT and generally carry
+ * no hydrated offers/variants, so the first list match cannot resolve an
+ * option the shopper opened from the list and then viewed (which
+ * populates the detail cache). Prefer the augmented detail entry when it
+ * holds the requested option, else keep scanning list entries past the
+ * first match. Returns undefined when no cached entry holds the option
+ * so callers fail closed.
+ */
+function findCachedProductWithOption(
+  queryClient: QueryClient,
+  productId: string,
+  options: { variantId?: string | null; offerId?: string | null }
+): Product | undefined {
+  return (
+    findDetailCachedProduct(queryClient, productId, options) ??
+    collectListCachedProducts(queryClient, productId).find((entry) =>
+      productHasOption(entry, options)
+    )
+  );
 }
 
 export function getCachedProductStock(
@@ -91,7 +150,10 @@ export function getCachedOptionStock(
     return getCachedProductStock(queryClient, productId);
   }
 
-  const product = findCachedProduct(queryClient, productId);
+  const product = findCachedProductWithOption(queryClient, productId, {
+    variantId,
+    offerId,
+  });
   if (!product) return undefined;
 
   if (variantId !== null) {

@@ -4,18 +4,21 @@ import { supabase } from '@/lib/supabase';
 const log = createLogger('Cart');
 
 /**
- * Base-option effective stock through the shopper-safe base inventory
- * projection (anchor-first effective policy plus base available units).
- * Unlimited tracking bypasses; strict compares exact units; other
- * policies use the scalar parent stock, mirroring the price-options base
- * branch and the PDP predicate. A product absent from the projection
- * (vanished or unpublished) reports zero; other lookup failures throw so
- * the caller retries instead of overselling.
+ * Base-option stock through the shopper-safe base inventory projection
+ * (anchor-first effective policy plus base available units). Unlimited
+ * tracking bypasses; strict compares exact units; other policies use
+ * the scalar parent stock, mirroring the price-options base branch and
+ * the PDP predicate. `strictUnits` carries the shared serialized pool
+ * when the policy is strict so the caller can cap the aggregate across
+ * the base line and every sibling offer (all claim the same
+ * hidden-anchor inventory); it is null otherwise. A product absent from
+ * the projection (vanished or unpublished) reports zero; other lookup
+ * failures throw so the caller retries instead of overselling.
  */
-export async function resolveBaseEffectiveStock(
+export async function resolveBaseStock(
   productId: string,
   parentStock: number
-): Promise<number> {
+): Promise<{ stock: number; strictUnits: number | null }> {
   const { data, error } = await supabase.rpc(
     'get_storefront_product_base_inventory',
     { p_product_ids: [productId] }
@@ -34,20 +37,21 @@ export async function resolveBaseEffectiveStock(
     | undefined;
   if (!row) {
     log.error('Base stock check found no such product:', productId);
-    return 0;
+    return { stock: 0, strictUnits: null };
   }
   if (row.effective_policy === 'serialized_then_unlimited') {
-    return Number.MAX_SAFE_INTEGER;
+    return { stock: Number.MAX_SAFE_INTEGER, strictUnits: null };
   }
   if (row.effective_policy === 'serialized_strict') {
     if (
       typeof row.available_units === 'number' &&
       Number.isFinite(row.available_units)
     ) {
-      return Math.max(0, row.available_units);
+      const units = Math.max(0, row.available_units);
+      return { stock: units, strictUnits: units };
     }
     log.error('Base stock check found no unit count:', productId);
     throw new Error('Cannot verify stock availability. Please try again.');
   }
-  return parentStock;
+  return { stock: parentStock, strictUnits: null };
 }

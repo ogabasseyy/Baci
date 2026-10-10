@@ -135,6 +135,11 @@ export interface Product {
   // Condition offers (multiple conditions with different prices)
   has_condition_offers?: boolean;
   offers?: ProductConditionOffer[];
+  // Explicit marker: the condition-offer fetch failed, so an absent
+  // `offers` list means "unknown", not "offerless". Exact offer links
+  // must fail closed (retry/unavailable) instead of silently dropping
+  // the requested identity.
+  offers_hydration_failed?: boolean;
 }
 
 export interface ProductVariant {

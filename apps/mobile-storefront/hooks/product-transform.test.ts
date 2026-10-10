@@ -73,6 +73,20 @@ describe('product-transform', () => {
     ]);
   });
 
+  it('carries the offer-hydration failure marker onto the product', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      has_variants: false,
+      variant_model: 'legacy',
+      variants: [],
+      has_condition_offers: true,
+      offers_hydration_failed: true,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({ offers_hydration_failed: true })
+    );
+  });
+
   it('carries hydrated base policy and units onto simple products', () => {
     const product = transformProduct({
       ...variantProductRow,

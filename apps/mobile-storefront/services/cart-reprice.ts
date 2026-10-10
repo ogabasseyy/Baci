@@ -4,16 +4,19 @@
  * The cart persists the unit price captured at add-to-cart time. Catalog prices
  * can drift afterwards (merchant edits, promos ending), leaving the cart stale.
  * The order API validates each line against the LIVE catalog
- * (`variant.price_override ?? product.price`) — so a stale cart price triggers
- * confusing checkout rejections (e.g. `negotiated_price_below_floor`).
+ * (`variant.price_override ?? product.price`, offers from `product_offers`) —
+ * so a stale cart price triggers confusing checkout rejections
+ * (e.g. `negotiated_price_below_floor`).
  *
  * This service re-fetches the authoritative unit price for each cart line using
  * the SAME sources the server's order validation uses:
  *   - base price  -> products.price
  *   - variant     -> get_order_variant_overrides RPC (RLS-safe, anon-granted)
+ *   - offer       -> get_product_offers RPC (active offers only)
  * so the reconciled cart basis matches what checkout will accept.
  */
 
+import { getStorefrontProductOffersByProductIds } from '@/lib/fetch-storefront-product-offers';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
@@ -133,6 +136,47 @@ export async function repriceCartItems(
       }
     }
 
+    // Live offer prices for exact offer lines, via the same
+    // anon-executable RPC checkout validation reads. A merchant-edited
+    // offer price would otherwise sail through repricing undetected and
+    // fail at order creation with a total/fee mismatch.
+    const offerPrice = new Map<string, { price: number; productId: string }>();
+    const offerLineProductIds = Array.from(
+      new Set(
+        items
+          .filter(
+            (item) =>
+              !item.variant_id &&
+              typeof item.offer_id === 'string' &&
+              item.offer_id.length > 0
+          )
+          .map((item) => item.product_id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      )
+    );
+    let offerLookupFailed = false;
+    if (offerLineProductIds.length > 0) {
+      const offersByProduct =
+        await getStorefrontProductOffersByProductIds(offerLineProductIds);
+      if (!offersByProduct) {
+        // Fail open, but do NOT fall back to base prices for offer lines —
+        // repricing to products.price would corrupt a valid offer price.
+        offerLookupFailed = true;
+        log.warn('Reprice offer lookup failed; skipping offer lines');
+      } else {
+        for (const [productId, offers] of Object.entries(offersByProduct)) {
+          for (const offer of offers) {
+            if (offer.price != null) {
+              offerPrice.set(offer.id, {
+                price: Number(offer.price),
+                productId,
+              });
+            }
+          }
+        }
+      }
+    }
+
     const result: RepriceResult = { priceById: {}, changes: [] };
     for (const item of items) {
       // Voucher reward lines (quiz awards, price 0) are validated by the
@@ -149,11 +193,42 @@ export async function repriceCartItems(
         continue;
       }
 
-      // Non-variant lines on products with condition offers (open_box/used) are
-      // priced from `product_offers`, not `products.price`. We cannot resolve
-      // that offer price here, so skip them — repricing to the base price would
-      // corrupt a valid offer price and raise a bogus drift alert. Checkout
-      // still validates these lines against the live offer separately.
+      // Exact offer lines reprice from the live offer row. A failed lookup
+      // or a vanished/inactive offer skips the line instead of corrupting
+      // it with the base price; availability is validated at checkout.
+      if (
+        !item.variant_id &&
+        typeof item.offer_id === 'string' &&
+        item.offer_id.length > 0
+      ) {
+        if (!offerLookupFailed) {
+          const live = offerPrice.get(item.offer_id);
+          if (
+            live &&
+            live.productId === item.product_id &&
+            Number.isFinite(live.price) &&
+            live.price > 0
+          ) {
+            result.priceById[item.id] = live.price;
+            if (Math.abs(live.price - item.price) > PRICE_TOLERANCE) {
+              result.changes.push({
+                id: item.id,
+                name: item.name,
+                oldPrice: item.price,
+                newPrice: live.price,
+              });
+            }
+          }
+        }
+        continue;
+      }
+
+      // Non-variant lines WITHOUT an exact offer on products with condition
+      // offers (open_box/used) are priced from `product_offers`, not
+      // `products.price`. We cannot resolve which offer price applies, so
+      // skip them — repricing to the base price would corrupt a valid offer
+      // price and raise a bogus drift alert. Checkout still validates these
+      // lines against the live offer separately.
       if (!item.variant_id && conditionOfferProducts.has(item.product_id)) {
         continue;
       }

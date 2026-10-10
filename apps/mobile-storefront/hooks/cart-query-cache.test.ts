@@ -164,6 +164,45 @@ describe('cart query cache helpers', () => {
     ).toBe(2);
   });
 
+  it('resolves the offer from the detail cache when the list row lacks offers', () => {
+    // Opened from a PRODUCT_SELECT list row, then viewed: the list entry
+    // carries no offers but the detail entry has the exact offer.
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 10 }] },
+    ]);
+    seedProductDetail(queryClient, 'gaming-beast', {
+      id: 'product-1',
+      slug: 'gaming-beast',
+      stock_quantity: 10,
+      offers: [{ id: 'offer-7', stock_quantity: 5 }],
+    });
+
+    expect(
+      getCachedOptionStock(queryClient, 'product-1', { offerId: 'offer-7' })
+    ).toBe(5);
+  });
+
+  it('scans past a list entry that lacks the requested variant', () => {
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 10 }] },
+      {
+        products: [
+          {
+            id: 'product-1',
+            stock_quantity: 10,
+            variants: [{ id: 'variant-2', stock_quantity: 3 }],
+          },
+        ],
+      },
+    ]);
+
+    expect(
+      getCachedOptionStock(queryClient, 'product-1', {
+        variantId: 'variant-2',
+      })
+    ).toBe(3);
+  });
+
   it('fails closed when the cached option is missing', () => {
     seedListPages(queryClient, [
       {

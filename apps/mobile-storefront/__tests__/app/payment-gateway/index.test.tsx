@@ -9,7 +9,9 @@ jest.mock('expo-router', () => ({ router: { replace: jest.fn() } }));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
-jest.mock('@/stores/auth-store', () => ({ useAuthStore: () => null }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: () => ({ id: '11111111-1111-4111-8111-111111111111' }),
+}));
 jest.mock('@/components/storefront/StorefrontScreenShell', () => ({
   StorefrontScreenShell: require('react-native').View,
 }));
@@ -17,7 +19,11 @@ jest.mock(
   '@/components/payment-gateway/use-payment-gateway-controller',
   () => ({
     usePaymentGatewayController: () => ({
-      validatedParams: { isValid: true },
+      // Stamped owner launch: the legacy ownership check is skipped.
+      validatedParams: {
+        isValid: true,
+        data: { userId: '11111111-1111-4111-8111-111111111111' },
+      },
       paymentKind: 'primary_wallet_card',
       status: mockStatus,
       errorMessage: null,

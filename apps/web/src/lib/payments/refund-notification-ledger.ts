@@ -82,11 +82,21 @@ export async function refundNotificationLedgerAmount({
     const matchedKobo = refunds
       .filter((refund) => {
         const refundGateway = normalizePaymentGateway(refund.gateway);
-        if (refundGateway === '' || refundGateway !== legGateway) return false;
         const metadata = refund.metadata as {
           payment_transaction_id?: unknown;
           provider_refund_status?: unknown;
         } | null;
+        // Merchant-attested manual rows link explicitly and count as
+        // coverage in matching money, mirroring the aggregate claim;
+        // they never sole-attribute, so an unlinked manual row still
+        // mismatches for review.
+        if (refundGateway === 'MANUAL')
+          return (
+            metadata?.payment_transaction_id === leg.id &&
+            normalizeCurrencyCode(refund.currency) === legCurrency &&
+            Number(refund.amount) > 0
+          );
+        if (refundGateway === '' || refundGateway !== legGateway) return false;
         // A locally completed Paystack refund counts only after it is
         // provider-verified; other gateways keep local-status trust.
         if (

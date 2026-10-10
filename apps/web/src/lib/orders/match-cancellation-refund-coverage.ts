@@ -72,7 +72,12 @@ export function matchCancellationRefundCoverage({
     // instead of silently dropping evidence the claim gate ignores.
     const attributed = linkedId === null && soleCompletedLegId !== null;
     const paymentId = linkedId ?? (attributed ? soleCompletedLegId : null);
-    if (row.status !== 'completed' || paymentId === null) {
+    // Terminal evidence is completed or refunded (legacy
+    // provider-confirmed rows), mirroring the aggregate claim.
+    if (
+      (row.status !== 'completed' && row.status !== 'refunded') ||
+      paymentId === null
+    ) {
       if (linkedId === null) unattributedUnlinkedCount += 1;
       continue;
     }

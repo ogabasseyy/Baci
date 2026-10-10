@@ -49,10 +49,15 @@ DROP TRIGGER IF EXISTS audit_order_refund_step ON public.order_cancellation_side
 CREATE TRIGGER audit_order_refund_step AFTER INSERT OR UPDATE OF status,attempts,retry_requests
   ON public.order_cancellation_side_effects FOR EACH ROW EXECUTE FUNCTION private.audit_order_refund_step();
 
+-- The confirmation parameter changes the signature: without a DROP the
+-- 7-argument overload would survive beside the new one, leaving an
+-- unattested entry point behind.
+DROP FUNCTION IF EXISTS private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text);
 CREATE OR REPLACE FUNCTION private.manage_order_refund(
   p_order_id uuid, p_action text DEFAULT 'status', p_amount numeric DEFAULT NULL,
   p_refunded_at timestamptz DEFAULT NULL, p_method text DEFAULT NULL,
-  p_reference text DEFAULT NULL, p_note text DEFAULT NULL
+  p_reference text DEFAULT NULL, p_note text DEFAULT NULL,
+  p_confirmed boolean DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_actor uuid := auth.uid();
@@ -185,6 +190,12 @@ BEGIN
       claimed_at=now(),error=NULL WHERE order_id=p_order_id AND step='refund'
       RETURNING status,error,attempts,retry_requests INTO v_step;
   ELSIF p_action='manual' THEN
+    -- Recording attests money already moved: the UI requires the
+    -- checkbox and the route validates it, but direct RPC callers
+    -- must attest too, and the audit trail must keep the proof.
+    IF p_confirmed IS NOT TRUE THEN
+      RAISE EXCEPTION 'refund_confirmation_required' USING ERRCODE='22023';
+    END IF;
     -- The trusted finalization requires a cancellation timestamp; legacy
     -- rows without one need ops review before manual money can route
     -- through the aggregate claim.
@@ -235,7 +246,7 @@ BEGIN
           'completed','manual',v_reference||'#'||v_leg_index::text,'Manual refund recorded by merchant',
           jsonb_build_object('payment_transaction_id',v_payment.id,'recorded_by',v_actor,
             'refunded_at',p_refunded_at,'method',p_method,'note',p_note,
-            'reference',v_reference));
+            'reference',v_reference,'confirmed',true));
         v_allocation := v_allocation-v_leg_remaining;
       END IF;
       EXIT WHEN v_allocation=0;
@@ -283,20 +294,22 @@ BEGIN
     'canManageRefunds',v_can_manage
       AND COALESCE(v_step.status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;
-REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
+REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
   FROM PUBLIC,anon,authenticated;
 -- Preserve the repository boundary: authenticated callers have no private-schema usage.
 -- This narrow delegate executes only the private function, which checks auth.uid and permissions.
+DROP FUNCTION IF EXISTS public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text);
 CREATE OR REPLACE FUNCTION public.manage_order_refund(
   p_order_id uuid,p_action text DEFAULT 'status',p_amount numeric DEFAULT NULL,
   p_refunded_at timestamptz DEFAULT NULL,p_method text DEFAULT NULL,
-  p_reference text DEFAULT NULL,p_note text DEFAULT NULL
+  p_reference text DEFAULT NULL,p_note text DEFAULT NULL,
+  p_confirmed boolean DEFAULT NULL
 ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$
- SELECT private.manage_order_refund(p_order_id,p_action,p_amount,p_refunded_at,p_method,p_reference,p_note);
+ SELECT private.manage_order_refund(p_order_id,p_action,p_amount,p_refunded_at,p_method,p_reference,p_note,p_confirmed);
 $$;
-REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
+REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
   FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
+GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
   TO authenticated;
 
 -- A provider confirmation updates payment status without changing amount paid.

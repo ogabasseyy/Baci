@@ -11,7 +11,12 @@ export function OrderRefundSection({
   order: Order;
   setOrder: Dispatch<SetStateAction<Order>>;
 }) {
+  // Paid scope: unpaid (or pending-payment) cancellations have no
+  // refundable balance, so skip the card and its status polling rather
+  // than rendering a noisy zero-balance Not started panel.
   if (!['Canceled', 'Cancelled'].includes(order.shippingStatus)) return null;
+  if (!['Paid', 'Partially Paid', 'Refunded'].includes(order.paymentStatus))
+    return null;
   return (
     <OrderRefundPanel
       key={order.id}

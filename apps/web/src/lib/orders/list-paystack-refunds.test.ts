@@ -145,4 +145,15 @@ describe('listPaystackRefunds', () => {
     }
     expect(rejected).not.toHaveBeenCalled();
   });
+  it('caps provider calls to the remaining budget', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response({ id: 5, reference: 'capture-1' }))
+      .mockResolvedValueOnce(response([refund]));
+    vi.stubGlobal('fetch', fetcher);
+    await listPaystackRefunds('capture-1', { timeoutMs: 5_000 });
+    expect(timeout).toHaveBeenCalledWith(5_000);
+    timeout.mockRestore();
+  });
 });

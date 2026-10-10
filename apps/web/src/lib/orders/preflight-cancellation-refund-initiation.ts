@@ -4,8 +4,21 @@ import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-tra
 import { normalizeRefundMoneyField } from '@/lib/orders/match-cancellation-refund-coverage';
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
-import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
+import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from '@/lib/orders/run-order-cancellation-side-effect';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
+
+// Worst-case sizing for one leg's provider preflight: a verify plus a
+// list page may take up to 30s (mirroring the provider precedent),
+// and the finish write reserves 8s after the last response
+// (mirroring the audit margin precedent). Starting a leg short of
+// both burns the window initiation needs, and every retry repeats
+// the same starvation — so admit per leg and defer when short.
+const PREFLIGHT_PROVIDER_CALL_WORST_MS = 30_000;
+const PREFLIGHT_FINISH_WRITE_RESERVE_MS = 8_000;
 
 interface CancellationRefundLedgerRow {
   amount: number;
@@ -24,6 +37,7 @@ interface CancellationRefundLedgerRow {
  */
 export async function preflightCancellationRefundInitiation({
   auditBlockedLegIds,
+  deadlineMs,
   linkedPaymentId,
   manualLinkedLegIds,
   mismatchedIds,
@@ -34,6 +48,7 @@ export async function preflightCancellationRefundInitiation({
   transactions,
 }: {
   auditBlockedLegIds: Set<string>;
+  deadlineMs?: number;
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
   manualLinkedLegIds: Set<string>;
   mismatchedIds: Set<string>;
@@ -112,12 +127,33 @@ export async function preflightCancellationRefundInitiation({
       !transaction.gateway_reference
     )
       continue;
+    const timeoutMs =
+      deadlineMs === undefined
+        ? undefined
+        : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
+    if (
+      timeoutMs !== undefined &&
+      timeoutMs < PREFLIGHT_PROVIDER_CALL_WORST_MS
+    ) {
+      // Starvation is not failure: reset the budget the claim
+      // consumed so the resume retries fresh instead of mistaking
+      // a short window for exhaustion.
+      await tryResetCancellationSideEffectAttempts(
+        supabase,
+        order.id,
+        'refund'
+      );
+      throw new DeferredError(
+        'cancellation_refund_preflight_deferred_for_budget'
+      );
+    }
     await checkCancellationRefundProvider({
       currency: transaction.currency || order.currency || 'NGN',
       knownRefunds: (refundRows ?? []).filter(
         (row) => linkedPaymentId(row) === transaction.id
       ),
       reference: transaction.gateway_reference,
+      timeoutMs,
     });
   }
   return { auditBlockedTransactions, initiationTransactions };

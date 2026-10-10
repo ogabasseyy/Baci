@@ -15,6 +15,7 @@ import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pen
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
+import { EXPECTED_PENDING_ORDER_REFUND_SOURCES } from './expected-pending-order-refund-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
@@ -42,21 +43,7 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
-  {
-    repositoryPath:
-      'supabase/migrations/20261002090000_order_refund_management.sql',
-    sha256: '12e90129490be7f0eae60bc17ab28b78ac104e37f47c6fe6a62fd41cf496c009',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261010120000_restrict_authenticated_refund_inserts.sql',
-    sha256: '03d4ea44a10296dc77c06f094ad33b9018e64baeaae89171eef5892ab32bf91d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql',
-    sha256: '11648751f8905fe679a78a2736c3683844e4252b650953f99471d45b1965e36e',
-  },
+  ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',

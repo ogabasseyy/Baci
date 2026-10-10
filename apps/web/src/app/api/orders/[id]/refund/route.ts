@@ -26,6 +26,8 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
   payment_currency_requires_review: 'Refund requires review before recording',
   payment_ledger_requires_review: 'Refund requires review before recording',
   invalid_refund_action: 'Invalid refund request',
+  refund_confirmation_required:
+    'Confirm that the money already moved before recording',
 };
 
 async function handle(
@@ -67,6 +69,7 @@ async function handle(
         p_method: body.method,
         p_reference: body.reference,
         p_note: body.note ? body.note : null,
+        p_confirmed: body.confirmed,
       });
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);

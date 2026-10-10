@@ -385,4 +385,64 @@ describe('refundNotificationLedgerAmount', () => {
       })
     ).rejects.toThrow('refund_notification_ledger_mismatch');
   });
+
+  it('counts explicitly linked manual rows as coverage', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('still rejects unlinked manual rows', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: {},
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
 });

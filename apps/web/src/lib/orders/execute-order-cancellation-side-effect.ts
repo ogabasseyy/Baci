@@ -200,7 +200,8 @@ export async function executeOrderCancellationSideEffect({
   const awaitingRefundPaymentIds = new Set<string>();
   const reviewRefundPaymentIds = new Set<string>();
   for (const row of refundRows ?? []) {
-    if (row.status === 'completed') continue;
+    // Terminal rows (completed or legacy refunded) are not in flight.
+    if (row.status === 'completed' || row.status === 'refunded') continue;
     const paymentId = linkedPaymentId(row);
     if (typeof paymentId !== 'string') continue;
     if (
@@ -264,6 +265,7 @@ export async function executeOrderCancellationSideEffect({
   const { auditBlockedTransactions, initiationTransactions } =
     await preflightCancellationRefundInitiation({
       auditBlockedLegIds,
+      deadlineMs,
       linkedPaymentId,
       manualLinkedLegIds,
       mismatchedIds,

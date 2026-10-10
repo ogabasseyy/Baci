@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./list-paystack-refunds', () => ({ listPaystackRefunds: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
+import { logger } from '@/lib/logger';
 import { checkCancellationRefundProvider } from './check-cancellation-refund-provider';
 import { listPaystackRefunds } from './list-paystack-refunds';
 
@@ -28,6 +30,20 @@ describe('checkCancellationRefundProvider', () => {
       'Unable to verify'
     );
   });
+  it('logs verification outages for ops alerting', async () => {
+    const failure = new Error('Paystack refund verification unavailable');
+    vi.mocked(listPaystackRefunds).mockRejectedValue(failure);
+    await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
+      'Unable to verify'
+    );
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: failure,
+        message: 'Cancellation refund provider verification failed',
+        reference: 'capture-1',
+      })
+    );
+  });
   it('allows accounted processed refunds but blocks pending ones', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
@@ -46,6 +62,27 @@ describe('checkCancellationRefundProvider', () => {
     await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
       'reconciliation'
     );
+  });
+  it('forwards the remaining budget to the refund lister', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([]);
+    await checkCancellationRefundProvider({ ...input, timeoutMs: 42_000 });
+    expect(vi.mocked(listPaystackRefunds)).toHaveBeenCalledWith(
+      'capture-1',
+      expect.objectContaining({ timeoutMs: 42_000 })
+    );
+  });
+  it('treats legacy refunded rows as reconciled like completed ones', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          { gateway_reference: '1', amount: 1, status: 'refunded' },
+        ],
+      })
+    ).resolves.toBeUndefined();
   });
   it('accounts unmatched processed refunds against completed manual Paystack rows', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([

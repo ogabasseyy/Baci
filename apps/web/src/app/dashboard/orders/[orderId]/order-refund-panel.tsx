@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { orderRefundStatusLabels } from '@/config/order-refund';
+import {
+  describeRefundWorkerError,
+  orderRefundStatusLabels,
+} from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
@@ -39,6 +42,7 @@ export function OrderRefundPanel({
           {
             signal: controller.signal,
             cache: 'no-store',
+            credentials: 'include',
           }
         );
         const data = await response.json().catch(() => ({}));
@@ -176,7 +180,9 @@ export function OrderRefundPanel({
               )}
             </dl>
             {summary.error && (
-              <p className="text-sm text-destructive">{summary.error}</p>
+              <p className="text-sm text-destructive" title={summary.error}>
+                {describeRefundWorkerError(summary.error)}
+              </p>
             )}
             <p className="text-xs text-muted-foreground">
               Attempts in current cycle: {summary.attempts}. Retries requested:{' '}

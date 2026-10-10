@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { listPaystackRefunds } from './list-paystack-refunds';
 import { normalizeRefundMoneyField } from './match-cancellation-refund-coverage';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
@@ -6,6 +7,7 @@ export async function checkCancellationRefundProvider({
   reference,
   currency,
   knownRefunds,
+  timeoutMs,
 }: {
   reference: string;
   currency: string;
@@ -16,11 +18,20 @@ export async function checkCancellationRefundProvider({
     currency?: string | null;
     metadata?: Record<string, unknown> | null;
   }>;
+  timeoutMs?: number;
 }): Promise<void> {
   let rows: Awaited<ReturnType<typeof listPaystackRefunds>>;
   try {
-    rows = await listPaystackRefunds(reference);
-  } catch {
+    rows = await listPaystackRefunds(reference, { timeoutMs });
+  } catch (error) {
+    // Fail closed, but log the cause: a config outage (missing
+    // secret) strands every Paystack leg and needs an ops alert,
+    // not silent reconciliation backlog.
+    logger.error({
+      error,
+      message: 'Cancellation refund provider verification failed',
+      reference,
+    });
     throw new DeliveryUncertainError(
       'Unable to verify existing Paystack refunds; review required'
     );
@@ -72,7 +83,11 @@ export async function checkCancellationRefundProvider({
       throw new DeliveryUncertainError(
         'Paystack refund amount or currency mismatch'
       );
-    if (known?.status === 'completed' && row.status === 'processed') continue;
+    if (
+      (known?.status === 'completed' || known?.status === 'refunded') &&
+      row.status === 'processed'
+    )
+      continue;
     if (row.status === 'processed') {
       const pair = manualCandidates.indexOf(row.amount);
       if (pair !== -1) {

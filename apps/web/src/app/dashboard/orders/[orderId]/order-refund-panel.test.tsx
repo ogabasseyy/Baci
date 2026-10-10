@@ -43,9 +43,16 @@ describe('OrderRefundPanel', () => {
     });
     render(<OrderRefundPanel orderId="order-1" />);
     const button = await screen.findByRole('button', { name: 'Retry refund' });
-    expect(
-      screen.getByText('Insufficient balance to process refund')
-    ).toBeInTheDocument();
+    // Worker errors render a fixed label; the raw string stays in
+    // the title for support, never as visible merchant-facing text.
+    const label = screen.getByText(
+      'The refund ran into a problem. Support has the details.'
+    );
+    expect(label).toBeInTheDocument();
+    expect(label).toHaveAttribute(
+      'title',
+      'Insufficient balance to process refund'
+    );
     fireEvent.click(button);
     await waitFor(() =>
       expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
@@ -187,7 +194,7 @@ describe('OrderRefundPanel', () => {
     await screen.findByRole('button', { name: 'Retry refund' });
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       '/api/orders/order%2F1%3Fx/refund',
-      expect.anything()
+      expect.objectContaining({ credentials: 'include' })
     );
   });
   it('fires the refunded callback once per order', async () => {

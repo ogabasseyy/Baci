@@ -313,6 +313,33 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(supabase.insert).not.toHaveBeenCalled();
     expect(supabase.update).toHaveBeenCalledWith({ attempts: 0 });
   });
+  it('treats legacy refunded rows as terminal coverage', async () => {
+    const supabase = refundClient({
+      payments: [paystackPayment],
+      refundRows: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+          status: 'refunded',
+        },
+      ],
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toEqual({ refundIds: [] });
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(supabase.insert).not.toHaveBeenCalled();
+  });
   it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 0 }],

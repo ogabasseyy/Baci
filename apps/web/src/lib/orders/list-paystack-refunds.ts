@@ -23,8 +23,14 @@ function identityTexts(value: unknown): string[] {
 }
 
 export async function listPaystackRefunds(
-  reference: string
+  reference: string,
+  options: { timeoutMs?: number } = {}
 ): Promise<ProviderRefund[]> {
+  // Bound every provider call to the remaining drain budget when the
+  // caller passes one: an uncapped 15s verify plus uncapped list
+  // pages could otherwise consume the window initiation needs, and
+  // every retry would repeat the same starvation.
+  const timeoutMs = Math.min(15_000, Math.max(1, options.timeoutMs ?? 15_000));
   // The reference travels only through encodeURIComponent into a query
   // string, so punctuation is safe: reject empties, oversize values, and
   // control characters that could smuggle log or cache-key forgeries.
@@ -41,7 +47,7 @@ export async function listPaystackRefunds(
       headers: { Authorization: `Bearer ${secret}` },
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) throw new Error('Paystack refund verification failed');
     const payload = await response.json();

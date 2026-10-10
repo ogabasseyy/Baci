@@ -92,6 +92,7 @@ describe('order refund route', () => {
         p_amount: 27574.83,
         p_reference: 'bank-1',
         p_method: 'bank_transfer',
+        p_confirmed: true,
       })
     );
   });

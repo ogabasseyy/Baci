@@ -93,7 +93,10 @@ BEGIN
             -- uncovered here while the executor treats its `paystack`
             -- refund as covering it, stranding the order paid with no
             -- aggregate finalization.
-            AND refund.status = 'completed'
+            -- Terminal refund evidence is completed or refunded (legacy
+            -- provider-confirmed rows): both count as returned money,
+            -- mirroring the manager and the status trigger.
+            AND refund.status IN ('completed', 'refunded')
             AND refund.amount > 0
             AND upper(btrim(refund.currency)) = upper(btrim(payment.currency))
             -- A locally completed Paystack refund counts only after it is

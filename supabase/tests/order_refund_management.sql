@@ -123,6 +123,8 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000014', v_merchant_id, 'REFUND-014',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000015', v_merchant_id, 'REFUND-015',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000016', v_merchant_id, 'REFUND-016',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -143,7 +145,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000011',
       '9ef11000-0000-4000-8000-000000000013',
       '9ef11000-0000-4000-8000-000000000014',
-      '9ef11000-0000-4000-8000-000000000015');
+      '9ef11000-0000-4000-8000-000000000015',
+      '9ef11000-0000-4000-8000-000000000016');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -212,7 +215,16 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000015', 'refund', 30, 'USD',
       'completed', 'paystack', 'fx-15',
       jsonb_build_object(
-        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000019'));
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000019')),
+    ('9ef12000-0000-4000-8000-000000000021', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000016', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-16', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000022', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000016', 'refund', 100, 'NGN',
+      'refunded', 'paystack', 'legacy-16',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000021',
+        'provider_refund_status', 'processed'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -298,7 +310,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 101,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'excess-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'excess-1',NULL,true);
     RAISE EXCEPTION 'excess refund accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
@@ -318,7 +330,7 @@ BEGIN
   -- matcher would quarantine the step and strand the balance.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 80 THEN
     RAISE EXCEPTION 'partial refund did not reduce remaining';
@@ -338,7 +350,7 @@ BEGIN
   -- conflicting reuse of the reference is rejected.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'manual replay duplicated the ledger row';
@@ -346,11 +358,33 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 25,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true);
     RAISE EXCEPTION 'conflicting reference reuse accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
+
+  -- Recording attests money already moved: direct RPC callers must
+  -- attest too, and the ledger row keeps the proof.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'unconfirmed-1', NULL, false);
+    RAISE EXCEPTION 'unattested manual refund accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'refund_confirmation_required' THEN RAISE; END IF;
+  END;
+  PERFORM public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', NULL, true);
+  IF NOT EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND gateway_reference = 'attested-1#1'
+      AND metadata->>'confirmed' = 'true'
+  ) THEN
+    RAISE EXCEPTION 'merchant attestation not persisted on manual row';
+  END IF;
 
   -- Claimed refunds block manual writes and management.
   SELECT public.manage_order_refund(
@@ -362,7 +396,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000008', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'claimed-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'claimed-1',NULL,true);
     RAISE EXCEPTION 'manual write accepted during claimed refund';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -384,7 +418,7 @@ BEGIN
   -- while the merchant reference stays queryable on every leg.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000002', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
     RAISE EXCEPTION 'split manual did not span both legs';
@@ -394,7 +428,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000002', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
     RAISE EXCEPTION 'split manual replay duplicated rows';
@@ -426,7 +460,7 @@ BEGIN
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000003', 'manual', 10,
     '2026-09-28T12:00:00Z', 'bank_transfer',
-    '  ' || pg_catalog.repeat('p', 100) || '  ');
+    '  ' || pg_catalog.repeat('p', 100) || '  ',NULL,true);
 
   -- Wallet and savings reversals reduce the outstanding balance, and a
   -- reversal-adjusted manual completes the order.
@@ -442,14 +476,14 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000004', 'manual', 51,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'over-after-reversal');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'over-after-reversal',NULL,true);
     RAISE EXCEPTION 'manual exceeded reversal-adjusted remaining';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
   END;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000004', 'manual', 50,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'reversal-adjusted'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'reversal-adjusted',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'refunded' THEN
     RAISE EXCEPTION 'reversal-adjusted manual did not complete the order';
@@ -459,7 +493,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000005', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'unlinked-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'unlinked-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside unallocated refund';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'unallocated_refund_requires_review' THEN RAISE; END IF;
@@ -477,14 +511,14 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000006', 'manual', 61,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-over');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-over',NULL,true);
     RAISE EXCEPTION 'manual exceeded split-internal remaining';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
   END;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000006', 'manual', 60,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'manual allocated to the reversed wallet leg';
@@ -498,7 +532,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000007', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'wallet-only-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'wallet-only-1',NULL,true);
     RAISE EXCEPTION 'manual allocated to a wallet-only order';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -507,7 +541,7 @@ BEGIN
   -- Legacy currency casing passes; genuinely foreign legs block.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000010', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'lower-1'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'lower-1',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'refunded' THEN
     RAISE EXCEPTION 'lowercase currency leg was not refundable';
@@ -515,7 +549,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000011', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'usd-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'usd-1',NULL,true);
     RAISE EXCEPTION 'manual accepted on foreign-currency leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;
@@ -526,7 +560,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000012', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'legacy-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'legacy-1',NULL,true);
     RAISE EXCEPTION 'manual accepted without cancellation timestamp';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -561,7 +595,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000014', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'inflight-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'inflight-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside an in-flight payment leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -583,7 +617,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000015', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover'
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'refunded' THEN
     RAISE EXCEPTION 'matching-money manual blocked by foreign row';
@@ -635,7 +669,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'staff-1');
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'staff-1',NULL,true);
   EXCEPTION WHEN SQLSTATE '42501' THEN
     v_rejected := SQLERRM = 'refund_forbidden';
   END;
@@ -755,6 +789,15 @@ BEGIN
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'partial manual coverage finalized early, got %', v_status;
   END IF;
+  -- A legacy refunded row is terminal evidence like a completed one:
+  -- full coverage finalizes instead of running the worker.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000016', 'refund',
+    '9ef13000-0000-4000-8000-000000000016');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'refunded-row coverage did not finalize, got %', v_status;
+  END IF;
 END;
 $refund_claim_finalize$;
 
@@ -864,7 +907,7 @@ BEGIN
 
   -- Anonymous callers and direct private access stay denied.
   IF pg_catalog.has_function_privilege('anon',
-    'public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)',
+    'public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'anonymous callers can execute the refund RPC';
   END IF;
@@ -872,7 +915,7 @@ BEGIN
     RAISE EXCEPTION 'private schema boundary open to authenticated';
   END IF;
   IF pg_catalog.has_function_privilege('authenticated',
-    'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)',
+    'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'direct private refund RPC allowed';
   END IF;

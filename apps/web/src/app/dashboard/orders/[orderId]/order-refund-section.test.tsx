@@ -55,6 +55,17 @@ describe('OrderRefundSection', () => {
     );
     expect(screen.queryByText('Refund')).not.toBeInTheDocument();
   });
+  it('hides the refund panel for unpaid cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({ paymentStatus: 'Unpaid' })}
+        setOrder={setOrder}
+      />
+    );
+    expect(screen.queryByText('Refund')).not.toBeInTheDocument();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
   it('marks the order refunded when the panel reports completion', async () => {
     vi.stubGlobal(
       'fetch',

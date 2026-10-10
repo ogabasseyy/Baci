@@ -1,8 +1,6 @@
-import { CONFIG } from '@/lib/config';
 import { HttpError } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import { supabase } from '@/lib/supabase';
-import type { VTUCheckoutPayload } from './vtu-checkout-response-schemas';
 
 const ALLOWED_CONFIRM_CHECKOUT_STATUSES = ['successful', 'processing'] as const;
 
@@ -82,34 +80,6 @@ export async function parseJsonResponse(response: Response) {
   }
 
   return data;
-}
-
-export function buildVtuRequestBody<T extends VTUCheckoutPayload>(payload: T) {
-  const normalized = normalizeVtuCheckoutPayload(payload);
-  const { walletAmount, ...rest } = normalized;
-  return {
-    ...rest,
-    merchantSlug: CONFIG.MERCHANT_SLUG,
-    ...(typeof walletAmount === 'number' && walletAmount > 0
-      ? { walletAmount }
-      : {}),
-  };
-}
-
-export function computeVtuWalletAmount(
-  selectionAmount: number | undefined,
-  currentTotal: number
-): number {
-  if (
-    typeof selectionAmount !== 'number' ||
-    selectionAmount <= 0 ||
-    !Number.isFinite(selectionAmount) ||
-    !Number.isFinite(currentTotal) ||
-    currentTotal <= 0
-  ) {
-    return 0;
-  }
-  return Math.min(selectionAmount, currentTotal);
 }
 
 export function shouldRotateWalletIdempotencyKeyForError(

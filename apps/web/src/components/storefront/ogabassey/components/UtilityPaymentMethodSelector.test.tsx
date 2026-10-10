@@ -16,9 +16,7 @@ describe('UtilityPaymentMethodSelector', () => {
       <UtilityPaymentMethodSelector
         canUseWallet={true}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={onSelectWallet}
-        selectedPaymentMethod="card"
         showWalletRow={true}
         walletBalance={500}
         walletLoading={false}
@@ -36,9 +34,7 @@ describe('UtilityPaymentMethodSelector', () => {
       <UtilityPaymentMethodSelector
         canUseWallet={true}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="wallet"
         showWalletRow={true}
         walletBalance={500}
         walletLoading={false}
@@ -48,29 +44,24 @@ describe('UtilityPaymentMethodSelector', () => {
     expect(screen.getByText('Recommended')).toBeInTheDocument();
   });
 
-  it('selects card and applies merchant theming to the selected option', async () => {
-    const user = userEvent.setup();
-    const onSelectCard = vi.fn();
-
+  it('offers no card option: wallet is the only payment method', () => {
     render(
       <UtilityPaymentMethodSelector
         canUseWallet={true}
         isLoading={false}
-        onSelectCard={onSelectCard}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="card"
         showWalletRow={true}
         walletBalance={500}
         walletLoading={false}
       />
     );
 
-    const cardOption = screen.getByRole('radio', { name: /pay with card/i });
-    expect(cardOption).toHaveClass('border-store-primary');
-
-    await user.click(cardOption);
-
-    expect(onSelectCard).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole('radio', { name: /pay with card/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', { name: /pay with wallet/i })
+    ).toHaveAttribute('aria-checked', 'true');
   });
 
   it('shows a disabled wallet option while its balance is loading', () => {
@@ -78,9 +69,7 @@ describe('UtilityPaymentMethodSelector', () => {
       <UtilityPaymentMethodSelector
         canUseWallet={false}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="card"
         showWalletRow={false}
         walletBalance={0}
         walletLoading={true}
@@ -98,9 +87,7 @@ describe('UtilityPaymentMethodSelector', () => {
       <UtilityPaymentMethodSelector
         canUseWallet={false}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="card"
         showWalletRow={true}
         walletBalance={0}
         walletLoading={false}
@@ -115,14 +102,12 @@ describe('UtilityPaymentMethodSelector', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not show wallet for signed-out customers', () => {
+  it('prompts signed-out customers to sign in and fund instead of showing a wallet row', () => {
     render(
       <UtilityPaymentMethodSelector
         canUseWallet={false}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="card"
         showWalletRow={false}
         walletBalance={0}
         walletLoading={false}
@@ -132,7 +117,9 @@ describe('UtilityPaymentMethodSelector', () => {
     expect(
       screen.queryByRole('radio', { name: /pay with wallet/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /pay with card/i })).toBeEnabled();
+    expect(
+      screen.getByText(/sign in and fund your wallet/i)
+    ).toBeInTheDocument();
   });
 
   it('invokes onFundWallet from the Pay with Bank Transfer option', async () => {
@@ -144,9 +131,7 @@ describe('UtilityPaymentMethodSelector', () => {
         canUseWallet={false}
         isLoading={false}
         onFundWallet={onFundWallet}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="card"
         showWalletRow={true}
         walletBalance={0}
         walletLoading={false}
@@ -168,9 +153,7 @@ describe('UtilityPaymentMethodSelector', () => {
       <UtilityPaymentMethodSelector
         canUseWallet={true}
         isLoading={false}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="wallet"
         showWalletRow={true}
         walletBalance={500}
         walletLoading={false}
@@ -182,14 +165,12 @@ describe('UtilityPaymentMethodSelector', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('disables available methods while a checkout request is pending', () => {
+  it('disables the wallet method while a checkout request is pending', () => {
     render(
       <UtilityPaymentMethodSelector
         canUseWallet={true}
         isLoading={true}
-        onSelectCard={vi.fn()}
         onSelectWallet={vi.fn()}
-        selectedPaymentMethod="wallet"
         showWalletRow={true}
         walletBalance={500}
         walletLoading={false}
@@ -199,32 +180,5 @@ describe('UtilityPaymentMethodSelector', () => {
     expect(
       screen.getByRole('radio', { name: /pay with wallet/i })
     ).toBeDisabled();
-    expect(screen.getByRole('radio', { name: /pay with card/i })).toBeDisabled();
-  });
-
-  it('moves focus and selects wallet with arrow keys', async () => {
-    const user = userEvent.setup();
-    const onSelectWallet = vi.fn();
-
-    render(
-      <UtilityPaymentMethodSelector
-        canUseWallet={true}
-        isLoading={false}
-        onSelectCard={vi.fn()}
-        onSelectWallet={onSelectWallet}
-        selectedPaymentMethod="card"
-        showWalletRow={true}
-        walletBalance={500}
-        walletLoading={false}
-      />
-    );
-
-    screen.getByRole('radio', { name: /pay with card/i }).focus();
-    await user.keyboard('{ArrowUp}');
-
-    expect(onSelectWallet).toHaveBeenCalledOnce();
-    expect(
-      screen.getByRole('radio', { name: /pay with wallet/i })
-    ).toHaveFocus();
   });
 });

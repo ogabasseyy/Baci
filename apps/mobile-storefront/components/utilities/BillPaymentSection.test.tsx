@@ -21,20 +21,9 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
 function createPaymentState(): PaymentState {
   return {
     canFundByBankTransfer: false,
-    cards: [],
-    isLoadingCards: false,
-    refetchCards: jest.fn<PaymentState['refetchCards']>(),
-    selectGateway: jest.fn(),
-    selectSavedCard: jest.fn(),
-    selectedGateway: 'paystack',
-    selectedSavedCardId: null,
-    supportedGateways: ['paystack'],
     walletBalance: 0,
-    walletCanRender: false,
     walletError: null,
     walletIsLoading: false,
-    walletSelection: undefined,
-    setWalletSelection: jest.fn(),
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
     resetWalletIdempotencyKey: jest.fn(),
   };

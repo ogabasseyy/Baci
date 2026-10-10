@@ -9,7 +9,6 @@ const {
   mockBillMountCount,
   mockCaptureClientEvent,
   mockFetchWithCsrf,
-  mockRedirectToPaymentCheckout,
   mockUseCustomerAuth,
   mockUseWallet,
 } = vi.hoisted(() => ({
@@ -18,7 +17,6 @@ const {
   mockBillMountCount: { current: 0 },
   mockCaptureClientEvent: vi.fn(),
   mockFetchWithCsrf: vi.fn(),
-  mockRedirectToPaymentCheckout: vi.fn(),
   mockUseCustomerAuth: vi.fn(),
   mockUseWallet: vi.fn(),
 }));
@@ -33,16 +31,6 @@ vi.mock('@/env', () => ({
   getSupabaseServiceRoleKey: () => 'test-service-role-key',
   getRootDomain: () => 'localhost',
 }));
-
-vi.mock('./utility-checkout', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./utility-checkout')>();
-
-  return {
-    ...original,
-    redirectToPaymentCheckout: mockRedirectToPaymentCheckout,
-  };
-});
 
 vi.mock('./utility/AirtimeDataForm', () => ({
   AirtimeDataForm: ({
@@ -199,7 +187,6 @@ export const utilityModalTestHarness = {
   checkoutFetch: vi.mocked(fetchWithCsrf),
   createJsonResponse,
   onClose: mockOnClose,
-  redirect: mockRedirectToPaymentCheckout,
   toast: vi.mocked(toast),
   useAuth: mockUseCustomerAuth,
   useWallet: mockUseWallet,
@@ -207,7 +194,6 @@ export const utilityModalTestHarness = {
     mockOnClose.mockClear();
     this.toast.mockClear();
     this.checkoutFetch.mockReset();
-    mockRedirectToPaymentCheckout.mockReset();
     mockCaptureClientEvent.mockReset();
     mockAirtimeMountCount.current = 0;
     mockBillMountCount.current = 0;

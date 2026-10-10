@@ -1,7 +1,19 @@
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export function releaseLockPath(root, commonDirectory) {
   return resolve(root, commonDirectory, 'baci-production-release.lock');
+}
+
+export function acquireReleaseLock(lockPath) {
+  try {
+    mkdirSync(lockPath);
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new Error(`release lock held: ${lockPath}; confirm no release is running, then remove it`);
+    }
+    throw error;
+  }
 }
 
 export function selectCoordinatedRun(runs, baseline, coordinationId) {
@@ -12,7 +24,18 @@ export function selectCoordinatedRun(runs, baseline, coordinationId) {
   return candidates[0] ?? null;
 }
 
-const IN_FLIGHT_RUN_STATUSES = new Set(['queued', 'in_progress', 'waiting', 'requested', 'pending']);
+// Enumerated for the list-workflow-runs status filter AND the sibling
+// classifier: a production run parked awaiting environment approval
+// (action_required) is still an in-flight deployment that must block
+// a second coordinator.
+export const IN_FLIGHT_RUN_STATUSES = new Set([
+  'queued',
+  'in_progress',
+  'waiting',
+  'requested',
+  'pending',
+  'action_required',
+]);
 
 export function selectSiblingCoordinatedRuns(runs, baseline, coordinationId, commit) {
   const knownIds = new Set(baseline.map(run => run.databaseId));

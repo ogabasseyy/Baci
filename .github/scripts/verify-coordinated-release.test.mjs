@@ -28,6 +28,16 @@ test('uncoordinated manual dispatches fail closed', () => {
     0
   );
 });
+test('manual dispatches with only one coordinator identifier fail closed', () => {
+  assert.notEqual(
+    run({ GITHUB_EVENT_NAME: 'workflow_dispatch', EXPECTED_RELEASE_SHA: sha }).status,
+    0
+  );
+  assert.notEqual(
+    run({ GITHUB_EVENT_NAME: 'workflow_dispatch', COORDINATION_ID: 'unique' }).status,
+    0
+  );
+});
 test('push releases without identifiers retain existing behavior', () => {
   assert.equal(run({ GITHUB_EVENT_NAME: 'push' }).status, 0);
 });

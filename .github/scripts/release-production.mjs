@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertLiveDeployment, coordinateRelease, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const repository = 'ogabasseyy/Baci';
@@ -45,7 +45,7 @@ async function main() {
   }
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
-  mkdirSync(lockPath);
+  acquireReleaseLock(lockPath);
   try {
     const result = await coordinateRelease({
       verifyCheckout: async () => {
@@ -56,7 +56,7 @@ async function main() {
         return command('git', ['rev-parse', 'HEAD']);
       },
       readMain: async () => gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha']),
-      listRuns: async () => ['queued', 'in_progress', 'waiting', 'requested', 'pending']
+      listRuns: async () => [...IN_FLIGHT_RUN_STATUSES]
         .flatMap(status => readRuns(`status=${status}`, true)),
       listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
       updateWorkers: async () => command('bash', ['vps-workers/deploy.sh'], false),

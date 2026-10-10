@@ -163,6 +163,15 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+    // Manual adjustments are owner-only (matching the RLS write policies
+    // and the RPC's own check): fail staff closed here with an honest
+    // 403 instead of letting the RPC answer a misleading 404.
+    if (!merchantContext.staffAccess.isOwner) {
+      return NextResponse.json(
+        { error: 'Only the merchant owner can adjust loyalty points' },
+        { status: 403 }
+      );
+    }
     const merchantId = merchantContext.merchantId;
 
     let rawBody: unknown = {};

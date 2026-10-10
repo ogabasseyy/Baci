@@ -17,6 +17,7 @@ import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-ref
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
+  DeliveryUncertainError,
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
@@ -71,6 +72,17 @@ export async function executeOrderCancellationSideEffect({
   );
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
+  }
+  const refundAmount = Number(order.amount_paid) || 0;
+  if (
+    transactions.some(
+      (transaction) =>
+        !transaction.currency || transaction.currency !== order.currency
+    )
+  ) {
+    throw new DeliveryUncertainError(
+      'Payment currency requires review before refund'
+    );
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
@@ -181,6 +193,7 @@ export async function executeOrderCancellationSideEffect({
   );
   if (
     gatewayRefundAmount <= 0 ||
+    !Number.isSafeInteger(Math.round(gatewayRefundAmount * 100)) ||
     transactions.some(
       (transaction) =>
         !Number.isFinite(Number(transaction.amount)) ||
@@ -267,6 +280,18 @@ export async function executeOrderCancellationSideEffect({
       !mismatchedIds.has(transaction.id) &&
       !auditBlockedLegIds.has(transaction.id)
   );
+  // Captures may legitimately exceed the recorded amount paid when
+  // superseded legs exist (their completed refunds already cover them),
+  // but the outstanding initiation itself must never exceed it.
+  const outstandingRefundKobo = initiationTransactions
+    .filter((transaction) => !refundedPaymentIds.has(transaction.id))
+    .reduce(
+      (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
+      0
+    );
+  if (outstandingRefundKobo > Math.round(refundAmount * 100)) {
+    throw new Error('Completed payment transaction has no refundable amount');
+  }
   // Pre-initiation provider guard: an existing Paystack refund the ledger
   // cannot account for must quarantine for review (delivery_uncertain)
   // instead of initiating a duplicate provider refund.

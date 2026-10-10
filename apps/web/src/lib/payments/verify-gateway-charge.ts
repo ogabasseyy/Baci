@@ -104,10 +104,11 @@ export type GatewayChargeVerification =
 export async function verifyGatewayCharge(
   gateway: HealableGateway,
   reference: string,
-  context?: GatewayChargeVerificationContext
+  context?: GatewayChargeVerificationContext,
+  signal?: AbortSignal
 ): Promise<GatewayChargeVerification> {
   if (gateway === 'paystack') {
-    const result = await verifyPaystackPayment(reference);
+    const result = await verifyPaystackPayment(reference, signal);
     if (!result.success) {
       return classifyFailure(result.code, 'paystack');
     }
@@ -131,7 +132,7 @@ export async function verifyGatewayCharge(
     };
   }
   if (gateway === 'korapay') {
-    const result = await verifyKorapayPayment(reference);
+    const result = await verifyKorapayPayment(reference, signal);
     if (!result.success) {
       return classifyFailure(result.code, 'korapay');
     }
@@ -177,7 +178,7 @@ export async function verifyGatewayCharge(
       };
     }
 
-    const result = await getJuicywayPaymentSession(sessionId);
+    const result = await getJuicywayPaymentSession(sessionId, signal);
     if (!result.success) {
       return classifyFailure(result.code, 'juicyway');
     }

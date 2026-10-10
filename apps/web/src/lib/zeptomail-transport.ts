@@ -63,7 +63,8 @@ export interface ZeptoMailApiResponse {
 export async function zeptoMailRequest(
   endpoint: ZeptoMailEndpoint,
   payload: Record<string, unknown>,
-  token: string
+  token: string,
+  signal?: AbortSignal
 ): Promise<ZeptoMailApiResponse> {
   let response: Response;
   try {
@@ -76,7 +77,12 @@ export async function zeptoMailRequest(
         Accept: 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(ZEPTOMAIL_REQUEST_TIMEOUT_MS),
+      signal: signal
+        ? AbortSignal.any([
+            signal,
+            AbortSignal.timeout(ZEPTOMAIL_REQUEST_TIMEOUT_MS),
+          ])
+        : AbortSignal.timeout(ZEPTOMAIL_REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     throw describeTransportFailure(error);

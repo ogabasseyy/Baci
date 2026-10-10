@@ -50,7 +50,31 @@ const settlementArgsSchema = z.object({
   orderShippingRetainedAmount: moneyInputSchema.nullish().optional(),
 });
 
+const SETTLEMENT_ORDER_CANCELLED = 'settlement_order_cancelled';
+
+function settlementRpcMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
 function throwSettlementRpcError(error: unknown): never {
+  // The settlement RPC rejects orders cancelled after this step was
+  // claimed. Normalize the guard to its permanent code so the
+  // drain/recovery selection filters stop retrying a row that can never
+  // succeed instead of re-climbing to the attempt cap.
+  if (settlementRpcMessage(error).includes(SETTLEMENT_ORDER_CANCELLED)) {
+    throw new Error(SETTLEMENT_ORDER_CANCELLED);
+  }
   if (error instanceof Error) {
     throw error;
   }

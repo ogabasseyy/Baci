@@ -187,6 +187,23 @@ test('the CLI validates real commit trees and refuses rewritten operational hist
     );
     const tabbed = git(['commit-tree', tabbedTree, '-p', initial, '-m', 'tab']);
     assert.throws(() => run(tabbed, initial));
+    const spacedSubtree = git(
+      ['mktree'],
+      `100644 blob ${barrierBlob}\t${commit}-runner-1 \n`
+    );
+    const spacedTree = git(
+      ['mktree'],
+      `100644 blob ${blob}\t.gigl-promote-record\n040000 tree ${spacedSubtree}\tbarriers\n`
+    );
+    const spaced = git([
+      'commit-tree',
+      spacedTree,
+      '-p',
+      initial,
+      '-m',
+      'space',
+    ]);
+    assert.throws(() => run(spaced, initial));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

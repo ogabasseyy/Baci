@@ -39,7 +39,7 @@ export function assertVercelApiSupport(probe) {
 }
 
 export function originRepoSlug(remoteUrl) {
-  const withoutSuffix = String(remoteUrl ?? '').replace(/\.git$/, '');
+  const withoutSuffix = String(remoteUrl ?? '').replace(/\/+$/, '').replace(/\.git$/, '');
   const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
   return match ? match[1].toLowerCase() : '';
 }

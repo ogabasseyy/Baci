@@ -33,6 +33,16 @@ operator path. Until then the guarantees in this document (SHA pinning,
 dispatch correlation, skipped-publication rejection, live-alias checks)
 apply to coordinator-driven workflow_dispatch releases only;
 push-to-main publication keeps its existing uncoordinated path.
+A push deploy interleaving a coordinated release is a known residual
+race: it publishes outside the sibling check, and the trailing
+live-alias verification fails the coordinator run without preventing
+the extra publication. The coordinator identifiers correlate a
+coordinator run with its dispatch; they are not authorization —
+anyone with workflow_dispatch permission and the right SHA passes
+the gate, so keep dispatch permission tightly scoped. Do not
+double-run the entry point for an already-released commit: republication
+is content-identical and passes verification, at the cost of a wasted
+deploy cycle — reconcile instead.
 Provision restricted runner authentication and trusted VPS access
 without copying personal SSH keys or introducing a broad permanent token.
 

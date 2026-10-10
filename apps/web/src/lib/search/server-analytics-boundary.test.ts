@@ -29,14 +29,13 @@ describe('search analytics service-role boundary', () => {
   });
 
   it('allows only the wrapper to construct the search-analytics brand', () => {
+    // Match constructions, not mentions: the brand string also appears
+    // in the service-client definition and the event-pipeline governance
+    // allowlist, which must not count as constructor sites.
+    const constructionPattern =
+      /createServiceClient\(\s*['"`]search-analytics['"`]\)/;
     const constructors = productionTypeScriptFiles(sourceRoot)
-      .filter((path) => {
-        const source = readFileSync(path, 'utf8');
-        return (
-          /['"`]search-analytics['"`]/.test(source) &&
-          !path.endsWith('lib/supabase/service.ts')
-        );
-      })
+      .filter((path) => constructionPattern.test(readFileSync(path, 'utf8')))
       .map((path) => relative(sourceRoot, path));
 
     expect(constructors).toEqual(['lib/search/server-analytics-client.ts']);

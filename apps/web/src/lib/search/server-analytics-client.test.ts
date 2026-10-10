@@ -39,6 +39,9 @@ describe('recordSearchSubmission', () => {
 
   it.each([
     ['non-uuid merchant', { merchant_id: 'not-a-uuid' }],
+    ['non-string merchant', { merchant_id: 12345 }],
+    ['non-string query', { search_query: 42 }],
+    ['null query', { search_query: null }],
     ['empty query', { search_query: '' }],
     ['oversized query', { search_query: 'q'.repeat(201) }],
     ['negative count', { results_count: -1 }],

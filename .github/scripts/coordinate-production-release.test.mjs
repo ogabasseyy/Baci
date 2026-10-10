@@ -205,9 +205,13 @@ test('malformed job listings refuse publication instead of throwing TypeError', 
   }
 });
 
-test('tags findRun failures as indeterminate dispatches', async () => {
-  for (const findRun of [async () => { throw new Error('dispatch outcome unknown'); }, async () => null]) {
-    const setup = fixture({ findRun });
+test('tags dispatch-window failures as indeterminate dispatches', async () => {
+  const cases = [
+    fixture({ dispatch: async () => { throw new Error('response lost'); } }),
+    fixture({ findRun: async () => { throw new Error('dispatch outcome unknown'); } }),
+    fixture({ findRun: async () => null }),
+  ];
+  for (const setup of cases) {
     const error = await coordinateRelease(setup.operations, coordinationId).then(
       () => { throw new Error('expected rejection'); },
       rejection => rejection

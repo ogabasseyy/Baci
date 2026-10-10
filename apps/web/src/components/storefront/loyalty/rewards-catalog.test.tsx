@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RewardsCatalog } from './rewards-catalog';
 
@@ -90,5 +90,88 @@ describe('RewardsCatalog', () => {
     );
 
     expect(screen.getByText('10% Off')).toBeInTheDocument();
+  });
+
+  it('renders a store-credit reward as credit, not a discount code', () => {
+    mockUseLoyalty.mockReturnValue(
+      loyaltyStateWithReward({
+        id: 'reward-3',
+        name: 'Wallet top-up',
+        description: 'Credit for your store balance',
+        points_required: 100,
+        reward_type: 'store_credit',
+        discount_value: 500,
+      })
+    );
+
+    render(<RewardsCatalog merchantId="merchant-1" customerId="customer-1" />);
+
+    expect(screen.getByText('₦500 Store Credit')).toBeInTheDocument();
+  });
+
+  it('fires onRedeemed after a successful redemption', async () => {
+    const mockRedeemReward = vi.fn().mockResolvedValue({ success: true });
+    mockUseLoyalty.mockReturnValue({
+      ...loyaltyStateWithReward({
+        id: 'reward-4',
+        name: 'Anything',
+        description: 'Redeemable',
+        points_required: 100,
+        reward_type: 'discount',
+        discount_type: 'fixed',
+        discount_value: 100,
+      }),
+      redeemReward: mockRedeemReward,
+    });
+    const onRedeemed = vi.fn();
+
+    render(
+      <RewardsCatalog
+        merchantId="merchant-1"
+        customerId="customer-1"
+        onRedeemed={onRedeemed}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
+
+    await waitFor(() => {
+      expect(mockRedeemReward).toHaveBeenCalledWith('reward-4');
+      expect(onRedeemed).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not fire onRedeemed when redemption fails', async () => {
+    const mockRedeemReward = vi
+      .fn()
+      .mockResolvedValue({ success: false, error: 'nope' });
+    mockUseLoyalty.mockReturnValue({
+      ...loyaltyStateWithReward({
+        id: 'reward-5',
+        name: 'Anything',
+        description: 'Redeemable',
+        points_required: 100,
+        reward_type: 'discount',
+        discount_type: 'fixed',
+        discount_value: 100,
+      }),
+      redeemReward: mockRedeemReward,
+    });
+    const onRedeemed = vi.fn();
+
+    render(
+      <RewardsCatalog
+        merchantId="merchant-1"
+        customerId="customer-1"
+        onRedeemed={onRedeemed}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
+
+    await waitFor(() => {
+      expect(mockRedeemReward).toHaveBeenCalledWith('reward-5');
+    });
+    expect(onRedeemed).not.toHaveBeenCalled();
   });
 });

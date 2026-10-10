@@ -10,8 +10,10 @@
 --
 -- This SECURITY DEFINER RPC performs the whole redemption in one
 -- transaction against the real schema (baseline 20260418000000):
--- availability (enabled, dates, finite stock with atomic decrement),
--- balance check, redemption insert, points deduction, and ledger row.
+-- expiry reconciliation, availability (enabled, dates, finite stock with
+-- atomic decrement), per-customer usage cap, program minimum balance,
+-- store_credit fulfillment, balance check, redemption insert, points
+-- deduction, and ledger row.
 -- The caller must own the customer row (customers.user_id = auth.uid()).
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,
@@ -24,6 +26,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_enabled boolean := false;
+  v_minimum integer := NULL;
   v_loyalty_id uuid;
   v_balance integer := 0;
   v_reward record;
@@ -31,12 +34,14 @@ DECLARE
   v_redemption_id uuid;
   v_redemption_code text;
   v_expires_at timestamptz;
+  v_expired_points integer := 0;
+  v_redemption_count integer := 0;
 BEGIN
   IF p_merchant_id IS NULL OR p_customer_id IS NULL OR p_reward_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  SELECT enabled INTO v_enabled
+  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id;
 
@@ -69,8 +74,47 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'not_enrolled');
   END IF;
 
+  -- Reconcile expired purchase credits before the balance check: award
+  -- stamps expires_at on earn transactions but nothing ever subtracts
+  -- them, so without this expired points stay spendable forever. The
+  -- member-row lock above serializes concurrent redemptions, so a second
+  -- redeem sees expired = true already committed and cannot double-count.
+  SELECT COALESCE(SUM(points), 0) INTO v_expired_points
+  FROM public.points_transactions
+  WHERE merchant_id = p_merchant_id
+    AND customer_id = p_customer_id
+    AND type = 'earn'
+    AND expired IS DISTINCT FROM true
+    AND expires_at IS NOT NULL
+    AND expires_at < pg_catalog.now();
+
+  IF v_expired_points > 0 THEN
+    UPDATE public.points_transactions
+    SET expired = true
+    WHERE merchant_id = p_merchant_id
+      AND customer_id = p_customer_id
+      AND type = 'earn'
+      AND expired IS DISTINCT FROM true
+      AND expires_at IS NOT NULL
+      AND expires_at < pg_catalog.now();
+
+    v_balance := GREATEST(0, v_balance - v_expired_points);
+    UPDATE public.customer_loyalty
+    SET points_balance = v_balance,
+        updated_at = pg_catalog.now()
+    WHERE id = v_loyalty_id;
+    INSERT INTO public.points_transactions (
+      customer_id, merchant_id, type, points, balance_after,
+      source, description
+    ) VALUES (
+      p_customer_id, p_merchant_id, 'expiry', -v_expired_points, v_balance,
+      'expiry', 'Expired purchase points reconciled'
+    );
+  END IF;
+
   -- Lock the reward row: finite stock decrements atomically below.
-  SELECT id, name, reward_type, reward_value, points_cost, stock_quantity
+  SELECT id, name, reward_type, reward_value, points_cost, stock_quantity,
+         usage_limit_per_customer
   INTO v_reward
   FROM public.loyalty_rewards
   WHERE id = p_reward_id
@@ -82,6 +126,38 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+  END IF;
+
+  -- Per-customer usage cap: without this a limit-1 reward is redeemable
+  -- repeatedly and only global stock bounds it.
+  IF v_reward.usage_limit_per_customer IS NOT NULL THEN
+    SELECT COUNT(*) INTO v_redemption_count
+    FROM public.reward_redemptions
+    WHERE merchant_id = p_merchant_id
+      AND customer_id = p_customer_id
+      AND reward_id = p_reward_id;
+    IF v_redemption_count >= v_reward.usage_limit_per_customer THEN
+      RETURN jsonb_build_object('success', false, 'error', 'usage_limit_reached');
+    END IF;
+  END IF;
+
+  -- Program minimum: the dashboard's "Minimum Redemption Points" is the
+  -- balance a member must hold before any redemption is allowed.
+  IF v_minimum IS NOT NULL AND v_minimum > 0 AND v_balance < v_minimum THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'minimum_not_met',
+      'required', v_minimum,
+      'available', v_balance
+    );
+  END IF;
+
+  -- store_credit rewards credit the customer balance below; a missing or
+  -- non-positive value is a misconfigured reward, failed closed here
+  -- before any write (stock, redemption, deduction).
+  IF v_reward.reward_type = 'store_credit'
+     AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
@@ -113,6 +189,16 @@ BEGIN
     v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at
   )
   RETURNING id INTO v_redemption_id;
+
+  -- store_credit fulfillment: credit the spendable customer balance in
+  -- the same transaction (row locked: concurrent credits serialize).
+  -- Without this the customer loses points for a useless discount code.
+  IF v_reward.reward_type = 'store_credit' THEN
+    UPDATE public.customers
+    SET store_credit = COALESCE(store_credit, 0) + v_reward.reward_value,
+        updated_at = pg_catalog.now()
+    WHERE id = p_customer_id;
+  END IF;
 
   UPDATE public.customer_loyalty
   SET points_balance = v_new_balance,

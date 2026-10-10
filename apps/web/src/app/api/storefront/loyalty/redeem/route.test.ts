@@ -206,4 +206,73 @@ describe('POST /api/storefront/loyalty/redeem', () => {
     expect(response.status).toBe(500);
     expect(body).toEqual({ error: 'Failed to process redemption' });
   });
+
+  it('returns 403 without calling the RPC when CSRF validation fails', async () => {
+    mocks.mockCheckCsrfProtection.mockResolvedValueOnce({
+      valid: false,
+      response: null,
+    });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toEqual({ error: 'CSRF validation failed' });
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('maps minimum_not_met to 400 with required/available', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        success: false,
+        error: 'minimum_not_met',
+        required: 500,
+        available: 150,
+      },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: 'Minimum points balance not met for redemption',
+      required: 500,
+      available: 150,
+    });
+  });
+
+  it('maps usage_limit_reached to 409', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'usage_limit_reached' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: 'Redemption limit reached for this reward',
+    });
+  });
 });

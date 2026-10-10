@@ -2,7 +2,8 @@ export type CatalogRewardType =
   | 'discount'
   | 'free_shipping'
   | 'free_product'
-  | 'exclusive_access';
+  | 'exclusive_access'
+  | 'store_credit';
 
 export type PersistedReward = {
   id: string;
@@ -23,6 +24,10 @@ const KNOWN_REWARD_TYPES: readonly CatalogRewardType[] = [
   'free_shipping',
   'free_product',
   'exclusive_access',
+  // Fulfilled by redeem_loyalty_reward as a customers.store_credit credit,
+  // not a discount code: keep it a distinct catalog type so the UI never
+  // presents it as a checkout code.
+  'store_credit',
 ];
 
 // Normalize persisted reward types to the storefront catalog contract: the

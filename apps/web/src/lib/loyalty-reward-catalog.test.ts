@@ -34,8 +34,15 @@ describe('toCatalogReward', () => {
     });
   });
 
-  it('falls back to a plain discount for unknown types', () => {
+  it('keeps store_credit distinct so it is never presented as a code', () => {
     expect(toCatalogReward(reward({ reward_type: 'store_credit' }))).toEqual({
+      reward_type: 'store_credit',
+      discount_type: undefined,
+    });
+  });
+
+  it('falls back to a plain discount for unknown types', () => {
+    expect(toCatalogReward(reward({ reward_type: 'mystery_box' }))).toEqual({
       reward_type: 'discount',
       discount_type: undefined,
     });

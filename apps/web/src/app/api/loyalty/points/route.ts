@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     // Get current loyalty record (or create one)
     const { data: initialLoyalty, error: loyaltyError } = await supabase
       .from('customer_loyalty')
-      .select('id, points_balance, lifetime_points')
+      .select('id, points_balance, lifetime_points, current_tier')
       .eq('merchant_id', merchantId)
       .eq('customer_id', customerId)
       .single();
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
             .toUpperCase(),
         })
         // PERFORMANCE: Use explicit column selection instead of .select() to prevent overfetching full rows
-        .select('id, points_balance, lifetime_points')
+        .select('id, points_balance, lifetime_points, current_tier')
         .single();
 
       if (createError) {
@@ -214,13 +214,38 @@ export async function POST(request: NextRequest) {
         ? (loyalty?.lifetime_points || 0) + points
         : loyalty?.lifetime_points || 0;
 
+    // Recompute the tier from the new lifetime total: the storefront
+    // status path trusts the persisted current_tier, so a manual award
+    // crossing a threshold must not leave it stale.
+    let newTier: string | null = null;
+    const { data: tierData, error: tierError } = await supabase.rpc(
+      'calculate_loyalty_tier',
+      {
+        p_lifetime_points: newLifetime,
+        p_merchant_id: merchantId,
+      }
+    );
+    if (tierError) {
+      console.error('Error recomputing loyalty tier:', tierError);
+    } else if (typeof tierData === 'string' && tierData.length > 0) {
+      newTier = tierData;
+    }
+
+    const loyaltyUpdate: Record<string, unknown> = {
+      points_balance: newBalance,
+      lifetime_points: newLifetime,
+      updated_at: new Date().toISOString(),
+    };
+    const previousTier = (loyalty as { current_tier?: string } | null)
+      ?.current_tier;
+    if (newTier !== null && newTier !== previousTier) {
+      loyaltyUpdate.current_tier = newTier;
+      loyaltyUpdate.tier_updated_at = new Date().toISOString();
+    }
+
     const { error: updateError } = await supabase
       .from('customer_loyalty')
-      .update({
-        points_balance: newBalance,
-        lifetime_points: newLifetime,
-        updated_at: new Date().toISOString(),
-      })
+      .update(loyaltyUpdate)
       .eq('id', loyalty?.id)
       .eq('merchant_id', merchantId);
 

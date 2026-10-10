@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
 import { createClient } from '@/lib/supabase/server';
@@ -22,6 +23,8 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   not_enrolled: 404,
   reward_unavailable: 404,
   insufficient_points: 400,
+  minimum_not_met: 400,
+  usage_limit_reached: 409,
   invalid_input: 400,
 };
 
@@ -31,6 +34,8 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   not_enrolled: 'Customer is not enrolled in the loyalty program',
   reward_unavailable: 'Reward not found or no longer available',
   insufficient_points: 'Insufficient points',
+  minimum_not_met: 'Minimum points balance not met for redemption',
+  usage_limit_reached: 'Redemption limit reached for this reward',
   invalid_input: 'Invalid redemption input',
 };
 
@@ -51,6 +56,8 @@ function getRedemptionInstructions(reward: {
       return 'Present this code to claim your free product. Contact the store for details.';
     case 'exclusive_access':
       return 'This code grants you early access to new products and exclusive sales.';
+    case 'store_credit':
+      return 'The credit has been added to your store balance and applies automatically at checkout.';
     default:
       return 'Apply this code at checkout or present it in-store to redeem your reward.';
   }
@@ -75,6 +82,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
+      );
+    }
+
+    // Cookie-authenticated browsers: reject forged cross-site POSTs before
+    // the points-spending redemption RPC runs (AGENTS.md CSRF rule).
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
       );
     }
 
@@ -150,7 +168,7 @@ export async function POST(request: NextRequest) {
           error: { code, result },
         });
       }
-      if (code === 'insufficient_points') {
+      if (code === 'insufficient_points' || code === 'minimum_not_met') {
         return NextResponse.json(
           {
             error: RPC_ERROR_MESSAGE[code],

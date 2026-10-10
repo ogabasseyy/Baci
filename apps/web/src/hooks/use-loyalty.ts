@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { buildCsrfHeaders } from '@/lib/csrf';
 
 interface LoyaltyReward {
   id: string;
@@ -11,7 +12,8 @@ interface LoyaltyReward {
     | 'discount'
     | 'free_shipping'
     | 'free_product'
-    | 'exclusive_access';
+    | 'exclusive_access'
+    | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
   min_tier?: string;
@@ -34,6 +36,13 @@ interface LoyaltySettings {
   referral_bonus_referee: number;
 }
 
+interface LoyaltyTier {
+  name: string;
+  minPoints: number;
+  multiplier: number | null;
+  perks: string[];
+}
+
 interface LoyaltyData {
   enrolled: boolean;
   points_balance: number;
@@ -43,6 +52,7 @@ interface LoyaltyData {
   points_to_next_tier: number;
   tier_thresholds: Record<string, number>;
   tier_progress: number;
+  tiers: LoyaltyTier[];
   referral_code: string | null;
   available_rewards: LoyaltyReward[];
   redeemable_rewards: LoyaltyReward[];
@@ -75,6 +85,17 @@ interface LoyaltyStateHandlers {
   setError: (error: string | null) => void;
 }
 
+const PERK_LABELS: Record<string, string> = {
+  free_shipping: 'Free shipping',
+  early_access: 'Early access to sales',
+  exclusive_discounts: 'Exclusive discounts',
+};
+
+function humanizePerk(perk: string): string {
+  const words = perk.replace(/[_-]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 // Mock data for preview/demo merchants. Built fresh per call so consumers
 // never share a mutable reference.
 function buildPreviewLoyaltyData(): LoyaltyData {
@@ -92,6 +113,27 @@ function buildPreviewLoyaltyData(): LoyaltyData {
       platinum: 1000,
     },
     tier_progress: 55,
+    tiers: [
+      { name: 'bronze', minPoints: 0, multiplier: 1, perks: [] },
+      {
+        name: 'silver',
+        minPoints: 100,
+        multiplier: 1.25,
+        perks: ['free_shipping'],
+      },
+      {
+        name: 'gold',
+        minPoints: 500,
+        multiplier: 1.5,
+        perks: ['free_shipping', 'early_access'],
+      },
+      {
+        name: 'platinum',
+        minPoints: 1000,
+        multiplier: 2,
+        perks: ['free_shipping', 'early_access', 'exclusive_discounts'],
+      },
+    ],
     referral_code: 'PREVIEW1',
     available_rewards: [],
     redeemable_rewards: [],
@@ -194,9 +236,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     try {
       const response = await fetch('/api/storefront/loyalty/enroll', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           merchant_id: merchantId,
           customer_id: customerId,
@@ -236,9 +276,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     try {
       const response = await fetch('/api/storefront/loyalty/redeem', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           merchant_id: merchantId,
           customer_id: customerId,
@@ -310,6 +348,9 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       },
     };
 
+    // Fallback when the status payload predates the tiers contract (older
+    // cached responses) or the merchant never configured this rung: the
+    // live path below renders merchant-defined values instead.
     const tierBenefits = {
       bronze: ['Earn 1 point per ₦100 spent', 'Access to basic rewards'],
       silver: [
@@ -330,6 +371,31 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         'Free express shipping',
       ],
     };
+
+    // Merchant-defined benefits first: the persisted ladder's multiplier
+    // (1.25x Silver, 1.5x Gold, 2x Platinum by default) and perk codes
+    // are the source of truth, not the hardcoded claims above.
+    const merchantTier = data?.tiers?.find(
+      (entry) => entry.name.toLowerCase() === tier.toLowerCase()
+    );
+    if (merchantTier) {
+      const benefits: string[] = [];
+      if (merchantTier.multiplier != null) {
+        benefits.push(`Earn ${merchantTier.multiplier}x points`);
+      }
+      for (const perk of merchantTier.perks ?? []) {
+        benefits.push(PERK_LABELS[perk] ?? humanizePerk(perk));
+      }
+      return {
+        colors:
+          tierColors[tier as keyof typeof tierColors] || tierColors.bronze,
+        benefits:
+          benefits.length > 0
+            ? benefits
+            : tierBenefits[tier as keyof typeof tierBenefits] ||
+              tierBenefits.bronze,
+      };
+    }
 
     return {
       colors: tierColors[tier as keyof typeof tierColors] || tierColors.bronze,

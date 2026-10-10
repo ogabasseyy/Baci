@@ -72,4 +72,37 @@ describe('useLoyalty', () => {
     expect(info.colors.bg).toBe('bg-yellow-100');
     expect(info.benefits.length).toBeGreaterThan(0);
   });
+
+  it('getTierInfo renders merchant-defined multipliers and perks', async () => {
+    const { result } = renderHook(() =>
+      useLoyalty('store-preview', 'customer-1')
+    );
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    // Preview ladder mirrors the persisted defaults (1.25x Silver), not
+    // the hardcoded 1.5x fallback claims.
+    expect(result.current.getTierInfo('silver').benefits).toEqual([
+      'Earn 1.25x points',
+      'Free shipping',
+    ]);
+    expect(result.current.getTierInfo('gold').benefits).toEqual([
+      'Earn 1.5x points',
+      'Free shipping',
+      'Early access to sales',
+    ]);
+  });
+
+  it('getTierInfo falls back for tiers missing from the ladder', async () => {
+    const { result } = renderHook(() =>
+      useLoyalty('store-preview', 'customer-1')
+    );
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    // Unknown rung: bronze fallback copy, bronze colors.
+    const info = result.current.getTierInfo('diamond');
+    expect(info.colors.bg).toBe('bg-amber-100');
+    expect(info.benefits).toContain('Access to basic rewards');
+  });
 });

@@ -118,9 +118,15 @@ VALUES
   ('01aa0000-0000-4000-8000-000000000018', '01aa0000-0000-4000-8000-000000000001', 'enroll-h@example.com', '01aa0000-0000-4000-8000-000000000108');
 
 INSERT INTO public.loyalty_settings (
-  merchant_id, enabled, signup_bonus_points, referral_bonus_points
+  merchant_id, enabled, signup_bonus_points, referral_bonus_points,
+  minimum_redemption_points
 ) VALUES (
-  '01aa0000-0000-4000-8000-000000000001', true, 50, 100
+  -- Minimum 100 (baseline default is 500): every redemption case below
+  -- runs with balance >= 150, so the program minimum never shadows the
+  -- insufficient-points and availability cases; the minimum gate itself
+  -- is covered by raising it in the redemption file.
+  '01aa0000-0000-4000-8000-000000000001', true, 50, 100,
+  100
 );
 
 INSERT INTO public.loyalty_rewards (

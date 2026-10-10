@@ -8,6 +8,8 @@ function chainable(result: QueryResult) {
   const chain: Record<string, (...args: unknown[]) => unknown> = {};
   chain.select = () => chain;
   chain.eq = () => chain;
+  chain.order = () => chain;
+  chain.limit = () => chain;
   chain.single = async () => result;
   chain.then = (resolve: (value: unknown) => unknown) =>
     Promise.resolve(result).then(resolve);

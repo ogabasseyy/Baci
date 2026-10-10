@@ -76,6 +76,10 @@ import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.cons
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Service key for guest-cart storage only: the cart RPCs are
+// service-role-executable (the anon key is publicly distributed, so
+// anon-executable writes would bypass the server-side creation quota).
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
@@ -195,19 +199,25 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY'
   );
   process.exit(1);
 }
 
 // Public shopping tools use the normal RLS-scoped anonymous client.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// Guest carts persist through Postgres RPCs on the same client: no local
-// volume, no writer lock, safe to scale past one replica.
-const guestCartStore = new GuestCartStore(supabase);
+// Guest carts persist through service-role-only Postgres RPCs: no local
+// volume, no writer lock, safe to scale past one replica. (The
+// creation quota stays per-process, so N replicas admit N times the
+// single-host burst: over-admission, never over-refusal.)
+const guestCartServiceClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY
+);
+const guestCartStore = new GuestCartStore(guestCartServiceClient);
 
 // =============================================================================
 // RATE LIMITING

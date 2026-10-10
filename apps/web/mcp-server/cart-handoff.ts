@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
-import { STOREFRONT_SNAPSHOT_VARIANT_WINDOW } from './storefront-snapshot-window';
+import {
+  STOREFRONT_SNAPSHOT_OFFER_WINDOW,
+  STOREFRONT_SNAPSHOT_VARIANT_WINDOW,
+} from './storefront-snapshot-window';
 
 type CartHandoffResult = {
   content: Array<{ type: 'text'; text: string }>;
@@ -105,12 +108,20 @@ export async function prepareCartHandoff({
     let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&
       Number(stockQuantity ?? 0) >= quantity;
     if (product.has_condition_offers === true) {
+      // PDP parity: the snapshot keeps 16 offers by (condition, id), so a
+      // stocked 17th offer is unpurchasable — window before the stock
+      // check or selection advertises an option the PDP cannot fulfill.
+      // (Search additionally claims first-row-per-condition because it
+      // attributes stock to conditions; this boolean needs no attribution.)
       const { data: offers, error: offersError } = await supabase
         .from('product_offers')
         .select('stock_quantity')
         .eq('merchant_id', merchantId)
         .eq('product_id', productId)
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .order('condition')
+        .order('id')
+        .limit(STOREFRONT_SNAPSHOT_OFFER_WINDOW);
       if (offersError) transient = true;
       optionAvailable ||= !offersError && Boolean(offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
     }

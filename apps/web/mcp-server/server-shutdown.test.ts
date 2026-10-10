@@ -71,41 +71,49 @@ it('fails closed before listening when startup validation exits early', async ()
     childScript,
     `await import(${JSON.stringify(path.join(moduleDir, 'server.ts'))});\n`
   );
+  const runChild = (
+    env: NodeJS.ProcessEnv
+  ): Promise<{ code: number; stderr: string }> =>
+    new Promise((resolve, reject) => {
+      const child = spawn(tsxExecutable, [childScript], {
+        // tsx resolves tsconfig paths from the cwd: pin it to the app
+        // so the child reaches startup validation no matter where
+        // vitest was invoked from.
+        cwd: path.dirname(moduleDir),
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr?.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('startup child timed out'));
+      }, 60000);
+      timer.unref();
+      child.on('error', reject);
+      child.on('close', (exitCode) => {
+        clearTimeout(timer);
+        resolve({ code: exitCode ?? -1, stderr });
+      });
+    });
   try {
-    const env = { ...process.env };
-    delete env.NEXT_PUBLIC_SUPABASE_URL;
-    delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const outcome = await new Promise<{ code: number; stderr: string }>(
-      (resolve, reject) => {
-        const child = spawn(tsxExecutable, [childScript], {
-          // tsx resolves tsconfig paths from the cwd: pin it to the app
-          // so the child reaches startup validation no matter where
-          // vitest was invoked from.
-          cwd: path.dirname(moduleDir),
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        let stderr = '';
-        child.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString();
-        });
-        const timer = setTimeout(() => {
-          child.kill();
-          reject(new Error('startup child timed out'));
-        }, 60000);
-        timer.unref();
-        child.on('error', reject);
-        child.on('close', (exitCode) => {
-          clearTimeout(timer);
-          resolve({ code: exitCode ?? -1, stderr });
-        });
-      }
-    );
-    expect(outcome.code).toBe(1);
-    // Fail closed: only a child that reached the env validation proves
-    // anything (an import-time crash would also exit 1).
-    expect(outcome.stderr).toContain('FATAL: Missing required environment');
+    // Each required credential fails the process on its own: the anon
+    // pair plus the service key the cart RPCs need.
+    for (const missing of [
+      ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+      ['SUPABASE_SERVICE_ROLE_KEY'],
+    ]) {
+      const env = { ...process.env };
+      for (const key of missing) delete env[key];
+      const outcome = await runChild(env);
+      expect(outcome.code).toBe(1);
+      // Fail closed: only a child that reached the env validation proves
+      // anything (an import-time crash would also exit 1).
+      expect(outcome.stderr).toContain('FATAL: Missing required environment');
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 90000);
+}, 120000);

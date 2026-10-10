@@ -44,6 +44,15 @@ export function createFakeGuestCartSupabase() {
         return fail({ code: '22023', message: 'invalid guest cart token' });
       if (!Array.isArray(params.p_items))
         return fail({ code: '22023', message: 'items must be an array' });
+      // Mirror the SQL clamps so a store bug that skips its own limits
+      // fails here instead of passing against a permissive double.
+      if (params.p_items.length > 20)
+        return fail({ code: '22023', message: 'guest cart holds at most 20 lines' });
+      if (
+        Date.parse(params.p_expires_at as string) >
+        Date.now() + 8 * 86400000
+      )
+        return fail({ code: '22023', message: 'guest cart expiry exceeds retention' });
       const expected = params.p_expected_version as number | null;
       const row = rows.get(token);
       if (expected === null || expected === undefined) {

@@ -158,6 +158,7 @@ function buildMcpServerEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     OPENAI_AGENTIC_SIGNING_KEY: 'test-signing-key',
     PAYSTACK_SECRET_KEY: 'test-paystack-key',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
     ...overrides,
   };
   if (!Object.hasOwn(overrides, 'MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS')) {

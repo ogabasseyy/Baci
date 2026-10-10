@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import type { McpSearchProductRow } from './search-products-query-helpers';
-import { STOREFRONT_SNAPSHOT_VARIANT_WINDOW } from './storefront-snapshot-window';
+import {
+  STOREFRONT_SNAPSHOT_OFFER_WINDOW,
+  STOREFRONT_SNAPSHOT_VARIANT_WINDOW,
+} from './storefront-snapshot-window';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY } from '../src/lib/hydrate-public-products';
 import { isPublicVariantPurchasable } from '../src/lib/is-public-variant-purchasable';
@@ -38,7 +41,6 @@ function isSearchVariantAvailable(
 // unavailable with no full-RPC fallback. Search mirrors the windows and
 // excludes truncated rows from selection; offers past 16 are invisible to
 // the PDP itself.
-const STOREFRONT_SNAPSHOT_OFFER_WINDOW = 16;
 // PostgREST clamps responses at 1,000 rows, so the option RPCs page by
 // product: 7 products carry at most 903 variant rows (129 each) and 62
 // carry at most 992 offer rows (16 each), keeping every response complete.

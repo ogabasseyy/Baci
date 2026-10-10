@@ -1,6 +1,12 @@
--- MCP guest carts: RPC outcomes, version gate, expiry, retention, RLS boundary.
--- Assertion-specific SQLSTATEs survive replay log sanitization without
--- exposing row data. P1101..P1116 identify fixed assertions.
+-- MCP guest carts: RPC outcomes, version gate, expiry, retention, and the
+-- service-role-only privilege boundary. Assertion-specific SQLSTATEs
+-- survive replay log sanitization without exposing row data. P1101..P1123
+-- identify fixed assertions.
+--
+-- Privilege note: the boundary is asserted with has_*_privilege as the
+-- session user, never by invoking a denied RPC as a denied role — denied
+-- function calls are untestable that way (Supabase Postgres 17 aborts the
+-- backend instead of raising 42501), and the grants ARE the boundary.
 BEGIN;
 DO $$
 DECLARE
@@ -120,35 +126,84 @@ BEGIN
   SELECT public.cleanup_mcp_guest_carts(1000) INTO v_cleaned;
   IF v_cleaned <> 1
   THEN RAISE EXCEPTION USING ERRCODE = 'P1116', MESSAGE = 'cleanup residue remains'; END IF;
-END $$;
--- The MCP server runs as anon: caller RPCs work, the table and the
--- retention RPC stay unreachable.
-SET LOCAL ROLE anon;
-DO $$
-DECLARE
-  v_outcome text;
-  v_count integer;
-BEGIN
+
+  -- The anon key is publicly distributed: anon holds EXECUTE on nothing,
+  -- so direct writes cannot bypass the MCP server quota.
+  IF has_function_privilege('anon',
+      'public.get_mcp_guest_cart(text)'::regprocedure, 'EXECUTE')
+    IS DISTINCT FROM FALSE
+    OR has_function_privilege('anon',
+      'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+    OR has_function_privilege('anon',
+      'public.delete_mcp_guest_cart(text,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+    OR has_function_privilege('anon',
+      'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1117', MESSAGE = 'anon holds cart RPC access'; END IF;
+
+  -- Authenticated callers share the public client: same denial.
+  IF has_function_privilege('authenticated',
+      'public.get_mcp_guest_cart(text)'::regprocedure, 'EXECUTE')
+    IS DISTINCT FROM FALSE
+    OR has_function_privilege('authenticated',
+      'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+    OR has_function_privilege('authenticated',
+      'public.delete_mcp_guest_cart(text,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+    OR has_function_privilege('authenticated',
+      'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM FALSE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1118', MESSAGE = 'authenticated holds cart RPC access'; END IF;
+
+  -- The table itself stays unreachable: no DML for anon or authenticated.
+  IF has_table_privilege('anon', 'public.mcp_guest_carts',
+      'SELECT, INSERT, UPDATE, DELETE') IS DISTINCT FROM FALSE
+    OR has_table_privilege('authenticated', 'public.mcp_guest_carts',
+      'SELECT, INSERT, UPDATE, DELETE') IS DISTINCT FROM FALSE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1119', MESSAGE = 'cart table directly reachable'; END IF;
+
+  -- The server operates through service_role: full RPC access there.
+  IF has_function_privilege('service_role',
+      'public.get_mcp_guest_cart(text)'::regprocedure, 'EXECUTE')
+    IS DISTINCT FROM TRUE
+    OR has_function_privilege('service_role',
+      'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM TRUE
+    OR has_function_privilege('service_role',
+      'public.delete_mcp_guest_cart(text,bigint)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM TRUE
+    OR has_function_privilege('service_role',
+      'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
+      'EXECUTE') IS DISTINCT FROM TRUE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1120', MESSAGE = 'service_role lost cart RPC access'; END IF;
+
+  -- The store caps carts at 20 lines: the 21st is rejected, the 20th kept.
+  BEGIN
+    PERFORM public.upsert_mcp_guest_cart(
+      '1212121212121212121212121212121212121212121212121212121212121212',
+      (SELECT jsonb_agg(jsonb_build_object('n', g)) FROM generate_series(1, 21) g),
+      pg_catalog.now() + interval '7 days', NULL);
+    RAISE EXCEPTION USING ERRCODE = 'P1121', MESSAGE = 'oversized cart accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+  END;
   SELECT outcome INTO v_outcome
   FROM public.upsert_mcp_guest_cart(
-    '9999999999999999999999999999999999999999999999999999999999999999',
-    '[]', pg_catalog.now() + interval '7 days', NULL);
+    '1313131313131313131313131313131313131313131313131313131313131313',
+    (SELECT jsonb_agg(jsonb_build_object('n', g)) FROM generate_series(1, 20) g),
+    pg_catalog.now() + interval '7 days', NULL);
   IF v_outcome <> 'ok'
-  THEN RAISE EXCEPTION USING ERRCODE = 'P1117', MESSAGE = 'anon upsert denied'; END IF;
-  SELECT count(*) INTO v_count FROM public.get_mcp_guest_cart(
-    '9999999999999999999999999999999999999999999999999999999999999999');
-  IF v_count <> 1
-  THEN RAISE EXCEPTION USING ERRCODE = 'P1118', MESSAGE = 'anon get denied'; END IF;
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1122', MESSAGE = '20-line cart rejected'; END IF;
+
+  -- Retention is bounded: far-future expiry is rejected.
   BEGIN
-    SELECT count(*) INTO v_count FROM public.mcp_guest_carts;
-    RAISE EXCEPTION USING ERRCODE = 'P1119', MESSAGE = 'anon read the cart table';
-  EXCEPTION WHEN insufficient_privilege THEN
-  END;
-  BEGIN
-    PERFORM public.cleanup_mcp_guest_carts(1);
-    RAISE EXCEPTION USING ERRCODE = 'P1120', MESSAGE = 'anon ran retention';
-  EXCEPTION WHEN insufficient_privilege THEN
+    PERFORM public.upsert_mcp_guest_cart(
+      '1414141414141414141414141414141414141414141414141414141414141414',
+      '[]', pg_catalog.now() + interval '30 days', NULL);
+    RAISE EXCEPTION USING ERRCODE = 'P1123', MESSAGE = 'far-future expiry accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
   END;
 END $$;
-RESET ROLE;
 ROLLBACK;

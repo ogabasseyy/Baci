@@ -15,6 +15,11 @@ describe('production MCP proxy configuration', () => {
     expect(compose).not.toContain('mcp-guest-carts');
     expect(compose).not.toContain('replicas:');
     expect(compose).toContain('read_only: true');
+    // The cart RPCs are service-role-only: the secret must reach the
+    // server or it fails closed at startup.
+    expect(compose).toContain(
+      'SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}'
+    );
     expect(dockerfile).not.toContain('MCP_GUEST_CART_DIRECTORY');
     expect(dockerfile).not.toContain('/var/lib/baci/guest-carts');
     expect(dockerfile).toContain('USER node');

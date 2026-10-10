@@ -29,9 +29,11 @@ REVOKE ALL ON TABLE public.mcp_guest_carts FROM PUBLIC, anon, authenticated;
 
 COMMENT ON TABLE public.mcp_guest_carts IS
   'Ephemeral MCP guest carts keyed by unguessable 64-hex capability token. '
-  'Reachable exclusively through the SECURITY DEFINER get/upsert/delete RPCs; '
-  'RLS on and all role grants revoked. Expired rows are dead weight the '
-  'expires_at index exists to sweep.';
+  'Reachable exclusively through the service-role-only SECURITY DEFINER '
+  'get/upsert/delete RPCs; RLS on and all role grants revoked. The anon key '
+  'is publicly distributed, so no caller RPC is anon-executable: writes '
+  'would otherwise bypass the MCP server quota. Expired rows are dead '
+  'weight the expires_at index exists to sweep.';
 
 -- ---------------------------------------------------------------------------
 -- Read one cart by capability token. Expired rows are returned (never
@@ -53,7 +55,7 @@ ALTER FUNCTION public.get_mcp_guest_cart(text) OWNER TO postgres;
 REVOKE EXECUTE ON FUNCTION public.get_mcp_guest_cart(text)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mcp_guest_cart(text)
-  TO anon, authenticated, service_role;
+  TO service_role;
 
 COMMENT ON FUNCTION public.get_mcp_guest_cart(text) IS
   'Reads one MCP guest cart by capability token. Returns zero rows for '
@@ -85,6 +87,15 @@ BEGIN
   END IF;
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'guest cart items must be an array';
+  END IF;
+  -- Mirror the TS store limits database-side so a compromised or buggy
+  -- caller cannot persist oversized carts or far-future retention: 20
+  -- lines max, and the 7-day sliding TTL plus headroom for clock skew.
+  IF jsonb_array_length(p_items) > 20 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'guest cart holds at most 20 lines';
+  END IF;
+  IF p_expires_at > pg_catalog.now() + interval '8 days' THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'guest cart expiry exceeds retention';
   END IF;
   IF p_expected_version IS NULL THEN
     BEGIN
@@ -137,7 +148,7 @@ REVOKE EXECUTE ON FUNCTION
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION
   public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint)
-  TO anon, authenticated, service_role;
+  TO service_role;
 
 COMMENT ON FUNCTION
   public.upsert_mcp_guest_cart(text, jsonb, timestamptz, bigint) IS
@@ -169,7 +180,7 @@ ALTER FUNCTION public.delete_mcp_guest_cart(text, bigint) OWNER TO postgres;
 REVOKE EXECUTE ON FUNCTION public.delete_mcp_guest_cart(text, bigint)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_mcp_guest_cart(text, bigint)
-  TO anon, authenticated, service_role;
+  TO service_role;
 
 COMMENT ON FUNCTION public.delete_mcp_guest_cart(text, bigint) IS
   'Version-gated delete of one MCP guest cart. False when the row moved or '

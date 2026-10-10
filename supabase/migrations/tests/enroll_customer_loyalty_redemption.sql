@@ -234,10 +234,11 @@ SELECT pg_temp.assert_true(
 );
 
 -- 20. The program minimum gates the redeemed cost, not the balance: with
--- minimum 200, a 50-cost reward is rejected with required/available even
--- though member 012 (balance 50 after case 19) can afford it. Like the
--- sibling redeem_loyalty_points contract, available reports the attempted
--- cost. Reset after: later cases run under the setup minimum of 100.
+-- minimum 200, a 50-cost reward is rejected even though member 012
+-- (balance 50 after case 19) can afford it. available reports the member
+-- balance (like insufficient_points) while points_cost carries the
+-- attempted cost. Reset after: later cases run under the setup
+-- minimum of 100.
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, enabled
 ) VALUES (
@@ -253,6 +254,7 @@ SELECT pg_temp.assert_true(
      AND result ->> 'error' = 'minimum_not_met'
      AND (result ->> 'required')::integer = 200
      AND (result ->> 'available')::integer = 50
+     AND (result ->> 'points_cost')::integer = 50
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000012',
@@ -279,6 +281,14 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 -- past-due earn is marked expired, the balance drops by its points, an
 -- expiry ledger row records the write-down, and the redemption then
 -- spends from the reconciled balance. (Member 018 enters at 1200.)
+-- Backdate the enrollment bonus first: now() is constant inside this
+-- transaction, so without this the bonus ties the earn below on
+-- created_at and the FIFO lot order flips on random row UUIDs.
+UPDATE public.points_transactions
+SET created_at = now() - interval '10 days'
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000018'
+  AND type = 'bonus';
 INSERT INTO public.points_transactions (
   customer_id, merchant_id, type, points, balance_after,
   source, description, expires_at, expired

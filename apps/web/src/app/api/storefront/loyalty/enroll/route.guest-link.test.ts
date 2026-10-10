@@ -31,7 +31,7 @@ describe('POST /api/storefront/loyalty/enroll guest linkage', () => {
     mocks.mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({
-        data: { id: CUSTOMER_ID },
+        data: { id: CUSTOMER_ID, email: 'guest@example.com' },
         error: null,
       });
 
@@ -45,6 +45,23 @@ describe('POST /api/storefront/loyalty/enroll guest linkage', () => {
       error:
         'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
     });
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the guest email differs only by casing', async () => {
+    mockGuestLogin('2026-10-09T00:00:00.000Z');
+    mocks.mockMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: { id: CUSTOMER_ID, email: 'Guest@Example.COM' },
+        error: null,
+      });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+
+    expect(response.status).toBe(409);
     expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
@@ -62,12 +79,12 @@ describe('POST /api/storefront/loyalty/enroll guest linkage', () => {
     expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when the guest row is not the requested customer', async () => {
+  it('returns 404 when the guest row email does not match', async () => {
     mockGuestLogin('2026-10-09T00:00:00.000Z');
     mocks.mockMaybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({
-        data: { id: 'other-customer-id' },
+        data: { id: CUSTOMER_ID, email: 'someone-else@example.com' },
         error: null,
       });
 

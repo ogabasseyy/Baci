@@ -1,6 +1,7 @@
 -- Status projection and cap cases for the enroll_customer_loyalty suite
--- (cases 27-28). Runs last: case 28 depends on the case-19 usage cap,
--- and case 27 mutates member 011 balances no later case depends on.
+-- (cases 27-28b). Runs after redemption: the cap and minimum cases
+-- depend on case-19 and case-25 state, and case 27 mutates member 011
+-- balances no later case depends on.
 
 -- 27. Status projects the spendable balance without writing: member 011
 -- holds 300 materialized with a 200-point expired lot and no redemption
@@ -84,4 +85,79 @@ SELECT pg_temp.assert_true(
      '01aa0000-0000-4000-8000-000000000016'
    ) AS result),
   'uncapped customer lost sight of a capped reward'
+);
+
+-- 28b. Status hides rewards below the program minimum: with minimum 500,
+-- member 018 (balance 100 after case 25) can afford Cheap perk but never
+-- redeem it, so it disappears from the catalog while the 500-cost Big
+-- perk stays (unaffordable, but not minimum-barred). Restored after.
+UPDATE public.loyalty_settings
+SET minimum_redemption_points = 500
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000108');
+
+SELECT pg_temp.assert_true(
+  (SELECT NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' IN ('Cheap perk', 'Free shipping')
+     )
+     AND EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Big perk'
+     )
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018'
+   ) AS result),
+  'status advertised a minimum-barred reward'
+);
+
+UPDATE public.loyalty_settings
+SET minimum_redemption_points = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 28c. Unsupported reward types are rejected before any mutation and
+-- hidden from status: the merchant PATCH endpoint stores reward_type
+-- without an allowlist, but redemption has no fulfillment for unknown
+-- types. (Member 015 is untouched by later cases.)
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, enabled, stock_quantity
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Mystery perk', 100,
+  'mystery', true, 5
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Mystery perk')
+   ) AS result),
+  'unknown reward type was redeemable'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT stock_quantity = 5
+   FROM public.loyalty_rewards
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND name = 'Mystery perk')
+  AND (SELECT points_balance = 1400
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000015')
+  AND (SELECT NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Mystery perk'
+     )
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015'
+   ) AS result),
+  'unknown reward type left a mutation or stayed advertised'
 );

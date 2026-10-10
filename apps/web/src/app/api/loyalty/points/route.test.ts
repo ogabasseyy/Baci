@@ -3,34 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const mockGetUser = vi.fn();
-  const mockSingle = vi.fn();
   const mockRpc = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockInsert = vi.fn();
-  const chain = {
-    select: vi.fn(),
-    eq: vi.fn(),
-    single: mockSingle,
-    insert: mockInsert,
-    update: mockUpdate,
-  };
-  chain.select.mockReturnValue(chain);
-  chain.eq.mockReturnValue(chain);
-  mockInsert.mockReturnValue(chain);
-  mockUpdate.mockReturnValue(chain);
   return {
     mockGetUser,
-    mockSingle,
     mockRpc,
-    mockUpdate,
     mockSupabase: {
       auth: { getUser: mockGetUser },
-      from: vi.fn(() => chain),
+      from: vi.fn(),
       rpc: mockRpc,
     },
     mockCheckCsrfProtection: vi.fn(),
     mockGetMerchant: vi.fn(),
-    mockCreateRecord: vi.fn(),
   };
 });
 
@@ -50,11 +33,6 @@ vi.mock('@/lib/csrf', () => ({
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: (...args: unknown[]) =>
     mocks.mockGetMerchant(...args),
-}));
-
-vi.mock('@/lib/loyalty-manual-record', () => ({
-  createLoyaltyRecordWithRetry: (...args: unknown[]) =>
-    mocks.mockCreateRecord(...args),
 }));
 
 const { POST } = await import('./route');
@@ -79,62 +57,98 @@ describe('POST /api/loyalty/points', () => {
       response: null,
     });
     mocks.mockGetMerchant.mockResolvedValue({ merchantId: MERCHANT_ID });
-    mocks.mockRpc.mockResolvedValue({ data: 'Silver', error: null });
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        success: true,
+        new_balance: 1100,
+        lifetime_points: 1100,
+        points_awarded: 200,
+      },
+      error: null,
+    });
   });
 
-  it('recomputes the tier when a manual award crosses a threshold', async () => {
-    mocks.mockSingle.mockResolvedValue({
-      data: {
-        id: 'loyalty-1',
-        points_balance: 900,
-        lifetime_points: 900,
-        current_tier: 'Bronze',
-      },
+  it('adjusts through the atomic RPC and returns balances', async () => {
+    const response = await POST(
+      createRequest({ customerId: CUSTOMER_ID, points: 200 })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.mockRpc).toHaveBeenCalledWith('adjust_loyalty_points', {
+      p_merchant_id: MERCHANT_ID,
+      p_customer_id: CUSTOMER_ID,
+      p_points: 200,
+      p_reason: null,
+      p_type: 'adjust',
+    });
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      newBalance: 1100,
+      lifetimePoints: 1100,
+      pointsAwarded: 200,
+    });
+  });
+
+  it('passes the merchant reason through to the RPC', async () => {
+    const response = await POST(
+      createRequest({
+        customerId: CUSTOMER_ID,
+        points: -50,
+        reason: 'Goodwill correction',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.mockRpc).toHaveBeenCalledWith(
+      'adjust_loyalty_points',
+      expect.objectContaining({
+        p_points: -50,
+        p_reason: 'Goodwill correction',
+      })
+    );
+  });
+
+  it.each([
+    ['customer_not_found', 404, 'Customer not found for this merchant'],
+    ['merchant_not_found', 404, 'Merchant not found'],
+    ['negative_balance', 400, 'Cannot reduce points below zero'],
+    ['out_of_range', 400, 'Points adjustment is out of range'],
+    ['creation_failed', 500, 'Failed to create loyalty record'],
+    ['invalid_input', 400, 'Invalid manual award input'],
+  ])('maps %s to %s', async (code, status, message) => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: code },
       error: null,
     });
 
     const response = await POST(
       createRequest({ customerId: CUSTOMER_ID, points: 200 })
     );
+    const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(mocks.mockRpc).toHaveBeenCalledWith('calculate_loyalty_tier', {
-      p_lifetime_points: 1100,
-      p_merchant_id: MERCHANT_ID,
-    });
-    expect(mocks.mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        points_balance: 1100,
-        lifetime_points: 1100,
-        current_tier: 'Silver',
-        tier_updated_at: expect.any(String),
-      })
-    );
+    expect(response.status).toBe(status);
+    expect(body).toEqual({ error: message });
   });
 
-  it('leaves the tier alone when the award stays within it', async () => {
-    mocks.mockSingle.mockResolvedValue({
-      data: {
-        id: 'loyalty-1',
-        points_balance: 100,
-        lifetime_points: 100,
-        current_tier: 'Bronze',
-      },
+  it('fails closed on transport errors and malformed results', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    });
+    const transport = await POST(
+      createRequest({ customerId: CUSTOMER_ID, points: 200 })
+    );
+    expect(transport.status).toBe(500);
+
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: true },
       error: null,
     });
-    mocks.mockRpc.mockResolvedValue({ data: 'Bronze', error: null });
-
-    const response = await POST(
-      createRequest({ customerId: CUSTOMER_ID, points: 50 })
+    const malformed = await POST(
+      createRequest({ customerId: CUSTOMER_ID, points: 200 })
     );
-
-    expect(response.status).toBe(200);
-    const updateArg = mocks.mockUpdate.mock.calls[0]?.[0] as Record<
-      string,
-      unknown
-    >;
-    expect(updateArg).not.toHaveProperty('current_tier');
-    expect(updateArg).not.toHaveProperty('tier_updated_at');
+    expect(malformed.status).toBe(500);
   });
 
   it('rejects malformed input with 400 instead of 500ing', async () => {
@@ -148,6 +162,7 @@ describe('POST /api/loyalty/points', () => {
       const response = await POST(createRequest(body));
       expect(response.status).toBe(400);
     }
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid JSON body with 400', async () => {
@@ -162,59 +177,5 @@ describe('POST /api/loyalty/points', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body).toEqual({ error: 'Invalid JSON body' });
-  });
-
-  it('creates the loyalty record through the retry helper on first award', async () => {
-    mocks.mockSingle.mockResolvedValue({
-      data: null,
-      error: { code: 'PGRST116' },
-    });
-    mocks.mockCreateRecord.mockResolvedValue({
-      id: 'loyalty-9',
-      points_balance: 0,
-      lifetime_points: 0,
-      current_tier: 'Bronze',
-    });
-
-    const response = await POST(
-      createRequest({ customerId: CUSTOMER_ID, points: 200 })
-    );
-
-    expect(response.status).toBe(200);
-    expect(mocks.mockCreateRecord).toHaveBeenCalledWith(
-      expect.anything(),
-      MERCHANT_ID,
-      CUSTOMER_ID
-    );
-    const body = await response.json();
-    expect(body.newBalance).toBe(200);
-  });
-
-  it('still awards points when the tier lookup fails', async () => {
-    mocks.mockSingle.mockResolvedValue({
-      data: {
-        id: 'loyalty-1',
-        points_balance: 900,
-        lifetime_points: 900,
-        current_tier: 'Bronze',
-      },
-      error: null,
-    });
-    mocks.mockRpc.mockResolvedValue({
-      data: null,
-      error: { message: 'boom' },
-    });
-
-    const response = await POST(
-      createRequest({ customerId: CUSTOMER_ID, points: 200 })
-    );
-
-    expect(response.status).toBe(200);
-    const updateArg = mocks.mockUpdate.mock.calls[0]?.[0] as Record<
-      string,
-      unknown
-    >;
-    expect(updateArg.points_balance).toBe(1100);
-    expect(updateArg).not.toHaveProperty('current_tier');
   });
 });

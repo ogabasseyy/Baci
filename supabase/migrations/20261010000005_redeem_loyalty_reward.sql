@@ -11,9 +11,10 @@
 -- This SECURITY DEFINER RPC performs the whole redemption in one
 -- transaction against the real schema (baseline 20260418000000):
 -- expiry reconciliation, availability (enabled, dates, finite stock with
--- atomic decrement), per-customer usage cap, program minimum redemption
--- amount, valued-reward guard, store_credit fulfillment, balance check,
--- redemption insert, points deduction, and ledger row.
+-- atomic decrement, supported reward types), per-customer usage cap,
+-- program minimum redemption amount, valued-reward guard, store_credit
+-- fulfillment, balance check, redemption insert, points deduction, and
+-- ledger row.
 -- The caller must own the customer row (customers.user_id = auth.uid()).
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,
@@ -121,6 +122,16 @@ BEGIN
     AND (start_date IS NULL OR start_date <= pg_catalog.now())
     AND (end_date IS NULL OR end_date >= pg_catalog.now())
     AND (stock_quantity IS NULL OR stock_quantity > 0)
+    -- Reject unsupported reward types before any mutation (same
+    -- allowlist as the status RPC; keep the two in sync): the merchant
+    -- PATCH endpoint stores reward_type without an allowlist, and this
+    -- RPC has no fulfillment behavior for unknown types, so redeeming
+    -- one would burn stock and points for a meaningless code.
+    AND reward_type IN (
+      'discount', 'discount_fixed', 'discount_percentage',
+      'free_shipping', 'free_product', 'exclusive_access',
+      'store_credit'
+    )
   FOR UPDATE;
 
   IF NOT FOUND THEN
@@ -151,7 +162,8 @@ BEGIN
       'success', false,
       'error', 'minimum_not_met',
       'required', v_minimum,
-      'available', v_reward.points_cost
+      'available', v_balance,
+      'points_cost', v_reward.points_cost
     );
   END IF;
 

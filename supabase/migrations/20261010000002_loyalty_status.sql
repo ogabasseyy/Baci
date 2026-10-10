@@ -96,7 +96,8 @@ BEGIN
   END IF;
 
   SELECT signup_bonus_points, referral_bonus_points,
-         points_per_currency, points_currency_unit, tiers
+         points_per_currency, points_currency_unit, tiers,
+         minimum_redemption_points
   INTO v_settings
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
@@ -164,6 +165,22 @@ BEGIN
           AND exhausted.customer_id = p_customer_id
           AND exhausted.reward_id = loyalty_rewards.id
       ) < usage_limit_per_customer)
+      -- Hide rewards below the program minimum: redemption compares the
+      -- cost (not the balance) against it, so an affordable-but-cheap
+      -- reward would otherwise show enabled and always 400.
+      AND (
+        COALESCE(v_settings.minimum_redemption_points, 0) <= 0
+        OR points_cost >= v_settings.minimum_redemption_points
+      )
+      -- Hide unsupported reward types (same allowlist as the redemption
+      -- RPC; keep the two in sync): the catalog mapper folds unknowns
+      -- into discount rendering, but redemption has no fulfillment for
+      -- them and rejects every attempt.
+      AND reward_type IN (
+        'discount', 'discount_fixed', 'discount_percentage',
+        'free_shipping', 'free_product', 'exclusive_access',
+        'store_credit'
+      )
   ) AS rewards;
 
   SELECT COALESCE(jsonb_agg(txn ORDER BY txn->>'created_at' DESC), '[]'::jsonb)

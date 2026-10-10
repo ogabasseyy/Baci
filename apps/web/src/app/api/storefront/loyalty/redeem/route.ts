@@ -15,6 +15,7 @@ type RedeemRpcResult = {
   error?: string;
   required?: number;
   available?: number;
+  points_cost?: number;
 } & Partial<StorefrontLoyaltyRedeemResult>;
 
 const RPC_ERROR_STATUS: Record<string, number> = {
@@ -174,6 +175,9 @@ export async function POST(request: NextRequest) {
             error: RPC_ERROR_MESSAGE[code],
             required: result?.required,
             available: result?.available,
+            ...(code === 'minimum_not_met'
+              ? { points_cost: result?.points_cost }
+              : {}),
           },
           { status }
         );

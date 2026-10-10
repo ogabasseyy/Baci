@@ -227,13 +227,14 @@ describe('POST /api/storefront/loyalty/redeem', () => {
     expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
-  it('maps minimum_not_met to 400 with required/available', async () => {
+  it('maps minimum_not_met to 400 with required/available/points_cost', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {
         success: false,
         error: 'minimum_not_met',
         required: 500,
-        available: 100,
+        available: 600,
+        points_cost: 100,
       },
       error: null,
     });
@@ -251,7 +252,8 @@ describe('POST /api/storefront/loyalty/redeem', () => {
     expect(body).toEqual({
       error: 'Minimum redemption amount not met',
       required: 500,
-      available: 100,
+      available: 600,
+      points_cost: 100,
     });
   });
 

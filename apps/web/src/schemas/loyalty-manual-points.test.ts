@@ -50,6 +50,27 @@ describe('loyaltyManualPointsSchema', () => {
     ).toBe(false);
   });
 
+  it('bounds adjustments to the signed 32-bit range', () => {
+    expect(
+      loyaltyManualPointsSchema.safeParse({
+        customerId: CUSTOMER_ID,
+        points: 2 ** 31,
+      }).success
+    ).toBe(false);
+    expect(
+      loyaltyManualPointsSchema.safeParse({
+        customerId: CUSTOMER_ID,
+        points: -(2 ** 31) - 1,
+      }).success
+    ).toBe(false);
+    expect(
+      loyaltyManualPointsSchema.safeParse({
+        customerId: CUSTOMER_ID,
+        points: 2 ** 31 - 1,
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects forged transaction types and overlong reasons', () => {
     expect(
       loyaltyManualPointsSchema.safeParse({

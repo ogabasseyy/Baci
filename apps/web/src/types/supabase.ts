@@ -17651,6 +17651,16 @@ export type Database = {
         Args: { p_merchant_id: string; p_product_identifier: string };
         Returns: undefined;
       };
+      adjust_loyalty_points: {
+        Args: {
+          p_customer_id: string;
+          p_merchant_id: string;
+          p_points: number;
+          p_reason: string | null;
+          p_type: string;
+        };
+        Returns: Json;
+      };
       enroll_customer_loyalty: {
         Args: {
           p_customer_id: string;

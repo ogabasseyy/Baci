@@ -1,6 +1,6 @@
 -- MCP guest carts: RPC outcomes, version gate, expiry, retention, capacity,
 -- and the worker-only privilege boundary. Assertion-specific SQLSTATEs
--- survive replay log sanitization without exposing row data. P1101..P1126
+-- survive replay log sanitization without exposing row data. P1101..P1127
 -- identify fixed assertions.
 --
 -- Privilege note: the boundary is asserted with has_*_privilege as the
@@ -196,6 +196,15 @@ BEGIN
       'public.cleanup_mcp_guest_carts(integer)'::regprocedure,
       'EXECUTE') IS DISTINCT FROM TRUE
   THEN RAISE EXCEPTION USING ERRCODE = 'P1121', MESSAGE = 'service_role RPC scope wrong'; END IF;
+
+  -- PostgREST serves every request as authenticator and SET ROLEs to the
+  -- JWT claim: without membership the gateway cannot assume the worker
+  -- role and the worker EXECUTE grants above are unreachable in
+  -- production. (Asserted as the session user, like the grants: invoking
+  -- a denied path as another role aborts the Supabase backend.)
+  IF pg_catalog.pg_has_role('authenticator', 'mcp_guest_cart_worker',
+      'MEMBER') IS DISTINCT FROM TRUE
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1127', MESSAGE = 'authenticator cannot assume worker role'; END IF;
 
   -- The store caps carts at 20 lines: the 21st is rejected, the 20th kept.
   BEGIN

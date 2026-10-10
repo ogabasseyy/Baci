@@ -324,6 +324,25 @@ the version-gated `get/upsert/delete_mcp_guest_cart` RPCs; concurrent writers
 (including across replicas) serialize through the per-row version gate, so the
 server needs no local volume and no replica pin. Expired rows are reclaimed by
 the hourly `mcp-guest-cart-cleanup` pg_cron sweep.
+
+### Worker token rotation
+
+The server authenticates to PostgREST with `MCP_GUEST_CART_WORKER_TOKEN`, a
+JWT minted offline with the `mcp_guest_cart_worker` role claim; the project
+anon key stays in the gateway `apikey` position and the worker JWT travels
+in the `Authorization` header. The server validates the token once at
+startup — role, expiry, and a minimum 24-hour remaining lifetime — and
+never refreshes it, so rotation is a deploy operation:
+
+1. Mint a new JWT with the same role claim and a fresh `exp` (ES256, RS256,
+   or HS256, signed by the project's JWT keys).
+2. Update the secret and redeploy before the old token's `exp`.
+3. A token with under 24 hours left refuses to start, so a stale secret
+   fails the deploy instead of dying silently mid-run.
+
+If rotation is missed, cart RPCs start failing: the tool logs
+`storage_unavailable` with a token-free code and `/health` reports the
+degraded store until the secret is rotated and the container restarted.
 Guest carts expire seven days after the last update, so active conversations
 never expire mid-use; idle carts are reclaimed. Only the changed line is revalidated on
 each call, so a stale line never blocks unrelated updates; the website

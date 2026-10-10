@@ -7,6 +7,12 @@ export class GuestCartWorkerTokenError extends Error {
 const EXPECTED_WORKER_ROLE = 'mcp_guest_cart_worker';
 // Supabase JWT signing keys support all three: ES256, RS256, HS256.
 const SUPPORTED_SIGNING_ALGORITHMS = new Set(['ES256', 'HS256', 'RS256']);
+// Minimum remaining token lifetime at startup: the long-running server
+// never refreshes the capability, so a token dying mid-deploy would
+// degrade carts until an operator rotates and restarts. Refusing a
+// short runway at deploy time forces rotation onto the deploy path
+// (see the README rotation runbook) instead of a silent expiry later.
+const MIN_TOKEN_RUNWAY_MS = 24 * 60 * 60 * 1000;
 
 function parseJwtPart(token: string, index: number): Record<string, unknown> {
   const value = token.split('.')[index];
@@ -20,23 +26,37 @@ function parseJwtPart(token: string, index: number): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-// Expiry/role pre-check only, mirroring the gigl worker client: it never
-// verifies the JWT signature or issuer. A mis-issued token surfaces at
-// PostgREST; this fails closed on the cases checkable offline.
-function hasCurrentWorkerCapability(token: string): boolean {
+// Expiry/role/runway pre-check only, mirroring the gigl worker client:
+// it never verifies the JWT signature or issuer. A mis-issued token
+// surfaces at PostgREST; this fails closed on the cases checkable
+// offline. Messages stay static: claims are attacker-influenced bytes.
+function assertWorkerCapability(token: string): void {
+  let header: Record<string, unknown>;
+  let claims: Record<string, unknown>;
   try {
-    if (token.split('.').length !== 3) return false;
-    const header = parseJwtPart(token, 0);
-    const claims = parseJwtPart(token, 1);
-    return (
-      typeof header.alg === 'string' &&
-      SUPPORTED_SIGNING_ALGORITHMS.has(header.alg) &&
-      claims.role === EXPECTED_WORKER_ROLE &&
-      typeof claims.exp === 'number' &&
-      claims.exp * 1000 > Date.now()
-    );
+    if (token.split('.').length !== 3) throw new Error('not a JWT');
+    header = parseJwtPart(token, 0);
+    claims = parseJwtPart(token, 1);
   } catch {
-    return false;
+    throw new GuestCartWorkerTokenError(
+      'Guest-cart worker token is missing, malformed, or not scoped to the cart worker role'
+    );
+  }
+  if (
+    typeof header.alg !== 'string' ||
+    !SUPPORTED_SIGNING_ALGORITHMS.has(header.alg) ||
+    claims.role !== EXPECTED_WORKER_ROLE ||
+    typeof claims.exp !== 'number' ||
+    !(claims.exp * 1000 > Date.now())
+  ) {
+    throw new GuestCartWorkerTokenError(
+      'Guest-cart worker token is missing, expired, or not scoped to the cart worker role'
+    );
+  }
+  if (!(claims.exp * 1000 > Date.now() + MIN_TOKEN_RUNWAY_MS)) {
+    throw new GuestCartWorkerTokenError(
+      'Guest-cart worker token expires within 24 hours; rotate it before deploying'
+    );
   }
 }
 
@@ -47,24 +67,31 @@ function isLoopbackHostname(hostname: string): boolean {
 
 /**
  * Builds the PostgREST client the guest-cart store persists through. The
- * token is a worker JWT minted offline (role claim
- * mcp_guest_cart_worker), never the service key: it can invoke only the
- * three cart RPCs. Refuses expired, mis-scoped, and malformed tokens, and
- * refuses to send the token over plaintext to a non-loopback origin.
- * Messages are static: the role claim is attacker-influenced log bytes.
+ * project anon key stays in the gateway `apikey` position while the
+ * offline-minted worker JWT (role claim mcp_guest_cart_worker) travels
+ * in the Authorization header — the gateway rejects a custom JWT in the
+ * key position before PostgREST can assume the worker role. Refuses
+ * expired, mis-scoped, and malformed tokens, tokens without a 24-hour
+ * rotation runway, and plaintext non-loopback origins.
  */
 export function createGuestCartWorkerClient(
   url: string,
+  anonKey: string | undefined,
   workerToken: string | undefined
 ): SupabaseClient {
-  if (!workerToken || !hasCurrentWorkerCapability(workerToken)) {
+  // Compose secrets and env files trail newlines: trim before any
+  // shape check so a rotated secret is never refused for whitespace.
+  const trimmedToken = workerToken?.trim();
+  assertWorkerCapability(trimmedToken ?? '');
+  const trimmedAnon = anonKey?.trim();
+  if (!trimmedAnon) {
     throw new GuestCartWorkerTokenError(
-      'Guest-cart worker token is missing, expired, or not scoped to the cart worker role'
+      'Guest-cart worker client is missing the project anon key'
     );
   }
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(url.trim());
   } catch {
     throw new GuestCartWorkerTokenError(
       'Guest-cart worker database URL is invalid'
@@ -80,5 +107,15 @@ export function createGuestCartWorkerClient(
       'Guest-cart worker token requires an https database URL outside loopback'
     );
   }
-  return createClient(url, workerToken);
+  // The parsed URL validated the shape; the client gets the trimmed
+  // input verbatim, since URL serialization would append a trailing
+  // slash the gateway path join does not expect.
+  return createClient(url.trim(), trimmedAnon, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+    global: { headers: { Authorization: `Bearer ${trimmedToken}` } },
+  });
 }

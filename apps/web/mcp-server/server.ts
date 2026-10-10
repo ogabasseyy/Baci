@@ -230,7 +230,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let guestCartStore: GuestCartStore;
 try {
   guestCartStore = new GuestCartStore(
-    createGuestCartWorkerClient(SUPABASE_URL, GUEST_CART_WORKER_TOKEN)
+    createGuestCartWorkerClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY,
+      GUEST_CART_WORKER_TOKEN
+    )
   );
 } catch (error) {
   // Static messages only: the token and its claims never reach logs.

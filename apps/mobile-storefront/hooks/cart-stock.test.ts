@@ -55,7 +55,7 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('counts existing voucher lines plus the optimistic paid line', () => {
+  it('excludes existing voucher lines from the optimistic paid total', () => {
     const voucherItem = {
       product_id: 'product-1',
       slug: 'redmi-note-14',
@@ -72,6 +72,8 @@ describe('cart-stock helpers', () => {
       voucher_award_id: 'voucher-award-2',
     });
     // onMutate already applied the incoming paid line before validation.
+    // The reserved voucher units left the live pool at award time, so only
+    // the optimistic paid line counts toward live stock.
     useCartStore.getState().addItem({
       product_id: 'product-1',
       slug: 'redmi-note-14',
@@ -90,7 +92,7 @@ describe('cart-stock helpers', () => {
         price: 220000,
         quantity: 2,
       })
-    ).toBe(4);
+    ).toBe(2);
   });
 
   it('uses cached stock while offline', async () => {
@@ -931,6 +933,67 @@ describe('cart-stock helpers', () => {
 
     expect(getExistingProductQuantityForStock('product-1')).toBe(3);
     expect(getExistingProductQuantityForStock('product-2')).toBe(4);
+  });
+
+  it('excludes pre-reserved voucher lines from the strict shared-pool total', () => {
+    // One of two units reserved for a voucher: the live pool holds one
+    // public unit, so the aggregate a paid add validates against is one,
+    // not two.
+    useCartStore.setState({
+      items: [
+        {
+          id: 'voucher-line',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 0,
+          quantity: 1,
+          voucher_award_id: 'award-1',
+        },
+        {
+          id: 'paid-line',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 1,
+        },
+      ],
+      isLoading: false,
+      lineSequence: 2,
+    });
+
+    expect(getExistingProductQuantityForStock('product-1')).toBe(1);
+  });
+
+  it('excludes pre-reserved voucher lines from the per-identity total', () => {
+    useCartStore.setState({
+      items: [
+        {
+          id: 'voucher-line',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 0,
+          quantity: 1,
+          variant_id: 'variant-1',
+          voucher_token: 'token-1',
+        },
+      ],
+      isLoading: false,
+      lineSequence: 1,
+    });
+
+    expect(
+      getExistingCartQuantityForStock({
+        product_id: 'product-1',
+        slug: 'slug',
+        name: 'Item',
+        price: 100,
+        quantity: 1,
+        variant_id: 'variant-1',
+      })
+    ).toBe(0);
   });
 
   it('does not double-count the optimistic offer line', () => {

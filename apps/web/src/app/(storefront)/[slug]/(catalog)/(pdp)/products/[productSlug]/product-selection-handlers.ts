@@ -1,4 +1,7 @@
-import { resolveVariantDisplaySelection } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  resolveVariantDisplaySelection,
+} from '@baci/shared/lib';
 import type { Product, ProductVariant } from '@/lib/products';
 import type { ProductCondition } from './product-selection-condition';
 
@@ -14,6 +17,7 @@ export interface ProductSelectionHandlerInputs {
   setSelectedAttributes: (attributes: Record<string, string>) => void;
   setSelectedCondition: (condition: ProductCondition) => void;
   setSelectedImage: (image: string) => void;
+  setSelectedOfferId: (offerId: string | null) => void;
   setSelectedVariant: (variant: ProductVariant | null) => void;
   usesVariantConditions: boolean;
   usesVariantRouteSelection: boolean;
@@ -39,6 +43,7 @@ export function createProductSelectionHandlers(
     setSelectedAttributes,
     setSelectedCondition,
     setSelectedImage,
+    setSelectedOfferId,
     setSelectedVariant,
     usesVariantConditions,
     usesVariantRouteSelection,
@@ -89,11 +94,24 @@ export function createProductSelectionHandlers(
     }
   };
 
-  const handleConditionChange = (condition: ProductCondition) => {
+  const handleConditionChange = (
+    condition: ProductCondition,
+    offerId?: string | null
+  ) => {
     setIgnoredRouteOfferId(offerIdParam);
     // Any explicit pick re-enables offers on a base-row entry.
     setIgnoredRouteBaseMatch(true);
-    setSelectedCondition(condition);
+    // Normalize aliases at the boundary: matching and pricing compare
+    // canonical conditions, so storing the raw click value would make
+    // every offer comparison fail and revert to the parent product.
+    const canonicalCondition = (normalizeCanonicalProductCondition(condition) ||
+      condition) as ProductCondition;
+    setSelectedCondition(canonicalCondition);
+    // Keep the clicked offer keyed by identity: several offers can share
+    // one canonical condition, and resolving the click by condition alone
+    // would charge the first match instead of the clicked price. Base and
+    // variant-axis picks carry no id and clear the explicit selection.
+    setSelectedOfferId(offerId ?? null);
 
     if (!usesVariantConditions) {
       return;
@@ -101,7 +119,7 @@ export function createProductSelectionHandlers(
 
     const nextSelection = resolveVariantDisplaySelection(product, {
       attributes: selectionAttributes,
-      condition,
+      condition: canonicalCondition,
     });
 
     if (nextSelection) {

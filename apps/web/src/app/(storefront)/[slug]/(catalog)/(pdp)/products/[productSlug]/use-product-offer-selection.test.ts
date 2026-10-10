@@ -199,6 +199,49 @@ describe('useProductOfferSelection', () => {
     expect(result.current.currentPrice).toBe(80);
   });
 
+  it('keeps a clicked later same-condition offer instead of the first match', () => {
+    const multiOfferProduct = {
+      ...baseProduct,
+      offers: [
+        { id: 'o1', condition: 'used', price: 80, stock_quantity: 3 },
+        { id: 'o3', condition: 'used', price: 70, stock_quantity: 1 },
+      ],
+    } as unknown as Product;
+    const { result } = renderHook(() =>
+      useProductOfferSelection(multiOfferProduct)
+    );
+    act(() => {
+      result.current.handleConditionChange('used', 'o3');
+    });
+    // Identity wins: the PDP charges the clicked offer, not the first
+    // same-condition row.
+    expect(result.current.selectedCondition).toBe('used');
+    expect(result.current.selectedOffer?.id).toBe('o3');
+    expect(result.current.currentPrice).toBe(70);
+  });
+
+  it('clears the explicit offer when the shopper returns to the base condition', () => {
+    const multiOfferProduct = {
+      ...baseProduct,
+      offers: [
+        { id: 'o1', condition: 'used', price: 80, stock_quantity: 3 },
+        { id: 'o3', condition: 'used', price: 70, stock_quantity: 1 },
+      ],
+    } as unknown as Product;
+    const { result } = renderHook(() =>
+      useProductOfferSelection(multiOfferProduct)
+    );
+    act(() => {
+      result.current.handleConditionChange('used', 'o3');
+    });
+    expect(result.current.selectedOffer?.id).toBe('o3');
+    act(() => {
+      result.current.handleConditionChange('new');
+    });
+    expect(result.current.selectedOffer).toBeNull();
+    expect(result.current.currentPrice).toBe(100);
+  });
+
   it('seeds the default variant and follows attribute changes', () => {
     const { result } = renderHook(() =>
       useProductOfferSelection(variantProduct)

@@ -62,6 +62,9 @@ export function useProductOfferSelection(product: Product) {
     null
   );
   const [ignoredRouteBaseMatch, setIgnoredRouteBaseMatch] = useState(false);
+  // Explicit shopper pick from a condition button, keyed by identity so a
+  // click on a later same-condition offer keeps its own price/stock.
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const routeOfferId =
     offerIdParam &&
     offerIdParam !== ignoredRouteOfferId &&
@@ -78,9 +81,23 @@ export function useProductOfferSelection(product: Product) {
     !routeOfferId &&
     !routeVariantId &&
     (selectedCondition === routeCondition || !routeCondition);
+  const explicitOfferId =
+    selectedOfferId &&
+    product.offers?.some(
+      (offer: { id: string }) => String(offer.id) === selectedOfferId
+    )
+      ? selectedOfferId
+      : null;
   const selectedOffer = usesVariantConditions
     ? null
-    : (routeOfferId &&
+    : (explicitOfferId &&
+        product.offers?.find(
+          (offer: { id: string; condition: string }) =>
+            String(offer.id) === explicitOfferId &&
+            normalizeCanonicalProductCondition(offer.condition) ===
+              selectedCondition
+        )) ||
+      (routeOfferId &&
         product.offers?.find(
           (offer: { id: string; condition: string }) =>
             String(offer.id) === routeOfferId &&
@@ -119,6 +136,7 @@ export function useProductOfferSelection(product: Product) {
     setPrevRouteSeedKey(routeSeedKey);
     setIgnoredRouteOfferId(null);
     setIgnoredRouteBaseMatch(false);
+    setSelectedOfferId(null);
 
     if (!usesVariantRouteSelection) {
       // An ID-only offer that stops resolving (removed offer, or offer_id
@@ -241,6 +259,7 @@ export function useProductOfferSelection(product: Product) {
       setSelectedAttributes,
       setSelectedCondition,
       setSelectedImage,
+      setSelectedOfferId,
       setSelectedVariant,
       usesVariantConditions,
       usesVariantRouteSelection,

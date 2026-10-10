@@ -421,7 +421,10 @@ export default function ProductDetailClient({
                       }
                       className={cn(
                         'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                        selectedCondition === (product.condition || 'new')
+                        selectedCondition ===
+                          normalizeCanonicalProductCondition(
+                            product.condition || 'new'
+                          )
                           ? 'border-store-primary text-store-primary bg-store-primary/5'
                           : 'border-gray-200 text-gray-500 hover:border-gray-300'
                       )}
@@ -435,12 +438,16 @@ export default function ProductDetailClient({
                           type="button"
                           onClick={() =>
                             handleConditionChange(
-                              offer.condition as ProductCondition
+                              offer.condition as ProductCondition,
+                              offer.id
                             )
                           }
                           className={cn(
                             'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                            selectedCondition === offer.condition
+                            selectedCondition ===
+                              normalizeCanonicalProductCondition(
+                                offer.condition
+                              )
                               ? 'border-store-primary text-store-primary bg-store-primary/5'
                               : 'border-gray-200 text-gray-500 hover:border-gray-300'
                           )}

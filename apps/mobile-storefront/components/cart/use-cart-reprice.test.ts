@@ -39,6 +39,17 @@ jest.mock('@/services/cart-reprice', () => ({
     }
     return out;
   },
+  pickChangedConditionById: (result: {
+    changes: { id: string }[];
+    conditionById: Record<string, string>;
+  }) => {
+    const out: Record<string, string> = {};
+    for (const change of result.changes) {
+      const live = result.conditionById[change.id];
+      if (typeof live === 'string') out[change.id] = live;
+    }
+    return out;
+  },
 }));
 
 jest.mock('@/stores/cart-store', () => ({
@@ -96,6 +107,7 @@ describe('useCartReprice', () => {
     ];
     mockRepriceCartItems.mockResolvedValue({
       priceById: { 'cart-1': 1250000 },
+      conditionById: {},
       changes,
     });
 
@@ -106,7 +118,7 @@ describe('useCartReprice', () => {
         mockItems,
         'merchant-1'
       );
-      expect(mockRepriceItems).toHaveBeenCalledWith({ 'cart-1': 1250000 });
+      expect(mockRepriceItems).toHaveBeenCalledWith({ 'cart-1': 1250000 }, {});
       expect(result.current.priceChanges).toEqual(changes);
     });
 

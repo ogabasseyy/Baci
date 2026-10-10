@@ -23,6 +23,18 @@ async function checkNetwork(): Promise<boolean> {
 }
 
 /**
+ * Pre-reserved quiz-voucher lines redeem award inventory that was already
+ * removed from the live pools during reservation: counting them against
+ * live stock would reject paid lines for units that were never theirs.
+ */
+function isReservedVoucherLine(cartItem: {
+  voucher_token?: string;
+  voucher_award_id?: string;
+}): boolean {
+  return Boolean(cartItem.voucher_token || cartItem.voucher_award_id);
+}
+
+/**
  * Total units in the store for this product/variant/offer identity.
  * The add-to-cart mutation validates this store total (not store plus
  * incoming): onMutate already applied the incoming line optimistically
@@ -36,6 +48,7 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
     .getState()
     .items.reduce(
       (total, cartItem) =>
+        !isReservedVoucherLine(cartItem) &&
         cartItem.product_id === item.product_id &&
         (cartItem.variant_id ?? null) === variantId &&
         (cartItem.offer_id ?? null) === offerId
@@ -49,14 +62,17 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
  * Total units in the store for this product across the base line and
  * every variant/offer line. Under strict serialized tracking all of
  * those lines claim the same hidden-anchor units, so the aggregate —
- * not just the per-identity total — must fit the pool.
+ * not just the per-identity total — must fit the pool. Pre-reserved
+ * voucher lines are excluded: their units left the pool at award time.
  */
 export function getExistingProductQuantityForStock(productId: string): number {
   return useCartStore
     .getState()
     .items.reduce(
       (total, cartItem) =>
-        cartItem.product_id === productId ? total + cartItem.quantity : total,
+        !isReservedVoucherLine(cartItem) && cartItem.product_id === productId
+          ? total + cartItem.quantity
+          : total,
       0
     );
 }

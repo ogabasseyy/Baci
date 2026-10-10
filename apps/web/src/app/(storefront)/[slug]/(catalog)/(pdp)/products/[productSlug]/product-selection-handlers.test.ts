@@ -39,6 +39,7 @@ function setup(overrides: Partial<ProductSelectionHandlerInputs> = {}) {
     setSelectedAttributes: vi.fn(),
     setSelectedCondition: vi.fn(),
     setSelectedImage: vi.fn(),
+    setSelectedOfferId: vi.fn(),
     setSelectedVariant: vi.fn(),
   };
   const handlers = createProductSelectionHandlers({
@@ -106,6 +107,7 @@ describe('createProductSelectionHandlers', () => {
       setIgnoredRouteBaseMatch,
       setIgnoredRouteOfferId,
       setSelectedCondition,
+      setSelectedOfferId,
       setSelectedVariant,
     } = setup({ offerIdParam: 'o1' });
     handleConditionChange('used');
@@ -113,7 +115,17 @@ describe('createProductSelectionHandlers', () => {
     expect(setIgnoredRouteOfferId).toHaveBeenCalledWith('o1');
     expect(setIgnoredRouteBaseMatch).toHaveBeenCalledWith(true);
     expect(setSelectedCondition).toHaveBeenCalledWith('used');
+    expect(setSelectedOfferId).toHaveBeenCalledWith(null);
     expect(setSelectedVariant).not.toHaveBeenCalled();
+  });
+
+  it('keys an explicit offer click by identity', () => {
+    const { handleConditionChange, setSelectedCondition, setSelectedOfferId } =
+      setup({ offerIdParam: 'o1' });
+    handleConditionChange('used', 'o2');
+
+    expect(setSelectedCondition).toHaveBeenCalledWith('used');
+    expect(setSelectedOfferId).toHaveBeenCalledWith('o2');
   });
 
   it('reselects the variant when conditions ride the variant axis', () => {

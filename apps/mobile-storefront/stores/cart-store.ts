@@ -251,8 +251,8 @@ export const useCartStore = create<CartState>()(
 
       ...createCheckoutGenerationActions(set),
 
-      repriceItems: (priceById) => {
-        set((state) => applyReprice(state, priceById));
+      repriceItems: (priceById, conditionById) => {
+        set((state) => applyReprice(state, priceById, conditionById));
       },
 
       toggleAssurance: (id) => {

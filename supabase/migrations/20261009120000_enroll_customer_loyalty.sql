@@ -253,7 +253,10 @@ $$;
 -- the session to the customer; the function re-verifies ownership above.
 -- Anonymous execution stays revoked so the RPC is never directly invocable
 -- without a session.
-REVOKE ALL ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text) FROM PUBLIC;
+-- Revoke from the named roles too: baseline default privileges grant new
+-- functions directly to anon/authenticated (not via PUBLIC), so a
+-- PUBLIC-only revoke would leave anon execution intact.
+REVOKE ALL ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text)
   TO authenticated, service_role;
 
@@ -386,6 +389,6 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_loyalty_status(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_loyalty_status(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_loyalty_status(uuid, uuid)
   TO authenticated, service_role;

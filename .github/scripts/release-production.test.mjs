@@ -8,11 +8,12 @@ import {
   assertCanonicalOriginPushUrls,
   assertCleanWorkerDeployEnv,
   assertRemovableLockPath,
-  assertVercelApiSupport,
+  assertVercelAccess,
   originRepoSlug,
   readRuns,
   RUNS_MAX_PAGES,
   shouldHoldReleaseLock,
+  waitForRunCompletion,
 } from './release-production.mjs';
 
 test('accepts every canonical GitHub remote spelling', () => {
@@ -31,13 +32,31 @@ test('accepts every canonical GitHub remote spelling', () => {
   }
 });
 
-test('requires a Vercel CLI that provides the api subcommand', () => {
-  assert.doesNotThrow(() => assertVercelApiSupport(() => {}));
-  assert.throws(() => assertVercelApiSupport(() => {
+test('requires authenticated Vercel access to the production project', () => {
+  assert.doesNotThrow(() => assertVercelAccess(() => 'dpl_abc123'));
+  assert.throws(() => assertVercelAccess(() => {
     throw new Error('vercel failed');
   }), {
-    message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.1); upgrade vercel and retry',
+    message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry',
   });
+});
+
+test('waits for run completion by polling the run endpoint', async () => {
+  const waits = [];
+  const sleeps = [];
+  const statuses = ['queued', 'in_progress', 'completed'];
+  await waitForRunCompletion(42, async () => statuses.shift() ?? 'completed', {
+    pollMs: 10,
+    timeoutMs: 60000,
+    sleep: async ms => { sleeps.push(ms); },
+    onWait: (status, elapsedMs) => { waits.push([status, elapsedMs]); },
+  });
+  assert.deepEqual(sleeps, [10, 10]);
+  assert.deepEqual(waits.map(([status]) => status), ['queued', 'in_progress']);
+  await assert.rejects(
+    waitForRunCompletion(42, async () => 'in_progress', { timeoutMs: 0, sleep: async () => {} }),
+    /timed out waiting for workflow run 42/
+  );
 });
 
 test('paginates run listing with one bounded call per page', () => {

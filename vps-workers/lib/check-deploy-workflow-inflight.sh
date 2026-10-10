@@ -81,6 +81,12 @@ _set_inflight_repo() {
     return 0
   fi
   inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
+  # A '#' starts a URL fragment, so https://evil.com#@github.com/org/repo
+  # has host evil.com while a strip-to-last-'@' would forge a github.com
+  # match. Legitimate remotes never contain a fragment marker: refuse.
+  case "$inflight_remote" in
+    *'#'*) echo 'Refusing worker promotion: origin URL must not contain a fragment.' >&2; return 1 ;;
+  esac
   # Normalize credential-bearing and trailing-slash HTTPS spellings to
   # the same canonical form the coordinator accepts. Credentials must
   # never reach the match below or the error message after it.

@@ -5,11 +5,17 @@ name: Ops Promote Record
 # validation. A `push` trigger cannot provide this: GitHub sources
 # push workflows from the pushed ref, and ops/gigl-promote-record is
 # an orphan operational tree that never contains this file. So the
-# default branch validates the operational branch's full history on a
-# schedule instead (plus manual dispatch). A red check means the
+# default branch validates the operational branch on a schedule
+# instead (plus manual dispatch). The last validated tip persists in
+# the actions cache under a rotating key (an exact-key hit skips the
+# save, so the key must be unique per run); validating from that tip
+# enforces fast-forward, so a force-push rewrite fails the check even
+# when every rewritten tree is shape-valid. A red check means the
 # branch holds an invalid or non-fast-forward record — reconcile the
 # branch, do not push more on top of it. Detection latency is bounded
-# by the schedule interval.
+# by the schedule interval. If the cache entry is ever evicted, the
+# next run falls back to full-history validation (shape-validity
+# only) and re-seeds the tip.
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -17,6 +23,12 @@ on:
 
 permissions:
   contents: read
+
+# Serialize scheduled runs: two overlapping runs would validate from
+# the same cached tip and race the re-seed.
+concurrency:
+  group: ops-promote-record
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -27,6 +39,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ops-promote-last-tip
+          key: ops-promote-last-tip-${{ github.run_id }}
+          restore-keys: ops-promote-last-tip-
       - name: Validate promote-record history
         run: |
           if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
@@ -34,4 +51,15 @@ jobs:
             exit 0
           fi
           tip="$(git rev-parse FETCH_HEAD)"
-          node ci_scripts/validate-promote-record.mjs "$tip" '0000000000000000000000000000000000000000'
+          previous='0000000000000000000000000000000000000000'
+          if [ -f .ops-promote-last-tip ]; then
+            previous="$(cat .ops-promote-last-tip)"
+          fi
+          # Best effort: after a rewrite the previous tip's objects may
+          # already be unreachable from every fetched ref. Missing
+          # objects still fail closed inside the validator.
+          if [ "$previous" != '0000000000000000000000000000000000000000' ]; then
+            git fetch origin "$previous" 2>/dev/null || true
+          fi
+          node ci_scripts/validate-promote-record.mjs "$tip" "$previous"
+          echo "$tip" > .ops-promote-last-tip

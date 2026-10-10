@@ -73,9 +73,12 @@ in the clean release checkout; do not disable global hooks to make an old checko
 - Create ops/gigl-promote-record orphan: a new branch validates its full
   reachable history, so non-orphan creation from unrelated history is refused.
 - The pre-push hook is client-side and bypassable (`--no-verify`); the
-  default branch re-validates the operational branch's full history on a
-  15-minute schedule as the backstop (a `push` trigger cannot work: GitHub
-  sources push workflows from the pushed ref, which never contains CI files).
+  default branch re-validates the operational branch from the last
+  validated tip on a 15-minute schedule as the backstop (a `push` trigger
+  cannot work: GitHub sources push workflows from the pushed ref, which
+  never contains CI files). Validating from the cached tip enforces
+  fast-forward, so force-push rewrites fail even when every rewritten
+  tree is shape-valid.
 
 ## Sources
 

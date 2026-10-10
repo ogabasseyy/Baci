@@ -82,13 +82,31 @@ export function parseJobsPayload(text, runId) {
 }
 
 export function originRepoSlug(remoteUrl) {
-  // Strip userinfo (tokens) without logging it: credentials do not
-  // change where the remote points. HTTPS only — the scp-like and
-  // ssh:// forms carry their user as part of the match below.
-  const withoutUserinfo = String(remoteUrl ?? '').replace(/^(https?:\/\/)[^/]*@/, '$1');
-  const withoutSuffix = withoutUserinfo.replace(/\/+$/, '').replace(/\.git$/, '');
-  const match = /^(?:https?:\/\/github\.com[/]|git@github\.com:|ssh:\/\/git@github\.com[/])(.+)$/i.exec(withoutSuffix);
-  return match ? match[1].toLowerCase() : '';
+  const raw = String(remoteUrl ?? '');
+  // scp-like and ssh:// forms carry no userinfo ambiguity: the user
+  // is part of the match, so handle them before URL parsing (which
+  // would reject the scp-like form outright).
+  const direct = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/)(.+)$/i.exec(
+    raw.replace(/\/+$/, '').replace(/\.git$/, '')
+  );
+  if (direct) return direct[1].toLowerCase();
+  // Parse http(s) with the URL class instead of regex-stripping '@':
+  // a fragment like https://evil.com#@github.com/org/repo has host
+  // evil.com, but a strip-to-last-'@' would forge a github.com match.
+  // URL separates userinfo, host, path, query, and fragment, so only
+  // a true github.com host passes. Credentials in userinfo never
+  // reach the match or any error message.
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return '';
+  }
+  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.hostname.toLowerCase() !== 'github.com') {
+    return '';
+  }
+  const path = parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');
+  return path ? path.toLowerCase() : '';
 }
 
 // gh --jq emits raw unquoted scalars for string results: never
@@ -221,7 +239,7 @@ async function main() {
         `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
-      findRun: async (_commit, baseline) => {
+      findRun: async (commit, baseline) => {
         // 36 x 5s: API visibility for a healthy dispatch can lag past
         // two minutes; a false-negative here holds the release lock
         // for manual reconciliation, so poll patiently.
@@ -230,7 +248,7 @@ async function main() {
           // dispatches the new run can fall outside the first page,
           // which would wrongly report 'dispatch outcome unknown' on
           // a healthy run.
-          const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch', true), baseline, coordinationId);
+          const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch', true), baseline, coordinationId, commit);
           if (candidate) return candidate;
           await new Promise(resolve => setTimeout(resolve, 5000));
         }

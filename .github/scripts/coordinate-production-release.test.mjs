@@ -18,6 +18,15 @@ test('dispatch correlation ignores unrelated or previously observed operator run
   assert.equal(selectCoordinatedRun([expected, { ...expected }], [], 'unique'), expected);
 });
 
+test('dispatch correlation ignores same-title runs on other SHAs', () => {
+  const commit = 'b'.repeat(40);
+  const plant = { databaseId: 7, event: 'workflow_dispatch', title: 'Coordinated release unique', headSha: 'c'.repeat(40) };
+  const ours = { ...plant, databaseId: 8, headSha: commit };
+  assert.equal(selectCoordinatedRun([plant, ours], [], 'unique', commit), ours);
+  assert.equal(selectCoordinatedRun([plant], [], 'unique', commit), null);
+  assert.throws(() => selectCoordinatedRun([ours, { ...ours, databaseId: 9 }], [], 'unique', commit), /ambiguous/);
+});
+
 test('in-flight enumeration covers approval-gated runs', () => {
   assert.deepEqual(
     [...IN_FLIGHT_RUN_STATUSES].sort(),

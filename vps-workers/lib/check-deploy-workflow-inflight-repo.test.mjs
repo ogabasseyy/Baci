@@ -72,6 +72,18 @@ test('resolves trailing-slash remotes', () => {
   );
 });
 
+test('refuses fragment-embedded remotes that forge a github.com host', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example#@github.com/example-owner/example-repo\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must not contain a fragment/);
+  assert.equal(ghArgs, '');
+});
+
 test('honors the explicit repo override for exotic remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

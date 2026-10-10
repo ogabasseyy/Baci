@@ -70,4 +70,12 @@ export async function checkCancellationRefundProvider({
       'An existing Paystack refund requires reconciliation before retry'
     );
   }
+  // Exact accounting: a leftover manual pool means the merchant claimed
+  // more Paystack money than the provider confirms. That is either a
+  // mis-recorded method or money that never moved — quarantine for review
+  // instead of passing on partial coverage.
+  if (manualPaystackKobo > 0)
+    throw new DeliveryUncertainError(
+      'Manual Paystack refunds exceed provider-confirmed amounts; review required'
+    );
 }

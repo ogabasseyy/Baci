@@ -99,4 +99,39 @@ describe('checkCancellationRefundProvider', () => {
       })
     ).rejects.toThrow('reconciliation');
   });
+  it('quarantines leftover manual pool the provider does not confirm', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 60, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: 'merchant-ref-1',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: { method: 'paystack' },
+          },
+        ],
+      })
+    ).rejects.toThrow('exceed provider-confirmed amounts');
+    // No provider rows at all with a Paystack manual claim also quarantines.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: 'merchant-ref-1',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: { method: 'paystack' },
+          },
+        ],
+      })
+    ).rejects.toThrow('exceed provider-confirmed amounts');
+  });
 });

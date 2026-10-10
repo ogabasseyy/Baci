@@ -8,6 +8,7 @@ import {
   assertCanonicalOriginPushUrls,
   assertCleanWorkerDeployEnv,
   assertRemovableLockPath,
+  assertServingDeploymentStable,
   assertVercelAccess,
   originRepoSlug,
   parseGhJqString,
@@ -135,6 +136,8 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 
     process.env.FAKE_GH_ERROR = '{"message":"rate limited"}';
     assert.throws(() => readRuns('status=queued', true), /no runs payload/);
+    process.env.FAKE_GH_ERROR = '<html>proxy says no</html>';
+    assert.throws(() => readRuns('status=queued', true), /invalid JSON/);
     delete process.env.FAKE_GH_ERROR;
 
     process.env.FAKE_GH_EXIT = '1';
@@ -183,6 +186,11 @@ test('refuses inherited worker-deploy safety overrides', () => {
     () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_WORKFLOW_REPO: 'fork/other' }),
     /BACI_DEPLOY_WORKFLOW_REPO/
   );
+});
+
+test('requires a stable serving deployment across verification reads', () => {
+  assert.doesNotThrow(() => assertServingDeploymentStable('dpl_aaa', 'dpl_aaa'));
+  assert.throws(() => assertServingDeploymentStable('dpl_aaa', 'dpl_bbb'), /changed during verification/);
 });
 
 test('holds the lock only on indeterminate dispatches', () => {

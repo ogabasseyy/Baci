@@ -110,6 +110,12 @@ export function shouldHoldReleaseLock(error) {
   return error?.indeterminateDispatch === true;
 }
 
+export function assertServingDeploymentStable(firstId, secondId) {
+  if (firstId !== secondId) {
+    throw new Error('live production deployment changed during verification; reconcile before retrying');
+  }
+}
+
 export function assertRemovableLockPath(lockPath) {
   if (basename(resolve(lockPath)) !== 'baci-production-release.lock') {
     throw new Error(`refusing to remove unexpected lock path: ${lockPath}`);
@@ -136,8 +142,14 @@ export function readRuns(filter, paginate = false) {
   const runs = [];
   const lastPage = paginate ? RUNS_MAX_PAGES : 1;
   for (let page = 1; page <= lastPage; page++) {
-    const payload = JSON.parse(gh(['api',
-      `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`]));
+    const endpoint = `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`;
+    const text = gh(['api', endpoint]);
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error(`workflow run listing for ${filter} returned invalid JSON; inspect preceding gh diagnostics`);
+    }
     if (!Array.isArray(payload.workflow_runs)) {
       throw new Error(`workflow run listing for ${filter} returned no runs payload; inspect preceding gh diagnostics`);
     }
@@ -217,6 +229,9 @@ async function main() {
         const deploymentId = readServingDeploymentId();
         const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${deploymentId}?${vercelScope}`, '--method', 'GET']));
         assertLiveDeployment(deployment, commit, vercelProjectId);
+        // Close the alias-to-deployment TOCTOU window: the alias may
+        // have flipped to another deployment between the two reads.
+        assertServingDeploymentStable(deploymentId, readServingDeploymentId());
       },
     }, coordinationId);
     process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);

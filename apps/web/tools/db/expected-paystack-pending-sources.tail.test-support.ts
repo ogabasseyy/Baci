@@ -424,4 +424,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928185000_reuse_claimed_reference_watch_on_redelivery.sql',
     sha256: 'c47db22c749b7f9f190dbdcb69311dd7b521a9966607514267c2cca3b5b20113',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928185100_narrow_cancel_gate_to_handled_abandoned_stamps.sql',
+    sha256: '53a8acb9cd76b7ae9441bd9fb3b2ceee812915cb9f4715c5343d1e886eae60c2',
+  },
 ];

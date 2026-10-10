@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928185000_reuse_claimed_reference_watch_on_redelivery.sql'
+      'supabase/migrations/20260928185100_narrow_cancel_gate_to_handled_abandoned_stamps.sql'
     );
   });
 

@@ -14,6 +14,10 @@ const transitionMigrationPath = resolve(
   __dirname,
   '../../../../../supabase/migrations/20260928184800_transition_captured_abandoned_legs_for_cancellation.sql'
 );
+const narrowGateMigrationPath = resolve(
+  __dirname,
+  '../../../../../supabase/migrations/20260928185100_narrow_cancel_gate_to_handled_abandoned_stamps.sql'
+);
 
 function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -40,6 +44,45 @@ describe('cancel gate reviewed-attempt migration', () => {
     expect(migrationSql).toContain(
       'CREATE OR REPLACE FUNCTION public.cancel_order_as_merchant('
     );
+  });
+
+  it('fails closed on funds-plausible stamps until ops closes the queue', () => {
+    expect(existsSync(narrowGateMigrationPath)).toBe(true);
+    if (!existsSync(narrowGateMigrationPath)) return;
+
+    const migrationSql = normalizeSql(
+      readFileSync(narrowGateMigrationPath, 'utf8')
+    );
+
+    // Same signature: OR REPLACE keeps every existing call on the
+    // new body.
+    expect(migrationSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.cancel_order_as_merchant('
+    );
+    // Verified captures (transitioned below) and provably fundless
+    // rows (missing/invalid reference, provider-terminal verdict)
+    // cancel past; everything else must clear the ops queue first.
+    expect(migrationSql).toContain("'partial_capture_short_reviewed'");
+    expect(migrationSql).toContain("'verified_success_captured'");
+    expect(migrationSql).toContain("'missing_reference'");
+    expect(migrationSql).toContain("'invalid_reference'");
+    expect(migrationSql).toContain("'terminal_evidence_mismatch'");
+    // The escape hatch: a stamped leg with no open review (own
+    // entry or merged evidence) is ops-accepted. Mismatch and
+    // conflict stamps are deliberately absent from the allowlist —
+    // cancelling past them would strand a captured charge with no
+    // refund leg. (Quoted: prose mentions the families unquoted.)
+    expect(migrationSql).not.toContain("'verified_capture_mismatch_reviewed'");
+    expect(migrationSql).not.toContain(
+      "'merchant_invoice_partial_conflict_reviewed'"
+    );
+    expect(migrationSql).toContain(
+      "r.metadata->'captured_attempts' ? t.id::text"
+    );
+    expect(migrationSql).toContain(
+      "r.metadata->'mismatched_attempts' ? t.id::text"
+    );
+    expect(migrationSql).toContain('payment_capture_in_flight');
   });
 });
 

@@ -82,6 +82,8 @@ test('the pre-push hook invokes promote-record validation', () => {
   assert.match(hook, /refs\/heads\/ops\/gigl-promote-record/);
   assert.match(hook, /Refusing deletion of ops\/gigl-promote-record/);
   assert.match(hook, /exit \$promote_fail/);
+  assert.match(hook, /refs_file=\$\(mktemp\) \|\|/);
+  assert.match(hook, /cat > "\$refs_file" \|\|/);
 });
 
 test('accepts barrier bodies with or without the trailing newline', () => {

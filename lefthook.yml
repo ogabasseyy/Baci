@@ -68,9 +68,12 @@ pre-push:
         # would block waiting for input.) A temp file — not a pipe —
         # feeds both loops below, since a piped loop runs in a
         # subshell and could not report failures.
-        refs_file=$(mktemp)
+        # Fail closed on setup errors: without `set -e`, an mktemp or
+        # cat failure would leave the loops below reading an empty or
+        # partial ref list and let the push through unvalidated.
+        refs_file=$(mktemp) || { echo '❌ Could not create temp file for pushed refs; refusing push.' >&2; exit 1; }
         trap 'rm -f "$refs_file"' EXIT
-        cat > "$refs_file"
+        cat > "$refs_file" || { echo '❌ Could not read pushed refs; refusing push.' >&2; exit 1; }
 
         # Validate the operational tree before resolving the default
         # branch: if refs/remotes/<remote>/HEAD is unset and the

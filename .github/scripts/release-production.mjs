@@ -30,11 +30,38 @@ function gh(args) {
   return command('gh', args);
 }
 
-export function assertVercelApiSupport(probe) {
+const vercelProjectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
+const vercelScope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${vercelProjectId}`;
+
+function readServingDeploymentId() {
+  const alias = JSON.parse(
+    command('vercel', ['api', `/v4/aliases/ogabassey.com?${vercelScope}`, '--method', 'GET'])
+  );
+  if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) throw new Error('cannot identify the serving deployment');
+  return alias.deploymentId;
+}
+
+export function assertVercelAccess(readAlias = readServingDeploymentId) {
   try {
-    probe();
+    readAlias();
   } catch {
-    throw new Error('operator Vercel CLI must provide `vercel api` (>= 50.5.1); upgrade vercel and retry');
+    throw new Error(
+      'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry'
+    );
+  }
+}
+
+export async function waitForRunCompletion(runId, readStatus, options = {}) {
+  const { pollMs = 10000, timeoutMs = 2700000, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
+  const started = Date.now();
+  for (;;) {
+    const status = await readStatus();
+    if (status === 'completed') return;
+    if (Date.now() - started >= timeoutMs) {
+      throw new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
+    }
+    if (onWait) onWait(status, Date.now() - started);
+    await sleep(pollMs);
   }
 }
 
@@ -108,10 +135,12 @@ async function main() {
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
   // Live-alias verification shells to `vercel api` (shipped in CLI
-  // 50.5.1). Preflight before acquiring the lock: a purely local
-  // precondition failure must not leave a lock behind, and the probes
-  // need no mutual exclusion.
-  assertVercelApiSupport(() => command('vercel', ['api', '--help']));
+  // 50.5.1). Preflight a real scoped read before acquiring the lock:
+  // `--help` would pass without authentication, deferring auth
+  // failures until after publication. A purely local precondition
+  // failure must not leave a lock behind, and the probes need no
+  // mutual exclusion.
+  assertVercelAccess();
   assertCleanWorkerDeployEnv();
   acquireReleaseLock(lockPath);
   let holdLock = false;
@@ -151,16 +180,30 @@ async function main() {
         }
         throw new Error('dispatch outcome unknown; inspect GitHub before retrying');
       },
-      watchRun: async runId => command('gh', ['run', 'watch', String(runId), '--repo', repository, '--exit-status'], false),
+      // Poll the run endpoint, not `gh run watch`: watch requires
+      // checks:read and cannot authenticate with fine-grained PATs,
+      // while the Actions API reads work. Conclusion is asserted by
+      // the readJobs check that follows.
+      watchRun: async runId => waitForRunCompletion(
+        runId,
+        async () => {
+          const status = JSON.parse(gh(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.status']));
+          if (typeof status !== 'string') {
+            throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
+          }
+          return status;
+        },
+        {
+          onWait: (status, elapsedMs) =>
+            process.stderr.write(`waiting on run ${runId}: ${status} (${Math.round(elapsedMs / 1000)}s)\n`),
+        }
+      ),
       cancelRun: async runId => gh(['run', 'cancel', String(runId), '--repo', repository]),
       readJobs: async runId => JSON.parse(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs'])).jobs,
       verifyLive: async commit => {
-        const projectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
-        const scope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${projectId}`;
-        const alias = JSON.parse(command('vercel', ['api', `/v4/aliases/ogabassey.com?${scope}`, '--method', 'GET']));
-        if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) throw new Error('cannot identify the serving deployment');
-        const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${alias.deploymentId}?${scope}`, '--method', 'GET']));
-        assertLiveDeployment(deployment, commit, projectId);
+        const deploymentId = readServingDeploymentId();
+        const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${deploymentId}?${vercelScope}`, '--method', 'GET']));
+        assertLiveDeployment(deployment, commit, vercelProjectId);
       },
     }, coordinationId);
     process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);

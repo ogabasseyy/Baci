@@ -168,10 +168,7 @@ describe('leased durable custody receipt worker', () => {
   it('blocks a receipt that omits the mapping reference without deferred retries', async () => {
     const { pvb_reference: _dropped, ...envelope } = fixture.envelope;
     const rawBody = Buffer.from(JSON.stringify(envelope));
-    const signature = createHmac(
-      'sha512',
-      fixture.configuration.webhookSecret
-    )
+    const signature = createHmac('sha512', fixture.configuration.webhookSecret)
       .update(rawBody)
       .digest('hex');
     const input = setup({

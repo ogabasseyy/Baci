@@ -130,6 +130,19 @@ test('the CLI validates real commit trees and refuses rewritten operational hist
       'unsafe',
     ]);
     assert.throws(() => run(unsafe, initial));
+    const hidden = git(['commit-tree', tree, '-p', unsafe, '-m', 'hide']);
+    assert.throws(() => run(hidden, initial));
+    const barrierBlob = git(['hash-object', '-w', '--stdin'], commit);
+    const tabbedSubtree = git(
+      ['mktree'],
+      `100644 blob ${barrierBlob}\t${commit}-runner-1\textra\n`
+    );
+    const tabbedTree = git(
+      ['mktree'],
+      `100644 blob ${blob}\t.gigl-promote-record\n040000 tree ${tabbedSubtree}\tbarriers\n`
+    );
+    const tabbed = git(['commit-tree', tabbedTree, '-p', initial, '-m', 'tab']);
+    assert.throws(() => run(tabbed, initial));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

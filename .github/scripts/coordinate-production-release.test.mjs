@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { assertLiveDeployment, coordinateRelease, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 
 const commit = 'b'.repeat(40);
 const coordinationId = 'test-coordination';
@@ -12,6 +15,30 @@ test('dispatch correlation ignores unrelated or previously observed operator run
   assert.equal(selectCoordinatedRun([prior, unrelated, expected], [prior], 'unique'), expected);
   assert.equal(selectCoordinatedRun([prior, unrelated], [prior], 'unique'), null);
   assert.throws(() => selectCoordinatedRun([expected, { ...expected, databaseId: 4 }], [], 'unique'), /ambiguous/);
+});
+
+test('in-flight enumeration covers approval-gated runs', () => {
+  assert.deepEqual(
+    [...IN_FLIGHT_RUN_STATUSES].sort(),
+    ['action_required', 'in_progress', 'pending', 'queued', 'requested', 'waiting']
+  );
+});
+
+test('a stale lock reports the lock path instead of a raw error', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'baci-lock-test-'));
+  try {
+    const lockPath = join(directory, 'baci-production-release.lock');
+    acquireReleaseLock(lockPath);
+    assert.throws(() => acquireReleaseLock(lockPath), {
+      message: `release lock held: ${lockPath}; confirm no release is running, then remove it`,
+    });
+    assert.throws(
+      () => acquireReleaseLock(join(directory, 'missing-parent', 'baci-production-release.lock')),
+      /ENOENT/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('release lock resolves relative and absolute shared Git directories', () => {
@@ -68,6 +95,17 @@ test('an in-flight sibling aborts the release and cancels our run', async () => 
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
   assert.equal(setup.calls.at(-1), 'cancelRun');
   assert.ok(!setup.calls.includes('watchRun'));
+});
+
+test('an approval-gated sibling aborts the release like any in-flight run', async () => {
+  const setup = fixture({
+    listCoordinatedRuns: async () => [{
+      databaseId: 43, event: 'workflow_dispatch', headSha: commit,
+      status: 'action_required', title: 'Coordinated release other-id',
+    }],
+  });
+  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
+  assert.equal(setup.calls.at(-1), 'cancelRun');
 });
 
 test('a completed sibling is an earlier release, not a racer', async () => {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 expected="${EXPECTED_RELEASE_SHA:-}"
-if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -z "${COORDINATION_ID:-}" ] && [ -z "$expected" ]; then
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && { [ -z "${COORDINATION_ID:-}" ] || [ -z "$expected" ]; }; then
   echo 'Uncoordinated manual dispatch; production work requires coordinator identifiers.' >&2
   exit 1
 fi

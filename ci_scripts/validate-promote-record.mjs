@@ -42,6 +42,28 @@ function git(args) {
   }).trim();
 }
 
+function readTreeEntries(revision) {
+  return git(['ls-tree', '-rz', revision])
+    .split('\0')
+    .filter(Boolean)
+    .map((line) => {
+      // Split on the FIRST tab only: git permits tabs in filenames,
+      // and splitting on every tab would validate a truncated path.
+      const tab = line.indexOf('\t');
+      if (tab === -1) throw new Error('invalid operational record object');
+      const metadata = line.slice(0, tab);
+      const path = line.slice(tab + 1);
+      const [mode, type, object] = metadata.split(' ');
+      if (type !== 'blob' || !/^[a-f0-9]{40}$/.test(object))
+        throw new Error('invalid operational record object');
+      const content = execFileSync('git', ['cat-file', 'blob', object], {
+        encoding: 'utf8',
+        maxBuffer: 16384,
+      });
+      return { path, mode, content };
+    });
+}
+
 export function validateRecordCommit(commit, previous) {
   if (!/^[a-f0-9]{40}$/.test(commit) || !/^[a-f0-9]{40}$/.test(previous)) {
     throw new Error('invalid operational record commit identity');
@@ -56,21 +78,17 @@ export function validateRecordCommit(commit, previous) {
     }
     git(['merge-base', '--is-ancestor', previous, commit]);
   }
-  const entries = git(['ls-tree', '-rz', commit])
-    .split('\0')
-    .filter(Boolean)
-    .map((line) => {
-      const [metadata, path] = line.split('\t');
-      const [mode, type, object] = metadata.split(' ');
-      if (type !== 'blob' || !/^[a-f0-9]{40}$/.test(object))
-        throw new Error('invalid operational record object');
-      const content = execFileSync('git', ['cat-file', 'blob', object], {
-        encoding: 'utf8',
-        maxBuffer: 16384,
-      });
-      return { path, mode, content };
-    });
-  validateRecordTree(entries);
+  // Every new commit's tree, not just the tip: an intermediate commit
+  // could smuggle an invalid blob that the tip then removes, leaving
+  // the bad tree in operational history. A no-op push (previous ==
+  // commit) yields an empty range, so still validate the tip.
+  const range = /^0+$/.test(previous) ? [commit] : [`${previous}..${commit}`];
+  const revisions = git(['rev-list', ...range])
+    .split('\n')
+    .filter(Boolean);
+  for (const revision of revisions.length === 0 ? [commit] : revisions) {
+    validateRecordTree(readTreeEntries(revision));
+  }
 }
 
 if (

@@ -75,15 +75,24 @@ pre-push:
         # Validate the operational tree before resolving the default
         # branch: if refs/remotes/<remote>/HEAD is unset and the
         # ls-remote lookup fails, the loud skip below must still
-        # refuse an invalid promote record. Deletions skip like the
-        # main loop; the main loop skips this branch's behind-base
-        # comparison since its history is separate from main.
+        # refuse an invalid promote record. Unlike the main loop,
+        # deletions of THIS branch are refused: dropping the
+        # operational history is not a fast-forward update. The main
+        # loop skips this branch's behind-base comparison since its
+        # history is separate from main.
         promote_fail=0
         while IFS=' ' read -r _local_ref local_sha _remote_ref _remote_sha; do
-          case "$local_sha" in *[!0]*) ;; *) continue ;; esac
           case "$_remote_ref" in
             refs/heads/ops/gigl-promote-record) ;;
             *) continue ;;
+          esac
+          case "$local_sha" in
+            *[!0]*) ;;
+            *)
+              echo '❌ Refusing deletion of ops/gigl-promote-record; operational history must be preserved.' >&2
+              promote_fail=1
+              continue
+              ;;
           esac
           if ! node ci_scripts/validate-promote-record.mjs "$local_sha" "$_remote_sha"; then
             promote_fail=1

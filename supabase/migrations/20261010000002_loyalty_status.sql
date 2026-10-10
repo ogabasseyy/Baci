@@ -194,6 +194,15 @@ BEGIN
         )
         OR reward_value > 0
       )
+      -- Hide minimum-gated store credit (same predicate as the
+      -- redemption RPC's minimum guard; keep the two in sync): the
+      -- minimum is unenforceable without order context, so offering
+      -- it promises a purchase requirement that cannot be checked.
+      AND (
+        reward_type <> 'store_credit'
+        OR minimum_order_amount IS NULL
+        OR minimum_order_amount <= 0
+      )
   ) AS rewards;
 
   SELECT COALESCE(jsonb_agg(txn ORDER BY txn->>'created_at' DESC), '[]'::jsonb)

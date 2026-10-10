@@ -1,4 +1,4 @@
--- Redemption-limit cases for the enroll_customer_loyalty suite (cases 19-22).
+-- Redemption-limit cases for the enroll_customer_loyalty suite (cases 19-22b).
 -- Split out of the redemption part (repository 300-line limit): usage
 -- caps, the program minimum, expiry reconciliation, and store-credit
 -- settlement. Runs in order right after it.
@@ -205,4 +205,45 @@ SELECT pg_temp.assert_true(
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000018'),
   'misconfigured store_credit reward was not rejected cleanly'
+);
+
+-- 22b. Minimum-gated store credit fails closed: redemption carries no
+-- order context and the credit lands in an unconditional balance, so a
+-- minimum_order_amount promise is unenforceable. The reward is hidden
+-- from status and rejected at redeem time with no mutation.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  minimum_order_amount, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Gated credit', 100,
+  'store_credit', 500, 1000, true
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000108');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Gated credit')
+   ) AS result)
+  AND (SELECT points_balance = 600
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000018')
+  AND (SELECT store_credit = 500
+   FROM public.customers
+   WHERE id = '01aa0000-0000-4000-8000-000000000018')
+  AND (SELECT NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Gated credit'
+     )
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018'
+   ) AS result),
+  'minimum-gated store credit was honored, mutated, or advertised'
 );

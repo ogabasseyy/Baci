@@ -50,7 +50,10 @@ export function RedemptionSuccessDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Check className="size-5 text-green-600" />
+            <Check
+              className="size-5"
+              style={{ color: 'var(--store-primary)' }}
+            />
             Reward Redeemed!
           </DialogTitle>
           <DialogDescription>

@@ -113,7 +113,7 @@ BEGIN
 
   -- Lock the reward row: finite stock decrements atomically below.
   SELECT id, name, reward_type, reward_value, points_cost, stock_quantity,
-         usage_limit_per_customer
+         usage_limit_per_customer, minimum_order_amount
   INTO v_reward
   FROM public.loyalty_rewards
   WHERE id = p_reward_id
@@ -181,6 +181,18 @@ BEGIN
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
      AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+  END IF;
+
+  -- Minimum-gated store credit cannot be honored: redemption carries no
+  -- order context and the credit lands in an unconditional balance, so
+  -- a minimum_order_amount promise is unenforceable here. Fail closed
+  -- instead of issuing credit without the required purchase. (Code-type
+  -- minimums ride with the checkout bridge: discount_codes carry
+  -- minimum_purchase_amount natively.)
+  IF v_reward.reward_type = 'store_credit'
+     AND v_reward.minimum_order_amount IS NOT NULL
+     AND v_reward.minimum_order_amount > 0 THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 

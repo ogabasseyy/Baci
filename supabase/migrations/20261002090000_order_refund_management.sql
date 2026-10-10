@@ -76,6 +76,7 @@ DECLARE
   v_reference text;
   v_allocation numeric;
   v_leg_remaining numeric;
+  v_constraint text;
   v_history jsonb;
   v_replay jsonb;
 BEGIN
@@ -232,6 +233,11 @@ BEGIN
     -- legs have no auto-reversal path, so they stay allocatable; missing
     -- or blank gateways stay allocatable like the worker's external-leg
     -- rule instead of silently stranding the manual amount.
+    -- A concurrent twin racing the same merchant reference slips past
+    -- the idempotency check above and collides here: scope the rescue
+    -- to the reference index only, so an unrelated unique violation
+    -- still surfaces instead of masquerading as a reference conflict.
+    BEGIN
     FOR v_payment IN SELECT id,amount,currency FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id
       AND transaction_type='payment' AND status='completed'
@@ -262,6 +268,13 @@ BEGIN
       END IF;
       EXIT WHEN v_allocation=0;
     END LOOP;
+    EXCEPTION WHEN unique_violation THEN
+      GET STACKED DIAGNOSTICS v_constraint = CONSTRAINT_NAME;
+      IF v_constraint = 'transactions_order_gateway_reference_key' THEN
+        RAISE EXCEPTION 'manual_reference_conflict' USING ERRCODE='P0001';
+      END IF;
+      RAISE;
+    END;
     IF v_allocation<>0 THEN RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001'; END IF;
     v_refunded := v_refunded+p_amount;
     v_remaining := v_remaining-p_amount;

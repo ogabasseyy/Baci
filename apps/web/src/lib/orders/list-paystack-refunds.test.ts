@@ -152,8 +152,32 @@ describe('listPaystackRefunds', () => {
       .mockResolvedValueOnce(response({ id: 5, reference: 'capture-1' }))
       .mockResolvedValueOnce(response([refund]));
     vi.stubGlobal('fetch', fetcher);
-    await listPaystackRefunds('capture-1', { timeoutMs: 5_000 });
-    expect(timeout).toHaveBeenCalledWith(5_000);
+    await listPaystackRefunds('capture-1', {
+      deadlineMs: Date.now() + 5_000,
+    });
+    expect(timeout).toHaveBeenCalledWith(expect.any(Number));
+    for (const call of timeout.mock.calls)
+      expect(call[0] as number).toBeLessThanOrEqual(5_000);
     timeout.mockRestore();
+  });
+  it('recomputes the cap before every page', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        now += 10_000;
+        return response({ id: 5, reference: 'capture-1' });
+      })
+      .mockResolvedValueOnce(response([refund]));
+    vi.stubGlobal('fetch', fetcher);
+    await listPaystackRefunds('capture-1', { deadlineMs: 1_000_000 + 20_000 });
+    // First request sees the full 20s (capped to the 15s transport
+    // maximum); the second sees only the 10s left after the first.
+    expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 10_000);
+    timeout.mockRestore();
+    clock.mockRestore();
   });
 });

@@ -20,7 +20,8 @@ function database({
     select: vi.fn().mockReturnThis(),
   };
   const refundQuery = {
-    eq: vi.fn((column: string) =>
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn((column: string) =>
       column === 'status'
         ? Promise.resolve({ data: refunds, error: refundError })
         : refundQuery
@@ -31,7 +32,10 @@ function database({
     .fn()
     .mockReturnValueOnce(paymentQuery)
     .mockReturnValueOnce(refundQuery);
-  return { supabase: { from } as unknown as SupabaseClient };
+  return {
+    refundQuery,
+    supabase: { from } as unknown as SupabaseClient,
+  };
 }
 
 export const refundNotificationLedgerTestKit = {

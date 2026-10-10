@@ -24,13 +24,8 @@ function identityTexts(value: unknown): string[] {
 
 export async function listPaystackRefunds(
   reference: string,
-  options: { timeoutMs?: number } = {}
+  options: { deadlineMs?: number } = {}
 ): Promise<ProviderRefund[]> {
-  // Bound every provider call to the remaining drain budget when the
-  // caller passes one: an uncapped 15s verify plus uncapped list
-  // pages could otherwise consume the window initiation needs, and
-  // every retry would repeat the same starvation.
-  const timeoutMs = Math.min(15_000, Math.max(1, options.timeoutMs ?? 15_000));
   // The reference travels only through encodeURIComponent into a query
   // string, so punctuation is safe: reject empties, oversize values, and
   // control characters that could smuggle log or cache-key forgeries.
@@ -43,6 +38,15 @@ export async function listPaystackRefunds(
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('Paystack refund verification unavailable');
   async function request(path: string): Promise<Record<string, unknown>> {
+    // Recompute the cap from the absolute deadline before every
+    // request: a timeout computed once would let each of the 20
+    // list pages spend the full budget again, consuming the window
+    // initiation needs. Recomputing bounds the whole list by the
+    // remaining budget instead.
+    const timeoutMs =
+      options.deadlineMs === undefined
+        ? 15_000
+        : Math.max(1, Math.min(15_000, options.deadlineMs - Date.now()));
     const response = await fetch(`https://api.paystack.co${path}`, {
       headers: { Authorization: `Bearer ${secret}` },
       cache: 'no-store',

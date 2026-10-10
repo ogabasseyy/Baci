@@ -125,6 +125,8 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000015', v_merchant_id, 'REFUND-015',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000016', v_merchant_id, 'REFUND-016',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000017', v_merchant_id, 'REFUND-017',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -146,7 +148,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000013',
       '9ef11000-0000-4000-8000-000000000014',
       '9ef11000-0000-4000-8000-000000000015',
-      '9ef11000-0000-4000-8000-000000000016');
+      '9ef11000-0000-4000-8000-000000000016',
+      '9ef11000-0000-4000-8000-000000000017');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -224,7 +227,15 @@ BEGIN
       'refunded', 'paystack', 'legacy-16',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000021',
-        'provider_refund_status', 'processed'));
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000023', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000017', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-17', '{}'::jsonb),
+    -- A failed row never counts as coverage, but its ledger identifier
+    -- still collides: the twin-race rescue reports the conflict.
+    ('9ef12000-0000-4000-8000-000000000024', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000017', 'refund', 5, 'NGN',
+      'failed', 'paystack', 'race-17#1', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -570,6 +581,18 @@ BEGIN
     RAISE EXCEPTION 'manual accepted on foreign-currency leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- A concurrent twin racing the same merchant reference slips past
+  -- the idempotency check and collides mid-allocation: the rescue
+  -- reports the reference conflict instead of a raw unique violation.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000017', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'race-17',NULL,true);
+    RAISE EXCEPTION 'racing reference accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
 
   -- Legacy rows without a cancellation timestamp route to review: the

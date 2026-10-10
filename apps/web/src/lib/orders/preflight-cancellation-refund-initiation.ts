@@ -127,13 +127,13 @@ export async function preflightCancellationRefundInitiation({
       !transaction.gateway_reference
     )
       continue;
-    const timeoutMs =
+    const remainingMs =
       deadlineMs === undefined
         ? undefined
         : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
     if (
-      timeoutMs !== undefined &&
-      timeoutMs < PREFLIGHT_PROVIDER_CALL_WORST_MS
+      remainingMs !== undefined &&
+      remainingMs < PREFLIGHT_PROVIDER_CALL_WORST_MS
     ) {
       // Starvation is not failure: reset the budget the claim
       // consumed so the resume retries fresh instead of mistaking
@@ -147,13 +147,16 @@ export async function preflightCancellationRefundInitiation({
         'cancellation_refund_preflight_deferred_for_budget'
       );
     }
+    // Pass the absolute deadline, not a frozen timeout: the lister
+    // recomputes the remaining cap before every page so a
+    // multi-page list cannot spend the budget once per page.
     await checkCancellationRefundProvider({
       currency: transaction.currency || order.currency || 'NGN',
+      deadlineMs,
       knownRefunds: (refundRows ?? []).filter(
         (row) => linkedPaymentId(row) === transaction.id
       ),
       reference: transaction.gateway_reference,
-      timeoutMs,
     });
   }
   return { auditBlockedTransactions, initiationTransactions };

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 import { refundNotificationLedgerTestKit } from './refund-notification-ledger.test-helpers';
 
@@ -414,6 +414,45 @@ describe('refundNotificationLedgerAmount', () => {
     });
 
     expect(amount).toContain('100');
+  });
+
+  it('counts legacy refunded rows as terminal coverage', async () => {
+    const { refundQuery, supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+    // Both terminal statuses are fetched: the claim finalizes on
+    // refunded rows, so fetching completed-only would dead-letter.
+    expect(vi.mocked(refundQuery.in)).toHaveBeenCalledWith('status', [
+      'completed',
+      'refunded',
+    ]);
   });
 
   it('still rejects unlinked manual rows', async () => {

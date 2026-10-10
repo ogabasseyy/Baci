@@ -63,12 +63,13 @@ describe('checkCancellationRefundProvider', () => {
       'reconciliation'
     );
   });
-  it('forwards the remaining budget to the refund lister', async () => {
+  it('forwards the absolute deadline to the refund lister', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);
-    await checkCancellationRefundProvider({ ...input, timeoutMs: 42_000 });
+    const deadlineMs = Date.now() + 42_000;
+    await checkCancellationRefundProvider({ ...input, deadlineMs });
     expect(vi.mocked(listPaystackRefunds)).toHaveBeenCalledWith(
       'capture-1',
-      expect.objectContaining({ timeoutMs: 42_000 })
+      expect.objectContaining({ deadlineMs })
     );
   });
   it('treats legacy refunded rows as reconciled like completed ones', async () => {

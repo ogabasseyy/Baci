@@ -44,13 +44,17 @@ export async function refundNotificationLedgerAmount({
   const externalLegs = paymentLegs.filter(
     (leg) => Number(leg.amount) > 0 && isExternalPaymentGateway(leg.gateway)
   );
+  // Terminal evidence is completed or refunded (legacy
+  // provider-confirmed rows), mirroring the aggregate claim: the claim
+  // finalizes on refunded rows, so the ledger must count them or the
+  // queued notifications dead-letter.
   const { data: refundLegs, error: refundLegError } = await supabase
     .from('transactions')
     .select('amount, currency, gateway, metadata')
     .eq('order_id', order.id)
     .eq('merchant_id', merchantId)
     .eq('transaction_type', 'refund')
-    .eq('status', 'completed');
+    .in('status', ['completed', 'refunded']);
   if (refundLegError) {
     throw new Error('refund_notification_ledger_lookup_failed');
   }

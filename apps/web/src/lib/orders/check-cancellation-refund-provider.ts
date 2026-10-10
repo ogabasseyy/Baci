@@ -7,7 +7,7 @@ export async function checkCancellationRefundProvider({
   reference,
   currency,
   knownRefunds,
-  timeoutMs,
+  deadlineMs,
 }: {
   reference: string;
   currency: string;
@@ -18,11 +18,11 @@ export async function checkCancellationRefundProvider({
     currency?: string | null;
     metadata?: Record<string, unknown> | null;
   }>;
-  timeoutMs?: number;
+  deadlineMs?: number;
 }): Promise<void> {
   let rows: Awaited<ReturnType<typeof listPaystackRefunds>>;
   try {
-    rows = await listPaystackRefunds(reference, { timeoutMs });
+    rows = await listPaystackRefunds(reference, { deadlineMs });
   } catch (error) {
     // Fail closed, but log the cause: a config outage (missing
     // secret) strands every Paystack leg and needs an ops alert,

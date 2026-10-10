@@ -202,17 +202,11 @@ describe('preflightCancellationRefundInitiation', () => {
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
-  it('caps the provider guard to the remaining budget', async () => {
+  it('passes the absolute deadline to the provider guard', async () => {
     const deadlineMs = Date.now() + 120_000;
     await preflightCancellationRefundInitiation(input({ deadlineMs }));
-    const call = vi.mocked(checkCancellationRefundProvider).mock
-      .calls[0][0] as {
-      timeoutMs?: number;
-    };
-    expect(typeof call.timeoutMs).toBe('number');
-    expect(call.timeoutMs as number).toBeGreaterThanOrEqual(30_000);
-    expect(call.timeoutMs as number).toBeLessThanOrEqual(
-      deadlineMs - Date.now()
+    expect(checkCancellationRefundProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ deadlineMs })
     );
   });
 });

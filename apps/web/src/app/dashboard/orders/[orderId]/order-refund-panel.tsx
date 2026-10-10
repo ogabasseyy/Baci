@@ -10,6 +10,7 @@ import {
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
+import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
 
 export function OrderRefundPanel({
@@ -93,14 +94,13 @@ export function OrderRefundPanel({
     )
       return;
     if (action === 'manual') {
-      const parsedAmount = Number(amount);
-      const parsedDate = new Date(date);
-      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        setError('Enter a valid refund amount greater than zero.');
-        return;
-      }
-      if (Number.isNaN(parsedDate.getTime())) {
-        setError('Enter a valid refund date and time.');
+      const validationError = validateManualRefundInput({
+        amount,
+        date,
+        remaining: summary?.remaining ?? null,
+      });
+      if (validationError) {
+        setError(validationError);
         return;
       }
     }

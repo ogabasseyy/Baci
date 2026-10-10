@@ -177,13 +177,14 @@ describe('order refund route', () => {
       code: expectedCode,
     });
   });
-  it('maps concurrent duplicate references to the 409 conflict', async () => {
+  it('leaves unexpected unique violations as internal errors', async () => {
+    // The RPC converts its own reference race; a residual 23505 is
+    // genuinely unexpected and must not masquerade as a conflict.
     mocks.rpc.mockResolvedValue({
       data: null,
       error: {
         code: '23505',
-        message:
-          'duplicate key value violates unique constraint "transactions_order_reference_uidx"',
+        message: 'duplicate key value violates unique constraint "other_uidx"',
       },
     });
     const response = await POST(
@@ -197,10 +198,10 @@ describe('order refund route', () => {
       }),
       context
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: 'This reference was already used for a different refund',
-      code: 'manual_reference_conflict',
+      error: 'Unable to manage refund',
+      code: 'internal_error',
     });
   });
 });

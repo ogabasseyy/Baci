@@ -16,10 +16,17 @@ export function acquireReleaseLock(lockPath) {
   }
 }
 
-export function selectCoordinatedRun(runs, baseline, coordinationId) {
+export function selectCoordinatedRun(runs, baseline, coordinationId, commit = null) {
   const knownIds = new Set(baseline.map(run => run.databaseId));
+  // Titles are operator-set display strings: when the release commit is
+  // known, require it too, so a planted same-title run on another SHA
+  // is ignored instead of forcing the mismatch-cancel path. A planted
+  // same-title same-SHA run still degrades to ambiguous/indeterminate
+  // (release-blocking, never a wrong release), and planting one needs
+  // dispatch permission plus the unguessable coordination id.
   const candidates = runs.filter(run => !knownIds.has(run.databaseId) &&
-    run.event === 'workflow_dispatch' && run.title === `Coordinated release ${coordinationId}`);
+    run.event === 'workflow_dispatch' && run.title === `Coordinated release ${coordinationId}` &&
+    (commit === null || run.headSha === commit));
   // Dedupe by run ID before the ambiguity check: a run landing
   // mid-pagination can surface the same databaseId on two pages.
   const seen = new Set();

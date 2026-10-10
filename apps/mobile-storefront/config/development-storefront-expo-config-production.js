@@ -1,3 +1,7 @@
+// Runtime source of truth for the production Expo config: Expo loads this
+// plain-CJS file directly (see app.config.ts) because Android releases
+// disable Node type stripping. The sibling .ts file is a type-only shim —
+// make behavior edits here, and keep the two exports aligned.
 const {
   buildStorefrontAndroidIntentFilters,
 } = require('./android-intent-filters.js');

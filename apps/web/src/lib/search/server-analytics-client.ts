@@ -12,6 +12,16 @@ export type SearchSubmissionRow = {
   search_method: 'client';
 };
 
+// Thrown only by the row guards below (never by client construction or
+// the insert): lets the route log programming errors distinctly from
+// configuration/transport infrastructure failures.
+export class SearchSubmissionValidationError extends Error {
+  constructor() {
+    super('Invalid search submission row');
+    this.name = 'SearchSubmissionValidationError';
+  }
+}
+
 /**
  * Search-submissions ingestion boundary (#3581).
  *
@@ -62,7 +72,7 @@ export async function recordSearchSubmission(
   // a future importer passes caller-supplied data. Reject before touching
   // the service-role client so misuse fails loudly instead of misattributing.
   if (!isIngestibleRow(row)) {
-    throw new Error('Invalid search submission row');
+    throw new SearchSubmissionValidationError();
   }
   // Sanitize content here too: shape validation above cannot tell
   // '<script>…' from a real query, and the sole route caller is not the
@@ -71,7 +81,7 @@ export async function recordSearchSubmission(
   // is a no-op; a value that sanitizes to empty is rejected, not stored.
   const sanitizedQuery = sanitizeSearchQuery(row.search_query);
   if (sanitizedQuery.length < 1) {
-    throw new Error('Invalid search submission row');
+    throw new SearchSubmissionValidationError();
   }
   // Allowlist the insert payload: validation above checks types/ranges but
   // a future importer could pass extra keys (clicked_product_id, created_at,

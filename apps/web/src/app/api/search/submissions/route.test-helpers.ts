@@ -19,6 +19,14 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 vi.mock('@/lib/search/server-analytics-client', () => ({
   recordSearchSubmission: mocks.recordSubmission,
+  // Same class object the route's instanceof checks: mirror the real
+  // module's brand (message + name) without importing server-only code.
+  SearchSubmissionValidationError: class SearchSubmissionValidationError extends Error {
+    constructor() {
+      super('Invalid search submission row');
+      this.name = 'SearchSubmissionValidationError';
+    }
+  },
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { warn: vi.fn(), error: vi.fn() },
@@ -27,6 +35,9 @@ vi.mock('@/lib/logger', () => ({
 // Import the handler AFTER mocks so the route binds the mocked modules.
 export const { POST } = await import('./route');
 export const { logger } = await import('@/lib/logger');
+export const { SearchSubmissionValidationError } = await import(
+  '@/lib/search/server-analytics-client'
+);
 
 export const merchantId = '123e4567-e89b-12d3-a456-426614174000';
 

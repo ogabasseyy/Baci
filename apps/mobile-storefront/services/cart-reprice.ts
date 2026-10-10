@@ -16,11 +16,18 @@
  * so the reconciled cart basis matches what checkout will accept.
  */
 
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
-import { getStorefrontProductOffersByProductIds } from '@/lib/fetch-storefront-product-offers';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
+import {
+  collectOfferLineProductIds,
+  fetchLiveOfferRepriceMap,
+  getDriftedOfferCondition,
+  pickChangedConditionById,
+  resolveOfferLinePrice,
+} from './cart-reprice-offer-lines';
+
+export { pickChangedConditionById };
 
 const log = createLogger('CartReprice');
 
@@ -147,50 +154,11 @@ export async function repriceCartItems(
       }
     }
 
-    // Live offer prices for exact offer lines, via the same
-    // anon-executable RPC checkout validation reads. A merchant-edited
-    // offer price would otherwise sail through repricing undetected and
-    // fail at order creation with a total/fee mismatch.
-    const offerPrice = new Map<
-      string,
-      { price: number; productId: string; condition: string | null }
-    >();
-    const offerLineProductIds = Array.from(
-      new Set(
-        items
-          .filter(
-            (item) =>
-              !item.variant_id &&
-              typeof item.offer_id === 'string' &&
-              item.offer_id.length > 0
-          )
-          .map((item) => item.product_id)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0)
-      )
-    );
-    let offerLookupFailed = false;
-    if (offerLineProductIds.length > 0) {
-      const offersByProduct =
-        await getStorefrontProductOffersByProductIds(offerLineProductIds);
-      if (!offersByProduct) {
-        // Fail open, but do NOT fall back to base prices for offer lines —
-        // repricing to products.price would corrupt a valid offer price.
-        offerLookupFailed = true;
-        log.warn('Reprice offer lookup failed; skipping offer lines');
-      } else {
-        for (const [productId, offers] of Object.entries(offersByProduct)) {
-          for (const offer of offers) {
-            if (offer.price != null) {
-              offerPrice.set(offer.id, {
-                price: Number(offer.price),
-                productId,
-                condition: offer.condition ?? null,
-              });
-            }
-          }
-        }
-      }
-    }
+    // Live offer rows for exact offer lines. A failed lookup skips offer
+    // lines rather than falling back to base prices, which would corrupt
+    // a valid offer price.
+    const { map: offerPrice, failed: offerLookupFailed } =
+      await fetchLiveOfferRepriceMap(collectOfferLineProductIds(items));
 
     const result: RepriceResult = {
       priceById: {},
@@ -221,35 +189,21 @@ export async function repriceCartItems(
         item.offer_id.length > 0
       ) {
         if (!offerLookupFailed) {
-          const live = offerPrice.get(item.offer_id);
-          // Finite zero is a valid live offer price (product_offers has
-          // no positive constraint and checkout accepts nonnegative): only
-          // non-finite and negative rows are unusable.
-          if (
-            live &&
-            live.productId === item.product_id &&
-            Number.isFinite(live.price) &&
-            live.price >= 0
-          ) {
+          const live = resolveOfferLinePrice(item, offerPrice);
+          if (live) {
             result.priceById[item.id] = live.price;
-            // A merchant-edited condition must refresh with the price:
-            // checkout canonically compares the submitted condition and
-            // rejects a drifted line as an invalid offer, so reporting
-            // no change here would sail a doomed line into submission.
-            // Lines without a submitted condition skip the check, same as
-            // the orders route; empty live conditions cannot reconcile.
-            const conditionDrifted =
-              item.condition != null &&
-              typeof live.condition === 'string' &&
-              live.condition !== '' &&
-              normalizeCanonicalProductCondition(item.condition) !==
-                normalizeCanonicalProductCondition(live.condition);
-            if (conditionDrifted && typeof live.condition === 'string') {
-              result.conditionById[item.id] = live.condition;
+            // A merchant-edited condition refreshes with the price so the
+            // line matches what checkout will accept.
+            const driftedCondition = getDriftedOfferCondition(
+              item.condition,
+              live.condition
+            );
+            if (driftedCondition) {
+              result.conditionById[item.id] = driftedCondition;
             }
             if (
               Math.abs(live.price - item.price) > PRICE_TOLERANCE ||
-              conditionDrifted
+              driftedCondition
             ) {
               result.changes.push({
                 id: item.id,
@@ -330,19 +284,6 @@ export function pickChangedPriceById(
     const livePrice = result.priceById[change.id];
     if (typeof livePrice === 'number') {
       changed[change.id] = livePrice;
-    }
-  }
-  return changed;
-}
-
-export function pickChangedConditionById(
-  result: RepriceResult
-): Record<string, string> {
-  const changed: Record<string, string> = {};
-  for (const change of result.changes) {
-    const liveCondition = result.conditionById[change.id];
-    if (typeof liveCondition === 'string' && liveCondition !== '') {
-      changed[change.id] = liveCondition;
     }
   }
   return changed;

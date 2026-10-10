@@ -24,6 +24,10 @@ jest.mock('@/lib/primary-wallet-card', () => ({
       authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
       amountKobo: 100000,
     }),
+    peekStatus: async () => ({
+      authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      amountKobo: 100000,
+    }),
   }),
 }));
 jest.mock('expo-router', () => ({
@@ -34,7 +38,14 @@ jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: () => ({ id: '11111111-1111-4111-8111-111111111111' }),
+  // Selector-honoring: the mount gate keys off a stable boolean, so a
+  // fresh object per call would retrigger the ownership effect forever.
+  useAuthStore: (select: (state: unknown) => unknown) =>
+    select({
+      user: { id: '11111111-1111-4111-8111-111111111111' },
+      customer: null,
+      isInitialized: true,
+    }),
 }));
 jest.mock('@/components/storefront/StorefrontScreenShell', () => ({
   StorefrontScreenShell: require('react-native').View,

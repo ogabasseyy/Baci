@@ -4,7 +4,6 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { InvalidCheckoutView } from '@/components/payment-gateway/InvalidCheckoutView';
 import { PaymentErrorView } from '@/components/payment-gateway/PaymentErrorView';
 import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/PaymentGatewayCheckoutView';
@@ -15,10 +14,10 @@ import { getWalletReturnHref } from '@/components/payment-gateway/payment-gatewa
 import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendingView';
 import { resolvePendingOrdersRoute } from '@/components/payment-gateway/resolve-pending-orders-route';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
+import { usePrimaryWalletCardOwnership } from '@/components/payment-gateway/use-primary-wallet-card-ownership';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { useAuthStore } from '@/stores/auth-store';
 
 export default function PaymentGatewayScreen() {
@@ -29,93 +28,20 @@ export default function PaymentGatewayScreen() {
   const customer = useAuthStore((state) => state.customer);
   const authReady = useAuthStore((state) => state.isInitialized);
   const paramsData = controller.validatedParams.data;
-  // Deep-link params are caller-controlled: the stamp alone proves
-  // nothing, and the reference alone does not bind the payment (a
-  // caller knowing it could pair it with any live Paystack URL). Every
-  // primary launch resolves ownership from the device record, then
-  // peek-polls the operation from the server and requires the exact
-  // server-issued checkout URL and amount. The WebView stays unmounted
-  // until both proofs pass (or the launch is blocked).
   const needsOwnershipCheck =
     controller.validatedParams.isValid &&
     controller.paymentKind === 'primary_wallet_card';
-  const [ownership, setOwnership] = useState<
-    'pending' | 'verified' | 'blocked' | 'mismatch'
-  >('pending');
-  // Mount-bind retry token: re-runs the ownership effect. Safe because
-  // the bind below is read-only (peekStatus persists nothing).
-  const [bindRetry, setBindRetry] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies(bindRetry): `bindRetry` is an intentional retrigger — the mismatch view bumps it to force a fresh ownership bind.
-  useEffect(() => {
-    if (!needsOwnershipCheck) return;
-    // Wait for auth hydration before the lookup: querying with an
-    // unresolved user would scope-parse-fail into a 'blocked' flash on
-    // a legitimate checkout. The spinner stays up until auth resolves.
-    if (!authReady) return;
-    // Auth resolved with no signed-in user: no record can be owned.
-    if (user?.id == null) {
-      setOwnership('blocked');
-      return;
-    }
-    let cancelled = false;
-    setOwnership('pending');
-    (async () => {
-      const client = createPrimaryWalletCardFundingClient();
-      let record: Awaited<ReturnType<typeof client.readPending>>;
-      try {
-        record = await client.readPending({
-          merchantId: paramsData?.merchantId,
-          userId: user?.id,
-        });
-      } catch {
-        if (!cancelled) setOwnership('blocked');
-        return;
-      }
-      if (
-        record == null ||
-        record.operationId == null ||
-        `pvb-first-primary-${record.operationId}` !== paramsData?.reference
-      ) {
-        if (!cancelled) setOwnership('blocked');
-        return;
-      }
-      // Server bind: peekStatus() status-polls the record's operation
-      // without persisting anything (never re-initializes: operationId
-      // is non-null here) and already enforces the record amount. Mount
-      // only when the server confirms this exact checkout URL and
-      // amount — a stale URL for an advanced operation, a forged URL,
-      // a tampered amount, or an unreachable server all fail closed.
-      // The WebView needs network regardless, so offline has no
-      // legitimate mount; the mismatch view offers a retry for
-      // transient network failures.
-      try {
-        const status = await client.peekStatus({
-          merchantId: record.merchantId,
-          userId: record.userId,
-          reference: paramsData?.reference,
-        });
-        const bound =
-          status.authorizationUrl === paramsData?.authorizationUrl &&
-          typeof paramsData?.amount === 'number' &&
-          Math.round(paramsData.amount * 100) === status.amountKobo;
-        if (!cancelled) setOwnership(bound ? 'verified' : 'mismatch');
-      } catch {
-        if (!cancelled) setOwnership('mismatch');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    needsOwnershipCheck,
+  // Mount gate: the WebView stays unmounted until the device record
+  // plus server URL/amount bind both pass (or the launch is blocked).
+  const { ownership, retryBind } = usePrimaryWalletCardOwnership({
+    enabled: needsOwnershipCheck,
     authReady,
-    bindRetry,
-    paramsData?.merchantId,
-    paramsData?.reference,
-    paramsData?.authorizationUrl,
-    paramsData?.amount,
-    user?.id,
-  ]);
+    userId: user?.id,
+    merchantId: paramsData?.merchantId,
+    reference: paramsData?.reference,
+    authorizationUrl: paramsData?.authorizationUrl,
+    amount: paramsData?.amount,
+  });
 
   // A pending/held REDVAULT capture may still be reconciled server-side, so
   // this action must not return to the still-populated checkout (which would
@@ -207,11 +133,7 @@ export default function PaymentGatewayScreen() {
                 ? 'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
                 : 'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
             }
-            onCheck={
-              ownership === 'mismatch'
-                ? () => setBindRetry((count) => count + 1)
-                : undefined
-            }
+            onCheck={ownership === 'mismatch' ? retryBind : undefined}
             onBack={() =>
               router.replace(getWalletReturnHref(controller.returnTo))
             }

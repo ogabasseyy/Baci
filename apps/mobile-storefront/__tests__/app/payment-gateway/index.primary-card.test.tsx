@@ -9,6 +9,7 @@ import PaymentGatewayScreen from '@/app/payment-gateway';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 
 let mockUserId = '11111111-1111-4111-8111-111111111111';
+let mockAuthReady = true;
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const operationId = '22222222-2222-4222-8222-222222222222';
 const mockStorage = new Map<string, string>();
@@ -74,7 +75,11 @@ jest.mock('@tanstack/react-query', () => ({
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: Object.assign(
     (select: (state: unknown) => unknown) =>
-      select({ user: { id: mockUserId }, customer: null }),
+      select({
+        user: { id: mockUserId },
+        customer: null,
+        isInitialized: mockAuthReady,
+      }),
     { getState: () => ({ user: { id: mockUserId } }) }
   ),
 }));
@@ -117,6 +122,7 @@ jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
 beforeEach(async () => {
   jest.clearAllMocks();
   mockUserId = '11111111-1111-4111-8111-111111111111';
+  mockAuthReady = true;
   // New launches carry the owner stamp; the legacy (stampless) path has
   // dedicated tests below.
   mockParamsUserId = '11111111-1111-4111-8111-111111111111';
@@ -141,6 +147,27 @@ beforeEach(async () => {
   // default fixture answers ready with the params URL and amount.
   mockFetchJson.mockClear();
   mockFetchJson.mockResolvedValue(response);
+});
+
+it('waits for auth hydration instead of flashing blocked on a legitimate checkout', async () => {
+  mockAuthReady = false;
+  const view = render(<PaymentGatewayScreen />);
+  // No lookup runs while auth is unresolved: the spinner stays up with
+  // no blocked copy and no server traffic.
+  expect(screen.getByText('Confirming Payment')).toBeOnTheScreen();
+  expect(
+    screen.queryByText(
+      'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
+    )
+  ).toBeNull();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+  mockAuthReady = true;
+  view.rerender(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
 });
 
 it('blocks another account through the actual controller and lets the original owner recover after signing back in', async () => {
@@ -277,7 +304,7 @@ it('blocks a launch that pairs the owned reference with a foreign checkout URL',
   await waitFor(() =>
     expect(
       screen.getByText(
-        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+        'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
       )
     ).toBeOnTheScreen()
   );
@@ -293,7 +320,7 @@ it('blocks a launch that pairs the owned reference with a tampered amount', asyn
   await waitFor(() =>
     expect(
       screen.getByText(
-        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+        'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
       )
     ).toBeOnTheScreen()
   );
@@ -315,7 +342,7 @@ it('blocks a stale checkout URL once the server advanced past ready', async () =
   await waitFor(() =>
     expect(
       screen.getByText(
-        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+        'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
       )
     ).toBeOnTheScreen()
   );
@@ -330,13 +357,33 @@ it('blocks the checkout when the server cannot confirm it at mount', async () =>
   await waitFor(() =>
     expect(
       screen.getByText(
-        'We could not confirm this checkout for your pending funding. Return to your wallet to check its status — do not start another charge if you already paid.'
+        'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
       )
     ).toBeOnTheScreen()
   );
   expect(
     screen.queryByRole('button', { name: 'Synthetic checkout callback' })
   ).not.toBeOnTheScreen();
+});
+
+it('recovers through the mismatch re-check once the server is reachable', async () => {
+  // First bind attempt fails (transient network failure); the retry
+  // re-runs the read-only bind and mounts the checkout.
+  mockFetchJson
+    .mockRejectedValueOnce(new Error('Synthetic network failure'))
+    .mockResolvedValue(response);
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Check funding status' })
+    ).toBeOnTheScreen()
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Check funding status' }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
 });
 
 it('hides the mounted primary checkout when the account switches after navigation', async () => {

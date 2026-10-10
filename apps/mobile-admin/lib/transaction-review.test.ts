@@ -11,6 +11,7 @@ import {
   getSupplierOptionsFromOrders,
   mapTransactionOrderRows,
   parseCostPriceInput,
+  splitTransactionSearchTerms,
   toSentenceCaseSupplierName,
 } from './transaction-review';
 
@@ -745,6 +746,31 @@ describe('transaction review helpers', () => {
       'ORD-260509-00NV-R'
     );
     expect(filterTransactionOrders(orders, 'missing text')).toEqual([]);
+  });
+
+  it('splits search queries into terms for server and client matching', () => {
+    expect(splitTransactionSearchTerms(' 353232106161443  Ada ')).toEqual([
+      '353232106161443',
+      'ada',
+    ]);
+    expect(splitTransactionSearchTerms('   ')).toEqual([]);
+  });
+
+  it('dedups, sorts, and folds terms so the server subset matches refinement', () => {
+    expect(splitTransactionSearchTerms('Bravo alpha BRAVO  Alpha')).toEqual([
+      'alpha',
+      'bravo',
+    ]);
+  });
+
+  it('caps term count and length exactly like the search RPC', () => {
+    const terms = splitTransactionSearchTerms(
+      `a01 a02 a03 a04 a05 a06 a07 a08 a09 ${'x'.repeat(70)} zebra`
+    );
+    expect(terms).toHaveLength(10);
+    expect(terms).toContain('x'.repeat(60));
+    expect(terms).not.toContain('x'.repeat(70));
+    expect(terms).not.toContain('zebra');
   });
 
   it('filters the missing-cost tab down to only missing-cost line items', () => {

@@ -27,16 +27,27 @@ export class PiggyvestApiError extends Error {
     | 'PIGGYVEST_REQUEST_ERROR'
     | 'PIGGYVEST_NETWORK_ERROR';
   readonly status: number | null;
+  /**
+   * True only when the provider answered with an explicit decline
+   * envelope (`status: false`): the request was processed and refused,
+   * as opposed to a transport failure, an auth rejection, or a
+   * success-shaped response that failed local parsing. Lets callers
+   * distinguish definitive no-transfer rejections (releasable after a
+   * proven-absent lookup) from ambiguous outcomes (held for reconcile).
+   */
+  readonly declined: boolean;
 
   constructor(
     code: PiggyvestApiError['code'],
     message: string,
-    status: number | null = null
+    status: number | null = null,
+    declined = false
   ) {
     super(message);
     this.name = 'PiggyvestApiError';
     this.code = code;
     this.status = status;
+    this.declined = declined;
   }
 }
 
@@ -139,7 +150,10 @@ export async function piggyvestRequest<Data>(
     throw new PiggyvestApiError(
       'PIGGYVEST_REQUEST_ERROR',
       message,
-      response.status
+      response.status,
+      // A parsed `status: false` envelope is an explicit provider
+      // decline; an unparsable header carries no such proof.
+      header.success
     );
   }
 

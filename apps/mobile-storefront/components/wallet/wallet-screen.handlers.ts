@@ -3,9 +3,12 @@ import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { createLogger } from '@/lib/logger';
+import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
 import { scheduleLocalNotification } from '@/services/push-notifications';
+import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
+import { resolveFundWalletRail } from './resolve-fund-wallet-rail';
 import { WALLET_FUNDING_ACCOUNT_MESSAGES } from './wallet-funding-account.constants';
 import {
   buildWalletTopUpGatewayParams,
@@ -56,6 +59,7 @@ interface FundWalletParams {
   activeMerchantSlug?: string;
   customer?: WalletHandlerCustomer | null;
   fundAmount: string;
+  refetchWalletBalance?: () => Promise<unknown>;
   resetFundPanel: () => void;
   setIsFundPending: (isPending: boolean) => void;
   user?: WalletHandlerUser | null;
@@ -132,9 +136,6 @@ export async function createWalletFundingAccount({
     Alert.alert('Unable to create account number', outcome.alertMessage);
     return false;
   }
-  if (outcome.accountSummary) {
-    Alert.alert('Account Ready', outcome.accountSummary);
-  }
   return true;
 }
 
@@ -143,22 +144,65 @@ export async function fundWallet({
   activeMerchantSlug,
   customer,
   fundAmount,
+  refetchWalletBalance,
   resetFundPanel,
   setIsFundPending,
   user,
   walletReturnTo,
 }: FundWalletParams): Promise<void> {
-  const amount = Number(fundAmount);
-  const amountValidationError = validateWalletTopUpAmount(amount);
-  if (amountValidationError) {
-    Alert.alert('Invalid Amount', amountValidationError);
-    return;
-  }
   if (isHostedStagingWalletTopUpBlocked()) {
     Alert.alert(
       'Wallet top-up unavailable',
       'Card wallet top-ups are disabled in this hosted staging preview.'
     );
+    return;
+  }
+  // A transient probe failure blocks with a retry affordance instead of a
+  // dead end: the retry re-runs funding (and the probe) with these params.
+  const rail = await resolveFundWalletRail(activeMerchantId, {
+    onRetry: () => {
+      void fundWallet({
+        activeMerchantId,
+        activeMerchantSlug,
+        customer,
+        fundAmount,
+        refetchWalletBalance,
+        resetFundPanel,
+        setIsFundPending,
+        user,
+        walletReturnTo,
+      });
+    },
+  });
+  if (rail === 'blocked') return;
+  if (rail === 'primary') {
+    // Recovery runs before any amount validation: a saved primary-card
+    // operation (possibly already charged) must be rechecked even when the
+    // funding form holds its normal empty amount. New primary fundings
+    // validate inside fundPrimaryWalletCard.
+    try {
+      return await fundPrimaryWalletCard({
+        activeMerchantId,
+        activeMerchantSlug,
+        customer,
+        fundAmount,
+        refetchWalletBalance,
+        resetFundPanel,
+        setIsFundPending,
+        user,
+        walletReturnTo,
+      });
+    } catch (error) {
+      // The server reports primary as unconfigured: fall through to the
+      // working legacy top-up below instead of stranding the customer.
+      if (!rollbackObservedCapabilityOnNotReady(activeMerchantId, error))
+        throw error;
+    }
+  }
+  const amount = Number(fundAmount);
+  const amountValidationError = validateWalletTopUpAmount(amount);
+  if (amountValidationError) {
+    Alert.alert('Invalid Amount', amountValidationError);
     return;
   }
   setIsFundPending(true);

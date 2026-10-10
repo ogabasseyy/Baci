@@ -8,6 +8,12 @@ jest.mock('./wallet-screen.handlers', () => ({
   createWalletFundingAccount: jest.fn(),
 }));
 
+const mockUseCapability = jest.fn();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
+
 const mockCreate = jest.mocked(createWalletFundingAccount);
 
 const enabledSettings = {
@@ -32,9 +38,41 @@ function buildParams(
 }
 
 describe('useWalletFundingAccountController', () => {
+  it('opens PiggyVest setup without creating a Paystack account or requiring Paystack settings', async () => {
+    const params = buildParams({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerPhone: null,
+      paymentSettings: null,
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+    expect(result.current.needsPhone).toBe(true);
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+    expect(params.setShowFundPanel).toHaveBeenCalledWith(true);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+  it('routes primary merchants through legacy creation when the server reports unconfigured', async () => {
+    mockUseCapability.mockReturnValue(false);
+    const params = buildParams({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerPhone: '08012345678',
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(params.setShowFundPanel).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreate.mockResolvedValue(true);
+    mockUseCapability.mockReturnValue(null);
   });
 
   it('flags needsPhone and blocks creation when the customer has no phone', () => {
@@ -104,6 +142,53 @@ describe('useWalletFundingAccountController', () => {
     // Initial attempt + explicit retry after the phone is saved.
     expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(result.current.needsPhone).toBe(false);
+  });
+
+  it('blocks legacy creation while a non-pilot merchant awaits the first capability verdict', async () => {
+    mockUseCapability.mockReturnValue(null);
+    const params = buildParams({
+      activeMerchantId: '00000000-0000-0000-0000-000000000001',
+      customerPhone: '08012345678',
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+
+    // Cold start: the probe has not resolved, so creation waits instead of
+    // minting a legacy DVA a primary verdict would orphan.
+    expect(result.current.canCreateFundingAccount).toBe(false);
+    expect(result.current.createFundingAccountUnavailableMessage).toBe(
+      'Checking account number availability...'
+    );
+
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.onCreateFundingAccount();
+    });
+
+    expect(outcome).toBe(false);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(params.setShowFundPanel).not.toHaveBeenCalled();
+  });
+
+  it('unblocks legacy creation once a non-pilot merchant resolves to not-ready', async () => {
+    mockUseCapability.mockReturnValue(false);
+    const params = buildParams({
+      activeMerchantId: '00000000-0000-0000-0000-000000000001',
+      customerPhone: '08012345678',
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+
+    expect(result.current.canCreateFundingAccount).toBe(true);
+
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(params.setShowFundPanel).not.toHaveBeenCalled();
   });
 
   it('does not retry creation when the forced phone save fails', async () => {

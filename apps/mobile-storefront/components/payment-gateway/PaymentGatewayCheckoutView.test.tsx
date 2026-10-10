@@ -174,4 +174,19 @@ describe('PaymentGatewayCheckoutView', () => {
     expect(screen.getByText('Checkout URL is missing.')).toBeOnTheScreen();
     expect(mockWebView).not.toHaveBeenCalled();
   });
+
+  it('renders funding-safe copy when the caller overrides the missing URL message', () => {
+    render(
+      <PaymentGatewayCheckoutView
+        {...baseProps}
+        authorizationUrl={undefined}
+        missingUrlMessage="Your funding is saved. Go back and check its status."
+      />
+    );
+
+    expect(
+      screen.getByText('Your funding is saved. Go back and check its status.')
+    ).toBeOnTheScreen();
+    expect(mockWebView).not.toHaveBeenCalled();
+  });
 });

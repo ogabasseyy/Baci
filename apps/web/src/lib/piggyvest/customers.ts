@@ -27,6 +27,7 @@ const createCustomerInputSchema = z.object({
   idNumber: z.string().min(1).max(100).optional(),
   thirdPartyIdentifier: z.string().min(1).max(200),
   returnIfExist: z.boolean().default(true),
+  enableInterestAccrual: z.boolean().optional(),
 });
 
 export type CreatePiggyvestCustomerInput = z.input<
@@ -56,6 +57,7 @@ export function createPiggyvestCustomer(
       body: {
         bvn: parsed.bvn,
         email: parsed.email.toLowerCase(),
+        enable_interest_accrual: parsed.enableInterestAccrual,
         id_number: parsed.idNumber,
         id_type: parsed.idType,
         name: parsed.name.normalize('NFKC'),

@@ -18,12 +18,11 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
-import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
-import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
+import { useWalletSavingsController } from './use-wallet-savings-controller';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -93,6 +92,7 @@ export function WalletScreen({
     activeMerchantSlug: CONFIG.MERCHANT_SLUG?.trim() || undefined,
     customer,
     redeemPointsMutation: redeemMutation.mutateAsync,
+    refetchWalletBalance: refetch,
     routeAction,
     routeRequiredAmount,
     user,
@@ -153,6 +153,27 @@ export function WalletScreen({
     setShowSavingsProgressModal,
     walletReturnTo,
   });
+  const display =
+    data && deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
+  const {
+    hasPendingSavingsContribution,
+    handleAddSavingsContribution,
+    handleFundSavingsWallet,
+    handleOpenSavings,
+  } = useWalletSavingsController({
+    userId: user?.id,
+    activeMerchantId,
+    activeMerchantSlug,
+    goal: display?.activeSavingsGoal ?? null,
+    idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
+    refetchWallet: refetch,
+    savingsContributionAmount,
+    spendableBalance: display?.spendableBalance ?? 0,
+    walletTopUp: { customer, user, setIsFundPending },
+    setIsAddingSavingsContribution,
+    setShowSavingsProgressModal,
+    setSavingsContributionAmount,
+  });
   if (authLoading) {
     return <WalletScreenView colors={colors} presentation={presentation} />;
   }
@@ -185,36 +206,7 @@ export function WalletScreen({
     showQuickSave,
     spendableBalance,
     totalBalance,
-  } = deriveWalletDisplayData(walletData, routeSavingsGoalId);
-  const {
-    handleAddSavingsContribution,
-    handleFundSavingsWallet,
-    handleOpenSavings,
-  } = createWalletSavingsActions({
-    activeMerchantId,
-    activeMerchantSlug,
-    goal: activeSavingsGoal,
-    idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
-    refetchWallet: refetch,
-    savingsContributionAmount,
-    spendableBalance,
-    startWalletTopUp: () => {
-      if (activeSavingsGoal) {
-        void startSavingsWalletTopUp({
-          activeMerchantId,
-          activeMerchantSlug,
-          customer,
-          fundAmount: savingsContributionAmount,
-          goalId: activeSavingsGoal.id,
-          setIsFundPending,
-          user,
-        });
-      }
-    },
-    setIsAddingSavingsContribution,
-    setShowSavingsProgressModal,
-    setSavingsContributionAmount,
-  });
+  } = display ?? deriveWalletDisplayData(walletData, routeSavingsGoalId);
   return (
     <>
       <WalletScreenView
@@ -227,6 +219,7 @@ export function WalletScreen({
           contentContainerStyle: scrollContentStyle,
           createFundingAccountUnavailableMessage,
           customerId: customer?.id,
+          merchantId: activeMerchantId,
           canResolveCreditBaseline: isWalletFundingSessionReady,
           earningsAvailable,
           earningsBalance,
@@ -234,6 +227,7 @@ export function WalletScreen({
           fundReturnTo,
           fundingAccount,
           isAddingSavingsContribution,
+          hasPendingSavingsContribution,
           isCreatingFundingAccount: createFundingAccountMutation.isPending,
           isFundPending,
           isRedeemPending: redeemMutation.isPending,

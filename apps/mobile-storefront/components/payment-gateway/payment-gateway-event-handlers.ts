@@ -124,6 +124,12 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
+      if (paymentKind === PAYMENT_KINDS.PRIMARY_WALLET_CARD) {
+        refs.paymentCompletionStartedRef.current = false;
+        setErrorMessage(null);
+        beginPaymentCompletion();
+        return;
+      }
       if (paymentMethod === 'uba_redvault') {
         if (
           refs.statusRef.current === 'processing' ||
@@ -159,6 +165,7 @@ export function createPaymentGatewayEventHandlers({
         (paymentMethod === 'uba_redvault' ||
           paymentKind === PAYMENT_KINDS.VTU ||
           paymentKind === PAYMENT_KINDS.WALLET ||
+          paymentKind === PAYMENT_KINDS.PRIMARY_WALLET_CARD ||
           paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) &&
         isSessionPaymentCompletionRedirect(request.url, reference)
       ) {

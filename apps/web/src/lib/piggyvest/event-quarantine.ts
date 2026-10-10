@@ -20,7 +20,12 @@ import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 
 const MAX_DETAIL_BYTES = 8192;
 
-const reasonSchema = z.enum(['unparseable', 'unknown-event', 'conflict']);
+const reasonSchema = z.enum([
+  'unparseable',
+  'unknown-event',
+  'conflict',
+  'key-family',
+]);
 
 const recordInputSchema = z.object({
   bodyDigest: z.string().regex(/^[0-9a-f]{64}$/),

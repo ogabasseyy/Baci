@@ -1,5 +1,22 @@
-import { describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
+
+const mockProbePlanFunding =
+  jest.fn<(merchantId: string) => Promise<boolean>>();
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as Record<string, unknown>;
+  return {
+    ...actual,
+    getPiggyvestPrimaryCapability: (merchantId: string) =>
+      mockProbePlanFunding(merchantId),
+  };
+});
+
+beforeEach(() => {
+  mockProbePlanFunding.mockResolvedValue(false);
+});
 
 const { fetchExistingSavingsPlanFunding, fetchSavingsPlanFunding } =
   require('@/lib/customer-savings') as typeof import('@/lib/customer-savings');
@@ -69,6 +86,57 @@ describe('fetchSavingsPlanFunding', () => {
     expect(init).toMatchObject({ method: 'POST' });
     const body = JSON.parse(String((init as { body: string }).body));
     expect(body).toEqual({ bvn: '00000000000', goalId: 'goal-1' });
+  });
+
+  it('provisions through legacy funding when primary reports unconfigured', async () => {
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ token: 'csrf-token' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Savings wallet setup is unavailable.',
+          code: 'SAVINGS_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'ready',
+          accounts: [
+            {
+              accountNumber: '0001234567',
+              accountName: 'Synthetic account',
+              bankName: 'Synthetic bank',
+            },
+          ],
+        }),
+      });
+
+    await expect(
+      fetchSavingsPlanFunding({
+        bvn: '00000000000',
+        goalId: '22222222-2222-4222-8222-222222222222',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        merchantSlug: 'ogabassey',
+      })
+    ).resolves.toMatchObject({ status: 'ready' });
+
+    const urls = mockFetchWithTimeout.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => !url.includes('/api/csrf'));
+    expect(urls[0]).toContain(
+      '/api/storefront/customer/savings/primary-provisioning'
+    );
+    expect(urls[1]).toContain('/api/storefront/customer/savings/funding');
   });
 
   it('includes the interest opt-in only when requested', async () => {

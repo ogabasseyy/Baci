@@ -9,6 +9,29 @@ vi.mock('@/env', () => ({
   getPiggyvestWebhookSecret: () => 'synthetic-staging-byte-test',
   getPiggyvestApiConfig: () => null,
 }));
+vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@/lib/piggyvest/webhook-secret-union')
+    >();
+  return {
+    ...actual,
+    verifyPiggyvestWebhookSecrets: (input: {
+      rawBody: Uint8Array;
+      signature: string | null;
+    }) => {
+      const secret = actual.matchPiggyvestWebhookSecret({
+        ...input,
+        secrets: ['synthetic-staging-byte-test'],
+      });
+      // Family binding is covered by dedicated tests; these suites pin
+      // downstream handling with the legacy-authorized family.
+      return secret
+        ? { status: 'verified' as const, secret, families: ['legacy'] as const }
+        : { status: 'invalid' as const };
+    },
+  };
+});
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: () => mocks.createServiceClient(),
 }));

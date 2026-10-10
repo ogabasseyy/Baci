@@ -1,0 +1,4 @@
+{
+  "extends": "../../../apps/web/src/lib/piggyvest/primary-wallet-card-custody-typecheck.json",
+  "include": ["*.ts"]
+}

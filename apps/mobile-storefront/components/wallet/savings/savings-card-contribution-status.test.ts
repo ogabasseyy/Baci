@@ -28,6 +28,98 @@ const setters = () => ({
 
 beforeEach(() => jest.clearAllMocks());
 
+it.each([
+  ['completed', 10000, true],
+  ['completed', 9999, true],
+  ['completed', 10001, false],
+  ['completed', undefined, false],
+  ['pending', 10000, false],
+] as const)('cancels reminders only for a completed charge covering remaining amount: %s/%s', async (status, remainingAmountKobo, cancels) => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status,
+  });
+  const cancelSavingsReminder = jest.fn().mockResolvedValue(undefined);
+  await readSavingsCardContributionStatus({
+    allowBusy: false,
+    busyRef: { current: false },
+    controllers: new Set(),
+    goalId: snapshot.goalId,
+    isCurrent: () => true,
+    snapshot,
+    cancelSavingsReminder,
+    remainingAmountKobo,
+    ...setters(),
+  });
+  expect(cancelSavingsReminder).toHaveBeenCalledTimes(cancels ? 1 : 0);
+  if (cancels)
+    expect(cancelSavingsReminder).toHaveBeenCalledWith(snapshot.goalId);
+});
+
+it('cancels the completed goal reminder before refresh unmounts the funding flow', async () => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status: 'completed',
+  });
+  let current = true;
+  const events: string[] = [];
+  const cancelSavingsReminder = jest.fn(async () => {
+    events.push('cancel');
+  });
+  const refreshWallet = jest.fn(async () => {
+    events.push('refresh');
+    current = false;
+  });
+  const state = setters();
+  await syncSavingsCardContributionStatus({
+    goalId: snapshot.goalId,
+    isCurrent: () => current,
+    snapshot,
+    signal: new AbortController().signal,
+    cancelSavingsReminder,
+    remainingAmountKobo: 10000,
+    refreshWallet,
+    ...state,
+  });
+  expect(events).toEqual(['cancel', 'refresh']);
+  expect(cancelSavingsReminder).toHaveBeenCalledWith(snapshot.goalId);
+  expect(state.setMessage).not.toHaveBeenCalled();
+});
+
+it('keeps confirmed completion and wallet refresh when reminder cleanup fails', async () => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status: 'completed',
+  });
+  const cancelSavingsReminder = jest
+    .fn()
+    .mockRejectedValue(new Error('local cleanup failed'));
+  const refreshWallet = jest.fn().mockResolvedValue(undefined);
+  const state = setters();
+  await syncSavingsCardContributionStatus({
+    goalId: snapshot.goalId,
+    isCurrent: () => true,
+    snapshot,
+    signal: new AbortController().signal,
+    cancelSavingsReminder,
+    remainingAmountKobo: 10000,
+    refreshWallet,
+    ...state,
+  });
+  expect(cancelSavingsReminder).toHaveBeenCalledWith(snapshot.goalId);
+  expect(refreshWallet).toHaveBeenCalledTimes(1);
+  expect(state.setAllowRetry).not.toHaveBeenCalledWith(true);
+});
+
 it('refreshes the wallet after a completed recovered contribution', async () => {
   jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
     goalId: snapshot.goalId,

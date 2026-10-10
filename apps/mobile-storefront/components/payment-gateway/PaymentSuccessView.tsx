@@ -19,6 +19,7 @@ function getRedirectMessage(paymentKind?: PaymentKind) {
     case PAYMENT_KINDS.VTU:
       return 'Redirecting to your utility confirmation...';
     case PAYMENT_KINDS.WALLET:
+    case PAYMENT_KINDS.PRIMARY_WALLET_CARD:
       return 'Redirecting to your wallet...';
     default:
       return 'Redirecting to your order confirmation...';

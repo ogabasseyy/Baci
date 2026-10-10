@@ -21,6 +21,42 @@ jest.mock('@/lib/wallet-top-up', () => ({
   initializeWalletTopUp: jest.fn(),
 }));
 
+const mockFundPrimaryWalletCard =
+  jest.fn<(...args: never[]) => Promise<void>>();
+jest.mock('./fund-primary-wallet-card', () => ({
+  fundPrimaryWalletCard: (...args: never[]) =>
+    mockFundPrimaryWalletCard(...args),
+}));
+
+// These suites pin the known-verdict paths: merchant-1 is observed
+// non-primary, so funding must route legacy without probing.
+const mockGetCapability = jest
+  .fn<(...args: unknown[]) => Promise<boolean>>()
+  .mockRejectedValue(new Error('must not probe on a known verdict'));
+const mockReadObserved = jest
+  .fn<(...args: unknown[]) => boolean | null>()
+  .mockReturnValue(false);
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return {
+    ...actual,
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockGetCapability(...args),
+  };
+});
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability-cache'
+  ) as typeof import('@/lib/piggyvest-primary-capability-cache');
+  return {
+    ...actual,
+    readObservedPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockReadObserved(...args),
+  };
+});
+
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
     error: jest.fn(),
@@ -65,7 +101,7 @@ describe('wallet-screen.handlers', () => {
     );
   });
 
-  it('creates a funding account and announces the account summary', async () => {
+  it('does not duplicate the funding sheet with a success alert when account details exist', async () => {
     await createWalletFundingAccount({
       createFundingAccount: async () => ({
         account: {
@@ -79,10 +115,7 @@ describe('wallet-screen.handlers', () => {
       walletDvaEnabled: true,
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Account Ready',
-      'Kuda - 1234567890'
-    );
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('shows the phone prompt instead of alerting on CUSTOMER_PHONE_REQUIRED', async () => {
@@ -196,6 +229,8 @@ describe('wallet-screen.handlers', () => {
     expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
       expect.objectContaining({ returnTo: '/checkout' })
     );
+    // A known non-primary verdict routes legacy without probing.
+    expect(mockGetCapability).not.toHaveBeenCalled();
     expect(mockTrackEvent).toHaveBeenCalledWith(
       'wallet_top_up_started',
       expect.objectContaining({ amount: 5000, gateway: 'paystack' })
@@ -212,6 +247,97 @@ describe('wallet-screen.handlers', () => {
     expect(setIsFundPending).toHaveBeenLastCalledWith(false);
   });
 
+  it('falls back to the legacy top-up when primary reports unconfigured', async () => {
+    mockFundPrimaryWalletCard.mockRejectedValue(
+      Object.assign(new Error('unavailable'), {
+        code: 'PRIMARY_CARD_NOT_READY',
+      })
+    );
+    mockInitializeWalletTopUp.mockResolvedValue({
+      authorization_url: 'https://pay.example/authorize',
+      gateway: 'paystack',
+      reference: 'ref-legacy',
+      success: true,
+    });
+
+    await fundWallet({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      activeMerchantSlug: 'ogabassey',
+      customer: {
+        first_name: 'Ada',
+        id: 'customer-1',
+        last_name: 'Buyer',
+        phone: '08012345678',
+      },
+      fundAmount: '5000',
+      resetFundPanel: jest.fn(),
+      setIsFundPending: jest.fn(),
+      user: null,
+      walletReturnTo: undefined,
+    });
+
+    expect(mockFundPrimaryWalletCard).toHaveBeenCalledTimes(1);
+    expect(mockInitializeWalletTopUp).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({ reference: 'ref-legacy' }),
+    });
+  });
+
+  it('retries funding after a transient probe failure instead of stranding the tap', async () => {
+    // Unknown verdict: the probe runs, fails once (blocked, no legacy
+    // minted on ambiguity), then the retry re-probes and routes legacy.
+    mockReadObserved.mockReturnValue(null);
+    mockGetCapability
+      .mockRejectedValueOnce(new Error('transport down'))
+      .mockResolvedValueOnce(false);
+    mockInitializeWalletTopUp.mockResolvedValue({
+      authorization_url: 'https://pay.example/authorize',
+      gateway: 'paystack',
+      reference: 'ref-retry',
+      success: true,
+    });
+    const params = {
+      activeMerchantId: 'merchant-1',
+      activeMerchantSlug: 'ogabassey',
+      customer: {
+        first_name: 'Ada',
+        id: 'customer-1',
+        last_name: 'Buyer',
+        phone: '08012345678',
+      },
+      fundAmount: '5000',
+      resetFundPanel: jest.fn(),
+      setIsFundPending: jest.fn(),
+      user: null,
+    };
+
+    await fundWallet(params);
+
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unable to fund wallet',
+      'We could not confirm your wallet rail. Please try again.',
+      expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+    );
+    const buttons = jest.mocked(Alert.alert).mock.calls[0][2] ?? [];
+    const retry = buttons.find((button) => button?.text === 'Try again');
+    expect(retry?.onPress).toEqual(expect.any(Function));
+
+    retry?.onPress?.();
+
+    // The retried probe resolves legacy and the working top-up runs.
+    for (let i = 0; i < 20 && mockGetCapability.mock.calls.length < 2; i++)
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(mockGetCapability).toHaveBeenCalledTimes(2);
+    for (
+      let i = 0;
+      i < 20 && mockInitializeWalletTopUp.mock.calls.length < 1;
+      i++
+    )
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(mockInitializeWalletTopUp).toHaveBeenCalledTimes(1);
+  });
   it('returns a savings-origin top-up to the plan without submitting a savings transfer', async () => {
     mockInitializeWalletTopUp.mockResolvedValue({
       authorization_url: 'https://pay.example/authorize',

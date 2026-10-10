@@ -93,10 +93,40 @@ const rich = z.object({
     ),
 });
 
+// Terminal failure twin of the rich envelope: a successfully queried
+// transfer that the provider reports as failed. Field bindings mirror
+// success exactly so failed evidence authenticates against the same
+// stored reservation before any hold is released.
+const richFailed = z.object({
+  status: z.literal(true),
+  data: z
+    .object({
+      status: z.literal('failed'),
+      id: identifier,
+      internal_reference: identifier,
+      reference: identifier,
+      third_party_reference: identifier,
+      amount,
+      fee: z.literal(0),
+      customer_id: identifier,
+      source_wallet: identifier,
+      destination_wallet: identifier,
+      business_id: identifier.optional(),
+      currency: identifier.optional(),
+      destination_customer_id: identifier.optional(),
+    })
+    .refine(
+      (data) =>
+        data.id === data.internal_reference &&
+        data.source_wallet !== data.destination_wallet
+    ),
+});
+
 export const prefundedCardTransferVerificationSchemas = {
   identifier,
   normalized,
   rich,
+  richFailed,
   ownership,
   runtimeOwnership: ownership.extend({
     crosswalk: crosswalk.extend({

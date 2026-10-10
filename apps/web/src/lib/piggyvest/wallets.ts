@@ -32,6 +32,10 @@ const createWalletDataSchema = z.object({ id: z.string().min(1) });
 
 const retrieveWalletDataSchema = z.object({
   id: z.string().min(1),
+  // Owning provider customer, preserved for evidence binding: snapshot and
+  // verification require it to match the stored mapping. Optional here so
+  // unrelated consumers stay liberal; the evidence boundary is strict.
+  api_customer_id: z.string().min(1).optional(),
   business_id: z.string().min(1),
   virtual_account_id: z.string().nullable().optional(),
   currency: z.literal('NGN'),

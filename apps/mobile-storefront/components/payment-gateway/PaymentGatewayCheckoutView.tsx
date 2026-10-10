@@ -27,6 +27,11 @@ interface PaymentGatewayCheckoutViewProps {
   authorizationUrl?: string;
   colors: typeof Colors.light;
   gatewayName: string;
+  // Primary launches ride this view on loading/ready with the URL in
+  // navigation params; when it is absent the operation is still saved
+  // server-side, so primary overrides the dead-end fallback with
+  // funding-safe copy instead of the generic missing-URL message.
+  missingUrlMessage?: string;
   onClose: () => void;
   onError: NonNullable<ComponentProps<typeof WebView>['onError']>;
   onLoadEnd: () => void;
@@ -48,6 +53,7 @@ export function PaymentGatewayCheckoutView({
   authorizationUrl,
   colors,
   gatewayName,
+  missingUrlMessage,
   onClose,
   onError,
   onLoadEnd,
@@ -149,7 +155,7 @@ export function PaymentGatewayCheckoutView({
       ) : (
         <View style={styles.centeredContainer}>
           <Text style={[styles.statusMessage, { color: colors.textSecondary }]}>
-            Checkout URL is missing.
+            {missingUrlMessage ?? 'Checkout URL is missing.'}
           </Text>
         </View>
       )}

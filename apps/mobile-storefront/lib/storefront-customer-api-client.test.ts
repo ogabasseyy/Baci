@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import {
   mockFetchWithTimeout,
   mockGetSession,
@@ -210,5 +210,113 @@ describe('storefront customer API client', () => {
     await expect(
       client.fetchJson({ path: '/api/storefront/customer/savings/goals' })
     ).rejects.toThrow('Authentication required. Please sign in again.');
+  });
+
+  it('sends with the bound token when the session user matches', async () => {
+    const client = createStorefrontCustomerApiClient();
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-a', user: { id: 'user-a' } },
+      },
+      error: null,
+    });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ ok: true }),
+    });
+
+    await client.fetchJson({
+      path: '/api/storefront/customer/savings/goals',
+      expectedUserId: 'user-a',
+    });
+
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token-a' },
+      })
+    );
+  });
+
+  it('throws before sending when the session user differs from expected', async () => {
+    const client = createStorefrontCustomerApiClient();
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-b', user: { id: 'user-b' } },
+      },
+      error: null,
+    });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ ok: true }),
+    });
+
+    await expect(
+      client.fetchJson({
+        path: '/api/storefront/customer/savings/goals',
+        expectedUserId: 'user-a',
+      })
+    ).rejects.toThrow('The signed-in account changed. Please try again.');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it('re-reads the session instead of serving a stale cached token for a new account', async () => {
+    const client = createStorefrontCustomerApiClient();
+    const now = new Date('2026-05-24T10:00:00.000Z').getTime();
+    const expiresAt = Math.floor((now + 120_000) / 1000);
+    const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+    mockGetSession.mockResolvedValueOnce({
+      data: {
+        session: {
+          access_token: 'token-a',
+          expires_at: expiresAt,
+          user: { id: 'user-a' },
+        },
+      },
+      error: null,
+    });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ ok: true }),
+    });
+
+    try {
+      await client.fetchJson({
+        path: '/api/storefront/customer/savings/goals',
+        expectedUserId: 'user-a',
+      });
+      // Account switch: the cached token belongs to the previous user.
+      mockGetSession.mockResolvedValueOnce({
+        data: {
+          session: {
+            access_token: 'token-b',
+            expires_at: expiresAt,
+            user: { id: 'user-b' },
+          },
+        },
+        error: null,
+      });
+      await client.fetchJson({
+        path: '/api/storefront/customer/savings/goals',
+        expectedUserId: 'user-b',
+      });
+
+      expect(mockGetSession).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer token-b' },
+        })
+      );
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 });

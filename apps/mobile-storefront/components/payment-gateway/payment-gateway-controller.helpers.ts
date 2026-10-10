@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import type { WalletTopUpGateway } from '@/lib/wallet-top-up';
 import { PaymentGatewayParamsSchema } from '@/schemas/payment-gateway';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
@@ -16,11 +17,16 @@ export function isWalletTopUpGateway(
 }
 
 export function getWalletReturnHref(returnTo?: string): Href {
-  return (returnTo || '/wallet') as Href;
+  // Every caller passes schema- or server-validated input, but this helper
+  // is the last redirect boundary: re-sanitize so a future
+  // caller can never turn it into an open redirect.
+  return sanitizeWalletReturnTo(returnTo) ?? '/wallet';
 }
 
 export function getCloseConfirmationMessage(paymentKind?: string) {
   switch (paymentKind) {
+    case PAYMENT_KINDS.PRIMARY_WALLET_CARD:
+      return 'Your card funding operation is saved. Leaving does not cancel a charge already in progress. Check its status from your wallet. Do not pay again.';
     case PAYMENT_KINDS.SAVINGS_AUTH:
       return 'If you leave now, your savings card authorization may remain incomplete.';
     case PAYMENT_KINDS.VTU:

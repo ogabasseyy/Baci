@@ -56,7 +56,8 @@ import {
 import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
-import { prefundedCardWebhookBoundary } from '@/lib/piggyvest/prefunded-card-webhook-boundary';
+import { reconcilePrimaryWalletCardCheckoutWebhook } from '@/lib/piggyvest/primary-wallet-card-checkout-webhook-reconcile';
+import { walletCardWebhookBoundary } from '@/lib/piggyvest/wallet-card-webhook-boundary';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
@@ -74,6 +75,10 @@ import {
   referenceSchema,
 } from '@/schemas/payments';
 import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
+import {
+  dispatchPaystackCheckoutOnlyWebhook,
+  matchPaystackWebhookSecrets,
+} from './paystack-key-family-dispatch';
 
 type PaymentGateway = 'paystack' | 'korapay';
 
@@ -526,45 +531,6 @@ function verifyKorapayWebhookSignature(
   }
 }
 
-/**
- * Verify Paystack webhook signature
- * @param signature - The signature from the x-paystack-signature header
- * @param payload - The raw request body as string
- * @returns boolean indicating if signature is valid
- */
-function verifyPaystackWebhookSignature(
-  signature: string | null,
-  payload: string
-): boolean {
-  if (!signature) {
-    logger.warn({ message: 'Paystack webhook signature missing' });
-    return false;
-  }
-
-  const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  if (!secretKey) {
-    logger.error({ message: 'PAYSTACK_SECRET_KEY not configured' });
-    return false;
-  }
-
-  try {
-    // Generate expected signature using HMAC-SHA512
-    const expectedSignature = createHmac('sha512', secretKey)
-      .update(payload)
-      .digest('hex');
-    return verifyWebhookSignature(
-      String(signature).toLowerCase(),
-      expectedSignature
-    );
-  } catch (error) {
-    logger.error({
-      message: 'Paystack webhook signature verification error',
-      error,
-    });
-    return false;
-  }
-}
-
 function verifyWebhookSignature(
   providedSignature: string,
   expectedSignature: string
@@ -593,9 +559,12 @@ export async function POST(request: NextRequest) {
 
     // Verify webhook signature based on gateway
     let isValidSignature = false;
+    let paystackCheckoutOnly = false;
     if (gateway === 'paystack') {
       const signature = request.headers.get('x-paystack-signature');
-      isValidSignature = verifyPaystackWebhookSignature(signature, rawBody);
+      const matched = matchPaystackWebhookSecrets(signature, rawBody);
+      isValidSignature = matched.legacy || matched.checkout;
+      paystackCheckoutOnly = matched.checkout && !matched.legacy;
     } else {
       const signature = request.headers.get('x-korapay-signature');
       isValidSignature = verifyKorapayWebhookSignature(signature, rawBody);
@@ -645,6 +614,14 @@ export async function POST(request: NextRequest) {
       gateway,
       event: body.event,
     });
+
+    if (gateway === 'paystack' && paystackCheckoutOnly) {
+      // Key-to-handler scoping: a delivery verified solely by the
+      // primary-card checkout key is routed exclusively to the card
+      // reconcile path (see the key-family helper). Legacy handlers
+      // (merchant wallets, invoices, savings) never see it.
+      return await dispatchPaystackCheckoutOnlyWebhook(body);
+    }
 
     if (
       gateway === 'paystack' &&
@@ -734,7 +711,10 @@ export async function POST(request: NextRequest) {
     // store.flagReconciliation on mismatch). Mutations stay disabled by
     // default and require PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED=true.
     if (gateway === 'paystack') {
-      const firstCardBoundary = prefundedCardWebhookBoundary(body);
+      const primaryCardReconciled =
+        await reconcilePrimaryWalletCardCheckoutWebhook({ body });
+      if (primaryCardReconciled) return primaryCardReconciled;
+      const firstCardBoundary = walletCardWebhookBoundary(body);
       if (firstCardBoundary) return firstCardBoundary;
     }
 

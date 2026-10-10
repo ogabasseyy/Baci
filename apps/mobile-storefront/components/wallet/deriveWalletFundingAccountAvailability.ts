@@ -6,6 +6,13 @@ interface DeriveWalletFundingAccountAvailabilityParams {
   isPaymentSettingsError: boolean;
   isPaymentSettingsPending: boolean;
   paymentSettings?: PaymentSettings | null;
+  /**
+   * True while a never-observed non-pilot merchant awaits the first primary
+   * capability verdict. Creation must wait: a legacy DVA minted now would be
+   * orphaned if the verdict comes back primary-enabled.
+   */
+  primaryVerdictPending?: boolean;
+  primaryWalletSetup?: boolean;
 }
 
 export interface WalletFundingAccountAvailability {
@@ -22,17 +29,22 @@ export function deriveWalletFundingAccountAvailability({
   isPaymentSettingsError,
   isPaymentSettingsPending,
   paymentSettings,
+  primaryVerdictPending = false,
+  primaryWalletSetup = false,
 }: DeriveWalletFundingAccountAvailabilityParams): WalletFundingAccountAvailability {
   const walletDvaEnabled =
-    paymentSettings?.wallet_paystack_dva_enabled === true;
+    primaryWalletSetup || paymentSettings?.wallet_paystack_dva_enabled === true;
   const normalizedCustomerPhone = customerPhone?.trim() ?? '';
   let createFundingAccountUnavailableMessage: string | undefined;
   let needsPhone = false;
 
-  if (isPaymentSettingsPending) {
+  if (
+    !primaryWalletSetup &&
+    (isPaymentSettingsPending || primaryVerdictPending)
+  ) {
     createFundingAccountUnavailableMessage =
       WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING;
-  } else if (isPaymentSettingsError) {
+  } else if (!primaryWalletSetup && isPaymentSettingsError) {
     createFundingAccountUnavailableMessage =
       WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_ERROR;
   } else if (!walletDvaEnabled) {
@@ -51,7 +63,7 @@ export function deriveWalletFundingAccountAvailability({
       !createFundingAccountUnavailableMessage && !needsPhone,
     createFundingAccountUnavailableMessage,
     customerPhone: normalizedCustomerPhone,
-    isPaymentSettingsPending,
+    isPaymentSettingsPending: !primaryWalletSetup && isPaymentSettingsPending,
     needsPhone,
     walletDvaEnabled,
   };

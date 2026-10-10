@@ -7,12 +7,10 @@ import { useToast } from '@/components/ui/Toast';
 import { setClipboardString } from '@/lib/clipboard';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
-import { createPaymentGatewayMessageHandler } from './create-payment-gateway-message-handler';
 import {
   isPaymentGateway,
   PAYMENT_GATEWAY_LABELS,
 } from './payment-gateway.helpers';
-import { createPaymentGatewayCompletionHandlers } from './payment-gateway-completion-handlers';
 import {
   getCloseConfirmationMessage,
   parsePaymentGatewayParams,
@@ -21,37 +19,14 @@ import type {
   PaymentGatewayRefs,
   PaymentGatewayStatus,
 } from './payment-gateway-controller.types';
-import { createPaymentGatewayEventHandlers } from './payment-gateway-event-handlers';
-import { createPaymentGatewayTimers } from './payment-gateway-timers';
+import { requiresServerCheckoutConfirmation } from './requires-server-checkout-confirmation';
 import { resolvePendingOrdersRoute } from './resolve-pending-orders-route';
-
-// React Compiler forbids passing refs to plain function calls during render but
-// allows passing them to hooks. These wrappers classify the render-time handler
-// factories as hooks; like before, they re-run on every render.
-function usePaymentGatewayTimers(
-  input: Parameters<typeof createPaymentGatewayTimers>[0]
-) {
-  return createPaymentGatewayTimers(input);
-}
-
-function usePaymentGatewayMessageHandler(
-  input: Parameters<typeof createPaymentGatewayMessageHandler>[0]
-) {
-  return createPaymentGatewayMessageHandler(input);
-}
-
-function usePaymentGatewayEventHandlers(
-  input: Parameters<typeof createPaymentGatewayEventHandlers>[0]
-) {
-  return createPaymentGatewayEventHandlers(input);
-}
-
-function usePaymentGatewayCompletionHandlers(
-  input: Parameters<typeof createPaymentGatewayCompletionHandlers>[0]
-) {
-  return createPaymentGatewayCompletionHandlers(input);
-}
-
+import { usePaymentGatewayCompletionHandlers } from './use-payment-gateway-completion-handlers';
+import {
+  usePaymentGatewayEventHandlers,
+  usePaymentGatewayMessageHandler,
+  usePaymentGatewayTimers,
+} from './use-payment-gateway-handler-hooks';
 export function usePaymentGatewayController() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<Record<string, string>>();
@@ -74,6 +49,14 @@ export function usePaymentGatewayController() {
   const [status, setStatusState] = useState<PaymentGatewayStatus>('loading');
   const statusRef = useRef<PaymentGatewayStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Primary-card only: the recovered operation reference (never the raw
+  // URL parameter) and the terminal new-funding directive. Both are set
+  // exclusively by the card completion run that verified them.
+  const [confirmedOperationReference, setConfirmedOperationReference] =
+    useState<string | null>(null);
+  const [terminalDirective, setTerminalDirective] = useState<string | null>(
+    null
+  );
   const gatewayRefs: PaymentGatewayRefs = {
     copiedGatewayTextRef,
     isMountedRef,
@@ -172,8 +155,10 @@ export function usePaymentGatewayController() {
       refs: gatewayRefs,
       returnTo,
       scheduleDelayedNavigation,
+      setConfirmedOperationReference,
       setErrorMessage,
       setPaymentStatus,
+      setTerminalDirective,
       trackingToken,
       utilityType,
     });
@@ -195,8 +180,12 @@ export function usePaymentGatewayController() {
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
-    confirmRedvaultPayment:
-      paymentMethod === 'uba_redvault' ? beginPaymentCompletion : undefined,
+    confirmServerPayment: requiresServerCheckoutConfirmation(
+      paymentMethod,
+      paymentKind
+    )
+      ? beginPaymentCompletion
+      : undefined,
     copiedGatewayTextRef,
     copyGatewayText,
     customerIdentifier,
@@ -279,8 +268,11 @@ export function usePaymentGatewayController() {
   return {
     amount,
     authorizationUrl,
+    confirmedOperationReference,
     errorMessage,
     gatewayName,
+    returnTo,
+    terminalDirective,
     // Alias retained for checkout back-button consumers; both paths confirm cancellation.
     handleBack: handleClose,
     handleClose,

@@ -21,8 +21,10 @@ interface PaymentGatewayCompletionHandlerInput
   queryClient: QueryClient;
   refs: PaymentGatewayRefs;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setConfirmedOperationReference?: (reference: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   setPaymentStatus: PaymentStatusSetter;
+  setTerminalDirective?: (message: string | null) => void;
 }
 
 export function createPaymentGatewayCompletionHandlers({
@@ -43,8 +45,10 @@ export function createPaymentGatewayCompletionHandlers({
   refs,
   returnTo,
   scheduleDelayedNavigation,
+  setConfirmedOperationReference,
   setErrorMessage,
   setPaymentStatus,
+  setTerminalDirective,
   trackingToken,
   utilityType,
 }: PaymentGatewayCompletionHandlerInput) {
@@ -105,6 +109,27 @@ export function createPaymentGatewayCompletionHandlers({
 
     if (paymentKind === PAYMENT_KINDS.VTU) {
       beginVtuPaymentCompletion();
+      return;
+    }
+    if (paymentKind === PAYMENT_KINDS.PRIMARY_WALLET_CARD) {
+      const { beginPrimaryWalletCardCompletion } = await import(
+        './primary-wallet-card-completion'
+      );
+      beginPrimaryWalletCardCompletion({
+        clearPendingLoadTimeout,
+        gateway,
+        merchantId,
+        merchantSlug,
+        queryClient,
+        reference,
+        refs,
+        returnTo,
+        scheduleDelayedNavigation,
+        setConfirmedOperationReference,
+        setErrorMessage,
+        setPaymentStatus,
+        setTerminalDirective,
+      });
       return;
     }
 

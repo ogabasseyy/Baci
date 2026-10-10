@@ -88,7 +88,37 @@ function isSafeQuery(query: string): boolean {
  * query is only required to be well-formed and free of nested redirects.
  * Fragments are rejected outright — nothing in this app produces one, and one
  * would otherwise carry unchecked path-ish text past the path rules.
+ *
+ * Deliberately NOT allowlisted to /wallet*: returnTo is a general
+ * interrupted-flow handoff — wallet funding resumes /checkout (abandoned
+ * purchase), /imei-check (device check), and savings routes. Same-app
+ * screens are deep-linkable regardless, so same-app navigation is not a
+ * privilege boundary; the security boundary here is off-app escape
+ * (absolute URLs, protocol-relative, traversal, nested hops).
  */
+/**
+ * True when a saved handoff resumes the savings flow: the href must first
+ * pass the same sanitization as navigation, then carry action=savings
+ * (extra parameters such as savingsGoalId are expected on primary flows).
+ */
+export function isWalletSavingsReturnHref(value: unknown): boolean {
+  const href = sanitizeWalletReturnTo(value);
+  if (!href) return false;
+  const queryIndex = href.indexOf('?');
+  if (queryIndex === -1) return false;
+  return href
+    .slice(queryIndex + 1)
+    .split('&')
+    .some((pair) => {
+      const separatorIndex = pair.indexOf('=');
+      if (separatorIndex <= 0) return false;
+      return (
+        decode(pair.slice(0, separatorIndex)) === 'action' &&
+        decode(pair.slice(separatorIndex + 1)) === 'savings'
+      );
+    });
+}
+
 export function sanitizeWalletReturnTo(
   value: unknown
 ): WalletReturnHref | undefined {

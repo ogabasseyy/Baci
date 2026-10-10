@@ -174,6 +174,10 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
+  // The union gate reads every secret var directly; pin the rotation vars
+  // empty so each test's PVB_SECRET_KEY stub fully decides the outcome.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_SECRETS', '');
+  vi.stubEnv('PIGGYVEST_WEBHOOK_SECRET_PREVIOUS', '');
 });
 
 describe('GET reachability probe', () => {
@@ -224,16 +228,30 @@ describe('POST event intake', () => {
 
   it('acks 200 without processing when the signature is invalid', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    const rawBody = JSON.stringify(inflowEvent);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const rawBody = JSON.stringify(inflowEvent);
 
-    const response = await POST(createRequest(rawBody, '0'.repeat(128)));
+      const response = await POST(createRequest(rawBody, '0'.repeat(128)));
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      received: false,
-      code: 'PIGGYVEST_INVALID_SIGNATURE',
-    });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        received: false,
+        code: 'PIGGYVEST_INVALID_SIGNATURE',
+      });
+      expect(mocks.createServiceClient).not.toHaveBeenCalled();
+      // Monitoring surface for the log drain: presence only.
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[PiggyVest Webhook] Rejected delivery with invalid signature (signature header present)'
+        )
+      );
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('0'.repeat(128))
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('records an authentic inflow and acks received', async () => {

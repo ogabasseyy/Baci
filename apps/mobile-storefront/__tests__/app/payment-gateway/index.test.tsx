@@ -1,371 +1,132 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import type React from 'react';
 import PaymentGatewayScreen from '@/app/payment-gateway';
-import { setClipboardString } from '@/lib/clipboard';
-import {
-  VtuPaymentStillProcessingError,
-  waitForVtuConfirmation,
-} from '@/lib/vtu-checkout';
 
-const mockToastError = jest.fn();
-const mockToastSuccess = jest.fn();
-let mockSearchParams = {
-  amount: '1000',
-  authorizationUrl: 'https://checkout.paystack.com/test',
-  customerIdentifier: '43901766923',
-  gateway: 'paystack',
-  paymentKind: 'vtu',
-  reference: 'ref-123',
-  utilityType: 'power',
-};
-
+const mockRetry = jest.fn();
+let mockStatus = 'pending';
+let mockReturnTo: string | undefined;
+jest.mock('@/lib/primary-wallet-card', () => ({
+  // These tests route by status, not ownership: the device record
+  // always proves the launch belongs to the current user and the
+  // server always confirms the checkout URL and amount.
+  createPrimaryWalletCardFundingClient: () => ({
+    readPending: async () => ({
+      operationId: '22222222-2222-4222-8222-222222222222',
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      userId: '11111111-1111-4111-8111-111111111111',
+    }),
+    recover: async () => ({
+      authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      amountKobo: 100000,
+    }),
+    peekStatus: async () => ({
+      authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      amountKobo: 100000,
+    }),
+  }),
+}));
 jest.mock('expo-router', () => ({
-  Stack: {
-    Screen: () => null,
-  },
-  router: {
-    back: jest.fn(),
-    replace: jest.fn(),
-  },
-  useLocalSearchParams: () => mockSearchParams,
+  router: { replace: jest.fn() },
+  Stack: { Screen: () => null },
 }));
-
-jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({
-    children,
-    edges,
-  }: {
-    children?: React.ReactNode;
-    edges?: string[];
-  }) => {
-    const { View } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-
-    return (
-      <View accessibilityLabel={`safe-area-edges:${edges?.join(',') ?? 'all'}`}>
-        {children}
-      </View>
-    );
-  },
-}));
-
-jest.mock('react-native-webview', () => ({
-  WebView: ({
-    injectedJavaScript,
-    injectedJavaScriptBeforeContentLoadedForMainFrameOnly,
-    injectedJavaScriptForMainFrameOnly,
-    onMessage,
-    onNavigationStateChange,
-    onShouldStartLoadWithRequest,
-    source,
-  }: {
-    injectedJavaScript?: string;
-    injectedJavaScriptBeforeContentLoadedForMainFrameOnly?: boolean;
-    injectedJavaScriptForMainFrameOnly?: boolean;
-    onMessage?: (event: { nativeEvent: { data: string } }) => void;
-    onNavigationStateChange?: (event: { url: string }) => void;
-    onShouldStartLoadWithRequest?: (event: { url: string }) => boolean;
-    source: { uri: string };
-  }) => {
-    const { Pressable, Text, View } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-
-    return (
-      <View>
-        <Pressable
-          accessibilityLabel="mock-payment-webview"
-          onPress={() =>
-            onMessage?.({
-              nativeEvent: {
-                data: JSON.stringify({
-                  text: '1234567890',
-                  type: 'payment_clipboard_copy',
-                }),
-              },
-            })
-          }
-        >
-          <View>
-            <Text>{`webview:${source.uri}`}</Text>
-            <Text>{`clipboard-bridge:${
-              injectedJavaScript ? 'enabled' : 'missing'
-            }`}</Text>
-            <Text>{`clipboard-main-frame-only:${String(
-              injectedJavaScriptForMainFrameOnly
-            )}`}</Text>
-            <Text>{`clipboard-before-main-frame-only:${String(
-              injectedJavaScriptBeforeContentLoadedForMainFrameOnly
-            )}`}</Text>
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="mock-payment-account-detected"
-          onPress={() =>
-            onMessage?.({
-              nativeEvent: {
-                data: JSON.stringify({
-                  text: '1234567890',
-                  type: 'payment_account_number_detected',
-                }),
-              },
-            })
-          }
-        >
-          <Text>detect-account-number</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="mock-payment-success-navigation"
-          onPress={() =>
-            onShouldStartLoadWithRequest?.({
-              url: 'https://usebaci.com/checkout/success?reference=ref-123',
-            }) !== false &&
-            onNavigationStateChange?.({
-              url: 'https://usebaci.com/checkout/success?reference=ref-123',
-            })
-          }
-        >
-          <Text>success-navigation</Text>
-        </Pressable>
-      </View>
-    );
-  },
-}));
-
-jest.mock('@/lib/clipboard', () => ({
-  setClipboardString: jest.fn(() => Promise.resolve(true)),
-}));
-
-jest.mock('@/lib/supabase', () => ({
-  supabase: {},
-}));
-
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
-
-jest.mock('@/components/ui/Toast', () => ({
-  useToast: () => ({
-    error: mockToastError,
-    success: mockToastSuccess,
-    Toast: () => {
-      const { View } =
-        jest.requireActual<typeof import('react-native')>('react-native');
-
-      return <View testID="toast-root" />;
-    },
-  }),
+jest.mock('@/stores/auth-store', () => ({
+  // Selector-honoring: the mount gate keys off a stable boolean, so a
+  // fresh object per call would retrigger the ownership effect forever.
+  useAuthStore: (select: (state: unknown) => unknown) =>
+    select({
+      user: { id: '11111111-1111-4111-8111-111111111111' },
+      customer: null,
+      isInitialized: true,
+    }),
+}));
+jest.mock('@/components/storefront/StorefrontScreenShell', () => ({
+  StorefrontScreenShell: require('react-native').View,
+}));
+jest.mock(
+  '@/components/payment-gateway/use-payment-gateway-controller',
+  () => ({
+    usePaymentGatewayController: () => ({
+      // Stamped owner launch whose device record proves ownership and
+      // whose server bind confirms the checkout URL and amount.
+      validatedParams: {
+        isValid: true,
+        data: {
+          userId: '11111111-1111-4111-8111-111111111111',
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          reference: 'pvb-first-primary-22222222-2222-4222-8222-222222222222',
+          authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+          amount: 1000,
+        },
+      },
+      paymentKind: 'primary_wallet_card',
+      status: mockStatus,
+      errorMessage: null,
+      handleRetry: mockRetry,
+      returnTo: mockReturnTo,
+    }),
+  })
+);
+jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
+  PaymentGatewayCheckoutView: () => null,
 }));
 
-jest.mock('@/lib/vtu-checkout', () => {
-  const actual =
-    jest.requireActual<typeof import('@/lib/vtu-checkout')>(
-      '@/lib/vtu-checkout'
-    );
-
-  return {
-    ...actual,
-    waitForVtuConfirmation: jest.fn(),
-  };
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockReturnTo = undefined;
 });
 
-jest.mock('@/stores/cart-store', () => ({
-  useCartStore: (selector: (state: { clearCart: () => void }) => unknown) =>
-    selector({ clearCart: jest.fn() }),
-}));
-
-function renderPaymentGatewayScreen() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: { retry: false },
-      queries: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <PaymentGatewayScreen />
-    </QueryClientProvider>
+it.each([
+  ['pending', 'Wallet funding pending'],
+  ['error', 'Could not check funding status'],
+  // A never-emitted 'held' stays on primary funding copy instead of
+  // leaking into the generic Redvault held view.
+  ['held', 'Wallet funding pending'],
+])('routes primary %s to safe funding status UI, not failed payment or orders', async (status, title) => {
+  mockStatus = status;
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(screen.getByRole('header').props.children).toBe(title)
   );
-}
+  expect(screen.getByRole('alert').props.children).toContain(
+    'Do not pay again'
+  );
+  expect(screen.queryByText('View your orders')).toBeNull();
+  expect(screen.queryByText('Payment Failed')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Check funding status' }));
+  expect(mockRetry).toHaveBeenCalledTimes(1);
+  fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
+  expect(router.replace).toHaveBeenCalledWith('/wallet');
+});
 
-describe('PaymentGatewayScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useRealTimers();
-    mockSearchParams = {
-      amount: '1000',
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      customerIdentifier: '43901766923',
-      gateway: 'paystack',
-      paymentKind: 'vtu',
-      reference: 'ref-123',
-      utilityType: 'power',
-    };
-  });
-
-  it('does not apply a top safe-area inset under the native stack header', () => {
-    renderPaymentGatewayScreen();
-
-    expect(screen.getByLabelText('safe-area-edges:bottom')).toBeTruthy();
-    expect(screen.getByText('Secure Paystack Checkout')).toBeTruthy();
-    expect(
-      screen.getByText('webview:https://checkout.paystack.com/test')
-    ).toBeTruthy();
-  });
-
-  it('copies generic gateway text once from WebView clipboard messages', async () => {
-    renderPaymentGatewayScreen();
-
-    expect(screen.getByText('clipboard-bridge:enabled')).toBeTruthy();
-    expect(screen.getByText('clipboard-main-frame-only:false')).toBeTruthy();
-    expect(
-      screen.getByText('clipboard-before-main-frame-only:false')
-    ).toBeTruthy();
-
-    fireEvent.press(screen.getByLabelText('mock-payment-webview'));
-
-    expect(setClipboardString).toHaveBeenCalledWith('1234567890');
-    await waitFor(() =>
-      expect(mockToastSuccess).toHaveBeenCalledWith('Text copied.')
-    );
-
-    fireEvent.press(screen.getByLabelText('mock-payment-webview'));
-
-    expect(setClipboardString).toHaveBeenCalledTimes(1);
-    expect(mockToastSuccess).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps decimal precision in the amount banner', () => {
-    mockSearchParams = { ...mockSearchParams, amount: '1500.50' };
-
-    renderPaymentGatewayScreen();
-
-    expect(screen.getByText('₦1,500.50')).toBeTruthy();
-  });
-
-  it('auto-copies a detected gateway account number without showing a second copy button', async () => {
-    renderPaymentGatewayScreen();
-
-    fireEvent.press(screen.getByLabelText('mock-payment-account-detected'));
-
-    await waitFor(() =>
-      expect(setClipboardString).toHaveBeenCalledWith('1234567890')
-    );
-    await waitFor(() =>
-      expect(mockToastSuccess).toHaveBeenCalledWith('Account number copied.')
-    );
-    expect(screen.queryByText('Paystack account')).toBeNull();
-  });
-
-  it('routes VTU payments that are still processing without showing payment failed', async () => {
-    let rejectConfirmation:
-      | ((error: VtuPaymentStillProcessingError) => void)
-      | undefined;
-    (
-      waitForVtuConfirmation as jest.MockedFunction<
-        typeof waitForVtuConfirmation
-      >
-    ).mockImplementation(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectConfirmation = reject;
-        })
-    );
-
-    renderPaymentGatewayScreen();
-
-    fireEvent.press(screen.getByLabelText('mock-payment-success-navigation'));
-
-    expect(screen.queryByText('Order Confirmed!')).toBeNull();
-    await waitFor(() => {
-      expect(screen.getByText('Payment Received')).toBeTruthy();
-      expect(
-        screen.getByText(
-          "We're generating your token now. This usually takes 30-60 seconds, and we'll notify you when it's ready."
-        )
-      ).toBeTruthy();
-    });
-
-    await act(async () => {
-      rejectConfirmation?.(
-        new VtuPaymentStillProcessingError({
-          reference: 'ref-123',
-        })
-      );
-    });
-
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({
-        pathname: '/utilities/[type]',
-        params: expect.objectContaining({
-          customerIdentifier: '43901766923',
-          paymentStatus: 'processing',
-          reference: 'ref-123',
-          type: 'power',
-        }),
-      })
-    );
-    expect(screen.queryByText('Payment Failed')).toBeNull();
-  });
-
-  it('allows VTU confirmation to retry after a transient failure', async () => {
-    jest.useFakeTimers({ advanceTimers: true });
-    (
-      waitForVtuConfirmation as jest.MockedFunction<
-        typeof waitForVtuConfirmation
-      >
+it('fails closed to primary funding copy on an unknown future status', async () => {
+  mockStatus = 'future-terminal-state';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(screen.getByRole('header').props.children).toBe(
+      'Wallet funding pending'
     )
-      .mockRejectedValueOnce(new Error('Temporary confirmation error'))
-      .mockResolvedValueOnce({
-        amount: 1000,
-        customerIdentifier: '43901766923',
-        reference: 'ref-123',
-        status: 'successful',
-      });
+  );
+  expect(screen.queryByText('View your orders')).toBeNull();
+  expect(screen.queryByText('Payment Failed')).toBeNull();
+});
 
-    renderPaymentGatewayScreen();
-
-    fireEvent.press(screen.getByLabelText('mock-payment-success-navigation'));
-
-    await waitFor(() =>
-      expect(screen.getByText('Payment Failed')).toBeTruthy()
-    );
-
-    fireEvent.press(screen.getByText('Try Again'));
-
-    await waitFor(() =>
-      expect(screen.getByText('Secure Paystack Checkout')).toBeTruthy()
-    );
-    fireEvent.press(screen.getByLabelText('mock-payment-success-navigation'));
-
-    await waitFor(() =>
-      expect(waitForVtuConfirmation).toHaveBeenCalledTimes(2)
-    );
-    await waitFor(() =>
-      expect(screen.getByText('Payment Successful!')).toBeTruthy()
-    );
-    await act(async () => {
-      jest.runOnlyPendingTimers();
-    });
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({
-        pathname: '/utilities/[type]',
-        params: expect.objectContaining({
-          customerIdentifier: '43901766923',
-          paymentStatus: 'successful',
-          reference: 'ref-123',
-          type: 'power',
-        }),
-      })
-    );
-  });
+it('resumes the saved savings handoff when leaving the pending funding view', async () => {
+  mockStatus = 'pending';
+  mockReturnTo = '/wallet?action=savings&savingsGoalId=owned-goal';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Return to wallet' })
+    ).toBeOnTheScreen()
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
+  expect(router.replace).toHaveBeenCalledWith(mockReturnTo);
 });

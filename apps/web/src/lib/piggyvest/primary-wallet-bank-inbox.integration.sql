@@ -1,0 +1,319 @@
+\set ON_ERROR_STOP on
+\set hold_custody 1
+\ir primary-wallet-card-custody.integration.sql
+\ir ../../../../../supabase/migrations/20261007230000_primary_bank_signed_inbox.sql
+\ir ../../../../../supabase/migrations/20261007230100_primary_bank_custody_prerequisite.sql
+\ir ../../../../../supabase/migrations/20261008091000_primary_bank_hold_specificity.sql
+\ir ../../../../../supabase/migrations/20261007230200_primary_bank_inbox_worker.sql
+\ir ../../../../../supabase/migrations/20261008093600_primary_bank_inbox_expiry_drain.sql
+\ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
+\ir ../../../../../supabase/migrations/20261008093700_primary_bank_inbox_unsettled_deletion_block.sql
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
+CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
+CREATE ROLE baci_primary_bank_worker LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
+GRANT primary_bank_signed_intake TO baci_primary_bank_intake;
+GRANT primary_bank_inbox_worker TO baci_primary_bank_worker;
+INSERT INTO piggyvest_primary.bank_inbox_authorities VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','fixture-business','staging','baci_primary_bank_intake','baci_primary_bank_worker',true,'2099-01-01T00:00:00Z');
+CREATE TEMP TABLE bank_fixture(label text PRIMARY KEY,scope jsonb,raw_hex text,receipt jsonb,stored_claim jsonb);
+GRANT SELECT,UPDATE ON pg_temp.bank_fixture TO baci_primary_bank_intake,baci_primary_bank_worker;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt)
+SELECT 'card',jsonb_build_object('merchantId',scope->>'merchantId','businessId','fixture-business','expiresAt','2099-01-01T00:00:00.000Z'),bank
+FROM public.custody_fixture WHERE label='third@example.test';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{eventId}','"bank-card"');
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt) SELECT 'bank',scope,receipt||jsonb_build_object('eventId','bank-independent','providerTransactionId','unrelated-deposit','amountKobo',10000) FROM pg_temp.bank_fixture WHERE label='card';
+UPDATE pg_temp.bank_fixture SET raw_hex=encode(convert_to(jsonb_build_object('eventId',receipt->'eventId','eventType','bank-transfer.inflow.success',
+ 'customer_id',receipt->'providerCustomerId','pvb_wallet',receipt->'providerWalletId',
+ 'eventData',jsonb_build_object('id',receipt->'eventDataId','transaction_id',receipt->'providerTransactionId','customer_id',receipt->'providerCustomerId',
+ 'amount',receipt->'amountKobo','fee',receipt->'feeKobo','currency',receipt->'currency','reference',receipt->'reference',
+ 'session_id',receipt->'sessionId','timestamp',receipt->'creditedAt'))::text,'UTF8'),'hex');
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{creditedAt}',to_jsonb(to_char(date_trunc('milliseconds',(receipt->>'creditedAt')::timestamptz) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex')));
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ FOR fixture IN SELECT * FROM pg_temp.bank_fixture LOOP
+  IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'bank intake failed'; END IF;
+  IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'duplicate' THEN RAISE EXCEPTION 'duplicate intake lost'; END IF;
+ END LOOP;
+ BEGIN
+  PERFORM piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1),'{"batchSize":1}');
+  RAISE EXCEPTION 'intake claimed financial worker';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1),
+ jsonb_build_object('rawHex',encode(convert_to('{"eventId":"legacy","eventType":"bank-transfer.inflow.success","customer_id":"legacy","pvb_wallet":"legacy"}','UTF8'),'hex'),'signature',repeat('a',128)))<>'not_handled' THEN RAISE EXCEPTION 'legacy bank intercepted'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ FOR leased IN SELECT value FROM jsonb_array_elements(piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1),'{"batchSize":10}')) LOOP
+  SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE receipt->>'eventId'=leased->>'eventId';
+  UPDATE pg_temp.bank_fixture SET stored_claim=leased WHERE label=fixture.label;
+  BEGIN
+   PERFORM piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',jsonb_set(fixture.receipt,'{amountKobo}','999')));
+   RAISE EXCEPTION 'signed amount changed';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>(CASE WHEN fixture.label='card' THEN 'prerequisite' ELSE 'credited' END) THEN RAISE EXCEPTION 'bank/card hold attribution guessed'; END IF;
+ END LOOP;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-card' AND (state<>'pending' OR reason<>'prerequisite')) THEN RAISE EXCEPTION 'card leg prerequisite dropped'; END IF;
+ IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-independent' AND state<>'processed') THEN RAISE EXCEPTION 'unrelated deposit wrongly deferred'; END IF;
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>142 THEN RAISE EXCEPTION 'unrelated deposit lost'; END IF;
+END $$;
+-- Terminal card states never hold bank deposits: reconciliation_required
+-- settles nothing, so even an amount-matching deposit must credit.
+-- Fourth's operation is otherwise untouched in this chain, so it is
+-- flipped directly (no treasury capacity remains for a fresh reserve).
+UPDATE piggyvest_primary_card.operations SET state='reconciliation_required',claim_token=NULL,updated_at=clock_timestamp()
+WHERE customer_id='40000000-0000-4000-8000-000000000002';
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'terminal-hold',scope,(receipt||'{"eventId":"bank-terminal-hold","providerTransactionId":"terminal-hold-deposit","providerCustomerId":"fourth@example.test","providerWalletId":"fourth@example.test-wallet","amountKobo":25000}')::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-terminal-hold"'),'{eventData,transaction_id}','"terminal-hold-deposit"'),'{customer_id}','"fourth@example.test"'),'{eventData,customer_id}','"fourth@example.test"'),'{pvb_wallet}','"fourth@example.test-wallet"'),'{eventData,amount}','25000')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='terminal-hold';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='terminal-hold';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'terminal-hold intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='terminal-hold';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'terminal card state held bank deposit'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='fourth@example.test')<>542 THEN RAISE EXCEPTION 'terminal-hold deposit lost'; END IF;
+END $$;
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM public.custody_fixture WHERE label='third@example.test';
+ IF piggyvest_primary_card.settle_custody((fixture.scope->>'integrationId')::uuid,'staging',fixture.proof)<>'completed' THEN RAISE EXCEPTION 'card proof failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_signed_inbox SET available_at=clock_timestamp()-interval '1 second';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; outcome text; BEGIN
+ FOR leased IN SELECT value FROM jsonb_array_elements(piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1),'{"batchSize":10}')) LOOP
+  SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE receipt->>'eventId'=leased->>'eventId';
+  outcome:=piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt));
+  IF outcome<>(CASE WHEN fixture.label='card' THEN 'duplicate' ELSE 'credited' END) THEN RAISE EXCEPTION 'bank replay attribution guessed'; END IF;
+ END LOOP;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE state<>'processed') THEN RAISE EXCEPTION 'bank replay failed'; END IF;
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>392 THEN RAISE EXCEPTION 'bank/card double credit or valid bank loss'; END IF;
+ IF (SELECT total_earned FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>7 THEN RAISE EXCEPTION 'bank counted as interest'; END IF;
+ IF has_table_privilege('baci_primary_bank_worker','public.customer_wallets','UPDATE') OR has_function_privilege('baci_primary_bank_worker','piggyvest_primary.apply_inflow_environment(uuid,text,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'worker unbounded writes'; END IF;
+ IF has_table_privilege('authenticated','piggyvest_primary.bank_signed_inbox','SELECT') THEN RAISE EXCEPTION 'raw bank bytes exposed'; END IF;
+END $$;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'conflict',scope,jsonb_set(receipt,'{eventId}','"bank-conflict"'),encode(convert_to((convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb||'{"eventId":"bank-conflict"}')::text,'UTF8'),'hex') FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='conflict';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='conflict';
+ PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='conflict';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ UPDATE pg_temp.bank_fixture SET stored_claim=leased WHERE label='conflict';
+ IF piggyvest_primary.retry_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token','10000000-0000-4000-8000-000000000009','reason','io_retry')) THEN RAISE EXCEPTION 'stale token accepted'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_signed_inbox SET lease_until=clock_timestamp()-interval '1 second' WHERE event_id='bank-conflict';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='conflict';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased->>'token'=fixture.stored_claim->>'token' THEN RAISE EXCEPTION 'crash lease not fenced'; END IF;
+ IF NOT piggyvest_primary.retry_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','reason','io_retry')) THEN RAISE EXCEPTION 'retry not durable'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_signed_inbox SET attempts=50,available_at=clock_timestamp()-interval '1 second' WHERE event_id='bank-conflict';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ BEGIN
+ IF piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1),'{"batchSize":1}')<>'[]'::jsonb THEN RAISE EXCEPTION 'retry limit unbounded'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-conflict' AND state='blocked' AND reason='attempt_limit' AND octet_length(payload)>0) THEN RAISE EXCEPTION 'exhausted bank receipt discarded'; END IF;
+ BEGIN UPDATE piggyvest_primary.bank_signed_inbox SET payload=convert_to('{}','UTF8'); RAISE EXCEPTION 'raw bank receipt mutable'; EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'financial',scope,receipt||'{"eventId":"financial-conflict","amountKobo":9999}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"financial-conflict"'),'{eventData,amount}','9999')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='financial';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='financial';
+ PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='financial';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'conflict' THEN RAISE EXCEPTION 'financial conflict weakened to prerequisite'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='financial-conflict' AND state='blocked' AND reason='financial_conflict') THEN RAISE EXCEPTION 'financial conflict not retained'; END IF;
+END $$;
+GRANT piggyvest_primary_evidence TO primary_bank_inbox_worker;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ BEGIN
+ IF piggyvest_primary.bank_role_safe(true) THEN RAISE EXCEPTION 'capability ancestor accepted'; END IF;
+ BEGIN PERFORM piggyvest_primary.bank_inbox_readiness('10000000-0000-4000-8000-000000000004','staging',(SELECT scope FROM pg_temp.bank_fixture LIMIT 1)); RAISE EXCEPTION 'expanded ancestor ready'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+REVOKE piggyvest_primary_evidence FROM primary_bank_inbox_worker;
+GRANT SELECT ON public.customer_wallets TO primary_bank_inbox_worker;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ BEGIN IF piggyvest_primary.bank_role_safe(true) THEN RAISE EXCEPTION 'effective table grant accepted'; END IF; END $$;
+RESET SESSION AUTHORIZATION;
+REVOKE SELECT ON public.customer_wallets FROM primary_bank_inbox_worker;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.apply_inflow_environment(uuid,text,jsonb) TO primary_bank_inbox_worker;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ BEGIN IF piggyvest_primary.bank_role_safe(true) THEN RAISE EXCEPTION 'expanded RPC accepted'; END IF; END $$;
+RESET SESSION AUTHORIZATION;
+REVOKE EXECUTE ON FUNCTION piggyvest_primary.apply_inflow_environment(uuid,text,jsonb) FROM primary_bank_inbox_worker;
+REVOKE EXECUTE ON FUNCTION piggyvest_primary.process_bank_inbox(uuid,text,jsonb,jsonb) FROM primary_bank_inbox_worker;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ BEGIN IF piggyvest_primary.bank_role_safe(true) THEN RAISE EXCEPTION 'missing required RPC accepted'; END IF; END $$;
+RESET SESSION AUTHORIZATION;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.process_bank_inbox(uuid,text,jsonb,jsonb) TO primary_bank_inbox_worker;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'prerequisite-cap',scope,receipt||'{"eventId":"bank-prerequisite-cap","providerTransactionId":"prerequisite-cap-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-prerequisite-cap"'),'{eventData,transaction_id}','"prerequisite-cap-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='prerequisite-cap';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='prerequisite-cap';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'prerequisite-cap intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_signed_inbox SET attempts=50,state='pending',reason='prerequisite',claim_token=NULL,lease_until=NULL,available_at=clock_timestamp()-interval '1 second' WHERE event_id='bank-prerequisite-cap';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='prerequisite-cap';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased IS NULL OR leased->>'eventId'<>'bank-prerequisite-cap' THEN RAISE EXCEPTION 'prerequisite receipt blocked by attempt cap'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'prerequisite-cap deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-prerequisite-cap' AND state='processed') THEN RAISE EXCEPTION 'prerequisite-cap receipt not processed'; END IF;
+END $$;
+-- Post-deadline drain: intake and worker keep processing deposits into
+-- existing mappings after expires_at (role validity covers the drain
+-- window operationally). Scope substitution and disabled authorities
+-- still fail closed.
+UPDATE piggyvest_primary.bank_inbox_authorities SET expires_at='2000-01-01T00:00:00Z' WHERE integration_id='10000000-0000-4000-8000-000000000004';
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'drain',jsonb_set(scope,'{expiresAt}','"2000-01-01T00:00:00.000Z"'),receipt||'{"eventId":"bank-drain","providerTransactionId":"drain-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-drain"'),'{eventData,transaction_id}','"drain-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='drain';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'drain intake failed'; END IF;
+ BEGIN
+  PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',(fixture.scope||'{"expiresAt":"2099-01-01T00:00:00.000Z"}')::jsonb,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+  RAISE EXCEPTION 'drain scope substituted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_inbox_authorities SET enabled=false WHERE integration_id='10000000-0000-4000-8000-000000000004';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ BEGIN
+  PERFORM piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)));
+  RAISE EXCEPTION 'disabled drain accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_inbox_authorities SET enabled=true WHERE integration_id='10000000-0000-4000-8000-000000000004';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='drain';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased->>'eventId'<>'bank-drain' THEN RAISE EXCEPTION 'drain claim missed'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'drain deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-drain' AND state='processed') THEN RAISE EXCEPTION 'drain receipt not processed'; END IF;
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>592 THEN RAISE EXCEPTION 'drain deposit miscredited'; END IF;
+END $$;
+-- Deletion is rejected while a bank deposit is still being processed:
+-- detaching the intent would return the receipt to prerequisite
+-- forever even though the provider holds the money. This chain
+-- predates the 092700 detach, so mirror its onboarding_intents row
+-- here (the full migration needs savings tables this chain lacks).
+ALTER TABLE piggyvest_primary.onboarding_intents DROP CONSTRAINT onboarding_intents_customer_id_fkey;
+ALTER TABLE piggyvest_primary.onboarding_intents ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE piggyvest_primary.onboarding_intents ADD CONSTRAINT onboarding_intents_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+ALTER TABLE piggyvest_primary_card.operations DROP CONSTRAINT operations_customer_id_fkey;
+ALTER TABLE piggyvest_primary_card.operations ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE piggyvest_primary_card.operations ADD CONSTRAINT operations_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+-- The custody-chain stubs below predate ON DELETE CASCADE, which the
+-- 20260418 baseline defines for both tables.
+ALTER TABLE public.customer_wallets DROP CONSTRAINT customer_wallets_customer_id_fkey;
+ALTER TABLE public.customer_wallets ADD CONSTRAINT customer_wallets_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+ALTER TABLE public.customer_wallet_transactions DROP CONSTRAINT customer_wallet_transactions_customer_id_fkey;
+ALTER TABLE public.customer_wallet_transactions ADD CONSTRAINT customer_wallet_transactions_customer_id_fkey
+  FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'guard',scope,receipt||'{"eventId":"bank-guard","providerTransactionId":"guard-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-guard"'),'{eventData,transaction_id}','"guard-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='drain';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='guard';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='guard';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'guard intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ DECLARE v_deleted boolean := false; BEGIN
+ BEGIN
+  DELETE FROM public.customers WHERE email='third@example.test';
+  v_deleted := true;
+ EXCEPTION WHEN raise_exception THEN NULL; END;
+ IF v_deleted THEN RAISE EXCEPTION 'pending bank deposit deletion allowed'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM public.customers WHERE email='third@example.test') THEN RAISE EXCEPTION 'guard customer deleted'; END IF;
+END $$;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='guard';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased->>'eventId'<>'bank-guard' THEN RAISE EXCEPTION 'guard claim missed'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'guard deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+-- Terminal rows release the guard: the delete detaches the intent and
+-- receipt links while retaining the money evidence.
+DO $$ BEGIN
+ DELETE FROM public.customers WHERE email='third@example.test';
+ IF (SELECT count(*) FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-guard' AND state='processed')<>1 THEN RAISE EXCEPTION 'terminal bank row lost'; END IF;
+ IF (SELECT count(*) FROM piggyvest_primary.inflow_receipts WHERE event_id='bank-guard' AND wallet_transaction_id IS NULL)<>1 THEN RAISE EXCEPTION 'terminal bank receipt lost'; END IF;
+END $$;
+-- The guard trigger function itself must not keep the default PUBLIC
+-- grant, or bank_role_safe fails every bank session.
+DO $$ BEGIN
+ IF has_function_privilege('public', 'piggyvest_primary.block_unsettled_bank_inbox_customer_deletion()', 'EXECUTE') THEN RAISE EXCEPTION 'bank guard publicly executable'; END IF;
+END $$;

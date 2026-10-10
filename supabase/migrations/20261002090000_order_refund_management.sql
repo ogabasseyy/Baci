@@ -65,6 +65,7 @@ DECLARE
   v_reversed_internal numeric;
   v_leg_index integer;
   v_can_manage boolean;
+  v_reference text;
   v_allocation numeric;
   v_leg_remaining numeric;
   v_history jsonb;
@@ -108,17 +109,18 @@ BEGIN
       RAISE EXCEPTION 'cancelled_paid_order_required' USING ERRCODE='P0001';
     END IF;
     IF p_action='manual' THEN
+      v_reference := NULLIF(btrim(p_reference),'');
       IF p_amount IS NULL OR p_amount<=0 OR p_amount<>round(p_amount,2)
         OR p_refunded_at IS NULL OR p_refunded_at>now()
         OR p_method IS NULL OR p_method NOT IN ('paystack','bank_transfer','cash','other')
-        OR NULLIF(btrim(p_reference),'') IS NULL OR length(p_reference)>100
+        OR v_reference IS NULL OR length(v_reference)>100
         OR COALESCE(length(p_note),0)>500 THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
       SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
         'refunded_at',min(metadata->>'refunded_at')) INTO v_replay
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
-        AND gateway='manual' AND metadata->>'reference'=btrim(p_reference);
+        AND gateway='manual' AND metadata->>'reference'=v_reference;
       IF (v_replay->>'amount') IS NOT NULL THEN
         IF (v_replay->>'amount')::numeric<>p_amount OR v_replay->>'method'<>p_method
           OR (v_replay->>'refunded_at')::timestamptz<>p_refunded_at THEN
@@ -175,10 +177,10 @@ BEGIN
         INSERT INTO public.transactions (merchant_id,order_id,transaction_type,amount,currency,
           status,gateway,gateway_reference,description,metadata)
         VALUES (v_order.merchant_id,p_order_id,'refund',v_leg_remaining,v_payment.currency,
-          'completed','manual',btrim(p_reference)||'#'||v_leg_index,'Manual refund recorded by merchant',
+          'completed','manual',v_reference||'#'||v_leg_index::text,'Manual refund recorded by merchant',
           jsonb_build_object('payment_transaction_id',v_payment.id,'recorded_by',v_actor,
             'refunded_at',p_refunded_at,'method',p_method,'note',p_note,
-            'reference',btrim(p_reference)));
+            'reference',v_reference));
         v_allocation := v_allocation-v_leg_remaining;
       END IF;
       EXIT WHEN v_allocation=0;

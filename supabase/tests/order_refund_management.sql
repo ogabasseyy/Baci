@@ -69,6 +69,8 @@ SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020'
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'pending')::numeric=0,'legacy refunded rows are not pending');
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'remaining')::numeric=70,'legacy refunded rows reduce remaining');
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000020')->>'canRecordManual')::boolean,'manual stays available beside legacy rows');
+SELECT manage_order_refund('00000000-0000-4000-8000-000000000020','manual',10,'2026-09-28','bank_transfer','  '||repeat('p',100)||'  ');
+SELECT assert_refund((SELECT metadata->>'reference'=repeat('p',100) AND gateway_reference=repeat('p',100)||'#1' FROM transactions WHERE order_id='00000000-0000-4000-8000-000000000020' AND transaction_type='refund' AND gateway='manual'),'overlong padded reference validated trimmed and stored trimmed');
 SELECT assert_refund((manage_order_refund('00000000-0000-4000-8000-000000000003')->>'canManageRefunds')::boolean,'owner can manage refunds');
 INSERT INTO orders VALUES ('00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001',100,100,'NGN','cancelled','paid',now(),now());
 INSERT INTO transactions(id,merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference) VALUES ('00000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000030','payment',100,'NGN','completed','paystack','capture-31');

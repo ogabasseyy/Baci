@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const migrationPath = resolve(
   __dirname,
-  '../../../../../supabase/migrations/20260928120000_backfill_paystack_dva_attempt_markers.sql'
+  '../../../../../supabase/migrations/20260928120100_backfill_paystack_dva_attempt_markers.sql'
 );
 
 function normalizeSql(sql: string) {

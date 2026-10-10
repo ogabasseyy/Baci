@@ -59,8 +59,19 @@ it('does not persist invalid HMAC, reserialized bytes or oversize input', async 
   ).toBe('invalid_signature');
   expect(mocks.enqueue).not.toHaveBeenCalled();
 });
-it('does not persist signed malformed or unrelated payloads', async () => {
-  const body = Buffer.from('{}');
+it.each([
+  ['empty object', '{}'],
+  [
+    'wrong event type',
+    '{"eventType":"other","eventCategory":"interest-payout","eventId":"e1"}',
+  ],
+  [
+    'missing event id',
+    '{"eventType":"interest-payout.success","eventCategory":"interest-payout"}',
+  ],
+  ['not JSON', 'not-json'],
+])('does not persist signed %s without an identifiable envelope', async (_label, text) => {
+  const body = Buffer.from(text);
   const signed = createHmac('sha512', fixture.config.webhookSecret)
     .update(body)
     .digest('hex');
@@ -71,6 +82,27 @@ it('does not persist signed malformed or unrelated payloads', async () => {
     })
   ).toBe('invalid_payload');
   expect(mocks.enqueue).not.toHaveBeenCalled();
+});
+it('persists authenticated shape failures for durable worker quarantine', async () => {
+  const body = Buffer.from(
+    JSON.stringify({
+      ...fixture.event,
+      eventData: { ...fixture.event.eventData, currency: 'USD' },
+    })
+  );
+  const signed = createHmac('sha512', fixture.config.webhookSecret)
+    .update(body)
+    .digest('hex');
+  expect(
+    await dispatchPrimaryWalletPaidInterestInbox({
+      rawBody: body,
+      signature: signed,
+    })
+  ).toBe('accepted');
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: body.toString('hex'),
+    signature: signed,
+  });
 });
 it('persists signed inconsistent economics for durable worker quarantine', async () => {
   const body = Buffer.from(

@@ -21,6 +21,18 @@ export const primaryWalletPaidInterestInboxSchemas = {
         .default([]),
     }),
   enqueue: z.strictObject({ rawHex, signature }),
+  // Minimal intake envelope, mirroring the enqueue SQL's own gate: once
+  // the bytes are authenticated and identifiable, they persist. Shape
+  // and semantic failures (non-NGN currency, bad references, broken
+  // economics) are the worker's to quarantine — rejecting them here
+  // would 503 without storing evidence until retries exhaust.
+  envelope: z
+    .object({
+      eventType: z.literal('interest-payout.success'),
+      eventCategory: z.enum(['interest-payout', 'interest_payout']),
+      eventId,
+    })
+    .passthrough(),
   intake: z.enum(['accepted', 'duplicate', 'quarantined', 'not_handled']),
   claim: z.strictObject({ batchSize: z.number().int().min(1).max(10) }),
   claims: z

@@ -1,7 +1,6 @@
 import 'server-only';
 import { primaryWalletCardCheckoutSchemas as schemas } from '@/schemas/primary-wallet-card-checkout';
 import { createPrimaryWalletCardCheckoutExecutor } from './primary-wallet-card-checkout-executor';
-import { assertCheckoutIntentOwnership } from './primary-wallet-card-checkout-ownership';
 import { readPrimaryWalletCardCheckoutRuntimeDrain } from './primary-wallet-card-checkout-runtime';
 import {
   isReversalEvent,
@@ -33,16 +32,16 @@ function disputeResolution(
  *
  * Money-out evidence has the same status as money-in evidence: a refund
  * the ledger ignores is a customer charged twice (refund issued by
- * Paystack, full custody still settled to us). This path cross-binds the
- * metadata operation ID to the event's transaction slot (Paystack puts
- * the ORIGINAL charge reference there, never its own event ID), re-reads
- * the stored intent under the runtime scope — ownership asserted on the
- * six immutable IDs, email excluded like status recovery — and records
- * the durable reversal row. A reversal against an uncollected checkout
- * abandons it (releasing treasury); against a collected checkout it
- * flags the ledger and blocks re-credit. A dispute resolution updates
- * the dispute's row: won lifts the fence (no money moved), lost keeps
- * it. Latest provider outcome wins.
+ * Paystack, full custody still settled to us). Paystack's documented
+ * refund webhook carries no metadata — only the original transaction
+ * reference — so the operation is derived from the reference tail and
+ * ownership is validated against the stored intent and runtime, never
+ * webhook fields: the intent's tenant IDs come from our own table, and
+ * must equal the deployment's. A reversal against an uncollected
+ * checkout abandons it (releasing treasury); against a collected
+ * checkout it flags the ledger and blocks re-credit. A dispute
+ * resolution updates the dispute's row: won lifts the fence (no money
+ * moved), lost keeps it. Latest provider outcome wins.
  *
  * 200 only once the reversal is durable; anything unresolved returns
  * null so the sync boundary keeps the delivery retryable.
@@ -54,15 +53,25 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
 }): Promise<Response | null> {
   const body = webhookObject(input.body);
   const data = body ? webhookObject(body.data) : null;
-  const metadata = webhookMetadataOf(input.body);
-  if (!body || !data || !metadata) return null;
+  if (!body || !data) return null;
   if (typeof body.event !== 'string' || !isReversalEvent(body.event))
     return null;
-  const operationId =
-    typeof metadata.operation_id === 'string' ? metadata.operation_id : null;
   const transactionReference = reversalTransactionReference(data);
-  if (!operationId) return null;
-  if (transactionReference !== `pvb-first-primary-${operationId}`) return null;
+  const tail =
+    transactionReference &&
+    /^pvb-first-primary-([0-9a-fA-F-]{36})$/.exec(transactionReference);
+  if (!tail) return null;
+  const operationId = tail[1] as string;
+  // Metadata is a best-effort cross-check, never a requirement: the
+  // documented refund shape omits it. When present it must agree with
+  // the reference; a self-contradictory delivery stays retryable.
+  const metadata = webhookMetadataOf(input.body);
+  if (
+    metadata &&
+    typeof metadata.operation_id === 'string' &&
+    metadata.operation_id !== operationId
+  )
+    return null;
 
   let runtime: ReturnType<typeof readPrimaryWalletCardCheckoutRuntimeDrain>;
   try {
@@ -75,13 +84,7 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
   } catch {
     return null;
   }
-  if (
-    !runtime ||
-    metadata.integration_id !== runtime.settings.integrationId ||
-    metadata.merchant_id !== runtime.settings.merchantId ||
-    metadata.environment !== runtime.settings.environment
-  )
-    return null;
+  if (!runtime) return null;
 
   let reversal: ReturnType<typeof schemas.reversal.parse>;
   try {
@@ -126,39 +129,35 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
   try {
     const execute =
       input.execute ?? createPrimaryWalletCardCheckoutExecutor(runtime);
-    // The scope is identical to the charge service's storage scope: the
-    // metadata five IDs plus runtime dims. read_operation asserts them
-    // against the stored customer row server-side, so a mangled-or-replayed
-    // delivery for another tenant fails here before anything is written.
-    // The scope email is carried but never compared (status-recovery
-    // rule); the webhook cannot supply a trustworthy one.
+    // The intent comes from our own table by the provider-asserted
+    // reference; its tenant IDs must equal the deployment's. No email
+    // participates: the webhook cannot supply a trustworthy one, and
+    // the status-recovery rule excludes it.
+    const intent = schemas.intent.parse(
+      await execute('reversal_intent', [transactionReference])
+    );
+    if (
+      intent.operationId !== operationId ||
+      intent.environment !== runtime.settings.environment ||
+      intent.integrationId !== runtime.settings.integrationId ||
+      intent.merchantId !== runtime.settings.merchantId ||
+      intent.businessId !== runtime.settings.businessId
+    )
+      throw new Error('Primary card identity unavailable');
+    // The write scope is fully server-derived: stored customer IDs
+    // plus runtime dims. record_checkout_reversal re-asserts them
+    // against the operation row before writing.
     const storageScope = JSON.stringify({
       environment: runtime.settings.environment,
       integrationId: runtime.settings.integrationId,
       merchantId: runtime.settings.merchantId,
-      customerId: metadata.customer_id,
-      userId: metadata.user_id,
+      customerId: intent.customerId,
+      userId: intent.userId,
       businessId: runtime.settings.businessId,
-      email: null,
+      email: intent.email,
       expiresAt: runtime.settings.expiresAt,
       callbackUrl: runtime.settings.callbackUrl,
     });
-    const intent = schemas.intent.parse(
-      await execute('read', [storageScope, operationId])
-    );
-    if (intent.operationId !== operationId)
-      throw new Error('Primary card identity unavailable');
-    assertCheckoutIntentOwnership(
-      {
-        environment: runtime.settings.environment,
-        integrationId: runtime.settings.integrationId,
-        merchantId: runtime.settings.merchantId,
-        customerId: metadata.customer_id,
-        userId: metadata.user_id,
-        businessId: runtime.settings.businessId,
-      },
-      intent
-    );
     schemas.reversalOutcome.parse(
       await execute('reversal', [
         storageScope,

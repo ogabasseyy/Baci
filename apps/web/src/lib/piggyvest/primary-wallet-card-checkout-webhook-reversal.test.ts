@@ -30,10 +30,7 @@ function body(overrides: Record<string, unknown> = {}) {
 
 function setup(status = 'completed') {
   const execute = vi.fn(
-    async (
-      action: string,
-      _params?: readonly string[]
-    ): Promise<unknown> => {
+    async (action: string, _params?: readonly string[]): Promise<unknown> => {
       if (action === 'read') return { ...fixture.intent, status };
       if (action === 'reversal') return { outcome: 'recorded' };
       throw new Error(`Invalid test action ${action}`);

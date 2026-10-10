@@ -15,7 +15,7 @@ not a Vercel cloud build.
 
 The coordinator requires authenticated GitHub and Vercel CLIs, working SSH access
 to the approved VPS, and the existing worker deployment prerequisites. The Vercel
-CLI must be >= 50.5.0, the first release shipping `vercel api` for live-alias
+CLI must be >= 50.5.1, the first release shipping `vercel api` for live-alias
 verification; older CLIs are refused before dispatching. It refuses
 dirty or stale checkouts and concurrent deployments, rechecks main after worker
 preparation, verifies the dispatched SHA, rejects skipped publication, and checks

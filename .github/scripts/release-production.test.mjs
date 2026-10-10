@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
 
-import { assertVercelApiSupport, originRepoSlug, readRuns, RUNS_MAX_PAGES } from './release-production.mjs';
+import {
+  assertCanonicalOriginPushUrls,
+  assertCleanWorkerDeployEnv,
+  assertRemovableLockPath,
+  assertVercelApiSupport,
+  originRepoSlug,
+  readRuns,
+  RUNS_MAX_PAGES,
+} from './release-production.mjs';
 
 test('accepts every canonical GitHub remote spelling', () => {
   for (const remote of [
@@ -24,7 +32,7 @@ test('requires a Vercel CLI that provides the api subcommand', () => {
   assert.throws(() => assertVercelApiSupport(() => {
     throw new Error('vercel failed');
   }), {
-    message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.0); upgrade vercel and retry',
+    message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.1); upgrade vercel and retry',
   });
 });
 
@@ -37,6 +45,10 @@ test('paginates run listing with one bounded call per page', () => {
 const { appendFileSync } = require('node:fs');
 const endpoint = process.argv[3];
 appendFileSync(${JSON.stringify(log)}, endpoint + '\\n');
+if (process.env.FAKE_GH_ERROR) {
+  process.stdout.write(process.env.FAKE_GH_ERROR);
+  process.exit(0);
+}
 const page = Number(/[?&]page=(\\d+)/.exec(endpoint)[1]);
 const counts = process.env.FAKE_GH_PAGES.split(',').map(Number);
 const runs = Array.from({ length: counts[page - 1] ?? 0 }, (_, i) => ({
@@ -49,6 +61,7 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
   );
   const savedPath = process.env.PATH;
   const savedPages = process.env.FAKE_GH_PAGES;
+  const savedError = process.env.FAKE_GH_ERROR;
   process.env.PATH = `${directory}${delimiter}${savedPath}`;
   try {
     process.env.FAKE_GH_PAGES = '100,3';
@@ -68,11 +81,52 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
     writeFileSync(log, '');
     assert.equal(readRuns('status=queued', false).length, 100);
     assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 1);
+
+    process.env.FAKE_GH_ERROR = '{"message":"rate limited"}';
+    assert.throws(() => readRuns('status=queued', true), /no runs payload/);
   } finally {
     process.env.PATH = savedPath;
     if (savedPages === undefined) delete process.env.FAKE_GH_PAGES;
     else process.env.FAKE_GH_PAGES = savedPages;
+    if (savedError === undefined) delete process.env.FAKE_GH_ERROR;
+    else process.env.FAKE_GH_ERROR = savedError;
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('requires every push URL to be the canonical repository', () => {
+  assert.doesNotThrow(() => assertCanonicalOriginPushUrls('https://github.com/ogabasseyy/Baci.git'));
+  assert.doesNotThrow(() =>
+    assertCanonicalOriginPushUrls('https://github.com/ogabasseyy/Baci.git\ngit@github.com:ogabasseyy/Baci.git\n')
+  );
+  for (const pushUrls of [
+    '',
+    'git@github.com:fork/other.git',
+    'https://github.com/ogabasseyy/Baci.git\ngit@github.com:fork/other.git',
+  ]) {
+    assert.throws(() => assertCanonicalOriginPushUrls(pushUrls), /canonical repository/);
+  }
+});
+
+test('refuses inherited worker-deploy safety overrides', () => {
+  assert.doesNotThrow(() => assertCleanWorkerDeployEnv({}));
+  assert.doesNotThrow(() =>
+    assertCleanWorkerDeployEnv({ BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '0', BACI_DEPLOY_WORKFLOW_REPO: '' })
+  );
+  assert.throws(
+    () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '1' }),
+    /BACI_DEPLOY_SKIP_INFLIGHT_CHECK/
+  );
+  assert.throws(
+    () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_WORKFLOW_REPO: 'fork/other' }),
+    /BACI_DEPLOY_WORKFLOW_REPO/
+  );
+});
+
+test('removes only the leaf lock directory', () => {
+  assert.doesNotThrow(() => assertRemovableLockPath('/repo/.git/baci-production-release.lock'));
+  for (const lockPath of ['/tmp/evil', '/repo/.git', '/x/baci-production-release.lock/../other']) {
+    assert.throws(() => assertRemovableLockPath(lockPath), /unexpected lock path/);
   }
 });
 

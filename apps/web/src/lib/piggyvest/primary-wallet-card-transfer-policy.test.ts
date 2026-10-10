@@ -28,7 +28,10 @@ describe('approved issuer transfer policy (internal, not a provider signing cont
       });
       return {
         ...fixture.configuration,
-        runtime: { ...fixture.configuration.runtime, expiresAt: '2026-10-07T20:00:30Z' },
+        runtime: {
+          ...fixture.configuration.runtime,
+          expiresAt: '2026-10-07T20:00:30Z',
+        },
         policyBytes,
         policySignature: createHmac(
           'sha256',
@@ -41,8 +44,9 @@ describe('approved issuer transfer policy (internal, not a provider signing cont
     const now = Date.parse('2027-01-01T00:00:00Z');
     // Fresh authorization covering now: drains despite the lapsed
     // integration deadline.
-    expect(assertPrimaryCardTransferPolicy(resign('2028-01-01T00:00:00Z'), now))
-      .toBeDefined();
+    expect(
+      assertPrimaryCardTransferPolicy(resign('2028-01-01T00:00:00Z'), now)
+    ).toBeDefined();
     // Lapsed authorization: the worker stops instead of transferring
     // on a stale policy.
     expect(() =>

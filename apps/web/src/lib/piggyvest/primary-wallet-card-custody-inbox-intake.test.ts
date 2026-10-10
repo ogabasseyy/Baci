@@ -110,10 +110,7 @@ describe('private signed raw-byte custody intake', () => {
   it('enqueues a minimally attributable receipt that omits the mapping reference', async () => {
     const { pvb_reference: _dropped, ...envelope } = fixture.envelope;
     const rawBody = Buffer.from(JSON.stringify(envelope));
-    const signature = createHmac(
-      'sha512',
-      fixture.configuration.webhookSecret
-    )
+    const signature = createHmac('sha512', fixture.configuration.webhookSecret)
       .update(rawBody)
       .digest('hex');
     const execute = vi

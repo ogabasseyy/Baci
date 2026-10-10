@@ -1,6 +1,6 @@
 -- Re-grant authenticator membership LAST, after the extended
 -- request-scope hook was installed by
--- 20261009230000_blog_media_worker_request_scope AND observed
+-- 20261009230000 AND observed
 -- fleet-wide by probe-blog-media-hook-reload.sh (the deploy runs the
 -- applier only through the scope migration, requires a unanimous
 -- window of anonymous reload-canary acks over the Data API while

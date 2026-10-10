@@ -68,9 +68,11 @@ export function resolveSelectionPricing({
       : undefined;
   // Offer selections bypass the unmanaged short-circuit: order creation
   // checks the offer allocation even on unmanaged parents, so an
-  // unmanaged infinite here would advertise what checkout refuses.
+  // unmanaged infinite here would advertise what checkout refuses. The
+  // serialized variant count likewise wins over the shortcut: a strict
+  // variant with zero units is unorderable on any parent.
   const managedStock =
-    !isStockManaged && !selectedOffer
+    !isStockManaged && !selectedOffer && serializedVariantStock === undefined
       ? Number.POSITIVE_INFINITY
       : (serializedVariantStock ??
         getEffectiveStock(

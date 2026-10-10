@@ -46,14 +46,14 @@ export function useProductDetailPurchaseState(
   const selectedVariantCanPurchase =
     routeData.product?.has_variants === true
       ? resolvedVariantPurchaseSelection
-        ? routeData.product.manage_stock === false
+        ? selectedVariant?.effective_policy === 'serialized_then_unlimited'
           ? true
-          : selectedVariant?.effective_policy === 'serialized_then_unlimited'
-            ? true
-            : selectedVariant?.effective_policy === 'serialized_strict'
-              ? (typeof selectedVariant.available_units === 'number'
-                  ? selectedVariant.available_units
-                  : 0) > quantityInCart
+          : selectedVariant?.effective_policy === 'serialized_strict'
+            ? (typeof selectedVariant.available_units === 'number'
+                ? selectedVariant.available_units
+                : 0) > quantityInCart
+            : routeData.product.manage_stock === false
+              ? true
               : typeof selectedVariant?.stock_quantity === 'number'
                 ? selectedVariant.stock_quantity > quantityInCart
                 : selectedVariant?.in_stock !== false
@@ -72,7 +72,8 @@ export function useProductDetailPurchaseState(
     routeData.product?.has_variants === true
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
-        ? routeData.product.manage_stock === false ||
+        ? (!selectedConditionOffer &&
+            routeData.product.manage_stock === false) ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
             ? Math.min(
                 selectedConditionOffer.stock_quantity,

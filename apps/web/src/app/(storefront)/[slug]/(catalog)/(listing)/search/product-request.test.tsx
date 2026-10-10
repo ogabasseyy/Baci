@@ -164,3 +164,43 @@ it('mints a CSRF token for cold sessions before submitting', async () => {
     { csrfToken: 'csrf-minted-token' }
   );
 });
+it('reseeds the form and clears completion when the query changes', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const { rerender } = render(
+    <ProductRequest query="iPhone 20" merchantSlug="ogabassey" />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status').textContent).toContain('Request sent')
+  );
+
+  rerender(<ProductRequest query="Galaxy S30" merchantSlug="ogabassey" />);
+
+  expect(screen.queryByRole('status')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  expect(screen.getByLabelText('Requested product')).toHaveProperty(
+    'value',
+    'Galaxy S30'
+  );
+});
+it('keeps the draft when the query changes mid-edit', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const { rerender } = render(
+    <ProductRequest query="iPhone 20" merchantSlug="ogabassey" />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Requested product'), {
+    target: { value: 'iPhone 20 Pro Max' },
+  });
+
+  rerender(<ProductRequest query="Galaxy S30" merchantSlug="ogabassey" />);
+
+  expect(screen.getByLabelText('Requested product')).toHaveProperty(
+    'value',
+    'iPhone 20 Pro Max'
+  );
+});

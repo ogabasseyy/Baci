@@ -188,12 +188,71 @@ it.each([
     quantityInCart: 1,
     expected: true,
   },
+  {
+    name: 'unmanaged parent gates a zeroed offer scalar',
+    offer: { id: 'o1', stock_quantity: 0 },
+    product: { manage_stock: false },
+    quantityInCart: 0,
+    expected: false,
+  },
+  {
+    name: 'unmanaged parent honors a funded offer scalar',
+    offer: { id: 'o1', stock_quantity: 2 },
+    product: { manage_stock: false },
+    quantityInCart: 1,
+    expected: true,
+  },
+  {
+    name: 'unmanaged base without an offer stays purchasable',
+    offer: null,
+    product: { manage_stock: false },
+    quantityInCart: 0,
+    expected: true,
+  },
 ])('$name', ({ offer, product, quantityInCart, expected }) => {
   mockFindMatchingConditionOffer.mockReturnValue(offer as never);
   const { result } = renderHook(() =>
     useProductDetailPurchaseState(
       routeData({
         product: { id: 'p1', price: 100, ...product } as Product,
+      }),
+      quantityInCart,
+      null
+    )
+  );
+  expect(result.current.canPurchase).toBe(expected);
+});
+
+it.each([
+  {
+    name: 'compares strict variant units even on unmanaged parents',
+    variant: {
+      stock_quantity: 0,
+      effective_policy: 'serialized_strict',
+      available_units: 1,
+    },
+    quantityInCart: 1,
+    expected: false,
+  },
+  {
+    name: 'passes legacy variants on unmanaged parents',
+    variant: { stock_quantity: 0, effective_policy: 'off' },
+    quantityInCart: 0,
+    expected: true,
+  },
+])('$name', ({ variant, quantityInCart, expected }) => {
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: {
+          id: 'p1',
+          price: 100,
+          has_variants: true,
+          manage_stock: false,
+        } as Product,
+        currentVariantSelection: {
+          variant: { id: 'v1', ...variant },
+        } as never,
       }),
       quantityInCart,
       null

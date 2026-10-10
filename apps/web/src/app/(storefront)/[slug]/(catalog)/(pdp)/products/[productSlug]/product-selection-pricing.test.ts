@@ -134,6 +134,27 @@ describe('resolveSelectionPricing', () => {
     });
   });
 
+  it('compares strict variant units ahead of the unmanaged shortcut', () => {
+    expect(
+      resolveSelectionPricing({
+        product: { ...product, manage_stock: false },
+        selectedOffer: null,
+        displaySelection: null,
+        effectiveVariant: {
+          available_units: 0,
+          effective_policy: 'serialized_strict',
+          stock_quantity: 0,
+        },
+        isStockManaged: false,
+      })
+    ).toEqual({
+      currentPrice: 100,
+      currentCompareAtPrice: 120,
+      currentStock: 0,
+      isOutOfStock: true,
+    });
+  });
+
   it('prices a strict variant from exact units ahead of a zero scalar', () => {
     expect(
       resolveSelectionPricing({

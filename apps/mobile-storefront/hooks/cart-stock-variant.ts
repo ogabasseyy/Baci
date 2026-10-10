@@ -11,14 +11,17 @@ const log = createLogger('Cart');
  * zero and rolled back an available add. Unlimited tracking bypasses;
  * strict compares the projection's exact available_units; other policies
  * use the finite quantity with parent inheritance, mirroring the
- * price-options CTE. A variant absent from the projection (vanished or
+ * price-options CTE — except on explicitly unmanaged parents, where
+ * order creation skips the variant decrement and legacy variants stay
+ * unbounded. A variant absent from the projection (vanished or
  * unpublished) reports zero; other lookup failures throw so the caller
  * retries instead of overselling.
  */
 export async function resolveVariantEffectiveStock(
   productId: string,
   variantId: string,
-  parentStock: number
+  parentStock: number,
+  isParentUnmanaged = false
 ): Promise<number> {
   const variantsByProduct = await getStorefrontProductVariantsByProductIds([
     productId,
@@ -45,6 +48,9 @@ export async function resolveVariantEffectiveStock(
     }
     log.error('Variant stock check found no unit count:', variantId);
     throw new Error('Cannot verify stock availability. Please try again.');
+  }
+  if (isParentUnmanaged) {
+    return Number.MAX_SAFE_INTEGER;
   }
   return typeof row.stock_quantity === 'number' &&
     Number.isFinite(row.stock_quantity)

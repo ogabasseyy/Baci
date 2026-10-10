@@ -112,8 +112,13 @@ export async function checkStock(
   // Only an explicit false bypasses stock checks: legacy NULL rows are
   // managed inventory (platform policy shared with search and the PDPs).
   // Offer lines still resolve their own allocation: order creation
-  // checks the offer scalar even on unmanaged parents.
-  if (data?.manage_stock === false && !options?.offerId) {
+  // checks the offer scalar even on unmanaged parents. Variants resolve
+  // too, so strict unit counts win over the shortcut below.
+  if (
+    data?.manage_stock === false &&
+    !options?.offerId &&
+    !options?.variantId
+  ) {
     return {
       available: true,
       currentStock: Number.MAX_SAFE_INTEGER,
@@ -136,7 +141,8 @@ export async function checkStock(
     ? await resolveVariantEffectiveStock(
         productId,
         options.variantId,
-        parentStock
+        parentStock,
+        data?.manage_stock === false
       )
     : options?.offerId
       ? await resolveOfferEffectiveStock(

@@ -256,6 +256,54 @@ describe('cart-stock helpers', () => {
     });
   });
 
+  it('compares strict variant units on unmanaged parents', async () => {
+    mockProductAndRpc(parent({ manage_stock: false }), {});
+    mockVariants([
+      {
+        id: 'variant-x',
+        product_id: 'product-1',
+        stock_quantity: 0,
+        effective_policy: 'serialized_strict',
+        available_units: 1,
+      },
+    ]);
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-x' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 1,
+      requestedQuantity: 1,
+    });
+    await expect(
+      checkStock('product-1', 2, undefined, { variantId: 'variant-x' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 1,
+      requestedQuantity: 2,
+    });
+  });
+
+  it('leaves legacy variants unbounded on unmanaged parents', async () => {
+    mockProductAndRpc(parent({ manage_stock: false }), {});
+    mockVariants([
+      {
+        id: 'variant-2',
+        product_id: 'product-1',
+        stock_quantity: 0,
+        effective_policy: 'off',
+      },
+    ]);
+
+    await expect(
+      checkStock('product-1', 40, undefined, { variantId: 'variant-2' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 40,
+    });
+  });
+
   it('lets a null variant quantity inherit the parent stock', async () => {
     mockProductAndRpc(parent({ stock_quantity: 5 }), {});
     mockVariants([

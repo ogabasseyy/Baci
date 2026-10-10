@@ -56,10 +56,13 @@ export function resolveProductDetailsOfferState(args: {
     routeOfferId
   );
   const managesStock = productData.manage_stock !== false;
+  // Offer selections bypass the unmanaged pass: the cart and order paths
+  // enforce the finite offer allocation even on unmanaged parents.
   const canPurchase =
     (productData.variants?.length ?? 0) > 0
       ? Boolean(currentVariantSelection) &&
         (!managesStock || currentCartOffer.stock > 0)
-      : !managesStock || currentOffer.stock > 0;
+      : (!managesStock && currentOffer.offerId == null) ||
+        currentOffer.stock > 0;
   return { canPurchase, currentCartOffer, currentOffer, managesStock };
 }

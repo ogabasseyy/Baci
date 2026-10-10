@@ -136,4 +136,30 @@ describe('attachOrderItemOfferLabels', () => {
     );
     expect(fetchOffers).not.toHaveBeenCalled();
   });
+
+  it('fans offer lookups out in bounded batches', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchOffers = vi.fn(async (productId: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return {
+        data: [{ offer_id: `offer-for-${productId}`, grade: 'B' }],
+        error: null,
+      };
+    });
+    const items = Array.from({ length: 25 }, (_, index) => ({
+      offer_id: `offer-for-product-${index}`,
+      product_id: `product-${index}`,
+    }));
+
+    const result = await attachOrderItemOfferLabels(items, fetchOffers);
+
+    expect(fetchOffers).toHaveBeenCalledTimes(25);
+    expect(maxInFlight).toBeLessThanOrEqual(10);
+    expect(result).toHaveLength(25);
+    expect(result[24]).toMatchObject({ offer_grade: 'B' });
+  });
 });

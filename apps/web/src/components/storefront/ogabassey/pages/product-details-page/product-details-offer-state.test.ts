@@ -63,6 +63,62 @@ describe('resolveProductDetailsOfferState', () => {
     expect(state.canPurchase).toBe(true);
   });
 
+  it('gates an unmanaged offer selection by its scalar', () => {
+    const base = {
+      currentCartVariantSelection: null,
+      currentVariantDisplaySelection: null,
+      currentVariantSelection: null,
+      productData: productWith({
+        manage_stock: false,
+        offers: [
+          {
+            id: 'offer-used',
+            condition: 'used',
+            rawPrice: 450,
+            stock_quantity: 0,
+          },
+        ],
+      }),
+      routeOfferId: 'offer-used',
+      selectedCondition: 'used' as const,
+      variantSelectionAttributes: {},
+    };
+
+    expect(resolveProductDetailsOfferState(base).canPurchase).toBe(false);
+    expect(
+      resolveProductDetailsOfferState({
+        ...base,
+        productData: productWith({
+          manage_stock: false,
+          stock_quantity: 9,
+          offers: [
+            {
+              id: 'offer-open',
+              condition: 'used',
+              rawPrice: 450,
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        routeOfferId: 'offer-open',
+      }).canPurchase
+    ).toBe(true);
+  });
+
+  it('passes unmanaged base selections without an offer', () => {
+    const state = resolveProductDetailsOfferState({
+      currentCartVariantSelection: null,
+      currentVariantDisplaySelection: null,
+      currentVariantSelection: null,
+      productData: productWith({ manage_stock: false }),
+      routeOfferId: null,
+      selectedCondition: 'new',
+      variantSelectionAttributes: {},
+    });
+
+    expect(state.canPurchase).toBe(true);
+  });
+
   it('gates variant products on a resolved purchasable selection', () => {
     const base = {
       currentVariantDisplaySelection: null,

@@ -244,4 +244,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008430000_storefront_search_offer_unmanaged_scalar.sql',
     sha256: '73bdd7d599624c61bd214a50d98a8bd53b735eb4f4363211fa18b0ebe1b4b674',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008440000_storefront_redvault_refund_offer_scalar.sql',
+    sha256: '54ba7edde1d7315a86bee81c434c88de6f9eb680d61c31e5bf46dcfe126d6a8b',
+  },
 ] as const;

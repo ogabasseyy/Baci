@@ -50,8 +50,20 @@ export function ProductRequest({
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [prevQuery, setPrevQuery] = useState(query);
   const sending = useRef(false);
   const request = useRef({ key: '', id: '' });
+
+  // A new search reuses this component while it stays mounted: reseed the
+  // form and clear the terminal states, mirroring the native request
+  // form. Guarded while the dialog is open or a submit is in flight so a
+  // background query change cannot clobber the shopper's draft.
+  if (query !== prevQuery && !open && !pending) {
+    setPrevQuery(query);
+    setProduct(query);
+    setSent(false);
+    setError('');
+  }
   async function submit() {
     if (sending.current) return;
     sending.current = true;

@@ -124,12 +124,22 @@ export async function attachOrderItemOfferLabels<
   );
   let labels = new Map<string, { grade?: string; notes?: string }>();
   try {
-    const results = await Promise.all(
-      productIds.map(async (productId) => ({
-        productId,
-        ...(await fetchOffers(productId)),
-      }))
-    );
+    // Bounded batches like the order verifiers: a large order must not
+    // fan out an unbounded burst of parallel offer RPCs.
+    const results: {
+      productId: string;
+      data: OfferLabelRow[] | null;
+      error: unknown;
+    }[] = [];
+    for (let index = 0; index < productIds.length; index += 10) {
+      const batch = await Promise.all(
+        productIds.slice(index, index + 10).map(async (productId) => ({
+          productId,
+          ...(await fetchOffers(productId)),
+        }))
+      );
+      results.push(...batch);
+    }
     if (results.some((result) => result.error)) {
       return items;
     }

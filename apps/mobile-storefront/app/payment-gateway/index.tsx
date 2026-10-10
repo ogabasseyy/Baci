@@ -65,13 +65,15 @@ export default function PaymentGatewayScreen() {
       controller.validatedParams.data?.userId &&
       user?.id !== controller.validatedParams.data.userId
     ) {
+      // No status check here: the non-owner's tap could only run a
+      // doomed check against another account's operation. Only the way
+      // back stays available.
       return (
         <PrimaryWalletCardPendingView
           colors={colors}
           statusError
           message={null}
           terminalDirective="Signed-in account changed. This checkout belongs to the previous account — go back so its owner can complete it."
-          onCheck={controller.handleRetry}
           onBack={() =>
             router.replace(getWalletReturnHref(controller.returnTo))
           }

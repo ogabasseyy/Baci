@@ -74,6 +74,11 @@ export function beginPrimaryWalletCardCompletion(
         }
       };
       requireSameAccount();
+      // Abandoned is server-terminal (cancelled before collection, no
+      // money moved), so replacing the retained-operation guard with
+      // the terminal directive is safe here — and only here among
+      // server statuses. custody_pending/reconciliation_required fall
+      // through below with no directive set.
       if (result.status === 'abandoned') {
         input.refs.paymentCompletionStartedRef.current = false;
         input.setErrorMessage(TERMINAL_DIRECTIVE_COPY);

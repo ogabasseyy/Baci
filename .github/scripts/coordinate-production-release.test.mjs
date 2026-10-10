@@ -210,6 +210,9 @@ test('tags dispatch-window failures as indeterminate dispatches', async () => {
     fixture({ dispatch: async () => { throw new Error('response lost'); } }),
     fixture({ findRun: async () => { throw new Error('dispatch outcome unknown'); } }),
     fixture({ findRun: async () => null }),
+    fixture({ listCoordinatedRuns: async () => { throw new Error('api flake'); } }),
+    fixture({ watchRun: async () => { throw new Error('watch flake'); } }),
+    fixture({ readJobs: async () => { throw new Error('jobs flake'); } }),
   ];
   for (const setup of cases) {
     const error = await coordinateRelease(setup.operations, coordinationId).then(
@@ -218,6 +221,19 @@ test('tags dispatch-window failures as indeterminate dispatches', async () => {
     );
     assert.equal(error.indeterminateDispatch, true);
   }
+  const abortSetup = fixture({
+    listCoordinatedRuns: async () => [{
+      databaseId: 43, event: 'workflow_dispatch', headSha: commit,
+      status: 'in_progress', title: 'Coordinated release other-id',
+    }],
+    cancelRun: async () => { throw new Error('cancel flake'); },
+  });
+  const abortError = await coordinateRelease(abortSetup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(abortError.message, /concurrent coordination detected; our-run cancellation failed/);
+  assert.equal(abortError.indeterminateDispatch, true);
   const setup = fixture({ verifyLive: async () => { throw new Error('stale live alias'); } });
   const error = await coordinateRelease(setup.operations, coordinationId).then(
     () => { throw new Error('expected rejection'); },

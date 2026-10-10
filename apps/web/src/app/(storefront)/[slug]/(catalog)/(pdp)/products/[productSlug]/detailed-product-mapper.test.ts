@@ -64,7 +64,7 @@ describe('mapDetailedCachedProductToProduct', () => {
     );
   });
 
-  it('defaults detailed products to manage_stock false while keeping stock', () => {
+  it('defaults detailed products to manage_stock true while keeping stock', () => {
     const product = mapDetailedCachedProductToProduct(
       {
         id: 'prod-2',
@@ -118,7 +118,7 @@ describe('mapDetailedCachedProductToProduct', () => {
       compare_at_price: 650000,
       min_variant_price: 590000,
       max_variant_price: 740000,
-      manage_stock: false,
+      manage_stock: true,
       stock: 7,
       category: 'Smart Phones',
       category_slug: 'smart-phones',

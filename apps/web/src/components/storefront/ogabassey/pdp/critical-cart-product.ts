@@ -64,7 +64,9 @@ export function createCriticalCartProduct(
     image: product.image,
     imageHint: product.imageHint || product.name,
     imageLarge: product.imageLarge || product.image,
-    manage_stock: product.manage_stock ?? false,
+    // NULL means managed (platform policy): only explicit false
+    // disables the cart out-of-stock guard.
+    manage_stock: product.manage_stock ?? true,
     mpn: product.mpn || product.slug || product.id,
     name: product.name,
     offers: product.offers,

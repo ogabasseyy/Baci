@@ -192,7 +192,9 @@ export function mapDetailedCachedProductToProduct(
     compare_at_price: parseOptionalPrice(detailedProduct.compare_at_price),
     min_variant_price: detailedProduct.min_variant_price ?? undefined,
     max_variant_price: detailedProduct.max_variant_price ?? undefined,
-    manage_stock: detailedProduct.manage_stock ?? false,
+    // NULL means managed (platform policy shared with search, the cart,
+    // and order creation): only explicit false disables stock checks.
+    manage_stock: detailedProduct.manage_stock ?? true,
     inventory_tracking_policy:
       detailedProduct.inventory_tracking_policy ?? undefined,
     stock: getEffectiveStock(detailedProduct),

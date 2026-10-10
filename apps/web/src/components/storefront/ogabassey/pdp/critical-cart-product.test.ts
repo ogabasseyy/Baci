@@ -101,7 +101,7 @@ describe('createCriticalCartProduct', () => {
     });
   });
 
-  it('keeps legacy unmanaged stock rows purchasable by default', () => {
+  it('treats missing stock flags as managed by default', () => {
     const legacyInput = {
       ...buildCriticalCartInput({
         brand: '',
@@ -123,7 +123,7 @@ describe('createCriticalCartProduct', () => {
       description: 'Legacy Gadget',
       imageHint: 'Legacy Gadget',
       imageLarge: 'https://cdn.ogabassey.com/legacy.avif',
-      manage_stock: false,
+      manage_stock: true,
       mpn: 'legacy-gadget',
       stock: 0,
     });

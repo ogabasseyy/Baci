@@ -18,6 +18,18 @@ GRANT USAGE ON SCHEMA storage TO blog_media_sweep_worker;
 GRANT SELECT, DELETE ON storage.objects TO blog_media_sweep_worker;
 GRANT SELECT ON public.merchants TO blog_media_sweep_worker;
 
+-- Authorize the Storage API's role switch directly, not just the
+-- table privileges above. Storage applies the JWT role claim
+-- verbatim as its session role (set_config('role', jwt_role) in
+-- scope.ts, role taken from options.user.payload.role in
+-- pg-connection.ts), which requires the session user to hold
+-- membership in that role. The later authenticator membership would
+-- reach Storage only transitively through the platform's
+-- storage_admin-in-authenticator grant, so this direct grant keeps
+-- the remove() authorization explicit and independent of platform
+-- membership defaults.
+GRANT blog_media_sweep_worker TO supabase_storage_admin;
+
 -- Two pre-existing DELETE policies are TO PUBLIC while filtering on
 -- auth.uid()-derived merchant ownership. TO PUBLIC forces every
 -- role's DELETE to evaluate them, so the worker's removal fails with

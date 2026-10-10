@@ -1,21 +1,23 @@
 -- Confine the blog media sweep worker at the PostgREST request
--- boundary. Membership in blog_media_sweep_worker was granted to
--- authenticator before any scope guard knew the role, so a used or
--- leaked BLOG_MEDIA_SWEEP_WORKER_TOKEN reaches every PostgREST
--- endpoint through inherited PUBLIC EXECUTE grants — not just the
--- two sweep wrappers. This extends the installed pre-request scope
--- hook (shared with the GIGL worker; its logic is preserved
--- verbatim) with the worker's two-RPC capability, following
+-- boundary. Without a scope guard, a used or leaked
+-- BLOG_MEDIA_SWEEP_WORKER_TOKEN reaches every PostgREST endpoint
+-- through inherited PUBLIC EXECUTE grants — not just the two sweep
+-- wrappers — from the moment any migration grants authenticator
+-- membership. This extends the installed pre-request scope hook
+-- (shared with the GIGL worker; its logic is preserved verbatim)
+-- with the worker's two-RPC capability, following
 -- 20260805113000_restore_gigl_tracking_postgrest_capability.
 --
 -- Deploy sequencing mirrors GIGL: apply through THIS migration,
 -- observe unanimous canary acks fleet-wide with
 -- .github/scripts/probe-blog-media-hook-reload.sh, then apply
--- 20261009240000 to re-grant membership. Membership is revoked
--- below, so the token is unusable (cron sweeps pause and recover on
--- the next run) until the isolate migration re-grants it behind a
--- loaded hook. Never re-grant here: PostgreSQL exposes membership
--- at commit while PostgREST reloads asynchronously.
+-- 20261009240000 to grant membership. Membership is revoked below
+-- (a no-op warning on first rollout, where no earlier migration
+-- grants it; a real revocation on upgrade paths), so the token is
+-- unusable (cron sweeps pause and recover on the next run) until
+-- the isolate migration grants it behind a loaded hook. Never grant
+-- here: PostgreSQL exposes membership at commit while PostgREST
+-- reloads asynchronously.
 CREATE OR REPLACE FUNCTION public.__blog_media_hook_reload_canary__()
 RETURNS text
 LANGUAGE sql

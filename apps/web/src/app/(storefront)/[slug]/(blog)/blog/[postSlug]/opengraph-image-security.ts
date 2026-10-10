@@ -8,8 +8,13 @@ import { PLATFORM_BLOG_CONTEXT } from '@/lib/platform-blog';
 
 export { getBlogCacheTag } from '@/lib/blog-cache-tags';
 
+// Same composition as the shared media trust set (deploy override,
+// default CDN, Supabase Storage): upload extraction and
+// Discover-readiness accept default-CDN images under an override,
+// so OG must too or published posts lose their social preview.
 const trustedOriginCandidates = [
-  env.NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN || DEFAULT_BLOG_MEDIA_CDN_ORIGIN,
+  env.NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN,
+  DEFAULT_BLOG_MEDIA_CDN_ORIGIN,
   env.NEXT_PUBLIC_SUPABASE_URL,
 ];
 

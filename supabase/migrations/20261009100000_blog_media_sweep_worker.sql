@@ -18,7 +18,11 @@ $$;
 
 ALTER ROLE blog_media_sweep_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
 GRANT USAGE ON SCHEMA public TO blog_media_sweep_worker;
-GRANT blog_media_sweep_worker TO authenticator;
+-- No authenticator membership here: granting it would make a
+-- provisioned worker JWT usable under the old (or missing)
+-- request-scope hook from this commit until the scope migration
+-- revokes it. Membership arrives only in 20261009240000, after the
+-- hook is installed and the reload probe witnesses it fleet-wide.
 
 CREATE OR REPLACE FUNCTION public.blog_media_sweep_worker_claim(
   p_cutoff TIMESTAMPTZ,

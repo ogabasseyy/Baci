@@ -93,7 +93,12 @@ test('an in-flight sibling aborts the release and cancels our run', async () => 
       status: 'in_progress', title: 'Coordinated release other-id',
     }],
   });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /concurrent coordination detected; our-run cancellation accepted/);
+  assert.equal(error.indeterminateDispatch, true);
   assert.equal(setup.calls.at(-1), 'cancelRun');
   assert.ok(!setup.calls.includes('watchRun'));
 });
@@ -158,7 +163,12 @@ test('refuses main advancing during worker preparation', async () => {
 
 test('never watches a dispatch belonging to another commit', async () => {
   const setup = fixture({ findRun: async () => ({ databaseId: 42, headSha: 'c'.repeat(40) }) });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /dispatch commit mismatch/);
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /dispatch commit mismatch; cancellation accepted/);
+  assert.equal(error.indeterminateDispatch, true);
   assert.equal(setup.calls.at(-1), 'cancelRun');
   assert.ok(!setup.calls.includes('watchRun'));
 });

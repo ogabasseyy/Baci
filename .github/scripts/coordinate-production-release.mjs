@@ -99,7 +99,9 @@ export async function coordinateRelease(operations, coordinationId) {
       mismatch.indeterminateDispatch = true;
       throw mismatch;
     }
-    throw new Error('dispatch commit mismatch; cancellation requested');
+    // Cancel is 202 Accepted, not proof of termination: the run may
+    // still publish, so retain the lock for reconciliation.
+    tagIndeterminate(new Error('dispatch commit mismatch; cancellation accepted, run may still publish; reconcile before retrying'));
   }
   // The lock is local, so a second coordinator on another machine can
   // race this release — on the same commit or a different one. An
@@ -127,7 +129,9 @@ export async function coordinateRelease(operations, coordinationId) {
       abort.indeterminateDispatch = true;
       throw abort;
     }
-    throw new Error('concurrent coordination detected; release aborted');
+    // Cancel is 202 Accepted, not proof of termination: our run may
+    // still publish, so retain the lock for reconciliation.
+    tagIndeterminate(new Error('concurrent coordination detected; our-run cancellation accepted, run may still publish; reconcile before retrying'));
   }
   let jobs;
   try {

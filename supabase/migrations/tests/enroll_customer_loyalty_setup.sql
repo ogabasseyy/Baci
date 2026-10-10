@@ -92,6 +92,11 @@ SELECT
   'test', now(), now(), now(), '{}', '{}'
 FROM generate_series(1, 8) AS seq;
 
+-- merchants writes fire the identity-audit trigger, whose canonical writer
+-- raises audit_actor_required (28000) without a JWT role actor: seed this
+-- row as service_role like the other merchants-seeding replay checks.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.merchants (id, email, business_name, slug)
 VALUES (
   '01aa0000-0000-4000-8000-000000000001',
@@ -99,6 +104,7 @@ VALUES (
   'Loyalty Enroll Merchant',
   'loyalty-enroll-merchant'
 );
+RESET ROLE;
 
 INSERT INTO public.customers (id, merchant_id, email, user_id)
 VALUES

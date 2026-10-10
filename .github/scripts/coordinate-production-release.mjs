@@ -87,13 +87,17 @@ export async function coordinateRelease(operations, coordinationId) {
     error.indeterminateDispatch = true;
     throw error;
   }
-  if (!Number.isSafeInteger(run.databaseId) || run.databaseId <= 0) throw new Error('invalid dispatch run identity');
+  if (!Number.isSafeInteger(run.databaseId) || run.databaseId <= 0) {
+    tagIndeterminate(new Error('invalid dispatch run identity'));
+  }
   if (run.headSha !== commit) {
     try {
       await operations.cancelRun(run.databaseId);
-    } catch {
-      // Best effort: a failed cancel (run already completed) must not
-      // mask the original commit-mismatch error.
+    } catch (error) {
+      const detail = error && typeof error === 'object' && error.message ? `: ${error.message}` : '';
+      const mismatch = new Error(`dispatch commit mismatch; cancellation failed${detail}; reconcile before retrying`);
+      mismatch.indeterminateDispatch = true;
+      throw mismatch;
     }
     throw new Error('dispatch commit mismatch; cancellation requested');
   }

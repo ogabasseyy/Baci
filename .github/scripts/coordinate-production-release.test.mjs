@@ -174,8 +174,23 @@ test('a failed mismatch cancel preserves the mismatch error', async () => {
     findRun: async () => ({ databaseId: 42, headSha: 'c'.repeat(40) }),
     cancelRun: async () => { throw new Error('run already completed'); },
   });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /dispatch commit mismatch/);
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /dispatch commit mismatch; cancellation failed/);
+  assert.equal(error.indeterminateDispatch, true);
   assert.ok(!setup.calls.includes('watchRun'));
+});
+
+test('a malformed dispatch identity is indeterminate', async () => {
+  const setup = fixture({ findRun: async () => ({ databaseId: 'nope', headSha: commit }) });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /invalid dispatch run identity/);
+  assert.equal(error.indeterminateDispatch, true);
 });
 
 test('a green workflow with skipped publication is not a release', async () => {

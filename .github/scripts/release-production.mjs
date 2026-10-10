@@ -216,7 +216,10 @@ async function main() {
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
       findRun: async (_commit, baseline) => {
-        for (let attempt = 0; attempt < 24; attempt++) {
+        // 36 x 5s: API visibility for a healthy dispatch can lag past
+        // two minutes; a false-negative here holds the release lock
+        // for manual reconciliation, so poll patiently.
+        for (let attempt = 0; attempt < 36; attempt++) {
           // Bounded pagination like listRuns: with 100+ recent
           // dispatches the new run can fall outside the first page,
           // which would wrongly report 'dispatch outcome unknown' on

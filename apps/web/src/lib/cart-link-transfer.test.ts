@@ -95,7 +95,16 @@ it('returns false when no products match', async () => {
 
 it('transfers available guest lines and retains missing ones', async () => {
   setupProductsQuery({
-    data: [{ id: added, name: 'Phone', status: 'active', images: [] }],
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        manage_stock: true,
+        stock_quantity: 10,
+      },
+    ],
     error: null,
   });
   const options = setupOptions({
@@ -270,7 +279,16 @@ it('rejects crafted legacy links before the catalog query', async () => {
 
 it('treats an uppercase item_id as found when the catalog returns lowercase', async () => {
   setupProductsQuery({
-    data: [{ id: added, name: 'Phone', status: 'active', images: [] }],
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        manage_stock: true,
+        stock_quantity: 10,
+      },
+    ],
     error: null,
   });
   const options = setupOptions({ itemIds: added.toUpperCase() });
@@ -285,5 +303,28 @@ it('treats an uppercase item_id as found when the catalog returns lowercase', as
   expect(new URLSearchParams(window.location.search).get('item_id')).toBeNull();
   expect(options.toast).not.toHaveBeenCalledWith(
     expect.objectContaining({ title: 'Some items unavailable' })
+  );
+});
+
+it('treats a null manage_stock handoff product as managed', async () => {
+  setupProductsQuery({
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        manage_stock: null,
+        stock_quantity: 0,
+      },
+    ],
+    error: null,
+  });
+  const options = setupOptions({ itemIds: added });
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).not.toHaveBeenCalled();
+  expect(options.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Not enough stock' })
   );
 });

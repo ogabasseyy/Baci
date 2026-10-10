@@ -60,6 +60,11 @@ SELECT pg_temp.assert_true(
 );
 
 -- Fixtures.
+-- merchants writes fire the identity-audit trigger, whose canonical writer
+-- raises audit_actor_required (28000) without a JWT role actor: seed these
+-- rows as service_role like the other merchants-seeding replay checks.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.merchants (id, email, business_name, slug, user_id)
 VALUES (
   '03aa0000-0000-4000-8000-000000000001',
@@ -76,8 +81,8 @@ VALUES (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Fixture row goes through the service_role write path used by the new
--- ingestion edge, proving it succeeds under the active RLS configuration.
-SET LOCAL ROLE service_role;
+-- ingestion edge (role still set from the merchants fixtures above),
+-- proving it succeeds under the active RLS configuration.
 INSERT INTO public.search_analytics (
   merchant_id, search_query, results_count, search_method
 ) VALUES (

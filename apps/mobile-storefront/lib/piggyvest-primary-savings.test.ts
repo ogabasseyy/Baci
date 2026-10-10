@@ -58,12 +58,10 @@ it('passes a terminal cancellation through instead of reporting it as unconfirme
     status: 'cancelled',
     operationId: input.idempotencyKey,
   });
-  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual(
-    {
-      status: 'cancelled',
-      operationId: input.idempotencyKey,
-    }
-  );
+  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual({
+    status: 'cancelled',
+    operationId: input.idempotencyKey,
+  });
 });
 it('rejects fractions smaller than kobo before requesting a payment', async () => {
   await expect(

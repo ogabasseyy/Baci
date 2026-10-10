@@ -138,9 +138,9 @@ describe('getPiggyvestPrimaryCapability', () => {
 
   it('re-probes past a cached positive and rolls it back on not-ready', async () => {
     read.mockResolvedValue({ account: null });
-    await expect(
-      getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)
-    ).resolves.toBe(true);
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
+    );
     expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(true);
     read.mockRejectedValue(notReady('PIGGYVEST_NOT_READY'));
     await expect(
@@ -150,9 +150,9 @@ describe('getPiggyvestPrimaryCapability', () => {
     expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(
       false
     );
-    await expect(
-      getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)
-    ).resolves.toBe(false);
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      false
+    );
     expect(read).toHaveBeenCalledTimes(2);
   });
 

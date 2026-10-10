@@ -5,6 +5,8 @@ export type TransactionReviewSchemaColumnAvailability = Readonly<{
   discountCodeUnavailable: boolean;
   lineIdUnavailable: boolean;
   offerIdUnavailable?: boolean;
+  offerGradeUnavailable?: boolean;
+  offerConditionNotesUnavailable?: boolean;
   productMatchStatusUnavailable?: boolean;
   quizAwardIdUnavailable: boolean;
   quizAwardAmountUnavailable?: boolean;
@@ -26,6 +28,8 @@ const schemaColumnAvailabilityKeys: Readonly<
   discount_code_id: 'discountCodeUnavailable',
   line_id: 'lineIdUnavailable',
   offer_id: 'offerIdUnavailable',
+  offer_grade: 'offerGradeUnavailable',
+  offer_condition_notes: 'offerConditionNotesUnavailable',
   product_match_status: 'productMatchStatusUnavailable',
   quiz_award_amount: 'quizAwardAmountUnavailable',
   quiz_award_id: 'quizAwardIdUnavailable',
@@ -44,6 +48,8 @@ export function createTransactionReviewSchemaColumnState() {
     discountCodeUnavailable: false,
     lineIdUnavailable: false,
     offerIdUnavailable: false,
+    offerGradeUnavailable: false,
+    offerConditionNotesUnavailable: false,
     productMatchStatusUnavailable: false,
     quizAwardAmountUnavailable: false,
     quizAwardIdUnavailable: false,
@@ -125,6 +131,14 @@ export function omitUnavailableTransactionReviewSchemaColumns(
   }
   if (isUnavailable('offerIdUnavailable', 'offer_id')) {
     result = withoutSchemaColumn(result, 'offer_id');
+  }
+  if (isUnavailable('offerGradeUnavailable', 'offer_grade')) {
+    result = withoutSchemaColumn(result, 'offer_grade');
+  }
+  if (
+    isUnavailable('offerConditionNotesUnavailable', 'offer_condition_notes')
+  ) {
+    result = withoutSchemaColumn(result, 'offer_condition_notes');
   }
   if (isUnavailable('adTrackingUnavailable', 'ad_tracking')) {
     result = withoutSchemaColumn(result, 'ad_tracking');

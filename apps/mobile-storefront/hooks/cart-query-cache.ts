@@ -166,9 +166,12 @@ export function getCachedOptionStock(
       const units = finiteOrUndefined(variant.available_units);
       return units === undefined ? undefined : Math.max(0, units);
     }
+    // Inherit from the already selected option-bearing entry: a fresh
+    // lookup would switch cache records and could validate against older
+    // parent stock than the entry that holds the option.
     return (
       finiteOrUndefined(variant.stock_quantity) ??
-      getCachedProductStock(queryClient, productId)
+      finiteOrUndefined(product.stock_quantity)
     );
   }
 
@@ -186,5 +189,6 @@ export function getCachedOptionStock(
   if (product.base_effective_policy === 'serialized_then_unlimited') {
     return scalar ?? Number.MAX_SAFE_INTEGER;
   }
-  return scalar ?? getCachedProductStock(queryClient, productId);
+  // Inherit from the already selected option-bearing entry (see above).
+  return scalar ?? finiteOrUndefined(product.stock_quantity);
 }

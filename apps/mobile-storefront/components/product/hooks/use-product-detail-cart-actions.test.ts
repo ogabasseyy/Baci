@@ -12,6 +12,14 @@ jest.mock('@/services/tiktok-product-route-tracking', () => ({
     mockTrackAddToCart(...args),
 }));
 
+const mockValidatedUpdateQuantity = jest.fn();
+jest.mock('@/hooks/use-cart', () => ({
+  useCart: () => ({
+    updateQuantity: (...args: unknown[]) =>
+      mockValidatedUpdateQuantity(...args),
+  }),
+}));
+
 type CartActionsArgs = Parameters<typeof useProductDetailCartActions>;
 
 function buildArgs(
@@ -149,6 +157,32 @@ describe('useProductDetailCartActions catalog basis', () => {
       })
     );
     expect(added).not.toHaveProperty('catalog_price');
+  });
+
+  it('routes stepper and typed quantity edits through the validated mutation', () => {
+    const { args } = buildArgs({
+      cartState: {
+        quantityInCart: 1,
+        cartItem: { id: 'line-1' },
+      },
+    });
+    const { result } = renderHook(() => useProductDetailCartActions(...args));
+
+    act(() => {
+      result.current.handleUpdateQuantity(2);
+    });
+    act(() => {
+      result.current.handleLocalQtyChange('3');
+    });
+
+    expect(mockValidatedUpdateQuantity).toHaveBeenCalledWith('line-1', 2);
+    expect(mockValidatedUpdateQuantity).toHaveBeenCalledWith('line-1', 3);
+    const cartState = args[1] as unknown as {
+      updateQuantity: jest.Mock;
+      removeItem: jest.Mock;
+    };
+    expect(cartState.updateQuantity).not.toHaveBeenCalled();
+    expect(cartState.removeItem).not.toHaveBeenCalled();
   });
 
   it('omits the catalog price without a condition offer', () => {

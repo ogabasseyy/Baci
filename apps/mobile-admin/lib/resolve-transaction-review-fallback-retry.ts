@@ -14,6 +14,8 @@ const RETRYABLE_FALLBACK_COLUMNS = [
   'variant_attributes',
   'variant_id',
   'product_match_status',
+  'offer_grade',
+  'offer_condition_notes',
 ] as const;
 
 /** Marks newly missing columns and reports whether to retry the fallback query. */

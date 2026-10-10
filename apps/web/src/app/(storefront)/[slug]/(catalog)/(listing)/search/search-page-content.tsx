@@ -162,6 +162,7 @@ export async function SearchPageContent({
                 currency={merchantCurrency}
                 assistEnabled={
                   process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
+                  merchant.is_published &&
                   merchant.slug === getConfiguredAgenticMerchantSlug()
                 }
                 refinements={refinements}

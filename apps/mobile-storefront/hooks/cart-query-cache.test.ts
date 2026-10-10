@@ -203,6 +203,24 @@ describe('cart query cache helpers', () => {
     ).toBe(3);
   });
 
+  it('inherits parent stock from the selected detail entry, not the stale list row', () => {
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 3 }] },
+    ]);
+    seedProductDetail(queryClient, 'gaming-beast', {
+      id: 'product-1',
+      slug: 'gaming-beast',
+      stock_quantity: 10,
+      offers: [{ id: 'offer-7' }],
+    });
+
+    // The offer scalar is absent (inherits parent): the detail entry's
+    // own parent stock wins over the older list snapshot.
+    expect(
+      getCachedOptionStock(queryClient, 'product-1', { offerId: 'offer-7' })
+    ).toBe(10);
+  });
+
   it('fails closed when the cached option is missing', () => {
     seedListPages(queryClient, [
       {

@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getEffectiveStock } from '@/lib/product-stock';
@@ -17,6 +18,9 @@ type CartProductRow = {
   stock_quantity: number | null;
   status: string | null;
   manage_stock: boolean | null;
+  has_condition_offers: boolean | null;
+  has_variants: boolean | null;
+  variant_model: string | null;
 };
 
 type CartVariantRow = {
@@ -37,6 +41,28 @@ function getCartValidationKey(
 ) {
   const variantKey = variantId ? `${id}::${variantId}` : id;
   return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
+}
+
+/**
+ * Mirrors the order RPC's offer parent gate (M28): the flag must be on,
+ * the parent must be non-variant (sku_matrix counts as variant-bearing),
+ * and no live non-anchor variants may exist. The variants RPC already
+ * excludes inventory anchors, so any row for the product fails the gate.
+ * Without this, background validation would retain and reprice a stale
+ * offer line that order creation then rejects at checkout.
+ */
+function isOfferParentEligible(
+  product: CartProductRow,
+  productHasLiveVariants: boolean
+): boolean {
+  if (product.has_condition_offers !== true) return false;
+  if (
+    product.has_variants === true ||
+    (product.variant_model ?? '') === 'sku_matrix'
+  )
+    return false;
+  if (productHasLiveVariants) return false;
+  return true;
 }
 
 /**
@@ -94,17 +120,22 @@ export async function POST(request: NextRequest) {
     // Merchant-scoped price enforcement lives in the orders route
     // (computeOrderNegotiationDiscount + the order RPC), so validating a
     // foreign active ID here cannot discount or misprice an order.
+    // Offer lines need the variant list too: the parent gate rejects
+    // stale offers on products that gained live variants.
+    const needsVariantList =
+      validVariantIds.length > 0 ||
+      validationItems.some((item) => !item.variantId && item.offerId);
     const [productsResult, variantsResult, offerMap] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
             .from('products')
             .select(
-              'id, name, price, stock, stock_quantity, status, manage_stock'
+              'id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model'
             )
             .in('id', validFormatIds)
             .returns<CartProductRow[]>()
         : Promise.resolve({ data: null, error: null }),
-      validVariantIds.length > 0 && validFormatIds.length > 0
+      needsVariantList && validFormatIds.length > 0
         ? (supabase.rpc('get_storefront_product_variants', {
             p_product_ids: Array.from(new Set(validFormatIds)),
           }) as unknown as Promise<{
@@ -158,6 +189,9 @@ export async function POST(request: NextRequest) {
     );
     const variantMap = new Map(
       variants.map((variant) => [String(variant.id), variant])
+    );
+    const productsWithLiveVariants = new Set(
+      variants.map((variant) => String(variant.product_id))
     );
 
     const validProducts: {
@@ -218,6 +252,51 @@ export async function POST(request: NextRequest) {
           ? offerMap.get(`${strId}::${item.offerId}`)
           : undefined;
       if (!item.variantId && item.offerId && !offer) {
+        const invalidOfferKey = getCartValidationKey(
+          strId,
+          undefined,
+          item.offerId
+        );
+        if (!invalidProductIds.includes(invalidOfferKey)) {
+          invalidProductIds.push(invalidOfferKey);
+        }
+        continue;
+      }
+
+      // A live offer row on a variant-bearing (or flag-disabled) parent is
+      // stale: order creation rejects it, so validation must not retain
+      // and reprice the line only to fail at checkout.
+      if (
+        !item.variantId &&
+        item.offerId &&
+        offer &&
+        !isOfferParentEligible(product, productsWithLiveVariants.has(strId))
+      ) {
+        const invalidOfferKey = getCartValidationKey(
+          strId,
+          undefined,
+          item.offerId
+        );
+        if (!invalidProductIds.includes(invalidOfferKey)) {
+          invalidProductIds.push(invalidOfferKey);
+        }
+        continue;
+      }
+
+      // Staff can change an active offer's condition after it lands in a
+      // cart. The orders route canonically compares and rejects a drifted
+      // persisted condition, so validation invalidates the line early —
+      // mirroring that comparison — instead of reporting it valid and
+      // failing only at checkout. Lines without a submitted condition
+      // skip the check, same as the orders route.
+      if (
+        !item.variantId &&
+        item.offerId &&
+        offer &&
+        item.condition != null &&
+        normalizeCanonicalProductCondition(item.condition) !==
+          normalizeCanonicalProductCondition(offer.condition ?? '')
+      ) {
         const invalidOfferKey = getCartValidationKey(
           strId,
           undefined,

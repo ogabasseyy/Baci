@@ -300,6 +300,8 @@ describe('TransactionOrderCard', () => {
       ...editableItem,
       condition: 'refurbished',
       offerId: '55555555-5555-4555-8555-555555555555',
+      offerGrade: 'B',
+      offerConditionNotes: 'Light wear',
     };
 
     render(
@@ -329,7 +331,7 @@ describe('TransactionOrderCard', () => {
     );
 
     expect(screen.getByText(/Condition /)).toHaveTextContent(
-      'Condition Open Box · Offer 55555555'
+      'Condition Open Box · Grade B · Light wear · Offer 55555555-5555-4555-8555-555555555555'
     );
   });
 

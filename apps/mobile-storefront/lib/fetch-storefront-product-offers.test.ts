@@ -92,6 +92,25 @@ describe('fetch-storefront-product-offers', () => {
     });
   });
 
+  it('processes large product lists in bounded batches of 10', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockRpc.mockImplementation(() => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return Promise.resolve({ data: [], error: null }).finally(() => {
+        inFlight -= 1;
+      });
+    });
+
+    const ids = Array.from({ length: 25 }, (_, index) => `product-${index}`);
+    const result = await getStorefrontProductOffersByProductIds(ids);
+
+    expect(Object.keys(result ?? {})).toHaveLength(25);
+    expect(mockRpc).toHaveBeenCalledTimes(25);
+    expect(maxInFlight).toBeLessThanOrEqual(10);
+  });
+
   it('returns null when any offer lookup fails', async () => {
     mockRpc
       .mockReturnValueOnce(Promise.resolve({ data: [], error: null }))

@@ -75,11 +75,18 @@ export function TransactionOrderCardItem({
         ) : null}
         {item.condition || item.offerId ? (
           <Text style={[styles.itemDetailText, { color: colors.textMuted }]}>
-            {item.condition
-              ? `Condition ${formatProductCondition(item.condition) ?? item.condition}`
-              : null}
-            {item.condition && item.offerId ? ' · ' : null}
-            {item.offerId ? `Offer ${String(item.offerId).slice(0, 8)}` : null}
+            {[
+              item.condition
+                ? `Condition ${formatProductCondition(item.condition) ?? item.condition}`
+                : null,
+              item.offerGrade ? `Grade ${item.offerGrade}` : null,
+              item.offerConditionNotes ?? null,
+              // Full id: a truncated prefix can collide across offers and
+              // this row is where admins tell two condition offers apart.
+              item.offerId ? `Offer ${String(item.offerId)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
         ) : null}
       </View>

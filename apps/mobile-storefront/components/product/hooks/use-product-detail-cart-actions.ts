@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import { Alert, Dimensions } from 'react-native';
+import { useCart } from '@/hooks/use-cart';
 import { useHaptics } from '@/hooks/use-haptics';
 import { resolveCartItemImageUrl } from '@/lib/cart-display';
 import { findMatchingConditionOffer } from '@/lib/product-condition-offers';
@@ -21,6 +22,11 @@ export function useProductDetailCartActions(
   const haptics = useHaptics();
   const [localQty, setLocalQty] = useState(cartState.quantityInCart.toString());
   const [showAddedToast, setShowAddedToast] = useState(false);
+  // Quantity edits route through the validated cart mutation (stock,
+  // offer allocation, and strict serialized caps with rollback), never
+  // the raw store writer: the PDP controls stay usable while an offer
+  // line sits in the cart, and direct writes would bypass every check.
+  const { updateQuantity: validatedUpdateQuantity } = useCart();
   const [flyingParticles, setFlyingParticles] = useState<
     { id: number; startX: number; startY: number }[]
   >([]);
@@ -74,7 +80,7 @@ export function useProductDetailCartActions(
     setLocalQty(cleanText);
     const num = Number.parseInt(cleanText, 10);
     if (!Number.isNaN(num) && num > 0 && cartState.cartItem) {
-      cartState.updateQuantity(cartState.cartItem.id, num);
+      validatedUpdateQuantity(cartState.cartItem.id, num);
     }
   };
 
@@ -83,7 +89,7 @@ export function useProductDetailCartActions(
     if (Number.isNaN(num) || num <= 0) {
       setLocalQty(cartState.quantityInCart.toString());
     } else if (cartState.cartItem) {
-      cartState.updateQuantity(cartState.cartItem.id, num);
+      validatedUpdateQuantity(cartState.cartItem.id, num);
     }
   };
 
@@ -190,7 +196,7 @@ export function useProductDetailCartActions(
       triggerFlyToCart(event);
     if (cartState.cartItem) {
       if (newQuantity <= 0) cartState.removeItem(cartState.cartItem.id);
-      else cartState.updateQuantity(cartState.cartItem.id, newQuantity);
+      else validatedUpdateQuantity(cartState.cartItem.id, newQuantity);
     } else if (newQuantity > 0) {
       handleAddToCart();
     }

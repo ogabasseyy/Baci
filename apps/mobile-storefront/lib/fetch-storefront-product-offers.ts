@@ -31,7 +31,11 @@ interface ProductOfferRpcRow {
  * RPC. The nested product_offers table select its callers replace reads
  * empty for shoppers (staff-only SELECT policy), while this SECURITY
  * DEFINER RPC returns active rows only. Single-product RPC, so one call
- * per id; same retry and fail-soft shape as the sibling fetches.
+ * per id in bounded batches of 10 (mirroring the web cart validator):
+ * a large checkout-valid cart can name up to 200 distinct products and
+ * one unbounded burst, multiplied by retries, would time out the
+ * pre-checkout reprice. Same retry and fail-soft shape as the sibling
+ * fetches.
  */
 export async function getStorefrontProductOffersByProductIds(
   productIds: string[]
@@ -44,23 +48,27 @@ export async function getStorefrontProductOffersByProductIds(
     return {} as Record<string, StorefrontProductConditionOfferRow[]>;
   }
 
-  const results = await Promise.all(
-    uniqueProductIds.map(async (productId) => {
-      const { data, error } = await withSupabaseRetry(
-        async () =>
-          await supabase.rpc('get_product_offers', {
-            p_product_id: productId,
-          }),
-        {
-          maxRetries: 3,
-          onRetry: (attempt, err) => {
-            log.warn(`Product offers rpc retry ${attempt}: ${err.message}`);
-          },
-        }
-      );
-      return { data, error, productId };
-    })
-  );
+  const results: { data: unknown; error: unknown; productId: string }[] = [];
+  for (let index = 0; index < uniqueProductIds.length; index += 10) {
+    const batch = await Promise.all(
+      uniqueProductIds.slice(index, index + 10).map(async (productId) => {
+        const { data, error } = await withSupabaseRetry(
+          async () =>
+            await supabase.rpc('get_product_offers', {
+              p_product_id: productId,
+            }),
+          {
+            maxRetries: 3,
+            onRetry: (attempt, err) => {
+              log.warn(`Product offers rpc retry ${attempt}: ${err.message}`);
+            },
+          }
+        );
+        return { data, error, productId };
+      })
+    );
+    results.push(...batch);
+  }
 
   const failed = results.find((result) => result.error);
   if (failed) {

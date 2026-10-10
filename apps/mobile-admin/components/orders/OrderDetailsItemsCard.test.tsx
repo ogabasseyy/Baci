@@ -178,7 +178,7 @@ describe('OrderDetailsItemsCard', () => {
     expect(onSelectItem).toHaveBeenCalledWith(items[1]);
   });
 
-  it('renders the selected offer grade, notes, and short ref', () => {
+  it('renders the selected offer grade, notes, and full ref', () => {
     render(
       <OrderDetailsItemsCard
         colors={colors}
@@ -196,11 +196,13 @@ describe('OrderDetailsItemsCard', () => {
     );
 
     expect(
-      screen.getByText('Offer: Grade B · Light wear · ref 55555555')
+      screen.getByText(
+        'Offer: Grade B · Light wear · ref 55555555-5555-4555-8555-555555555555'
+      )
     ).toBeInTheDocument();
   });
 
-  it('renders only the short ref when the offer labels are unresolved', () => {
+  it('renders only the full ref when the offer labels are unresolved', () => {
     render(
       <OrderDetailsItemsCard
         colors={colors}
@@ -215,6 +217,8 @@ describe('OrderDetailsItemsCard', () => {
       />
     );
 
-    expect(screen.getByText('Offer: ref 55555555')).toBeInTheDocument();
+    expect(
+      screen.getByText('Offer: ref 55555555-5555-4555-8555-555555555555')
+    ).toBeInTheDocument();
   });
 });

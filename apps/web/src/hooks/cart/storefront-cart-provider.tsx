@@ -373,6 +373,22 @@ export function StorefrontCartProvider({
       return;
     }
 
+    // Offer lines carry their selected allocation on stock (unlimited
+    // offers carry a 9999 sentinel): cap the resulting line at it so two
+    // successive adds cannot exceed what checkout will reserve. The
+    // offer identity travels on the add options (merging matches it), so
+    // the same cap covers fresh and merged adds. Voucher, unmanaged,
+    // and non-finite-allocation lines skip the cap.
+    const cappedOfferAllocation =
+      !isQuizPrizeVoucherLine &&
+      normalizedOptions?.offerId != null &&
+      (productForCart.manage_stock ?? true) &&
+      typeof productForCart.stock === 'number' &&
+      Number.isFinite(productForCart.stock) &&
+      productForCart.stock >= 0
+        ? Math.floor(productForCart.stock)
+        : undefined;
+
     if (product.has_variants && !normalizedOptions?.variantId) {
       logger.warn({
         message: 'Attempted to add variant product without selecting variant',
@@ -398,9 +414,16 @@ export function StorefrontCartProvider({
       if (existingIndex >= 0) {
         const nextCart = [...previousCart];
         const existingItem = nextCart[existingIndex];
+        const mergedQuantity =
+          cappedOfferAllocation !== undefined
+            ? Math.min(existingItem.quantity + quantity, cappedOfferAllocation)
+            : existingItem.quantity + quantity;
+        if (cappedOfferAllocation !== undefined && mergedQuantity <= 0) {
+          return previousCart;
+        }
         nextCart[existingIndex] = {
           ...existingItem,
-          quantity: existingItem.quantity + quantity,
+          quantity: mergedQuantity,
           cartItemId: existingItem.cartItemId || cartItemId,
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
@@ -417,12 +440,19 @@ export function StorefrontCartProvider({
         };
         result = nextCart;
       } else {
+        const freshQuantity =
+          cappedOfferAllocation !== undefined
+            ? Math.min(quantity, cappedOfferAllocation)
+            : quantity;
+        if (cappedOfferAllocation !== undefined && freshQuantity <= 0) {
+          return previousCart;
+        }
         result = [
           ...previousCart,
           {
             ...productForCart,
             cartItemId,
-            quantity,
+            quantity: freshQuantity,
             variantId: normalizedOptions?.variantId,
             variantAttributes: normalizedOptions?.variantAttributes,
             selectedColor: normalizedOptions?.color,
@@ -562,10 +592,27 @@ export function StorefrontCartProvider({
       const nextCart = [...previousCart];
       const item = nextCart[targetIndex];
       const minimumOrderQuantity = item.minimum_order_quantity || 1;
+      let nextQuantity =
+        quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
+      // Cap offer lines at their carried allocation (same rule as adds):
+      // silent over-quantity updates would otherwise sail past checkout
+      // reservation. A zero allocation keeps the previous quantity
+      // instead of deleting the line; validation prunes dead lines.
+      if (
+        item.offerId != null &&
+        (item.manage_stock ?? true) &&
+        typeof item.stock === 'number' &&
+        Number.isFinite(item.stock)
+      ) {
+        const allocation = Math.floor(item.stock);
+        if (allocation <= 0) {
+          return previousCart;
+        }
+        nextQuantity = Math.min(nextQuantity, allocation);
+      }
       nextCart[targetIndex] = {
         ...item,
-        quantity:
-          quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity,
+        quantity: nextQuantity,
       };
       // A quantity change alters the cart total, so an active cart-wide
       // negotiation no longer represents the agreed total — clear the group

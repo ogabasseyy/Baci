@@ -381,6 +381,9 @@ describe('POST /api/cart/validate', () => {
         stock_quantity: 0,
         status: 'active',
         manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
       },
     ];
     mocks.offers = [
@@ -426,6 +429,9 @@ describe('POST /api/cart/validate', () => {
         stock_quantity: 0,
         status: 'active',
         manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
       },
     ];
     mocks.offers = [
@@ -495,6 +501,9 @@ describe('POST /api/cart/validate', () => {
         stock_quantity: 0,
         status: 'active',
         manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
       },
     ];
     mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
@@ -557,5 +566,177 @@ describe('POST /api/cart/validate', () => {
       `${PRODUCT_ID}::${VARIANT_ID}::offer=${OFFER_ID}`,
     ]);
     expect(body.validProducts).toEqual([]);
+  });
+
+  it('invalidates a live offer when the parent flag is off', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: false,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+    expect(body.validProducts).toEqual([]);
+  });
+
+  it('invalidates a live offer on a variant-bearing parent', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: true,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+  });
+
+  it('invalidates a live offer when live variants exist for the product', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    // The variants RPC already excludes inventory anchors, so any row
+    // here is a live variant failing the parent gate.
+    mocks.variants = [{ id: VARIANT_ID, product_id: PRODUCT_ID }];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_storefront_product_variants',
+      { p_product_ids: [PRODUCT_ID] }
+    );
+  });
+
+  it('invalidates an offer line whose submitted condition drifted', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'new',
+        },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+    expect(body.validProducts).toEqual([]);
+  });
+
+  it('keeps an offer line whose submitted condition matches live', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+
+    const response = await postCartValidate({
+      cartItems: [
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'Used',
+        },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([]);
+    expect(body.validProducts).toHaveLength(1);
   });
 });

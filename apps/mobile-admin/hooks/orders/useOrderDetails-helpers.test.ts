@@ -74,6 +74,38 @@ describe('mapOrderItems', () => {
 
     expect(result).toEqual([expect.objectContaining({ offer_id: 'offer-7' })]);
   });
+
+  it('carries the stored offer label snapshot for display', () => {
+    const result = mapOrderItems([
+      {
+        condition: 'used',
+        has_assurance: null,
+        id: 'item-1',
+        image_url: null,
+        item_description: null,
+        name: 'Phone',
+        offer_id: 'offer-7',
+        offer_grade: 'B',
+        offer_condition_notes: 'Light wear',
+        price: 80000,
+        product_match_status: 'linked',
+        product_id: 'product-1',
+        products: null,
+        quantity: 1,
+        variant_attributes: null,
+        variant_id: null,
+        variant_name: null,
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        offer_id: 'offer-7',
+        offer_grade: 'B',
+        offer_condition_notes: 'Light wear',
+      }),
+    ]);
+  });
 });
 
 describe('attachOrderItemOfferLabels', () => {
@@ -109,6 +141,70 @@ describe('attachOrderItemOfferLabels', () => {
       offer_condition_notes: 'Light wear',
     });
     expect(result[2]).not.toHaveProperty('offer_grade');
+  });
+
+  it('prefers the stored snapshot over the mutable catalog row', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [
+        {
+          offer_id: 'offer-7',
+          grade: 'D',
+          condition_notes: 'Revised after sale',
+        },
+      ],
+      error: null,
+    }));
+
+    const result = await attachOrderItemOfferLabels(
+      [
+        {
+          offer_id: 'offer-7',
+          offer_grade: 'B',
+          offer_condition_notes: 'Light wear',
+          product_id: 'product-1',
+        },
+      ],
+      fetchOffers
+    );
+
+    // No catalog read at all: the snapshot is the creation-time truth
+    // even though the live offer now carries different labels.
+    expect(fetchOffers).not.toHaveBeenCalled();
+    expect(result[0]).toMatchObject({
+      offer_grade: 'B',
+      offer_condition_notes: 'Light wear',
+    });
+  });
+
+  it('falls back to the live lookup for pre-snapshot lines', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [
+        {
+          offer_id: 'offer-7',
+          grade: 'B',
+          condition_notes: 'Light wear',
+        },
+      ],
+      error: null,
+    }));
+
+    const result = await attachOrderItemOfferLabels(
+      [
+        {
+          offer_id: 'offer-7',
+          offer_grade: null,
+          offer_condition_notes: null,
+          product_id: 'product-1',
+        },
+      ],
+      fetchOffers
+    );
+
+    expect(fetchOffers).toHaveBeenCalledTimes(1);
+    expect(result[0]).toMatchObject({
+      offer_grade: 'B',
+      offer_condition_notes: 'Light wear',
+    });
   });
 
   it('leaves items untouched when the offer lookup fails', async () => {

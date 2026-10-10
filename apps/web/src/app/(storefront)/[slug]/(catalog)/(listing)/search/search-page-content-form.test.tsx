@@ -95,7 +95,7 @@ function createSearchProducts(count: number): NormalizedProduct[] {
   })) as NormalizedProduct[];
 }
 
-function mockStorefrontContext(slug = 'ogabassey') {
+function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
   mockHeaders.mockResolvedValue(
     new Headers([
       ['host', 'proxy.internal'],
@@ -109,6 +109,7 @@ function mockStorefrontContext(slug = 'ogabassey') {
     custom_domain: null,
     business_name: slug === 'ogabassey' ? 'Ogabassey' : 'Other store',
     payout_currency: 'NGN',
+    is_published: isPublished,
   } as never);
 }
 
@@ -179,6 +180,43 @@ describe('SearchPageContent', () => {
           screen.queryByRole('button', { name: 'Ask about this search' })
         ).toBeNull();
       }
+    } finally {
+      if (prevFlag === undefined)
+        delete process.env.STOREFRONT_SEARCH_ASSIST_ENABLED;
+      else process.env.STOREFRONT_SEARCH_ASSIST_ENABLED = prevFlag;
+      if (prevTenant === undefined)
+        delete process.env.BACI_AGENTIC_MERCHANT_SLUG;
+      else process.env.BACI_AGENTIC_MERCHANT_SLUG = prevTenant;
+    }
+  });
+
+  it('hides search assistance on an unpublished configured tenant', async () => {
+    const prevFlag = process.env.STOREFRONT_SEARCH_ASSIST_ENABLED;
+    const prevTenant = process.env.BACI_AGENTIC_MERCHANT_SLUG;
+    process.env.STOREFRONT_SEARCH_ASSIST_ENABLED = 'true';
+    process.env.BACI_AGENTIC_MERCHANT_SLUG = 'ogabassey';
+    try {
+      // The chat resolver rejects unpublished merchants, so advertising the
+      // entry point would end every attempt in a 503.
+      mockStorefrontContext('ogabassey', false);
+      mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+        count: 45,
+        didYouMean: null,
+        products: createSearchProducts(20),
+        productIds: [],
+        query: 'iphone',
+      });
+
+      render(
+        (await SearchPageContent(
+          createSearchPageProps({ q: 'iphone' })
+        )) as React.ReactElement
+      );
+      fireEvent.focus(screen.getByLabelText('Search products'));
+
+      expect(
+        screen.queryByRole('button', { name: 'Ask about this search' })
+      ).toBeNull();
     } finally {
       if (prevFlag === undefined)
         delete process.env.STOREFRONT_SEARCH_ASSIST_ENABLED;

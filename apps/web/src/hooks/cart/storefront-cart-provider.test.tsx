@@ -363,6 +363,71 @@ describe('StorefrontCartProvider', () => {
     ).toBe(3);
   });
 
+  it('caps merged offer adds at the carried allocation', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const offerProduct = { ...mockProduct, stock: 1 };
+    act(() => {
+      result.current.addToCart(offerProduct, 1, { offerId: 'offer-1' });
+      result.current.addToCart(offerProduct, 1, { offerId: 'offer-1' });
+    });
+
+    // Two successive adds must not exceed the single-unit allocation
+    // checkout will reserve.
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cart[0]?.quantity).toBe(1);
+  });
+
+  it('caps fresh offer adds and offer updates at the carried allocation', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const offerProduct = { ...mockProduct, stock: 2 };
+    act(() => {
+      result.current.addToCart(offerProduct, 5, { offerId: 'offer-1' });
+    });
+    expect(result.current.cart[0]?.quantity).toBe(2);
+
+    const targetId = result.current.cart[0]?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetId as string, 9);
+    });
+    expect(
+      result.current.cart.find((item) => item.cartItemId === targetId)?.quantity
+    ).toBe(2);
+  });
+
+  it('skips the allocation cap for unmanaged offer lines', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    act(() => {
+      result.current.addToCart(
+        { ...mockProduct, manage_stock: false, stock: 1 },
+        3,
+        { offerId: 'offer-1' }
+      );
+    });
+
+    expect(result.current.cart[0]?.quantity).toBe(3);
+  });
+
   it('defers validation until interaction when requested', async () => {
     vi.useFakeTimers();
 

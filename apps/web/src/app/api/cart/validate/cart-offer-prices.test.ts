@@ -7,7 +7,7 @@ const OFFER_ID = '55555555-5555-4555-8555-555555555555';
 describe('fetchCartOfferPrices', () => {
   it('maps live offers per product and skips variant lines', async () => {
     const fetchOffers = vi.fn(async () => ({
-      data: [{ offer_id: OFFER_ID, price: 400_000 }],
+      data: [{ offer_id: OFFER_ID, price: 400_000, condition: 'used' }],
       error: null,
     }));
 
@@ -23,6 +23,7 @@ describe('fetchCartOfferPrices', () => {
     expect(offerMap.get(`${PRODUCT_ID}::${OFFER_ID}`)).toEqual({
       offer_id: OFFER_ID,
       price: 400_000,
+      condition: 'used',
     });
   });
 

@@ -87,7 +87,10 @@ export function OrderDetailsItemsCard({
                   {[
                     item.offer_grade ? `Grade ${item.offer_grade}` : null,
                     item.offer_condition_notes ?? null,
-                    `ref ${String(item.offer_id).slice(0, 8)}`,
+                    // Full id: an 8-char prefix can collide across offers
+                    // and this detail view is where admins resolve exactly
+                    // which condition offer a line refers to.
+                    `ref ${String(item.offer_id)}`,
                   ]
                     .filter(Boolean)
                     .join(' · ')}

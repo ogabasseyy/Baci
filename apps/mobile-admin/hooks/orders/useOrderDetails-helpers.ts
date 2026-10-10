@@ -3,6 +3,8 @@ import { getJoinedRecord } from '@/lib/supabase-utils';
 
 interface OrderItemRow {
   offer_id?: string | null;
+  offer_grade?: string | null;
+  offer_condition_notes?: string | null;
   condition: string | null;
   has_assurance: boolean | null;
   id: string;
@@ -72,6 +74,8 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
       image_url: item.image_url ?? undefined,
       name: itemName,
       offer_id: item.offer_id ?? undefined,
+      offer_grade: item.offer_grade ?? undefined,
+      offer_condition_notes: item.offer_condition_notes ?? undefined,
       price: item.price,
       product_id: item.product_id ?? null,
       product_match_status: item.product_match_status ?? undefined,
@@ -91,23 +95,46 @@ type OfferLabelRow = {
   condition_notes?: unknown;
 };
 
+function hasOfferLabelSnapshot(item: {
+  offer_grade?: string | null;
+  offer_condition_notes?: string | null;
+}) {
+  return (
+    (typeof item.offer_grade === 'string' && item.offer_grade !== '') ||
+    (typeof item.offer_condition_notes === 'string' &&
+      item.offer_condition_notes !== '')
+  );
+}
+
 /**
- * Attach the selected offer's grade/notes to mapped order items through
- * the shopper-safe get_product_offers RPC (single order, so one lookup
- * per distinct product with offer lines). Fail-soft: offer lines keep
- * their persisted condition and short ref when the lookup fails.
+ * Attach the purchased offer's grade/notes to mapped order items. Lines
+ * created after the label snapshot carry their creation-time labels and
+ * display them verbatim — the merchant may since have edited the offer
+ * or marked it inactive/sold out, and the live catalog row must not
+ * rewrite history. Only pre-snapshot lines fall back to the shopper-safe
+ * get_product_offers RPC (one lookup per distinct product). Fail-soft:
+ * offer lines keep their persisted condition and ref when the lookup
+ * fails.
  */
+type AttachedOfferLabelItem<TItem> = TItem & {
+  offer_grade?: string;
+  offer_condition_notes?: string;
+};
+
 export async function attachOrderItemOfferLabels<
-  TItem extends { offer_id?: string; product_id?: string | null },
+  TItem extends {
+    offer_id?: string;
+    offer_grade?: string | null;
+    offer_condition_notes?: string | null;
+    product_id?: string | null;
+  },
 >(
   items: TItem[],
   fetchOffers: (productId: string) => Promise<{
     data: OfferLabelRow[] | null;
     error: unknown;
   }>
-): Promise<
-  (TItem & { offer_grade?: string; offer_condition_notes?: string })[]
-> {
+): Promise<AttachedOfferLabelItem<TItem>[]> {
   const offerItems = items.filter(
     (item): item is TItem & { offer_id: string; product_id: string } =>
       typeof item.offer_id === 'string' &&
@@ -116,11 +143,16 @@ export async function attachOrderItemOfferLabels<
       item.product_id !== ''
   );
   if (offerItems.length === 0) {
-    return items;
+    return items as AttachedOfferLabelItem<TItem>[];
   }
 
+  // Snapshot lines never consult the mutable catalog row: their stored
+  // labels are the creation-time truth even when the live offer changed
+  // grade/notes or left the active set.
+  const lookupItems = offerItems.filter((item) => !hasOfferLabelSnapshot(item));
+
   const productIds = Array.from(
-    new Set(offerItems.map((item) => item.product_id))
+    new Set(lookupItems.map((item) => item.product_id))
   );
   let labels = new Map<string, { grade?: string; notes?: string }>();
   try {
@@ -141,7 +173,7 @@ export async function attachOrderItemOfferLabels<
       results.push(...batch);
     }
     if (results.some((result) => result.error)) {
-      return items;
+      return items as AttachedOfferLabelItem<TItem>[];
     }
     labels = new Map(
       results.flatMap((result) =>
@@ -165,7 +197,7 @@ export async function attachOrderItemOfferLabels<
       )
     );
   } catch {
-    return items;
+    return items as AttachedOfferLabelItem<TItem>[];
   }
 
   return items.map((item) => {
@@ -173,10 +205,26 @@ export async function attachOrderItemOfferLabels<
       typeof item.offer_id !== 'string' ||
       typeof item.product_id !== 'string'
     ) {
-      return item;
+      return item as AttachedOfferLabelItem<TItem>;
+    }
+    if (hasOfferLabelSnapshot(item)) {
+      // Stored snapshot wins verbatim: normalize nulls without ever
+      // merging in live catalog values.
+      return {
+        ...item,
+        offer_grade:
+          typeof item.offer_grade === 'string' && item.offer_grade !== ''
+            ? item.offer_grade
+            : undefined,
+        offer_condition_notes:
+          typeof item.offer_condition_notes === 'string' &&
+          item.offer_condition_notes !== ''
+            ? item.offer_condition_notes
+            : undefined,
+      };
     }
     const label = labels.get(`${item.product_id}::${item.offer_id}`);
-    if (!label) return item;
+    if (!label) return item as AttachedOfferLabelItem<TItem>;
     return {
       ...item,
       offer_grade: label.grade,

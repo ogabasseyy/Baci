@@ -3,6 +3,7 @@ export type CartValidationItem = {
   price: number | null;
   variantId?: string;
   offerId?: string;
+  condition?: string;
 };
 
 type RawCartItem = {
@@ -11,6 +12,7 @@ type RawCartItem = {
   variantId?: string;
   variant_id?: string;
   offerId?: string;
+  condition?: string;
 };
 
 const uuidRegex =
@@ -38,6 +40,7 @@ export function prepareCartValidationItems(
         price: item.price,
         variantId: normalizeVariantId(item),
         offerId: item.offerId,
+        condition: item.condition,
       }))
     : ((productIds ?? []) as string[]).map((id) => ({ id, price: null }));
 

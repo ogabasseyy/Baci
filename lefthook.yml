@@ -159,6 +159,13 @@ pre-push:
           # don't get checked against themselves.
           [ "$branch" = "$default_branch" ] && continue
 
+          if [ "$branch" = "ops/gigl-promote-record" ]; then
+            if ! node ci_scripts/validate-promote-record.mjs "$local_sha" "$_remote_sha"; then
+              fail=1
+            fi
+            continue
+          fi
+
           base=$(git config "branch.$branch.base" 2>/dev/null || true)
           if [ -z "$base" ]; then
             base="${remote}/${default_branch}"

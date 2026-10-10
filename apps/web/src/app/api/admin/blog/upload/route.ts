@@ -9,6 +9,15 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
+import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
+import { handleBlogMediaTombstoneRefresh } from './blog-media-tombstone-refresh-route';
+import { releaseBlogMediaPaths } from './blog-media-tombstone-release';
+import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
+import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
+import {
+  type FeaturedImageVariantRecord,
+  uploadFeaturedImageVariants,
+} from './upload-featured-image-variants';
 import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
@@ -24,6 +33,11 @@ import {
 
 const PLATFORM_BLOG_UPLOAD_RATE_LIMIT = 30;
 const PLATFORM_BLOG_UPLOAD_RATE_WINDOW_MINUTES = 1;
+// Cleanup draws from its own budget: an invalidated upload may itself be
+// the request that exhausts the upload bucket, and its DELETE must not
+// 429 on the count it just contributed to.
+const PLATFORM_BLOG_MEDIA_DELETE_RATE_LIMIT = 30;
+const PLATFORM_BLOG_MEDIA_DELETE_RATE_WINDOW_MINUTES = 1;
 
 export async function POST(request: NextRequest) {
   const auth = await getPlatformAdminAuthForPermission('content.manage');
@@ -82,6 +96,12 @@ export async function POST(request: NextRequest) {
   const sourceBuffer = Buffer.from(await file.arrayBuffer());
   const uploadedPaths: string[] = [];
 
+  // Stage before the write: termination between staging and upload
+  // leaves a tombstone the sweep reaps, while termination the other
+  // way would leak an orphan the cron can never discover.
+  const preStaging = await stageUploadedBlogMediaPaths(supabase, [filePath]);
+  if (preStaging) return preStaging;
+
   const { error: uploadError } = await supabase.storage
     .from('media')
     .upload(filePath, sourceBuffer, {
@@ -91,6 +111,7 @@ export async function POST(request: NextRequest) {
     });
 
   if (uploadError) {
+    await releaseBlogMediaPaths(supabase, [filePath]);
     console.error('Platform blog media upload failed', { error: uploadError });
     return NextResponse.json(
       { error: 'Failed to upload file', code: 'UPLOAD_FAILED' },
@@ -111,58 +132,39 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // The source is already staged (pre-write above), so the long
+  // generation step runs with a reclaimable tombstone in place.
   let generated: Awaited<ReturnType<typeof generateFeaturedImageVariants>>;
   try {
     generated = await generateFeaturedImageVariants(sourceBuffer, {
       mimeType: file.type,
     });
   } catch (error) {
-    await cleanupUploadedPaths(supabase, uploadedPaths);
+    // Release only confirmed removals: on cleanup failure the
+    // objects stay in Storage and their tombstones must stay for
+    // the sweep to retry.
+    const removed = await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, removed);
     if (error instanceof BlogFeaturedImageError) {
       return toFeaturedUploadErrorResponse(error);
     }
     throw error;
   }
 
-  const featuredImageVariants: Record<
-    string,
-    {
-      contentType: string;
-      height: number;
-      path: string;
-      url: string;
-      width: number;
-    }
-  > = {};
+  let featuredImageVariants: Record<string, FeaturedImageVariantRecord>;
 
   try {
-    for (const variant of Object.values(generated.variants)) {
-      const variantPath = buildPlatformMediaPath(
-        `${fileToken}/${variant.key}.webp`
-      );
-      const { error: variantError } = await supabase.storage
-        .from('media')
-        .upload(variantPath, variant.buffer, {
-          cacheControl: '31536000',
-          contentType: variant.contentType,
-          upsert: false,
-        });
-
-      if (variantError) {
-        throw variantError;
-      }
-
-      uploadedPaths.push(variantPath);
-      featuredImageVariants[variant.key] = {
-        contentType: variant.contentType,
-        height: variant.height,
-        path: variantPath,
-        url: toPlatformMediaUrl(variantPath),
-        width: variant.width,
-      };
-    }
+    const uploaded = await uploadFeaturedImageVariants(
+      supabase,
+      fileToken,
+      generated,
+      uploadedPaths
+    );
+    if ('response' in uploaded) return uploaded.response;
+    featuredImageVariants = uploaded.variants;
   } catch (error) {
-    await cleanupUploadedPaths(supabase, uploadedPaths);
+    const removed = await cleanupUploadedPaths(supabase, uploadedPaths);
+    await releaseBlogMediaPaths(supabase, removed);
     console.error(
       'Platform featured variant upload failed; cleaned partial uploads',
       {
@@ -220,9 +222,9 @@ export async function DELETE(request: NextRequest) {
   const isAllowed = await checkRateLimit(
     supabase,
     auth.user.id,
-    'platform_blog_upload',
-    PLATFORM_BLOG_UPLOAD_RATE_LIMIT,
-    PLATFORM_BLOG_UPLOAD_RATE_WINDOW_MINUTES
+    'platform_blog_media_delete',
+    PLATFORM_BLOG_MEDIA_DELETE_RATE_LIMIT,
+    PLATFORM_BLOG_MEDIA_DELETE_RATE_WINDOW_MINUTES
   );
   if (!isAllowed) {
     return NextResponse.json(
@@ -236,13 +238,31 @@ export async function DELETE(request: NextRequest) {
     return parsedDeleteBody.response;
   }
 
-  const { error } = await supabase.storage
-    .from('media')
-    .remove(parsedDeleteBody.paths);
-  if (error) {
-    console.error('Platform blog media delete failed', {
-      error,
+  const filtered = await filterBlogMediaPathsWithoutPersistedReferences(
+    supabase,
+    parsedDeleteBody.paths
+  );
+  if (filtered === null) {
+    console.error('Platform blog media reference check failed', {
       paths: parsedDeleteBody.paths,
+    });
+    return NextResponse.json(
+      { error: 'Failed to verify media references' },
+      { status: 500 }
+    );
+  }
+  const { deletable, skipped } = filtered;
+  if (deletable.length === 0) {
+    return NextResponse.json({ skipped, success: true, tombstoned: [] });
+  }
+
+  // Stage the deletion instead of removing: a concurrent save can
+  // resurrect a tombstone its payload references before the sweep's
+  // grace window expires.
+  const staged = await tombstoneBlogMediaPaths(supabase, deletable);
+  if (!staged) {
+    console.error('Platform blog media tombstone staging failed', {
+      paths: deletable,
     });
     return NextResponse.json(
       { error: 'Failed to delete file' },
@@ -251,5 +271,9 @@ export async function DELETE(request: NextRequest) {
   }
 
   revalidatePlatformBlog();
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ skipped, success: true, tombstoned: deletable });
+}
+
+export function PATCH(request: NextRequest) {
+  return handleBlogMediaTombstoneRefresh(request);
 }

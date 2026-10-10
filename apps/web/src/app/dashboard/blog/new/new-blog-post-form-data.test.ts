@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createEmptyPostFormData,
   getFeaturedImagePreviewUrl,
@@ -8,6 +8,10 @@ import {
 } from './new-blog-post-form-data';
 
 describe('new blog post form data', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('creates a blank draft while preserving the supplied author name', () => {
     expect(createEmptyPostFormData('Ada')).toMatchObject({
       author_name: 'Ada',

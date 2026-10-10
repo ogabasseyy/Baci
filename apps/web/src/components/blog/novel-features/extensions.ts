@@ -27,6 +27,7 @@ import {
   UpdatedImage,
   UploadImagesPlugin,
 } from 'novel';
+import { orderedList } from './ordered-list';
 
 const lowlight = createLowlight(common);
 
@@ -86,11 +87,9 @@ const starterKit = StarterKit.configure({
       class: cx('list-disc list-outside leading-3 -mt-2'),
     },
   },
-  orderedList: {
-    HTMLAttributes: {
-      class: cx('list-decimal list-outside leading-3 -mt-2'),
-    },
-  },
+  // Ordered lists render below with type-driven markers so an
+  // imported type="A" list shows alphabetically, not decimal.
+  orderedList: false,
   listItem: {
     HTMLAttributes: {
       class: cx('leading-normal -mb-2'),
@@ -146,6 +145,7 @@ const table = Table.configure({
 
 export const defaultExtensions = [
   starterKit,
+  orderedList,
   placeholder,
   tiptapLink,
   tiptapImage,

@@ -1,4 +1,7 @@
--- Runtime regression contract for 20261009120000_enroll_customer_loyalty.sql.
+-- Runtime regression contract for the #3165 loyalty migrations
+-- (20261009120000_enroll_customer_loyalty,
+--  20261009120001_loyalty_status,
+--  20261009120002_award_purchase_points_row_lock).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --

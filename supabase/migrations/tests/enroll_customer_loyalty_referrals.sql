@@ -1,4 +1,4 @@
--- Referral, edge, and tier cases for the enroll_customer_loyalty suite (cases 6-9).
+-- Referral, edge, and tier cases for the enroll_customer_loyalty suite (cases 6-10).
 
 -- 6. Referral enrollment awards the bonus to BOTH sides ("you both get X").
 -- The referrer's balances are nulled first to prove legacy NULL rows are
@@ -141,5 +141,15 @@ SELECT pg_temp.assert_true(
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000015'),
   'tier-crossing enrollment wrote the wrong tier'
+);
+
+-- 10. Purchase awards serialize on the loyalty row with referral credits:
+-- without a row lock, a purchase write landing after a referral credit
+-- overwrites the credited balance with a stale absolute value.
+SELECT pg_temp.assert_true(
+  pg_get_functiondef(
+    'public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure
+  ) LIKE '%FOR UPDATE%',
+  'award_purchase_points does not lock the loyalty row'
 );
 

@@ -99,8 +99,9 @@ INSERT INTO public.loyalty_settings (
 );
 
 INSERT INTO public.loyalty_rewards (
-  merchant_id, name, points_cost, reward_type, enabled, end_date
+  merchant_id, name, points_cost, reward_type, enabled, end_date, stock_quantity
 ) VALUES
-  ('01aa0000-0000-4000-8000-000000000001', 'Free shipping', 200, 'free_shipping', true, NULL),
-  ('01aa0000-0000-4000-8000-000000000001', 'Disabled perk', 100, 'discount', false, NULL),
-  ('01aa0000-0000-4000-8000-000000000001', 'Expired perk', 150, 'discount', true, now() - interval '1 day');
+  ('01aa0000-0000-4000-8000-000000000001', 'Free shipping', 200, 'free_shipping', true, NULL, NULL),
+  ('01aa0000-0000-4000-8000-000000000001', 'Disabled perk', 100, 'discount', false, NULL, NULL),
+  ('01aa0000-0000-4000-8000-000000000001', 'Expired perk', 150, 'discount', true, now() - interval '1 day', NULL),
+  ('01aa0000-0000-4000-8000-000000000001', 'Sold-out perk', 120, 'discount', true, NULL, 0);

@@ -16,14 +16,12 @@ type LoyaltyStatusRpcResult = {
 const RPC_ERROR_STATUS: Record<string, number> = {
   program_unavailable: 404,
   customer_not_found: 404,
-  forbidden: 403,
   invalid_input: 400,
 };
 
 const RPC_ERROR_MESSAGE: Record<string, string> = {
   program_unavailable: 'Loyalty program not available for this merchant',
   customer_not_found: 'Customer not found for this merchant',
-  forbidden: 'You can only view your own loyalty status',
   invalid_input: 'Invalid loyalty status input',
 };
 
@@ -179,7 +177,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const validated = storefrontLoyaltyStatusResultSchema.safeParse(result);
+    // Normalize merchant-saved tiers before validation: the settings API
+    // accepts arbitrary tier JSON, so minPoints can arrive null (which would
+    // 500 below) while the route needs finite numbers for threshold
+    // arithmetic. Clamp to 0, the same floor as the default ladder.
+    const rawTiers: Array<{ name?: unknown; minPoints?: unknown }> =
+      Array.isArray(result.tiers) ? result.tiers : [];
+    const normalizedResult = {
+      ...result,
+      tiers: rawTiers.map((entry) => ({
+        ...entry,
+        name: typeof entry.name === 'string' ? entry.name : '',
+        minPoints:
+          typeof entry.minPoints === 'number' &&
+          Number.isFinite(entry.minPoints)
+            ? entry.minPoints
+            : 0,
+      })),
+    };
+    const validated =
+      storefrontLoyaltyStatusResultSchema.safeParse(normalizedResult);
     if (!validated.success) {
       logger.error({
         message: 'Malformed loyalty status result',
@@ -203,20 +220,28 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search after the member's current tier: a threshold raised after the
-    // tier was earned must not report the current tier as next (which would
-    // render negative progress). Custom tier names sit outside the ladder,
-    // so they fall back to a lifetime-only search.
-    const currentIndex = (TIER_ORDER as readonly string[]).indexOf(tier);
-    let nextTier: TierName | null = null;
-    for (const [index, name] of TIER_ORDER.entries()) {
-      if (index > currentIndex && thresholds[name] > status.lifetime_points) {
-        nextTier = name;
-        break;
-      }
-    }
-    const pointsToNextTier = nextTier
-      ? Math.max(0, thresholds[nextTier] - status.lifetime_points)
+    // Progress along the merchant-defined ladder (the same tiers
+    // calculate_loyalty_tier uses), not the hardcoded defaults: a merchant
+    // with custom tiers (Starter/VIP) must never be shown silver/gold. Search
+    // after the member's current rung — a threshold raised after the tier was
+    // earned must not report the current tier as next (which would render
+    // negative progress). Names outside the ladder fall back to a
+    // lifetime-only search.
+    const ladder = [...status.tiers]
+      .map((entry) => ({
+        name: entry.name.toLowerCase(),
+        minPoints: entry.minPoints,
+      }))
+      .sort((a, b) => a.minPoints - b.minPoints);
+    const currentPosition = ladder.findIndex((entry) => entry.name === tier);
+    const rungsAhead =
+      currentPosition >= 0 ? ladder.slice(currentPosition + 1) : ladder;
+    const nextEntry = rungsAhead.find(
+      (entry) => entry.minPoints > status.lifetime_points
+    );
+    const nextTier = nextEntry ? nextEntry.name : null;
+    const pointsToNextTier = nextEntry
+      ? Math.max(0, nextEntry.minPoints - status.lifetime_points)
       : 0;
 
     const perCurrency = status.points_per_currency ?? 1;

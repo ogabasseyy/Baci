@@ -1,80 +1,13 @@
-import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { mockRpc, mockGetUser, mockMaybeSingle, mockSupabase } = vi.hoisted(
-  () => {
-    const mockRpc = vi.fn();
-    const mockGetUser = vi.fn();
-    const mockMaybeSingle = vi.fn();
-    const chain = {
-      select: vi.fn(),
-      eq: vi.fn(),
-      is: vi.fn(),
-      maybeSingle: mockMaybeSingle,
-    };
-    chain.select.mockReturnValue(chain);
-    chain.eq.mockReturnValue(chain);
-    chain.is.mockReturnValue(chain);
-
-    return {
-      mockRpc,
-      mockGetUser,
-      mockMaybeSingle,
-      mockSupabase: {
-        auth: { getUser: mockGetUser },
-        from: vi.fn(() => chain),
-        rpc: mockRpc,
-      },
-    };
-  }
-);
-
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(() => ({})),
-}));
-
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => mockSupabase),
-}));
-
-vi.mock('@/lib/logger', () => ({
-  logger: {
-    error: vi.fn(),
-  },
-}));
-
-import { POST } from './route';
-
-const MERCHANT_ID = '01aa0000-0000-4000-8000-000000000001';
-const CUSTOMER_ID = '01aa0000-0000-4000-8000-000000000011';
-const USER_ID = '01aa0000-0000-4000-8000-000000000101';
-
-function createRequest(body: unknown) {
-  return new NextRequest('https://usebaci.com/api/storefront/loyalty/enroll', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: typeof body === 'string' ? body : JSON.stringify(body),
-  });
-}
-
-function createSuccessResult() {
-  return {
-    success: true,
-    points_balance: 50,
-    lifetime_points: 50,
-    current_tier: 'Bronze',
-    referral_code: 'ABCD1234',
-    referral_bonus_applied: false,
-  };
-}
-
-function mockOwnedCustomer() {
-  mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
-  mockMaybeSingle.mockResolvedValue({
-    data: { id: CUSTOMER_ID },
-    error: null,
-  });
-}
+import {
+  CUSTOMER_ID,
+  createRequest,
+  createSuccessResult,
+  MERCHANT_ID,
+  mockOwnedCustomer,
+  enrollMocks as mocks,
+  POST,
+} from './route.test-helpers';
 
 describe('POST /api/storefront/loyalty/enroll', () => {
   beforeEach(() => {
@@ -83,15 +16,18 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('enrolls via a single enroll_customer_loyalty RPC call', async () => {
-    mockRpc.mockResolvedValue({ data: createSuccessResult(), error: null });
+    mocks.mockRpc.mockResolvedValue({
+      data: createSuccessResult(),
+      error: null,
+    });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
     );
     const body = await response.json();
 
-    expect(mockRpc).toHaveBeenCalledTimes(1);
-    expect(mockRpc).toHaveBeenCalledWith('enroll_customer_loyalty', {
+    expect(mocks.mockRpc).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRpc).toHaveBeenCalledWith('enroll_customer_loyalty', {
       p_merchant_id: MERCHANT_ID,
       p_customer_id: CUSTOMER_ID,
       p_referral_code: null,
@@ -109,7 +45,10 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('passes the referral code through to the RPC', async () => {
-    mockRpc.mockResolvedValue({ data: createSuccessResult(), error: null });
+    mocks.mockRpc.mockResolvedValue({
+      data: createSuccessResult(),
+      error: null,
+    });
 
     await POST(
       createRequest({
@@ -119,7 +58,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
       })
     );
 
-    expect(mockRpc).toHaveBeenCalledWith('enroll_customer_loyalty', {
+    expect(mocks.mockRpc).toHaveBeenCalledWith('enroll_customer_loyalty', {
       p_merchant_id: MERCHANT_ID,
       p_customer_id: CUSTOMER_ID,
       p_referral_code: 'ref2024',
@@ -127,7 +66,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 401 without a session', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    mocks.mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
@@ -136,11 +75,11 @@ describe('POST /api/storefront/loyalty/enroll', () => {
 
     expect(response.status).toBe(401);
     expect(body).toEqual({ error: 'Authentication required' });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the customer belongs to another user', async () => {
-    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+    mocks.mockMaybeSingle.mockResolvedValue({ data: null, error: null });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
@@ -149,7 +88,31 @@ describe('POST /api/storefront/loyalty/enroll', () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the caller owns an unlinked guest row', async () => {
+    mocks.mockGetUser.mockResolvedValue({
+      data: { user: { id: 'new-login-id', email: 'guest@example.com' } },
+    });
+    mocks.mockMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: { id: 'guest-row-id' },
+        error: null,
+      });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error:
+        'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
+    });
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 when merchant_id or customer_id is missing', async () => {
@@ -160,7 +123,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({
       error: 'merchant_id and customer_id are required',
     });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 for non-UUID ids', async () => {
@@ -169,7 +132,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     );
 
     expect(response.status).toBe(400);
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 with a generic message for invalid referral codes', async () => {
@@ -184,7 +147,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
 
     expect(response.status).toBe(400);
     expect(body).toEqual({ error: 'Invalid enrollment input' });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 for an invalid JSON body', async () => {
@@ -193,11 +156,11 @@ describe('POST /api/storefront/loyalty/enroll', () => {
 
     expect(response.status).toBe(400);
     expect(body).toEqual({ error: 'Invalid JSON body' });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the loyalty program is unavailable', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'program_unavailable' },
       error: null,
     });
@@ -214,7 +177,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 404 when the customer does not belong to the merchant', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'customer_not_found' },
       error: null,
     });
@@ -228,25 +191,8 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
   });
 
-  it('returns 403 when enrollment is forbidden', async () => {
-    mockRpc.mockResolvedValue({
-      data: { success: false, error: 'forbidden' },
-      error: null,
-    });
-
-    const response = await POST(
-      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body).toEqual({
-      error: 'You can only enroll your own customer account',
-    });
-  });
-
   it('returns 409 when the customer is already enrolled', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'already_enrolled' },
       error: null,
     });
@@ -263,7 +209,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 503 when referral codes collide', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'referral_code_collision' },
       error: null,
     });
@@ -280,7 +226,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 500 when the RPC call fails', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: null,
       error: { message: 'connection reset' },
     });
@@ -295,7 +241,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 500 for an unexpected RPC result', async () => {
-    mockRpc.mockResolvedValue({ data: null, error: null });
+    mocks.mockRpc.mockResolvedValue({ data: null, error: null });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
@@ -307,7 +253,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
   });
 
   it('returns 500 for a malformed success payload', async () => {
-    mockRpc.mockResolvedValue({
+    mocks.mockRpc.mockResolvedValue({
       data: { success: true, points_balance: 'fifty' },
       error: null,
     });

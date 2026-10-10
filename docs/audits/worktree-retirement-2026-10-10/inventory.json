@@ -1,0 +1,3966 @@
+{
+  "baseline": "ae94a5075d92ebdc3625c13006a6dd4144dba4fa",
+  "capturedAt": "2026-10-10T13:33:02.221Z",
+  "notes": [
+    "Classification is triage, not deletion authorization.",
+    "PR matches are from a bounded live recent-500 snapshot; branch matches do not imply identical HEAD.",
+    "No source was removed; future retirement needs fresh status/activity and ignored-data preservation."
+  ],
+  "rows": [
+    {
+      "id": 1,
+      "path": "/Users/mac/Baci-app",
+      "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Merged PR does not account for broad dirty and untracked edits across instructions, mobile, web, migrations, and tools. Active processes; preserve all state.",
+      "shard": 1,
+      "manifest": {
+        "id": 1,
+        "path": "/Users/mac/Baci-app",
+        "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+        "branch": "refs/heads/fix/mobile-admin-signup-skip-owner",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/mobile-admin-signup-skip-owner",
+          "headRefOid": "b4dab9107bb508ea4ef50b1f4f8eb85f05cc1cbc",
+          "mergedAt": "2026-08-14T18:35:30Z",
+          "number": 3344,
+          "state": "MERGED",
+          "title": "fix(mobile-admin): skip duplicate owner step after email signup",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3344",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app",
+      "head": "89d61b383bd1631a2bb99444ba9a930060aeaa36",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "PiggyVest dirty source; ignored env names only present",
+      "shard": 2,
+      "manifest": {
+        "id": 2,
+        "path": "/Users/mac/.codex/worktrees/0d77/Baci-app",
+        "head": "89d61b383bd1631a2bb99444ba9a930060aeaa36",
+        "branch": "refs/heads/feat/piggyvest-wallet",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 3,
+      "path": "/Users/mac/.codex/worktrees/baci-blog-draft-handoff/Baci-app",
+      "head": "3bb6a36c968188815272a124383a415fda589b60",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "PR #3623 is merged at this exact head, but 1,047 tracked deletions remain under apps/web/docs; preserve this dirty state.",
+      "shard": 3,
+      "manifest": {
+        "id": 3,
+        "path": "/Users/mac/.codex/worktrees/baci-blog-draft-handoff/Baci-app",
+        "head": "3bb6a36c968188815272a124383a415fda589b60",
+        "branch": "refs/heads/codex/blog-review-handoff",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/blog-review-handoff",
+          "headRefOid": "3bb6a36c968188815272a124383a415fda589b60",
+          "mergedAt": "2026-10-10T05:22:08Z",
+          "number": 3623,
+          "state": "MERGED",
+          "title": "Add platform blog review handoff importer and intent metadata",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3623",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "path": "/Users/mac/.codex/worktrees/baci-muse-production/Baci-app",
+      "head": "cbea2ab34d368da4c5894d95298253cbc7c8350e",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Two tracked local changes; inspect content before any retirement.",
+      "shard": 1,
+      "manifest": {
+        "id": 4,
+        "path": "/Users/mac/.codex/worktrees/baci-muse-production/Baci-app",
+        "head": "cbea2ab34d368da4c5894d95298253cbc7c8350e",
+        "branch": "refs/heads/codex/baci-legal-entity-correction",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 5,
+      "path": "/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app",
+      "head": "dd2cc20be0a9c67ea5b164aab98ab2662605b8e4",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact PR #3617 head is MERGED; clean worktree; ignored entries were generated/type artifacts only.",
+      "shard": 2,
+      "manifest": {
+        "id": 5,
+        "path": "/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app",
+        "head": "dd2cc20be0a9c67ea5b164aab98ab2662605b8e4",
+        "branch": "refs/heads/codex/blog-rss-xml-safety",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/blog-rss-xml-safety",
+          "headRefOid": "dd2cc20be0a9c67ea5b164aab98ab2662605b8e4",
+          "mergedAt": "2026-10-04T06:05:39Z",
+          "number": 3617,
+          "state": "MERGED",
+          "title": "fix(web): sanitize XML 1.0 characters in blog feeds",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3617",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "path": "/Users/mac/.codex/worktrees/checkout-3577-pre-slice",
+      "head": "0e65eba26d21d19284ed1fd586c206a5b953b7f1",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Clean detached checkout; zero patch-unique commits and zero changed paths.",
+      "shard": 3,
+      "manifest": {
+        "id": 6,
+        "path": "/Users/mac/.codex/worktrees/checkout-3577-pre-slice",
+        "head": "0e65eba26d21d19284ed1fd586c206a5b953b7f1",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 7,
+      "path": "/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app",
+      "head": "a09e19db1942e3d635b9a4ca88fec948b31a59e4",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 7,
+        "path": "/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app",
+        "head": "a09e19db1942e3d635b9a4ca88fec948b31a59e4",
+        "branch": "refs/heads/codex/checkout-payment-switch",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/checkout-payment-switch",
+          "headRefOid": "a09e19db1942e3d635b9a4ca88fec948b31a59e4",
+          "mergedAt": "2026-09-26T14:36:21Z",
+          "number": 3508,
+          "state": "MERGED",
+          "title": "fix(checkout): restore pending order resumption across payment methods",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3508",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "path": "/Users/mac/.codex/worktrees/checkout-reliability/Baci-app",
+      "head": "ba982e3f88a672e32a4847b97ef9b3c424cab5fa",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3501 exact head is MERGED, but ignored checkout-reliability planning artifact remains; preserve pending data review.",
+      "shard": 2,
+      "manifest": {
+        "id": 8,
+        "path": "/Users/mac/.codex/worktrees/checkout-reliability/Baci-app",
+        "head": "ba982e3f88a672e32a4847b97ef9b3c424cab5fa",
+        "branch": "refs/heads/codex/checkout-payment-orchestration",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/checkout-payment-orchestration",
+          "headRefOid": "ba982e3f88a672e32a4847b97ef9b3c424cab5fa",
+          "mergedAt": "2026-09-26T11:10:35Z",
+          "number": 3501,
+          "state": "MERGED",
+          "title": "refactor(checkout): isolate payment orchestration and recovery",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3501",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "path": "/Users/mac/.codex/worktrees/event-worker-api-isolation/Baci-app",
+      "head": "7d3cd523b140b196539be0cd538174c6c7fa664a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "No unique commits; 204 tracked event-worker source/test changes remain uncommitted.",
+      "shard": 3,
+      "manifest": {
+        "id": 9,
+        "path": "/Users/mac/.codex/worktrees/event-worker-api-isolation/Baci-app",
+        "head": "7d3cd523b140b196539be0cd538174c6c7fa664a",
+        "branch": "refs/heads/codex/event-worker-api-isolation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 10,
+      "path": "/Users/mac/.codex/worktrees/issue-3165/Baci-app",
+      "head": "29a9c1ccbd067135d1df539ccab00a387e142f55",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Open loyalty enrollment RPC and owner-authorization work. Commit/path evidence does not certify behavior absent from current main.",
+      "shard": 1,
+      "manifest": {
+        "id": 10,
+        "path": "/Users/mac/.codex/worktrees/issue-3165/Baci-app",
+        "head": "29a9c1ccbd067135d1df539ccab00a387e142f55",
+        "branch": "refs/heads/fix/loyalty-enroll-schema",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/loyalty-enroll-schema",
+          "headRefOid": "29a9c1ccbd067135d1df539ccab00a387e142f55",
+          "mergedAt": null,
+          "number": 3651,
+          "state": "OPEN",
+          "title": "fix(loyalty): enroll via atomic enroll_customer_loyalty RPC",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3651",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "path": "/Users/mac/.codex/worktrees/issue-3581/Baci-app",
+      "head": "517e72f05e62e7678f6d1715f3f2c394f6157a8b",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Activity snapshot shows running processes; current HEAD differs from manifest HEAD (87444bee), recheck before retirement.",
+      "shard": 2,
+      "manifest": {
+        "id": 11,
+        "path": "/Users/mac/.codex/worktrees/issue-3581/Baci-app",
+        "head": "87444beeae1443ea69ad99497b57e464566db50c",
+        "branch": "refs/heads/fix/search-analytics-service-role",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/search-analytics-service-role",
+          "headRefOid": "87444beeae1443ea69ad99497b57e464566db50c",
+          "mergedAt": null,
+          "number": 3652,
+          "state": "OPEN",
+          "title": "fix(search): service-role-only search_analytics ingestion",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3652",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "path": "/Users/mac/.codex/worktrees/manual-order-receipt-email/Baci-app",
+      "head": "46fd50fb31b6f7f54671ec4e99b8c79f6239322b",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Open PR #3580 at exact HEAD for manual-order receipt/invoice email; 231 unique commits plus two dirty receipt-hook tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 12,
+        "path": "/Users/mac/.codex/worktrees/manual-order-receipt-email/Baci-app",
+        "head": "46fd50fb31b6f7f54671ec4e99b8c79f6239322b",
+        "branch": "refs/heads/codex/manual-order-receipt-email-pr",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/manual-order-receipt-email-pr",
+          "headRefOid": "46fd50fb31b6f7f54671ec4e99b8c79f6239322b",
+          "mergedAt": null,
+          "number": 3580,
+          "state": "OPEN",
+          "title": "feat(orders): email manual-order receipts and invoices",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3580",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "path": "/Users/mac/.codex/worktrees/merchant-image-pilot/Baci-app",
+      "head": "a0caa3ce681a348e9e14498b2d7702aeff0dfef9",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Open lab-only merchant image pilot with dirty/untracked state.",
+      "shard": 1,
+      "manifest": {
+        "id": 13,
+        "path": "/Users/mac/.codex/worktrees/merchant-image-pilot/Baci-app",
+        "head": "a0caa3ce681a348e9e14498b2d7702aeff0dfef9",
+        "branch": "refs/heads/codex/merchant-image-pilot",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/merchant-image-pilot",
+          "headRefOid": "a0caa3ce681a348e9e14498b2d7702aeff0dfef9",
+          "mergedAt": null,
+          "number": 3605,
+          "state": "OPEN",
+          "title": "feat(pilot): merchant image variant pilot with per-rung never-larger guard (lab-only)",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3605",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "path": "/Users/mac/.codex/worktrees/ogabassey-persistent-cart/Baci-app",
+      "head": "4737bdb040e512cd89a7c2932adca211de511276",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 14,
+        "path": "/Users/mac/.codex/worktrees/ogabassey-persistent-cart/Baci-app",
+        "head": "4737bdb040e512cd89a7c2932adca211de511276",
+        "branch": "refs/heads/codex/ogabassey-persistent-cart",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/ogabassey-persistent-cart",
+          "headRefOid": "4737bdb040e512cd89a7c2932adca211de511276",
+          "mergedAt": null,
+          "number": 3639,
+          "state": "OPEN",
+          "title": "Persist Ogabassey guest carts and transfer them to checkout",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3639",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "path": "/Users/mac/.codex/worktrees/ogabassey-search-refinements/Baci-app",
+      "head": "70f729f06837076e05167a9ef351f67e011dc081",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Open PR #3616 at exact HEAD for search discovery/cart assurance; 182 unique commits plus four dirty cart-repricing files.",
+      "shard": 3,
+      "manifest": {
+        "id": 15,
+        "path": "/Users/mac/.codex/worktrees/ogabassey-search-refinements/Baci-app",
+        "head": "70f729f06837076e05167a9ef351f67e011dc081",
+        "branch": "refs/heads/codex/ogabassey-search-refinements",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/ogabassey-search-refinements",
+          "headRefOid": "70f729f06837076e05167a9ef351f67e011dc081",
+          "mergedAt": null,
+          "number": 3616,
+          "state": "OPEN",
+          "title": "feat(storefront): improve search discovery and cart assurance",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3616",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "path": "/Users/mac/.codex/worktrees/ogabassey-search-relevance/Baci-app",
+      "head": "a37716d88cc21a368b912fcfadd33a27ad64a997",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "19 local status entries and one untracked file despite zero patch-distinct commits.",
+      "shard": 1,
+      "manifest": {
+        "id": 16,
+        "path": "/Users/mac/.codex/worktrees/ogabassey-search-relevance/Baci-app",
+        "head": "a37716d88cc21a368b912fcfadd33a27ad64a997",
+        "branch": "refs/heads/codex/ogabassey-search-relevance-followup",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 17,
+      "path": "/Users/mac/.codex/worktrees/ogabassey-search-summary/Baci-app",
+      "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 17,
+        "path": "/Users/mac/.codex/worktrees/ogabassey-search-summary/Baci-app",
+        "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
+        "branch": "refs/heads/codex/ogabassey-search-summary",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/ogabassey-search-summary",
+          "headRefOid": "7d8353d5a53c329abb820d497b5827bb665bb060",
+          "mergedAt": null,
+          "number": 3613,
+          "state": "OPEN",
+          "title": "feat(mobile): simplify search and add draggable filter sheets",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3613",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "path": "/Users/mac/.codex/worktrees/piggyvest-architecture-audit/Baci-app",
+      "head": "59f62320b2433875404cc49f5b1b9e3764c56bf2",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "114 unique commits / 672 paths plus 115 dirty PiggyVest/payment source files; complex, not fully reviewed.",
+      "shard": 3,
+      "manifest": {
+        "id": 18,
+        "path": "/Users/mac/.codex/worktrees/piggyvest-architecture-audit/Baci-app",
+        "head": "59f62320b2433875404cc49f5b1b9e3764c56bf2",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 19,
+      "path": "/Users/mac/.codex/worktrees/piggyvest-primary-release/Baci-app",
+      "head": "b547cb22fe9f2e635cf9fb0b8ffb657b7df42e77",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Open PiggyVest primary-wallet work plus dirty and untracked local state.",
+      "shard": 1,
+      "manifest": {
+        "id": 19,
+        "path": "/Users/mac/.codex/worktrees/piggyvest-primary-release/Baci-app",
+        "head": "b547cb22fe9f2e635cf9fb0b8ffb657b7df42e77",
+        "branch": "refs/heads/codex/piggyvest-primary-wallet-integration",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/piggyvest-primary-wallet-integration",
+          "headRefOid": "b547cb22fe9f2e635cf9fb0b8ffb657b7df42e77",
+          "mergedAt": null,
+          "number": 3642,
+          "state": "OPEN",
+          "title": "feat(wallet): connect PiggyVest primary wallet and signed funding flows",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3642",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "path": "/Users/mac/.codex/worktrees/production-release-coordination/Baci-app",
+      "head": "a891f5287738267c4df701ae1e02836a1a2959f9",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "activity snapshot shows running processes",
+      "shard": 2,
+      "manifest": {
+        "id": 20,
+        "path": "/Users/mac/.codex/worktrees/production-release-coordination/Baci-app",
+        "head": "a891f5287738267c4df701ae1e02836a1a2959f9",
+        "branch": "refs/heads/codex/production-release-coordination",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/production-release-coordination",
+          "headRefOid": "a891f5287738267c4df701ae1e02836a1a2959f9",
+          "mergedAt": null,
+          "number": 3654,
+          "state": "OPEN",
+          "title": "fix(deploy): coordinate worker releases and pin production dispatch",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3654",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "path": "/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app",
+      "head": "9820841a377e989d9dd53d0ababfc4d31ef2c8eb",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts.",
+      "shard": 3,
+      "manifest": {
+        "id": 21,
+        "path": "/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app",
+        "head": "9820841a377e989d9dd53d0ababfc4d31ef2c8eb",
+        "branch": "refs/heads/codex/shipping-migration-audit",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/shipping-migration-audit",
+          "headRefOid": "9820841a377e989d9dd53d0ababfc4d31ef2c8eb",
+          "mergedAt": "2026-09-26T12:20:10Z",
+          "number": 3506,
+          "state": "MERGED",
+          "title": "fix(db): preserve audit attribution in shipping policy repair",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3506",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "path": "/Users/mac/Baci-app-worktrees/airtime-wallet-only",
+      "head": "6eda63ce245969b6a9bd23dda316f1c680762e11",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Open wallet-only utility purchase flow and rejection coverage.",
+      "shard": 1,
+      "manifest": {
+        "id": 22,
+        "path": "/Users/mac/Baci-app-worktrees/airtime-wallet-only",
+        "head": "6eda63ce245969b6a9bd23dda316f1c680762e11",
+        "branch": "refs/heads/feat/airtime-wallet-only",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "feat/airtime-wallet-only",
+          "headRefOid": "6eda63ce245969b6a9bd23dda316f1c680762e11",
+          "mergedAt": null,
+          "number": 3655,
+          "state": "OPEN",
+          "title": "feat(vtu): route all utility purchases through wallet-only checkout",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3655",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a26fe302f75651c15",
+      "head": "0aeb6f5eaf6c45adc3c7268040ee22d7d7940434",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "PR #3203 is CLOSED but current worktree HEAD differs from the PR head SHA; preserve for review.",
+      "shard": 2,
+      "manifest": {
+        "id": 23,
+        "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a26fe302f75651c15",
+        "head": "0aeb6f5eaf6c45adc3c7268040ee22d7d7940434",
+        "branch": "refs/heads/d/agentic-tenant-chat-handlers",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "d/agentic-tenant-chat-handlers",
+          "headRefOid": "06f81cb6de53c9373524b26ed84600e22e021aa9",
+          "mergedAt": null,
+          "number": 3203,
+          "state": "CLOSED",
+          "title": "refactor(agentic): de-hardcode the copilot tenant in the 3 scoped-client surfaces",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3203",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a27f15a03ad086e97",
+      "head": "ef133c4cb6789a66dfa4cef338931fd76afd577d",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Plan-tier-authoritative entitlement, tests, and append-only snapshot migration; baseline patch filter finds no equivalent commit.",
+      "shard": 3,
+      "manifest": {
+        "id": 24,
+        "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a27f15a03ad086e97",
+        "head": "ef133c4cb6789a66dfa4cef338931fd76afd577d",
+        "branch": "refs/heads/worktree-agent-a27f15a03ad086e97",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 25,
+      "path": "/Users/mac/Baci-app/.worktrees/3309-transactional-handoff",
+      "head": "e9685335bc6eb66b3e50e5048b66b0e5f5520dfa",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Remediation handoff/global lock ownership/recovery changes; overlaps IDs 106, 184, 187, and 190 but patch equivalence not established.",
+      "shard": 1,
+      "manifest": {
+        "id": 25,
+        "path": "/Users/mac/Baci-app/.worktrees/3309-transactional-handoff",
+        "head": "e9685335bc6eb66b3e50e5048b66b0e5f5520dfa",
+        "branch": "refs/heads/codex/3309-transactional-handoff",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 26,
+      "path": "/Users/mac/Baci-app/.worktrees/3309-transition-cluster-bb725742",
+      "head": "59296a71cf83f5ac614b4a39ef3c76d146e96cbd",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 26,
+        "path": "/Users/mac/Baci-app/.worktrees/3309-transition-cluster-bb725742",
+        "head": "59296a71cf83f5ac614b4a39ef3c76d146e96cbd",
+        "branch": "refs/heads/codex/3309-transition-cluster-bb725742",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 27,
+      "path": "/Users/mac/Baci-app/.worktrees/3309-transition-p1-integration",
+      "head": "975cca2707d12cb09fab741123eb0a219c198ef8",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "23 unique remediation transition/canary commits; broad VPS-worker change set with no matching remote branch/PR.",
+      "shard": 3,
+      "manifest": {
+        "id": 27,
+        "path": "/Users/mac/Baci-app/.worktrees/3309-transition-p1-integration",
+        "head": "975cca2707d12cb09fab741123eb0a219c198ef8",
+        "branch": "refs/heads/codex/3309-transition-p1-integration",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 28,
+      "path": "/Users/mac/Baci-app/.worktrees/android-disk-preflight",
+      "head": "02aa73cd50495dbd1471079ee3cea7c5826b3544",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Android release low-disk preflight script/workflow/tests; candidate only, not behavior-verified against baseline.",
+      "shard": 1,
+      "manifest": {
+        "id": 28,
+        "path": "/Users/mac/Baci-app/.worktrees/android-disk-preflight",
+        "head": "02aa73cd50495dbd1471079ee3cea7c5826b3544",
+        "branch": "refs/heads/codex/android-disk-preflight",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 29,
+      "path": "/Users/mac/Baci-app/.worktrees/android-soloader-fix",
+      "head": "491ad2cea33a46c7cdc82516c9a146a4f6bcd748",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior.",
+      "shard": 2,
+      "manifest": {
+        "id": 29,
+        "path": "/Users/mac/Baci-app/.worktrees/android-soloader-fix",
+        "head": "491ad2cea33a46c7cdc82516c9a146a4f6bcd748",
+        "branch": "refs/heads/codex/android-soloader-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 30,
+      "path": "/Users/mac/Baci-app/.worktrees/android-svg-anr-fix",
+      "head": "ea750bc12d0bdd61b767d09f4a8d9e4832663cac",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Localized unique test-only tightening of static GadgetPattern backdrop regression guard.",
+      "shard": 3,
+      "manifest": {
+        "id": 30,
+        "path": "/Users/mac/Baci-app/.worktrees/android-svg-anr-fix",
+        "head": "ea750bc12d0bdd61b767d09f4a8d9e4832663cac",
+        "branch": "refs/heads/codex/android-svg-anr-regression",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 31,
+      "path": "/Users/mac/Baci-app/.worktrees/anr-telemetry.Tmecix",
+      "head": "1e3e267dc5af4e765fc70a7ada5ced3c854861f3",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Native ANR attribution module/tests; candidate only, not behavior-verified against baseline.",
+      "shard": 1,
+      "manifest": {
+        "id": 31,
+        "path": "/Users/mac/Baci-app/.worktrees/anr-telemetry.Tmecix",
+        "head": "1e3e267dc5af4e765fc70a7ada5ced3c854861f3",
+        "branch": "refs/heads/codex/android-anr-telemetry",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 32,
+      "path": "/Users/mac/Baci-app/.worktrees/aws-offload",
+      "head": "5dd21bc1ae1cc0eec4f269070b16a2bde7469a6e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 32,
+        "path": "/Users/mac/Baci-app/.worktrees/aws-offload",
+        "head": "5dd21bc1ae1cc0eec4f269070b16a2bde7469a6e",
+        "branch": "refs/heads/codex/aws-offload",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 33,
+      "path": "/Users/mac/Baci-app/.worktrees/baci-connector-r0",
+      "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as ID 84, distinct local dirt.",
+      "shard": 3,
+      "manifest": {
+        "id": 33,
+        "path": "/Users/mac/Baci-app/.worktrees/baci-connector-r0",
+        "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+        "branch": "refs/heads/feat/baci-connector-r0",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 34,
+      "path": "/Users/mac/Baci-app/.worktrees/base-homepage-inline-css",
+      "head": "8b368c38e05ac998e1c69c10047dcc8ecd587659",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Dedicated homepage route plus dirty/untracked CSS split loaders, product slots, manifest and tests.",
+      "shard": 1,
+      "manifest": {
+        "id": 34,
+        "path": "/Users/mac/Baci-app/.worktrees/base-homepage-inline-css",
+        "head": "8b368c38e05ac998e1c69c10047dcc8ecd587659",
+        "branch": "refs/heads/fix/ogabassey-home-dedicated-route",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 35,
+      "path": "/Users/mac/Baci-app/.worktrees/cd-3203",
+      "head": "822a6925ab65bb8cef778e9f50b3699cc956745d",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 35,
+        "path": "/Users/mac/Baci-app/.worktrees/cd-3203",
+        "head": "822a6925ab65bb8cef778e9f50b3699cc956745d",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 36,
+      "path": "/Users/mac/Baci-app/.worktrees/chowdeck-marketplace-design",
+      "head": "2027fd8e067aa696b471dbf6b51e0f3c3b0b3f47",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Chowdeck evidence/schema package: three unique commits and 38 dirty contract/evidence/test files.",
+      "shard": 3,
+      "manifest": {
+        "id": 36,
+        "path": "/Users/mac/Baci-app/.worktrees/chowdeck-marketplace-design",
+        "head": "2027fd8e067aa696b471dbf6b51e0f3c3b0b3f47",
+        "branch": "refs/heads/codex/chowdeck-marketplace-design",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 37,
+      "path": "/Users/mac/Baci-app/.worktrees/cloudflare-deploy-skew",
+      "head": "61b34ab8ec3bacda5700ec7836b727edde31bc9a",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Release marker/config coherence and deploy gate changes; candidate only, not behavior-verified against baseline.",
+      "shard": 1,
+      "manifest": {
+        "id": 37,
+        "path": "/Users/mac/Baci-app/.worktrees/cloudflare-deploy-skew",
+        "head": "61b34ab8ec3bacda5700ec7836b727edde31bc9a",
+        "branch": "refs/heads/codex/fix-storefront-release-coherence",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-storefront-release-coherence",
+          "headRefOid": "61b34ab8ec3bacda5700ec7836b727edde31bc9a",
+          "mergedAt": null,
+          "number": 3270,
+          "state": "CLOSED",
+          "title": "fix(deploy): bind release gate to built marker",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3270",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "path": "/Users/mac/Baci-app/.worktrees/codeql-piggyvest-fixes",
+      "head": "d182440020a1c347c69645ff01ed08563ad518de",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 38,
+        "path": "/Users/mac/Baci-app/.worktrees/codeql-piggyvest-fixes",
+        "head": "d182440020a1c347c69645ff01ed08563ad518de",
+        "branch": "refs/heads/fix/codeql-piggyvest-prod-findings",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/codeql-piggyvest-prod-findings",
+          "headRefOid": "d182440020a1c347c69645ff01ed08563ad518de",
+          "mergedAt": null,
+          "number": 3645,
+          "state": "OPEN",
+          "title": "fix(security): resolve 3 production code-scan findings (1507, 1510, 1511)",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3645",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "path": "/Users/mac/Baci-app/.worktrees/credit-direct-final",
+      "head": "0a9fa0301eec84fd1c5f1c6351d4bf64d2489a65",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Four unique commits plus seven dirty checkout/payment files.",
+      "shard": 3,
+      "manifest": {
+        "id": 39,
+        "path": "/Users/mac/Baci-app/.worktrees/credit-direct-final",
+        "head": "0a9fa0301eec84fd1c5f1c6351d4bf64d2489a65",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 40,
+      "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-implementation",
+      "head": "4e96512cd360def702fa843a1df71e1f7fac04ed",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Eligibility, policy, cutover, fulfillment changes and local residue.",
+      "shard": 1,
+      "manifest": {
+        "id": 40,
+        "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-implementation",
+        "head": "4e96512cd360def702fa843a1df71e1f7fac04ed",
+        "branch": "refs/heads/codex/customizable-pay-on-delivery",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 41,
+      "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-plan",
+      "head": "49e8c8c9490d6d881cd7b9c6bdbc3cb1ce1fd902",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 41,
+        "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-plan",
+        "head": "49e8c8c9490d6d881cd7b9c6bdbc3cb1ce1fd902",
+        "branch": "refs/heads/codex/customizable-pay-on-delivery-plan",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 42,
+      "path": "/Users/mac/Baci-app/.worktrees/cwv-critical-viewport-home",
+      "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts.",
+      "shard": 3,
+      "manifest": {
+        "id": 42,
+        "path": "/Users/mac/Baci-app/.worktrees/cwv-critical-viewport-home",
+        "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+        "branch": "refs/heads/codex/h0-cwv-measurement-runner",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 43,
+      "path": "/Users/mac/Baci-app/.worktrees/cwv-ogabassey-utility-20260908",
+      "head": "a3825baefddc2383ccb69405979bb5d2cd2eeb67",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Branch is advanced beyond merged PR; dirty source and 364 untracked files require preservation.",
+      "shard": 1,
+      "manifest": {
+        "id": 43,
+        "path": "/Users/mac/Baci-app/.worktrees/cwv-ogabassey-utility-20260908",
+        "head": "a3825baefddc2383ccb69405979bb5d2cd2eeb67",
+        "branch": "refs/heads/cwv/ogabassey-utility-routes-20260908",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "cwv/ogabassey-utility-routes-20260908",
+          "headRefOid": "758780442be8a4298131e623e917def65c13f93d",
+          "mergedAt": "2026-09-11T19:22:33Z",
+          "number": 3451,
+          "state": "MERGED",
+          "title": "perf(storefront): paint Ogabassey utility LCP in the visible PPR shell",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3451",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "path": "/Users/mac/Baci-app/.worktrees/dep-bump-9",
+      "head": "8050f71462914dd712d7f6ef8872898718d511aa",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 44,
+        "path": "/Users/mac/Baci-app/.worktrees/dep-bump-9",
+        "head": "8050f71462914dd712d7f6ef8872898718d511aa",
+        "branch": "refs/heads/fix/security-9-new-alerts",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/security-9-new-alerts",
+          "headRefOid": "8050f71462914dd712d7f6ef8872898718d511aa",
+          "mergedAt": null,
+          "number": 3634,
+          "state": "OPEN",
+          "title": "fix(security): resolve 9 Dependabot alerts (458-466)",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3634",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "path": "/Users/mac/Baci-app/.worktrees/desktop-device-intake-implementation",
+      "head": "6e02e78c6f870cbc2722a643c5dbb2f70d1ae36a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "133 unique desktop-intake commits and 51 dirty desktop files. apps/web/.env.local filename noted; contents not read.",
+      "shard": 3,
+      "manifest": {
+        "id": 45,
+        "path": "/Users/mac/Baci-app/.worktrees/desktop-device-intake-implementation",
+        "head": "6e02e78c6f870cbc2722a643c5dbb2f70d1ae36a",
+        "branch": "refs/heads/codex/desktop-device-intake-implementation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 46,
+      "path": "/Users/mac/Baci-app/.worktrees/discount-transaction-history-pr",
+      "head": "952206d228eb722b330e486fd222b0f12853cfd0",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Exact merged PR head but one local modification remains; squash/history counts do not identify whether dirty behavior is redundant.",
+      "shard": 1,
+      "manifest": {
+        "id": 46,
+        "path": "/Users/mac/Baci-app/.worktrees/discount-transaction-history-pr",
+        "head": "952206d228eb722b330e486fd222b0f12853cfd0",
+        "branch": "refs/heads/codex/discount-transaction-history",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/discount-transaction-history",
+          "headRefOid": "952206d228eb722b330e486fd222b0f12853cfd0",
+          "mergedAt": "2026-08-31T11:46:34Z",
+          "number": 3394,
+          "state": "MERGED",
+          "title": "fix: apply discounts to transaction history profit",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3394",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "path": "/Users/mac/Baci-app/.worktrees/expense-edit-exposure-20260824",
+      "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 47,
+        "path": "/Users/mac/Baci-app/.worktrees/expense-edit-exposure-20260824",
+        "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
+        "branch": "refs/heads/codex/expense-edit-exposure-20260824",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/expense-edit-exposure-20260824",
+          "headRefOid": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
+          "mergedAt": "2026-08-24T22:44:13Z",
+          "number": 3389,
+          "state": "MERGED",
+          "title": "fix(mobile-admin): expose expense row editing",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3389",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "path": "/Users/mac/Baci-app/.worktrees/expo-dev-client-flow",
+      "head": "9c494b63e72da0d1632f466f182ccbe73a7e057b",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Six unique mobile-admin app-config commits plus two dirty config/test files; branch absent remotely.",
+      "shard": 3,
+      "manifest": {
+        "id": 48,
+        "path": "/Users/mac/Baci-app/.worktrees/expo-dev-client-flow",
+        "head": "9c494b63e72da0d1632f466f182ccbe73a7e057b",
+        "branch": "refs/heads/codex/expo-dev-client-flow",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 49,
+      "path": "/Users/mac/Baci-app/.worktrees/expo-image-pilot",
+      "head": "1c87b0506cc91d16a590c819065657a8253f7f9e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Expo Image product-card pilot/config changes; no exact PR match established in this audit.",
+      "shard": 1,
+      "manifest": {
+        "id": 49,
+        "path": "/Users/mac/Baci-app/.worktrees/expo-image-pilot",
+        "head": "1c87b0506cc91d16a590c819065657a8253f7f9e",
+        "branch": "refs/heads/codex/expo-image-pilot",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 50,
+      "path": "/Users/mac/Baci-app/.worktrees/expo-ota-foundation",
+      "head": "7f28c647729bf91be12a13321609252fdabc09a6",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 50,
+        "path": "/Users/mac/Baci-app/.worktrees/expo-ota-foundation",
+        "head": "7f28c647729bf91be12a13321609252fdabc09a6",
+        "branch": "refs/heads/codex/expo-ota-foundation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 51,
+      "path": "/Users/mac/Baci-app/.worktrees/expo-react-compiler",
+      "head": "a82b2cb2a1df478b5842f7a7c1d6ddacff82f980",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Expo React Compiler enablement for mobile-admin with config tests; branch absent remotely.",
+      "shard": 3,
+      "manifest": {
+        "id": 51,
+        "path": "/Users/mac/Baci-app/.worktrees/expo-react-compiler",
+        "head": "a82b2cb2a1df478b5842f7a7c1d6ddacff82f980",
+        "branch": "refs/heads/codex/expo-react-compiler",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 52,
+      "path": "/Users/mac/Baci-app/.worktrees/expo57-modernization",
+      "head": "f593be74e5fcdf53585de12264ce9f24c72d473f",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Head advanced beyond merged PR; Expo/EAS files remain dirty/untracked.",
+      "shard": 1,
+      "manifest": {
+        "id": 52,
+        "path": "/Users/mac/Baci-app/.worktrees/expo57-modernization",
+        "head": "f593be74e5fcdf53585de12264ce9f24c72d473f",
+        "branch": "refs/heads/codex/expo57-modernization-pr",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/expo57-modernization-pr",
+          "headRefOid": "1475fb3af0f532c32804e759ea6cdca173de729e",
+          "mergedAt": "2026-08-23T15:21:37Z",
+          "number": 3371,
+          "state": "MERGED",
+          "title": "chore(mobile-admin): modernize Expo 57 runtime",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3371",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "path": "/Users/mac/Baci-app/.worktrees/expo57-patches",
+      "head": "63351e259c0147b54d60314dfa4ab5b8f57428e6",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 53,
+        "path": "/Users/mac/Baci-app/.worktrees/expo57-patches",
+        "head": "63351e259c0147b54d60314dfa4ab5b8f57428e6",
+        "branch": "refs/heads/codex/expo57-patches",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 54,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-archive-fallback-keys",
+      "head": "f6791924f086823b4ec431892c2c0ec68cc76e2e",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "44 unique archive-fallback invalidation commits / 115 paths; broad series not semantically reviewed.",
+      "shard": 3,
+      "manifest": {
+        "id": 54,
+        "path": "/Users/mac/Baci-app/.worktrees/fix-archive-fallback-keys",
+        "head": "f6791924f086823b4ec431892c2c0ec68cc76e2e",
+        "branch": "refs/heads/codex/fix-archive-fallback-keys",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 55,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-blog-prerender-cache-20260830",
+      "head": "337e18184b2e5cd9b9a1bbd2945846fbe34f95f7",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Closed PR with cached-category navigation interruption fix; candidate only, not behavior-verified against baseline.",
+      "shard": 1,
+      "manifest": {
+        "id": 55,
+        "path": "/Users/mac/Baci-app/.worktrees/fix-blog-prerender-cache-20260830",
+        "head": "337e18184b2e5cd9b9a1bbd2945846fbe34f95f7",
+        "branch": "refs/heads/codex/fix-blog-prerender-cache-20260830",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-blog-prerender-cache-20260830",
+          "headRefOid": "337e18184b2e5cd9b9a1bbd2945846fbe34f95f7",
+          "mergedAt": null,
+          "number": 3433,
+          "state": "CLOSED",
+          "title": "fix(web): preserve prerender navigation interruptions",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3433",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-payout-context-race",
+      "head": "2805e0eb8cd6fde0863cc15fdee6269edbe9fa2e",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 56,
+        "path": "/Users/mac/Baci-app/.worktrees/fix-payout-context-race",
+        "head": "2805e0eb8cd6fde0863cc15fdee6269edbe9fa2e",
+        "branch": "refs/heads/codex/fix-payout-context-race",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 57,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-vercel-cloudflare-env-sync",
+      "head": "2a2ffc9bd006f5e4aaf7950b5355bbc84fba7794",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3297 is closed unmerged at this exact head; inspect closure rationale/current main before reuse.",
+      "shard": 3,
+      "manifest": {
+        "id": 57,
+        "path": "/Users/mac/Baci-app/.worktrees/fix-vercel-cloudflare-env-sync",
+        "head": "2a2ffc9bd006f5e4aaf7950b5355bbc84fba7794",
+        "branch": "refs/heads/codex/fix-vercel-cloudflare-env-sync",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-vercel-cloudflare-env-sync",
+          "headRefOid": "2a2ffc9bd006f5e4aaf7950b5355bbc84fba7794",
+          "mergedAt": null,
+          "number": 3297,
+          "state": "CLOSED",
+          "title": "fix: update existing Cloudflare Vercel credentials",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3297",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys",
+      "head": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 58,
+        "path": "/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys",
+        "head": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",
+        "branch": "refs/heads/fix/web-ios-production-deploys",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/web-ios-production-deploys",
+          "headRefOid": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",
+          "mergedAt": "2026-09-09T12:44:14Z",
+          "number": 3457,
+          "state": "MERGED",
+          "title": "fix(deploy): unblock web HMAC gate and iOS Xcode 26.2 archives",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3457",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "path": "/Users/mac/Baci-app/.worktrees/flight-delivery-review-20260827",
+      "head": "fc7a2ef5be58e37342a16b97946e18dc15425fc8",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 59,
+        "path": "/Users/mac/Baci-app/.worktrees/flight-delivery-review-20260827",
+        "head": "fc7a2ef5be58e37342a16b97946e18dc15425fc8",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 60,
+      "path": "/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications",
+      "head": "9e722420726aeac5d8cb20894e6f816dd39f93da",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "PR #3248 merged at this exact head; clean status and only generated/build data ignored.",
+      "shard": 3,
+      "manifest": {
+        "id": 60,
+        "path": "/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications",
+        "head": "9e722420726aeac5d8cb20894e6f816dd39f93da",
+        "branch": "refs/heads/codex/gigl-tracking-notifications-rebased",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/gigl-tracking-notifications",
+          "headRefOid": "9e722420726aeac5d8cb20894e6f816dd39f93da",
+          "mergedAt": "2026-08-03T09:48:58Z",
+          "number": 3248,
+          "state": "MERGED",
+          "title": "feat(shipping): add GIGL tracking notifications",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3248",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "path": "/Users/mac/Baci-app/.worktrees/gigl-wallet-shipping-margin",
+      "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "One local modification on main.",
+      "shard": 1,
+      "manifest": {
+        "id": 61,
+        "path": "/Users/mac/Baci-app/.worktrees/gigl-wallet-shipping-margin",
+        "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
+        "branch": "refs/heads/main",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 62,
+      "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task1-prep",
+      "head": "60fc68f0e6ff9d083bca785bf042fdf5e145f1de",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 62,
+        "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task1-prep",
+        "head": "60fc68f0e6ff9d083bca785bf042fdf5e145f1de",
+        "branch": "refs/heads/codex/h0-cwv-task1-prep",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 63,
+      "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task3-prep",
+      "head": "158caf7e8a41503d1910ef0b860c4c5cabaa12af",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Six unique CWV-runner commits plus 227 dirty infra runner files.",
+      "shard": 3,
+      "manifest": {
+        "id": 63,
+        "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task3-prep",
+        "head": "158caf7e8a41503d1910ef0b860c4c5cabaa12af",
+        "branch": "refs/heads/codex/h0-cwv-task3-prep",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 64,
+      "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task6-prep",
+      "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "CWV runner planning changes with dirty docs and untracked files.",
+      "shard": 1,
+      "manifest": {
+        "id": 64,
+        "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task6-prep",
+        "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+        "branch": "refs/heads/codex/h0-cwv-task6-prep",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 65,
+      "path": "/Users/mac/Baci-app/.worktrees/h0-gate0-prep",
+      "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 65,
+        "path": "/Users/mac/Baci-app/.worktrees/h0-gate0-prep",
+        "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
+        "branch": "refs/heads/codex/h0-gate0-prep",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 66,
+      "path": "/Users/mac/Baci-app/.worktrees/h0-task9-receipt-current-20260815",
+      "head": "ae4dbca94551ecd66fe1c40d41ca4a8ebb76f67b",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Open PR #3353 at exact local HEAD for CWV/analytics inventory; keep available for review.",
+      "shard": 3,
+      "manifest": {
+        "id": 66,
+        "path": "/Users/mac/Baci-app/.worktrees/h0-task9-receipt-current-20260815",
+        "head": "ae4dbca94551ecd66fe1c40d41ca4a8ebb76f67b",
+        "branch": "refs/heads/codex/h0-task9-receipt-20260815",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/h0-task9-receipt-20260815",
+          "headRefOid": "ae4dbca94551ecd66fe1c40d41ca4a8ebb76f67b",
+          "mergedAt": null,
+          "number": 3353,
+          "state": "OPEN",
+          "title": "chore(cwv): record Task 8 privileged inventory",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3353",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "path": "/Users/mac/Baci-app/.worktrees/h1-home-critical-viewport",
+      "head": "127eedc9769a4285773e9681a980f18122049a14",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Homepage hero preload contract with dirty and untracked state.",
+      "shard": 1,
+      "manifest": {
+        "id": 67,
+        "path": "/Users/mac/Baci-app/.worktrees/h1-home-critical-viewport",
+        "head": "127eedc9769a4285773e9681a980f18122049a14",
+        "branch": "refs/heads/codex/h1-home-critical-viewport",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 68,
+      "path": "/Users/mac/Baci-app/.worktrees/homepage-early-css-pr-20260913",
+      "head": "afd2f941ee4e01535c6333db111f5b1ac87eee65",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 68,
+        "path": "/Users/mac/Baci-app/.worktrees/homepage-early-css-pr-20260913",
+        "head": "afd2f941ee4e01535c6333db111f5b1ac87eee65",
+        "branch": "refs/heads/codex/home-first-paint-css",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 69,
+      "path": "/Users/mac/Baci-app/.worktrees/macos-merchant-app-plan",
+      "head": "0c56f0cc8d2d3fe1bc8c3481790a97fe849eb343",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Five unique planning commits, two dirty plan/design files, and ignored planning data.",
+      "shard": 3,
+      "manifest": {
+        "id": 69,
+        "path": "/Users/mac/Baci-app/.worktrees/macos-merchant-app-plan",
+        "head": "0c56f0cc8d2d3fe1bc8c3481790a97fe849eb343",
+        "branch": "refs/heads/codex/macos-merchant-app-plan",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 70,
+      "path": "/Users/mac/Baci-app/.worktrees/merchant-media-pipeline",
+      "head": "3c4e02486f7bbea7debb52c3e854cccb8f20533c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Large media/readiness history and two dirty docs; semantic review complex.",
+      "shard": 1,
+      "manifest": {
+        "id": 70,
+        "path": "/Users/mac/Baci-app/.worktrees/merchant-media-pipeline",
+        "head": "3c4e02486f7bbea7debb52c3e854cccb8f20533c",
+        "branch": "refs/heads/codex/merchant-media-pipeline",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 71,
+      "path": "/Users/mac/Baci-app/.worktrees/merchant-scoped-invalidation",
+      "head": "9cc236d6c65be05ee9eaa375b30e994a516defc0",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 71,
+        "path": "/Users/mac/Baci-app/.worktrees/merchant-scoped-invalidation",
+        "head": "9cc236d6c65be05ee9eaa375b30e994a516defc0",
+        "branch": "refs/heads/codex/merchant-scoped-invalidation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 72,
+      "path": "/Users/mac/Baci-app/.worktrees/merchant-settings-security",
+      "head": "d611b6df45ed94e1abb8e2b76cadabdad0fed5cd",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Merchant identity security: authorized merchant access, restricted update schema, guarded identity/social-media migrations and SQL tests. Baseline route differs.",
+      "shard": 3,
+      "manifest": {
+        "id": 72,
+        "path": "/Users/mac/Baci-app/.worktrees/merchant-settings-security",
+        "head": "d611b6df45ed94e1abb8e2b76cadabdad0fed5cd",
+        "branch": "refs/heads/codex/merchant-settings-security",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 73,
+      "path": "/Users/mac/Baci-app/.worktrees/metro-clean-20260817",
+      "head": "a0221b2734af571fd112e3f5c63311d3b1a73af4",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Builder-preview security/Metro changes; preserve candidate pending current-main behavior comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 73,
+        "path": "/Users/mac/Baci-app/.worktrees/metro-clean-20260817",
+        "head": "a0221b2734af571fd112e3f5c63311d3b1a73af4",
+        "branch": "refs/heads/wip/metro-clean-20260817-preserved",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 74,
+      "path": "/Users/mac/Baci-app/.worktrees/metro-current-main-20260808",
+      "head": "4a8e55ef7b3e44e5431c34804de3fa61c86723a1",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 74,
+        "path": "/Users/mac/Baci-app/.worktrees/metro-current-main-20260808",
+        "head": "4a8e55ef7b3e44e5431c34804de3fa61c86723a1",
+        "branch": "refs/heads/codex/quiz-testing-current-main-20260829",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 75,
+      "path": "/Users/mac/Baci-app/.worktrees/middleware-modularization-20260912",
+      "head": "c0958bb54ced42fbd47bcafb865e2c94b95a1cd6",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3513 merged at exact HEAD, but ignored .superpowers/sdd planning/report data remains; inspect before retirement.",
+      "shard": 3,
+      "manifest": {
+        "id": 75,
+        "path": "/Users/mac/Baci-app/.worktrees/middleware-modularization-20260912",
+        "head": "c0958bb54ced42fbd47bcafb865e2c94b95a1cd6",
+        "branch": "refs/heads/codex/middleware-modularization-20260912",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/middleware-modularization-20260912",
+          "headRefOid": "c0958bb54ced42fbd47bcafb865e2c94b95a1cd6",
+          "mergedAt": "2026-09-27T08:54:09Z",
+          "number": 3513,
+          "state": "MERGED",
+          "title": "refactor(web): modularize middleware and coalesce storefront reads",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3513",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 76,
+      "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-e2e-current-main.bEKqlN",
+      "head": "b76dc7cc831eabd1cc1f8b0533e443c1c8a9be15",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Dirty tracked state and one untracked file.",
+      "shard": 1,
+      "manifest": {
+        "id": 76,
+        "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-e2e-current-main.bEKqlN",
+        "head": "b76dc7cc831eabd1cc1f8b0533e443c1c8a9be15",
+        "branch": "refs/heads/codex/mobile-admin-e2e-codegen",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 77,
+      "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-product-delete-stale",
+      "head": "a4dd43eaa05c3e22658d7facfc7375525e2f6efa",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "1,095 tracked deletions; preserve pending owner review",
+      "shard": 2,
+      "manifest": {
+        "id": 77,
+        "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-product-delete-stale",
+        "head": "a4dd43eaa05c3e22658d7facfc7375525e2f6efa",
+        "branch": "refs/heads/codex/mobile-admin-hide-archived-search",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/mobile-admin-hide-archived-search",
+          "headRefOid": "a4dd43eaa05c3e22658d7facfc7375525e2f6efa",
+          "mergedAt": "2026-08-27T17:42:18Z",
+          "number": 3397,
+          "state": "MERGED",
+          "title": "fix(mobile-admin): hide archived products from search",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3397",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 78,
+      "path": "/Users/mac/Baci-app/.worktrees/mobile-builder-v1-recovered",
+      "head": "94a805642f68fcfd71e6351bd09bc2bb63e5168a",
+      "classification": "MISSING",
+      "evidence": "Manifest path absent; no Git metadata or file status.",
+      "shard": 3,
+      "manifest": {
+        "id": 78,
+        "path": "/Users/mac/Baci-app/.worktrees/mobile-builder-v1-recovered",
+        "head": "94a805642f68fcfd71e6351bd09bc2bb63e5168a",
+        "locked": true,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 79,
+      "path": "/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908",
+      "head": "3e065198486962d14cdf1afeecdc2e1e6247cfb7",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 79,
+        "path": "/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908",
+        "head": "3e065198486962d14cdf1afeecdc2e1e6247cfb7",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/mobile-native-crash-fixes-20260908",
+          "headRefOid": "3e065198486962d14cdf1afeecdc2e1e6247cfb7",
+          "mergedAt": "2026-09-11T06:16:41Z",
+          "number": 3455,
+          "state": "MERGED",
+          "title": "fix(mobile): guard native checkout crashes and reduce render work",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3455",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 80,
+      "path": "/Users/mac/Baci-app/.worktrees/multimodal-messaging",
+      "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 80,
+        "path": "/Users/mac/Baci-app/.worktrees/multimodal-messaging",
+        "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+        "branch": "refs/heads/codex/multimodal-messaging",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 81,
+      "path": "/Users/mac/Baci-app/.worktrees/negotiation-notification-fix",
+      "head": "643296b143501102b64e589ce948593b7352c10d",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "PR #3463 merged at exact HEAD; clean; only generated Expo/build data ignored.",
+      "shard": 3,
+      "manifest": {
+        "id": 81,
+        "path": "/Users/mac/Baci-app/.worktrees/negotiation-notification-fix",
+        "head": "643296b143501102b64e589ce948593b7352c10d",
+        "branch": "refs/heads/codex/negotiation-focus-subscription",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/negotiation-focus-subscription",
+          "headRefOid": "643296b143501102b64e589ce948593b7352c10d",
+          "mergedAt": "2026-09-12T05:48:08Z",
+          "number": 3463,
+          "state": "MERGED",
+          "title": "fix(mobile-admin): release negotiation subscriptions on blur",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3463",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 82,
+      "path": "/Users/mac/Baci-app/.worktrees/office-pickup-state-fix",
+      "head": "d0d1cbd2fd4b5867a980644acf5e29fd7c451c0c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Two local modifications.",
+      "shard": 1,
+      "manifest": {
+        "id": 82,
+        "path": "/Users/mac/Baci-app/.worktrees/office-pickup-state-fix",
+        "head": "d0d1cbd2fd4b5867a980644acf5e29fd7c451c0c",
+        "branch": "refs/heads/codex/office-pickup-state-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 83,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-camera-seo-review",
+      "head": "2a95ebf9adb5d6479428b8373dbc1bc086dea469",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 83,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-camera-seo-review",
+        "head": "2a95ebf9adb5d6479428b8373dbc1bc086dea469",
+        "branch": "refs/heads/codex/ogabassey-camera-seo-review",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 84,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-device-trust",
+      "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Same committed HEAD as ID 33, but 17 separate dirty storefront/support/IMEI files.",
+      "shard": 3,
+      "manifest": {
+        "id": 84,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-device-trust",
+        "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
+        "branch": "refs/heads/codex/ogabassey-device-trust",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 85,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-live-rails-20260831",
+      "head": "2c83782d15527e0df7b37b220a738e72079ce356",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Advanced beyond merged PR and dirty; live related-product pricing work remains.",
+      "shard": 1,
+      "manifest": {
+        "id": 85,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-live-rails-20260831",
+        "head": "2c83782d15527e0df7b37b220a738e72079ce356",
+        "branch": "refs/heads/codex/ogabassey-live-rails-20260831",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/ogabassey-live-rails-20260831",
+          "headRefOid": "2ed2e59391621147cb17869245c5a3b442d6bc40",
+          "mergedAt": "2026-09-29T20:31:09Z",
+          "number": 3419,
+          "state": "MERGED",
+          "title": "fix(blog): render live related-product pricing",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3419",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 86,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-snippet-configurations-20260905",
+      "head": "9c5b39af58698562693147280016479e7032c07f",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "36 untracked catalog enrichment/rollback artifacts",
+      "shard": 2,
+      "manifest": {
+        "id": 86,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-snippet-configurations-20260905",
+        "head": "9c5b39af58698562693147280016479e7032c07f",
+        "branch": "refs/heads/codex/ogabassey-snippet-configurations-20260905",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 87,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-timeout-storm-fix",
+      "head": "420c3889428c76f4aa030d53314aae28163c1123",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Unique semantic-RPC timeout change disables retries after timeout; focused tests added. Broader function diff merits deeper review.",
+      "shard": 3,
+      "manifest": {
+        "id": 87,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-timeout-storm-fix",
+        "head": "420c3889428c76f4aa030d53314aae28163c1123",
+        "branch": "refs/heads/codex/ogabassey-timeout-storm-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/ogabassey-timeout-storm-fix",
+          "headRefOid": "420c3889428c76f4aa030d53314aae28163c1123",
+          "mergedAt": null,
+          "number": 3427,
+          "state": "CLOSED",
+          "title": "perf(web): split and bound Ogabassey PDP semantic reads",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3427",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 88,
+      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-tracking-links",
+      "head": "18d0b4c5aaf4da523e20d92f2aadf9cce19cd945",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Eleven local modifications; no unique commit.",
+      "shard": 1,
+      "manifest": {
+        "id": 88,
+        "path": "/Users/mac/Baci-app/.worktrees/ogabassey-tracking-links",
+        "head": "18d0b4c5aaf4da523e20d92f2aadf9cce19cd945",
+        "branch": "refs/heads/codex/ogabassey-tracking-links",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 89,
+      "path": "/Users/mac/Baci-app/.worktrees/openrouter-ai-offload",
+      "head": "c6e27ce88ee669f3623b37e21fa0f30d6d095b6e",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 89,
+        "path": "/Users/mac/Baci-app/.worktrees/openrouter-ai-offload",
+        "head": "c6e27ce88ee669f3623b37e21fa0f30d6d095b6e",
+        "branch": "refs/heads/codex/openrouter-ai-offload",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 90,
+      "path": "/Users/mac/Baci-app/.worktrees/ownerless-followup-terra-sparse",
+      "head": "e5dac2f768f044277e8f89c5fd91bdbd7bc6f744",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "41 unique remediation fallback/workflow commits / 104 paths; compare with related remediation worktrees.",
+      "shard": 3,
+      "manifest": {
+        "id": 90,
+        "path": "/Users/mac/Baci-app/.worktrees/ownerless-followup-terra-sparse",
+        "head": "e5dac2f768f044277e8f89c5fd91bdbd7bc6f744",
+        "branch": "refs/heads/codex/3305-terra-followup-six-sparse",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 91,
+      "path": "/Users/mac/Baci-app/.worktrees/paypal-integration",
+      "head": "20412d3dd861671f740cb9dfb82ca33b1437115c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Large local state and PayPal route/CSP/SDK changes; inspect contents before classification.",
+      "shard": 1,
+      "manifest": {
+        "id": 91,
+        "path": "/Users/mac/Baci-app/.worktrees/paypal-integration",
+        "head": "20412d3dd861671f740cb9dfb82ca33b1437115c",
+        "branch": "refs/heads/feature/paypal-integration",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 92,
+      "path": "/Users/mac/Baci-app/.worktrees/paystack-manual-reconcile",
+      "head": "1f023e7c237183991364156c0c1dd8a55ad0b53a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 92,
+        "path": "/Users/mac/Baci-app/.worktrees/paystack-manual-reconcile",
+        "head": "1f023e7c237183991364156c0c1dd8a55ad0b53a",
+        "branch": "refs/heads/codex/paystack-migration-deploy-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/paystack-migration-deploy-fix",
+          "headRefOid": "1f023e7c237183991364156c0c1dd8a55ad0b53a",
+          "mergedAt": null,
+          "number": 3335,
+          "state": "CLOSED",
+          "title": "fix(deploy): repair paystack migration version collision",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3335",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 93,
+      "path": "/Users/mac/Baci-app/.worktrees/perf-home-lcp-20260912",
+      "head": "f53590f7593e0fe7b40a511cbb465d9d21ced936",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "No unique commits, but 14 dirty SEO/storefront files. Root and apps/web .env.local filenames only; contents not read.",
+      "shard": 3,
+      "manifest": {
+        "id": 93,
+        "path": "/Users/mac/Baci-app/.worktrees/perf-home-lcp-20260912",
+        "head": "f53590f7593e0fe7b40a511cbb465d9d21ced936",
+        "branch": "refs/heads/perf/home-lcp-isolate-20260912",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 94,
+      "path": "/Users/mac/Baci-app/.worktrees/pr-2047-mobile-storefront-crash",
+      "head": "770996bb81fe17d213271ed744fa8c7e57518a46",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Extensive tracked local state despite one changed triple-dot path.",
+      "shard": 1,
+      "manifest": {
+        "id": 94,
+        "path": "/Users/mac/Baci-app/.worktrees/pr-2047-mobile-storefront-crash",
+        "head": "770996bb81fe17d213271ed744fa8c7e57518a46",
+        "branch": "refs/heads/pr-2047-mobile-storefront-crash",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 95,
+      "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
+      "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "268 tracked deletions under node_modules are cleanup effects",
+      "shard": 2,
+      "manifest": {
+        "id": 95,
+        "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
+        "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
+        "branch": "refs/heads/codex/pr-2104-mobile-prod-deps",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 96,
+      "path": "/Users/mac/Baci-app/.worktrees/pr-3055-heartbeat",
+      "head": "7cc01c64869d54fb7dd509c582506dfb2435acf2",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Three unique repair-transition commits plus one dirty address-suggestions source file.",
+      "shard": 3,
+      "manifest": {
+        "id": 96,
+        "path": "/Users/mac/Baci-app/.worktrees/pr-3055-heartbeat",
+        "head": "7cc01c64869d54fb7dd509c582506dfb2435acf2",
+        "branch": "refs/heads/codex/pr-3055-heartbeat",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 97,
+      "path": "/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health",
+      "head": "d9a1f7dbd4f531cc4c0b2846640f7c2d33481d80",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 97,
+        "path": "/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health",
+        "head": "d9a1f7dbd4f531cc4c0b2846640f7c2d33481d80",
+        "branch": "refs/heads/codex/pr-3281-agentic-health",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/lambda-remediation-83ce991afefff5cf-d899c33f-c0b8-4279-8fb5-",
+          "headRefOid": "d9a1f7dbd4f531cc4c0b2846640f7c2d33481d80",
+          "mergedAt": "2026-08-11T23:55:05Z",
+          "number": 3281,
+          "state": "MERGED",
+          "title": "fix(web): keep agentic health cron transport successful",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3281",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 98,
+      "path": "/Users/mac/Baci-app/.worktrees/pr2627-posthog-upload",
+      "head": "f27e42b54828ad6efca87ca55212e95b94de50ff",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 98,
+        "path": "/Users/mac/Baci-app/.worktrees/pr2627-posthog-upload",
+        "head": "f27e42b54828ad6efca87ca55212e95b94de50ff",
+        "branch": "refs/heads/codex/pr2627-posthog-upload",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 99,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3203-security-fixes",
+      "head": "12d639fa60a1407ac3ec21c22128b86df9f67474",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Five unique chat security/tenant-boundary commits plus 14 dirty Santa/chat files.",
+      "shard": 3,
+      "manifest": {
+        "id": 99,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3203-security-fixes",
+        "head": "12d639fa60a1407ac3ec21c22128b86df9f67474",
+        "branch": "refs/heads/codex/pr3203-security-fixes",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 100,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3223-review-loop",
+      "head": "a67acddf133469cd4cc4dc8afe8ad9165f922c91",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "CI and VPS cache/deploy-secret synchronization changes; candidate pending direct behavior comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 100,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3223-review-loop",
+        "head": "a67acddf133469cd4cc4dc8afe8ad9165f922c91",
+        "branch": "refs/heads/codex/pr3223-review-loop",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 101,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3269-comments",
+      "head": "685305e321bb482461cce169ec8b5348d96cc47b",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 101,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3269-comments",
+        "head": "685305e321bb482461cce169ec8b5348d96cc47b",
+        "branch": "refs/heads/codex/pr3269-comments",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/task4-storefront-seo-rebase",
+          "headRefOid": "685305e321bb482461cce169ec8b5348d96cc47b",
+          "mergedAt": "2026-08-05T09:14:18Z",
+          "number": 3269,
+          "state": "MERGED",
+          "title": "feat(seo): harden storefront indexing and canonical parity",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3269",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3275-cost-cut",
+      "head": "2bf2c04b91a02ad1c7254f464309fe3f836701c4",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "PR #3275 merged at exact local HEAD; preserve the independent untracked logs/ data.",
+      "shard": 3,
+      "manifest": {
+        "id": 102,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3275-cost-cut",
+        "head": "2bf2c04b91a02ad1c7254f464309fe3f836701c4",
+        "branch": "refs/heads/codex/gigl-direct-worker-cost-cut",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/gigl-direct-worker-cost-cut",
+          "headRefOid": "2bf2c04b91a02ad1c7254f464309fe3f836701c4",
+          "mergedAt": "2026-10-04T13:05:07Z",
+          "number": 3275,
+          "state": "MERGED",
+          "title": "cost: move GIGL tracking schedules off Vercel",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3275",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3277-ci-fix",
+      "head": "39a43badce844d6e40a15f7ab73e9417e5aaa044",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Remediation/deploy workflow changes with dirty and untracked planning state.",
+      "shard": 1,
+      "manifest": {
+        "id": 103,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3277-ci-fix",
+        "head": "39a43badce844d6e40a15f7ab73e9417e5aaa044",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 104,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes",
+      "head": "01d5b31af9d4a628de7ac31b4b03a712d1816450",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact PR #3284 head is MERGED; clean worktree; no meaningful ignored data observed.",
+      "shard": 2,
+      "manifest": {
+        "id": 104,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes",
+        "head": "01d5b31af9d4a628de7ac31b4b03a712d1816450",
+        "branch": "refs/heads/codex/fix-shipping-empty-quotes",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-shipping-empty-quotes",
+          "headRefOid": "01d5b31af9d4a628de7ac31b4b03a712d1816450",
+          "mergedAt": "2026-09-23T13:10:04Z",
+          "number": 3284,
+          "state": "MERGED",
+          "title": "Correct empty shipping quote diagnostics",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3284",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3309-direct-process-handoff-sparse",
+      "head": "ddca5b4783fb85fc43ac109580dbd5cf636b8fe4",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "19 unique remediation handoff commits / 39 paths; clean and remote branch absent.",
+      "shard": 3,
+      "manifest": {
+        "id": 105,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3309-direct-process-handoff-sparse",
+        "head": "ddca5b4783fb85fc43ac109580dbd5cf636b8fe4",
+        "branch": "refs/heads/codex/3309-direct-process-handoff",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 106,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3309-path-direct-handoff-sparse",
+      "head": "5fffb3a4f4c6b041a966a3ea73641aaa1268d41b",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Remediation handoff history overlaps ID 25; exact patch equivalence was not checked.",
+      "shard": 1,
+      "manifest": {
+        "id": 106,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3309-path-direct-handoff-sparse",
+        "head": "5fffb3a4f4c6b041a966a3ea73641aaa1268d41b",
+        "branch": "refs/heads/codex/3309-path-direct-handoff",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 107,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3309-transition-locks-sparse",
+      "head": "e9d43f7e9b574bcbe3d9480548c801e374ee6fa9",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 107,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3309-transition-locks-sparse",
+        "head": "e9d43f7e9b574bcbe3d9480548c801e374ee6fa9",
+        "branch": "refs/heads/codex/3309-transition-locks",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 108,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3310-nemotron-fixes",
+      "head": "ce9be811acd2ac43f1b7e6d8386a478b2d488d0a",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "34 unique builder-preview commits plus one dirty shared render-policy contract.",
+      "shard": 3,
+      "manifest": {
+        "id": 108,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3310-nemotron-fixes",
+        "head": "ce9be811acd2ac43f1b7e6d8386a478b2d488d0a",
+        "branch": "refs/heads/codex/pr3310-nemotron-fixes",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 109,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3337-clean-20260814",
+      "head": "b7d702c7b920c429a4e37fc736a22f8322f48730",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "SuperQuiz experience and substantial local tracked/untracked state.",
+      "shard": 1,
+      "manifest": {
+        "id": 109,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3337-clean-20260814",
+        "head": "b7d702c7b920c429a4e37fc736a22f8322f48730",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 110,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3338-clean-20260814",
+      "head": "c79e79af018fefa96c99128d07236a2c95f8b57c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 110,
+        "path": "/Users/mac/Baci-app/.worktrees/pr3338-clean-20260814",
+        "head": "c79e79af018fefa96c99128d07236a2c95f8b57c",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/superquiz-admin-timing-prizes",
+          "headRefOid": "c79e79af018fefa96c99128d07236a2c95f8b57c",
+          "mergedAt": null,
+          "number": 3338,
+          "state": "CLOSED",
+          "title": "feat: complete SuperQuiz admin timing and prize flow",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3338",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "path": "/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830",
+      "head": "03199cc64332cee7dbf8c2e6d3fc75279bd0e8bb",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "PR #3431 merged at exact local HEAD; clean status and no meaningful ignored data found.",
+      "shard": 3,
+      "manifest": {
+        "id": 111,
+        "path": "/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830",
+        "head": "03199cc64332cee7dbf8c2e6d3fc75279bd0e8bb",
+        "branch": "refs/heads/codex/mobile-image-payload-optimization",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/mobile-image-payload-optimization",
+          "headRefOid": "03199cc64332cee7dbf8c2e6d3fc75279bd0e8bb",
+          "mergedAt": "2026-09-01T19:30:21Z",
+          "number": 3431,
+          "state": "MERGED",
+          "title": "perf(mobile): reduce product image payloads",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3431",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "path": "/Users/mac/Baci-app/.worktrees/quiz-main-reconciliation-20260905",
+      "head": "ba049d9ef72ad4cf5840db178e010dc43517ee1d",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Exact merged PR head but quiz recovery/lobby edits and untracked local files remain.",
+      "shard": 1,
+      "manifest": {
+        "id": 112,
+        "path": "/Users/mac/Baci-app/.worktrees/quiz-main-reconciliation-20260905",
+        "head": "ba049d9ef72ad4cf5840db178e010dc43517ee1d",
+        "branch": "refs/heads/codex/quiz-main-reconciliation-20260905",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/quiz-main-reconciliation-20260905",
+          "headRefOid": "ba049d9ef72ad4cf5840db178e010dc43517ee1d",
+          "mergedAt": "2026-09-07T20:25:56Z",
+          "number": 3445,
+          "state": "MERGED",
+          "title": "fix(quiz): restore lobby navigation and recovery UX",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3445",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "path": "/Users/mac/Baci-app/.worktrees/quiz-testing-20260909",
+      "head": "4312d2a1022b055b7d53d590ee4e904fe7290f3c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 113,
+        "path": "/Users/mac/Baci-app/.worktrees/quiz-testing-20260909",
+        "head": "4312d2a1022b055b7d53d590ee4e904fe7290f3c",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 114,
+      "path": "/Users/mac/Baci-app/.worktrees/readiness-round4-sol-fix",
+      "head": "63cf0ea13551b60d730f508f8709e0f923285481",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "38 unique readiness commits; review with ID 117 before salvage.",
+      "shard": 3,
+      "manifest": {
+        "id": 114,
+        "path": "/Users/mac/Baci-app/.worktrees/readiness-round4-sol-fix",
+        "head": "63cf0ea13551b60d730f508f8709e0f923285481",
+        "branch": "refs/heads/codex/readiness-round4-sol-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 115,
+      "path": "/Users/mac/Baci-app/.worktrees/readiness-round4-web",
+      "head": "e0e860c0ccc847d877272d4785d2e6a420efb05e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Readiness web/KYC request handling; may overlap ID 70/118; current-main behavior comparison incomplete.",
+      "shard": 1,
+      "manifest": {
+        "id": 115,
+        "path": "/Users/mac/Baci-app/.worktrees/readiness-round4-web",
+        "head": "e0e860c0ccc847d877272d4785d2e6a420efb05e",
+        "branch": "refs/heads/codex/readiness-round4-web",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 116,
+      "path": "/Users/mac/Baci-app/.worktrees/readiness-task10-invalidation",
+      "head": "1a0f666e78ff59254231f8e353fa0d28fff8f295",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 116,
+        "path": "/Users/mac/Baci-app/.worktrees/readiness-task10-invalidation",
+        "head": "1a0f666e78ff59254231f8e353fa0d28fff8f295",
+        "branch": "refs/heads/codex/readiness-task10-invalidation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 117,
+      "path": "/Users/mac/Baci-app/.worktrees/readiness-task8-mobile-query",
+      "head": "69777c97069748b790f94ed45c5a257f4416ba09",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "19 unique readiness commits including load-failure state; review with ID 114 before salvage.",
+      "shard": 3,
+      "manifest": {
+        "id": 117,
+        "path": "/Users/mac/Baci-app/.worktrees/readiness-task8-mobile-query",
+        "head": "69777c97069748b790f94ed45c5a257f4416ba09",
+        "branch": "refs/heads/codex/readiness-task8-mobile-query",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 118,
+      "path": "/Users/mac/Baci-app/.worktrees/readiness-task9-app-focus",
+      "head": "f180f37ff052d115dd5235b7c86637388731d9e0",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "App-focus query refresh and readiness artifacts; overlap with ID 70/115 not exhaustively resolved.",
+      "shard": 1,
+      "manifest": {
+        "id": 118,
+        "path": "/Users/mac/Baci-app/.worktrees/readiness-task9-app-focus",
+        "head": "f180f37ff052d115dd5235b7c86637388731d9e0",
+        "branch": "refs/heads/codex/readiness-task9-app-focus",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 119,
+      "path": "/Users/mac/Baci-app/.worktrees/rebase-3127",
+      "head": "a4f31b88ff30e9eada61ac8e5faa0147333defff",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 119,
+        "path": "/Users/mac/Baci-app/.worktrees/rebase-3127",
+        "head": "a4f31b88ff30e9eada61ac8e5faa0147333defff",
+        "branch": "refs/heads/codex/rebase-3127",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 120,
+      "path": "/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821",
+      "head": "18c6e963f8f94e1ff326e010bc86c973829fb7fb",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "No patch-unique commits; two changed paths are patch-equivalent; clean, only generated/dependency data ignored.",
+      "shard": 3,
+      "manifest": {
+        "id": 120,
+        "path": "/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821",
+        "head": "18c6e963f8f94e1ff326e010bc86c973829fb7fb",
+        "branch": "refs/heads/codex/reconcile-cron-audit-20260821",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 121,
+      "path": "/Users/mac/Baci-app/.worktrees/release-failures",
+      "head": "ffd5a739a8a3035bef5156816587ee5a957deb36",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Closed PR with mobile native release hardening scripts/workflows; candidate only, not behavior-verified against baseline.",
+      "shard": 1,
+      "manifest": {
+        "id": 121,
+        "path": "/Users/mac/Baci-app/.worktrees/release-failures",
+        "head": "ffd5a739a8a3035bef5156816587ee5a957deb36",
+        "branch": "refs/heads/codex/fix-release-failures",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-release-failures",
+          "headRefOid": "ffd5a739a8a3035bef5156816587ee5a957deb36",
+          "mergedAt": null,
+          "number": 3434,
+          "state": "CLOSED",
+          "title": "fix: harden mobile native release builds",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3434",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 122,
+      "path": "/Users/mac/Baci-app/.worktrees/remediation-final-deferred-sparse",
+      "head": "497df71d343940ffee03170f3d078fc5b2805556",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 122,
+        "path": "/Users/mac/Baci-app/.worktrees/remediation-final-deferred-sparse",
+        "head": "497df71d343940ffee03170f3d078fc5b2805556",
+        "branch": "refs/heads/codex/3305-remediation-final-deferred",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 123,
+      "path": "/Users/mac/Baci-app/.worktrees/remediator-main-merged-final",
+      "head": "9acddc04d720d918bee8f31e3b593ec1a938a6b9",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Unique scoped Sentry issue-event route plus dirty worker/docs paths and ignored logs.",
+      "shard": 3,
+      "manifest": {
+        "id": 123,
+        "path": "/Users/mac/Baci-app/.worktrees/remediator-main-merged-final",
+        "head": "9acddc04d720d918bee8f31e3b593ec1a938a6b9",
+        "branch": "refs/heads/codex/fix-sentry-issue-event-route",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-sentry-issue-event-route",
+          "headRefOid": "a2e667ae0598de366a44f33d4427e8aeaee13816",
+          "mergedAt": null,
+          "number": 3322,
+          "state": "CLOSED",
+          "title": "fix: load Android issue events from Sentry",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3322",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 124,
+      "path": "/Users/mac/Baci-app/.worktrees/review-pr-2898",
+      "head": "a02368133b905930961160999635510b13b37f16",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Customer edit parity/new-order draft retention plus dirty local changes.",
+      "shard": 1,
+      "manifest": {
+        "id": 124,
+        "path": "/Users/mac/Baci-app/.worktrees/review-pr-2898",
+        "head": "a02368133b905930961160999635510b13b37f16",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 125,
+      "path": "/Users/mac/Baci-app/.worktrees/rum-nav-timing",
+      "head": "b31f35e8a7c8b8e2555dc73dfbeb5588d4c4bf6a",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 125,
+        "path": "/Users/mac/Baci-app/.worktrees/rum-nav-timing",
+        "head": "b31f35e8a7c8b8e2555dc73dfbeb5588d4c4bf6a",
+        "branch": "refs/heads/rum/navigation-timing-breakdown",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 126,
+      "path": "/Users/mac/Baci-app/.worktrees/s1-pr2-auth-containment",
+      "head": "2875b2c1458451a7f83180b7cf8bdd54bc21c5c4",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Ten unique durable cache-invalidation commits plus 29 dirty event/cache files.",
+      "shard": 3,
+      "manifest": {
+        "id": 126,
+        "path": "/Users/mac/Baci-app/.worktrees/s1-pr2-auth-containment",
+        "head": "2875b2c1458451a7f83180b7cf8bdd54bc21c5c4",
+        "branch": "refs/heads/codex/b0-durable-cache-invalidation",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/b0-durable-cache-invalidation",
+          "headRefOid": "2875b2c1458451a7f83180b7cf8bdd54bc21c5c4",
+          "mergedAt": null,
+          "number": 3229,
+          "state": "CLOSED",
+          "title": "feat: add durable storefront cache invalidation",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3229",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 127,
+      "path": "/Users/mac/Baci-app/.worktrees/sec-leftover-14",
+      "head": "b71d244849945b1f203994d20e6b45f73178c339",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Locked active worktree; security dependency update for alerts 470, 472, 479-490.",
+      "shard": 1,
+      "manifest": {
+        "id": 127,
+        "path": "/Users/mac/Baci-app/.worktrees/sec-leftover-14",
+        "head": "b71d244849945b1f203994d20e6b45f73178c339",
+        "branch": "refs/heads/fix/security-remaining-14-alerts",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 128,
+      "path": "/Users/mac/Baci-app/.worktrees/semrush-crawl-depth-july04",
+      "head": "7037e80c2ea6c403d61a3b1befca902317ecef0c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 128,
+        "path": "/Users/mac/Baci-app/.worktrees/semrush-crawl-depth-july04",
+        "head": "7037e80c2ea6c403d61a3b1befca902317ecef0c",
+        "branch": "refs/heads/codex/semrush-crawl-depth-july04",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 129,
+      "path": "/Users/mac/Baci-app/.worktrees/seo-discovery-20260912",
+      "head": "055cbce393828a6d5f465d78accdc3f9ecd23ee7",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "No unique commits, but 14 dirty SEO/storefront source/test files.",
+      "shard": 3,
+      "manifest": {
+        "id": 129,
+        "path": "/Users/mac/Baci-app/.worktrees/seo-discovery-20260912",
+        "head": "055cbce393828a6d5f465d78accdc3f9ecd23ee7",
+        "branch": "refs/heads/codex/seo-discovery-20260912",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 130,
+      "path": "/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908",
+      "head": "2ca377a749422da1ea4eaf9f01f17c6ca10e4ef7",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 130,
+        "path": "/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908",
+        "head": "2ca377a749422da1ea4eaf9f01f17c6ca10e4ef7",
+        "branch": "refs/heads/codex/shipping-legacy-client-20260908",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/shipping-legacy-client-20260908",
+          "headRefOid": "2ca377a749422da1ea4eaf9f01f17c6ca10e4ef7",
+          "mergedAt": "2026-09-09T08:46:22Z",
+          "number": 3452,
+          "state": "MERGED",
+          "title": "fix(shipping): preserve quotes for legacy mobile clients",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3452",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 131,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna",
+      "head": "e8772444bd129f825d379238ef7bcc8df264369a",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior.",
+      "shard": 2,
+      "manifest": {
+        "id": 131,
+        "path": "/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna",
+        "head": "e8772444bd129f825d379238ef7bcc8df264369a",
+        "branch": "refs/heads/codex/shopify-catalog-ci-luna",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 132,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-inventory-luna",
+      "head": "56fe51ab77da6c19b4922e73d91c53523fe8516e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Unique test-only serialized inventory concurrency contract suite.",
+      "shard": 3,
+      "manifest": {
+        "id": 132,
+        "path": "/Users/mac/Baci-app/.worktrees/shopify-inventory-luna",
+        "head": "56fe51ab77da6c19b4922e73d91c53523fe8516e",
+        "branch": "refs/heads/codex/shopify-inventory-luna",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 133,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-inventory-refresh",
+      "head": "ac4a4b9a1fc0f79b18baa222d50072ccea7d37fb",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Local head differs from earlier merged PR head; significant later inventory/test history. Do not equate PR merge with whole branch redundancy.",
+      "shard": 1,
+      "manifest": {
+        "id": 133,
+        "path": "/Users/mac/Baci-app/.worktrees/shopify-inventory-refresh",
+        "head": "ac4a4b9a1fc0f79b18baa222d50072ccea7d37fb",
+        "branch": "refs/heads/codex/shopify-inventory-refresh",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/shopify-inventory-refresh",
+          "headRefOid": "77fba27965f9105943adef6a433fad8eb442daea",
+          "mergedAt": "2026-09-29T11:11:49Z",
+          "number": 3374,
+          "state": "MERGED",
+          "title": "test: guard serialized inventory concurrency contracts",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3374",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 134,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-mobile-e2e-luna",
+      "head": "b9bb0b1a73d9b3c9dfd2847213636fbb5d0d9e7e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 134,
+        "path": "/Users/mac/Baci-app/.worktrees/shopify-mobile-e2e-luna",
+        "head": "b9bb0b1a73d9b3c9dfd2847213636fbb5d0d9e7e",
+        "branch": "refs/heads/codex/shopify-mobile-e2e-luna",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 135,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-rate-limit-luna",
+      "head": "4e355286df8cbcbc0b73fbbde00dff80b61d52e3",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Rate-limit backend-fallback diagnostics in runtime instrumentation and focused tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 135,
+        "path": "/Users/mac/Baci-app/.worktrees/shopify-rate-limit-luna",
+        "head": "4e355286df8cbcbc0b73fbbde00dff80b61d52e3",
+        "branch": "refs/heads/codex/shopify-rate-limit-luna",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 136,
+      "path": "/Users/mac/Baci-app/.worktrees/social-ads-google-finalize",
+      "head": "06c7ee2abdceabc56a1f8efbed5a99b0a77e2fe2",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Merchant-bound Google OAuth/analytics changes plus dirty state.",
+      "shard": 1,
+      "manifest": {
+        "id": 136,
+        "path": "/Users/mac/Baci-app/.worktrees/social-ads-google-finalize",
+        "head": "06c7ee2abdceabc56a1f8efbed5a99b0a77e2fe2",
+        "branch": "refs/heads/codex/social-ads-google-finalize",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 137,
+      "path": "/Users/mac/Baci-app/.worktrees/social-media-audit-guard",
+      "head": "41b30a31c263a5e596164079dc96eeafdd80a882",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 137,
+        "path": "/Users/mac/Baci-app/.worktrees/social-media-audit-guard",
+        "head": "41b30a31c263a5e596164079dc96eeafdd80a882",
+        "branch": "refs/heads/codex/guard-social-media-audit",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 138,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-agp-9-1",
+      "head": "1c0dd3b154c2ffeb5c8b04cd522c629b64c1947f",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "AGP 9 compatibility and multiline classpath handling with focused config tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 138,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-agp-9-1",
+        "head": "1c0dd3b154c2ffeb5c8b04cd522c629b64c1947f",
+        "branch": "refs/heads/codex/storefront-agp-9-1",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 139,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-b0",
+      "head": "d7db23042d4e661b702a9ba36b361430cee10a71",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Builder CAS/preview hardening and Storefront AI planning; candidate pending behavior comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 139,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-b0",
+        "head": "d7db23042d4e661b702a9ba36b361430cee10a71",
+        "branch": "refs/heads/feat/storefront-ai-b0",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 140,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-d0",
+      "head": "97c44c0391ff98c4454afb107713a0d3b8f278e0",
+      "classification": "MISSING",
+      "evidence": "manifest path absent; locked=true",
+      "shard": 2,
+      "manifest": {
+        "id": 140,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-d0",
+        "head": "97c44c0391ff98c4454afb107713a0d3b8f278e0",
+        "branch": "refs/heads/feat/storefront-ai-d0",
+        "locked": true,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 141,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r1",
+      "head": "d11558e060440f78c61b76c9c383484287cbe15e",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "31 unique storefront-AI/PageSpec/builder-preview commits / 202 paths; complex feature family.",
+      "shard": 3,
+      "manifest": {
+        "id": 141,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r1",
+        "head": "d11558e060440f78c61b76c9c383484287cbe15e",
+        "branch": "refs/heads/feat/storefront-ai-r2",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 142,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r2-luna",
+      "head": "71300d6de9b70b78fbdb90db53dfbe77f80e2272",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Strict PageSpec and R2 persistence/authority work; candidate pending behavior comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 142,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r2-luna",
+        "head": "71300d6de9b70b78fbdb90db53dfbe77f80e2272",
+        "branch": "refs/heads/codex/storefront-ai-r2-luna",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 143,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r3-plan",
+      "head": "edad4f48ccf3eb824ecf5d90dd8c5ed6a49a35fe",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 143,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r3-plan",
+        "head": "edad4f48ccf3eb824ecf5d90dd8c5ed6a49a35fe",
+        "branch": "refs/heads/codex/storefront-ai-r3-plan",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 144,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-w0",
+      "head": "b3ed77628ed77e6d72d82e1e3fce9c7a75f5aecf",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "26 unique storefront-AI W0 commits / 99 paths; overlaps ID 141.",
+      "shard": 3,
+      "manifest": {
+        "id": 144,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-w0",
+        "head": "b3ed77628ed77e6d72d82e1e3fce9c7a75f5aecf",
+        "branch": "refs/heads/feat/storefront-ai-w0",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 145,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-audit-fixes",
+      "head": "6ed1ef65ac8d5f9a88c4bf0a5310f1e245bbbf3f",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Checkout/payment dialog changes plus dirty state.",
+      "shard": 1,
+      "manifest": {
+        "id": 145,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-audit-fixes",
+        "head": "6ed1ef65ac8d5f9a88c4bf0a5310f1e245bbbf3f",
+        "branch": "refs/heads/codex/storefront-audit-fixes",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 146,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-edge-renderer-pilot",
+      "head": "55c3ad3cbf7d4722aa3ba0a1de9435b7c22e3091",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 146,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-edge-renderer-pilot",
+        "head": "55c3ad3cbf7d4722aa3ba0a1de9435b7c22e3091",
+        "branch": "refs/heads/codex/storefront-edge-renderer-pilot",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/storefront-edge-renderer-pilot",
+          "headRefOid": "55c3ad3cbf7d4722aa3ba0a1de9435b7c22e3091",
+          "mergedAt": null,
+          "number": 3379,
+          "state": "CLOSED",
+          "title": "feat(shared): add bounded storefront projection contract",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3379",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 147,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-seo-baseline",
+      "head": "d2c7d8ca9e6646ca0aaeea44bc273fdd27a6e0ca",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "One unique SEO mapper commit plus 34 dirty storefront SEO/page/sitemap files.",
+      "shard": 3,
+      "manifest": {
+        "id": 147,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-seo-baseline",
+        "head": "d2c7d8ca9e6646ca0aaeea44bc273fdd27a6e0ca",
+        "branch": "refs/heads/codex/storefront-seo-baseline",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 148,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-web-alignment-integration-qa",
+      "head": "a4c2b423d3d1880a4d4a920231705d4a0d78476b",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "274 local status entries; one unique commit does not summarize dirty contents.",
+      "shard": 1,
+      "manifest": {
+        "id": 148,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-web-alignment-integration-qa",
+        "head": "a4c2b423d3d1880a4d4a920231705d4a0d78476b",
+        "branch": "refs/heads/codex/storefront-web-alignment-integration-qa",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 149,
+      "path": "/Users/mac/Baci-app/.worktrees/storefront-width",
+      "head": "d9107c943f7991db3106c08210c83e7f02a1c4c1",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 149,
+        "path": "/Users/mac/Baci-app/.worktrees/storefront-width",
+        "head": "d9107c943f7991db3106c08210c83e7f02a1c4c1",
+        "branch": "refs/heads/codex/storefront-width",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 150,
+      "path": "/Users/mac/Baci-app/.worktrees/task57-protected-anchors",
+      "head": "bc0b19a3dd421bd42cd3f8db56e9a7337d243a37",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Builder-AI structural guard changes protect internal layout anchors with regression tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 150,
+        "path": "/Users/mac/Baci-app/.worktrees/task57-protected-anchors",
+        "head": "bc0b19a3dd421bd42cd3f8db56e9a7337d243a37",
+        "branch": "refs/heads/codex/task57-protected-anchors",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 151,
+      "path": "/Users/mac/Baci-app/.worktrees/universal-payment-design",
+      "head": "6714131b75e65ffe7cbcdaba20536c1c056a7f08",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Universal payment authority/recovery design documents; preserve planning history pending comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 151,
+        "path": "/Users/mac/Baci-app/.worktrees/universal-payment-design",
+        "head": "6714131b75e65ffe7cbcdaba20536c1c056a7f08",
+        "branch": "refs/heads/codex/universal-payment-design",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 152,
+      "path": "/Users/mac/Baci-app/.worktrees/variant-review-followups",
+      "head": "2cd1fc38adbef569d9fab1439a1c0b962c58592c",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "ancestor of baseline; clean",
+      "shard": 2,
+      "manifest": {
+        "id": 152,
+        "path": "/Users/mac/Baci-app/.worktrees/variant-review-followups",
+        "head": "2cd1fc38adbef569d9fab1439a1c0b962c58592c",
+        "branch": "refs/heads/codex/variant-review-followups",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 153,
+      "path": "/Users/mac/Baci-app/.worktrees/vercel-active-cpu-memory-config",
+      "head": "bcdbf54cb591af2d9047afacaf75cdaaa29cccfa",
+      "classification": "MISSING",
+      "evidence": "Manifest path absent; no Git metadata or file status.",
+      "shard": 3,
+      "manifest": {
+        "id": 153,
+        "path": "/Users/mac/Baci-app/.worktrees/vercel-active-cpu-memory-config",
+        "head": "bcdbf54cb591af2d9047afacaf75cdaaa29cccfa",
+        "branch": "refs/heads/codex/vercel-active-cpu-memory-config",
+        "locked": true,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/vercel-active-cpu-memory-config",
+          "headRefOid": "d51254200647d311fa4271ff6afef20e0be358e3",
+          "mergedAt": null,
+          "number": 3355,
+          "state": "OPEN",
+          "title": "fix(vercel): remove unsupported Fluid memory config",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3355",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 154,
+      "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-cuts-round2",
+      "head": "a38ca7061b3ed2ad73d19983f2fca566f0b84e8c",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Cost/performance and cache work plus one tracked local modification.",
+      "shard": 1,
+      "manifest": {
+        "id": 154,
+        "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-cuts-round2",
+        "head": "a38ca7061b3ed2ad73d19983f2fca566f0b84e8c",
+        "branch": "refs/heads/codex/vercel-cost-cuts-round2",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 155,
+      "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-reduction-20260901",
+      "head": "18d89de6080a0b4f9a82a324bca1ea8a0dec75d9",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Branch name matches merged PR #3441 but current HEAD differs from PR head SHA; preserve pending comparison.",
+      "shard": 2,
+      "manifest": {
+        "id": 155,
+        "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-reduction-20260901",
+        "head": "18d89de6080a0b4f9a82a324bca1ea8a0dec75d9",
+        "branch": "refs/heads/codex/cost-reduction-phase2",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/cost-reduction-phase2",
+          "headRefOid": "d9d2bdf406cc325f223b9d7aa5a6f3f686434c74",
+          "mergedAt": "2026-09-06T16:39:31Z",
+          "number": 3441,
+          "state": "MERGED",
+          "title": "perf(storefront): reduce Vercel cache and invalidation work",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3441",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 156,
+      "path": "/Users/mac/Baci-app/.worktrees/vps-remediator-deploy",
+      "head": "15c8d5dcbc52a5a1a4984dcdd103c17954fadc83",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3304 is closed unmerged at exact head; check closure rationale/current main before reuse.",
+      "shard": 3,
+      "manifest": {
+        "id": 156,
+        "path": "/Users/mac/Baci-app/.worktrees/vps-remediator-deploy",
+        "head": "15c8d5dcbc52a5a1a4984dcdd103c17954fadc83",
+        "branch": "refs/heads/codex/sentry-remediator-event-evidence",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/sentry-remediator-event-evidence",
+          "headRefOid": "15c8d5dcbc52a5a1a4984dcdd103c17954fadc83",
+          "mergedAt": null,
+          "number": 3304,
+          "state": "CLOSED",
+          "title": "Fix VPS Sentry remediation evidence",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3304",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "path": "/Users/mac/Baci-app/.worktrees/wht-invoice-adjustments-design",
+      "head": "8c71477ab4463564fab7cc39df11c48ff05d607e",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "WHT financial lifecycle and invoice adjustment design documents.",
+      "shard": 1,
+      "manifest": {
+        "id": 157,
+        "path": "/Users/mac/Baci-app/.worktrees/wht-invoice-adjustments-design",
+        "head": "8c71477ab4463564fab7cc39df11c48ff05d607e",
+        "branch": "refs/heads/codex/wht-invoice-adjustments-design",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 158,
+      "path": "/Users/mac/Baci-worktrees/category-recent-carousel",
+      "head": "e6d619b21484c86994dd09a2b5932b8bbd92d816",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "empty tree diff despite unique commit subject",
+      "shard": 2,
+      "manifest": {
+        "id": 158,
+        "path": "/Users/mac/Baci-worktrees/category-recent-carousel",
+        "head": "e6d619b21484c86994dd09a2b5932b8bbd92d816",
+        "branch": "refs/heads/codex/category-recent-carousel",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 159,
+      "path": "/Users/mac/Baci-worktrees/compare-preflight-slow-fetch-fix",
+      "head": "b2597e3b43a10bdc3126e8d58741d56cc07bea64",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Merchant-host binding fix has closed unmerged PR #3453; check closure/current-main behavior before reuse.",
+      "shard": 3,
+      "manifest": {
+        "id": 159,
+        "path": "/Users/mac/Baci-worktrees/compare-preflight-slow-fetch-fix",
+        "head": "b2597e3b43a10bdc3126e8d58741d56cc07bea64",
+        "branch": "refs/heads/codex/chat-catalog-merchant-binding",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/chat-catalog-merchant-binding",
+          "headRefOid": "b2597e3b43a10bdc3126e8d58741d56cc07bea64",
+          "mergedAt": null,
+          "number": 3453,
+          "state": "CLOSED",
+          "title": "fix(web): bind chat catalog to resolved storefront merchant",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3453",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "path": "/Users/mac/Baci-worktrees/cursor-savings-phase1",
+      "head": "2a4a8e40bf15a169038132df19b8593a463912cc",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Very large dirty/untracked state; no content inferred disposable.",
+      "shard": 1,
+      "manifest": {
+        "id": 160,
+        "path": "/Users/mac/Baci-worktrees/cursor-savings-phase1",
+        "head": "2a4a8e40bf15a169038132df19b8593a463912cc",
+        "branch": "refs/heads/cursor-savings-phase1",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 161,
+      "path": "/Users/mac/Baci-worktrees/fix-main-red",
+      "head": "6c5dc3598eba6bd0eb0119ee0f9317abc1f35039",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3481 merged exact head; git-only activity snapshot means refresh process state before retirement.",
+      "shard": 2,
+      "manifest": {
+        "id": 161,
+        "path": "/Users/mac/Baci-worktrees/fix-main-red",
+        "head": "6c5dc3598eba6bd0eb0119ee0f9317abc1f35039",
+        "branch": "refs/heads/fix/main-red",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/main-red",
+          "headRefOid": "6c5dc3598eba6bd0eb0119ee0f9317abc1f35039",
+          "mergedAt": "2026-09-22T11:30:05Z",
+          "number": 3481,
+          "state": "MERGED",
+          "title": "fix: repair all red main workflows (vitest route, sdkmanager, Swift concurrency, edge inventory)",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3481",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 162,
+      "path": "/Users/mac/Baci-worktrees/home-js-diet",
+      "head": "a38ceb3babe5ecd4095f872056988fec770394f5",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Four unique analytics/PDP static-params commits; branch purpose differs from observed patch set.",
+      "shard": 3,
+      "manifest": {
+        "id": 162,
+        "path": "/Users/mac/Baci-worktrees/home-js-diet",
+        "head": "a38ceb3babe5ecd4095f872056988fec770394f5",
+        "branch": "refs/heads/perf/home-boot-js-diet",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 163,
+      "path": "/Users/mac/Baci-worktrees/image-bitmap-memory-fix",
+      "head": "c127b0484e47c1bc7d8661f7f402bba3423d03b5",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Bitmap decoder safeguards plus one local change.",
+      "shard": 1,
+      "manifest": {
+        "id": 163,
+        "path": "/Users/mac/Baci-worktrees/image-bitmap-memory-fix",
+        "head": "c127b0484e47c1bc7d8661f7f402bba3423d03b5",
+        "branch": "refs/heads/codex/image-bitmap-memory-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 164,
+      "path": "/Users/mac/Baci-worktrees/invoice-funnel-20260913",
+      "head": "a87330a527d90a8d30f2cbac4773156ebd733876",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Branch name matches merged PR #3468 but current HEAD differs from PR head SHA; treat as different uncategorized work.",
+      "shard": 2,
+      "manifest": {
+        "id": 164,
+        "path": "/Users/mac/Baci-worktrees/invoice-funnel-20260913",
+        "head": "a87330a527d90a8d30f2cbac4773156ebd733876",
+        "branch": "refs/heads/codex/invoice-funnel-20260913",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/invoice-funnel-20260913",
+          "headRefOid": "19e20890eff6fd2003d2a56ea35befd9983e7ec4",
+          "mergedAt": "2026-09-24T17:35:51Z",
+          "number": 3468,
+          "state": "MERGED",
+          "title": "Fix proforma invoice checkout funnel",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3468",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 165,
+      "path": "/Users/mac/Baci-worktrees/ios-watchdog-fix",
+      "head": "bafc2e44781bd4b30312c76215ae405d124b3e48",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "iOS memory-warning diagnostics helper and error-monitoring tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 165,
+        "path": "/Users/mac/Baci-worktrees/ios-watchdog-fix",
+        "head": "bafc2e44781bd4b30312c76215ae405d124b3e48",
+        "branch": "refs/heads/codex/ios-watchdog-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 166,
+      "path": "/Users/mac/Baci-worktrees/oxygen-integration",
+      "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "68 dirty entries and two non-ignored untracked files.",
+      "shard": 1,
+      "manifest": {
+        "id": 166,
+        "path": "/Users/mac/Baci-worktrees/oxygen-integration",
+        "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
+        "branch": "refs/heads/feat/oxygen-integration",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 167,
+      "path": "/Users/mac/Baci-worktrees/paystack-money-notifications",
+      "head": "54110079f208e1e399742386edb918c4de016aa0",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "untracked Paystack refund code/tests/migration",
+      "shard": 2,
+      "manifest": {
+        "id": 167,
+        "path": "/Users/mac/Baci-worktrees/paystack-money-notifications",
+        "head": "54110079f208e1e399742386edb918c4de016aa0",
+        "branch": "refs/heads/feat/paystack-money-notifications",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 168,
+      "path": "/Users/mac/Baci-worktrees/pdp-core-snapshot-fix",
+      "head": "882c3e27d0915ff51d60afb8bc09b1a36971c5b3",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "PDP core snapshot retries one retryable transient read under a single deadline; focused tests.",
+      "shard": 3,
+      "manifest": {
+        "id": 168,
+        "path": "/Users/mac/Baci-worktrees/pdp-core-snapshot-fix",
+        "head": "882c3e27d0915ff51d60afb8bc09b1a36971c5b3",
+        "branch": "refs/heads/codex/pdp-core-snapshot-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 169,
+      "path": "/Users/mac/Baci-worktrees/piggyvest-3620-takeover",
+      "head": "afef44eee3c348f60e541e5aafbb6d71c12b5cdc",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Extensive PiggyVest implementation and local residue; semantic review complex.",
+      "shard": 1,
+      "manifest": {
+        "id": 169,
+        "path": "/Users/mac/Baci-worktrees/piggyvest-3620-takeover",
+        "head": "afef44eee3c348f60e541e5aafbb6d71c12b5cdc",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 170,
+      "path": "/Users/mac/Baci-worktrees/posthog-followup-secondary",
+      "head": "7b05a3194faa50b1054946c6c00cd90697a081af",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "empty tree diff despite unique commit subject",
+      "shard": 2,
+      "manifest": {
+        "id": 170,
+        "path": "/Users/mac/Baci-worktrees/posthog-followup-secondary",
+        "head": "7b05a3194faa50b1054946c6c00cd90697a081af",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 171,
+      "path": "/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume",
+      "head": "c59cd1fd239b3a9658b12f60f3cc41bbab47f7fa",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "PR #3462 merged at exact HEAD; clean; no meaningful ignored data observed.",
+      "shard": 3,
+      "manifest": {
+        "id": 171,
+        "path": "/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume",
+        "head": "c59cd1fd239b3a9658b12f60f3cc41bbab47f7fa",
+        "branch": "refs/heads/fix/checkout-retry-codex-followup",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "fix/checkout-retry-codex-followup",
+          "headRefOid": "c59cd1fd239b3a9658b12f60f3cc41bbab47f7fa",
+          "mergedAt": "2026-09-22T16:47:13Z",
+          "number": 3462,
+          "state": "MERGED",
+          "title": "fix(checkout): address leftover Codex findings from retry resume",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3462",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 172,
+      "path": "/Users/mac/Baci-worktrees/pr3186-outbox-rpc",
+      "head": "9634efb601be727bd621af7be3d80383b3b33b53",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "CI/replay and RPC diagnostics with local dirty/untracked state.",
+      "shard": 1,
+      "manifest": {
+        "id": 172,
+        "path": "/Users/mac/Baci-worktrees/pr3186-outbox-rpc",
+        "head": "9634efb601be727bd621af7be3d80383b3b33b53",
+        "branch": "refs/heads/codex/pr3186-outbox-rpc-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-order-outbox-rpc-grants",
+          "headRefOid": "9634efb601be727bd621af7be3d80383b3b33b53",
+          "mergedAt": "2026-08-14T15:03:41Z",
+          "number": 3186,
+          "state": "MERGED",
+          "title": "fix(db): restrict order outbox claim RPC",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3186",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 173,
+      "path": "/Users/mac/Baci-worktrees/pr3203-tenant",
+      "head": "06f81cb6de53c9373524b26ed84600e22e021aa9",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 173,
+        "path": "/Users/mac/Baci-worktrees/pr3203-tenant",
+        "head": "06f81cb6de53c9373524b26ed84600e22e021aa9",
+        "branch": "refs/heads/codex/pr3203-tenant-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "d/agentic-tenant-chat-handlers",
+          "headRefOid": "06f81cb6de53c9373524b26ed84600e22e021aa9",
+          "mergedAt": null,
+          "number": 3203,
+          "state": "CLOSED",
+          "title": "refactor(agentic): de-hardcode the copilot tenant in the 3 scoped-client surfaces",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3203",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 174,
+      "path": "/Users/mac/Baci-worktrees/pr3231-order-schema",
+      "head": "c25ef6c848826fec17579193338365285bb08464",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "PR #3231 is closed unmerged at exact head; verify closure rationale and current schema before reuse.",
+      "shard": 3,
+      "manifest": {
+        "id": 174,
+        "path": "/Users/mac/Baci-worktrees/pr3231-order-schema",
+        "head": "c25ef6c848826fec17579193338365285bb08464",
+        "branch": "refs/heads/codex/pr3231-order-schema-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/order-private-schema-usage-hotfix",
+          "headRefOid": "c25ef6c848826fec17579193338365285bb08464",
+          "mergedAt": null,
+          "number": 3231,
+          "state": "CLOSED",
+          "title": "fix(db): restore storefront order schema usage",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3231",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "path": "/Users/mac/Baci-worktrees/pr3322-ci-fix",
+      "head": "47c2c9ceae9424b06a0e2c2bb55ed17daccf4a31",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 175,
+        "path": "/Users/mac/Baci-worktrees/pr3322-ci-fix",
+        "head": "47c2c9ceae9424b06a0e2c2bb55ed17daccf4a31",
+        "branch": "refs/heads/codex/pr3322-ci-fix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/fix-sentry-issue-route",
+          "headRefOid": "47c2c9ceae9424b06a0e2c2bb55ed17daccf4a31",
+          "mergedAt": "2026-08-11T18:07:12Z",
+          "number": 3324,
+          "state": "MERGED",
+          "title": "fix: load Android issue events from Sentry (CI fixture refresh)",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3324",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 176,
+      "path": "/Users/mac/Baci-worktrees/pr3359-review-followup",
+      "head": "58b1e0b8ef528dcbaecc95babe2d5b975fe90426",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 176,
+        "path": "/Users/mac/Baci-worktrees/pr3359-review-followup",
+        "head": "58b1e0b8ef528dcbaecc95babe2d5b975fe90426",
+        "branch": "refs/heads/codex/3359-followup",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 177,
+      "path": "/Users/mac/Baci-worktrees/pr3597-order-refunds",
+      "head": "70fe0944fa83ef0591e30abc6692c7ae409b8b6b",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Open PR #3597 remote head 8ba03c467ba8 is ahead of local 70fe0944fa83; 20 dirty refund/cancellation files need reconciliation.",
+      "shard": 3,
+      "manifest": {
+        "id": 177,
+        "path": "/Users/mac/Baci-worktrees/pr3597-order-refunds",
+        "head": "70fe0944fa83ef0591e30abc6692c7ae409b8b6b",
+        "branch": "refs/heads/feat/order-refund-management",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "feat/order-refund-management",
+          "headRefOid": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
+          "mergedAt": null,
+          "number": 3597,
+          "state": "OPEN",
+          "title": "feat(orders): manage cancellation refunds and manual refund records",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3597",
+          "exactAuditedHead": false
+        }
+      ]
+    },
+    {
+      "id": 178,
+      "path": "/Users/mac/Baci-worktrees/pr3597-refunds",
+      "head": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Refund RPC/currency/reference fixes; candidate pending current-main behavioral comparison.",
+      "shard": 1,
+      "manifest": {
+        "id": 178,
+        "path": "/Users/mac/Baci-worktrees/pr3597-refunds",
+        "head": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "feat/order-refund-management",
+          "headRefOid": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
+          "mergedAt": null,
+          "number": 3597,
+          "state": "OPEN",
+          "title": "feat(orders): manage cancellation refunds and manual refund records",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3597",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 179,
+      "path": "/Users/mac/Baci-worktrees/remediation-credential",
+      "head": "843ab191059ed5894e53ef90361df134681bf8b3",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 179,
+        "path": "/Users/mac/Baci-worktrees/remediation-credential",
+        "head": "843ab191059ed5894e53ef90361df134681bf8b3",
+        "branch": "refs/heads/codex/remediation-credential-boundary",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 180,
+      "path": "/Users/mac/Baci-worktrees/remediation-research-gate-fix",
+      "head": "8a18c776b4e828c567a45c12e24f128d10eadedc",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Four unique remediation research/delivery-gate commits plus dirty/ignored logs.",
+      "shard": 3,
+      "manifest": {
+        "id": 180,
+        "path": "/Users/mac/Baci-worktrees/remediation-research-gate-fix",
+        "head": "8a18c776b4e828c567a45c12e24f128d10eadedc",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 181,
+      "path": "/Users/mac/Baci-worktrees/semantic-timeout-fix",
+      "classification": "MISSING",
+      "evidence": "Assigned path absent during audit.",
+      "shard": 1,
+      "manifest": {
+        "id": 181,
+        "path": "/Users/mac/Baci-worktrees/semantic-timeout-fix",
+        "head": "bcdbf54cb591af2d9047afacaf75cdaaa29cccfa",
+        "locked": true,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 182,
+      "path": "/Users/mac/Baci-worktrees/sparse-vps-readiness-checkout",
+      "head": "2b52f514152d8665028921db6170e6db459ec1ca",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 182,
+        "path": "/Users/mac/Baci-worktrees/sparse-vps-readiness-checkout",
+        "head": "2b52f514152d8665028921db6170e6db459ec1ca",
+        "branch": "refs/heads/codex/emergency-github-hosted-deploy",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": [
+        {
+          "headRefName": "codex/emergency-github-hosted-deploy",
+          "headRefOid": "2b52f514152d8665028921db6170e6db459ec1ca",
+          "mergedAt": "2026-08-31T12:55:13Z",
+          "number": 3422,
+          "state": "MERGED",
+          "title": "ci: use hosted runner for production deploy",
+          "url": "https://github.com/ogabasseyy/Baci/pull/3422",
+          "exactAuditedHead": true
+        }
+      ]
+    },
+    {
+      "id": 183,
+      "path": "/Users/mac/Baci-worktrees/terra-3305-cleanup-path-canonical",
+      "head": "5419d8dd3f74acd798eff954ecfdba76385362ad",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "46 unique remediation cleanup-path commits / 105 paths; compare against related branches.",
+      "shard": 3,
+      "manifest": {
+        "id": 183,
+        "path": "/Users/mac/Baci-worktrees/terra-3305-cleanup-path-canonical",
+        "head": "5419d8dd3f74acd798eff954ecfdba76385362ad",
+        "branch": "refs/heads/codex/3305-cleanup-path-canonical",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 184,
+      "path": "/Users/mac/Baci-worktrees/terra-3305-followup-isolated",
+      "head": "bc3b00b42625e80c9339c91b794b4f91f1f249f1",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Remediation cleanup idempotency/tests; overlaps IDs 25/106/187/190, exact patch comparison not completed.",
+      "shard": 1,
+      "manifest": {
+        "id": 184,
+        "path": "/Users/mac/Baci-worktrees/terra-3305-followup-isolated",
+        "head": "bc3b00b42625e80c9339c91b794b4f91f1f249f1",
+        "branch": "refs/heads/codex/3305-terra-followup-isolated",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 185,
+      "path": "/Users/mac/Baci-worktrees/terra-3305-storage-stale-claim",
+      "head": "7a31c64bdd81e56612f203fdd4540816465d32f4",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 185,
+        "path": "/Users/mac/Baci-worktrees/terra-3305-storage-stale-claim",
+        "head": "7a31c64bdd81e56612f203fdd4540816465d32f4",
+        "branch": "refs/heads/codex/3305-storage-stale-claim",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 186,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-autofix-capability",
+      "head": "304b11c62770e26a9d2bfb233a549b670f739e6a",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "13 unique remediation capability commits / 33 paths; compare overlaps.",
+      "shard": 3,
+      "manifest": {
+        "id": 186,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-autofix-capability",
+        "head": "304b11c62770e26a9d2bfb233a549b670f739e6a",
+        "branch": "refs/heads/codex/3309-autofix-capability",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 187,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-case-state-review",
+      "head": "49aded50ec9e454f0d8056dd1e07768e09cd42a5",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Remediation stale-lock ownership/transition changes; overlapping history not exhaustively compared.",
+      "shard": 1,
+      "manifest": {
+        "id": 187,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-case-state-review",
+        "head": "49aded50ec9e454f0d8056dd1e07768e09cd42a5",
+        "branch": "refs/heads/codex/3309-case-state-review",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 188,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-claim-atomic",
+      "head": "c3a0d9041e0d43703fd20190b90c843e77eb5d59",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 188,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-claim-atomic",
+        "head": "c3a0d9041e0d43703fd20190b90c843e77eb5d59",
+        "branch": "refs/heads/codex/3309-claim-atomic",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 189,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-claim-matrix",
+      "head": "d65b60f2bb947955b939cabd2433f49a76b25fef",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Six unique stale-claim recovery commits; compare with lock-recovery peers.",
+      "shard": 3,
+      "manifest": {
+        "id": 189,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-claim-matrix",
+        "head": "d65b60f2bb947955b939cabd2433f49a76b25fef",
+        "branch": "refs/heads/codex/3309-claim-matrix",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 190,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-claim-residue-recovery",
+      "head": "78a57da4a26deffb4fb883b425b1b8fe17db7a43",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "Abandoned claim/sidecar recovery tests and fixes; overlapping history not exhaustively compared.",
+      "shard": 1,
+      "manifest": {
+        "id": 190,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-claim-residue-recovery",
+        "head": "78a57da4a26deffb4fb883b425b1b8fe17db7a43",
+        "branch": "refs/heads/codex/3309-claim-residue-recovery",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 191,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-lock-capability",
+      "head": "7b4de1b6e89317c3c03f3bc9670efd26eb4aa68d",
+      "classification": "PRESERVE_IMPROVEMENT",
+      "evidence": "",
+      "shard": 2,
+      "manifest": {
+        "id": 191,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-lock-capability",
+        "head": "7b4de1b6e89317c3c03f3bc9670efd26eb4aa68d",
+        "branch": "refs/heads/codex/3309-lock-capability",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 192,
+      "path": "/Users/mac/Baci-worktrees/terra-3309-storage-sidecar-cleanup",
+      "head": "82db689a6dd60596350a8f06f40bc899f12d2f73",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "Four unique lock-sidecar cleanup commits; compare with IDs 189/186.",
+      "shard": 3,
+      "manifest": {
+        "id": 192,
+        "path": "/Users/mac/Baci-worktrees/terra-3309-storage-sidecar-cleanup",
+        "head": "82db689a6dd60596350a8f06f40bc899f12d2f73",
+        "branch": "refs/heads/codex/3309-storage-sidecar-cleanup",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    },
+    {
+      "id": 194,
+      "path": "/private/tmp/baci-blog-handoff-rollout",
+      "head": "ae94a5075d92ebdc3625c13006a6dd4144dba4fa",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "Baseline-clean but unique ignored image is absent from primary.",
+      "shard": 1,
+      "manifest": {
+        "id": 194,
+        "path": "/private/tmp/baci-blog-handoff-rollout",
+        "head": "ae94a5075d92ebdc3625c13006a6dd4144dba4fa",
+        "locked": false,
+        "prunable": false
+      },
+      "prMatches": []
+    }
+  ]
+}

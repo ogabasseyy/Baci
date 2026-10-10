@@ -1,0 +1,191 @@
+{
+  "capturedAt": "2026-10-10T13:33:11.766Z",
+  "checks": [
+    {
+      "id": 5,
+      "path": "/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app",
+      "head": "dd2cc20be0a9c67ea5b164aab98ab2662605b8e4",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 6,
+      "path": "/Users/mac/.codex/worktrees/checkout-3577-pre-slice",
+      "head": "0e65eba26d21d19284ed1fd586c206a5b953b7f1",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 7,
+      "path": "/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app",
+      "head": "a09e19db1942e3d635b9a4ca88fec948b31a59e4",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 21,
+      "path": "/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app",
+      "head": "9820841a377e989d9dd53d0ababfc4d31ef2c8eb",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 29,
+      "path": "/Users/mac/Baci-app/.worktrees/android-soloader-fix",
+      "head": "491ad2cea33a46c7cdc82516c9a146a4f6bcd748",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 58,
+      "path": "/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys",
+      "head": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 60,
+      "path": "/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications",
+      "head": "9e722420726aeac5d8cb20894e6f816dd39f93da",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 79,
+      "path": "/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908",
+      "head": "3e065198486962d14cdf1afeecdc2e1e6247cfb7",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 81,
+      "path": "/Users/mac/Baci-app/.worktrees/negotiation-notification-fix",
+      "head": "643296b143501102b64e589ce948593b7352c10d",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 97,
+      "path": "/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health",
+      "head": "d9a1f7dbd4f531cc4c0b2846640f7c2d33481d80",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 104,
+      "path": "/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes",
+      "head": "01d5b31af9d4a628de7ac31b4b03a712d1816450",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 111,
+      "path": "/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830",
+      "head": "03199cc64332cee7dbf8c2e6d3fc75279bd0e8bb",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 120,
+      "path": "/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821",
+      "head": "18c6e963f8f94e1ff326e010bc86c973829fb7fb",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 130,
+      "path": "/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908",
+      "head": "2ca377a749422da1ea4eaf9f01f17c6ca10e4ef7",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 131,
+      "path": "/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna",
+      "head": "e8772444bd129f825d379238ef7bcc8df264369a",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 152,
+      "path": "/Users/mac/Baci-app/.worktrees/variant-review-followups",
+      "head": "2cd1fc38adbef569d9fab1439a1c0b962c58592c",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 158,
+      "path": "/Users/mac/Baci-worktrees/category-recent-carousel",
+      "head": "e6d619b21484c86994dd09a2b5932b8bbd92d816",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 170,
+      "path": "/Users/mac/Baci-worktrees/posthog-followup-secondary",
+      "head": "7b05a3194faa50b1054946c6c00cd90697a081af",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    },
+    {
+      "id": 171,
+      "path": "/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume",
+      "head": "c59cd1fd239b3a9658b12f60f3cc41bbab47f7fa",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": [
+        {
+          "pid": 1030,
+          "command": "watchman"
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "path": "/Users/mac/Baci-worktrees/pr3322-ci-fix",
+      "head": "47c2c9ceae9424b06a0e2c2bb55ed17daccf4a31",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": []
+    }
+  ],
+  "activityCapturedAt": "2026-10-10T13:33:12.540Z"
+}

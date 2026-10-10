@@ -52,7 +52,7 @@ BEGIN
   -- The drain binds the presented deadline to the stored one: post-expiry
   -- callers present the known stored deadline.
   scope := fixture.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}';
-  payload := jsonb_build_object('event','refund.processed','kind','refund','amountKobo',25000,'currency','NGN','status','processed',
+  payload := jsonb_build_object('event','refund.processed','kind','refund','resolution',NULL,'amountKobo',25000,'currency','NGN','status','processed',
     'transactionReference','pvb-first-primary-'||fixture.operation_id);
   IF piggyvest_primary_card.record_checkout_reversal(scope,fixture.operation_id,'refund','evt-refund-fifth-1',payload)->>'outcome'<>'recorded' THEN
     RAISE EXCEPTION 'uncollected reversal not recorded';
@@ -119,7 +119,7 @@ DO $$ DECLARE
   payload jsonb;
 BEGIN
   SELECT * INTO fixture FROM public.custody_fixture WHERE label='fourth@example.test';
-  payload := jsonb_build_object('event','charge.dispute.create','kind','dispute','amountKobo',25000,'currency','NGN','status','pending',
+  payload := jsonb_build_object('event','charge.dispute.create','kind','dispute','resolution',NULL,'amountKobo',25000,'currency','NGN','status','pending',
     'transactionReference','pvb-first-primary-'||fixture.operation_id);
   IF piggyvest_primary_card.record_checkout_reversal(fixture.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}',fixture.operation_id,'dispute','evt-dispute-fourth-1',payload)->>'outcome'<>'recorded' THEN
     RAISE EXCEPTION 'collected reversal not recorded';
@@ -156,14 +156,80 @@ BEGIN
   END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+-- Dispute resolutions update the dispute's row (create and resolve
+-- share the dispute id). A won dispute lifts the fence: fourth
+-- settles to completion. A lost dispute keeps it: third's
+-- post-settlement dispute records the liability without mutating the
+-- settled ledger.
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  fourth record;
+  third record;
+  won jsonb;
+  lost jsonb;
+BEGIN
+  SELECT * INTO fourth FROM public.custody_fixture WHERE label='fourth@example.test';
+  SELECT * INTO third FROM public.custody_fixture WHERE label='third@example.test';
+  won := jsonb_build_object('event','charge.dispute.resolve','kind','dispute','resolution','won','amountKobo',25000,'currency','NGN','status','resolved',
+    'transactionReference','pvb-first-primary-'||fourth.operation_id);
+  IF piggyvest_primary_card.record_checkout_reversal(fourth.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}',fourth.operation_id,'dispute','evt-dispute-fourth-1',won)->>'outcome'<>'resolved' THEN
+    RAISE EXCEPTION 'won dispute did not resolve the row';
+  END IF;
+  IF piggyvest_primary_card.record_checkout_reversal(third.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}',third.operation_id,'dispute','evt-dispute-third-1',
+    jsonb_build_object('event','charge.dispute.create','kind','dispute','resolution',NULL,'amountKobo',25000,'currency','NGN','status','pending',
+    'transactionReference','pvb-first-primary-'||third.operation_id))->>'outcome'<>'recorded' THEN
+    RAISE EXCEPTION 'post-settlement dispute not recorded';
+  END IF;
+  lost := jsonb_build_object('event','charge.dispute.resolve','kind','dispute','resolution','lost','amountKobo',25000,'currency','NGN','status','resolved',
+    'transactionReference','pvb-first-primary-'||third.operation_id);
+  IF piggyvest_primary_card.record_checkout_reversal(third.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}',third.operation_id,'dispute','evt-dispute-third-1',lost)->>'outcome'<>'resolved' THEN
+    RAISE EXCEPTION 'lost dispute did not resolve the row';
+  END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+DO $$ DECLARE
+  inbox record;
+  envelope jsonb;
+  raw text;
+  claims jsonb;
+  claim jsonb;
+  digest text;
+  proof jsonb;
+BEGIN
+  SELECT * INTO inbox FROM public.fence_fixture WHERE label='fourth@example.test';
+  envelope := inbox.envelope||'{"eventId":"reversal-settle-fourth-won"}';
+  raw := encode(convert_to(envelope::text,'UTF8'),'hex');
+  IF piggyvest_primary_card.enqueue_signed_inbox('10000000-0000-4000-8000-000000000004','staging',inbox.capability,raw,repeat('a',128))<>'accepted' THEN
+    RAISE EXCEPTION 'won settle intake failed';
+  END IF;
+  claims := piggyvest_primary_card.claim_signed_inbox('10000000-0000-4000-8000-000000000004','staging',inbox.capability,10);
+  SELECT value INTO claim FROM jsonb_array_elements(claims) value WHERE value->>'eventId'='reversal-settle-fourth-won';
+  IF claim IS NULL THEN RAISE EXCEPTION 'won settle claim missing'; END IF;
+  digest := encode(sha256(decode(raw,'hex')),'hex');
+  proof := (SELECT custody.proof FROM public.custody_fixture custody WHERE label='fourth@example.test')
+    ||jsonb_build_object('observedAt',clock_timestamp(),'bodyDigest',digest,'inboxToken',claim->>'token','eventId','reversal-settle-fourth-won');
+  IF piggyvest_primary_card.settle_custody('10000000-0000-4000-8000-000000000004','staging',proof)<>'completed' THEN
+    RAISE EXCEPTION 'won dispute still fenced settlement';
+  END IF;
+  IF NOT piggyvest_primary_card.finish_signed_inbox('10000000-0000-4000-8000-000000000004','staging',inbox.capability,'reversal-settle-fourth-won',(claim->>'token')::uuid,'completed') THEN
+    RAISE EXCEPTION 'won settlement not acknowledged';
+  END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
-  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals)<>3 THEN RAISE EXCEPTION 'reversal tally wrong'; END IF;
-  IF (SELECT count(*) FROM piggyvest_primary_card.settlements)<>1 THEN RAISE EXCEPTION 'reversal leaked settlement'; END IF;
-  IF (SELECT state FROM piggyvest_primary_card.operations WHERE id=(SELECT operation_id FROM public.custody_fixture WHERE label='fourth@example.test'))<>'custody_pending' THEN RAISE EXCEPTION 'collected reversal mutated operation'; END IF;
-  IF (SELECT available_balance FROM public.customer_wallets WHERE customer_id='40000000-0000-4000-8000-000000000002')<>292 THEN RAISE EXCEPTION 'reversed settlement moved wallet'; END IF;
-  IF EXISTS(SELECT 1 FROM public.customer_wallet_transactions WHERE customer_id='40000000-0000-4000-8000-000000000002' AND source_type='piggyvest_primary_card_custody') THEN RAISE EXCEPTION 'reversed settlement credited wallet'; END IF;
-  IF (SELECT state FROM piggyvest_primary_card.transfer_outbox WHERE operation_id=(SELECT operation_id FROM public.custody_fixture WHERE label='fourth@example.test'))='completed' THEN RAISE EXCEPTION 'reversed settlement completed outbox'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals)<>4 THEN RAISE EXCEPTION 'reversal tally wrong'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.settlements)<>2 THEN RAISE EXCEPTION 'won dispute did not settle'; END IF;
+  IF (SELECT resolution FROM piggyvest_primary_card.checkout_reversals WHERE provider_event_id='evt-dispute-fourth-1')<>'won' THEN RAISE EXCEPTION 'won resolution not stored'; END IF;
+  IF (SELECT resolution FROM piggyvest_primary_card.checkout_reversals WHERE provider_event_id='evt-dispute-third-1')<>'lost' THEN RAISE EXCEPTION 'lost resolution not stored'; END IF;
+  IF (SELECT state FROM piggyvest_primary_card.operations WHERE id=(SELECT operation_id FROM public.custody_fixture WHERE label='third@example.test'))<>'completed' THEN RAISE EXCEPTION 'lost dispute mutated settlement'; END IF;
+  IF (SELECT state FROM piggyvest_primary_card.operations WHERE id=(SELECT operation_id FROM public.custody_fixture WHERE label='fourth@example.test'))<>'completed' THEN RAISE EXCEPTION 'won dispute did not complete operation'; END IF;
+  -- Fourth links its preexisting bank receipt: the fence lift settles
+  -- without a second credit.
+  IF (SELECT available_balance FROM public.customer_wallets WHERE customer_id='40000000-0000-4000-8000-000000000002')<>292 THEN RAISE EXCEPTION 'won settlement double-credited wallet'; END IF;
+  IF EXISTS(SELECT 1 FROM public.customer_wallet_transactions WHERE customer_id='40000000-0000-4000-8000-000000000002' AND source_type='piggyvest_primary_card_custody') THEN RAISE EXCEPTION 'won settlement credited wallet'; END IF;
+  IF (SELECT state FROM piggyvest_primary_card.transfer_outbox WHERE operation_id=(SELECT operation_id FROM public.custody_fixture WHERE label='fourth@example.test'))<>'completed' THEN RAISE EXCEPTION 'won settlement did not complete outbox'; END IF;
   IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE customer_id='50000000-0000-4000-8000-000000000002' AND state='reserved')<>1 THEN RAISE EXCEPTION 're-reserve missing'; END IF;
-  IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>60000 THEN RAISE EXCEPTION 'reversal treasury tally wrong'; END IF;
-  IF (SELECT consumed_kobo FROM prefunded_card.treasury_bindings)<>45000 THEN RAISE EXCEPTION 'reversal consumed treasury'; END IF;
+  IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>35000 THEN RAISE EXCEPTION 'reversal treasury tally wrong'; END IF;
+  IF (SELECT consumed_kobo FROM prefunded_card.treasury_bindings)<>70000 THEN RAISE EXCEPTION 'won settlement did not consume treasury'; END IF;
 END $$;

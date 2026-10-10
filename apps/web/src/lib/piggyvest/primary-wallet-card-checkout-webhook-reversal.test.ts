@@ -117,6 +117,56 @@ describe('primary card checkout webhook reversal', () => {
     expect(response?.status).toBe(200);
   });
 
+  it.each([
+    { resolution: 'declined', status: 'resolved', expected: 'won' },
+    { resolution: 'merchant-accepted', status: 'resolved', expected: 'lost' },
+  ])('records dispute resolutions with outcome $expected', async ({
+    resolution,
+    status,
+    expected,
+  }) => {
+    const { execute, runtime } = setup('completed');
+    const payload = body();
+    const data = payload.data as Record<string, unknown>;
+    delete data.transaction_reference;
+    data.transaction_ref = fixture.intent.reference;
+    data.status = status;
+    (data as Record<string, unknown>).resolution = resolution;
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: { ...payload, event: 'charge.dispute.resolve' },
+      runtime,
+      execute: execute as never,
+    });
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(reversalParams[2]).toBe('dispute');
+    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
+      event: 'charge.dispute.resolve',
+      resolution: expected,
+    });
+    expect(response?.status).toBe(200);
+  });
+
+  it('leaves ambiguous resolutions unset so the fence holds', async () => {
+    const { execute, runtime } = setup('completed');
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: {
+        ...body(),
+        event: 'charge.dispute.resolve',
+        data: {
+          ...(body().data as Record<string, unknown>),
+          status: 'pending',
+        },
+      },
+      runtime,
+      execute: execute as never,
+    });
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(JSON.parse(reversalParams[4] ?? '{}')).toMatchObject({
+      resolution: null,
+    });
+    expect(response?.status).toBe(200);
+  });
+
   it('resolves the original reference from nested dispute payloads', async () => {
     const { execute, runtime } = setup('completed');
     const payload = body();

@@ -40,6 +40,12 @@ it('exposes signing keys while the worker stays unconfigured', () => {
   expect(
     readPrimaryWalletPaidInterestInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();
+  expect(() =>
+    readPrimaryWalletPaidInterestInboxSecrets({
+      ...incomplete,
+      PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS: 'malformed',
+    })
+  ).toThrow(/secrets unavailable/);
 });
 it('keeps signing keys available while intake processing is rolled back', () => {
   const disabled = {

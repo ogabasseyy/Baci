@@ -29,3 +29,40 @@ export function webhookMetadataOf(
   }
   return webhookObject(metadata);
 }
+
+/**
+ * Money-out events against a checkout reference. Refunds carry the
+ * original reference in top-level `transaction_reference`; disputes
+ * (create and resolve) carry it in the dispute object's
+ * `transaction_ref` or nested `transaction.reference` instead.
+ */
+export const REVERSAL_EVENTS = [
+  'refund.processed',
+  'charge.dispute.create',
+  'charge.dispute.resolve',
+] as const;
+
+export function isReversalEvent(event: unknown): boolean {
+  return (
+    typeof event === 'string' &&
+    (REVERSAL_EVENTS as readonly string[]).includes(event)
+  );
+}
+
+export function reversalTransactionReference(
+  data: Record<string, unknown>
+): string | null {
+  for (const key of ['transaction_reference', 'transaction_ref']) {
+    const direct = data[key];
+    if (typeof direct === 'string' && direct) return direct;
+  }
+  for (const key of ['transaction', 'dispute']) {
+    const nested = webhookObject(data[key]);
+    const candidate =
+      nested && typeof nested.reference === 'string' && nested.reference
+        ? nested.reference
+        : null;
+    if (candidate) return candidate;
+  }
+  return null;
+}

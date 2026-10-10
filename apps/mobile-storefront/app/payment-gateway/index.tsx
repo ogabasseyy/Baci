@@ -4,6 +4,7 @@
  */
 
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { InvalidCheckoutView } from '@/components/payment-gateway/InvalidCheckoutView';
 import { PaymentErrorView } from '@/components/payment-gateway/PaymentErrorView';
 import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/PaymentGatewayCheckoutView';
@@ -17,6 +18,7 @@ import { usePaymentGatewayController } from '@/components/payment-gateway/use-pa
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { useAuthStore } from '@/stores/auth-store';
 
 export default function PaymentGatewayScreen() {
@@ -25,6 +27,48 @@ export default function PaymentGatewayScreen() {
   const controller = usePaymentGatewayController();
   const user = useAuthStore((state) => state.user);
   const customer = useAuthStore((state) => state.customer);
+  const paramsData = controller.validatedParams.data;
+  // Launches without the user stamp predate it: resolve ownership from
+  // the device record instead of the params, so a second user cannot
+  // enter card details into the first user's checkout. The WebView
+  // stays unmounted until the record proves the current user owns this
+  // reference (or the launch is blocked).
+  const needsLegacyOwnershipCheck =
+    controller.validatedParams.isValid &&
+    controller.paymentKind === 'primary_wallet_card' &&
+    !paramsData?.userId;
+  const [legacyOwnership, setLegacyOwnership] = useState<
+    'pending' | 'verified' | 'blocked'
+  >('pending');
+  useEffect(() => {
+    if (!needsLegacyOwnershipCheck) return;
+    let cancelled = false;
+    setLegacyOwnership('pending');
+    (async () => {
+      try {
+        const record = await createPrimaryWalletCardFundingClient().readPending(
+          {
+            merchantId: paramsData?.merchantId,
+            userId: user?.id,
+          }
+        );
+        const owns =
+          record?.operationId != null &&
+          `pvb-first-primary-${record.operationId}` === paramsData?.reference;
+        if (!cancelled) setLegacyOwnership(owns ? 'verified' : 'blocked');
+      } catch {
+        if (!cancelled) setLegacyOwnership('blocked');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    needsLegacyOwnershipCheck,
+    paramsData?.merchantId,
+    paramsData?.reference,
+    user?.id,
+  ]);
 
   // A pending/held REDVAULT capture may still be reconciled server-side, so
   // this action must not return to the still-populated checkout (which would
@@ -79,6 +123,34 @@ export default function PaymentGatewayScreen() {
           }
         />
       );
+    }
+
+    // Stampless legacy launches carry no identity to compare, so the
+    // device record is the authority: the WebView mounts only for a
+    // record that proves the current user owns this reference.
+    if (needsLegacyOwnershipCheck) {
+      if (legacyOwnership === 'pending') {
+        return (
+          <PaymentProcessingView
+            colors={colors}
+            paymentKind={controller.paymentKind}
+            utilityType={controller.utilityType}
+          />
+        );
+      }
+      if (legacyOwnership === 'blocked') {
+        return (
+          <PrimaryWalletCardPendingView
+            colors={colors}
+            statusError
+            message={null}
+            terminalDirective="We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited."
+            onBack={() =>
+              router.replace(getWalletReturnHref(controller.returnTo))
+            }
+          />
+        );
+      }
     }
 
     // Closed primary status set: beginPrimaryWalletCardCompletion only

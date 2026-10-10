@@ -39,6 +39,24 @@ export interface PiggyvestFamilySecret {
 export function collectPiggyvestWebhookSecretsWithFamilies(
   env: NodeJS.ProcessEnv = process.env
 ): PiggyvestFamilySecret[] {
+  return collectPiggyvestWebhookSecretsWithStatus(env).secrets;
+}
+
+export function collectPiggyvestWebhookSecrets(
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  return [
+    ...new Set(
+      collectPiggyvestWebhookSecretsWithFamilies(env).map(
+        (candidate) => candidate.secret
+      )
+    ),
+  ];
+}
+
+function collectPiggyvestWebhookSecretsWithStatus(
+  env: NodeJS.ProcessEnv = process.env
+): { secrets: PiggyvestFamilySecret[]; misconfigured: boolean } {
   // Secrets-only readers: key material survives incomplete provisioning
   // (missing database password, unparseable scope, expired worker) so the
   // outer gate verifies and the unready intake answers a retryable 503
@@ -52,6 +70,7 @@ export function collectPiggyvestWebhookSecretsWithFamilies(
     ['interest', () => readPrimaryWalletPaidInterestInboxSecrets(env)],
   ];
   const secrets: PiggyvestFamilySecret[] = [];
+  let misconfigured = false;
   const seen = new Set<string>();
   const push = (candidate: unknown, family: PiggyvestWebhookKeyFamily) => {
     if (
@@ -73,22 +92,15 @@ export function collectPiggyvestWebhookSecretsWithFamilies(
         for (const retained of config.retainedWebhookSecrets)
           push(retained, family);
     } catch {
-      // Disabled or misconfigured runtimes contribute no secrets.
+      // Disabled runtimes return null above; a throw means the family is
+      // configured but unreadable (e.g. malformed retained-key JSON), so
+      // its key set is incomplete. Healthy families still contribute,
+      // but verification must not call an unmatched delivery invalid:
+      // it may be signed with a key we failed to load.
+      misconfigured = true;
     }
   }
-  return secrets;
-}
-
-export function collectPiggyvestWebhookSecrets(
-  env: NodeJS.ProcessEnv = process.env
-): string[] {
-  return [
-    ...new Set(
-      collectPiggyvestWebhookSecretsWithFamilies(env).map(
-        (candidate) => candidate.secret
-      )
-    ),
-  ];
+  return { secrets, misconfigured };
 }
 
 /**
@@ -155,9 +167,15 @@ export function verifyPiggyvestWebhookSecrets(input: {
   signature: string | null;
   env?: NodeJS.ProcessEnv;
 }): PiggyvestWebhookVerification {
-  const secrets = collectPiggyvestWebhookSecretsWithFamilies(input.env);
+  const { secrets, misconfigured } = collectPiggyvestWebhookSecretsWithStatus(
+    input.env
+  );
   if (secrets.length === 0) return { status: 'unconfigured' };
   const match = matchPiggyvestWebhookSecretWithFamilies({ ...input, secrets });
-  if (!match) return { status: 'invalid' };
+  // A delivery that matches no loaded key is invalid — unless a family
+  // failed to load, in which case the key set is incomplete and the
+  // delivery may be legitimate. Report unconfigured (retryable 503) so
+  // the provider retries instead of the route 200-acking it as invalid.
+  if (!match) return { status: misconfigured ? 'unconfigured' : 'invalid' };
   return { status: 'verified', secret: match.secret, families: match.families };
 }

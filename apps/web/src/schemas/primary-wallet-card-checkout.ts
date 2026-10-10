@@ -146,8 +146,15 @@ export const primaryWalletCardCheckoutSchemas = {
     operationId: uuid,
     providerEventId: z.string().min(1).max(128),
     evidence: z.strictObject({
-      event: z.enum(['refund.processed', 'charge.dispute.create']),
+      event: z.enum([
+        'refund.processed',
+        'charge.dispute.create',
+        'charge.dispute.resolve',
+      ]),
       kind: z.enum(['refund', 'dispute']),
+      // Set only by dispute resolutions: won lifts the settlement
+      // fence (no money moved), lost keeps it (the refund stands).
+      resolution: z.enum(['won', 'lost']).nullable(),
       // Partial refunds below the charge floor still record: any
       // money-out against our reference is reversal evidence, never
       // noise. Absent on event shapes that carry no amount (the row
@@ -159,6 +166,6 @@ export const primaryWalletCardCheckoutSchemas = {
     }),
   }),
   reversalOutcome: z.strictObject({
-    outcome: z.enum(['recorded', 'duplicate']),
+    outcome: z.enum(['recorded', 'duplicate', 'resolved']),
   }),
 };

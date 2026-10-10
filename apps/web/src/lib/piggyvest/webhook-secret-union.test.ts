@@ -156,6 +156,38 @@ it('verifies with a retained key and reports the matched secret', async () => {
   ).toEqual({ status: 'invalid' });
 });
 
+it('reports unconfigured instead of invalid when a family fails to load', async () => {
+  const { createHmac } = await import('node:crypto');
+  mocks.bank.mockImplementation(() => {
+    throw new Error('Primary bank inbox secrets unavailable');
+  });
+  mocks.interest.mockReturnValue({ webhookSecret: 'interest-secret' });
+  const rawBody = Buffer.from('{"event":"bank-transfer.inflow.success"}');
+  // Signed with a key the failed reader could not load: the key set is
+  // incomplete, so the delivery must retry, not 200-ack as invalid.
+  const signature = createHmac('sha512', 'unloaded-retained-secret')
+    .update(rawBody)
+    .digest('hex');
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody,
+      signature,
+      env: { NODE_ENV: 'test' },
+    })
+  ).toEqual({ status: 'unconfigured' });
+  // A delivery that verifies against a loaded key still flows.
+  const valid = createHmac('sha512', 'interest-secret')
+    .update(rawBody)
+    .digest('hex');
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody,
+      signature: valid,
+      env: { NODE_ENV: 'test' },
+    }).status
+  ).toBe('verified');
+});
+
 it('tags each secret with the family that configured it', () => {
   mocks.bank.mockReturnValue({ webhookSecret: 'bank-secret' });
   mocks.custody.mockReturnValue({

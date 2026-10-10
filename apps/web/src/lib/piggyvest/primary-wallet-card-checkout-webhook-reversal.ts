@@ -4,23 +4,26 @@ import { createPrimaryWalletCardCheckoutExecutor } from './primary-wallet-card-c
 import { assertCheckoutIntentOwnership } from './primary-wallet-card-checkout-ownership';
 import { readPrimaryWalletCardCheckoutRuntimeDrain } from './primary-wallet-card-checkout-runtime';
 import {
+  isReversalEvent,
+  reversalTransactionReference,
   webhookMetadataOf,
   webhookObject,
 } from './primary-wallet-card-checkout-webhook-shape';
 
 type Executor = ReturnType<typeof createPrimaryWalletCardCheckoutExecutor>;
 
-const REVERSAL_EVENTS = ['refund.processed', 'charge.dispute.create'] as const;
-
-function nestedTransactionReference(
+function disputeResolution(
+  event: string,
   data: Record<string, unknown>
-): string | null {
-  for (const key of ['transaction', 'dispute']) {
-    const nested = webhookObject(data[key]);
-    const candidate =
-      nested && typeof nested.reference === 'string' ? nested.reference : null;
-    if (candidate) return candidate;
-  }
+): 'won' | 'lost' | null {
+  if (event !== 'charge.dispute.resolve') return null;
+  // Paystack resolves a dispute as declined (merchant won, no money
+  // moved) or merchant-accepted (merchant lost, the refund stands).
+  // Anything else stays unresolved: the fence holds until the outcome
+  // is unambiguous.
+  if (data.status === 'resolved' && data.resolution === 'declined')
+    return 'won';
+  if (data.resolution === 'merchant-accepted') return 'lost';
   return null;
 }
 
@@ -31,13 +34,15 @@ function nestedTransactionReference(
  * Money-out evidence has the same status as money-in evidence: a refund
  * the ledger ignores is a customer charged twice (refund issued by
  * Paystack, full custody still settled to us). This path cross-binds the
- * metadata operation ID to `transaction_reference` (Paystack puts the
- * ORIGINAL charge reference there, never its own event ID), re-reads
+ * metadata operation ID to the event's transaction slot (Paystack puts
+ * the ORIGINAL charge reference there, never its own event ID), re-reads
  * the stored intent under the runtime scope — ownership asserted on the
  * six immutable IDs, email excluded like status recovery — and records
  * the durable reversal row. A reversal against an uncollected checkout
  * abandons it (releasing treasury); against a collected checkout it
- * flags the ledger and blocks re-credit.
+ * flags the ledger and blocks re-credit. A dispute resolution updates
+ * the dispute's row: won lifts the fence (no money moved), lost keeps
+ * it. Latest provider outcome wins.
  *
  * 200 only once the reversal is durable; anything unresolved returns
  * null so the sync boundary keeps the delivery retryable.
@@ -51,17 +56,11 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
   const data = body ? webhookObject(body.data) : null;
   const metadata = webhookMetadataOf(input.body);
   if (!body || !data || !metadata) return null;
-  if (
-    typeof body.event !== 'string' ||
-    !(REVERSAL_EVENTS as readonly string[]).includes(body.event)
-  )
+  if (typeof body.event !== 'string' || !isReversalEvent(body.event))
     return null;
   const operationId =
     typeof metadata.operation_id === 'string' ? metadata.operation_id : null;
-  const transactionReference =
-    (typeof data.transaction_reference === 'string'
-      ? data.transaction_reference
-      : null) ?? nestedTransactionReference(data);
+  const transactionReference = reversalTransactionReference(data);
   if (!operationId) return null;
   if (transactionReference !== `pvb-first-primary-${operationId}`) return null;
 
@@ -98,7 +97,8 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
               : null,
       evidence: {
         event: body.event,
-        kind: body.event === 'charge.dispute.create' ? 'dispute' : 'refund',
+        kind: body.event === 'refund.processed' ? 'refund' : 'dispute',
+        resolution: disputeResolution(body.event, data),
         // Informational fields coerce to null rather than rejecting the
         // delivery: an authentic event with an absent amount still
         // records, and the amounts reconcile from the provider.

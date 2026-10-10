@@ -45,6 +45,7 @@ describe('primary card legacy webhook isolation', () => {
   it.each([
     'refund.processed',
     'charge.dispute.create',
+    'charge.dispute.resolve',
   ])('keeps reversal-shaped %s deliveries retryable instead of acking them as noise', (event) => {
     expect(
       primaryWalletCardCheckoutWebhookBoundary({

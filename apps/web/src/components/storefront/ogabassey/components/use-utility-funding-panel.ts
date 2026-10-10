@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import type { StorefrontWalletFundingAccount } from '@baci/shared';
 
 interface UseUtilityFundingPanelInput {
@@ -61,11 +61,12 @@ export const useUtilityFundingPanel = ({
     setShowFundingPanel(false);
   }
 
-  const closeFundingPanel = useCallback(() => {
+  // Plain handlers — React Compiler owns memoization (no useCallback).
+  const closeFundingPanel = () => {
     setShowFundingPanel(false);
-  }, []);
+  };
 
-  const openForInsufficientBalance = useCallback(() => {
+  const openForInsufficientBalance = () => {
     // Wallet-only checkout: surface the funding panel WITHOUT auto-create
     // so the customer can top up and retry. No-op when bank-transfer
     // funding is unavailable.
@@ -73,13 +74,13 @@ export const useUtilityFundingPanel = ({
       setFundingPanelAutoCreate(false);
       setShowFundingPanel(true);
     }
-  }, [canFundByBankTransfer]);
+  };
 
-  const toggleFromExplicitChoice = useCallback(() => {
+  const toggleFromExplicitChoice = () => {
     // Explicit bank-transfer action: this IS the consent.
     setFundingPanelAutoCreate(true);
     setShowFundingPanel((visible) => !visible);
-  }, []);
+  };
 
   return {
     canFundByBankTransfer,

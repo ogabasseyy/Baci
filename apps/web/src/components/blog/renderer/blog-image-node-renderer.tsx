@@ -1,3 +1,4 @@
+import { isStablePublicMediaUrl } from '@baci/shared/storefront';
 import Image from 'next/image';
 import {
   buildInlineImageSiblings,
@@ -28,13 +29,21 @@ export const BlogImageNodeRenderer = ({
 }: BlogImageNodeRendererProps) => {
   // Guard against missing src to prevent runtime errors
   const rawSrc = node.attrs?.src;
-  const imageSrc = rawSrc ? sanitizeUrl(rawSrc) : '';
+  const imageSrc =
+    typeof rawSrc === 'string'
+      ? isStablePublicMediaUrl(rawSrc)
+        ? rawSrc
+        : sanitizeUrl(rawSrc)
+      : '';
   const imageCaption =
     (typeof node.attrs?.title === 'string' ? node.attrs.title : '').trim() ||
     (typeof node.attrs?.caption === 'string' ? node.attrs.caption.trim() : '');
 
-  // Only allow http/https protocols for blog images in 2026 for security and CDN stability
-  if (!imageSrc?.startsWith('http')) {
+  // Only allow http/https or content-addressed release media for security and CDN stability.
+  if (
+    !imageSrc ||
+    (!imageSrc.startsWith('http') && !isStablePublicMediaUrl(imageSrc))
+  ) {
     logger.warn({
       message: 'Blog image node missing or invalid src attribute',
       src: rawSrc ?? null,

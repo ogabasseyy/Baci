@@ -614,8 +614,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     // The order FK already nulled the link before the scan, so the
     // verified merchant debit files into the order-independent queue
-    // — but the watch stays open: a later completion sharing the
-    // reference must claim it instead of acknowledging silently.
+    // — and the handled watch resolves: the detached completed
+    // payment satisfies the retire guard forever, so leaving it open
+    // would ride the bounded sweep queue every run.
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'paystack_refund_evidence_invalid',
@@ -624,14 +625,13 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
         reason: expect.stringContaining('detached from any order'),
       })
     );
-    expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith(
       'open_paystack_refund_recovery_watch_v1',
       expect.objectContaining({ p_paystack_ref: 'PSK-1' })
     );
-    expect(rpc).not.toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
-      expect.anything()
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
     );
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })

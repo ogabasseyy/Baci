@@ -178,10 +178,12 @@ export async function recoverUnknownPaystackRefund(
         }
         // Stable detached under the watch: the verified refund is
         // still a real merchant debit, so retain it in the
-        // order-independent queue. The watch stays open — filed or
-        // not, a later completion sharing the reference must claim
-        // it instead of acknowledging silently; the sweep retires
-        // the watch when no payment ever lands.
+        // order-independent queue, then resolve the watch like the
+        // multi-match branch: the detached completed payment
+        // satisfies the retire guard forever, so a leaked open watch
+        // would ride the bounded sweep queue every run, and a later
+        // completion sharing the reference is a different payment
+        // whose claim would file this refund's evidence stale.
         await fileInvalidPaystackRefundEvidenceReview(supabase, {
           evidence: {
             providerPaymentTransactionId: evidence.providerPaymentTransactionId,
@@ -192,6 +194,10 @@ export async function recoverUnknownPaystackRefund(
           reason: `Paystack refund ${refundId} verified for reference ${resolvedPaymentReference} but its completed payment is detached from any order; route the merchant debit manually`,
           reference: resolvedPaymentReference,
           refundId,
+        });
+        await resolvePaystackRefundRecoveryWatch(supabase, {
+          providerRefundId: refundId,
+          reference: resolvedPaymentReference,
         });
         logger.info({
           message:

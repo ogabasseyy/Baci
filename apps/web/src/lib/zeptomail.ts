@@ -2,8 +2,8 @@ import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  admitZeptomailPlatformFallback,
   clampZeptomailAttemptsPerSender,
-  resolveZeptomailFallbackAdmission,
   ZEPTOMAIL_MAX_RETRIES,
   ZEPTOMAIL_RETRY_BASE_DELAY_MS,
 } from '@/lib/zeptomail-send-budget';
@@ -627,12 +627,7 @@ export async function sendEmail({
   // lost to that, so retry once from the platform domain — mirroring the
   // auth-email hook, which also falls back to the platform sender.
   const { fallbackAttempts, fallbackBudgetMs, fallbackFits, fallbackWorstMs } =
-    resolveZeptomailFallbackAdmission({
-      attemptsPerSender,
-      ...(fallbackDeadlineMs !== undefined && {
-        remainingBudgetMs: fallbackDeadlineMs - Date.now(),
-      }),
-    });
+    admitZeptomailPlatformFallback({ attemptsPerSender, fallbackDeadlineMs });
   if (fallbackBudgetMs !== undefined && !fallbackFits) {
     console.warn(
       `ZeptoMail skipping platform-sender fallback: ${String(fallbackBudgetMs)}ms remain, ${String(fallbackWorstMs)}ms required`

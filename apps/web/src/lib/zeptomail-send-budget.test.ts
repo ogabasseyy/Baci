@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  admitZeptomailPlatformFallback,
   clampZeptomailAttemptsPerSender,
   resolveZeptomailFallbackAdmission,
   senderLoopWorstMs,
@@ -58,6 +59,31 @@ describe('zeptomail send budget', () => {
       fallbackBudgetMs: senderLoopWorstMs(1),
       fallbackFits: true,
       fallbackWorstMs: senderLoopWorstMs(1),
+    });
+  });
+
+  it('admits from an absolute deadline without inline math', () => {
+    const nowMs = 1_700_000_000_000;
+    expect(
+      admitZeptomailPlatformFallback({
+        attemptsPerSender: 4,
+        fallbackDeadlineMs: nowMs + senderLoopWorstMs(1),
+        nowMs,
+      })
+    ).toEqual({
+      fallbackAttempts: 1,
+      fallbackBudgetMs: senderLoopWorstMs(1),
+      fallbackFits: true,
+      fallbackWorstMs: senderLoopWorstMs(1),
+    });
+    // No deadline: full loop, nothing to fit.
+    expect(
+      admitZeptomailPlatformFallback({ attemptsPerSender: 4, nowMs })
+    ).toEqual({
+      fallbackAttempts: 4,
+      fallbackBudgetMs: undefined,
+      fallbackFits: true,
+      fallbackWorstMs: senderLoopWorstMs(4),
     });
   });
 

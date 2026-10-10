@@ -69,6 +69,29 @@ export interface ZeptomailFallbackAdmission {
  * retryable failure. Pass the remaining budget (deadline minus now);
  * omit it when the caller set no fallback deadline.
  */
+/**
+ * Admit the platform-sender fallback from the caller's absolute
+ * deadline: converts the epoch-ms cutoff to a remaining budget and
+ * resolves admission in one call, so the send path passes its
+ * deadline through instead of spreading deadline math inline.
+ */
+export function admitZeptomailPlatformFallback({
+  attemptsPerSender,
+  fallbackDeadlineMs,
+  nowMs = Date.now(),
+}: {
+  attemptsPerSender: number;
+  fallbackDeadlineMs?: number;
+  nowMs?: number;
+}): ZeptomailFallbackAdmission {
+  return resolveZeptomailFallbackAdmission({
+    attemptsPerSender,
+    ...(fallbackDeadlineMs !== undefined && {
+      remainingBudgetMs: fallbackDeadlineMs - nowMs,
+    }),
+  });
+}
+
 export function resolveZeptomailFallbackAdmission({
   attemptsPerSender,
   remainingBudgetMs,

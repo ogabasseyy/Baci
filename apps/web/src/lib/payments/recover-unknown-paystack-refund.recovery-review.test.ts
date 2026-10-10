@@ -412,8 +412,10 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     // The atomic recheck returned the same detached row the watch was
     // opened for: without the detached branch the stable pass would
-    // acknowledge with no audit row or review. The watch stays open
-    // so a later completion sharing the reference claims it.
+    // acknowledge with no audit row or review. The handled watch
+    // resolves — the detached payment satisfies the retire guard
+    // forever, so leaving it open would ride the sweep queue
+    // every run.
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'paystack_refund_evidence_invalid',
@@ -426,9 +428,9 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       'open_paystack_refund_recovery_watch_v1',
       expect.anything()
     );
-    expect(rpc).not.toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
-      expect.anything()
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
     );
   });
 

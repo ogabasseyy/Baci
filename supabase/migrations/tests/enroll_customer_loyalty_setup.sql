@@ -118,7 +118,10 @@ SELECT pg_temp.assert_true(
 );
 
 -- The tier-order migration closes the baseline's anon grant on the tier
--- projection: only sessions may execute it directly.
+-- projection. The authenticated grant stays: the invoker's-rights
+-- award_purchase_points calls this with the caller's rights, so only
+-- anon is revoked (accepted tier-ladder enumeration, documented in the
+-- migration).
 SELECT pg_temp.assert_true(
   NOT EXISTS (
     SELECT 1
@@ -135,6 +138,48 @@ SELECT pg_temp.assert_true(
   AND has_function_privilege('service_role',
     'public.calculate_loyalty_tier(integer,uuid)', 'EXECUTE'),
   'calculate_loyalty_tier grants are incorrect'
+);
+
+-- The award migration revokes the baseline's anon grant: the award calls
+-- the tier projection with the caller's rights, so an advertised anon
+-- award would only fail mid-transaction on the tier call.
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.award_purchase_points(uuid,uuid,uuid,numeric)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.award_purchase_points(uuid,uuid,uuid,numeric)', 'EXECUTE')
+  AND has_function_privilege('authenticated',
+    'public.award_purchase_points(uuid,uuid,uuid,numeric)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.award_purchase_points(uuid,uuid,uuid,numeric)', 'EXECUTE'),
+  'award_purchase_points grants are incorrect'
+);
+
+-- The referral-settlement helper has no ownership check, so only the
+-- enrollment RPC may reach it (definer's rights): no PUBLIC grant, no
+-- anon EXECUTE, no authenticated EXECUTE, service_role only.
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS procedure,
+      LATERAL aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) AS acl_entry
+    WHERE procedure.oid = 'public.credit_loyalty_referral(uuid,uuid,uuid,integer,integer,uuid)'::regprocedure
+      AND acl_entry.grantee = 0
+      AND acl_entry.privilege_type = 'EXECUTE'
+  )
+  AND NOT has_function_privilege('anon',
+    'public.credit_loyalty_referral(uuid,uuid,uuid,integer,integer,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated',
+    'public.credit_loyalty_referral(uuid,uuid,uuid,integer,integer,uuid)', 'EXECUTE')
+  AND has_function_privilege('service_role',
+    'public.credit_loyalty_referral(uuid,uuid,uuid,integer,integer,uuid)', 'EXECUTE'),
+  'credit_loyalty_referral grants are incorrect'
 );
 
 -- Fixtures.

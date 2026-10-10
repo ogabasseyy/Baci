@@ -1,5 +1,5 @@
 -- Status projection and cap cases for the enroll_customer_loyalty suite
--- (cases 27-28b). Runs after redemption: the cap and minimum cases
+-- (cases 27-28d). Runs after redemption: the cap and minimum cases
 -- depend on case-19 and case-25 state, and case 27 mutates member 011
 -- balances no later case depends on.
 
@@ -160,4 +160,42 @@ SELECT pg_temp.assert_true(
      '01aa0000-0000-4000-8000-000000000015'
    ) AS result),
   'unknown reward type left a mutation or stayed advertised'
+);
+
+-- 28d. Valued rewards without a positive value are hidden from status
+-- (same predicate as the redemption RPC's valued guard): a null, zero,
+-- or negative store_credit / discount_fixed / discount_percentage
+-- always fails closed at redeem time, so it must not be offered. A
+-- plain discount without a value stays listed: it is redeemable.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  enabled, stock_quantity
+) VALUES
+  ('01aa0000-0000-4000-8000-000000000001', 'Empty credit', 100,
+   'store_credit', NULL, true, 5),
+  ('01aa0000-0000-4000-8000-000000000001', 'Zero fixed', 100,
+   'discount_fixed', 0, true, 5),
+  ('01aa0000-0000-4000-8000-000000000001', 'Negative percent', 100,
+   'discount_percentage', -10, true, 5),
+  ('01aa0000-0000-4000-8000-000000000001', 'Valueless discount', 100,
+   'discount', NULL, true, 5);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
+
+SELECT pg_temp.assert_true(
+  (SELECT NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' IN (
+         'Empty credit', 'Zero fixed', 'Negative percent'
+       )
+     )
+     AND EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Valueless discount'
+     )
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015'
+   ) AS result),
+  'unvalued valued-reward stayed advertised or plain discount hid'
 );

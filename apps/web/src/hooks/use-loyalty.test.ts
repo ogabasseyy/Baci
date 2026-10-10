@@ -105,4 +105,36 @@ describe('useLoyalty', () => {
     expect(info.colors.bg).toBe('bg-amber-100');
     expect(info.benefits).toContain('Access to basic rewards');
   });
+
+  it('redeemReward maps reward_type through for the success dialog', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            redemption_code: 'RDM-CREDIT',
+            reward_name: 'Wallet top-up',
+            reward_type: 'store_credit',
+            points_spent: 100,
+            new_balance: 900,
+            expires_at: '2026-11-09T00:00:00.000Z',
+            instructions: 'The credit has been added.',
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response);
+
+    const { result } = renderHook(() => useLoyalty('merchant-1', 'customer-1'));
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    const outcome = await result.current.redeemReward('reward-7');
+    expect(outcome).toMatchObject({
+      success: true,
+      redemption_code: 'RDM-CREDIT',
+      reward_type: 'store_credit',
+    });
+  });
 });

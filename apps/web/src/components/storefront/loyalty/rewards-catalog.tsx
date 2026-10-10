@@ -28,8 +28,10 @@ interface RewardsCatalogProps {
    * hardcoded ₦. */
   merchantCountry?: string | null;
   merchantPayoutCurrency?: string | null;
-  /** Fired after a successful redemption so embedding views (page-level
-   * history, status card) can refetch their own loyalty instances. */
+  /** Fired after a redemption attempt (success or failure) so embedding
+   * views (page-level history, status card) can refetch their own loyalty
+   * instances. Failures fire too: the RPC commits expiry reconciliation
+   * before validating, so a failed attempt can still mutate the balance. */
   onRedeemed?: () => void;
 }
 
@@ -91,13 +93,16 @@ export function RewardsCatalog({
             code: result.redemption_code || '',
             instructions: result.instructions || '',
             expiresAt: result.expires_at || '',
+            rewardType: result.reward_type,
           });
           setShowSuccessDialog(true);
           onRedeemed?.();
         } else {
-          // The hook refetches only on success: refresh here too, or a
-          // stale (e.g. expiry-reconciled) balance stays visible.
+          // The RPC commits expiry reconciliation before validating, so a
+          // failed attempt can still mutate the balance: refresh every
+          // view, not just this catalog's own instance.
           void refetch();
+          onRedeemed?.();
           toast({
             title: 'Redemption Failed',
             description: result.error || 'Unable to redeem reward',

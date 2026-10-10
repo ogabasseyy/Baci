@@ -41,6 +41,24 @@ describe('RedemptionSuccessDialog', () => {
     ).toBeInTheDocument();
   });
 
+  it('hides the code block and shows credit text for store_credit', () => {
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={{ ...RESULT, rewardType: 'store_credit' }}
+      />
+    );
+
+    expect(
+      screen.getByText(/The credit is now on your store balance\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('RDM-ABC123')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Copy redemption code' })
+    ).not.toBeInTheDocument();
+  });
+
   it('copies the code and toasts on copy click', () => {
     mockToast.mockClear();
     const writeText = vi.fn();

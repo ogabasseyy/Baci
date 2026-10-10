@@ -4,7 +4,7 @@ import {
   createRequest,
   createSuccessResult,
   MERCHANT_ID,
-  mockOwnedCustomer,
+  mockSession,
   enrollMocks as mocks,
   POST,
 } from './route.test-helpers';
@@ -12,7 +12,7 @@ import {
 describe('POST /api/storefront/loyalty/enroll', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOwnedCustomer();
+    mockSession();
   });
 
   it('enrolls via a single enroll_customer_loyalty RPC call', async () => {
@@ -78,17 +78,20 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when the customer belongs to another user', async () => {
-    mocks.mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+  it('consults the RPC instead of short-circuiting ownership mismatches', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'customer_not_found' },
+      error: null,
+    });
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
     );
     const body = await response.json();
 
+    expect(mocks.mockRpc).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 when merchant_id or customer_id is missing', async () => {
@@ -182,6 +185,21 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({
       error: 'Customer is already enrolled in the loyalty program',
     });
+  });
+
+  it('returns 400 when the configured bonus is out of range', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'out_of_range' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: 'Enrollment bonus is out of range' });
   });
 
   it('returns 503 when referral codes collide', async () => {

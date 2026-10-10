@@ -181,6 +181,19 @@ BEGIN
         'free_shipping', 'free_product', 'exclusive_access',
         'store_credit'
       )
+      -- Hide valued rewards without a positive value (same predicate as
+      -- the redemption RPC's valued guard; keep the two in sync): a
+      -- null/zero/negative store_credit, discount_fixed, or
+      -- discount_percentage always fails closed at redeem time, so
+      -- advertising it only offers a permanently unredeemable reward.
+      -- Plain 'discount' without a value stays listed: it is redeemable
+      -- and renders a generic label.
+      AND (
+        reward_type NOT IN (
+          'store_credit', 'discount_fixed', 'discount_percentage'
+        )
+        OR reward_value > 0
+      )
   ) AS rewards;
 
   SELECT COALESCE(jsonb_agg(txn ORDER BY txn->>'created_at' DESC), '[]'::jsonb)

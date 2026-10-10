@@ -56,10 +56,12 @@ SELECT pg_temp.assert_true(
 );
 
 -- 30. Deductions keep lifetime, tier crossings recompute, and every guard
--- fails closed without mutation: active staff may adjust, but unknown,
--- foreign, and deleted customers, negative balances, zero points,
--- forged types, non-members, and suspended staff are all rejected.
-SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+-- fails closed without mutation: unknown, foreign, and deleted
+-- customers, negative balances, zero points, forged types,
+-- non-members, and staff (active or suspended) are all rejected. Staff
+-- fail closed like non-members: the RLS write policies admit owners
+-- only, and the RPC matches that bound.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
@@ -70,7 +72,7 @@ SELECT pg_temp.assert_true(
      '01aa0000-0000-4000-8000-000000000016',
      -50, NULL, 'adjust'
    ) AS result),
-  'staff deduction failed or moved lifetime'
+  'owner deduction failed or moved lifetime'
 );
 
 SELECT pg_temp.assert_true(
@@ -151,6 +153,18 @@ SELECT pg_temp.assert_true(
      10, NULL, 'adjust'
    ) AS result),
   'non-member manual adjustment was not rejected'
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'merchant_not_found'
+   FROM public.adjust_loyalty_points(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000016',
+     10, NULL, 'adjust'
+   ) AS result),
+  'active-staff manual adjustment was not rejected'
 );
 
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000104');

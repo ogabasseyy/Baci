@@ -11,8 +11,10 @@ import type {
   CancellationMerchant,
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
+import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-cancellation-refund-initiation';
 import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
@@ -103,6 +105,8 @@ export async function executeOrderCancellationSideEffect({
   const soleCompletedLeg =
     soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
   const {
+    manualLinkedLegIds,
+    manualPendingLegIds,
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,
@@ -180,6 +184,7 @@ export async function executeOrderCancellationSideEffect({
   );
   if (
     gatewayRefundAmount <= 0 ||
+    !Number.isSafeInteger(Math.round(gatewayRefundAmount * 100)) ||
     transactions.some(
       (transaction) =>
         !Number.isFinite(Number(transaction.amount)) ||
@@ -195,7 +200,8 @@ export async function executeOrderCancellationSideEffect({
   const awaitingRefundPaymentIds = new Set<string>();
   const reviewRefundPaymentIds = new Set<string>();
   for (const row of refundRows ?? []) {
-    if (row.status === 'completed') continue;
+    // Terminal rows (completed or legacy refunded) are not in flight.
+    if (row.status === 'completed' || row.status === 'refunded') continue;
     const paymentId = linkedPaymentId(row);
     if (typeof paymentId !== 'string') continue;
     if (
@@ -256,11 +262,19 @@ export async function executeOrderCancellationSideEffect({
   // same way: their provider refund may already exist. Clean legs still
   // move below. Fully refunded legs need no quarantine: nothing will be
   // initiated for them, so terminalizing would only strand the rest.
-  const auditBlockedTransactions = transactions.filter(
-    (transaction) =>
-      auditBlockedLegIds.has(transaction.id) &&
-      !refundedPaymentIds.has(transaction.id)
-  );
+  const { auditBlockedTransactions, initiationTransactions } =
+    await preflightCancellationRefundInitiation({
+      auditBlockedLegIds,
+      deadlineMs,
+      linkedPaymentId,
+      manualLinkedLegIds,
+      mismatchedIds,
+      order,
+      refundedPaymentIds,
+      refundRows,
+      supabase,
+      transactions,
+    });
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -268,33 +282,19 @@ export async function executeOrderCancellationSideEffect({
     reason,
     refundedPaymentIds,
     supabase,
-    transactions: transactions.filter(
-      (transaction) =>
-        !mismatchedIds.has(transaction.id) &&
-        !auditBlockedLegIds.has(transaction.id)
-    ),
+    transactions: initiationTransactions,
   });
-  if (auditBlockedTransactions.length > 0) {
-    await quarantineRefund({
-      metadata: { audit_blocked_leg_count: auditBlockedTransactions.length },
-      order,
-      preflight: true,
-      reason:
-        'A provider refund event for this leg has no verified local audit row; verify it before another provider refund',
-      supabase,
-      transactions: auditBlockedTransactions,
-    });
-  }
-  if (mismatchedTransactions.length > 0) {
-    await quarantineRefund({
-      metadata: { mismatched_leg_count: mismatchedTransactions.length },
-      order,
-      preflight: true,
-      reason:
-        'Completed cancellation refunds do not cover their payment legs; verify amounts before another provider refund',
-      supabase,
-      transactions: mismatchedTransactions,
-    });
+  await quarantineWithheldCancellationRefundLegs({
+    auditBlockedTransactions,
+    mismatchedTransactions,
+    order,
+    supabase,
+  });
+  if (manualPendingLegIds.size > 0) {
+    // Never complete under a pending manual: the final record would
+    // land on a completed row no drain reselects, stranding finalization.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_manual_completion');
   }
   return { refundIds };
 }

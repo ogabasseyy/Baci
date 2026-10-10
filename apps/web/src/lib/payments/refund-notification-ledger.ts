@@ -44,13 +44,17 @@ export async function refundNotificationLedgerAmount({
   const externalLegs = paymentLegs.filter(
     (leg) => Number(leg.amount) > 0 && isExternalPaymentGateway(leg.gateway)
   );
+  // Terminal evidence is completed or refunded (legacy
+  // provider-confirmed rows), mirroring the aggregate claim: the claim
+  // finalizes on refunded rows, so the ledger must count them or the
+  // queued notifications dead-letter.
   const { data: refundLegs, error: refundLegError } = await supabase
     .from('transactions')
     .select('amount, currency, gateway, metadata')
     .eq('order_id', order.id)
     .eq('merchant_id', merchantId)
     .eq('transaction_type', 'refund')
-    .eq('status', 'completed');
+    .in('status', ['completed', 'refunded']);
   if (refundLegError) {
     throw new Error('refund_notification_ledger_lookup_failed');
   }
@@ -82,11 +86,21 @@ export async function refundNotificationLedgerAmount({
     const matchedKobo = refunds
       .filter((refund) => {
         const refundGateway = normalizePaymentGateway(refund.gateway);
-        if (refundGateway === '' || refundGateway !== legGateway) return false;
         const metadata = refund.metadata as {
           payment_transaction_id?: unknown;
           provider_refund_status?: unknown;
         } | null;
+        // Merchant-attested manual rows link explicitly and count as
+        // coverage in matching money, mirroring the aggregate claim;
+        // they never sole-attribute, so an unlinked manual row still
+        // mismatches for review.
+        if (refundGateway === 'MANUAL')
+          return (
+            metadata?.payment_transaction_id === leg.id &&
+            normalizeCurrencyCode(refund.currency) === legCurrency &&
+            Number(refund.amount) > 0
+          );
+        if (refundGateway === '' || refundGateway !== legGateway) return false;
         // A locally completed Paystack refund counts only after it is
         // provider-verified; other gateways keep local-status trust.
         if (

@@ -1,4 +1,5 @@
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 
 interface CancellationRefundRow {
   amount: unknown;
@@ -20,7 +21,12 @@ interface CancellationRefundRow {
  * completed leg when the caller names one, mirroring the claim SQL —
  * never to a refund_pending leg — so a legacy refund plus an
  * in-flight leg defers instead of terminalizing before the completion
- * gate runs.
+ * gate runs. Merchant-attested manual rows always link explicitly and
+ * count as coverage in matching money, mirroring the aggregate claim;
+ * legs carrying them never initiate (double-refund protection) and
+ * never mismatch for the manual rows themselves; a partial manual
+ * record reports its leg pending so the caller defers (never
+ * quarantines, never completes) until the merchant finishes.
  */
 export function matchCancellationRefundCoverage({
   linkedPaymentId,
@@ -33,19 +39,20 @@ export function matchCancellationRefundCoverage({
   soleCompletedLegId?: string | null;
   transactions: GatewayPaymentTransaction[];
 }): {
+  manualLinkedLegIds: Set<string>;
+  manualPendingLegIds: Set<string>;
   mismatchedIds: Set<string>;
   mismatchedTransactions: GatewayPaymentTransaction[];
   refundedPaymentIds: Set<string>;
   unattributedUnlinkedCount: number;
   unverifiedLinkedLegIds: Set<string>;
 } {
-  const normalizeMoneyField = (value: unknown): string =>
-    String(value ?? '')
-      .trim()
-      .toUpperCase();
+  const normalizeMoneyField = normalizeRefundMoneyField;
   const legById = new Map(transactions.map((leg) => [leg.id, leg]));
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
+  const manualLinkedLegIds = new Set<string>();
+  const badManualLegIds = new Set<string>();
   const unverifiedLinkedLegIds = new Set<string>();
   let unattributedUnlinkedCount = 0;
   for (const row of refundRows ?? []) {
@@ -55,15 +62,38 @@ export function matchCancellationRefundCoverage({
     // instead of silently dropping evidence the claim gate ignores.
     const attributed = linkedId === null && soleCompletedLegId !== null;
     const paymentId = linkedId ?? (attributed ? soleCompletedLegId : null);
-    if (row.status !== 'completed' || paymentId === null) {
+    // Terminal evidence is completed or refunded (legacy
+    // provider-confirmed rows), mirroring the aggregate claim.
+    if (
+      (row.status !== 'completed' && row.status !== 'refunded') ||
+      paymentId === null
+    ) {
       if (linkedId === null) unattributedUnlinkedCount += 1;
       continue;
     }
-    completedLinkedLegIds.add(paymentId);
     const leg = legById.get(paymentId);
     if (!leg) {
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
+    }
+    const rowGateway = normalizeMoneyField(row.gateway);
+    const isManualRow = rowGateway === 'MANUAL';
+    const currencyMatches =
+      normalizeMoneyField(row.currency) === normalizeMoneyField(leg.currency);
+    if (isManualRow && linkedId !== null) {
+      // Explicitly linked manual rows always block provider initiation
+      // on their leg; matching-money rows below also count as coverage.
+      manualLinkedLegIds.add(paymentId);
+      if (!currencyMatches) {
+        badManualLegIds.add(paymentId);
+        continue;
+      }
+    } else if (isManualRow) {
+      // Unlinked manual rows cannot safely target the sole leg.
+      unattributedUnlinkedCount += 1;
+      continue;
+    } else {
+      completedLinkedLegIds.add(paymentId);
     }
     // Both paths normalize exactly like the claim gate
     // (whitespace-trimmed, uppercased; missing gateways never match):
@@ -77,12 +107,8 @@ export function matchCancellationRefundCoverage({
     // the order paid and settlement unreversed. Missing gateways
     // mismatch into quarantine instead.
     const gatewayMatches =
-      normalizeMoneyField(row.gateway) !== '' &&
-      normalizeMoneyField(row.gateway) === normalizeMoneyField(leg.gateway);
-    if (
-      !gatewayMatches ||
-      normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)
-    ) {
+      rowGateway !== '' && rowGateway === normalizeMoneyField(leg.gateway);
+    if ((!gatewayMatches && !isManualRow) || !currencyMatches) {
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
     }
@@ -105,19 +131,31 @@ export function matchCancellationRefundCoverage({
     );
   }
   const refundedPaymentIds = new Set<string>();
+  const manualPendingLegIds = new Set<string>();
   const mismatchedTransactions: GatewayPaymentTransaction[] = [];
   for (const leg of transactions) {
     const legKobo = Math.round(Number(leg.amount) * 100);
     if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
       refundedPaymentIds.add(leg.id);
-    } else if (completedLinkedLegIds.has(leg.id)) {
+    } else if (
+      completedLinkedLegIds.has(leg.id) ||
+      badManualLegIds.has(leg.id)
+    ) {
       mismatchedTransactions.push(leg);
+    } else if (manualLinkedLegIds.has(leg.id)) {
+      // A manual-linked leg with no other evidence waits for the
+      // merchant: the caller excludes it from initiation without
+      // quarantining, and defers the step so the drain reclaims the
+      // row instead of completing it before the merchant finishes.
+      manualPendingLegIds.add(leg.id);
     }
   }
   const mismatchedIds = new Set(
     mismatchedTransactions.map((transaction) => transaction.id)
   );
   return {
+    manualLinkedLegIds,
+    manualPendingLegIds,
     mismatchedIds,
     mismatchedTransactions,
     refundedPaymentIds,

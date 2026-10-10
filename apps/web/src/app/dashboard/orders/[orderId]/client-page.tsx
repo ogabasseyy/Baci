@@ -52,6 +52,7 @@ import ConfirmInsuranceDialog, {
 } from './confirm-insurance-dialog';
 import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary';
 import { OrderPaymentSummary } from './OrderPaymentSummary';
+import { OrderRefundSection } from './order-refund-section';
 import { ShipmentDetailsCard } from './shipment-details-card';
 
 // Type definitions
@@ -510,6 +511,7 @@ export default function OrderDetailsClientPage({
 
           <div className="grid auto-rows-max items-start gap-4">
             <OrderPaymentSummary order={order} />
+            <OrderRefundSection order={order} setOrder={setOrder} />
 
             <Card>
               <CardHeader>

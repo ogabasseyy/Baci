@@ -70,6 +70,9 @@ export function refundClient({
   }[];
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const update = vi.fn().mockReturnValue({
+    eq: vi.fn().mockReturnThis(),
+  });
   const paymentLookup = transactionQuery(payments);
   const from = vi
     .fn()
@@ -77,7 +80,7 @@ export function refundClient({
     .mockReturnValueOnce(transactionQuery(refundRows))
     .mockReturnValueOnce(auditReviewsQuery(auditReviews));
   for (const _payment of payments) {
-    from.mockReturnValueOnce({ insert });
+    from.mockReturnValueOnce({ insert, update });
   }
-  return { from, insert, paymentLookup };
+  return { from, insert, paymentLookup, update };
 }

@@ -15,6 +15,7 @@ import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pen
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
+import { EXPECTED_PENDING_ORDER_REFUND_SOURCES } from './expected-pending-order-refund-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
@@ -42,6 +43,7 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',

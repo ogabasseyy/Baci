@@ -189,6 +189,22 @@ test('an indeterminate dispatch is not retried', async () => {
   assert.equal(setup.calls.filter(name => name === 'dispatch').length, 1);
 });
 
+test('malformed job listings refuse publication instead of throwing TypeError', async () => {
+  for (const readJobs of [
+    async () => null,
+    async () => ({ message: 'error' }),
+    async () => [null],
+    async () => [{ name: 'deploy-production' }],
+    async () => [{ name: 'deploy-production', conclusion: 'success' }, null],
+  ]) {
+    const setup = fixture({ readJobs });
+    await assert.rejects(
+      coordinateRelease(setup.operations, coordinationId),
+      /production publication did not succeed/
+    );
+  }
+});
+
 test('tags findRun failures as indeterminate dispatches', async () => {
   for (const findRun of [async () => { throw new Error('dispatch outcome unknown'); }, async () => null]) {
     const setup = fixture({ findRun });

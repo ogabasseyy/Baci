@@ -47,8 +47,18 @@ function git(args) {
   }).trim();
 }
 
+// Untrimmed variant for NUL-delimited output: trim() would strip a
+// trailing-whitespace filename before validation; the NUL split plus
+// Boolean filter already drops the terminal empty segment.
+function gitRaw(args) {
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+  });
+}
+
 function readTreeEntries(revision) {
-  return git(['ls-tree', '-rz', revision])
+  return gitRaw(['ls-tree', '-rz', revision])
     .split('\0')
     .filter(Boolean)
     .map((line) => {

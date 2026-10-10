@@ -355,7 +355,10 @@ degraded store until the secret is rotated and the container restarted.
 Guest carts expire seven days after the last update, so active conversations
 never expire mid-use; idle carts are reclaimed. Only the changed line is revalidated on
 each call, so a stale line never blocks unrelated updates; the website
-re-checks stock at transfer. A call with an expired or unknown token returns
+re-checks stock at transfer. Chat-cart staleness window: surviving lines
+are never revalidated in chat, so a line that dies after its add stays
+visible until transfer drops it — the website re-check is the freshness
+boundary, and the chat cart carries no per-line staleness signal. A call with an expired or unknown token returns
 `cart_expired: true` instead of a generic failure; the widget retries adds
 once without the token and recovers removals locally, so the shopper can keep
 shopping without starting over. Removing the last line deletes the cart row

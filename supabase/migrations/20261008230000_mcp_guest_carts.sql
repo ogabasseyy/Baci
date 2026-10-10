@@ -29,12 +29,16 @@ ALTER ROLE mcp_guest_cart_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
 
 GRANT USAGE ON SCHEMA public TO mcp_guest_cart_worker;
 -- PostgREST serves every request as authenticator and SET ROLEs to the
--- JWT claim: without membership the gateway cannot assume the worker
--- role and every cart RPC fails before reaching the function. No reload
--- ceremony (unlike the GIGL hook migration): these RPCs were never
--- PUBLIC-granted, so the membership timing cannot expose an unconfined
--- path however PostgREST interleaves its config reload.
-GRANT mcp_guest_cart_worker TO authenticator;
+-- JWT claim, but the membership grant lives in the isolate migration
+-- (20261010100000), not here: every role inherits PUBLIC privileges,
+-- so granting membership before the request-scope hook confines this
+-- role would let a leaked worker token invoke other PUBLIC-executable
+-- RPCs. Deploy sequencing mirrors the GIGL/blog-media ceremony: the
+-- scope migration (20261010090000) extends the pre-request allowlist
+-- with the three cart RPCs, probe-guest-cart-hook-reload.sh observes
+-- unanimous reload-canary acks fleet-wide, then the isolate migration
+-- grants membership. Never grant here: PostgreSQL exposes membership
+-- at commit while PostgREST reloads asynchronously.
 CREATE TABLE IF NOT EXISTS public.mcp_guest_carts (
   token text PRIMARY KEY CHECK (token ~ '^[a-f0-9]{64}$'),
   items jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(items) = 'array'),

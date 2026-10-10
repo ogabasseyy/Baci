@@ -61,8 +61,31 @@ function assertWorkerCapability(token: string): void {
 }
 
 function isLoopbackHostname(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase().replace(/\.$/, '');
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  let host = hostname.trim().toLowerCase().replace(/\.$/, '');
+  // URL keeps IPv6 brackets on .hostname ([::1]); strip them, or the
+  // loopback comparison below never matches a real parsed URL.
+  if (host.startsWith('[') && host.endsWith(']'))
+    host = host.slice(1, -1);
+  if (host === 'localhost' || host === '::1' || host === '0.0.0.0')
+    return true;
+  // IPv4-mapped ::ffff:127.x: the tail arrives hexified (7f00:1) from
+  // URL normalization, so match the high byte, not dotted text.
+  // Developers bind these alternates to dodge port clashes; none of
+  // them leave the host. Shorthand like 127.1 already normalized to
+  // dotted quad before this runs.
+  if (host.startsWith('::ffff:')) {
+    const tail = host.slice('::ffff:'.length);
+    if (tail.includes('.'))
+      return tail.startsWith('127.') && tail.split('.').length === 4;
+    const firstWord = Number.parseInt(tail.split(':')[0] ?? '', 16);
+    return Number.isInteger(firstWord) && firstWord >> 8 === 0x7f;
+  }
+  const parts = host.split('.');
+  return (
+    parts.length === 4 &&
+    parts[0] === '127' &&
+    parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+  );
 }
 
 /**

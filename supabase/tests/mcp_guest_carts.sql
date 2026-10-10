@@ -1,6 +1,6 @@
 -- MCP guest carts: RPC outcomes, version gate, expiry, retention, capacity,
 -- and the worker-only privilege boundary. Assertion-specific SQLSTATEs
--- survive replay log sanitization without exposing row data. P1101..P1128
+-- survive replay log sanitization without exposing row data. P1101..P1129
 -- identify fixed assertions.
 --
 -- Privilege note: the boundary is asserted with has_*_privilege as the
@@ -17,6 +17,8 @@ DECLARE
   v_expires timestamptz;
   v_deleted boolean;
   v_cleaned integer;
+  v_denied boolean;
+  v_message text;
 BEGIN
   -- Creation reports ok at version 1.
   SELECT version, outcome INTO v_version, v_outcome
@@ -216,6 +218,49 @@ BEGIN
       'public.upsert_mcp_guest_cart(text,jsonb,timestamptz,bigint)'::regprocedure)
     ) NOT LIKE '%pg_advisory_xact_lock%baci_mcp_guest_cart_capacity%'
   THEN RAISE EXCEPTION USING ERRCODE = 'P1128', MESSAGE = 'capacity lock missing'; END IF;
+
+  -- The pre-request hook confines the worker role to the three cart
+  -- RPCs: a leaked token inherits PUBLIC EXECUTE, so the allowlist —
+  -- not the grants — is the PostgREST boundary. Executed with faked
+  -- request settings, mirroring the blog-media scope check: the
+  -- session user invokes the hook, never a denied role, so the
+  -- backend stays up and denials surface as 42501.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'mcp_guest_cart_worker', true);
+  PERFORM pg_catalog.set_config('request.method', 'POST', true);
+  BEGIN
+    PERFORM pg_catalog.set_config('request.path', '/rpc/get_mcp_guest_cart', true);
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+    PERFORM pg_catalog.set_config('request.path', '/rpc/upsert_mcp_guest_cart', true);
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+    PERFORM pg_catalog.set_config('request.path', '/rpc/delete_mcp_guest_cart', true);
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE EXCEPTION USING ERRCODE = 'P1129', MESSAGE = 'worker scope refused an allowed path';
+  END;
+  -- Retention stays out of the worker allowlist: pg_cron runs it as
+  -- the schedule owner, never through a worker JWT.
+  PERFORM pg_catalog.set_config('request.path', '/rpc/cleanup_mcp_guest_carts', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_denied := (v_message = 'Guest cart worker request is outside its capability scope');
+  END;
+  IF NOT v_denied
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1129', MESSAGE = 'worker request scope wrong'; END IF;
+  -- The reload canary shadows for anonymous callers.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
+  PERFORM pg_catalog.set_config('request.path', '/rpc/__guest_cart_hook_reload_canary__', true);
+  v_denied := FALSE;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_denied := (v_message = 'GUEST CART hook reload canary observed');
+  END;
+  IF NOT v_denied
+  THEN RAISE EXCEPTION USING ERRCODE = 'P1129', MESSAGE = 'worker canary not shadowing'; END IF;
 
   -- The store caps carts at 20 lines: the 21st is rejected, the 20th kept.
   BEGIN

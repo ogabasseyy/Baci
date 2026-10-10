@@ -30,8 +30,14 @@ export function useCartReview(options: CartReviewOptions) {
       // A rejected URL (wrong path, foreign origin) must surface: the
       // button is enabled by the local lines, so silence would strand
       // the shopper behind a Review that neither navigates nor errors.
-      if (reviewUrl) openOgabasseyUrl(reviewUrl);
-      else setCartError('This guest cart link is no longer valid.');
+      // A blocked navigation (no bridge, popup blocked) surfaces too,
+      // mirroring the add flow's popup remedy.
+      if (reviewUrl) {
+        if (!openOgabasseyUrl(reviewUrl))
+          setCartError(
+            'Could not open your guest cart. Please allow popups and try again.'
+          );
+      } else setCartError('This guest cart link is no longer valid.');
     } catch {
       setCartError('Could not open your guest cart. Please try again.');
     }

@@ -273,7 +273,17 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath: 'supabase/migrations/20261008230000_mcp_guest_carts.sql',
-    sha256: '38f31ccdcb3edae48fa6e46013565941926c1372d303cfdb13692bcbb177bc62',
+    sha256: '05de4506962c8a74248edf16a40139bec2c76cbea2a668c86aef17811a370dda',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010090000_mcp_guest_cart_worker_request_scope.sql',
+    sha256: '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010100000_mcp_guest_cart_worker_postgrest_isolate.sql',
+    sha256: '32e0cf82c8f4427203e12a731c2fe7e7bd8303933d6bf9662012aa2941c700bd',
   },
   {
     repositoryPath:

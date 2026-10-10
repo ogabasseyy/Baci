@@ -99,6 +99,20 @@ it('reports a rejected review URL instead of silently doing nothing', () => {
   }
 });
 
+it('reports a popup-blocked Review instead of stranding the shopper', () => {
+  const { result, setCartError } = setup({ cart, cartUrl: foreignUrl });
+  delete window.openai;
+  window.open = vi.fn(() => null);
+  expect(result.current.canReviewCart).toBe(true);
+  act(() => {
+    result.current.handleViewCart();
+  });
+  expect(window.open).toHaveBeenCalled();
+  expect(setCartError).toHaveBeenCalledWith(
+    'Could not open your guest cart. Please allow popups and try again.'
+  );
+});
+
 it('holds navigation while a handoff is in flight', () => {
   const { result, openExternal } = setup({
     cart,

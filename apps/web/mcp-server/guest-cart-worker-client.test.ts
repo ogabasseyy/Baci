@@ -120,6 +120,23 @@ it('refuses to send the token over plaintext or credentialed URLs', () => {
   expect(() =>
     createGuestCartWorkerClient(LOOPBACK_URL, ANON_KEY, jwt())
   ).not.toThrow();
+  // The whole loopback range stays plaintext-capable for local dev:
+  // alternate 127.x binds, mapped IPv6, and the wildcard bind.
+  for (const host of [
+    '127.0.0.2',
+    '127.1',
+    '[::1]',
+    '[::ffff:127.0.0.1]',
+    '0.0.0.0',
+    'localhost',
+  ]) {
+    expect(() =>
+      createGuestCartWorkerClient(`http://${host}:54321`, ANON_KEY, jwt())
+    ).not.toThrow();
+  }
+  expect(() =>
+    createGuestCartWorkerClient('http://128.0.0.1:54321', ANON_KEY, jwt())
+  ).toThrow(/https/);
   expect(() =>
     createGuestCartWorkerClient(
       'https://user:pass@project.supabase.co',

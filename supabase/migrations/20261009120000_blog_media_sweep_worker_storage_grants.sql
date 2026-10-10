@@ -18,17 +18,16 @@ GRANT USAGE ON SCHEMA storage TO blog_media_sweep_worker;
 GRANT SELECT, DELETE ON storage.objects TO blog_media_sweep_worker;
 GRANT SELECT ON public.merchants TO blog_media_sweep_worker;
 
--- Authorize the Storage API's role switch directly, not just the
--- table privileges above. Storage applies the JWT role claim
+-- No direct grant to supabase_storage_admin: it is a reserved
+-- role ("only superusers can modify it"), and migrations run as the
+-- non-superuser postgres, so such a grant fails with 42501 here and
+-- in production. None is needed: Storage applies the JWT role claim
 -- verbatim as its session role (set_config('role', jwt_role) in
--- scope.ts, role taken from options.user.payload.role in
--- pg-connection.ts), which requires the session user to hold
--- membership in that role. The later authenticator membership would
--- reach Storage only transitively through the platform's
--- storage_admin-in-authenticator grant, so this direct grant keeps
--- the remove() authorization explicit and independent of platform
--- membership defaults.
-GRANT blog_media_sweep_worker TO supabase_storage_admin;
+-- scope.ts), SET ROLE accepts transitive membership (verified), and
+-- the platform grants storage_admin membership in authenticator while
+-- 20261009240000 grants the worker to authenticator — so Storage
+-- reaches the worker transitively once the isolate migration lands.
+-- Never add a storage_admin grant here; it cannot be deployed.
 
 -- Two pre-existing DELETE policies are TO PUBLIC while filtering on
 -- auth.uid()-derived merchant ownership. TO PUBLIC forces every

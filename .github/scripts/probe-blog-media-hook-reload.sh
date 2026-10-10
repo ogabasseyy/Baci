@@ -48,7 +48,7 @@ RENOTIFY_S="${BLOG_MEDIA_HOOK_PROBE_RENOTIFY_S:-60}"
 
 if ! [ "$DEADLINE_S" -ge 1 ] 2>/dev/null || ! [ "$INTERVAL_S" -ge 0 ] 2>/dev/null \
   || ! [ "$UNANIMITY_S" -ge 1 ] 2>/dev/null || ! [ "$RENOTIFY_S" -ge 1 ] 2>/dev/null; then
-  echo "::error::BLOG MEDIA hook probe deadline/interval/unanimity/renotify must be positive numbers" >&2
+  echo "::error::BLOG MEDIA hook probe deadline/unanimity/renotify must be >= 1 and interval must be >= 0 (0 = test-only fast poll)" >&2
   exit 1
 fi
 

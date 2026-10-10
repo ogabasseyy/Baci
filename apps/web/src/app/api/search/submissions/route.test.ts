@@ -50,7 +50,7 @@ describe('explicit search submissions', () => {
     expect(response.status).toBe(503);
     expect(logger.error).toHaveBeenCalledExactlyOnceWith({
       message: 'Search submission row failed ingestion validation',
-      error: failure,
+      errorName: 'Error',
     });
   });
 

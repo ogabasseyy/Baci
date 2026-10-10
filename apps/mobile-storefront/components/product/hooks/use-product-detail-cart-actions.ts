@@ -22,11 +22,15 @@ export function useProductDetailCartActions(
   const haptics = useHaptics();
   const [localQty, setLocalQty] = useState(cartState.quantityInCart.toString());
   const [showAddedToast, setShowAddedToast] = useState(false);
-  // Quantity edits route through the validated cart mutation (stock,
-  // offer allocation, and strict serialized caps with rollback), never
-  // the raw store writer: the PDP controls stay usable while an offer
-  // line sits in the cart, and direct writes would bypass every check.
-  const { updateQuantity: validatedUpdateQuantity } = useCart();
+  // Adds and quantity edits route through the validated cart mutations
+  // (stock, offer allocation, and strict serialized caps with rollback),
+  // never the raw store writers: the PDP controls stay usable while an
+  // offer line sits in the cart, and direct writes would bypass every
+  // check, including the sibling aggregate an initial add must fit.
+  const {
+    updateQuantity: validatedUpdateQuantity,
+    addToCart: validatedAddToCart,
+  } = useCart();
   const [flyingParticles, setFlyingParticles] = useState<
     { id: number; startX: number; startY: number }[]
   >([]);
@@ -151,7 +155,7 @@ export function useProductDetailCartActions(
           routeData.suppressConditionOfferMatch
         )
       : null;
-    cartState.addItem({
+    validatedAddToCart({
       product_id: product.id,
       slug: product.slug,
       variant_id: routeData.effectiveSelectedVariantId || undefined,

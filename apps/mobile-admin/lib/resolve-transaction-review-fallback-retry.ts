@@ -9,6 +9,7 @@ const RETRYABLE_FALLBACK_COLUMNS = [
   'quiz_award_id',
   'quiz_award_amount',
   'line_id',
+  'offer_id',
   'ad_tracking',
   'cancelled_at',
   'variant_attributes',

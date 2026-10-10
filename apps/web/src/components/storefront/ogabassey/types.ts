@@ -111,6 +111,11 @@ export interface Product {
   reviews?: number;
   stock?: number;
   manage_stock?: boolean;
+  // Serialized base-unit pool the cart aggregate cap reads: hydration
+  // folds exact units here while offer adds overwrite stock with the
+  // selected allocation.
+  stock_quantity?: number;
+  inventory_tracking_policy?: string | null;
   videoUrl?: string; // YouTube URL for unboxing/review
   // Technical specs from API (optional but typed)
   product_key_specs?: ProductKeySpecs;

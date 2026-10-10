@@ -57,6 +57,27 @@ describe('toRelatedProductsProduct', () => {
     expect(result.mpn).toBe('');
   });
 
+  it('carries the strict serialized pool for the cart aggregate cap', () => {
+    const result = toRelatedProductsProduct(
+      makeProduct({
+        stock: 1,
+        stock_quantity: 1,
+        inventory_tracking_policy: 'serialized_strict',
+      })
+    );
+
+    expect(result.stock).toBe(1);
+    expect(result.stock_quantity).toBe(1);
+    expect(result.inventory_tracking_policy).toBe('serialized_strict');
+  });
+
+  it('omits the strict pool when the source has none', () => {
+    const result = toRelatedProductsProduct(makeProduct());
+
+    expect(result.stock_quantity).toBeUndefined();
+    expect(result.inventory_tracking_policy).toBeUndefined();
+  });
+
   it('normalizes a null manage_stock row to managed inventory', () => {
     // Legacy rows carry a NULL flag at runtime though the type is boolean.
     const result = toRelatedProductsProduct(

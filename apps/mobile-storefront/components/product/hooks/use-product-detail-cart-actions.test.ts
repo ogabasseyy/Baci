@@ -13,10 +13,12 @@ jest.mock('@/services/tiktok-product-route-tracking', () => ({
 }));
 
 const mockValidatedUpdateQuantity = jest.fn();
+const mockValidatedAddToCart = jest.fn();
 jest.mock('@/hooks/use-cart', () => ({
   useCart: () => ({
     updateQuantity: (...args: unknown[]) =>
       mockValidatedUpdateQuantity(...args),
+    addToCart: (...args: unknown[]) => mockValidatedAddToCart(...args),
   }),
 }));
 
@@ -81,18 +83,24 @@ function buildArgs(
 describe('useProductDetailCartActions add-to-cart image', () => {
   beforeEach(() => {
     mockTrackAddToCart.mockClear();
+    mockValidatedAddToCart.mockClear();
+    mockValidatedUpdateQuantity.mockClear();
   });
 
   it("uses the selected color's image even when the gallery shows another color", () => {
-    const { addItem, args } = buildArgs();
+    const { args } = buildArgs();
     const { result } = renderHook(() => useProductDetailCartActions(...args));
 
     act(() => {
       result.current.handleAddToCart();
     });
 
-    expect(addItem).toHaveBeenCalledTimes(1);
-    expect(addItem.mock.calls[0]?.[0]).toEqual(
+    expect(mockValidatedAddToCart).toHaveBeenCalledTimes(1);
+    // The raw store writer must never see an initial add: only the
+    // validated mutation checks stock and the sibling aggregate.
+    const cartState = args[1] as unknown as { addItem: jest.Mock };
+    expect(cartState.addItem).not.toHaveBeenCalled();
+    expect(mockValidatedAddToCart.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         color: 'Black',
         image_url: 'https://cdn.example.com/iphone-15-black.avif',
@@ -101,7 +109,7 @@ describe('useProductDetailCartActions add-to-cart image', () => {
   });
 
   it('falls back to the displayed gallery frame when the color has no image', () => {
-    const { addItem, args } = buildArgs({
+    const { args } = buildArgs({
       routeData: { resolvedColorImages: {} },
     });
     const { result } = renderHook(() => useProductDetailCartActions(...args));
@@ -110,7 +118,7 @@ describe('useProductDetailCartActions add-to-cart image', () => {
       result.current.handleAddToCart();
     });
 
-    expect(addItem.mock.calls[0]?.[0]).toEqual(
+    expect(mockValidatedAddToCart.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         image_url: 'https://cdn.example.com/iphone-15-yellow.avif',
       })
@@ -119,8 +127,13 @@ describe('useProductDetailCartActions add-to-cart image', () => {
 });
 
 describe('useProductDetailCartActions catalog basis', () => {
+  beforeEach(() => {
+    mockTrackAddToCart.mockClear();
+    mockValidatedAddToCart.mockClear();
+    mockValidatedUpdateQuantity.mockClear();
+  });
   it('omits the catalog price for a non-variant condition offer', () => {
-    const { addItem, args } = buildArgs({
+    const { args } = buildArgs({
       routeData: {
         product: {
           id: 'pixel-8',
@@ -149,7 +162,10 @@ describe('useProductDetailCartActions catalog basis', () => {
       result.current.handleAddToCart();
     });
 
-    const added = addItem.mock.calls[0]?.[0];
+    const added = mockValidatedAddToCart.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(added).toEqual(
       expect.objectContaining({
         price: 320000,
@@ -186,7 +202,7 @@ describe('useProductDetailCartActions catalog basis', () => {
   });
 
   it('omits the catalog price without a condition offer', () => {
-    const { addItem, args } = buildArgs({
+    const { args } = buildArgs({
       routeData: {
         product: {
           id: 'pixel-8',
@@ -206,7 +222,10 @@ describe('useProductDetailCartActions catalog basis', () => {
       result.current.handleAddToCart();
     });
 
-    const added = addItem.mock.calls[0]?.[0];
+    const added = mockValidatedAddToCart.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(added).toEqual(expect.objectContaining({ offer_id: undefined }));
     expect(added).not.toHaveProperty('catalog_price');
   });

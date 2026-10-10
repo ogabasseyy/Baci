@@ -37,13 +37,10 @@ interface StorefrontCartProviderProps {
   validationActivationTimeoutMs?: number;
 }
 
-// stock_quantity is untyped on Product but present at runtime: hydration
-// folds exact serialized units into it (sanitize only redacts
-// fulfillment details), and offer adds overwrite stock while leaving it
-// as the shared base-unit pool.
-type StrictPoolProductLike = Pick<Product, 'inventory_tracking_policy'> & {
-  stock_quantity?: unknown;
-};
+type StrictPoolProductLike = Pick<
+  Product,
+  'inventory_tracking_policy' | 'stock_quantity'
+>;
 
 /**
  * Shared base-unit pool for a strict serialized product. Hydration folds
@@ -433,12 +430,13 @@ export function StorefrontCartProvider({
     // offers carry a 9999 sentinel): cap the resulting line at it so two
     // successive adds cannot exceed what checkout will reserve. The
     // offer identity travels on the add options (merging matches it), so
-    // the same cap covers fresh and merged adds. Voucher, unmanaged,
-    // and non-finite-allocation lines skip the cap.
+    // the same cap covers fresh and merged adds. Only voucher and
+    // non-finite-allocation lines skip the cap: order creation enforces
+    // finite offer scalars even on unmanaged parents (M24), so unmanaged
+    // offer lines keep the cap exactly like managed ones.
     const cappedOfferAllocation =
       !isQuizPrizeVoucherLine &&
       normalizedOptions?.offerId != null &&
-      (productForCart.manage_stock ?? true) &&
       typeof productForCart.stock === 'number' &&
       Number.isFinite(productForCart.stock) &&
       productForCart.stock >= 0
@@ -702,7 +700,6 @@ export function StorefrontCartProvider({
       // instead of deleting the line; validation prunes dead lines.
       if (
         item.offerId != null &&
-        (item.manage_stock ?? true) &&
         typeof item.stock === 'number' &&
         Number.isFinite(item.stock)
       ) {

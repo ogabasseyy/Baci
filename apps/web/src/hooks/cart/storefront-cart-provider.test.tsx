@@ -478,7 +478,7 @@ describe('StorefrontCartProvider', () => {
     ).toBe(1);
   });
 
-  it('skips the allocation cap for unmanaged offer lines', async () => {
+  it('caps unmanaged offer lines at the carried allocation', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontCartProvider merchantSlug="ogabassey">
         {children}
@@ -487,6 +487,9 @@ describe('StorefrontCartProvider', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
 
+    // Order creation enforces finite offer scalars even when the parent
+    // is unmanaged, so the cart must cap these lines too — only
+    // non-offer unmanaged lines skip stock caps.
     act(() => {
       result.current.addToCart(
         { ...mockProduct, manage_stock: false, stock: 1 },
@@ -495,7 +498,15 @@ describe('StorefrontCartProvider', () => {
       );
     });
 
-    expect(result.current.cart[0]?.quantity).toBe(3);
+    expect(result.current.cart[0]?.quantity).toBe(1);
+
+    const targetId = result.current.cart[0]?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetId as string, 5);
+    });
+    expect(
+      result.current.cart.find((item) => item.cartItemId === targetId)?.quantity
+    ).toBe(1);
   });
 
   it('defers validation until interaction when requested', async () => {

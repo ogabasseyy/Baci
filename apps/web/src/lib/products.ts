@@ -177,6 +177,10 @@ export interface Product {
   manage_stock: boolean;
   stock: number;
   inventory_tracking_policy?: string | null;
+  // Base-unit pool for strict serialized products: hydration folds exact
+  // units here while offer adds overwrite stock with the selected
+  // allocation, so the cart aggregate cap reads this field.
+  stock_quantity?: number | null;
   minimum_order_quantity?: number;
   image: string;
   imageLarge: string;

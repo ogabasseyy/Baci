@@ -2,7 +2,7 @@
 -- cannot read customer_loyalty/points_transactions directly (merchant-only
 -- RLS), so this RPC projects the caller's own enrollment, rewards, and
 -- recent transactions after the same ownership check as enrollment.
--- Split from 20261009120000 (repository 300-line limit); applies right
+-- Split from 20261010000001 (repository 300-line limit); applies right
 -- after it. Exhausted finite rewards (stock_quantity = 0) are excluded so
 -- the catalog never offers an unredeemable reward; NULL means unlimited.
 CREATE OR REPLACE FUNCTION public.get_loyalty_status(

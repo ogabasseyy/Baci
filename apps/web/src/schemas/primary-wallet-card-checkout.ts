@@ -142,4 +142,23 @@ export const primaryWalletCardCheckoutSchemas = {
   }),
   acknowledgement: z.literal(true),
   initializationAcknowledgement: z.boolean(),
+  reversal: z.strictObject({
+    operationId: uuid,
+    providerEventId: z.string().min(1).max(128),
+    evidence: z.strictObject({
+      event: z.enum(['refund.processed', 'charge.dispute.create']),
+      kind: z.enum(['refund', 'dispute']),
+      // Partial refunds below the charge floor still record: any
+      // money-out against our reference is reversal evidence, never
+      // noise. Absent on event shapes that carry no amount (the row
+      // records the event; the amounts reconcile from the provider).
+      amountKobo: z.number().int().min(1).max(9999999999).nullable(),
+      currency: z.string().length(3).nullable(),
+      status: z.string().min(1).max(64).nullable(),
+      transactionReference: reference,
+    }),
+  }),
+  reversalOutcome: z.strictObject({
+    outcome: z.enum(['recorded', 'duplicate']),
+  }),
 };

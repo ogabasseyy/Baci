@@ -3,31 +3,13 @@ import { createPrimaryWalletCardCheckoutExecutor } from './primary-wallet-card-c
 import { createPrimaryWalletCardCheckoutProvider } from './primary-wallet-card-checkout-provider';
 import { readPrimaryWalletCardCheckoutRuntimeDrain } from './primary-wallet-card-checkout-runtime';
 import { createPrimaryWalletCardCheckoutService } from './primary-wallet-card-checkout-service';
+import {
+  webhookMetadataOf,
+  webhookObject,
+} from './primary-wallet-card-checkout-webhook-shape';
 
 type Executor = ReturnType<typeof createPrimaryWalletCardCheckoutExecutor>;
 type Provider = ReturnType<typeof createPrimaryWalletCardCheckoutProvider>;
-
-function object(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function metadataOf(body: unknown): Record<string, unknown> | null {
-  const data = object(
-    body && typeof body === 'object' && 'data' in body ? body.data : null
-  );
-  if (!data) return null;
-  let metadata: unknown = data.metadata;
-  if (typeof metadata === 'string') {
-    try {
-      metadata = JSON.parse(metadata);
-    } catch {
-      return null;
-    }
-  }
-  return object(metadata);
-}
 
 /**
  * Durably reconciles an authentic primary card-checkout webhook.
@@ -46,9 +28,9 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
   execute?: Executor;
   provider?: Provider;
 }): Promise<Response | null> {
-  const body = object(input.body);
-  const data = body ? object(body.data) : null;
-  const metadata = metadataOf(input.body);
+  const body = webhookObject(input.body);
+  const data = body ? webhookObject(body.data) : null;
+  const metadata = webhookMetadataOf(input.body);
   const reference =
     data && typeof data.reference === 'string' ? data.reference : null;
   const operationId =
@@ -57,9 +39,9 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
       : null;
   const email =
     data &&
-    object(data.customer) &&
-    typeof object(data.customer)?.email === 'string'
-      ? (object(data.customer)?.email as string)
+    webhookObject(data.customer) &&
+    typeof webhookObject(data.customer)?.email === 'string'
+      ? (webhookObject(data.customer)?.email as string)
       : null;
   if (!reference || !operationId || !email) return null;
   if (reference !== `pvb-first-primary-${operationId}`) return null;

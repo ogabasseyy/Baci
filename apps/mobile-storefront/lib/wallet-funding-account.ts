@@ -1,5 +1,6 @@
 import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import { WalletFundingAccountResponseSchema } from '@/schemas/wallet-funding-account';
+import { useAuthStore } from '@/stores/auth-store';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import {
   getPiggyvestPrimaryCapability,
@@ -45,13 +46,23 @@ function parseWalletFundingAccountResponse({
 export async function getWalletFundingAccount({
   merchantId,
   merchantSlug,
+  userId,
 }: {
   merchantId?: string | null;
   merchantSlug?: string | null;
+  userId?: string | null;
 }) {
+  // Bind the primary read to the caller when known, else to whoever is
+  // signed in at call time: the client authenticates with the token it
+  // read for that user (or throws), so a mid-flight switch cannot
+  // return another user's funding account.
+  const expectedUserId = userId ?? useAuthStore.getState().user?.id;
   if (isPiggyvestPrimaryMerchant(merchantId)) {
     try {
-      return await piggyvestPrimaryWalletApi.read(merchantId ?? '');
+      return await piggyvestPrimaryWalletApi.read(
+        merchantId ?? '',
+        expectedUserId ?? undefined
+      );
     } catch (error) {
       if (!rollbackObservedCapabilityOnNotReady(merchantId, error)) throw error;
     }
@@ -75,12 +86,18 @@ export async function createWalletFundingAccount({
   merchantSlug,
   bvn,
   consent,
+  userId,
 }: {
   merchantId?: string | null;
   merchantSlug?: string | null;
   bvn?: string;
   consent?: boolean;
+  userId?: string | null;
 }) {
+  // Same bind as the read above: the client rejects a mismatched
+  // session before the BVN leaves the device, so a mid-flight switch
+  // cannot onboard the new account with the previous account's BVN.
+  const expectedUserId = userId ?? useAuthStore.getState().user?.id;
   // Probe-first routing: an unobserved (never-probed) merchant must not
   // fall straight through to the legacy DVA creation below. The checkout
   // bank-transfer path calls this directly after consent — bypassing the
@@ -100,11 +117,14 @@ export async function createWalletFundingAccount({
           'Your BVN and consent are required for PiggyVest wallet setup. No bank account was created.'
         );
       try {
-        return await piggyvestPrimaryWalletApi.create({
-          merchantId: merchantId ?? '',
-          bvn,
-          consent,
-        });
+        return await piggyvestPrimaryWalletApi.create(
+          {
+            merchantId: merchantId ?? '',
+            bvn,
+            consent,
+          },
+          expectedUserId ?? undefined
+        );
       } catch (error) {
         if (!rollbackObservedCapabilityOnNotReady(merchantId, error))
           throw error;

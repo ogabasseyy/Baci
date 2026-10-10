@@ -39,7 +39,7 @@ Do not add a duplicate scheduler or modify Vercel cron/registries automatically.
 
 Runtime settings pin `PIGGYVEST_PRIMARY_INTEGRATION_ID`, `ENVIRONMENT`,
 `MERCHANT_ID`, `BUSINESS_ID`, existing primary database host/port/name/CA,
-`PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED=true`, `BANK_INBOX_EXPIRES_AT`,
+`PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED=true`, `PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED=true` (set only after the drain timer below is installed and enabled; without it intake answers retryable 503 instead of queueing rows nobody will drain), `BANK_INBOX_EXPIRES_AT`,
 `BANK_INBOX_WEBHOOK_SECRET` and `BANK_WORKER_PASSWORD` (all bank names prefixed
 `PIGGYVEST_PRIMARY_`). The worker login is fixed `baci_primary_bank_worker` with
 only `primary_bank_inbox_worker`; intake separately uses `baci_primary_bank_intake`

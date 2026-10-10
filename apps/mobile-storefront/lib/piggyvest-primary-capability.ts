@@ -127,7 +127,7 @@ export async function getPiggyvestPrimaryCapabilitySnapshot(
 ): Promise<PiggyvestPrimaryCapabilitySnapshot> {
   const cached = readObservedPiggyvestPrimaryCapability(merchantId);
   if (cached !== null) return { available: cached };
-  return await sharedProbe(`${merchantId}\n${userId}`, merchantId);
+  return await sharedProbe(`${merchantId}\n${userId}`, merchantId, userId);
 }
 
 /**
@@ -141,12 +141,14 @@ export async function getPiggyvestPrimaryCapability(
 ): Promise<boolean> {
   const cached = readObservedPiggyvestPrimaryCapability(merchantId);
   if (cached !== null) return cached;
-  return (await sharedProbe(`${merchantId}\nverdict`, merchantId)).available;
+  return (await sharedProbe(`${merchantId}\nverdict`, merchantId, undefined))
+    .available;
 }
 
 async function sharedProbe(
   scopeKey: string,
-  merchantId: string
+  merchantId: string,
+  userId: string | undefined
 ): Promise<PiggyvestPrimaryCapabilitySnapshot> {
   const pending = inflight.get(scopeKey);
   if (pending) return pending;
@@ -154,7 +156,11 @@ async function sharedProbe(
   let probe!: Promise<PiggyvestPrimaryCapabilitySnapshot>;
   probe = (async () => {
     try {
-      const snapshot = await piggyvestPrimaryWalletApi.read(merchantId);
+      // Snapshot probes bind the read to their user so the account
+      // belongs to the caller it is returned to. Verdict-only probes
+      // carry no user and discard the account: only the merchant-wide
+      // boolean escapes, so there is nothing to leak across users.
+      const snapshot = await piggyvestPrimaryWalletApi.read(merchantId, userId);
       observePiggyvestPrimaryCapability(merchantId, true);
       return { available: true, account: snapshot.account };
     } catch (error) {

@@ -4,6 +4,15 @@ import {
   mockGetSession,
 } from '@/lib/wallet-top-up.test-utils';
 
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
+
 const { createWalletFundingAccount, getWalletFundingAccount } =
   require('@/lib/wallet-funding-account') as typeof import('@/lib/wallet-funding-account');
 const { clearPiggyvestPrimaryCapabilityCache } =
@@ -12,6 +21,7 @@ const { clearPiggyvestPrimaryCapabilityCache } =
 describe('wallet funding account api client', () => {
   beforeEach(() => {
     clearPiggyvestPrimaryCapabilityCache();
+    mockAuthUserId = null;
   });
   it('requires BVN only after the server confirms primary is available', async () => {
     mockFetchWithTimeout.mockClear();
@@ -144,6 +154,76 @@ describe('wallet funding account api client', () => {
           (options as { method?: string }).method === 'POST'
       )
     ).toBe(false);
+  });
+  it('binds primary creation to the signed-in account by default', async () => {
+    mockAuthUserId = 'user-1';
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-2', user: { id: 'user-2' } },
+      },
+      error: null,
+    });
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '00000000-0000-4000-8000-000000000005',
+        bvn: '12345678901',
+        consent: true,
+      })
+    ).rejects.toThrow('The signed-in account changed. Please try again.');
+    // The verdict probe (merchant-wide boolean only) may run unbound,
+    // but the BVN-carrying POST never leaves the device.
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([, options]) =>
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'POST'
+      )
+    ).toBe(false);
+  });
+  it('prefers an explicit caller userId over the signed-in account', async () => {
+    mockAuthUserId = 'user-2';
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Wallet access is temporarily unavailable.',
+          code: 'PIGGYVEST_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          account: {
+            accountName: 'Ogabassey/Jane Doe',
+            accountNumber: '1234567890',
+            bankName: 'Titan Paystack',
+            provider: 'paystack',
+          },
+          requiresConsent: false,
+        }),
+      });
+    // Default session user is user-1: the explicit bind succeeds where
+    // the signed-in default (user-2) would throw before sending.
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '00000000-0000-4000-8000-000000000006',
+        userId: 'user-1',
+      })
+    ).resolves.toMatchObject({
+      account: { accountNumber: '1234567890' },
+    });
   });
   it('refuses to mint a legacy DVA when the probe fails ambiguously', async () => {
     mockFetchWithTimeout.mockClear();

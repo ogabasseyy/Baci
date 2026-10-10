@@ -93,9 +93,16 @@ export function readPrimaryWalletBankInboxRuntime(
       certificateAuthority: env.PIGGYVEST_PRIMARY_DB_CA,
     },
   });
+  // An enabled inbox additionally requires the drain schedule
+  // attestation: queueing deposits while no timer drains the inbox
+  // would leave them uncredited after the provider stops retrying.
+  // Without it intake fails closed (retryable 503) instead of
+  // acknowledging rows nobody will drain. The operator sets the flag
+  // only after installing and enabling the drain timer.
   if (
     (mode === 'intake' &&
-      env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true') ||
+      (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true' ||
+        env.PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED !== 'true')) ||
     !parsed.success
   )
     throw new Error('Primary bank inbox configuration unavailable');

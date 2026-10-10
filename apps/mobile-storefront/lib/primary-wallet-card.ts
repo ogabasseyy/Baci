@@ -88,6 +88,12 @@ export function createPrimaryWalletCardFundingClient() {
           path: `/api/storefront/customer/wallet/primary-card/${initialize ? 'initialize' : 'status'}`,
           method: 'POST',
           includeCsrf: true,
+          // Bind the token to the record owner inside the client's own
+          // session read: the getUser check above cannot cover a switch
+          // landing between it and this send, which would otherwise
+          // reserve a checkout for the new account under the previous
+          // account's stored record.
+          expectedUserId: record.userId,
           body: initialize
             ? {
                 merchantId: record.merchantId,

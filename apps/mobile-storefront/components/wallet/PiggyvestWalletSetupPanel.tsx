@@ -55,7 +55,10 @@ export function PiggyvestWalletSetupPanel({
     setError(false);
     setAwaitingAccount(false);
     try {
-      const result = await piggyvestPrimaryWalletApi.read(merchantId);
+      const result = await piggyvestPrimaryWalletApi.read(
+        merchantId,
+        requestUserId ?? undefined
+      );
       if (authUserIdRef.current !== requestUserId) return;
       if (result.account) onRefresh();
       else setAwaitingAccount(true);
@@ -122,7 +125,14 @@ export function PiggyvestWalletSetupPanel({
             // still-mounted form keeps its input and shows its error
             // for correction and resubmission.
             const requestUserId = authUserIdRef.current;
-            const result = await piggyvestPrimaryWalletApi.create(input);
+            // Bound before sending: the client authenticates with the
+            // token it read for this user (or throws), so a switch
+            // mid-flight cannot onboard the new account with the
+            // previous account's BVN.
+            const result = await piggyvestPrimaryWalletApi.create(
+              input,
+              requestUserId ?? undefined
+            );
             // Switched mid-flight: the input belonged to the previous
             // account, so never apply its outcome to the new one.
             if (authUserIdRef.current !== requestUserId) return;

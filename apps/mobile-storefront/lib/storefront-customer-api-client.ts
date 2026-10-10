@@ -16,6 +16,15 @@ type FetchStorefrontCustomerApiInput = {
   method?: 'GET' | 'POST' | 'PATCH';
   query?: MerchantIdentifiersInput & { goalId?: string };
   signal?: AbortSignal;
+  /**
+   * Binds the request to the user the caller acted for. The check runs
+   * inside the same session read that mints the Bearer [REDACTED], so an
+   * account switch between the caller's own check and this send cannot
+   * silently re-authenticate a mutation (or a cached funding snapshot)
+   * as the new user: the token in hand provably belongs to the expected
+   * user, or the call throws before any bytes leave the device.
+   */
+  expectedUserId?: string;
 };
 
 const ACCESS_TOKEN_CACHE_SAFETY_WINDOW_MS = 30_000;
@@ -95,17 +104,30 @@ function buildQueryString(
 export function createStorefrontCustomerApiClient() {
   let cachedAccessToken: string | null = null;
   let cachedAccessTokenExpiresAt = 0;
+  let cachedAccessTokenUserId: string | null = null;
 
   const clearCachedAccessToken = () => {
     cachedAccessToken = null;
     cachedAccessTokenExpiresAt = 0;
+    cachedAccessTokenUserId = null;
   };
 
-  const getAccessToken = async () => {
+  const getAccessToken = async (expectedUserId?: string) => {
     if (cachedAccessToken && cachedAccessTokenExpiresAt > Date.now()) {
-      return cachedAccessToken;
+      // The cache is a performance shortcut, never an identity
+      // decision: a pinned token from a previous account must not
+      // satisfy a new account's request (or vice versa). Drop it and
+      // re-read below instead of throwing: the session may simply
+      // have rotated since the cache filled.
+      if (
+        expectedUserId === undefined ||
+        cachedAccessTokenUserId === expectedUserId
+      )
+        return cachedAccessToken;
+      clearCachedAccessToken();
+    } else {
+      clearCachedAccessToken();
     }
-    clearCachedAccessToken();
 
     const {
       data: { session },
@@ -116,6 +138,13 @@ export function createStorefrontCustomerApiClient() {
       clearCachedAccessToken();
       throw new Error('Authentication required. Please sign in again.');
     }
+    // Atomic with the token handoff: the token returned below belongs
+    // to this user, so a switch landing after this read cannot change
+    // which identity the request authenticates as.
+    if (expectedUserId !== undefined && session.user?.id !== expectedUserId) {
+      clearCachedAccessToken();
+      throw new Error('The signed-in account changed. Please try again.');
+    }
 
     const expiresAtMs =
       typeof session.expires_at === 'number'
@@ -124,6 +153,7 @@ export function createStorefrontCustomerApiClient() {
     if (expiresAtMs > Date.now()) {
       cachedAccessToken = session.access_token;
       cachedAccessTokenExpiresAt = expiresAtMs;
+      cachedAccessTokenUserId = session.user?.id ?? null;
     }
 
     return session.access_token;
@@ -136,8 +166,9 @@ export function createStorefrontCustomerApiClient() {
     path,
     query,
     signal,
+    expectedUserId,
   }: FetchStorefrontCustomerApiInput) => {
-    const accessToken = await getAccessToken();
+    const accessToken = await getAccessToken(expectedUserId);
     let csrfToken: string | undefined;
     if (includeCsrf) {
       const csrfResponse = await fetchWithTimeout(

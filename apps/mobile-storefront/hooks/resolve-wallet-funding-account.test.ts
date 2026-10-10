@@ -160,6 +160,7 @@ it('never shows the previous users account after an account switch', async () =>
   });
   mockUserId = 'user-b';
   const second = await readPrimaryFundingAccount(merchant, 'user-b');
+  expect(read).toHaveBeenLastCalledWith(merchant, 'user-b');
   expect(second).toEqual({ status: 'ready', account: accountB });
   expect(resolveWalletFundingAccount(legacy, merchant, second)).toEqual({
     account_name: 'User B',

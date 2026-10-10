@@ -17,6 +17,15 @@ DO $$ DECLARE fixture record; selected jsonb; BEGIN
  IF piggyvest_primary_card.claim_transfer((fixture.scope->>'integrationId')::uuid,'staging',fixture.operation_id)->>'outcome'<>'existing' THEN RAISE EXCEPTION 'unknown retried'; END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary_card.transfer_outbox SET updated_at=clock_timestamp()-interval '6 minutes' WHERE operation_id=(SELECT operation_id FROM public.custody_fixture WHERE label='fifth@example.test');
+SET SESSION AUTHORIZATION baci_primary_card_transfer;
+DO $$ DECLARE fixture record; selected jsonb; BEGIN
+ SELECT * INTO fixture FROM public.custody_fixture WHERE label='fifth@example.test';
+ selected:=piggyvest_primary_card.select_ready_transfers((fixture.scope->>'integrationId')::uuid,'staging',(SELECT capability-'payloadContract'-'mappingContract' FROM public.signed_inbox_fixture),1);
+ IF selected->'operationIds'<>jsonb_build_array(fixture.operation_id) OR (selected->>'unknownCount')::integer<>1 THEN RAISE EXCEPTION 'aged unknown not selected or uncounted'; END IF;
+ IF piggyvest_primary_card.claim_transfer((fixture.scope->>'integrationId')::uuid,'staging',fixture.operation_id)->>'outcome'<>'reclaimed' THEN RAISE EXCEPTION 'aged unknown not reclaimed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
 SET SESSION AUTHORIZATION baci_primary_card_custody;
 DO $$ DECLARE fixture record; proof jsonb; BEGIN
  SELECT * INTO fixture FROM public.custody_fixture WHERE label='fifth@example.test';

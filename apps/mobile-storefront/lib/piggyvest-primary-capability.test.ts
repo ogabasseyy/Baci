@@ -181,8 +181,11 @@ describe('getPiggyvestPrimaryCapability', () => {
       .mockResolvedValueOnce({ account: accountB });
     const pendingA = getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-a');
     const pendingB = getPiggyvestPrimaryCapabilitySnapshot(merchant, 'user-b');
-    // B fires its own probe instead of waiting on A's promise.
+    // B fires its own probe instead of waiting on A's promise, and each
+    // probe binds its read to its own user.
     expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledWith(merchant, 'user-a');
+    expect(read).toHaveBeenCalledWith(merchant, 'user-b');
     resolveFirst({ account: accountA });
     await expect(pendingA).resolves.toEqual({
       available: true,

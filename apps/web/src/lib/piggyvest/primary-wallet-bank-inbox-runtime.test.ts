@@ -16,6 +16,24 @@ it('does not require new configuration on an old deployment for intake', () => {
     })
   ).toBeNull();
 });
+it('fails intake closed until the drain schedule is attested', () => {
+  expect(() =>
+    readPrimaryWalletBankInboxRuntime('intake', {
+      ...fixture.env,
+      PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED: 'false',
+    })
+  ).toThrow(/Primary bank inbox/);
+  const { PIGGYVEST_PRIMARY_BANK_INBOX_DRAIN_SCHEDULED: _dropped, ...rest } =
+    fixture.env;
+  expect(() => readPrimaryWalletBankInboxRuntime('intake', rest)).toThrow(
+    /Primary bank inbox/
+  );
+  // The worker drains regardless: the attestation gates queueing, never
+  // the drain of already-acknowledged rows.
+  expect(
+    readPrimaryWalletBankInboxRuntime('worker', rest)?.database.login
+  ).toBe('baci_primary_bank_worker');
+});
 it('drains acknowledged rows in worker mode after the inbox is disabled', () => {
   const config = readPrimaryWalletBankInboxRuntime('worker', {
     ...fixture.env,

@@ -94,6 +94,60 @@ describe('primary PiggyVest wallet API client', () => {
       })
     );
   });
+  it('binds reads to the expected user inside the client session read', async () => {
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-a', user: { id: 'user-a' } },
+      },
+      error: null,
+    });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    await expect(
+      piggyvestPrimaryWalletApi.read(merchantId, 'user-a')
+    ).resolves.toEqual(
+      expect.objectContaining({ provisioningStatus: 'pending' })
+    );
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-a',
+        }),
+      })
+    );
+  });
+  it('rejects reads before sending when the session user differs', async () => {
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-b', user: { id: 'user-b' } },
+      },
+      error: null,
+    });
+    await expect(
+      piggyvestPrimaryWalletApi.read(merchantId, 'user-a')
+    ).rejects.toThrow('The signed-in account changed. Please try again.');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+  it('rejects onboarding before sending the BVN when the session user differs', async () => {
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-b', user: { id: 'user-b' } },
+      },
+      error: null,
+    });
+    await expect(
+      piggyvestPrimaryWalletApi.create(
+        { merchantId, bvn: '12345678901', consent: true },
+        'user-a'
+      )
+    ).rejects.toThrow('The signed-in account changed. Please try again.');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
   it('looks up a fresh access token for every operation', async () => {
     // Far-future expiry: a shared client would cache token-user-a and reuse
     // it after the account switch, leaking the previous user's Bearer [REDACTED]

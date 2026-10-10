@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 \ir primary-wallet-card-transfer.integration.sql
 \ir ../../../../../supabase/migrations/20261007201300_primary_card_transfer_outbox_selector.sql
+\ir ../../../../../supabase/migrations/20261008094400_primary_card_transfer_unknown_revisit.sql
 UPDATE piggyvest_primary_card.reservations SET created_at=clock_timestamp()-interval '1 day';
 INSERT INTO prefunded_card.treasury_snapshots SELECT id,'snapshot-after-signed-third',2,clock_timestamp(),verified_available_kobo-consumed_kobo,'fixture_verifier',clock_timestamp() FROM prefunded_card.treasury_bindings;
 INSERT INTO public.customers VALUES('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000003','fifth@example.test');

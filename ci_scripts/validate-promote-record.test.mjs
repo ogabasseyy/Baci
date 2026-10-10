@@ -72,6 +72,21 @@ test('rejects missing, malformed or oversized operational records', () => {
   }
 });
 
+test('accepts barrier bodies with or without the trailing newline', () => {
+  for (const content of [commit, `${commit}\n`]) {
+    assert.doesNotThrow(() =>
+      validateRecordTree([
+        record,
+        {
+          path: `barriers/${commit}-runner-123`,
+          mode: '100644',
+          content,
+        },
+      ])
+    );
+  }
+});
+
 test('requires each barrier body to match its filename SHA', () => {
   for (const entry of [
     {
@@ -81,6 +96,21 @@ test('requires each barrier body to match its filename SHA', () => {
     },
     { path: 'barriers/not-a-release', mode: '100644', content: commit },
     { path: `barriers/${commit}-runner/123`, mode: '100644', content: commit },
+    {
+      path: `barriers/${commit}-runner-123`,
+      mode: '100644',
+      content: `  ${commit}\n`,
+    },
+    {
+      path: `barriers/${commit}-runner-123`,
+      mode: '100644',
+      content: `${commit} `,
+    },
+    {
+      path: `barriers/${commit}-runner-123`,
+      mode: '100644',
+      content: `${commit}\n\n`,
+    },
   ]) {
     assert.throws(() => validateRecordTree([record, entry]), /record/);
   }

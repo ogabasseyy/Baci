@@ -29,7 +29,12 @@ export function validateRecordTree(entries) {
         /^barriers\/([a-f0-9]{40})-[A-Za-z0-9._-]+-[1-9][0-9]*$/.exec(
           entry.path
         );
-      if (!barrier || entry.content.trim() !== barrier[1])
+      // Exact body, modulo the single trailing newline the producer
+      // writes: trim() would also accept whitespace-padded SHAs.
+      const body = entry.content.endsWith('\n')
+        ? entry.content.slice(0, -1)
+        : entry.content;
+      if (!barrier || body !== barrier[1])
         throw new Error('invalid operational barrier record');
     }
   }

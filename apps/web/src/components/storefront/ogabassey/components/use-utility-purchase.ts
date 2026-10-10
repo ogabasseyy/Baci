@@ -13,6 +13,7 @@ import type { UtilityTabId } from './UtilityTabs';
 
 interface UseUtilityPurchaseParams {
   activeTab: UtilityTabId;
+  canFundByBankTransfer: boolean;
   clearIntent: () => void;
   customer: Customer | null;
   isAuthLoading: boolean;
@@ -70,6 +71,7 @@ interface UseUtilityPurchaseReturn {
  */
 export function useUtilityPurchase({
   activeTab,
+  canFundByBankTransfer,
   clearIntent,
   customer,
   isAuthLoading,
@@ -91,6 +93,10 @@ export function useUtilityPurchase({
     key: string;
     payloadSignature: string;
   } | null>(null);
+  // References whose debit is already reflected in the displayed balance. A
+  // retained key replays the SAME transaction on resubmit, so without this
+  // guard every processing replay would decrement the balance again.
+  const appliedBalanceRefs = useRef<Set<string>>(new Set());
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
     if (
@@ -150,6 +156,17 @@ export function useUtilityPurchase({
     // the remaining shortfall so partial balances don't overfund.
     if (walletBalance < payload.amount) {
       const shortfall = payload.amount - walletBalance;
+      if (!canFundByBankTransfer) {
+        // No funding rail on web for this store (DVAs disabled, no card
+        // top-up UI): say so plainly instead of promising a panel that
+        // cannot provision an account.
+        toast({
+          title: 'Insufficient wallet balance',
+          description: `Your wallet balance of ₦${walletBalance.toLocaleString()} is ₦${shortfall.toLocaleString()} short. Wallet top-up isn't available for this store.`,
+          variant: 'destructive',
+        });
+        return;
+      }
       toast({
         title: 'Insufficient wallet balance',
         description: `Fund your wallet with at least ₦${shortfall.toLocaleString()} more to complete this purchase.`,
@@ -183,13 +200,19 @@ export function useUtilityPurchase({
         walletIdempotencyAttemptRef.current = null;
       }
       clearIntent();
-      // Prefer the server's post-transaction balance when cashback was
-      // credited — the local decrement would otherwise display too low a
-      // balance and block a valid follow-up purchase as underfunded.
-      if (typeof result.cashback?.newBalance === 'number') {
-        setWalletBalance(result.cashback.newBalance);
-      } else {
-        setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+      // A replayed reference is the same debit — only apply the balance
+      // effect the first time it is seen. Buy-again purchases mint new
+      // references, so genuine repeat buys still decrement.
+      if (!appliedBalanceRefs.current.has(result.reference)) {
+        appliedBalanceRefs.current.add(result.reference);
+        // Prefer the server's post-transaction balance when cashback was
+        // credited — the local decrement would otherwise display too low a
+        // balance and block a valid follow-up purchase as underfunded.
+        if (typeof result.cashback?.newBalance === 'number') {
+          setWalletBalance(result.cashback.newBalance);
+        } else {
+          setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
+        }
       }
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);

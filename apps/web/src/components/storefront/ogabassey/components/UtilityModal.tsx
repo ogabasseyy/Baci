@@ -57,6 +57,10 @@ export const UtilityModal = ({
     customer?.id
   );
   const [showFundingPanel, setShowFundingPanel] = useState(false);
+  // The panel's autoCreate treats the explicit bank-transfer action as
+  // consent. Programmatic opens (insufficient balance) must NOT auto-create —
+  // the customer consents by clicking the panel's own CTA instead.
+  const [fundingPanelAutoCreate, setFundingPanelAutoCreate] = useState(true);
   const canUseWallet = isAuthenticated && walletBalance > 0;
   // The DVA is the customer's wallet funding account. Offer the action when
   // the merchant supports DVAs and the wallet API says either an account
@@ -76,15 +80,19 @@ export const UtilityModal = ({
     transactionRef,
   } = useUtilityPurchase({
     activeTab,
+    canFundByBankTransfer,
     clearIntent,
     customer,
     isAuthLoading,
     isAuthenticated,
     merchantSlug: merchant?.slug,
     onInsufficientWalletBalance: () => {
-      // Wallet-only checkout: surface the funding panel so the customer can
-      // top up and retry. No-op when bank-transfer funding is unavailable.
+      // Wallet-only checkout: surface the funding panel WITHOUT auto-create
+      // so the customer can top up and retry. The panel's own CTA is the
+      // consent point — this programmatic open must not provision a DVA.
+      // No-op when bank-transfer funding is unavailable.
       if (canFundByBankTransfer) {
+        setFundingPanelAutoCreate(false);
         setShowFundingPanel(true);
       }
     },
@@ -231,7 +239,11 @@ export const UtilityModal = ({
                 isLoading={loading}
                 onFundWallet={
                   canFundByBankTransfer
-                    ? () => setShowFundingPanel((visible) => !visible)
+                    ? () => {
+                        // Explicit bank-transfer action: this IS the consent.
+                        setFundingPanelAutoCreate(true);
+                        setShowFundingPanel((visible) => !visible);
+                      }
                     : undefined
                 }
                 onSelectWallet={handleSelectWallet}
@@ -242,7 +254,7 @@ export const UtilityModal = ({
               {showFundingPanel && canFundByBankTransfer ? (
                 <UtilityWalletFundingPanel
                   account={fundingAccount}
-                  autoCreate
+                  autoCreate={fundingPanelAutoCreate}
                   customerId={customer?.id}
                   customerFirstName={customer?.first_name ?? null}
                   customerLastName={customer?.last_name ?? null}

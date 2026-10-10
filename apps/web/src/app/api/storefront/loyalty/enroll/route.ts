@@ -81,14 +81,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve the caller's own customer row for this merchant. A mismatch
-    // returns the same 404 as a missing customer so callers cannot probe
-    // which customer IDs exist.
+    // Resolve the caller's own live customer row for this merchant.
+    // A mismatch returns the same 404 as a missing customer so callers
+    // cannot probe which customer IDs exist. Soft-deleted rows are
+    // non-writable.
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('id')
       .eq('merchant_id', parsed.data.merchant_id)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (customerError) {
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
       message: 'Successfully enrolled in loyalty program',
       data: {
         points_balance: validated.data.points_balance,
-        tier: validated.data.current_tier,
+        tier: validated.data.current_tier.toLowerCase(),
         referral_code: validated.data.referral_code,
       },
     });

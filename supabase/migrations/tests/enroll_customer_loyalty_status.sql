@@ -32,12 +32,12 @@ SELECT pg_temp.assert_true(
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
 
 SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'forbidden'
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
    FROM public.get_loyalty_status(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000011'
    ) AS result),
-  'cross-customer status was not forbidden'
+  'cross-customer status disclosed membership'
 );
 
 -- 11. A non-enrolled customer gets zeros plus the live catalog.

@@ -61,6 +61,19 @@ SELECT pg_temp.assert_true(
 );
 
 -- Fixtures.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data
+)
+SELECT
+  ('01aa0000-0000-4000-8000-00000000010' || seq::text)::uuid,
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'enroll-user-' || seq || '@example.com',
+  'test', now(), now(), now(), '{}', '{}'
+FROM generate_series(1, 7) AS seq;
+
 INSERT INTO public.merchants (id, email, business_name, slug)
 VALUES (
   '01aa0000-0000-4000-8000-000000000001',
@@ -76,7 +89,8 @@ VALUES
   ('01aa0000-0000-4000-8000-000000000013', '01aa0000-0000-4000-8000-000000000001', 'enroll-c@example.com', '01aa0000-0000-4000-8000-000000000103'),
   ('01aa0000-0000-4000-8000-000000000014', '01aa0000-0000-4000-8000-000000000001', 'enroll-d@example.com', '01aa0000-0000-4000-8000-000000000104'),
   ('01aa0000-0000-4000-8000-000000000015', '01aa0000-0000-4000-8000-000000000001', 'enroll-e@example.com', '01aa0000-0000-4000-8000-000000000105'),
-  ('01aa0000-0000-4000-8000-000000000016', '01aa0000-0000-4000-8000-000000000001', 'enroll-f@example.com', '01aa0000-0000-4000-8000-000000000106');
+  ('01aa0000-0000-4000-8000-000000000016', '01aa0000-0000-4000-8000-000000000001', 'enroll-f@example.com', '01aa0000-0000-4000-8000-000000000106'),
+  ('01aa0000-0000-4000-8000-000000000017', '01aa0000-0000-4000-8000-000000000001', 'enroll-g@example.com', '01aa0000-0000-4000-8000-000000000107');
 
 INSERT INTO public.loyalty_settings (
   merchant_id, enabled, signup_bonus_points, referral_bonus_points

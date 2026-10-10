@@ -9,10 +9,12 @@ const { mockRpc, mockGetUser, mockMaybeSingle, mockSupabase } = vi.hoisted(
     const chain = {
       select: vi.fn(),
       eq: vi.fn(),
+      is: vi.fn(),
       maybeSingle: mockMaybeSingle,
     };
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
+    chain.is.mockReturnValue(chain);
 
     return {
       mockRpc,
@@ -182,6 +184,89 @@ describe('GET /api/storefront/loyalty', () => {
     expect(body.points_balance).toBe(0);
     expect(body.next_tier).toBe('silver');
     expect(body.points_to_next_tier).toBe(1000);
+  });
+
+  it('normalizes persisted reward types to the catalog contract', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        rewards: [
+          {
+            id: 'r-pct',
+            name: 'Ten percent off',
+            description: null,
+            points_cost: 100,
+            reward_type: 'discount_percentage',
+            reward_value: 10,
+          },
+          {
+            id: 'r-credit',
+            name: 'Store credit',
+            description: null,
+            points_cost: 300,
+            reward_type: 'store_credit',
+            reward_value: 500,
+          },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.available_rewards).toEqual([
+      {
+        id: 'r-pct',
+        name: 'Ten percent off',
+        description: '',
+        points_required: 100,
+        reward_type: 'discount',
+        discount_type: 'percentage',
+        discount_value: 10,
+        active: true,
+      },
+      {
+        id: 'r-credit',
+        name: 'Store credit',
+        description: '',
+        points_required: 300,
+        reward_type: 'discount',
+        discount_type: undefined,
+        discount_value: 500,
+        active: true,
+      },
+    ]);
+  });
+
+  it('searches for the next tier after a raised threshold', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        lifetime_points: 500,
+        current_tier: 'Silver',
+        tiers: [
+          { name: 'Bronze', minPoints: 0 },
+          { name: 'Silver', minPoints: 5000 },
+          { name: 'Gold', minPoints: 5000 },
+          { name: 'Platinum', minPoints: 10000 },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tier).toBe('silver');
+    expect(body.next_tier).toBe('gold');
+    expect(body.points_to_next_tier).toBe(4500);
   });
 
   it('passes custom tier names through lowercased', async () => {

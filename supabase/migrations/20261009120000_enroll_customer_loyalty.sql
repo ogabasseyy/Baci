@@ -85,25 +85,19 @@ BEGIN
   END IF;
 
   -- The customer must exist and belong to this merchant.
-  PERFORM 1
-  FROM public.customers
-  WHERE id = p_customer_id
-    AND merchant_id = p_merchant_id;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
-  END IF;
-
-  -- The caller must own the customer row. auth.uid() is NULL for callers
-  -- without a JWT, which never matches, so this fail-closes.
+  -- Existence, liveness, and ownership in one predicate: a single
+  -- customer_not_found avoids disclosing which customer IDs exist to direct
+  -- RPC callers. auth.uid() is NULL for callers without a JWT, which never
+  -- matches, so this fail-closes. Soft-deleted rows are non-writable.
   PERFORM 1
   FROM public.customers
   WHERE id = p_customer_id
     AND merchant_id = p_merchant_id
+    AND deleted_at IS NULL
     AND user_id = auth.uid();
 
   IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'forbidden');
+    RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
   -- Reject double enrollment (also enforced by the UNIQUE insert below).
@@ -205,7 +199,9 @@ BEGIN
 
   -- Referrer half, atomically with the enrollment. Balances are nullable
   -- in the schema, so coalesce before crediting (legacy rows predate the
-  -- DEFAULT 0 backfill path).
+  -- DEFAULT 0 backfill path). referral_count tracks code usage
+  -- (attribution), not paid bonuses: it increments even when the
+  -- configured bonus is zero.
   IF v_referrer_customer_id IS NOT NULL THEN
     UPDATE public.customer_loyalty
     SET
@@ -283,7 +279,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  SELECT *
+  SELECT signup_bonus_points, referral_bonus_points,
+         points_per_currency, points_currency_unit, tiers
   INTO v_settings
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
@@ -293,26 +290,19 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
 
+  -- Existence, liveness, and ownership in one predicate (see enrollment).
   PERFORM 1
   FROM public.customers
   WHERE id = p_customer_id
-    AND merchant_id = p_merchant_id;
+    AND merchant_id = p_merchant_id
+    AND deleted_at IS NULL
+    AND user_id = auth.uid();
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
-  PERFORM 1
-  FROM public.customers
-  WHERE id = p_customer_id
-    AND merchant_id = p_merchant_id
-    AND user_id = auth.uid();
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'forbidden');
-  END IF;
-
-  SELECT *
+  SELECT points_balance, lifetime_points, current_tier
   INTO v_loyalty
   FROM public.customer_loyalty
   WHERE merchant_id = p_merchant_id

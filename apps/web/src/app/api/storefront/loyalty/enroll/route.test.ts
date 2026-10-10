@@ -9,10 +9,12 @@ const { mockRpc, mockGetUser, mockMaybeSingle, mockSupabase } = vi.hoisted(
     const chain = {
       select: vi.fn(),
       eq: vi.fn(),
+      is: vi.fn(),
       maybeSingle: mockMaybeSingle,
     };
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
+    chain.is.mockReturnValue(chain);
 
     return {
       mockRpc,
@@ -100,7 +102,7 @@ describe('POST /api/storefront/loyalty/enroll', () => {
       message: 'Successfully enrolled in loyalty program',
       data: {
         points_balance: 50,
-        tier: 'Bronze',
+        tier: 'bronze',
         referral_code: 'ABCD1234',
       },
     });

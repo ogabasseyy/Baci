@@ -44,6 +44,46 @@ function toTierName(value: string): TierName {
     : 'bronze';
 }
 
+type CatalogRewardType =
+  | 'discount'
+  | 'free_shipping'
+  | 'free_product'
+  | 'exclusive_access';
+
+// Normalize persisted reward types to the storefront catalog contract: the
+// catalog indexes its icon map directly and crashes on unknown keys.
+function toCatalogReward(reward: {
+  id: string;
+  name: string;
+  description: string | null;
+  points_cost: number;
+  reward_type: string;
+  reward_value: number | null;
+}): {
+  reward_type: CatalogRewardType;
+  discount_type: 'percentage' | 'fixed' | undefined;
+} {
+  if (reward.reward_type === 'discount_percentage') {
+    return { reward_type: 'discount', discount_type: 'percentage' };
+  }
+  if (reward.reward_type === 'discount_fixed') {
+    return { reward_type: 'discount', discount_type: 'fixed' };
+  }
+  const known: readonly CatalogRewardType[] = [
+    'discount',
+    'free_shipping',
+    'free_product',
+    'exclusive_access',
+  ];
+  if ((known as readonly string[]).includes(reward.reward_type)) {
+    return {
+      reward_type: reward.reward_type as CatalogRewardType,
+      discount_type: undefined,
+    };
+  }
+  return { reward_type: 'discount', discount_type: undefined };
+}
+
 // GET - Get customer's loyalty status.
 //
 // Reads through the get_loyalty_status RPC: the caller must own the
@@ -77,14 +117,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Resolve the caller's own customer row for this merchant. A mismatch
-    // returns the same 404 as a missing customer so callers cannot probe
-    // which customer IDs exist.
+    // Resolve the caller's own live customer row for this merchant.
+    // A mismatch returns the same 404 as a missing customer so callers
+    // cannot probe which customer IDs exist. Soft-deleted rows are
+    // non-readable here, matching the enrollment route.
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('id')
       .eq('merchant_id', parsed.data.merchant_id)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (customerError) {
@@ -161,9 +203,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Search after the member's current tier: a threshold raised after the
+    // tier was earned must not report the current tier as next (which would
+    // render negative progress). Custom tier names sit outside the ladder,
+    // so they fall back to a lifetime-only search.
+    const currentIndex = (TIER_ORDER as readonly string[]).indexOf(tier);
     let nextTier: TierName | null = null;
-    for (const name of TIER_ORDER) {
-      if (thresholds[name] > status.lifetime_points) {
+    for (const [index, name] of TIER_ORDER.entries()) {
+      if (index > currentIndex && thresholds[name] > status.lifetime_points) {
         nextTier = name;
         break;
       }
@@ -174,15 +221,19 @@ export async function GET(request: NextRequest) {
 
     const perCurrency = status.points_per_currency ?? 1;
     const currencyUnit = status.points_currency_unit ?? 100;
-    const availableRewards = status.rewards.map((reward) => ({
-      id: reward.id,
-      name: reward.name,
-      description: reward.description ?? '',
-      points_required: reward.points_cost,
-      reward_type: reward.reward_type,
-      discount_value: reward.reward_value ?? undefined,
-      active: true,
-    }));
+    const availableRewards = status.rewards.map((reward) => {
+      const catalog = toCatalogReward(reward);
+      return {
+        id: reward.id,
+        name: reward.name,
+        description: reward.description ?? '',
+        points_required: reward.points_cost,
+        reward_type: catalog.reward_type,
+        discount_type: catalog.discount_type,
+        discount_value: reward.reward_value ?? undefined,
+        active: true,
+      };
+    });
     const redeemableRewards = availableRewards.filter(
       (reward) => reward.points_required <= status.points_balance
     );

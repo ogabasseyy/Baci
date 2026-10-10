@@ -32,17 +32,17 @@ SELECT pg_temp.assert_true(
   'unknown customer did not fail closed'
 );
 
--- 3. Cross-customer enrollment is forbidden.
+-- 3. Cross-customer enrollment is indistinguishable from unknown-customer.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
 
 SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'forbidden'
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
    FROM public.enroll_customer_loyalty(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000011',
      NULL
    ) AS result),
-  'cross-customer enrollment was not forbidden'
+  'cross-customer enrollment disclosed membership'
 );
 
 SELECT pg_temp.assert_true(
@@ -50,7 +50,24 @@ SELECT pg_temp.assert_true(
    FROM public.customer_loyalty
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000011'),
-  'forbidden enrollment left a partial mutation'
+  'rejected enrollment left a partial mutation'
+);
+
+-- 3b. Soft-deleted customers cannot enroll.
+UPDATE public.customers
+SET deleted_at = now()
+WHERE id = '01aa0000-0000-4000-8000-000000000017';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000017',
+     NULL
+   ) AS result),
+  'soft-deleted customer was allowed to enroll'
 );
 
 -- 4. Plain enrollment as the owning customer.

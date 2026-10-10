@@ -184,6 +184,21 @@ describe('GET /api/storefront/loyalty', () => {
     expect(body.points_to_next_tier).toBe(1000);
   });
 
+  it('passes custom tier names through lowercased', async () => {
+    mockRpc.mockResolvedValue({
+      data: { ...createStatusResult(), current_tier: 'Diamond' },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tier).toBe('diamond');
+  });
+
   it('returns 401 without a session', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null } });
 

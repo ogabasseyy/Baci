@@ -19,7 +19,6 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   already_enrolled: 409,
   program_unavailable: 404,
   customer_not_found: 404,
-  forbidden: 403,
   invalid_input: 400,
   referral_code_collision: 503,
 };
@@ -28,7 +27,6 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   already_enrolled: 'Customer is already enrolled in the loyalty program',
   program_unavailable: 'Loyalty program not available for this merchant',
   customer_not_found: 'Customer not found for this merchant',
-  forbidden: 'You can only enroll your own customer account',
   invalid_input: 'Invalid enrollment input',
   referral_code_collision:
     'Enrollment is temporarily unavailable, please try again',
@@ -105,6 +103,29 @@ export async function POST(request: NextRequest) {
     }
 
     if (!customer || customer.id !== parsed.data.customer_id) {
+      // Guest-checkout rows carry a NULL user_id, so a logged-in shopper
+      // whose account predates their login misses the lookup above. Point
+      // them at re-linking (owned by the auth-session upsert flow) instead
+      // of a bare 404 — this reveals only the caller's own linkage state.
+      // Never auto-link here: enrollment writes bonus-bearing state.
+      if (user.email) {
+        const { data: guestRow } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('merchant_id', parsed.data.merchant_id)
+          .eq('email', user.email)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (guestRow) {
+          return NextResponse.json(
+            {
+              error:
+                'Customer account is not linked to this login. Sign in again to link it, then retry enrollment.',
+            },
+            { status: 409 }
+          );
+        }
+      }
       return NextResponse.json(
         { error: 'Customer not found for this merchant' },
         { status: 404 }

@@ -1,6 +1,6 @@
--- Status cases for the enroll_customer_loyalty suite (cases 10-12).
+-- Status cases for the enroll_customer_loyalty suite (cases 11-13).
 
--- 10. Status fail-closes on program/customer/ownership.
+-- 11. Status fail-closes on program/customer/ownership.
 UPDATE public.loyalty_settings
 SET enabled = false
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -40,7 +40,7 @@ SELECT pg_temp.assert_true(
   'cross-customer status disclosed membership'
 );
 
--- 11. A non-enrolled customer gets zeros plus the live catalog.
+-- 12. A non-enrolled customer gets zeros plus the live catalog.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000106');
 
 SELECT pg_temp.assert_true(
@@ -52,6 +52,10 @@ SELECT pg_temp.assert_true(
      AND jsonb_array_length(result -> 'rewards') = 1
      AND result -> 'rewards' -> 0 ->> 'name' = 'Free shipping'
      AND (result -> 'rewards' -> 0 ->> 'points_cost')::integer = 200
+     AND NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Sold-out perk'
+     )
      AND jsonb_array_length(result -> 'transactions') = 0
      AND jsonb_array_length(result -> 'tiers') = 4
    FROM public.get_loyalty_status(
@@ -61,7 +65,7 @@ SELECT pg_temp.assert_true(
   'non-enrolled status returned the wrong projection'
 );
 
--- 12. An enrolled customer gets balances, catalog, and recent transactions.
+-- 13. An enrolled customer gets balances, catalog, and recent transactions.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 
 SELECT pg_temp.assert_true(

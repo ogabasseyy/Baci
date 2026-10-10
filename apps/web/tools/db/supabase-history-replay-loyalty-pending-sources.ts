@@ -1,3 +1,5 @@
 // Frozen replay rows for loyalty migrations.
 // Keep these bytes aligned with the checked-in migration files.
-export const LOYALTY_PENDING_REPLAY_SOURCE_ROWS = `15bcb338ef2b1e816655bb9517f26ab91ad1ee077d1722bfea46773340941f47 20261009120000_enroll_customer_loyalty.sql`;
+export const LOYALTY_PENDING_REPLAY_SOURCE_ROWS = `f23b7d39a3e7644fec7b5cfee86b2ca1fab40f2886948b11e9f783e5d45aee3f 20261009120000_enroll_customer_loyalty.sql
+90f0e5dd94140836e5e3f09aae49824ae6bc1da35c9faccc6bf1e252ceb496de 20261009120001_loyalty_status.sql
+a55b4edb726e2b1bb8f3a41ad4fcc41c059e4bc93fdc3cc5d607e82348cc30c7 20261009120002_award_purchase_points_row_lock.sql`;

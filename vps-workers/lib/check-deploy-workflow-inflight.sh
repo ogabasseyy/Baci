@@ -140,7 +140,7 @@ _list_noncompleted_deploy_runs() {
   _list_pass=1
   while [ "$_list_pass" -le 3 ]; do
     _list_pass_tsv=""
-    for _list_status in queued in_progress waiting requested pending; do
+    for _list_status in queued in_progress waiting requested pending action_required; do
       if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
         --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
         2>"${_list_err_file:-/dev/null}")"; then
@@ -303,7 +303,11 @@ record_deploy_workflow_promote() {
 _push_promote_record() {
   push_value="$1"
   push_ref="refs/baci-tmp/promote-record"
-  push_msg="record worker promote overlap ${push_value%%:*} [skip ci]"
+  # No [skip ci]: the Ops Promote Record workflow must validate every
+  # push to this branch server-side (the pre-push hook is bypassable).
+  # No other push workflow triggers on this branch, so record pushes
+  # run only that validator.
+  push_msg="record worker promote overlap ${push_value%%:*}"
   # Plumbing only: no checkout touched. Committer identity rides on
   # the command line so a bare-bones operator clone (no user.name or
   # user.email configured) still records.

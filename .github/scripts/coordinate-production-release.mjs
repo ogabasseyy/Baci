@@ -65,18 +65,22 @@ export async function coordinateRelease(operations, coordinationId) {
   if (await operations.readMain() !== commit) throw new Error('main changed during worker preparation; publication refused');
   const baseline = await operations.listRuns();
   if (baseline.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
-  // Dispatch and discovery are the indeterminate window: once the
-  // dispatch request is sent, any failure (lost response, unknown
-  // outcome, ambiguity) means a run may exist that we cannot see, so
-  // the caller must hold the release lock for reconcile-before-removal
-  // instead of auto-releasing it for an immediate rerun.
+  // Dispatch, discovery, and observation of the known run are the
+  // indeterminate window: once the dispatch request is sent, any
+  // failure (lost response, unknown outcome, ambiguity, unreadable
+  // status) means a run may exist or publish unseen, so the caller
+  // must hold the release lock for reconcile-before-removal instead
+  // of auto-releasing it for an immediate rerun.
+  const tagIndeterminate = error => {
+    if (error && typeof error === 'object') error.indeterminateDispatch = true;
+    throw error;
+  };
   let run;
   try {
     await operations.dispatch(commit);
     run = await operations.findRun(commit, baseline);
   } catch (error) {
-    if (error && typeof error === 'object') error.indeterminateDispatch = true;
-    throw error;
+    tagIndeterminate(error);
   }
   if (!run) {
     const error = new Error('dispatch outcome unknown; inspect GitHub before retrying');
@@ -104,17 +108,30 @@ export async function coordinateRelease(operations, coordinationId) {
   // exclusion needs the single outer coordinator from the unattended
   // integration boundary. Completed siblings are earlier releases,
   // not racers, and are ignored.
-  const siblings = selectSiblingCoordinatedRuns(await operations.listCoordinatedRuns(), baseline, coordinationId);
+  let siblings;
+  try {
+    siblings = selectSiblingCoordinatedRuns(await operations.listCoordinatedRuns(), baseline, coordinationId);
+  } catch (error) {
+    tagIndeterminate(error);
+  }
   if (siblings.length > 0) {
     try {
       await operations.cancelRun(run.databaseId);
-    } catch {
-      // Best effort: the abort must report the race, not the cancel.
+    } catch (error) {
+      const detail = error && typeof error === 'object' && error.message ? `: ${error.message}` : '';
+      const abort = new Error(`concurrent coordination detected; our-run cancellation failed${detail}; reconcile before retrying`);
+      abort.indeterminateDispatch = true;
+      throw abort;
     }
     throw new Error('concurrent coordination detected; release aborted');
   }
-  await operations.watchRun(run.databaseId);
-  const jobs = await operations.readJobs(run.databaseId);
+  let jobs;
+  try {
+    await operations.watchRun(run.databaseId);
+    jobs = await operations.readJobs(run.databaseId);
+  } catch (error) {
+    tagIndeterminate(error);
+  }
   // gh run view reports the latest attempt's jobs for the single
   // non-matrixed deploy-production job, so exactly one success is the
   // green shape; re-runs supersede earlier attempts rather than

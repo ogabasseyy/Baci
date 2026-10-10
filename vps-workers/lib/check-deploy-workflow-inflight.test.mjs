@@ -41,13 +41,16 @@ test('queries every non-completed status without a fixed window', () => {
   // Two consecutive stable passes prove nothing transitioned
   // mid-scan; a single pass can always dodge.
   const calls = ghArgs.split('\n').filter(Boolean);
-  assert.equal(calls.length, 10);
+  assert.equal(calls.length, 12);
+  // Mirrors IN_FLIGHT_RUN_STATUSES in coordinate-production-release.mjs:
+  // an approval-parked run can still publish later.
   for (const status of [
     'queued',
     'in_progress',
     'waiting',
     'requested',
     'pending',
+    'action_required',
   ]) {
     assert.equal(
       calls.filter((call) => call.includes(`status=${status}`)).length,
@@ -70,15 +73,15 @@ test('captures a run that transitions status mid-scan', () => {
       'echo "$@" >> "$GH_ARGS_FILE"',
       'n=$(($(cat "$GH_ARGS_FILE.count" 2>/dev/null || echo 0) + 1)); echo "$n" >"$GH_ARGS_FILE.count"',
       'case "$*" in',
-      '  *status=requested*) if [ "$n" -le 5 ]; then printf \'184400113\\trequested\\tabc99999\\tpush\\thttps://example.invalid/runs/184400113\\n\'; fi;;',
+      '  *status=requested*) if [ "$n" -le 6 ]; then printf \'184400113\\trequested\\tabc99999\\tpush\\thttps://example.invalid/runs/184400113\\n\'; fi;;',
       `  *status=queued*) if [ "$n" -ge ${queuedFrom} ]; then printf '184400113\\tqueued\\tabc99999\\tpush\\thttps://example.invalid/runs/184400113\\n'; fi;;`,
       'esac',
       'exit 0',
     ].join('\n');
-  const { result, ghArgs } = runCheck({ ghBody: transitionStub(6) });
+  const { result, ghArgs } = runCheck({ ghBody: transitionStub(7) });
 
   assert.equal(result.status, 1);
-  assert.equal(ghArgs.split('\n').filter(Boolean).length, 10);
+  assert.equal(ghArgs.split('\n').filter(Boolean).length, 12);
   // Exactly one unioned row: the id plus its run URL (two mentions).
   assert.equal(result.stderr.match(/184400113/g).length, 2);
 });
@@ -92,15 +95,15 @@ test('re-scans when a pass diverges', () => {
       'echo "$@" >> "$GH_ARGS_FILE"',
       'n=$(($(cat "$GH_ARGS_FILE.count" 2>/dev/null || echo 0) + 1)); echo "$n" >"$GH_ARGS_FILE.count"',
       'case "$*" in',
-      '  *status=requested*) if [ "$n" -le 5 ]; then printf \'184400114\\trequested\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
-      '  *status=queued*) if [ "$n" -ge 11 ]; then printf \'184400114\\tqueued\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
+      '  *status=requested*) if [ "$n" -le 6 ]; then printf \'184400114\\trequested\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
+      '  *status=queued*) if [ "$n" -ge 13 ]; then printf \'184400114\\tqueued\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
       'esac',
       'exit 0',
     ].join('\n'),
   });
 
   assert.equal(result.status, 1);
-  assert.equal(ghArgs.split('\n').filter(Boolean).length, 15);
+  assert.equal(ghArgs.split('\n').filter(Boolean).length, 18);
   // Exactly one unioned row: the id plus its run URL (two mentions).
   assert.equal(result.stderr.match(/184400114/g).length, 2);
 });

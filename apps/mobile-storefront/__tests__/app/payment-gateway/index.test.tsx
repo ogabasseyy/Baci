@@ -12,10 +12,17 @@ let mockStatus = 'pending';
 let mockReturnTo: string | undefined;
 jest.mock('@/lib/primary-wallet-card', () => ({
   // These tests route by status, not ownership: the device record
-  // always proves the launch belongs to the current user.
+  // always proves the launch belongs to the current user and the
+  // server always confirms the checkout URL and amount.
   createPrimaryWalletCardFundingClient: () => ({
     readPending: async () => ({
       operationId: '22222222-2222-4222-8222-222222222222',
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      userId: '11111111-1111-4111-8111-111111111111',
+    }),
+    recover: async () => ({
+      authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      amountKobo: 100000,
     }),
   }),
 }));
@@ -36,13 +43,16 @@ jest.mock(
   '@/components/payment-gateway/use-payment-gateway-controller',
   () => ({
     usePaymentGatewayController: () => ({
-      // Stamped owner launch whose device record proves ownership.
+      // Stamped owner launch whose device record proves ownership and
+      // whose server bind confirms the checkout URL and amount.
       validatedParams: {
         isValid: true,
         data: {
           userId: '11111111-1111-4111-8111-111111111111',
           merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
           reference: 'pvb-first-primary-22222222-2222-4222-8222-222222222222',
+          authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+          amount: 1000,
         },
       },
       paymentKind: 'primary_wallet_card',

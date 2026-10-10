@@ -153,6 +153,11 @@ export async function createWalletFundingAccount({
       }
     }
   }
+  // Bind the legacy fallback to the initiating user, like the primary
+  // create() above: the awaited verdict probes yield to the event loop,
+  // so an account switch in between must not mint a DVA under the new
+  // session. The binding is checked inside the client's own session
+  // read, atomically with the token mint.
   const data = await walletFundingApiClient.fetchJson({
     body: {
       consent: true,
@@ -163,6 +168,7 @@ export async function createWalletFundingAccount({
     },
     method: 'POST',
     path: '/api/storefront/customer/wallet/funding-account',
+    expectedUserId: expectedUserId ?? undefined,
   });
   return parseWalletFundingAccountResponse({ data, operation: 'create' });
 }

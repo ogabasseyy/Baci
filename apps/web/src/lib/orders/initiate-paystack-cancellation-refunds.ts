@@ -7,6 +7,17 @@ import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-c
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import { DeferredError } from './run-order-cancellation-side-effect';
 
+// Worst-case sizing for one refund leg: the provider POST may take up
+// to 30s (mirroring the transport worst-case precedent), and the
+// audit write reserves 8s after the response (mirroring the audit
+// margin precedent). Starting a leg short of both strands it: an
+// abort before dispatch reports NETWORK_ERROR and terminally
+// quarantines a definitely unattempted leg, while an accept just
+// before the timeout leaves no margin to persist its audit row
+// before the worker is killed.
+const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
+const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
+
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded
  * completed refund, auditing each accepted refund before moving on. Returns
@@ -47,10 +58,20 @@ export async function initiatePaystackCancellationRefunds({
     if (refundedPaymentIds.has(transaction.id)) continue;
     // Bound every leg to the remaining invocation deadline: a plain
     // Error keeps the step retryable, so unattempted legs run on the
-    // next tick instead of stranding a mid-flight claim.
+    // next tick instead of stranding a mid-flight claim. Legs start
+    // only when a full provider call plus the audit reserve both fit;
+    // the provider timeout excludes the reserve so an accepted refund
+    // always has margin to persist before the worker is killed.
     const timeoutMs =
       deadlineMs === undefined ? undefined : deadlineMs - Date.now();
-    if (timeoutMs !== undefined && timeoutMs <= 0) {
+    const providerTimeoutMs =
+      timeoutMs === undefined
+        ? undefined
+        : timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS;
+    if (
+      timeoutMs !== undefined &&
+      timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS < REFUND_PROVIDER_CALL_WORST_MS
+    ) {
       // On the final attempt the claim has already raised the row to
       // the attempts cap, so a plain retryable error would finish it
       // as failed-with-five-attempts — a state the drain never
@@ -95,7 +116,7 @@ export async function initiatePaystackCancellationRefunds({
       transaction.gateway_reference as string,
       Math.round(transactionAmount * 100),
       reason || 'Order cancelled',
-      timeoutMs
+      providerTimeoutMs
     );
     if (!paystackRefund.success) {
       await handlePaystackCancellationRefundFailure({

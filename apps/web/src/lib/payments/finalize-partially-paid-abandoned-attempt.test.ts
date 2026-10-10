@@ -382,6 +382,57 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     );
   });
 
+  it('throws loudly when the retry marker cannot be confirmed', async () => {
+    const h = harness();
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    finalize.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    fileDuplicate.mockResolvedValue(false);
+    fileDuplicateFallback.mockResolvedValue(false);
+
+    // Both filings failed on a completed row: without a confirmed
+    // marker no sweep reselects it, so silence would strand the
+    // captured evidence with neither a review nor a retry path.
+    await expect(
+      finalizePartiallyPaidAbandonedAttempt({
+        ...h,
+        attempt,
+        providerData: {},
+        supabase: { rpc } as never,
+      })
+    ).rejects.toThrow('duplicate_capture_retry_marker_failed');
+    // First set plus one retry for a transient blip.
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('accepts a pre-marked row without re-setting the marker', async () => {
+    const h = harness();
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    finalize.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    fileDuplicate.mockResolvedValue(false);
+    fileDuplicateFallback.mockResolvedValue(false);
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt: {
+        ...attempt,
+        metadata: { duplicate_capture_review_pending: true },
+      },
+      providerData: {},
+      supabase: { rpc } as never,
+    });
+
+    expect(h.summary.failed).toBe(true);
+    expect(h.hold).toHaveBeenCalledWith('duplicate_capture_review_failed');
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('fails the sweep when admitting a processing attempt errors', async () => {
     const h = harness();
     const { from } = admittingClient(null, new Error('database unavailable'));

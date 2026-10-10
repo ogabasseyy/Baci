@@ -145,7 +145,17 @@ export async function reconcilePaystackCancellationRefund(
   )
     throw new Error('paystack_refund_evidence_mismatch');
 
-  const status = current.status.toLowerCase();
+  // A missing or non-string provider status must join the
+  // deterministic evidence-review path like any other unknown
+  // status: calling .toLowerCase() on it throws a TypeError the
+  // workers do not classify, so the row would only rotate forever
+  // with no operations review.
+  const rawStatus: unknown = (current as unknown as { status?: unknown })
+    .status;
+  if (typeof rawStatus !== 'string') {
+    throw new Error('unknown_paystack_refund_status');
+  }
+  const status = rawStatus.toLowerCase();
   if (
     ![
       'pending',

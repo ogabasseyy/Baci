@@ -42,7 +42,7 @@ describe('initiatePaystackCancellationRefunds failures', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
-  it('bounds each leg to the remaining deadline', async () => {
+  it('bounds each leg to the remaining deadline minus the audit reserve', async () => {
     acceptedRefund();
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
 
@@ -56,12 +56,49 @@ describe('initiatePaystackCancellationRefunds failures', () => {
       });
 
       expect(refundIds).toEqual([101]);
+      // 70s remain: the provider call gets 62s so an accepted refund
+      // always has margin to persist its audit row.
       expect(mocks.initiatePaystackRefund).toHaveBeenCalledWith(
         'PSK-1',
         1250,
         'Order cancelled',
-        70_000
+        62_000
       );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('defers the leg when less than a provider call plus audit fits', async () => {
+    acceptedRefund();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      // 30s remain: starting the provider call would abort before
+      // dispatch (terminally quarantining a definitely unattempted
+      // leg as NETWORK_ERROR) or accept with no audit margin — so
+      // the leg defers retryably instead of starting.
+      const failure = await initiatePaystackCancellationRefunds({
+        deadlineMs: 1_270_000,
+        order,
+        refundedPaymentIds: new Set(),
+        supabase,
+        transactions: [transaction],
+      }).then(
+        () => {
+          throw new Error('expected the margin to throw');
+        },
+        (error: unknown) => error
+      );
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(DeliveryUncertainError);
+      expect((failure as Error).message).toBe(
+        'cancellation_refund_deadline_exceeded'
+      );
+      expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+      expect(insert).not.toHaveBeenCalled();
+      expect(mocks.quarantineRefund).not.toHaveBeenCalled();
     } finally {
       now.mockRestore();
     }

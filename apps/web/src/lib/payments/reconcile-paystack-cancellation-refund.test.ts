@@ -99,6 +99,41 @@ describe('Paystack cancellation refund reconciliation', () => {
     );
   });
 
+  it.each([
+    ['missing', undefined],
+    ['non-string', 42],
+  ])('files a deterministic review when the provider status is %s', async (_label, status) => {
+    const db = database();
+    provider.fetchRefund.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 42,
+        transaction: 123,
+        amount: 10000,
+        currency: 'NGN',
+        status,
+      },
+    });
+
+    // A TypeError here would only rotate the row forever: the
+    // malformed status joins the deterministic evidence-review
+    // path like any other unknown status.
+    const failure = await reconcilePaystackCancellationRefund(
+      db as never,
+      refund
+    ).then(
+      () => {
+        throw new Error('expected malformed status to throw');
+      },
+      (error: unknown) => error
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe('unknown_paystack_refund_status');
+    expect(isDeterministicRefundError(failure)).toBe(true);
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
   it('files a deterministic rejection when the provider lookup 404s', async () => {
     provider.fetchRefund.mockResolvedValueOnce({
       code: 'HTTP_404',

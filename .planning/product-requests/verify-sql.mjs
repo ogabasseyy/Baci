@@ -30,7 +30,7 @@ await db.exec(await fs.readFile(new URL('../../supabase/migrations/2026100417050
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008210000_storefront_product_request_contact_canonical.sql', import.meta.url), 'utf8'));
 // Apply distinct outcome codes so replay pins the route's SQLSTATE contract.
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008220000_storefront_product_request_outcome_codes.sql', import.meta.url), 'utf8'));
-await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008230000_storefront_product_request_contact_intl_prefix.sql', import.meta.url), 'utf8'));
+await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008230001_storefront_product_request_contact_intl_prefix.sql', import.meta.url), 'utf8'));
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008250000_storefront_product_request_contact_zero_run.sql', import.meta.url), 'utf8'));
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008260000_storefront_product_request_query_key.sql', import.meta.url), 'utf8'));
 const submit = (query, contact, id, slug = 'ogabassey') => db.query('SELECT public.submit_storefront_product_request($1,$2,$3,$4::uuid)', [slug, query, contact, id]);

@@ -141,7 +141,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261008230000_storefront_product_request_contact_intl_prefix.sql',
+      'supabase/migrations/20261008230001_storefront_product_request_contact_intl_prefix.sql',
     sha256: '8f62f43b635df75e52eb3fb810e159ef72b43f79472f6935a840362c3ccc71ff',
   },
   {

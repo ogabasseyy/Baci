@@ -203,9 +203,7 @@ export async function fetchAndAddCartItems({
           continue;
         }
         const anchor = anchorStock.projections.get(product.id.toLowerCase());
-        // NULL means managed (legacy rows predate the flag): without this
-        // an unconfigured product would skip the stock guard below and
-        // carry a stale parent stock scalar into the cart.
+        // NULL manage_stock means managed: legacy rows predate the flag.
         const managed = anchor?.manageStock ?? product.manage_stock ?? true;
         const effectiveStock = Number(
           anchor?.stockQuantity ?? product.stock_quantity ?? 0

@@ -58,24 +58,6 @@ export async function finalizeVerifiedWedge({
   supabase: SupabaseClient;
   verification: VerifiedCharge;
 }): Promise<'finalized' | 'stop'> {
-  // This path runs in pass 1, whose 90s incremental share can never
-  // fit the default four-attempt sender budget: admit on a single
-  // attempt per sender instead, and pass the same cap into finalize
-  // so the send loop actually fits. A failed send retries through the
-  // paid side-effect queue on a later pass. Rows we never start stay
-  // unstamped for the next sweep.
-  try {
-    assertRefundNotificationSendTime(
-      deadlineMs,
-      zeptomailSendAdmissionBudgetMs(VERIFIED_WEDGE_EMAIL_ATTEMPTS)
-    );
-  } catch {
-    logger.info({
-      message: 'Stopping wedged-order sweep before finalize budget runs out',
-      transactionId: candidate.id,
-    });
-    return 'stop';
-  }
   // File the duplicate review for an extra capture on an already-paid
   // order. Shared by fresh captures and filing-only retries: evidence
   // comes from the verification response — never re-scaled from the
@@ -172,8 +154,30 @@ export async function finalizeVerifiedWedge({
     // Filing-only retry: the row already completed on an earlier tick
     // whose duplicate filings both failed. Re-running the finalizer
     // would re-settle captured funds; only the review is still owed.
+    // This branch runs ahead of the email budget gate below: it never
+    // sends email, so gating it on the send budget would return 'stop'
+    // under backlog — halting the whole sweep — and leave the extra
+    // captured payment without its review.
     await resolveDuplicateCapture();
     return 'finalized';
+  }
+  // This path runs in pass 1, whose 90s incremental share can never
+  // fit the default four-attempt sender budget: admit on a single
+  // attempt per sender instead, and pass the same cap into finalize
+  // so the send loop actually fits. A failed send retries through the
+  // paid side-effect queue on a later pass. Rows we never start stay
+  // unstamped for the next sweep.
+  try {
+    assertRefundNotificationSendTime(
+      deadlineMs,
+      zeptomailSendAdmissionBudgetMs(VERIFIED_WEDGE_EMAIL_ATTEMPTS)
+    );
+  } catch {
+    logger.info({
+      message: 'Stopping wedged-order sweep before finalize budget runs out',
+      transactionId: candidate.id,
+    });
+    return 'stop';
   }
   // Cancel the finalize itself — not just this wait — when the pass
   // budget runs out: the signal aborts the in-flight paid-email send

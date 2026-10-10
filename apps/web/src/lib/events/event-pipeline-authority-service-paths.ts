@@ -55,4 +55,11 @@ export const eventPipelineAuthorityServicePaths = [
     'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
     'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
   ],
+  // Only the public search-submissions endpoint may drive the branded
+  // search-analytics ingestion edge (#3581, owner-approved temporary
+  // exception recorded in AGENTS.md; expires 2027-01-07).
+  [
+    'apps/web/src/app/api/search/submissions/route.ts',
+    'apps/web/src/lib/search/server-analytics-client.ts',
+  ],
 ] as const;

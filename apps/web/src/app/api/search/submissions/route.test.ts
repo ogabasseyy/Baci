@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  logger,
   merchantId,
   submissionMocks as mocks,
   POST,
   request,
+  SearchSubmissionValidationError,
   setupSubmissionMocks,
 } from './route.test-helpers';
 
@@ -32,13 +34,81 @@ describe('explicit search submissions', () => {
         result_limit: 1,
       })
     );
-    expect(mocks.from).toHaveBeenCalledWith('search_analytics');
-    expect(mocks.insert).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith({
       merchant_id: merchantId,
       search_query: 'iphone',
       results_count: 27,
       search_method: 'client',
     });
+  });
+
+  it('logs ingestion validation failures distinctly from downtime', async () => {
+    mocks.recordSubmission.mockRejectedValueOnce(
+      new SearchSubmissionValidationError()
+    );
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission row failed ingestion validation',
+      errorName: 'SearchSubmissionValidationError',
+    });
+  });
+
+  it('logs transport and config failures as infrastructure, not validation', async () => {
+    const failure = new Error('service role is not configured');
+    failure.name = 'ServiceClientConfigError';
+    mocks.recordSubmission.mockRejectedValueOnce(failure);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission ingestion infrastructure failure',
+      errorName: 'ServiceClientConfigError',
+    });
+  });
+
+  it('logs DB insert errors with a secret-free classification', async () => {
+    mocks.recordSubmission.mockResolvedValueOnce({
+      error: { code: 'XX000', message: 'db down' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submissions insert failed',
+      errorCode: 'XX000',
+    });
+  });
+
+  it('falls back to unknown when the error has no code', async () => {
+    mocks.recordSubmission.mockResolvedValueOnce({
+      error: { message: 'fetch failed' },
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submissions insert failed',
+      errorCode: 'unknown',
+    });
+  });
+
+  it('writes through the narrow ingestion edge so direct writes stay revoked', async () => {
+    const response = await POST(request());
+    expect(response.status).toBe(204);
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith({
+      merchant_id: merchantId,
+      search_query: 'iphone',
+      results_count: 27,
+      search_method: 'client',
+    });
+    expect(mocks.cookieFrom).not.toHaveBeenCalledWith('search_analytics');
+    expect(mocks.cookieInsert).not.toHaveBeenCalled();
   });
 
   it('resolves path-based stores on the platform domain', async () => {
@@ -99,7 +169,7 @@ describe('explicit search submissions', () => {
     expect(response.status).toBe(204);
     expect(mocks.merchant).toHaveBeenCalledWith('shop.example.com');
     expect(mocks.merchant).toHaveBeenCalledWith('www.shop.example.com');
-    expect(mocks.insert).toHaveBeenCalledExactlyOnceWith(
+    expect(mocks.recordSubmission).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ merchant_id: merchantId })
     );
   });
@@ -120,7 +190,7 @@ describe('explicit search submissions', () => {
     mocks.rpc.mockResolvedValue({ data: [], error: null });
     expect((await POST(request())).status).toBe(204);
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
-    expect(mocks.insert).toHaveBeenCalledWith(
+    expect(mocks.recordSubmission).toHaveBeenCalledWith(
       expect.objectContaining({ results_count: 0 })
     );
   });
@@ -142,16 +212,19 @@ describe('explicit search submissions', () => {
         error: { message: 'secret database detail' },
       });
     if (failure === 'insert')
-      mocks.insert.mockResolvedValue({
+      mocks.recordSubmission.mockResolvedValue({
         error: { message: 'secret database detail' },
       });
     if (failure === 'throw')
-      mocks.insert.mockRejectedValue(new Error('secret database detail'));
+      mocks.recordSubmission.mockRejectedValue(
+        new Error('secret database detail')
+      );
     const response = await POST(request());
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: 'Search tracking unavailable',
     });
-    if (failure === 'search') expect(mocks.insert).not.toHaveBeenCalled();
+    if (failure === 'search')
+      expect(mocks.recordSubmission).not.toHaveBeenCalled();
   });
 });

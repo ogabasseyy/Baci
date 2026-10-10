@@ -57,6 +57,10 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
         'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       ],
+      [
+        'apps/web/src/app/api/search/submissions/route.ts',
+        'apps/web/src/lib/search/server-analytics-client.ts',
+      ],
     ]);
   });
 });

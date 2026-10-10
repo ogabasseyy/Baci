@@ -7,6 +7,7 @@ export interface OrderDetailsItem {
   offer_id?: string;
   offer_grade?: string;
   offer_condition_notes?: string;
+  offer_labels_snapshotted?: boolean;
   display_image_url?: string;
   has_assurance?: boolean;
   id: string;

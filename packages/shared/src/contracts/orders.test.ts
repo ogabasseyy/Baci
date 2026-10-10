@@ -116,6 +116,7 @@ describe('order column constants', () => {
         'offer_id',
         'offer_grade',
         'offer_condition_notes',
+        'offer_labels_snapshotted',
         'product_name:name',
         'product_match_status',
         'variant_id',

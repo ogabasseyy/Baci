@@ -259,4 +259,19 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008460000_storefront_order_offer_line_integrity.sql',
     sha256: 'a24d66d648520a706efe239d39551afacbff849dd595faacb4d6afe4af7cbfa9',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009320000_storefront_order_offer_label_snapshot.sql',
+    sha256: '626f481b0ce174326487239600a77e78fe2b874aa6de385a58d7548f244c76be',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009330000_storefront_order_offer_label_snapshot_marker.sql',
+    sha256: '8217e99ebde5738bb99416ba4e92c0c7f0c9a5fe745e8418e82281e25c2f1634',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009340000_search_mobile_admin_transaction_review_offer_labels.sql',
+    sha256: '485807b0af847ef347f22640e45c9da97b1f1d6dc6665131c93b8c462cd0f229',
+  },
 ] as const;

@@ -37,6 +37,62 @@ interface StorefrontCartProviderProps {
   validationActivationTimeoutMs?: number;
 }
 
+// stock_quantity is untyped on Product but present at runtime: hydration
+// folds exact serialized units into it (sanitize only redacts
+// fulfillment details), and offer adds overwrite stock while leaving it
+// as the shared base-unit pool.
+type StrictPoolProductLike = Pick<Product, 'inventory_tracking_policy'> & {
+  stock_quantity?: unknown;
+};
+
+/**
+ * Shared base-unit pool for a strict serialized product. Hydration folds
+ * exact units into stock_quantity while each offer add carries its own
+ * allocation on stock, so sibling offer lines must aggregate against
+ * this pool — not just their own scalar — mirroring the native
+ * getExistingProductQuantityForStock check. Non-strict, unmanaged, and
+ * non-finite shapes return undefined so callers keep scalar logic.
+ */
+function getStrictSerializedPool(
+  product: StrictPoolProductLike
+): number | undefined {
+  if (product.inventory_tracking_policy !== 'serialized_strict') {
+    return undefined;
+  }
+  if (
+    typeof product.stock_quantity !== 'number' ||
+    !Number.isFinite(product.stock_quantity) ||
+    product.stock_quantity < 0
+  ) {
+    return undefined;
+  }
+  return Math.floor(product.stock_quantity);
+}
+
+/**
+ * Units already in the cart for a simple (non-variant) product across
+ * the base line and every sibling offer line. Voucher lines redeem
+ * pre-reserved award units outside the shared pool, so they are
+ * excluded from both the sum and the cap.
+ */
+function getSimpleProductCartTotal(
+  cart: CartItem[],
+  productId: string,
+  excludeIndex = -1
+): number {
+  return cart.reduce(
+    (total, line, index) =>
+      index !== excludeIndex &&
+      line.id === productId &&
+      line.variantId == null &&
+      line.quizAwardId == null &&
+      line.quizVoucherToken == null
+        ? total + line.quantity
+        : total,
+    0
+  );
+}
+
 export function StorefrontCartProvider({
   children,
   enableSmartCartPro = false,
@@ -389,6 +445,17 @@ export function StorefrontCartProvider({
         ? Math.floor(productForCart.stock)
         : undefined;
 
+    // Strict serialized siblings share one base-unit pool: each offer
+    // line also passes its own scalar cap, so without an aggregate the
+    // cart could hold two units against a single available unit that
+    // order creation then rejects on the second line. Variant adds
+    // resolve their own units and voucher lines redeem pre-reserved
+    // units, so the aggregate covers simple base/offer adds only.
+    const strictPool =
+      !isQuizPrizeVoucherLine && normalizedOptions?.variantId == null
+        ? getStrictSerializedPool(productForCart)
+        : undefined;
+
     if (product.has_variants && !normalizedOptions?.variantId) {
       logger.warn({
         message: 'Attempted to add variant product without selecting variant',
@@ -409,7 +476,6 @@ export function StorefrontCartProvider({
         product,
         normalizedOptions
       );
-
       let result: CartItem[];
       if (existingIndex >= 0) {
         const nextCart = [...previousCart];
@@ -421,9 +487,29 @@ export function StorefrontCartProvider({
         if (cappedOfferAllocation !== undefined && mergedQuantity <= 0) {
           return previousCart;
         }
+        // Sibling units outside the merging line: the merged line may
+        // only take remaining pool headroom.
+        const poolCappedMerged =
+          strictPool === undefined
+            ? mergedQuantity
+            : Math.min(
+                mergedQuantity,
+                Math.max(
+                  0,
+                  strictPool -
+                    getSimpleProductCartTotal(
+                      previousCart,
+                      productForCart.id,
+                      existingIndex
+                    )
+                )
+              );
+        if (strictPool !== undefined && poolCappedMerged <= 0) {
+          return previousCart;
+        }
         nextCart[existingIndex] = {
           ...existingItem,
-          quantity: mergedQuantity,
+          quantity: poolCappedMerged,
           cartItemId: existingItem.cartItemId || cartItemId,
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
@@ -447,12 +533,28 @@ export function StorefrontCartProvider({
         if (cappedOfferAllocation !== undefined && freshQuantity <= 0) {
           return previousCart;
         }
+        // Fresh siblings share the pool with every existing simple line:
+        // the new line may only take remaining headroom.
+        const poolCappedFresh =
+          strictPool === undefined
+            ? freshQuantity
+            : Math.min(
+                freshQuantity,
+                Math.max(
+                  0,
+                  strictPool -
+                    getSimpleProductCartTotal(previousCart, productForCart.id)
+                )
+              );
+        if (strictPool !== undefined && poolCappedFresh <= 0) {
+          return previousCart;
+        }
         result = [
           ...previousCart,
           {
             ...productForCart,
             cartItemId,
-            quantity: freshQuantity,
+            quantity: poolCappedFresh,
             variantId: normalizedOptions?.variantId,
             variantAttributes: normalizedOptions?.variantAttributes,
             selectedColor: normalizedOptions?.color,
@@ -609,6 +711,28 @@ export function StorefrontCartProvider({
           return previousCart;
         }
         nextQuantity = Math.min(nextQuantity, allocation);
+      }
+      // Strict serialized siblings share one base-unit pool: a quantity
+      // bump must also fit the pool headroom outside this line, or the
+      // cart could hold units order creation rejects. Variant and
+      // voucher lines are outside the aggregate, same as adds.
+      if (
+        item.variantId == null &&
+        item.quizAwardId == null &&
+        item.quizVoucherToken == null
+      ) {
+        const strictPool = getStrictSerializedPool(item);
+        if (strictPool !== undefined) {
+          const headroom = Math.max(
+            0,
+            strictPool -
+              getSimpleProductCartTotal(previousCart, item.id, targetIndex)
+          );
+          if (headroom <= 0) {
+            return previousCart;
+          }
+          nextQuantity = Math.min(nextQuantity, headroom);
+        }
       }
       nextCart[targetIndex] = {
         ...item,

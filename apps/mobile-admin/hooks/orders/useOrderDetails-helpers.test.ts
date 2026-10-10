@@ -87,6 +87,7 @@ describe('mapOrderItems', () => {
         offer_id: 'offer-7',
         offer_grade: 'B',
         offer_condition_notes: 'Light wear',
+        offer_labels_snapshotted: true,
         price: 80000,
         product_match_status: 'linked',
         product_id: 'product-1',
@@ -103,6 +104,7 @@ describe('mapOrderItems', () => {
         offer_id: 'offer-7',
         offer_grade: 'B',
         offer_condition_notes: 'Light wear',
+        offer_labels_snapshotted: true,
       }),
     ]);
   });
@@ -173,6 +175,40 @@ describe('attachOrderItemOfferLabels', () => {
     expect(result[0]).toMatchObject({
       offer_grade: 'B',
       offer_condition_notes: 'Light wear',
+    });
+  });
+
+  it('keeps marked-but-empty snapshots empty without a live lookup', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [
+        {
+          offer_id: 'offer-7',
+          grade: 'A',
+          condition_notes: 'Added after purchase',
+        },
+      ],
+      error: null,
+    }));
+
+    const result = await attachOrderItemOfferLabels(
+      [
+        {
+          offer_id: 'offer-7',
+          offer_grade: null,
+          offer_condition_notes: null,
+          offer_labels_snapshotted: true,
+          product_id: 'product-1',
+        },
+      ],
+      fetchOffers
+    );
+
+    // The marker proves both NULLs are creation-time truth: no catalog
+    // read, and the later merchant labels never leak into history.
+    expect(fetchOffers).not.toHaveBeenCalled();
+    expect(result[0]).toMatchObject({
+      offer_grade: undefined,
+      offer_condition_notes: undefined,
     });
   });
 

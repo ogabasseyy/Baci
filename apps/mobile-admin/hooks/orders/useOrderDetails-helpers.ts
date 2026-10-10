@@ -5,6 +5,7 @@ interface OrderItemRow {
   offer_id?: string | null;
   offer_grade?: string | null;
   offer_condition_notes?: string | null;
+  offer_labels_snapshotted?: boolean | null;
   condition: string | null;
   has_assurance: boolean | null;
   id: string;
@@ -76,6 +77,7 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
       offer_id: item.offer_id ?? undefined,
       offer_grade: item.offer_grade ?? undefined,
       offer_condition_notes: item.offer_condition_notes ?? undefined,
+      offer_labels_snapshotted: item.offer_labels_snapshotted ?? undefined,
       price: item.price,
       product_id: item.product_id ?? null,
       product_match_status: item.product_match_status ?? undefined,
@@ -98,8 +100,15 @@ type OfferLabelRow = {
 function hasOfferLabelSnapshot(item: {
   offer_grade?: string | null;
   offer_condition_notes?: string | null;
+  offer_labels_snapshotted?: boolean | null;
 }) {
+  // The marker distinguishes snapshotted-but-empty labels (an offer with
+  // neither grade nor notes at purchase) from pre-snapshot legacy rows:
+  // without it a later merchant edit would leak live labels into
+  // history. Stored labels alone still count for rows selected before
+  // the marker column existed.
   return (
+    item.offer_labels_snapshotted === true ||
     (typeof item.offer_grade === 'string' && item.offer_grade !== '') ||
     (typeof item.offer_condition_notes === 'string' &&
       item.offer_condition_notes !== '')
@@ -111,10 +120,12 @@ function hasOfferLabelSnapshot(item: {
  * created after the label snapshot carry their creation-time labels and
  * display them verbatim — the merchant may since have edited the offer
  * or marked it inactive/sold out, and the live catalog row must not
- * rewrite history. Only pre-snapshot lines fall back to the shopper-safe
- * get_product_offers RPC (one lookup per distinct product). Fail-soft:
- * offer lines keep their persisted condition and ref when the lookup
- * fails.
+ * rewrite history. The snapshotted marker (not label presence) decides:
+ * a marked line with empty labels stays empty rather than consulting
+ * live data. Only unmarked pre-snapshot lines fall back to the
+ * shopper-safe get_product_offers RPC (one lookup per distinct
+ * product). Fail-soft: offer lines keep their persisted condition and
+ * ref when the lookup fails.
  */
 type AttachedOfferLabelItem<TItem> = TItem & {
   offer_grade?: string;
@@ -126,6 +137,7 @@ export async function attachOrderItemOfferLabels<
     offer_id?: string;
     offer_grade?: string | null;
     offer_condition_notes?: string | null;
+    offer_labels_snapshotted?: boolean | null;
     product_id?: string | null;
   },
 >(

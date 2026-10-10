@@ -1,4 +1,3 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getEffectiveStock } from '@/lib/product-stock';
@@ -9,6 +8,11 @@ import {
   type OfferQueryResult,
 } from './cart-offer-prices';
 import { prepareCartValidationItems } from './prepare-cart-validation-items';
+import {
+  getCartValidationKey,
+  getInvalidOfferLineKey,
+  isOfferParentEligible,
+} from './resolve-cart-validation-offer-line';
 
 type CartProductRow = {
   id: string;
@@ -32,37 +36,6 @@ type CartVariantRow = {
 function toPriceNumber(value: number | string | null | undefined) {
   const price = Number(value ?? 0);
   return Number.isFinite(price) ? price : 0;
-}
-
-function getCartValidationKey(
-  id: string,
-  variantId?: string,
-  offerId?: string
-) {
-  const variantKey = variantId ? `${id}::${variantId}` : id;
-  return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
-}
-
-/**
- * Mirrors the order RPC's offer parent gate (M28): the flag must be on,
- * the parent must be non-variant (sku_matrix counts as variant-bearing),
- * and no live non-anchor variants may exist. The variants RPC already
- * excludes inventory anchors, so any row for the product fails the gate.
- * Without this, background validation would retain and reprice a stale
- * offer line that order creation then rejects at checkout.
- */
-function isOfferParentEligible(
-  product: CartProductRow,
-  productHasLiveVariants: boolean
-): boolean {
-  if (product.has_condition_offers !== true) return false;
-  if (
-    product.has_variants === true ||
-    (product.variant_model ?? '') === 'sku_matrix'
-  )
-    return false;
-  if (productHasLiveVariants) return false;
-  return true;
 }
 
 /**
@@ -244,83 +217,25 @@ export async function POST(request: NextRequest) {
 
       // Non-variant offer lines price from the live condition offer, not
       // the parent: pricing them from products.price would silently
-      // replace the advertised offer price on every validation pass. A
-      // missing row means the offer is gone (the RPC returns active rows
-      // only), so only that line is invalidated.
+      // replace the advertised offer price on every validation pass.
       const offer =
         !item.variantId && item.offerId
           ? offerMap.get(`${strId}::${item.offerId}`)
           : undefined;
-      if (!item.variantId && item.offerId && !offer) {
-        const invalidOfferKey = getCartValidationKey(
-          strId,
-          undefined,
-          item.offerId
-        );
+      const invalidOfferKey = getInvalidOfferLineKey({
+        strId,
+        variantId: item.variantId,
+        offerId: item.offerId,
+        submittedCondition: item.condition,
+        offer,
+        parentEligible: isOfferParentEligible(
+          product,
+          productsWithLiveVariants.has(strId)
+        ),
+      });
+      if (invalidOfferKey) {
         if (!invalidProductIds.includes(invalidOfferKey)) {
           invalidProductIds.push(invalidOfferKey);
-        }
-        continue;
-      }
-
-      // A live offer row on a variant-bearing (or flag-disabled) parent is
-      // stale: order creation rejects it, so validation must not retain
-      // and reprice the line only to fail at checkout.
-      if (
-        !item.variantId &&
-        item.offerId &&
-        offer &&
-        !isOfferParentEligible(product, productsWithLiveVariants.has(strId))
-      ) {
-        const invalidOfferKey = getCartValidationKey(
-          strId,
-          undefined,
-          item.offerId
-        );
-        if (!invalidProductIds.includes(invalidOfferKey)) {
-          invalidProductIds.push(invalidOfferKey);
-        }
-        continue;
-      }
-
-      // Staff can change an active offer's condition after it lands in a
-      // cart. The orders route canonically compares and rejects a drifted
-      // persisted condition, so validation invalidates the line early —
-      // mirroring that comparison — instead of reporting it valid and
-      // failing only at checkout. Lines without a submitted condition
-      // skip the check, same as the orders route.
-      if (
-        !item.variantId &&
-        item.offerId &&
-        offer &&
-        item.condition != null &&
-        normalizeCanonicalProductCondition(item.condition) !==
-          normalizeCanonicalProductCondition(offer.condition ?? '')
-      ) {
-        const invalidOfferKey = getCartValidationKey(
-          strId,
-          undefined,
-          item.offerId
-        );
-        if (!invalidProductIds.includes(invalidOfferKey)) {
-          invalidProductIds.push(invalidOfferKey);
-        }
-        continue;
-      }
-
-      // A line naming both a variant and a condition offer is contradictory:
-      // offers exist only for non-variant products, so neither platform
-      // attaches both and there is no defined price basis. Reject the line
-      // so cart and checkout agree — the orders route verifies any carried
-      // offer_id and would reject a dead one there instead.
-      if (item.variantId && item.offerId) {
-        const invalidComboKey = getCartValidationKey(
-          strId,
-          item.variantId,
-          item.offerId
-        );
-        if (!invalidProductIds.includes(invalidComboKey)) {
-          invalidProductIds.push(invalidComboKey);
         }
         continue;
       }

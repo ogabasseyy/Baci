@@ -408,6 +408,76 @@ describe('StorefrontCartProvider', () => {
     ).toBe(2);
   });
 
+  it('rejects a strict serialized sibling once the shared pool is claimed', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // One base unit, two offers each advertising one: the second line
+    // must not land or order creation rejects it at checkout.
+    const strictProduct = {
+      ...mockProduct,
+      stock: 1,
+      stock_quantity: 1,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+    });
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+    });
+
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cart[0]?.offerId).toBe('offer-a');
+    expect(result.current.cart[0]?.quantity).toBe(1);
+  });
+
+  it('shares strict pool headroom across merged adds and updates', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    const strictProduct = {
+      ...mockProduct,
+      stock: 2,
+      stock_quantity: 2,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+    });
+    expect(result.current.cart).toHaveLength(2);
+
+    // Merging into A cannot exceed the pool minus B's unit.
+    act(() => {
+      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+    });
+    expect(
+      result.current.cart.find((item) => item.offerId === 'offer-a')?.quantity
+    ).toBe(1);
+
+    // Bumping B cannot exceed the pool minus A's unit either.
+    const targetB = result.current.cart.find(
+      (item) => item.offerId === 'offer-b'
+    )?.cartItemId;
+    act(() => {
+      result.current.updateQuantity(targetB as string, 2);
+    });
+    expect(
+      result.current.cart.find((item) => item.offerId === 'offer-b')?.quantity
+    ).toBe(1);
+  });
+
   it('skips the allocation cap for unmanaged offer lines', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontCartProvider merchantSlug="ogabassey">

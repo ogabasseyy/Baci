@@ -2,13 +2,21 @@ name: Ops Promote Record
 
 # Server-side backstop for the pre-push hook: `git push --no-verify`
 # or a machine without hooks installed bypasses client-side
-# validation, so every push to the operational branch is re-validated
-# here. A red check means the branch holds an invalid or
-# non-fast-forward record range — reconcile the branch, do not push
-# more on top of it.
+# validation. A `push` trigger cannot provide this: GitHub sources
+# push workflows from the pushed ref, and ops/gigl-promote-record is
+# an orphan operational tree that never contains this file. So the
+# default branch validates the operational branch's full history on a
+# schedule instead (plus manual dispatch). A red check means the
+# branch holds an invalid or non-fast-forward record — reconcile the
+# branch, do not push more on top of it. Detection latency is bounded
+# by the schedule interval.
 on:
-  push:
-    branches: [ops/gigl-promote-record]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -18,5 +26,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Validate promote-record range
-        run: node ci_scripts/validate-promote-record.mjs "${{ github.event.after }}" "${{ github.event.before }}"
+          persist-credentials: false
+      - name: Validate promote-record history
+        run: |
+          if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
+            echo 'ops/gigl-promote-record does not exist yet; nothing to validate.'
+            exit 0
+          fi
+          tip="$(git rev-parse FETCH_HEAD)"
+          node ci_scripts/validate-promote-record.mjs "$tip" '0000000000000000000000000000000000000000'

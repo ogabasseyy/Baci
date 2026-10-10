@@ -53,6 +53,18 @@ it('does not accept a response for another operation', async () => {
     'could not be confirmed'
   );
 });
+it('passes a terminal cancellation through instead of reporting it as unconfirmed', async () => {
+  mockFetchJson.mockResolvedValue({
+    status: 'cancelled',
+    operationId: input.idempotencyKey,
+  });
+  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual(
+    {
+      status: 'cancelled',
+      operationId: input.idempotencyKey,
+    }
+  );
+});
 it('rejects fractions smaller than kobo before requesting a payment', async () => {
   await expect(
     addPiggyvestPrimarySavingsContribution({ ...input, amount: 0.001 })

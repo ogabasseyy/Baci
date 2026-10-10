@@ -50,6 +50,8 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 let mockParamsUserId: string | undefined;
+let mockParamsReference =
+  'pvb-first-primary-22222222-2222-4222-8222-222222222222';
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn(), back: jest.fn() },
   Stack: { Screen: () => null },
@@ -57,7 +59,7 @@ jest.mock('expo-router', () => ({
     paymentKind: 'primary_wallet_card',
     gateway: 'paystack',
     merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-    reference: 'pvb-first-primary-22222222-2222-4222-8222-222222222222',
+    reference: mockParamsReference,
     authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
     amount: '1000',
     returnTo: mockReturnTo,
@@ -116,6 +118,8 @@ beforeEach(async () => {
   // New launches carry the owner stamp; the legacy (stampless) path has
   // dedicated tests below.
   mockParamsUserId = '11111111-1111-4111-8111-111111111111';
+  mockParamsReference =
+    'pvb-first-primary-22222222-2222-4222-8222-222222222222';
   mockStorage.clear();
   mockFetchJson.mockResolvedValue(response);
   await createPrimaryWalletCardFundingClient().start({
@@ -149,6 +153,11 @@ it('blocks another account through the actual controller and lets the original o
   mockUserId = '11111111-1111-4111-8111-111111111111';
   mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
   view.rerender(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(
     screen.getByRole('button', { name: 'Synthetic checkout callback' })
   );
@@ -207,12 +216,53 @@ it('mounts a stampless legacy launch when the device record proves ownership', a
   ).toBeOnTheScreen();
 });
 
+it('blocks a stamped launch whose reference has no device record even when the stamp matches', async () => {
+  // Forged deep link: the attacker stamps the victim's own id next to
+  // another customer's checkout. The stamp comparison passes, so only
+  // the persisted-record check can stop the WebView from mounting.
+  mockStorage.clear();
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
+
+it('blocks a stamped launch whose reference belongs to a different operation', async () => {
+  // The victim owns a pending funding, but the crafted link points at
+  // another customer's reference: the record mismatches, so the
+  // checkout must not mount.
+  mockParamsReference =
+    'pvb-first-primary-55555555-5555-4555-8555-555555555555';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
+
 it('hides the mounted primary checkout when the account switches after navigation', async () => {
   mockParamsUserId = '11111111-1111-4111-8111-111111111111';
   const view = render(<PaymentGatewayScreen />);
-  expect(
-    screen.getByRole('button', { name: 'Synthetic checkout callback' })
-  ).toBeOnTheScreen();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   // User B signs in while A's checkout stays mounted: the WebView must
   // disappear so B can never enter card details into A's charge.
   mockUserId = '44444444-4444-4444-8444-444444444444';
@@ -236,14 +286,21 @@ it('hides the mounted primary checkout when the account switches after navigatio
   // A signs back in: the owner's checkout returns.
   mockUserId = '11111111-1111-4111-8111-111111111111';
   view.rerender(<PaymentGatewayScreen />);
-  expect(
-    screen.getByRole('button', { name: 'Synthetic checkout callback' })
-  ).toBeOnTheScreen();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
 });
 
 it('checks the same durable operation through the actual callback, pending button and controller after restart', async () => {
   mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
   render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(
     screen.getByRole('button', { name: 'Synthetic checkout callback' })
   );
@@ -279,6 +336,11 @@ it('checks the same durable operation through the actual callback, pending butto
 it('retains the operation through network error and recovers status from the actual UI without another charge', async () => {
   mockFetchJson.mockRejectedValueOnce(new Error('Synthetic network failure'));
   render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(
     screen.getByRole('button', { name: 'Synthetic checkout callback' })
   );
@@ -304,6 +366,11 @@ it('retains the operation through network error and recovers status from the act
 it('shows the quotable operation reference on the pending view', async () => {
   mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
   render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(
     screen.getByRole('button', { name: 'Synthetic checkout callback' })
   );
@@ -324,6 +391,11 @@ it('shows the processing indicator while the primary server check runs', async (
   });
   mockFetchJson.mockReturnValue(gate);
   render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(
     screen.getByRole('button', { name: 'Synthetic checkout callback' })
   );

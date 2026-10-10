@@ -1,11 +1,23 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import PaymentGatewayScreen from '@/app/payment-gateway';
 
 const mockRetry = jest.fn();
 let mockStatus = 'pending';
 let mockReturnTo: string | undefined;
-jest.mock('expo-router', () => ({ router: { replace: jest.fn() } }));
+jest.mock('@/lib/primary-wallet-card', () => ({
+  // These tests route by status, not ownership: the device record
+  // always proves the launch belongs to the current user.
+  createPrimaryWalletCardFundingClient: () => ({
+    readPending: async () => ({
+      operationId: '22222222-2222-4222-8222-222222222222',
+    }),
+  }),
+}));
+jest.mock('expo-router', () => ({
+  router: { replace: jest.fn() },
+  Stack: { Screen: () => null },
+}));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
@@ -19,10 +31,14 @@ jest.mock(
   '@/components/payment-gateway/use-payment-gateway-controller',
   () => ({
     usePaymentGatewayController: () => ({
-      // Stamped owner launch: the legacy ownership check is skipped.
+      // Stamped owner launch whose device record proves ownership.
       validatedParams: {
         isValid: true,
-        data: { userId: '11111111-1111-4111-8111-111111111111' },
+        data: {
+          userId: '11111111-1111-4111-8111-111111111111',
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          reference: 'pvb-first-primary-22222222-2222-4222-8222-222222222222',
+        },
       },
       paymentKind: 'primary_wallet_card',
       status: mockStatus,
@@ -47,10 +63,12 @@ it.each([
   // A never-emitted 'held' stays on primary funding copy instead of
   // leaking into the generic Redvault held view.
   ['held', 'Wallet funding pending'],
-])('routes primary %s to safe funding status UI, not failed payment or orders', (status, title) => {
+])('routes primary %s to safe funding status UI, not failed payment or orders', async (status, title) => {
   mockStatus = status;
   render(<PaymentGatewayScreen />);
-  expect(screen.getByRole('header').props.children).toBe(title);
+  await waitFor(() =>
+    expect(screen.getByRole('header').props.children).toBe(title)
+  );
   expect(screen.getByRole('alert').props.children).toContain(
     'Do not pay again'
   );
@@ -62,20 +80,27 @@ it.each([
   expect(router.replace).toHaveBeenCalledWith('/wallet');
 });
 
-it('fails closed to primary funding copy on an unknown future status', () => {
+it('fails closed to primary funding copy on an unknown future status', async () => {
   mockStatus = 'future-terminal-state';
   render(<PaymentGatewayScreen />);
-  expect(screen.getByRole('header').props.children).toBe(
-    'Wallet funding pending'
+  await waitFor(() =>
+    expect(screen.getByRole('header').props.children).toBe(
+      'Wallet funding pending'
+    )
   );
   expect(screen.queryByText('View your orders')).toBeNull();
   expect(screen.queryByText('Payment Failed')).toBeNull();
 });
 
-it('resumes the saved savings handoff when leaving the pending funding view', () => {
+it('resumes the saved savings handoff when leaving the pending funding view', async () => {
   mockStatus = 'pending';
   mockReturnTo = '/wallet?action=savings&savingsGoalId=owned-goal';
   render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Return to wallet' })
+    ).toBeOnTheScreen()
+  );
   fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
   expect(router.replace).toHaveBeenCalledWith(mockReturnTo);
 });

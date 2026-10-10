@@ -145,6 +145,23 @@ export async function getPiggyvestPrimaryCapability(
     .available;
 }
 
+/**
+ * Unconditional re-probe that bypasses the verdict cache. A cached
+ * positive never expires on its own, so callers that would fail closed
+ * on it (e.g. the funding-account BVN preflight) refresh first: an
+ * authoritative NOT_READY rolls the verdict back and reroutes to
+ * legacy instead of blocking until the app restarts. Ambiguous
+ * failures reject like the initial probe, so callers never misroute
+ * money on a guess. Shares the verdict probe key, so a concurrent
+ * refresh and verdict share one request.
+ */
+export async function refreshPiggyvestPrimaryCapability(
+  merchantId: string
+): Promise<boolean> {
+  return (await sharedProbe(`${merchantId}\nverdict`, merchantId, undefined))
+    .available;
+}
+
 async function sharedProbe(
   scopeKey: string,
   merchantId: string,

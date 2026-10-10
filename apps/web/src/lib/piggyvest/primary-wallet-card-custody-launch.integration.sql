@@ -5,7 +5,7 @@ CREATE ROLE baci_primary_card_intake LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE 
 GRANT primary_card_signed_intake TO baci_primary_card_intake;
 GRANT SELECT ON public.signed_inbox_fixture TO baci_primary_card_intake;
 INSERT INTO piggyvest_primary_card.intake_authority VALUES('10000000-0000-4000-8000-000000000004','baci_primary_card_intake','2099-01-01',true);
-UPDATE public.signed_inbox_fixture SET envelope=jsonb_set(envelope,'{eventId}','"role-bound-receipt"');
+UPDATE public.signed_inbox_fixture SET envelope=jsonb_set(envelope,'{eventId}','"role-bound-receipt"')||'{"pvb_reference":"canonical-role-bound"}';
 UPDATE public.signed_inbox_fixture SET raw_hex=encode(convert_to(envelope::text,'UTF8'),'hex');
 SET SESSION AUTHORIZATION baci_primary_card_intake;
 DO $$ DECLARE fixture record; BEGIN

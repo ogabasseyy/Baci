@@ -33,4 +33,33 @@ describe('explicit signed custody intake capability deployment', () => {
       )
     ).toBeNull();
   });
+  it('drains queued receipts after an inbox rollback while keeping contract validation', () => {
+    const rolledBack = {
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+      PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false',
+    };
+    expect(
+      readPrimaryCardCustodyInboxRuntime(rolledBack, fixture.now)
+    ).toBeNull();
+    const parsed = readPrimaryCardCustodyInboxRuntime(
+      rolledBack,
+      fixture.now,
+      'drain'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.signedInbox.batchSize).toBe(
+      fixture.configuration.signedInbox.batchSize
+    );
+    expect(
+      readPrimaryCardCustodyInboxRuntime(
+        {
+          ...rolledBack,
+          PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT: undefined,
+        },
+        fixture.now,
+        'drain'
+      )
+    ).toBeNull();
+  });
 });

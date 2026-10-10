@@ -136,6 +136,24 @@ export async function addSavingsContributionToGoal({
       return;
     }
     if (
+      typeof contributionResult === 'object' &&
+      contributionResult !== null &&
+      'status' in contributionResult &&
+      contributionResult.status === 'cancelled'
+    ) {
+      // Terminal provider rejection: the hold was released server-side,
+      // so clear the operation for a safe retry without announcing
+      // success or leaving the contribution looking pending. The
+      // entered amount stays for the retry.
+      clearIdempotencyKey?.();
+      await refetchWallet().catch(() => undefined);
+      Alert.alert(
+        'Contribution cancelled',
+        'The transfer was cancelled before submission and your reserved wallet funds were released.'
+      );
+      return;
+    }
+    if (
       amount >= remainingAmount ||
       isCompletedSavingsContributionResult(contributionResult)
     ) {

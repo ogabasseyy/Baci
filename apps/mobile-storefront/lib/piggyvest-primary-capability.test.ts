@@ -4,6 +4,7 @@ import {
   getPiggyvestPrimaryCapability,
   getPiggyvestPrimaryCapabilitySnapshot,
   isPrimaryWalletNotReady,
+  refreshPiggyvestPrimaryCapability,
   rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
 } from './piggyvest-primary-capability';
@@ -133,6 +134,26 @@ describe('getPiggyvestPrimaryCapability', () => {
     expect(read).toHaveBeenCalledTimes(1);
     await getPiggyvestPrimaryCapability(PRIMARY_MERCHANT);
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-probes past a cached positive and rolls it back on not-ready', async () => {
+    read.mockResolvedValue({ account: null });
+    await expect(
+      getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)
+    ).resolves.toBe(true);
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(true);
+    read.mockRejectedValue(notReady('PIGGYVEST_NOT_READY'));
+    await expect(
+      refreshPiggyvestPrimaryCapability(PRIMARY_MERCHANT)
+    ).resolves.toBe(false);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(
+      false
+    );
+    await expect(
+      getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)
+    ).resolves.toBe(false);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the probe snapshot so callers reuse it instead of re-reading', async () => {

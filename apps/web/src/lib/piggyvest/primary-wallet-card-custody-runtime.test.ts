@@ -80,4 +80,35 @@ describe('trusted custody deployment configuration', () => {
       readPrimaryCardCustodyRuntime({ ...env, ...change }, fixture.now)
     ).toBeNull();
   });
+  it('drains after a custody rollback while keeping credential and environment bindings', () => {
+    const parsed = readPrimaryCardCustodyRuntime(
+      { ...env, PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
+      fixture.now,
+      'drain'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.custody.login).toBe('baci_primary_card_custody');
+    expect(
+      readPrimaryCardCustodyRuntime(
+        {
+          ...env,
+          PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+          VERCEL_ENV: 'production',
+        },
+        fixture.now,
+        'drain'
+      )
+    ).toBeNull();
+    expect(
+      readPrimaryCardCustodyRuntime(
+        {
+          ...env,
+          PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+          PIGGYVEST_PRIMARY_CARD_CUSTODY_PASSWORD: undefined,
+        },
+        fixture.now,
+        'drain'
+      )
+    ).toBeNull();
+  });
 });

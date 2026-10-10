@@ -52,9 +52,16 @@ export function readPrimaryWalletPaidInterestInboxRuntime(
   // Intake stops at the flag (no new rows while disabled); the worker
   // drains already-acknowledged rows through the same credentials-bound
   // config, or a rollback leaves queued payouts permanently unapplied.
+  // Intake additionally requires the drain schedule attestation (same
+  // rule as the bank inbox): acknowledging payouts while no timer
+  // drains the inbox would leave them queued after the provider stops
+  // retrying, so unattested intake fails closed and the provider
+  // redelivers. The operator sets the flag only after installing and
+  // enabling the drain timer.
   if (
     mode === 'intake' &&
-    env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true'
+    (env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED !== 'true' ||
+      env.PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED !== 'true')
   )
     return null;
   if (env.VERCEL_ENV !== 'production')

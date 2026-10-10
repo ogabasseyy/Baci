@@ -4,10 +4,15 @@ import { readPrimaryCardCustodyRuntime } from './primary-wallet-card-custody-run
 
 export function readPrimaryCardCustodyInboxRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  now = Date.now()
+  now = Date.now(),
+  mode: 'intake' | 'drain' = 'intake'
 ) {
-  const custody = readPrimaryCardCustodyRuntime(env, now);
-  if (!custody || env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true')
+  const custody = readPrimaryCardCustodyRuntime(env, now, mode);
+  if (
+    !custody ||
+    (mode === 'intake' &&
+      env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true')
+  )
     return null;
   const parsed = schemas.runtime.safeParse({
     ...custody,

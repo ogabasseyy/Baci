@@ -84,6 +84,97 @@ describe('wallet funding account api client', () => {
       expect.objectContaining({ method: 'POST' })
     );
   });
+  it('revalidates a stale positive before demanding BVN, rerouting to legacy when the server stood down', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    // First attempt observes primary-enabled and demands BVN.
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).rejects.toThrow('No bank account was created');
+    // The server disables the integration afterwards: the next
+    // BVN-less attempt must re-probe and mint legacy instead of
+    // failing the preflight on the stale cached verdict.
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Wallet access is temporarily unavailable.',
+          code: 'PIGGYVEST_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          account: {
+            accountName: 'Ogabassey/Jane Doe',
+            accountNumber: '1234567890',
+            bankName: 'Titan Paystack',
+            provider: 'paystack',
+          },
+          requiresConsent: false,
+        }),
+      });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).resolves.toMatchObject({
+      account: { accountNumber: '1234567890', provider: 'paystack' },
+    });
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/piggyvest-primary'
+      ),
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/funding-account'
+      ),
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+  it('keeps the BVN demand when revalidation fails ambiguously on a stale positive', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).rejects.toThrow('No bank account was created');
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockRejectedValue(new Error('network down'));
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).rejects.toThrow('No bank account was created');
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([, options]) =>
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'POST'
+      )
+    ).toBe(false);
+  });
   it('probes an unobserved merchant before creating a legacy DVA', async () => {
     mockFetchWithTimeout.mockClear();
     mockFetchWithTimeout

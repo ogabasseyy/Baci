@@ -18,9 +18,13 @@ export async function runPrimaryCardCustodyLaunch(input: {
     env.PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD
   )
     throw new Error('Worker credential profile unavailable');
+  // Drain mode: the worker settles already-acknowledged signed receipts
+  // even after the intake flags are rolled back. New intake stays gated
+  // on the flags; see the signed runtime's webhook handler.
   const config = readPrimaryCardCustodyInboxRuntime(
     env,
-    (input.now ?? Date.now)()
+    (input.now ?? Date.now)(),
+    'drain'
   );
   if (!config || config.transfer || config.signedInbox.batchSize !== 1)
     throw new Error('Worker configuration unavailable');

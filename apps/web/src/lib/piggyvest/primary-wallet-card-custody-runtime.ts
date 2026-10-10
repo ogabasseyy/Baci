@@ -3,10 +3,19 @@ import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wa
 
 export function readPrimaryCardCustodyRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  now = Date.now()
+  now = Date.now(),
+  mode: 'intake' | 'drain' = 'intake'
 ) {
+  // Drain mode ignores only the rollout flag: already-accepted signed
+  // receipts must keep settling after a rollback instead of stranding
+  // charged checkouts in custody_pending with no redelivery path. The
+  // worker drains queued rows only — it never intakes — so the flag is
+  // a new-work gate, not a drain gate. Environment binding,
+  // credentials, contracts, and the retained-secret fail-closed rule
+  // still apply in both modes.
   if (
-    env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true' ||
+    (mode === 'intake' &&
+      env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true') ||
     (env.VERCEL_ENV === 'production') !==
       (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )

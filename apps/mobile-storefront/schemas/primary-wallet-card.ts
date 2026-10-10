@@ -9,6 +9,12 @@ const consent = z.strictObject({
 });
 // Paystack rejects card charges below NGN 50 (5000 kobo).
 export const PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO = 5000;
+// Single source of truth for the Paystack checkout hostname allowlist:
+// both the launch params and the funding client pin to this exact
+// host. If Paystack ever announces a hostname migration, update this
+// constant (and its test pin) — not the call sites.
+export const PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME =
+  'checkout.paystack.com';
 const amountKobo = z
   .number()
   .int()
@@ -44,7 +50,7 @@ const response = z
           const parsed = new URL(value);
           return (
             parsed.protocol === 'https:' &&
-            parsed.hostname === 'checkout.paystack.com'
+            parsed.hostname === PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME
           );
         } catch {
           return false;

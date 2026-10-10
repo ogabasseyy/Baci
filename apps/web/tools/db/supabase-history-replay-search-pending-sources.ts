@@ -1,4 +1,4 @@
 // Frozen replay rows for search migrations.
 // Keep these bytes aligned with the checked-in migration files.
 export const SEARCH_PENDING_REPLAY_SOURCE_ROWS = `7d64c0b78fe68d3ce5d996c616769efd26cd4a6fbc56beebefc7e65fec1d620d 20260827100000_fix_search_products_not_archived_nulls.sql
-d140cb867145075c65b5f261293a363c7132b5a81b7c09579c4157fa176106eb 20261010000000_search_analytics_service_role_only_insert.sql`;
+274359d702da714d1ddb7bba6251b25e5dc1764bc43af18afbbb8ff17e7d9d3b 20261010000000_search_analytics_service_role_only_insert.sql`;

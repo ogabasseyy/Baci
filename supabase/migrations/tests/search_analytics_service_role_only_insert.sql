@@ -59,6 +59,15 @@ SELECT pg_temp.assert_true(
   'popular_searches still grants anon SELECT'
 );
 
+-- Least privilege: no PostgREST role advertises writes on the aggregate
+-- view either (it is not insertable, but the baseline grants said otherwise).
+SELECT pg_temp.assert_true(
+  NOT has_table_privilege('authenticated', 'public.popular_searches', 'INSERT')
+  AND NOT has_table_privilege('authenticated', 'public.popular_searches', 'UPDATE')
+  AND NOT has_table_privilege('authenticated', 'public.popular_searches', 'DELETE'),
+  'popular_searches still grants authenticated writes'
+);
+
 -- Fixtures.
 -- Owner row first: merchants.user_id references auth.users(id).
 INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,

@@ -56,7 +56,17 @@ export async function recordSearchSubmission(
   if (!isIngestibleRow(row)) {
     throw new Error('Invalid search submission row');
   }
+  // Allowlist the insert payload: validation above checks types/ranges but
+  // a future importer could pass extra keys (clicked_product_id, created_at,
+  // ...) that would otherwise flow verbatim through the RLS-bypassing
+  // branded client into an arbitrary tenant row.
+  const payload: SearchSubmissionRow = {
+    merchant_id: row.merchant_id,
+    search_query: row.search_query,
+    results_count: row.results_count,
+    search_method: row.search_method,
+  };
   const client = createServiceClient('search-analytics');
-  const { error } = await client.from('search_analytics').insert(row);
+  const { error } = await client.from('search_analytics').insert(payload);
   return { error };
 }

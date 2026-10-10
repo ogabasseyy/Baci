@@ -53,10 +53,12 @@ async function main() {
   }
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
-  acquireReleaseLock(lockPath);
   // Live-alias verification shells to `vercel api` (shipped in CLI
-  // 50.5.0); fail before dispatching rather than after watching a run.
+  // 50.5.0). Preflight before acquiring the lock: a purely local
+  // precondition failure must not leave a lock behind, and the probe
+  // needs no mutual exclusion.
   assertVercelApiSupport(() => command('vercel', ['api', '--help']));
+  acquireReleaseLock(lockPath);
   try {
     const result = await coordinateRelease({
       verifyCheckout: async () => {

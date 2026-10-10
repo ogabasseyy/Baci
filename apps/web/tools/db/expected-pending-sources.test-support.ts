@@ -14,6 +14,7 @@ import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-p
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
+import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
@@ -271,20 +272,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260926120000_public_storefront_domain_resolution.sql',
     sha256: 'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db',
   },
-  {
-    repositoryPath: 'supabase/migrations/20261008230000_mcp_guest_carts.sql',
-    sha256: '05de4506962c8a74248edf16a40139bec2c76cbea2a668c86aef17811a370dda',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261010090000_mcp_guest_cart_gigl_worker_request_scope.sql',
-    sha256: '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261010100000_mcp_guest_cart_worker_postgrest_isolate.sql',
-    sha256: '32e0cf82c8f4427203e12a731c2fe7e7bd8303933d6bf9662012aa2941c700bd',
-  },
+  ...EXPECTED_PENDING_GUEST_CART_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',

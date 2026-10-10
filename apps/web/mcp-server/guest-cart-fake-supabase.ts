@@ -57,6 +57,22 @@ export function createFakeGuestCartSupabase() {
         Date.now() + 8 * 86400000
       )
         return fail({ code: '22023', message: 'guest cart expiry exceeds retention' });
+      if (
+        !params.p_items.every(
+          (line) =>
+            typeof line === 'object' &&
+            line !== null &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+              (line as { product_id?: unknown }).product_id as string
+            ) &&
+            Number.isInteger((line as { quantity?: unknown }).quantity) &&
+            (line as { quantity: number }).quantity >= 1 &&
+            (line as { quantity: number }).quantity <= 10
+        )
+      )
+        return fail({ code: '22023', message: 'invalid guest cart line' });
+      if (JSON.stringify(params.p_items).length > 8192)
+        return fail({ code: '22023', message: 'guest cart payload exceeds size budget' });
       const expected = params.p_expected_version as number | null;
       const row = rows.get(token);
       if (expected === null || expected === undefined) {

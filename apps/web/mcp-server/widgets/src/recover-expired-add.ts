@@ -64,7 +64,8 @@ export async function recoverExpiredAdd(
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,
-    survivors
+    survivors,
+    productId
   );
   return {
     result: replayed.result ?? retry,
@@ -118,7 +119,8 @@ export async function recoverCartAdd(
   const replayed = await replaySurvivorsIntoCart(
     callCartTool,
     freshToken,
-    survivors
+    survivors,
+    productId
   );
   return {
     result: replayed.result ?? result,
@@ -133,16 +135,51 @@ function fullCartRecovery(): RecoveredCartAdd {
   };
 }
 
+// Best-effort retire of a partial fresh cart: aborts discard the fresh
+// token, so without cleanup the row holds products for seven days and
+// every retry mints another orphan. Emptying the last line deletes the
+// row and retires the token server-side. Cleanup calls are token-bound
+// updates, never creation-quota mints — and every failure is swallowed:
+// the transport may be down (often why recovery aborted), and the
+// recovery error below must survive, never a cleanup error.
+async function retirePartialCart(
+  callCartTool: CartUpdateCall,
+  freshToken: string,
+  landedProductIds: string[]
+): Promise<void> {
+  for (const productId of landedProductIds) {
+    try {
+      await callCartTool({
+        product_id: productId,
+        quantity: 0,
+        cart_token: freshToken,
+      });
+    } catch {
+      // Abort cleanup on first failure: further calls fail the same way.
+      return;
+    }
+  }
+}
+
 async function replaySurvivorsIntoCart(
   callCartTool: CartUpdateCall,
   freshToken: string,
-  survivors: CartItem[]
+  survivors: CartItem[],
+  clickedProductId: string
 ): Promise<{
   result: unknown | null;
   skippedSurvivors: SkippedSurvivor[];
 }> {
   let result: unknown | null = null;
   const skippedSurvivors: SkippedSurvivor[] = [];
+  const replayed: string[] = [];
+  const abort = async (): Promise<never> => {
+    await retirePartialCart(callCartTool, freshToken, [
+      clickedProductId,
+      ...replayed,
+    ]);
+    throw new Error('Guest cart recovery did not complete; retry the add.');
+  };
   for (const survivor of survivors) {
     let response: unknown;
     try {
@@ -154,17 +191,17 @@ async function replaySurvivorsIntoCart(
     } catch {
       // Transport failure: further replays would fail the same way, and
       // returning the partial cart would drop the unreplayed lines.
-      throw new Error('Guest cart recovery did not complete; retry the add.');
+      await abort();
     }
     const content = parseCartToolOutput(readStructuredContent(response));
     if (content?.success === true && content.cart_token === freshToken) {
       result = response;
+      replayed.push(survivor.product.id);
       continue;
     }
     // The fresh cart died mid-replay (evicted under capacity pressure):
     // same incomplete recovery, same failure instead of a partial merge.
-    if (content?.cart_expired === true)
-      throw new Error('Guest cart recovery did not complete; retry the add.');
+    if (content?.cart_expired === true) await abort();
     // Only explicitly unrestorable lines are skippable: variant selection
     // needs option choices and a dead product is gone. Every other
     // failure shape (full cart, transient merchant/catalog/filesystem
@@ -184,7 +221,7 @@ async function replaySurvivorsIntoCart(
       });
       continue;
     }
-    throw new Error('Guest cart recovery did not complete; retry the add.');
+    await abort();
   }
   return { result, skippedSurvivors };
 }

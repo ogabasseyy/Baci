@@ -72,7 +72,14 @@ it('rejects when a replay fails generically instead of dropping the line', async
       { product: second, quantity: 1 },
     ])
   ).rejects.toThrow(/did not complete/);
-  expect(callTool).toHaveBeenCalledTimes(2);
+  // Retry, failed replay, then the clicked line emptied so the partial
+  // fresh cart retires instead of orphaning.
+  expect(callTool).toHaveBeenCalledTimes(3);
+  expect(callTool).toHaveBeenLastCalledWith({
+    product_id: product.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
 });
 
 it('skips unavailable survivors and resolves with the last good replay', async () => {
@@ -141,7 +148,12 @@ it('rejects when the fresh cart re-expires mid-replay', async () => {
       { product: second, quantity: 1 },
     ])
   ).rejects.toThrow(/did not complete/);
-  expect(callTool).toHaveBeenCalledTimes(2);
+  expect(callTool).toHaveBeenCalledTimes(3);
+  expect(callTool).toHaveBeenLastCalledWith({
+    product_id: product.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
 });
 
 it('rejects on transport failure instead of merging a partial cart', async () => {
@@ -154,6 +166,13 @@ it('rejects on transport failure instead of merging a partial cart', async () =>
       { product: second, quantity: 1 },
     ])
   ).rejects.toThrow(/did not complete/);
-  expect(callTool).toHaveBeenCalledTimes(2);
+  // The retire attempt fires (and its failure is swallowed): retry,
+  // failed replay, best-effort cleanup.
+  expect(callTool).toHaveBeenCalledTimes(3);
+  expect(callTool).toHaveBeenLastCalledWith({
+    product_id: product.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
 });
 

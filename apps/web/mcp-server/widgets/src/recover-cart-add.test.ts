@@ -59,6 +59,58 @@ it('replays local survivors into a tokenless mint', async () => {
   });
 });
 
+it('retires the partial mint when replay aborts instead of orphaning it', async () => {
+  const minted = success(fresh, [product.id]);
+  const third = survivorAt(2).product;
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(success(fresh, [product.id, second.id]))
+    .mockRejectedValueOnce(new Error('socket hangup'))
+    .mockResolvedValue({ structuredContent: { success: true } });
+  await expect(
+    recoverCartAdd(callTool, minted, product.id, 1, undefined, [
+      { product, quantity: 1 },
+      { product: second, quantity: 1 },
+      { product: third, quantity: 1 },
+    ])
+  ).rejects.toThrow('Guest cart recovery did not complete; retry the add.');
+  // The clicked line plus the replayed survivor are emptied with the
+  // fresh token (token-bound updates, not quota mints); the never-
+  // replayed third line needs no cleanup.
+  expect(callTool).toHaveBeenCalledWith({
+    product_id: product.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
+  expect(callTool).toHaveBeenCalledWith({
+    product_id: second.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
+  expect(callTool).not.toHaveBeenCalledWith({
+    product_id: third.id,
+    quantity: 0,
+    cart_token: fresh,
+  });
+});
+
+it('keeps the recovery error when retire cleanup itself fails', async () => {
+  const minted = success(fresh, [product.id]);
+  const callTool = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('socket hangup'))
+    .mockRejectedValue(new Error('still down'));
+  await expect(
+    recoverCartAdd(callTool, minted, product.id, 1, undefined, [
+      { product, quantity: 1 },
+      { product: second, quantity: 1 },
+    ])
+  ).rejects.toThrow('Guest cart recovery did not complete; retry the add.');
+  // First replay throws, first cleanup throws, cleanup aborts fast:
+  // two calls, and the recovery error survives.
+  expect(callTool).toHaveBeenCalledTimes(2);
+});
+
 it('passes tokenless quota and failure responses through untouched', async () => {
   const denied = {
     structuredContent: {

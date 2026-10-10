@@ -194,7 +194,14 @@ it('keeps local lines and surfaces an error when a replay transport fails', asyn
   await act(async () => {
     await result.current.handleAddToCart(second);
   });
-  expect(callTool).toHaveBeenCalledTimes(4);
+  // Add, expired add, retry mint, failed replay, then the clicked line
+  // emptied so the partial fresh cart retires instead of orphaning.
+  expect(callTool).toHaveBeenCalledTimes(5);
+  expect(callTool).toHaveBeenLastCalledWith('update_ogabassey_guest_cart', {
+    product_id: second.id,
+    quantity: 0,
+    cart_token: freshToken,
+  });
   expect(result.current.cart).toHaveLength(1);
   expect(result.current.cart[0].product.id).toBe(product.id);
   expect(result.current.cartError).toBe(

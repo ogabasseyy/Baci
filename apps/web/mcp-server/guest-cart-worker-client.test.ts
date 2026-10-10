@@ -10,6 +10,11 @@ const HTTPS_URL = 'https://project.supabase.co';
 const LOOPBACK_URL = 'http://127.0.0.1:54321';
 const ANON_KEY = 'test-anon-key';
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Non-production allowlist admitting the fixture host below the pin.
+const TEST_ENV = {
+  NODE_ENV: 'test',
+  MCP_GUEST_CART_SUPABASE_ORIGIN_ALLOWLIST: 'project.supabase.co',
+};
 
 function jwt(
   claims: Record<string, unknown> = {
@@ -29,7 +34,12 @@ afterEach(async () => {
 });
 
 it('builds a client for a current worker token with rotation runway', () => {
-  const client = createGuestCartWorkerClient(HTTPS_URL, ANON_KEY, jwt());
+  const client = createGuestCartWorkerClient(
+    HTTPS_URL,
+    ANON_KEY,
+    jwt(),
+    TEST_ENV
+  );
   expect(typeof client.rpc).toBe('function');
 });
 
@@ -86,7 +96,7 @@ it('refuses tokens without a 24-hour rotation runway', () => {
     exp: Math.floor((Date.now() + DAY_MS + 60000) / 1000),
   });
   expect(() =>
-    createGuestCartWorkerClient(HTTPS_URL, ANON_KEY, roomy)
+    createGuestCartWorkerClient(HTTPS_URL, ANON_KEY, roomy, TEST_ENV)
   ).not.toThrow();
 });
 
@@ -104,9 +114,49 @@ it('tolerates whitespace around rotated secrets', () => {
     createGuestCartWorkerClient(
       `  ${HTTPS_URL}  `,
       ` ${ANON_KEY}\n`,
-      ` ${jwt()}\n`
+      ` ${jwt()}\n`,
+      TEST_ENV
     )
   ).not.toThrow();
+});
+
+it('pins the Supabase host so a substituted URL cannot take the token', () => {
+  const production = { NODE_ENV: 'production' } as const;
+  // The production pin itself always passes.
+  expect(() =>
+    createGuestCartWorkerClient(
+      'https://aivqthbxdshhltbwipbr.supabase.co',
+      ANON_KEY,
+      jwt(),
+      production
+    )
+  ).not.toThrow();
+  // Any other host fails in production, even when allowlisted: the
+  // extension applies only outside production.
+  for (const env of [
+    production,
+    {
+      NODE_ENV: 'production',
+      MCP_GUEST_CART_SUPABASE_ORIGIN_ALLOWLIST: 'evil.example, project.supabase.co',
+    },
+  ]) {
+    expect(() =>
+      createGuestCartWorkerClient(HTTPS_URL, ANON_KEY, jwt(), env)
+    ).toThrow(/not an allowed origin/);
+  }
+  // Outside production the allowlist extends the pin — and only the
+  // pin: unlisted hosts still fail.
+  expect(() =>
+    createGuestCartWorkerClient(HTTPS_URL, ANON_KEY, jwt(), TEST_ENV)
+  ).not.toThrow();
+  expect(() =>
+    createGuestCartWorkerClient(
+      'https://unlisted.example',
+      ANON_KEY,
+      jwt(),
+      TEST_ENV
+    )
+  ).toThrow(/not an allowed origin/);
 });
 
 it('refuses to send the token over plaintext or credentialed URLs', () => {

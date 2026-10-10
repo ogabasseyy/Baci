@@ -117,6 +117,7 @@ test('the CLI validates real commit trees and refuses rewritten operational hist
     assert.doesNotThrow(() => run(initial, '0'.repeat(40)));
     assert.doesNotThrow(() => run(descendant, initial));
     assert.throws(() => run(rewritten, initial));
+    assert.doesNotThrow(() => run(descendant, '0'.repeat(40)));
     const unsafeTree = git(
       ['mktree'],
       `100644 blob ${blob}\t.gigl-promote-record\n100644 blob ${blob}\tpackage.json\n`
@@ -130,6 +131,7 @@ test('the CLI validates real commit trees and refuses rewritten operational hist
       'unsafe',
     ]);
     assert.throws(() => run(unsafe, initial));
+    assert.throws(() => run(unsafe, '0'.repeat(40)));
     const hidden = git(['commit-tree', tree, '-p', unsafe, '-m', 'hide']);
     assert.throws(() => run(hidden, initial));
     const barrierBlob = git(['hash-object', '-w', '--stdin'], commit);

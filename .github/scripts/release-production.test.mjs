@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { originRepoSlug } from './release-production.mjs';
+import { assertVercelApiSupport, originRepoSlug } from './release-production.mjs';
 
 test('accepts every canonical GitHub remote spelling', () => {
   for (const remote of [
@@ -14,6 +14,15 @@ test('accepts every canonical GitHub remote spelling', () => {
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }
+});
+
+test('requires a Vercel CLI that provides the api subcommand', () => {
+  assert.doesNotThrow(() => assertVercelApiSupport(() => {}));
+  assert.throws(() => assertVercelApiSupport(() => {
+    throw new Error('vercel failed');
+  }), {
+    message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.0); upgrade vercel and retry',
+  });
 });
 
 test('rejects non-GitHub and non-repository remotes', () => {

@@ -38,6 +38,7 @@ describe('retireTerminalSideEffectDrain', () => {
 
     await expect(
       retireTerminalSideEffectDrain({
+        fileWedgeReview: mocks.retireWedgeWithReview,
         orderId: 'order-1',
         reason: 'gateway rejected reference',
         resolution: 'gateway_reference_invalid',
@@ -63,6 +64,7 @@ describe('retireTerminalSideEffectDrain', () => {
 
     await expect(
       retireTerminalSideEffectDrain({
+        fileWedgeReview: mocks.retireWedgeWithReview,
         orderId: 'order-1',
         reason: 'gateway rejected reference',
         resolution: 'gateway_reference_invalid',

@@ -60,6 +60,16 @@ SELECT pg_temp.assert_true(
 );
 
 -- Fixtures.
+-- Owner row first: merchants.user_id references auth.users(id).
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES (
+  '03aa0000-0000-4000-8000-000000000101',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'search-analytics-owner@example.com',
+  'test', now(), now(), now(), '{}', '{}'
+);
 -- merchants writes fire the identity-audit trigger, whose canonical writer
 -- raises audit_actor_required (28000) without a JWT role actor: seed these
 -- rows as service_role like the other merchants-seeding replay checks.

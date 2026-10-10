@@ -10,7 +10,9 @@ import {
   assertRemovableLockPath,
   assertVercelAccess,
   originRepoSlug,
+  parseGhJqString,
   readRuns,
+  readWorkflowRunStatus,
   RUNS_MAX_PAGES,
   shouldHoldReleaseLock,
   waitForRunCompletion,
@@ -27,9 +29,29 @@ test('accepts every canonical GitHub remote spelling', () => {
     'https://github.com/ogabasseyy/Baci/',
     'https://github.com/ogabasseyy/Baci.git/',
     'git@github.com:ogabasseyy/Baci.git/',
+    'https://x-access-token:sekret@github.com/ogabasseyy/Baci.git',
+    'https://ogabasseyy:sekret@github.com/ogabasseyy/Baci',
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }
+});
+
+test('reads raw gh --jq scalars without JSON parsing', () => {
+  assert.equal(parseGhJqString('in_progress\n', 'test status'), 'in_progress');
+  for (const output of ['', '   ', 'null', null, undefined]) {
+    assert.throws(() => parseGhJqString(output, 'test status'), /test status unreadable/);
+  }
+  const calls = [];
+  const status = readWorkflowRunStatus(
+    args => {
+      calls.push(args);
+      return 'queued\n';
+    },
+    42
+  );
+  assert.equal(status, 'queued');
+  assert.ok(calls[0].join(' ').includes('.status // empty'));
+  assert.throws(() => readWorkflowRunStatus(() => '', 42), /workflow run 42 status unreadable/);
 });
 
 test('requires authenticated Vercel access to the production project', () => {

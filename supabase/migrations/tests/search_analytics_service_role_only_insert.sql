@@ -68,11 +68,20 @@ INSERT INTO public.search_analytics (
   '03aa0000-0000-4000-8000-000000000001', 'phone', 27, 'client'
 );
 
--- Live proof: an authenticated direct INSERT fails on privileges.
+-- Live proof: direct INSERT fails on privileges for both PostgREST roles.
 DO $$
 DECLARE
   v_prior_role text := current_user;
 BEGIN
+  PERFORM set_config('role', 'anon', true);
+  BEGIN
+    INSERT INTO public.search_analytics (merchant_id, search_query)
+    VALUES ('03aa0000-0000-4000-8000-000000000001', 'sneaky');
+    RAISE EXCEPTION 'anon direct INSERT unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN
+    -- Expected: writes stay revoked.
+    NULL;
+  END;
   PERFORM set_config('role', 'authenticated', true);
   BEGIN
     INSERT INTO public.search_analytics (merchant_id, search_query)

@@ -34,7 +34,11 @@ export async function listPaystackRefunds(
     );
     if (!Array.isArray(envelope.data))
       throw new Error('Unverified refund list');
-    for (const candidate of envelope.data) {
+    const rows = envelope.data;
+    const linkedReferences: Array<string | undefined> = new Array(rows.length);
+    const unresolved: number[] = [];
+    for (let index = 0; index < rows.length; index++) {
+      const candidate = rows[index];
       if (
         !candidate ||
         !Number.isSafeInteger(candidate.id) ||
@@ -51,21 +55,39 @@ export async function listPaystackRefunds(
         ].includes(candidate.status)
       )
         throw new Error('Unverified refund record');
-      let linkedReference = candidate.transaction?.reference;
-      if (typeof candidate.transaction === 'string')
-        linkedReference = candidate.transaction;
-      if (
+      if (typeof candidate.transaction === 'string') {
+        linkedReferences[index] = candidate.transaction;
+      } else if (
         typeof candidate.transaction === 'number' &&
         Number.isSafeInteger(candidate.transaction) &&
         candidate.transaction > 0
       ) {
-        const transaction = await request(
-          `/transaction/${candidate.transaction}`
-        );
-        const data = transaction.data as { reference?: string } | null;
-        linkedReference = data?.reference;
+        unresolved.push(index);
+      } else {
+        linkedReferences[index] = candidate.transaction?.reference;
       }
-      if (linkedReference !== reference)
+    }
+    // Numeric transaction identities resolve with bounded concurrency: a
+    // page of 100 sequential 15s-timeout lookups would stall the worker.
+    const workers = Array.from(
+      { length: Math.min(5, unresolved.length) },
+      async () => {
+        while (unresolved.length > 0) {
+          const index = unresolved.shift();
+          if (index === undefined) return;
+          const candidate = rows[index];
+          const transaction = await request(
+            `/transaction/${candidate.transaction}`
+          );
+          const data = transaction.data as { reference?: string } | null;
+          linkedReferences[index] = data?.reference;
+        }
+      }
+    );
+    await Promise.all(workers);
+    for (let index = 0; index < rows.length; index++) {
+      const candidate = rows[index];
+      if (linkedReferences[index] !== reference)
         throw new Error('Refund transaction mismatch');
       refunds.push({
         id: candidate.id,

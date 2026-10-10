@@ -47,4 +47,56 @@ describe('checkCancellationRefundProvider', () => {
       'reconciliation'
     );
   });
+  it('accounts unmatched processed refunds against completed manual Paystack rows', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: 'merchant-ref-1',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: { method: 'paystack' },
+          },
+        ],
+      })
+    ).resolves.toBeUndefined();
+  });
+  it('still blocks when manual Paystack rows cannot cover the provider refund', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 200, currency: 'NGN', status: 'processed' },
+    ]);
+    const manual = {
+      gateway_reference: 'merchant-ref-1',
+      amount: 1,
+      status: 'completed',
+      currency: 'NGN',
+      metadata: { method: 'paystack' },
+    };
+    await expect(
+      checkCancellationRefundProvider({ ...input, knownRefunds: [manual] })
+    ).rejects.toThrow('reconciliation');
+    // A manual row in another currency cannot account for this leg.
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [{ ...manual, amount: 2, currency: 'USD' }],
+      })
+    ).rejects.toThrow('reconciliation');
+    // A manual row already matched by reference cannot account twice.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [{ ...manual, gateway_reference: '7' }],
+      })
+    ).rejects.toThrow('reconciliation');
+  });
 });

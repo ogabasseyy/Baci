@@ -30,6 +30,25 @@ describe('listPaystackRefunds', () => {
       { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
     ]);
   });
+  it('resolves several numeric transaction identities on one page', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response([
+          { ...refund, id: 1, transaction: 5 },
+          { ...refund, id: 2, transaction: 6 },
+          { ...refund, id: 3, transaction: 7 },
+        ])
+      )
+      .mockResolvedValue(response({ reference: 'capture-1' }));
+    vi.stubGlobal('fetch', fetcher);
+    expect(await listPaystackRefunds('capture-1')).toEqual([
+      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: 2, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: 3, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
   it('reads another page after a full page', async () => {
     const fetcher = vi
       .fn()

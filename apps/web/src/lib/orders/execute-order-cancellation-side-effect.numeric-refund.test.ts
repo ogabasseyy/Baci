@@ -1,6 +1,9 @@
 import { expect, it, vi } from 'vitest';
 
 const initiateRefund = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@/lib/initiate-paystack-refund', () => ({ initiateRefund }));
 vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
   buildOrderCancellationEmailMessage: vi.fn(),

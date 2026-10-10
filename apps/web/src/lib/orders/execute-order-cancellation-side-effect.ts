@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import { classifyCancellationRefundLinks } from '@/lib/orders/classify-cancellation-refund-links';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
@@ -261,6 +262,28 @@ export async function executeOrderCancellationSideEffect({
       auditBlockedLegIds.has(transaction.id) &&
       !refundedPaymentIds.has(transaction.id)
   );
+  const initiationTransactions = transactions.filter(
+    (transaction) =>
+      !mismatchedIds.has(transaction.id) &&
+      !auditBlockedLegIds.has(transaction.id)
+  );
+  // Pre-initiation provider guard: an existing Paystack refund the ledger
+  // cannot account for must quarantine for review (delivery_uncertain)
+  // instead of initiating a duplicate provider refund.
+  for (const transaction of initiationTransactions) {
+    if (
+      normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' ||
+      !transaction.gateway_reference
+    )
+      continue;
+    await checkCancellationRefundProvider({
+      currency: transaction.currency || order.currency || 'NGN',
+      knownRefunds: (refundRows ?? []).filter(
+        (row) => linkedPaymentId(row) === transaction.id
+      ),
+      reference: transaction.gateway_reference,
+    });
+  }
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -268,11 +291,7 @@ export async function executeOrderCancellationSideEffect({
     reason,
     refundedPaymentIds,
     supabase,
-    transactions: transactions.filter(
-      (transaction) =>
-        !mismatchedIds.has(transaction.id) &&
-        !auditBlockedLegIds.has(transaction.id)
-    ),
+    transactions: initiationTransactions,
   });
   if (auditBlockedTransactions.length > 0) {
     await quarantineRefund({

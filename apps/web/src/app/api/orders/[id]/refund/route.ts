@@ -4,6 +4,27 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { orderRefundSchema } from '@/schemas/order-refund';
 
+// Fixed user-facing messages for known refund identifiers. Raw database
+// exception text must never reach the client (CWE-209): unknown
+// identifiers fall back to the generic message.
+const KNOWN_REFUND_ERRORS: Record<string, string> = {
+  refund_forbidden: 'You do not have permission to manage this refund',
+  order_not_found: 'Order not found',
+  cancelled_paid_order_required: 'Refunds require a cancelled, paid order',
+  refund_processing_or_requires_review:
+    'Refund is processing or requires review',
+  invalid_manual_refund: 'Invalid manual refund request',
+  already_refunded: 'This order has already been fully refunded',
+  failed_refund_required: 'Only a failed refund can be retried',
+  refund_exceeds_remaining: 'Refund amount exceeds the remaining balance',
+  manual_reference_conflict:
+    'This reference was already used for a different refund',
+  unallocated_refund_requires_review: 'Refund requires review before recording',
+  payment_currency_requires_review: 'Refund requires review before recording',
+  payment_ledger_requires_review: 'Refund requires review before recording',
+  invalid_refund_action: 'Invalid refund request',
+};
+
 async function handle(
   request: NextRequest,
   params: Promise<{ id: string }>,
@@ -59,10 +80,7 @@ async function handle(
               : 500;
     return NextResponse.json(
       {
-        error:
-          status === 500
-            ? 'Unable to manage refund'
-            : error.message.replaceAll('_', ' '),
+        error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',
         code: error.code,
       },
       { status }

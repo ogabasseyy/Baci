@@ -39,7 +39,7 @@ export function OrderRefundPanel({
           signal: controller.signal,
           cache: 'no-store',
         });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         if (!response.ok)
           throw new Error(data.error || 'Unable to load refund');
         if (active && startedRevision === revision.current) {
@@ -77,6 +77,18 @@ export function OrderRefundPanel({
       )
     )
       return;
+    if (action === 'manual') {
+      const parsedAmount = Number(amount);
+      const parsedDate = new Date(date);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        setError('Enter a valid refund amount greater than zero.');
+        return;
+      }
+      if (Number.isNaN(parsedDate.getTime())) {
+        setError('Enter a valid refund date and time.');
+        return;
+      }
+    }
     revision.current += 1;
     setBusy(true);
     setError(null);
@@ -145,6 +157,12 @@ export function OrderRefundPanel({
                 <dt>Remaining</dt>
                 <dd>{money(summary.remaining)}</dd>
               </div>
+              {(summary.reversedInternal ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <dt>Returned to wallet/savings</dt>
+                  <dd>{money(summary.reversedInternal ?? 0)}</dd>
+                </div>
+              )}
             </dl>
             {summary.error && (
               <p className="text-sm text-destructive">{summary.error}</p>

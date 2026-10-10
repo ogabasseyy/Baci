@@ -4,6 +4,7 @@ export interface RefundSummary {
   refunded: number;
   remaining: number;
   pending: number;
+  reversedInternal?: number;
   status:
     | 'refunded'
     | 'processing'

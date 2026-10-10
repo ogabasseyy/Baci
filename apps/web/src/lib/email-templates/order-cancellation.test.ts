@@ -94,7 +94,13 @@ describe('cancellation refund status wording', () => {
       merchantUrl: 'https://example.com',
       currency: 'NGN',
     });
-    expect(html).toContain('Cancellation starts the refund workflow');
+    // The customer_email step is independent of the refund step: the email
+    // must not assert refund-workflow initiation while the refund may still
+    // be failed or delivery_uncertain.
+    expect(html).not.toContain('Cancellation starts the refund workflow');
+    expect(html).toContain(
+      'Please contact the store for an update on your refund status.'
+    );
     expect(html).not.toContain('will be processed within 3-5 business days');
   });
 });

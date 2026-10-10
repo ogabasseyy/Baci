@@ -96,21 +96,28 @@ describe('order refund route', () => {
     );
   });
   it.each([
-    ['42501', 403],
-    ['P0002', 404],
-    ['P0001', 409],
-    ['unexpected', 500],
-  ])('maps database %s errors to %s', async (code, status) => {
+    [
+      '42501',
+      403,
+      'refund_forbidden',
+      'You do not have permission to manage this refund',
+    ],
+    ['P0002', 404, 'order_not_found', 'Order not found'],
+    [
+      'P0001',
+      409,
+      'refund_processing_or_requires_review',
+      'Refund is processing or requires review',
+    ],
+    ['P0001', 409, 'internal_detail', 'Unable to manage refund'],
+    ['unexpected', 500, 'internal_detail', 'Unable to manage refund'],
+  ])('maps database %s errors to %s without echoing raw text', async (code, status, message, expectedError) => {
     mocks.rpc.mockResolvedValue({
       data: null,
-      error: { code, message: 'internal_detail' },
+      error: { code, message },
     });
     const response = await POST(request({ action: 'retry' }), context);
     expect(response.status).toBe(status);
-    if (status === 500)
-      expect(await response.json()).toEqual({
-        error: 'Unable to manage refund',
-        code,
-      });
+    expect(await response.json()).toEqual({ error: expectedError, code });
   });
 });

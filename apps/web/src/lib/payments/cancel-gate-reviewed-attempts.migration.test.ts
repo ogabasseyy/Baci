@@ -18,6 +18,10 @@ const narrowGateMigrationPath = resolve(
   __dirname,
   '../../../../../supabase/migrations/20260928185100_narrow_cancel_gate_to_handled_abandoned_stamps.sql'
 );
+const failClosedMigrationPath = resolve(
+  __dirname,
+  '../../../../../supabase/migrations/20260928185300_fail_closed_on_unknown_abandoned_stamps.sql'
+);
 
 function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -81,6 +85,30 @@ describe('cancel gate reviewed-attempt migration', () => {
     );
     expect(migrationSql).toContain(
       "r.metadata->'mismatched_attempts' ? t.id::text"
+    );
+    expect(migrationSql).toContain('payment_capture_in_flight');
+  });
+
+  it('admits only known manual-review stamps through the ops-closed hatch', () => {
+    expect(existsSync(failClosedMigrationPath)).toBe(true);
+    if (!existsSync(failClosedMigrationPath)) return;
+
+    const migrationSql = normalizeSql(
+      readFileSync(failClosedMigrationPath, 'utf8')
+    );
+
+    // Same signature: OR REPLACE keeps every existing call on the
+    // new body.
+    expect(migrationSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.cancel_order_as_merchant('
+    );
+    // The hatch allowlists exactly the two known manual-review
+    // resolutions: an unknown stamp with no recognized review would
+    // pass the NOT EXISTS trivially, silently exempting a
+    // potentially captured leg the transition never converts.
+    expect(migrationSql).toContain("'verified_capture_mismatch_reviewed'");
+    expect(migrationSql).toContain(
+      "'merchant_invoice_partial_conflict_reviewed'"
     );
     expect(migrationSql).toContain('payment_capture_in_flight');
   });

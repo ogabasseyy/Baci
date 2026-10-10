@@ -104,8 +104,10 @@ describe('public MCP result schema validation', () => {
       mcpToolOutputSchemas.get_brands.safeParse({ brands: [] }).success
     ).toBe(true);
     expect(
-      mcpToolOutputSchemas.add_to_cart.safeParse({ success: true, quantity: 0 })
-        .success
+      mcpToolOutputSchemas.prepare_storefront_cart_link.safeParse({
+        success: true,
+        quantity: 0,
+      }).success
     ).toBe(false);
   });
 });

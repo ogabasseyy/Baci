@@ -111,7 +111,7 @@ describe('public MCP output contracts', () => {
       const definitions = getResultTools(await postMcpJsonRpc(server.baseUrl, {
         id: 1, method: 'tools/list', params: {},
       }));
-      expect(definitions).toHaveLength(8);
+      expect(definitions).toHaveLength(10);
       for (const definition of definitions) {
         expect(definition, definition.name).toHaveProperty('outputSchema');
         const schema = Reflect.get(definition, 'outputSchema');
@@ -129,9 +129,9 @@ describe('public MCP output contracts', () => {
     const cases: Array<[keyof typeof mcpToolOutputSchemas, Record<string, unknown>]> = [
       ['search_products', { intent: { alternatives: [{}] }, limit: 10 }],
       ['search_products', { intent: { alternatives: [{ model: 'does-not-exist' }] } }],
-      ['add_to_cart', { product_id: 'available-product' }],
-      ['add_to_cart', { product_id: 'variant-available-product' }],
-      ['add_to_cart', { product_id: 'sold-out-product' }],
+      ['prepare_storefront_cart_link', { product_id: 'available-product' }],
+      ['prepare_storefront_cart_link', { product_id: 'variant-available-product' }],
+      ['prepare_storefront_cart_link', { product_id: 'sold-out-product' }],
       ['get_product', { product_id: 'available-product' }],
       ['get_product', { product_id: 'condition-offer-product' }],
       ['get_product', { product_id: 'missing-product' }],

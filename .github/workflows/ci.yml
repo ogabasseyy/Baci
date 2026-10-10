@@ -374,6 +374,9 @@ jobs:
           --sql-check supabase/tests/mcp_search_option_windows.sql
           --sql-check supabase/tests/mcp_search_option_windows_guard.sql --sql-check supabase/migrations/tests/connector_owner_creation_limit.sql
           --sql-check supabase/migrations/tests/piggyvest_transfer_outbox_claims_authorization_index.sql
+          --sql-check supabase/tests/mcp_guest_carts_rpc.sql
+          --sql-check supabase/tests/mcp_guest_carts_privileges.sql
+          --sql-check supabase/tests/mcp_guest_carts_capacity.sql
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
@@ -458,6 +461,9 @@ jobs:
           .github/scripts/probe-gigl-hook-reload.test.mjs
           .github/scripts/probe-blog-media-hook-reload.test.mjs
           .github/scripts/blog-hook-probe-gate.test.mjs
+          .github/scripts/probe-guest-cart-hook-reload.test.mjs
+          .github/scripts/probe-guest-cart-hook-reload-binding.test.mjs
+          .github/scripts/guest-cart-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs

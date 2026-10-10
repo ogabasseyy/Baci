@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
 
 const products = [
-  { id: 'phone-1', name: 'Phone One', slug: 'phone-one', price: 100000 },
+  { id: '11111111-1111-4111-8111-111111111111', name: 'Phone One', slug: 'phone-one', price: 100000 },
 ];
 afterEach(() => {
   delete window.openai;
@@ -147,7 +147,8 @@ describe('Ogabassey inline result presentation', () => {
     });
     const notifyIntrinsicHeight = vi.fn();
     const callTool = vi.fn().mockResolvedValue({ structuredContent: {
-      success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
+      success: true, cart_token: 'a'.repeat(64), cart_url: `https://ogabassey.com/cart?guest_cart=${encodeURIComponent(JSON.stringify([{ product_id: products[0].id, quantity: 1 }]))}`,
+      items: [{ product_id: products[0].id, quantity: 1 }], expires_at: '2026-10-14T00:00:00.000Z',
     } });
     window.openai = { toolOutput: { products }, displayMode: 'inline', notifyIntrinsicHeight, callTool, openExternal: vi.fn() };
     render(<App />);
@@ -155,7 +156,8 @@ describe('Ogabassey inline result presentation', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
     expect(screen.getByRole('button', { name: 'Remove Phone One' })).toBeTruthy();
     expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
-    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Remove Phone One' })); });
+    callTool.mockResolvedValueOnce({ structuredContent: { success: true, cart_token: 'a'.repeat(64), cart_url: 'https://ogabassey.com/cart?guest_cart=[]', items: [], expires_at: '2026-10-14T00:00:00.000Z' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Remove Phone One' })); });
     expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(180);
     callTool.mockRejectedValueOnce(new Error('offline'));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
@@ -166,7 +168,7 @@ describe('Ogabassey inline result presentation', () => {
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(180);
-    await act(async () => { finish?.({ structuredContent: { success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1' } }); });
+    await act(async () => { finish?.({ structuredContent: { success: true, cart_token: 'a'.repeat(64), cart_url: `https://ogabassey.com/cart?guest_cart=${encodeURIComponent(JSON.stringify([{ product_id: products[0].id, quantity: 1 }]))}`, items: [{ product_id: products[0].id, quantity: 1 }], expires_at: '2026-10-14T00:00:00.000Z' } }); });
     expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
   });
 

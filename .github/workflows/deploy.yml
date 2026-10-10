@@ -204,12 +204,12 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-    # 35 minutes covers both hook-reload probes' unanimity windows on
-    # the first deploy (later deploys skip each probe in seconds once
-    # its isolate migration is recorded), with headroom so a slow
-    # double-probe path fails by the probe's explicit error rather
-    # than by job timeout.
-    timeout-minutes: 35
+    # 50 minutes covers all three hook-reload probes' unanimity
+    # windows on the first deploy (later deploys skip each probe in
+    # seconds once its isolate migration is recorded), with headroom
+    # so a slow triple-probe path fails by the probe's explicit error
+    # rather than by job timeout.
+    timeout-minutes: 50
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -246,6 +246,21 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         run: .github/scripts/probe-blog-media-hook-reload.sh
+      - name: Apply pending migrations through the guest-cart scope hook
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20261010090000
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe guest-cart hook reload acknowledgement
+        # Same no-grant-without-a-witness rule as GIGL/blog-media: the
+        # isolate grant below must never commit while any PostgREST
+        # replica still serves the pre-cart hook, so unanimity on the
+        # guest-cart canary gates the remaining apply. Skips fast once
+        # the guest-cart isolate migration is recorded.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-guest-cart-hook-reload.sh
       - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy

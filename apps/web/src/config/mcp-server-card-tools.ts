@@ -2,13 +2,25 @@ import { z } from 'zod';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
+import { cartLinkInputSchema } from '../schemas/cart-link-input';
 import {
   MCP_DELIVERY_FEE_INFO_DESCRIPTION,
   mcpDeliveryFeeInfoInputSchema,
 } from '../schemas/mcp-delivery-fee-info';
+import {
+  MCP_GUEST_CART_DESCRIPTION,
+  mcpGuestCartInputSchema,
+} from '../schemas/mcp-guest-cart';
 import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
+
+// Generated from the same Zod contract the runtime registers, so the card
+// cannot drift from the tool. Shared by the tool and its alias entry.
+const CART_LINK_INPUT_SCHEMA = z.toJSONSchema(cartLinkInputSchema, {
+  target: 'draft-7',
+  io: 'input',
+});
 
 const PRODUCT_LOOKUP_INPUT_SCHEMA = {
   $schema: DRAFT_07_SCHEMA,
@@ -81,28 +93,39 @@ export const PUBLIC_MCP_TOOLS = [
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
-    name: 'add_to_cart',
+    name: 'update_ogabassey_guest_cart',
+    title: 'Update Ogabassey Guest Cart',
+    description: MCP_GUEST_CART_DESCRIPTION,
+    // Input mode: the runtime schema defaults quantity to 1, and discovery
+    // must advertise that default instead of a stricter required contract.
+    inputSchema: z.toJSONSchema(mcpGuestCartInputSchema, {
+      target: 'draft-7',
+      io: 'input',
+    }),
+    annotations: {
+      readOnlyHint: false,
+      // Mirrors update_ogabassey_guest_cart: removals delete persisted lines.
+      destructiveHint: true,
+      openWorldHint: false,
+      // Mirrors update_ogabassey_guest_cart: tokenless calls mint a new cart,
+      // so retries without the token are not idempotent.
+      idempotentHint: false,
+    },
+  },
+  {
+    name: 'prepare_storefront_cart_link',
     title: 'Prepare Ogabassey Cart Link',
     description:
       'Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
-    inputSchema: {
-      $schema: DRAFT_07_SCHEMA,
-      type: 'object',
-      properties: {
-        product_id: {
-          type: 'string',
-          description: 'The product ID to add to cart',
-        },
-        quantity: {
-          default: 1,
-          description: 'Quantity to add',
-          type: 'integer',
-          minimum: 1,
-          maximum: 10,
-        },
-      },
-      required: ['product_id'],
-    },
+    inputSchema: CART_LINK_INPUT_SCHEMA,
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+  },
+  {
+    name: 'add_to_cart',
+    title: 'Add to Cart (Deprecated Alias)',
+    description:
+      'Deprecated alias of prepare_storefront_cart_link for callers with a cached tool list. Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
+    inputSchema: CART_LINK_INPUT_SCHEMA,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {

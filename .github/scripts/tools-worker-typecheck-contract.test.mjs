@@ -53,6 +53,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'mcp-server/delivery-fee-quotes.test.ts',
     'mcp-server/delivery-gigl-quotes.test.ts',
     'mcp-server/server-delivery-gigl.test.ts',
+    'mcp-server/widgets/src/index.tsx',
   ]);
   assert.ok(!mcpTsconfig.exclude.includes('mcp-server'));
   assert.deepEqual(toolsTsconfig.compilerOptions.types, [

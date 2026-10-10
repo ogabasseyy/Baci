@@ -19,6 +19,9 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     const body = Buffer.concat(chunks).toString();
     res.setHeader('content-type', 'application/json');
     if (url.pathname.startsWith('/rest/')) {
+      // The startup capability probe arrives with the worker JWT, not the
+      // anon key: answer the cart-get RPC with the empty set.
+      if (url.pathname === '/rest/v1/rpc/get_mcp_guest_cart' && (req.headers.authorization ?? '').startsWith('Bearer ')) { res.end('[]'); return; }
       if (req.headers.authorization !== 'Bearer test-anon-key') { res.writeHead(403).end('{}'); return; }
       if (url.pathname === '/rest/v1/merchants') res.end(JSON.stringify({ id: 'merchant-1' }));
       else if (url.pathname === '/rest/v1/rpc/resolve_storefront_public_snapshot_v2') res.end(JSON.stringify([{ resolution_status: 'found', merchant_data: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' }, feature_settings: { shipping_providers: ['gigl'] } }]));
@@ -90,6 +93,8 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     expect(shipmentBodies).toHaveLength(pricedBeforeMismatch);
     const allowedRequests = new Set([
       'GET /rest/v1/merchants',
+      // Startup capability probe: one read-only cart-get before listening.
+      'POST /rest/v1/rpc/get_mcp_guest_cart',
       'POST /rest/v1/rpc/resolve_storefront_public_snapshot_v2',
       'POST /rest/v1/rpc/get_storefront_shipping_sender',
       'POST /rest/v1/rpc/get_storefront_pdp_core_v2',
@@ -100,6 +105,7 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     expect(requests.filter((request) => !allowedRequests.has(request))).toEqual([]);
     expect(requests.filter((request) => request === 'POST /login')).toHaveLength(1);
     expect(requests.filter((request) => request === 'GET /localstations/get')).toHaveLength(1);
+    expect(requests.filter((request) => request === 'POST /rest/v1/rpc/get_mcp_guest_cart')).toHaveLength(1);
   } finally {
     try {
       await client.close();

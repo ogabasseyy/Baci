@@ -38,13 +38,32 @@ export function originRepoSlug(remoteUrl) {
   return match ? match[1].toLowerCase() : '';
 }
 
-function readRuns(filter, paginate = false) {
-  const output = gh(['api', `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=100&${filter}`,
-    ...(paginate ? ['--paginate', '--slurp'] : [])]);
-  const pages = paginate ? JSON.parse(output) : [JSON.parse(output)];
-  return pages.flatMap(page => page.workflow_runs.map(run => ({
+// Pagination is manual and capped: one gh call per page, each holding at
+// most 100 full run objects (~400KB, inside the default 1MB spawn
+// buffer). gh's --paginate would concatenate the unbounded full
+// history through a single buffer until ENOBUFS blocks every release.
+// Five pages (500 runs) generously cover the newest-first windows
+// every caller needs: the just-dispatched run, in-flight guards, and
+// concurrent siblings are all minutes old.
+export const RUNS_PAGE_SIZE = 100;
+export const RUNS_MAX_PAGES = 5;
+
+export function slimWorkflowRun(run) {
+  return {
     databaseId: run.id, headSha: run.head_sha, status: run.status, event: run.event, title: run.display_title,
-  })));
+  };
+}
+
+export function readRuns(filter, paginate = false) {
+  const runs = [];
+  const lastPage = paginate ? RUNS_MAX_PAGES : 1;
+  for (let page = 1; page <= lastPage; page++) {
+    const batch = JSON.parse(gh(['api',
+      `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`])).workflow_runs;
+    runs.push(...batch.map(slimWorkflowRun));
+    if (batch.length < RUNS_PAGE_SIZE) break;
+  }
+  return runs;
 }
 
 async function main() {
@@ -79,9 +98,10 @@ async function main() {
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
       findRun: async (_commit, baseline) => {
         for (let attempt = 0; attempt < 24; attempt++) {
-          // Paginated like listRuns: with 100+ recent dispatches the new
-          // run can fall outside the first page, which would wrongly
-          // report 'dispatch outcome unknown' on a healthy run.
+          // Bounded pagination like listRuns: with 100+ recent
+          // dispatches the new run can fall outside the first page,
+          // which would wrongly report 'dispatch outcome unknown' on
+          // a healthy run.
           const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch', true), baseline, coordinationId);
           if (candidate) return candidate;
           await new Promise(resolve => setTimeout(resolve, 5000));

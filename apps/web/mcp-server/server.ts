@@ -15,7 +15,13 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
  */
 
 import { randomUUID } from 'node:crypto';
-import { prepareCartHandoff } from './cart-handoff';
+import { GuestCartStore } from './guest-cart-store';
+import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
+import { createGuestCartWorkerClient } from './guest-cart-worker-client';
+import { describeGuestCartStoreHealth } from './guest-cart-health';
+import { registerCartLinkTools } from './cart-link-tool';
+import { registerGuestCartTool } from './guest-cart-tool';
+import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
@@ -29,7 +35,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
 import {
@@ -72,6 +78,11 @@ import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.cons
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Worker JWT for guest-cart storage: minted offline with the
+// mcp_guest_cart_worker role claim, it can invoke only the three cart
+// RPCs. Neither the public anon key nor the RLS-bypassing service key
+// may back user-facing cart operations.
+const GUEST_CART_WORKER_TOKEN = process.env.MCP_GUEST_CART_WORKER_TOKEN;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
@@ -191,16 +202,48 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !GUEST_CART_WORKER_TOKEN) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, MCP_GUEST_CART_WORKER_TOKEN'
   );
   process.exit(1);
 }
+// Log the effective trust-proxy mode once: when false behind a proxy,
+// rate limiting and the cart quota key on the proxy socket address and
+// every caller shares one bucket (see README). The value is explicit
+// per deploy; this line keeps it visible in deploy logs.
+console.log(
+  JSON.stringify({
+    type: 'lifecycle',
+    event: 'mcp-trust-proxy-mode',
+    trustProxyRealIp: process.env.MCP_TRUST_PROXY_REAL_IP === 'true',
+    timestamp: new Date().toISOString(),
+  })
+);
 
 // Public shopping tools use the normal RLS-scoped anonymous client.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guest carts persist through worker-scoped Postgres RPCs: no local
+// volume, no writer lock, safe to scale past one replica. (The
+// creation quota stays per-process, so N replicas admit N times the
+// single-host burst: over-admission, never over-refusal.)
+let guestCartClient: SupabaseClient;
+try {
+  guestCartClient = createGuestCartWorkerClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    GUEST_CART_WORKER_TOKEN
+  );
+} catch (error) {
+  // Static messages only: the token and its claims never reach logs.
+  console.error('FATAL: Invalid guest-cart worker token');
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+// The startup probe authenticates this same client before the store
+// below serves traffic; the probe needs no store state.
+const guestCartStore = new GuestCartStore(guestCartClient);
 
 // =============================================================================
 // RATE LIMITING
@@ -1184,7 +1227,7 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
-function createOgabasseyServer() {
+function createOgabasseyServer(options: { clientIp?: string } = {}) {
   const server = new McpServer({
     name: 'ogabassey-store',
     version: '1.0.0',
@@ -1299,60 +1342,9 @@ function createOgabasseyServer() {
     }
   );
 
-  // Tool: Add to Cart (Widget-accessible)
-  // This tool can be called from the widget iframe using window.openai.callTool
-  server.registerTool(
-    'add_to_cart',
-    {
-      outputSchema: mcpToolOutputSchemas.add_to_cart,
-      title: 'Prepare Ogabassey Cart Link',
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
-      inputSchema: {
-        product_id: z.string().describe('The product ID to add to cart'),
-        quantity: z
-          .number()
-          .int()
-          .min(1)
-          .max(10)
-          .optional()
-          .default(1)
-          .describe('Quantity to add'),
-      },
-      _meta: {
-        'openai/widgetAccessible': true, // Enable widget-initiated calls
-        'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',
-        'openai/toolInvocation/invoked': 'Ready to add on Ogabassey',
-      },
-    },
-    async (args) => {
-      try {
-        const merchantId = await getMerchantId();
-        if (!merchantId) {
-          return {
-            content: [{ type: 'text', text: '❌ Unable to access store.' }],
-            structuredContent: { success: false, message: 'Store temporarily unavailable.' },
-          };
-        }
-
-        return prepareCartHandoff({
-          supabase,
-          merchantId,
-          productId: args.product_id,
-          quantity: args.quantity,
-          formatPrice,
-        });
-      } catch (error) {
-        console.error('Add to cart error:', error);
-        return {
-          content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
-          structuredContent: { success: false, message: 'Unable to prepare cart link.' },
-        };
-      }
-    }
-  );
+  registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {
@@ -2501,26 +2493,40 @@ const httpServer = createServer(
       return;
     }
 
-    // Readiness probe
+    // Readiness probe. Guest-cart storage rides along as a signal only: a
+    // degraded cart store must not flip the probe red, or catalog traffic
+    // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
+      const carts = describeGuestCartStoreHealth(guestCartStore);
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ status: 'healthy', database: 'connected' }));
+          res.end(
+            JSON.stringify({
+              status: 'healthy',
+              database: 'connected',
+              ...carts,
+            })
+          );
         } else {
           res.writeHead(503, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
               status: 'unhealthy',
               database: 'merchant not found',
+              ...carts,
             })
           );
         }
       } catch {
         res.writeHead(503, { 'content-type': 'application/json' });
         res.end(
-          JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
+          JSON.stringify({
+            status: 'unhealthy',
+            database: 'connection failed',
+            ...carts,
+          })
         );
       }
       return;
@@ -2573,7 +2579,7 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Allow-Headers', MCP_ALLOWED_HEADERS);
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const server = createOgabasseyServer();
+      const server = createOgabasseyServer({ clientIp: ip });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -2629,28 +2635,17 @@ const httpServer = createServer(
   }
 );
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+// Graceful shutdown (see server-shutdown.ts): drain in-flight requests,
+// then exit. Guest carts need no lock release: the Postgres version gate
+// serializes writers, so a replacement cannot corrupt a draining update.
+const gracefulShutdown = () =>
+  createGracefulShutdown({
+    closeServer: (done) => httpServer.close(done),
+    exit: (code) => process.exit(code),
+  })();
 
-process.on('SIGINT', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Unhandled rejection handler (fail closed - log and continue)
 process.on('unhandledRejection', (reason) => {
@@ -2663,7 +2658,7 @@ process.on('unhandledRejection', (reason) => {
   );
 });
 
-httpServer.listen(PORT, () => {
+function onListening() {
   const address = httpServer.address();
   const actualPort =
     typeof address === 'object' && address !== null ? address.port : PORT;
@@ -2693,4 +2688,12 @@ httpServer.listen(PORT, () => {
 ║    • Graceful shutdown                                         ║
 ╚════════════════════════════════════════════════════════════════╝
 `);
+}
+
+// The server listens only after the capability probe passes (see
+// guest-cart-startup-gate): a hung boot fails closed rather than
+// idling past the deploy's /health curl loop.
+gateStartupOnGuestCartCapability({
+  client: guestCartClient,
+  onReady: () => httpServer.listen(PORT, onListening),
 });

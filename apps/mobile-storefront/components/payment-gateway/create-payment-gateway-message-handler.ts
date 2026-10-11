@@ -7,7 +7,7 @@ const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
 
 interface CreatePaymentGatewayMessageHandlerInput {
-  confirmRedvaultPayment?: () => void;
+  confirmServerPayment?: () => void;
   amount?: number;
   clearCart: () => void | Promise<void>;
   confirmVtuPaymentSuccess: (input: {
@@ -101,7 +101,7 @@ function handleClipboardText({
 
 export function createPaymentGatewayMessageHandler({
   amount,
-  confirmRedvaultPayment,
+  confirmServerPayment,
   clearCart,
   confirmVtuPaymentSuccess,
   copiedGatewayTextRef,
@@ -138,6 +138,28 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
+    // Primary card confirms only through the hosted status boundary:
+    // route every success-claim message to the wired server confirmer
+    // (or drop it when unwired) before any branch below can credit it.
+    // Clipboard messages fall through; copying text never confirms.
+    if (
+      paymentKind === 'primary_wallet_card' &&
+      (data.type === 'crypto_success' ||
+        data.type === 'success' ||
+        data.type === 'payment_success')
+    ) {
+      if (confirmServerPayment) confirmServerPayment();
+      // Unwired drops are fail-closed by design, but must not be
+      // silent: without this warn a future caller omitting the
+      // confirmer would strand the checkout on loading with no
+      // triage signal. Redacted: message type only, no payload.
+      else
+        console.warn(
+          `[payment-gateway] dropped primary success-claim without confirmer: ${data.type}`
+        );
+      return;
+    }
+
     if (data.type === PAYMENT_CLIPBOARD_BRIDGE.clipboardMessageType) {
       handleClipboardText({
         copiedGatewayTextRef,
@@ -161,17 +183,21 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
-    if (confirmRedvaultPayment) {
+    if (confirmServerPayment) {
       if (
         data.type === 'crypto_success' ||
         data.type === 'success' ||
         data.type === 'payment_success'
       )
-        confirmRedvaultPayment();
+        confirmServerPayment();
       return;
     }
 
     if (data.type === 'crypto_success') {
+      // The early primary_wallet_card guard above returns for every
+      // success-claim type, so primary checkouts never reach this
+      // branch; the primary-card tests pin that routing and go red if
+      // the early guard ever narrows.
       await handleCryptoSuccessMessage(data, {
         amount,
         clearCart,

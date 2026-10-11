@@ -1,0 +1,85 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import {
+  readPrimaryWalletSavingsRecoveryRuntime,
+  readPrimaryWalletSavingsRuntime,
+} from './primary-wallet-savings-runtime';
+
+const primary = vi.hoisted(() => vi.fn());
+const primaryDrain = vi.hoisted(() => vi.fn());
+vi.mock('./primary-wallet-runtime', () => ({
+  readPrimaryWalletRuntime: primary,
+  readPrimaryWalletRuntimeDrain: primaryDrain,
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+it('does not enable transfers when their independent flag is off', () => {
+  expect(readPrimaryWalletSavingsRuntime({ NODE_ENV: 'test' })).toBeNull();
+  expect(primary).not.toHaveBeenCalled();
+});
+it('does not use provisioning credentials when authorizer credentials are missing', () => {
+  primary.mockReturnValue({
+    onboarding: {
+      integrationId: '11111111-1111-4111-8111-111111111111',
+      environment: 'staging',
+    },
+    database: {
+      host: 'db.example.com',
+      port: 5432,
+      name: 'postgres',
+      login: 'baci_piggyvest_primary_provisioner',
+      password: 'test-only',
+      certificateAuthority: 'test-ca',
+    },
+  });
+  expect(() =>
+    readPrimaryWalletSavingsRuntime({
+      NODE_ENV: 'test',
+      PIGGYVEST_PRIMARY_SAVINGS_ENABLED: 'true',
+    })
+  ).toThrow();
+});
+it('builds recovery lookups without the savings enabled flag', () => {
+  primaryDrain.mockReturnValue({
+    onboarding: {
+      integrationId: '11111111-1111-4111-8111-111111111111',
+      environment: 'staging',
+      merchantId: '33333333-3333-4333-8333-333333333333',
+      businessId: 'business',
+    },
+    providerToken: 'provider-secret',
+    database: {
+      host: 'db.example.com',
+      port: 5432,
+      name: 'postgres',
+      login: 'baci_piggyvest_primary_provisioner',
+      password: 'test-only',
+      certificateAuthority: 'test-ca',
+    },
+  });
+  const recovery = readPrimaryWalletSavingsRecoveryRuntime({
+    NODE_ENV: 'test',
+    PIGGYVEST_PRIMARY_ENABLED: 'false',
+    PIGGYVEST_PRIMARY_SAVINGS_ENABLED: 'false',
+    PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD: 'authorizer-secret',
+    PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD: 'evidence-secret',
+  });
+  expect(recovery.merchantId).toBe('33333333-3333-4333-8333-333333333333');
+  // Recovery carries the read-only reconciliation handles so status checks
+  // and outflow attribution can settle already-dispatched operations after
+  // a rollback; it never reserves or dispatches new ones.
+  expect(recovery.providerToken).toBe('provider-secret');
+  expect(recovery.reconciliationConfiguration).toMatchObject({
+    integrationId: '11111111-1111-4111-8111-111111111111',
+  });
+  // Recovery reads through the drain reader only: the flag-gated reader is
+  // never consulted, so a disabled runtime can't mask an outstanding op.
+  expect(primary).not.toHaveBeenCalled();
+  expect(primaryDrain).toHaveBeenCalledTimes(1);
+});
+it('fails recovery lookups closed without primary configuration', () => {
+  primaryDrain.mockReturnValue(null);
+  expect(() =>
+    readPrimaryWalletSavingsRecoveryRuntime({ NODE_ENV: 'test' })
+  ).toThrow('Primary savings configuration unavailable');
+});

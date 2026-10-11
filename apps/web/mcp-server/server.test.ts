@@ -1,4 +1,3 @@
-import type { ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +25,7 @@ if (snippetStart === -1 || snippetEnd === -1) {
 }
 
 const escapeHtmlSnippet = serverSource.slice(snippetStart, snippetEnd);
-const { getResultRecord, getResultTools, postMcpJsonRpc, startMcpServer, stopMcpServer } =
+const { getResultRecord, getResultTools, postMcpJsonRpc, startMcpServerWithPostgrest } =
   mcpServerTestSupport;
 
 function runEmbeddedEscapeHtml(input: unknown) {
@@ -133,17 +132,19 @@ describe('MCP widget purchase routing', () => {
 });
 
 describe('MCP streamable HTTP probe compatibility', () => {
-  let serverProcess: ChildProcess | undefined;
+  let closeServer: (() => Promise<void>) | undefined;
   let serverBaseUrl: string;
 
   beforeAll(async () => {
-    const server = await startMcpServer();
-    serverProcess = server.process;
+    // The shared stub answers the startup capability probe; a bare spawn
+    // against the default URL has no PostgREST to prove the JWT against.
+    const server = await startMcpServerWithPostgrest({});
+    closeServer = server.close;
     serverBaseUrl = server.baseUrl;
   }, 15_000);
 
   afterAll(async () => {
-    await stopMcpServer(serverProcess);
+    await closeServer?.();
   });
 
   it('allows the MCP protocol version header in CORS preflights', async () => {
@@ -170,6 +171,16 @@ describe('MCP streamable HTTP probe compatibility', () => {
     expect(response.headers.get('access-control-allow-methods')).toContain(
       'HEAD'
     );
+  });
+
+  it('reports guest-cart storage state in the readiness probe', async () => {
+    const response = await fetch(`${serverBaseUrl}/health`);
+    const body = (await response.json()) as Record<string, unknown>;
+
+    // The spawned test server gets a private writable cart directory, so
+    // storage reports ok regardless of the database outcome.
+    expect(body.guestCarts).toBe('ok');
+    expect(body).not.toHaveProperty('guestCartsReason');
   });
 
   it('publishes product lookup inputs for product detail tools', async () => {
@@ -213,7 +224,9 @@ describe('MCP streamable HTTP probe compatibility', () => {
       'get_product',
       'get_product_variants',
       'get_store_info',
+      'prepare_storefront_cart_link',
       'search_products',
+      'update_ogabassey_guest_cart',
     ]);
     expect(toolNames).not.toContain('check_order');
     expect(toolNames).not.toContain('check_payment_status');

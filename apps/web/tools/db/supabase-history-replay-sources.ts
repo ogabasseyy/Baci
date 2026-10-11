@@ -2,6 +2,7 @@
 
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
+import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
@@ -12,6 +13,9 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
+import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
+import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
 import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
@@ -47,6 +51,7 @@ const VERIFY_PAYMENT_REFERENCE_TOKEN_PENDING_SOURCES = `16fee07c93035f58783ea0dc
 const GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES = `1c8a5b5eaa76aa70b3f14f8d4772f013e53d3275bd6aec4b9608ab2a5f3c77d3 20260922210000_guest_payment_reference_snapshot.sql`;
 const GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES = `02eeeffc747952e75c15025baa6556ae1013da364c698cd8e3261df43a706d38 20260922220000_guest_payment_reference_snapshot_minimal.sql`;
 const GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES = `3864292ba62afad64de22549f334e2080fc558602bc31a94c6cdc9d233974614 20260923120000_guest_snapshot_inventory_proof.sql`;
+const TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES = `e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4 20261008174300_search_mobile_admin_transaction_review_orders.sql`;
 const PIPELINE_SOURCES = `4f31649ba4c9c3d6b5eb4110dbb0d144237502642d61c0606e15a9b1ba39556b 20260712150001_domain_event_pipeline_tables.sql
 3a3018fcd2e0daea0dec918d953e1dadf314ea1f88698e336a72a97da8ddcd1c 20260712150050_eventing_internal_schema.sql
 dcb23009b30f1970359737ccfc1e34f3b63b952a59e6854d1352a98b4fbdc21b 20260712150075_domain_event_idempotency_guard.sql
@@ -225,8 +230,15 @@ const PENDING_SOURCES = [
   'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
+  'ef7469eab56a7b2273023e2b924308e816222a1cce18af2a9b7d0e8ecd470b18 20261008230000_mcp_guest_carts.sql',
+  'c26c071f926457cfc07a951f9c5860e5d3b16136162fd70b5b6d85165c27a4c8 20261008230100_mcp_guest_cart_write_rpcs.sql',
+  '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a 20261010090000_mcp_guest_cart_gigl_worker_request_scope.sql',
+  '32e0cf82c8f4427203e12a731c2fe7e7bd8303933d6bf9662012aa2941c700bd 20261010100000_mcp_guest_cart_worker_postgrest_isolate.sql',
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
+  PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,
   STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES,
@@ -263,8 +275,10 @@ const PENDING_SOURCES = [
   GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES,
   GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES,
   GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES,
+  TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES,
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
+  BLOG_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,

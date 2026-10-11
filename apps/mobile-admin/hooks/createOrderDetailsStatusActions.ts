@@ -82,7 +82,9 @@ export function createOrderDetailsStatusActions({
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
           : newStatus === 'cancelled'
-            ? `The customer has been notified via email that their order has been ${newStatus}.`
+            ? order.payment_status === 'paid' || order.amount_paid > 0
+              ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
+              : 'The customer notification has been queued.'
             : '';
 
       setSuccessModal({
@@ -96,11 +98,18 @@ export function createOrderDetailsStatusActions({
         visible: true,
       });
     } catch (error: unknown) {
-      const nextError = error as Error;
+      // Rejections can be nullish or non-Error: read defensively so
+      // the catch itself never throws and Alert always gets text.
+      const nextError: { code?: unknown; message?: unknown } =
+        typeof error === 'object' && error !== null ? error : {};
+      const errorMessage =
+        typeof nextError.message === 'string'
+          ? nextError.message
+          : 'Failed to update status';
 
       if (
-        nextError.message?.includes('PAYMENT_REQUIRED') ||
-        nextError.message?.includes('paid before processing')
+        errorMessage.includes('PAYMENT_REQUIRED') ||
+        errorMessage.includes('paid before processing')
       ) {
         Alert.alert(
           'Payment Required',
@@ -113,11 +122,23 @@ export function createOrderDetailsStatusActions({
         return;
       }
 
-      Alert.alert('Error', 'Failed to update status');
+      // Read the code structurally: a rewrapped or serialized error
+      // across a bundle boundary fails instanceof but still carries
+      // the server's code. Both actionable cancel rejections surface
+      // the server reason instead of the generic fallback.
+      const errorCode = nextError.code;
+      const cancellationShowsServerReason =
+        newStatus === 'cancelled' &&
+        (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||
+          errorCode === 'ORDER_NOT_CANCELLABLE');
+      Alert.alert(
+        'Error',
+        cancellationShowsServerReason ? errorMessage : 'Failed to update status'
+      );
       if (IS_DEV_RUNTIME) {
         console.error('Order details status update failed', {
           currentStatus: order.shipping_status,
-          errorMessage: nextError.message,
+          errorMessage,
           nextStatus: newStatus,
           orderId: order.id,
           paymentStatus: order.payment_status,
@@ -136,7 +157,7 @@ export function createOrderDetailsStatusActions({
     Alert.alert(
       isPaid ? 'Cancel paid order?' : 'Cancel order?',
       isPaid
-        ? 'This records who cancelled the order and starts the refund workflow. This cannot be undone.'
+        ? 'Cancelling this paid order starts the customer refund process. Completion may take time or require review. Submit once; if the result is unclear, check the order status instead of cancelling again.'
         : 'This records who cancelled the order and restores tracked inventory. This cannot be undone.',
       [
         { text: 'Keep Order', style: 'cancel' },

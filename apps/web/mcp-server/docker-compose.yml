@@ -5,6 +5,10 @@ services:
       context: ../../..
       dockerfile: apps/web/mcp-server/Dockerfile
     restart: unless-stopped
+    # Shutdown needs the full drain deadline: the app forces the exit at
+    # SHUTDOWN_DRAIN_TIMEOUT_MS (10s), and the compose default grace (10s)
+    # could SIGKILL first, cutting in-flight requests off mid-drain.
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:8787:8787"
     environment:
@@ -22,11 +26,24 @@ services:
       - GIGL_QUOTE_TIMEOUT_MS=${GIGL_QUOTE_TIMEOUT_MS:-5000}
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      # Worker JWT, guest-cart storage only: the cart RPCs are
+      # worker-role-executable so anon callers cannot bypass the
+      # server-side creation quota. Required; the server fails closed.
+      - MCP_GUEST_CART_WORKER_TOKEN=${MCP_GUEST_CART_WORKER_TOKEN}
       - BACI_AGENTIC_ACCESS_TOKEN=${BACI_AGENTIC_ACCESS_TOKEN}
       - BACI_AGENTIC_SIGNING_KEY=${BACI_AGENTIC_SIGNING_KEY}
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}
       - OPENAI_AGENTIC_SIGNING_KEY=${OPENAI_AGENTIC_SIGNING_KEY}
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
+    # Read-only root: the server persists nothing locally (guest carts live
+    # in Postgres behind version-gated RPCs), so the filesystem stays fully
+    # immutable except for /tmp scratch space. No volume, no replica pin:
+    # concurrent writers serialize through the row version gate.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
       interval: 30s

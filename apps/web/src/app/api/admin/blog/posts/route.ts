@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { blogPostMediaPaths } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -17,9 +18,7 @@ import {
   adminPlatformBlogPostsListQuerySchema,
   createPostSchema,
 } from '@/schemas/admin-platform-blog-posts';
-
-const PLATFORM_BLOG_DETAIL_SELECT =
-  'id, title, slug, content, excerpt, featured_image_url, featured_image_alt, featured_image_width, featured_image_height, featured_image_variants, category, tags, keywords, author_name, author_title, author_image_url, author_bio, status, seo_title, seo_description, focus_keyword, word_count, reading_time_minutes, view_count, created_at, updated_at, published_at';
+import type { Json } from '@/types/supabase';
 
 function toAuthErrorResponse(status: 'unauthenticated' | 'forbidden') {
   return status === 'unauthenticated'
@@ -29,6 +28,24 @@ function toAuthErrorResponse(status: 'unauthenticated' | 'forbidden') {
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPlatformCreateError(
+  error: {
+    code?: string;
+    message?: string;
+  } | null
+): { error: string; status: 409 | 500 } {
+  if (error?.code === '23505') {
+    return { error: 'A post with this slug already exists', status: 409 };
+  }
+  if (
+    error?.code === 'P0001' &&
+    error.message?.includes('platform_blog_media_swept_during_save')
+  ) {
+    return { error: 'Referenced media was removed during save', status: 500 };
+  }
+  return { error: 'Failed to create platform blog post', status: 500 };
 }
 
 export async function GET(request: NextRequest) {
@@ -120,6 +137,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = sanitizeBlogPostData(rawBody);
+    // A create with no intent must not store orphan provenance. The sanitizer
+    // only clears explicitly supplied nullish intents (a missing key means
+    // "leave stored values alone" on PATCH), so handle the missing key here
+    // where a missing intent means the row will have NULL intent.
+    if (
+      (body.intent === null || body.intent === undefined) &&
+      body.intent_source !== undefined
+    ) {
+      body.intent_source = null;
+    }
     if (!body.slug && typeof body.title === 'string') {
       body.slug = generateSlug(body.title);
     }
@@ -169,11 +196,11 @@ export async function POST(request: NextRequest) {
     const publishedAt =
       postData.status === 'published' ? new Date().toISOString() : null;
 
-    const insertData = {
+    // Scope is forced in SQL, so the guard columns must not travel:
+    // the create whitelist rejects them as unknown fields.
+    const createPayload: Record<string, unknown> = {
       ...postData,
-      is_platform_post: true,
       keywords: postData.keywords || [],
-      merchant_id: null,
       published_at: publishedAt,
       reading_time_minutes: calculateReadingTime(postData.content),
       status: postData.status || 'draft',
@@ -181,30 +208,39 @@ export async function POST(request: NextRequest) {
       word_count: calculateWordCount(postData.content),
     };
 
+    const mediaRow = {
+      author_image_url: postData.author_image_url ?? null,
+      content: postData.content,
+      excerpt: postData.excerpt ?? null,
+      featured_image_url: postData.featured_image_url ?? null,
+      featured_image_variants: postData.featured_image_variants ?? null,
+    };
+
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .insert(insertData)
-      .select(PLATFORM_BLOG_DETAIL_SELECT)
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'A post with this slug already exists' },
-          { status: 409 }
-        );
+    const { data, error } = await supabase.rpc(
+      'mutate_platform_blog_post_create_atomic',
+      {
+        p_media_paths: blogPostMediaPaths(mediaRow),
+        // Zod-validated payloads are JSON-serializable; undefined
+        // keys never survive the wire encoding.
+        p_post_data: createPayload as unknown as Json,
       }
+    );
+    const row = Array.isArray(data) ? data[0] : data;
 
-      console.error('Failed to create platform blog post:', error);
+    if (error || !row) {
+      const mapped = readPlatformCreateError(error);
+      if (mapped.status === 500) {
+        console.error('Failed to create platform blog post:', error);
+      }
       return NextResponse.json(
-        { error: 'Failed to create platform blog post' },
-        { status: 500 }
+        { error: mapped.error },
+        { status: mapped.status }
       );
     }
 
-    revalidatePlatformBlog(data.slug);
-    return NextResponse.json(data, { status: 201 });
+    revalidatePlatformBlog(row.slug);
+    return NextResponse.json(row, { status: 201 });
   } catch (error) {
     console.error('Platform blog posts POST error:', error);
     return NextResponse.json(

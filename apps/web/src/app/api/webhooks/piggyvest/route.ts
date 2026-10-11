@@ -1,25 +1,23 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
-import { getPiggyvestApiConfig, getPiggyvestWebhookSecret } from '@/env';
-import {
-  digestRawBody,
-  recordQuarantineEvent,
-} from '@/lib/piggyvest/event-quarantine';
+import { getPiggyvestApiConfig } from '@/env';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
-import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
 import {
   type RecordPiggyvestEventInput,
   recordPiggyvestEvent,
 } from '@/lib/piggyvest/webhook-inbox';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
+import { verifyPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
 import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
 } from '@/schemas/piggyvest/events';
+import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
+import { quarantineAndAck } from './quarantine-and-ack';
 
 /**
  * Provider delivery contract (17 Sep 2026, quarantine slice 18 Sep 2026):
@@ -34,7 +32,8 @@ import {
  * - No secret configured -> 503 (fail closed; nothing is accepted).
  * - Bad/missing signature -> 200 without processing (docs behavior;
  *   forged traffic must not consume the 10 retries).
- * - Authentic but unparseable/unknown/conflicting event -> quarantine
+ * - Authentic but unparseable/unknown/conflicting event, or a delivery
+ *   signed by a key family unauthorized for legacy handling -> quarantine
  *   (durable receipt of a non-retryable observation) -> 200. Retries
  *   cannot fix these, so they must not burn the 10 attempts; nothing
  *   quarantined ever touches financial state.
@@ -114,41 +113,7 @@ const correlationSchema = z.object({
   eventType: z.string().min(1).max(200).optional(),
 });
 
-async function quarantineAndAck(
-  rawBody: Buffer,
-  reason: 'unparseable' | 'unknown-event' | 'conflict',
-  correlation: { eventId?: string; eventType?: string },
-  detail: Record<string, unknown> | null
-): Promise<Response> {
-  try {
-    await recordQuarantineEvent(createPiggyvestIntakeServiceClient(), {
-      bodyDigest: digestRawBody(rawBody),
-      reason,
-      eventId: correlation.eventId,
-      eventType: correlation.eventType,
-      detail,
-    });
-  } catch {
-    return NextResponse.json(
-      { error: 'Event intake unavailable', code: 'PIGGYVEST_INBOX_ERROR' },
-      { status: 503, headers: noStore }
-    );
-  }
-  return NextResponse.json(
-    { received: true, quarantined: true },
-    { status: 200, headers: noStore }
-  );
-}
-
 export async function POST(request: NextRequest): Promise<Response> {
-  const secret = getPiggyvestWebhookSecret();
-  if (!secret) {
-    return NextResponse.json(
-      { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
-      { status: 503, headers: noStore }
-    );
-  }
-
   // Bounded read (64 KiB / 5 s) before anything else: the edge proxy only
   // rejects declared Content-Lengths over 2 MiB, so a lengthless stream must
   // not be buffered unboundedly ahead of signature validation.
@@ -173,17 +138,28 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   const rawBody: Buffer = bounded.body;
   const signature = request.headers.get('x-pvb-signature');
-  const authentic = verifyPiggyvestPayloadSignature({
-    payload: rawBody,
-    signature,
-    secret,
-  });
-  if (!authentic) {
+  const verification = verifyPiggyvestWebhookSecrets({ rawBody, signature });
+  if (verification.status === 'unconfigured') {
+    return NextResponse.json(
+      { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
+      { status: 503, headers: noStore }
+    );
+  }
+  if (verification.status === 'invalid') {
+    // Monitoring surface: every other terminal rejection in this route
+    // warns, and a silent invalid-signature path would hide both a
+    // provider-side signing outage and an active forgery campaign from
+    // the log drain alerts key on. Presence only — never the signature
+    // value or body bytes.
+    console.warn(
+      `[PiggyVest Webhook] Rejected delivery with invalid signature (signature header ${signature === null ? 'absent' : 'present'})`
+    );
     return NextResponse.json(
       { received: false, code: 'PIGGYVEST_INVALID_SIGNATURE' },
       { status: 200, headers: noStore }
     );
   }
+  const matchedSecret = verification.secret;
 
   let jsonPayload: unknown;
   try {
@@ -192,7 +168,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   } catch {
     console.warn('[PiggyVest Webhook] Authentic delivery with invalid JSON');
-    return quarantineAndAck(rawBody, 'unparseable', {}, null);
+    return quarantineAndAck(
+      rawBody,
+      'unparseable',
+      {},
+      null,
+      createPiggyvestIntakeServiceClient
+    );
   }
 
   const parsed = piggyvestWebhookEventSchema.safeParse(jsonPayload);
@@ -203,11 +185,44 @@ export async function POST(request: NextRequest): Promise<Response> {
       rawBody,
       'unknown-event',
       correlation.success ? correlation.data : {},
-      null
+      null,
+      createPiggyvestIntakeServiceClient
     );
   }
 
   try {
+    // Specialized primary intakes claim their deliveries first (each gated
+    // on its own key family); null falls through to legacy processing.
+    const primary = await dispatchPrimaryPiggyvestIntake({
+      rawBody,
+      signature,
+      matchedSecret,
+      event: parsed.data,
+      families: verification.families,
+    });
+    if (primary === 'conflict') {
+      return quarantineAndAck(
+        rawBody,
+        'conflict',
+        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
+      );
+    }
+    if (primary) return primary;
+    // Key-family binding: only the legacy secret authorizes legacy ledger
+    // writes. A delivery signed solely by a primary family key that no
+    // specialized intake claimed is quarantined, never legacy-processed —
+    // otherwise a compromised narrow key could forge unrelated events.
+    if (!verification.families.includes('legacy')) {
+      return quarantineAndAck(
+        rawBody,
+        'key-family',
+        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
+      );
+    }
     // Processing runs even for duplicates: if the first delivery recorded
     // the inbox row but crashed before the ledger write, the redelivery
     // must still credit. The claim makes concurrent attempts safe.
@@ -223,7 +238,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data)
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
       );
     }
     const processing = await processPiggyvestEvent(

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   useCrypto: vi.fn(),
   useCustomer: vi.fn(),
   useDva: vi.fn(),
+  useRedvault: vi.fn(),
   useSubmission: vi.fn(),
   useTransfer: vi.fn(),
 }));
@@ -37,6 +38,9 @@ vi.mock('./use-checkout-dva-session', () => ({
 vi.mock('./use-checkout-order-submission', () => ({
   useCheckoutOrderSubmission: mocks.useSubmission,
 }));
+vi.mock('./use-checkout-redvault-availability', () => ({
+  useCheckoutRedvaultAvailability: mocks.useRedvault,
+}));
 vi.mock('./use-storefront-customer-session', () => ({
   useStorefrontCustomerSession: mocks.useCustomer,
 }));
@@ -56,6 +60,9 @@ beforeEach(() => {
   });
   mocks.useTransfer.mockReturnValue(walletTransfer);
   mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
+  mocks.useRedvault.mockReturnValue({
+    availability: { available: false, reason: 'unavailable' },
+  });
 });
 
 afterEach(() => {

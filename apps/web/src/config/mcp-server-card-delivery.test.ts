@@ -4,7 +4,9 @@ import { mcpDeliveryFeeInfoInputSchema } from '../schemas/mcp-delivery-fee-info'
 import { PUBLIC_MCP_TOOLS } from './mcp-server-card-tools';
 
 it('describes the cart tool as preparing a handoff link', () => {
-  const tool = PUBLIC_MCP_TOOLS.find((tool) => tool.name === 'add_to_cart');
+  const tool = PUBLIC_MCP_TOOLS.find(
+    (tool) => tool.name === 'prepare_storefront_cart_link'
+  );
   expect(tool?.title).toBe('Prepare Ogabassey Cart Link');
 });
 

@@ -10,7 +10,9 @@ const PUBLIC_TOOL_NAMES = [
   'get_product',
   'get_product_variants',
   'get_store_info',
+  'prepare_storefront_cart_link',
   'search_products',
+  'update_ogabassey_guest_cart',
 ];
 
 describe('GET /.well-known/mcp/server-card.json', () => {
@@ -70,7 +72,7 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     expect(toolsByName.get('get_product_variants')).toMatchObject({
       inputSchema: toolsByName.get('get_product').inputSchema,
     });
-    expect(toolsByName.get('add_to_cart')).toMatchObject({
+    expect(toolsByName.get('prepare_storefront_cart_link')).toMatchObject({
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
@@ -84,7 +86,23 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       },
     });
     expect(
-      toolsByName.get('add_to_cart').inputSchema.properties
+      toolsByName.get('prepare_storefront_cart_link').inputSchema.properties
+    ).not.toHaveProperty('session_id');
+    expect(toolsByName.get('update_ogabassey_guest_cart')).toMatchObject({
+      annotations: {
+        destructiveHint: true,
+        openWorldHint: false,
+        readOnlyHint: false,
+      },
+      inputSchema: {
+        required: ['product_id'],
+        properties: {
+          quantity: expect.objectContaining({ type: 'integer' }),
+        },
+      },
+    });
+    expect(
+      toolsByName.get('update_ogabassey_guest_cart').inputSchema.properties
     ).not.toHaveProperty('session_id');
   });
 

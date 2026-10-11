@@ -9,7 +9,9 @@ import {
 
 test('defines the current required public MCP inventory', () => {
   assert.deepEqual(DEFAULT_REQUIRED_TOOLS, [
+    'prepare_storefront_cart_link',
     'add_to_cart',
+  'update_ogabassey_guest_cart',
     'browse_categories',
     'get_brands',
     'get_product',
@@ -41,4 +43,15 @@ test('production smoke watches and runs the extracted contract tests', () => {
     assert.ok(paths.includes(`.github/scripts/${name}.*`));
     assert.ok(command.includes(`.github/scripts/${name}.test.mjs`));
   }
+});
+
+
+test('production smoke ignores stale repository tool overrides', () => {
+  const workflow = readFileSync(new URL('../workflows/mcp-production-smoke.yml', import.meta.url), 'utf8');
+  const matches = [...workflow.matchAll(/^\s*MCP_REQUIRED_TOOLS:\s*(.*)$/gm)];
+  assert.ok(matches.length > 0, 'expected an MCP_REQUIRED_TOOLS env entry');
+  for (const match of matches) {
+    assert.equal(match[1].trim(), '""');
+  }
+  assert.equal(workflow.includes('${{ vars.MCP_REQUIRED_TOOLS'), false);
 });

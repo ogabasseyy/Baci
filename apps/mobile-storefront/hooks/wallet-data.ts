@@ -1,8 +1,11 @@
-import { z } from 'zod';
 import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
-import { CustomerRowSchema, TransactionRowSchema } from '@/lib/validation';
+import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import {
+  readPrimaryFundingAccount,
+  resolveWalletFundingAccount,
+} from './resolve-wallet-funding-account';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -19,56 +22,34 @@ import {
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
+import {
+  coerceDatabaseNumber,
+  normalizeWalletTransaction,
+} from './wallet-transaction-normalize';
 
-const WalletFundingAccountSchema = z.object({
-  account_name: z.string().min(1),
-  account_number: z.string().regex(/^\d{10,20}$/),
-  bank_name: z.string().min(1),
-  provider: z.literal('paystack'),
-});
+// The primary provider probe may take up to its 30s network timeout;
+// the wallet load must never wait that long for one funding rail. A
+// stalled probe settles as unknown (surfaced as no account, never a
+// possibly superseded legacy DVA) while the rest of the load
+// proceeds; the next load refetches.
+const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
 
-const WalletTransactionDataSchema = TransactionRowSchema.omit({
-  amount: true,
-  id: true,
-}).extend({
-  amount: z.union([z.number(), z.string()]),
-  id: z.string(),
-});
-
-function coerceDatabaseNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      return null;
-    }
-
-    const numericValue = Number(trimmedValue);
-    return Number.isFinite(numericValue) ? numericValue : null;
-  }
-
-  return null;
-}
-
-function normalizeWalletTransaction(row: unknown): Transaction | null {
-  const validation = WalletTransactionDataSchema.safeParse(row);
-  if (!validation.success) {
-    return null;
-  }
-
-  const amount = coerceDatabaseNumber(validation.data.amount);
-  if (amount === null) {
-    return null;
-  }
-
-  return {
-    ...validation.data,
-    amount,
-    description: validation.data.description ?? '',
-  };
+function readPrimaryFundingAccountSoon(merchantId: string, userId: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<
+    Awaited<ReturnType<typeof readPrimaryFundingAccount>>
+  >((resolve) => {
+    timer = setTimeout(
+      () => resolve({ status: 'unavailable' }),
+      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
+    );
+  });
+  return Promise.race([
+    readPrimaryFundingAccount(merchantId, userId).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+    }),
+    timeout,
+  ]);
 }
 
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
@@ -168,29 +149,39 @@ export async function fetchWalletData(
     throw walletResult.error;
   }
 
-  const [fundingAccountResult, savingsGoalsResult, savingsInterest] =
-    await Promise.all([
-      supabase
-        .from('customer_wallet_payment_accounts')
-        .select('account_name, account_number, bank_name, provider')
-        .eq('merchant_id', merchantId)
-        .eq('customer_id', resolvedCustomerId)
-        .eq('provider', 'paystack')
-        .eq('status', 'active')
-        .maybeSingle(),
-      supabase
-        .from('customer_savings_goals')
-        .select(
-          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('customer_id', resolvedCustomerId)
-        .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
-        .order('created_at', { ascending: false }),
-      // Best-effort and never throws: on any failure it resolves to an
-      // explicit unavailable marker, so the wallet still loads.
-      fetchWalletSavingsInterest(merchantId),
-    ]);
+  const [
+    fundingAccountResult,
+    savingsGoalsResult,
+    savingsInterest,
+    primaryFunding,
+  ] = await Promise.all([
+    supabase
+      .from('customer_wallet_payment_accounts')
+      .select('account_name, account_number, bank_name, provider')
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', resolvedCustomerId)
+      .eq('provider', 'paystack')
+      .eq('status', 'active')
+      .maybeSingle(),
+    supabase
+      .from('customer_savings_goals')
+      .select(
+        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
+      )
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', resolvedCustomerId)
+      .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
+      .order('created_at', { ascending: false }),
+    // Best-effort and never throws: on any failure it resolves to an
+    // explicit unavailable marker, so the wallet still loads.
+    fetchWalletSavingsInterest(merchantId),
+    // Same contract for the primary provider lookup: it resolves
+    // alongside the database reads instead of serializing the load,
+    // with a short budget so a stalled probe cannot hold the wallet.
+    // Scoped to the authenticated identity so a snapshot-bearing probe
+    // can never leak across an account switch.
+    readPrimaryFundingAccountSoon(merchantId, userId ?? resolvedCustomerId),
+  ]);
 
   if (fundingAccountResult.error) {
     throw fundingAccountResult.error;
@@ -239,11 +230,10 @@ export async function fetchWalletData(
     }
   );
 
-  const fundingAccountValidation =
-    WalletFundingAccountSchema.nullable().safeParse(fundingAccountResult.data);
-  const fundingAccountData = fundingAccountValidation.success
-    ? fundingAccountValidation.data
-    : null;
+  const fundingAccountData = resolveWalletFundingAccount(
+    fundingAccountResult.data,
+    primaryFunding
+  );
 
   let transactionRows: Transaction[] = [];
   if (walletResult.data?.id) {

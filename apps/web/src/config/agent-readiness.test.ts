@@ -17,7 +17,8 @@ const originalEnv = Object.fromEntries(
 
 const PUBLIC_MCP_TOOL_NAMES = [
   'search_products',
-  'add_to_cart',
+  'prepare_storefront_cart_link',
+  'update_ogabassey_guest_cart',
   'get_product',
   'get_product_variants',
   'get_store_info',

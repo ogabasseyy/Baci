@@ -125,6 +125,8 @@ export function getAdminNotificationNavigationTarget(
     case 'new_order':
     case 'new_invoice':
     case 'payment_received':
+    case 'paystack_refund_processed':
+    case 'paystack_refund_needs_attention':
     case 'shipment_tracking': {
       const orderId = readString(payload, 'order_id', 'orderId');
       return orderId

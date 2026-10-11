@@ -23,12 +23,7 @@ import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays
 import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
 import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
-import { calculateCheckoutAssuranceFee } from './checkout-order-builders';
 import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
-import {
-  CHECKOUT_MERCHANT_ID,
-  CHECKOUT_MERCHANT_SLUG,
-} from './checkout-screen.constants';
 import type { AppliedDiscount } from './DiscountCodeInput';
 import { isCheckoutAddressContinueReady } from './is-checkout-address-continue-ready';
 import { getMerchantPickupLocation } from './merchant-pickup-location';
@@ -40,7 +35,7 @@ import { useCheckoutCryptoPayment } from './use-checkout-crypto-payment';
 import { useCheckoutCtaAnimation } from './use-checkout-cta-animation';
 import { useCheckoutDisplayCart } from './use-checkout-display-cart';
 import { useCheckoutNavigation } from './use-checkout-navigation';
-import { useCheckoutPaymentController } from './use-checkout-payment-controller';
+import { useCheckoutScreenPayment } from './use-checkout-screen-payment';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 import { useRedvaultReview } from './use-redvault-review';
 
@@ -106,23 +101,12 @@ export function CheckoutScreenView({
     setStep,
     step,
   });
-  const assuranceFee = calculateCheckoutAssuranceFee(items);
-  const paymentController = useCheckoutPaymentController({
-    assuranceFee,
-    customerId: customer?.id,
-    customerPhone: customer?.phone,
-    deliveryFee,
-    isAuthenticated,
-    items,
-    merchantId: merchant?.id || CHECKOUT_MERCHANT_ID,
-    merchantSlug: CHECKOUT_MERCHANT_SLUG,
-    step,
-    subtotal,
-  });
   const {
+    assuranceFee,
     availablePaymentMethods,
     displayTotal,
     orderTotals,
+    paymentController,
     paymentSettings,
     paymentTab,
     resetPaymentSelection,
@@ -131,7 +115,17 @@ export function CheckoutScreenView({
     total,
     walletBalance,
     walletSelection,
-  } = paymentController;
+  } = useCheckoutScreenPayment({
+    customerId: customer?.id,
+    customerPhone: customer?.phone,
+    deliveryFee,
+    isAuthenticated,
+    items,
+    merchantId: merchant?.id,
+    step,
+    subtotal,
+    userId: user?.id,
+  });
   const { getLiveSavingsSelection } = savings;
   const { closeRedvaultReview, openRedvaultReview, redvaultReview } =
     useRedvaultReview({

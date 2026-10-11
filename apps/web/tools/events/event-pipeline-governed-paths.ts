@@ -39,7 +39,14 @@ function repoRoot(): string {
 }
 
 function gitPaths(root: string, args: readonly string[]): string[] {
-  return execFileSync('git', [...args], { cwd: root, encoding: 'utf8' })
+  return execFileSync('git', [...args], {
+    cwd: root,
+    encoding: 'utf8',
+    // Frozen-base diffs grow with repo activity past the default 1MB
+    // execFileSync buffer (spawnSync git ENOBUFS on CI); match the
+    // sibling git helpers.
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split('\0')
     .filter(Boolean);
 }

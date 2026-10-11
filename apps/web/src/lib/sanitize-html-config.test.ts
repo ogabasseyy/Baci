@@ -70,4 +70,26 @@ describe('sanitize HTML config', () => {
       '<a href="https://example.com" rel="noopener noreferrer">Source</a>'
     );
   });
+
+  it('preserves ordered-list start values the editor can keep', () => {
+    // Tiptap's OrderedList parses start and re-emits non-default
+    // values, so stripping it here would silently renumber imports.
+    const sanitized = sanitizeLib(
+      '<ol start="5"><li>Step five</li><li>Step six</li></ol>',
+      createSanitizeHtmlOptions()
+    );
+
+    expect(sanitized).toContain('start="5"');
+  });
+
+  it('preserves ordered-list marker types the editor can keep', () => {
+    // OrderedList parses type and re-emits non-numeric values, so
+    // stripping it here would silently re-letter imports to 1, 2.
+    const sanitized = sanitizeLib(
+      '<ol type="A"><li>First</li><li>Second</li></ol>',
+      createSanitizeHtmlOptions()
+    );
+
+    expect(sanitized).toContain('type="A"');
+  });
 });

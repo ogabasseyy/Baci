@@ -154,9 +154,8 @@ export async function findProductionDispatchRun(readPage, readAll, baseline, coo
 }
 
 export function parseRunAttempt(text) {
-  // parseInt accepts numeric prefixes ('1abc' -> 1), which would let a
-  // garbled count release the lock as attempt 1. Require the whole
-  // string to be a positive safe integer; anything else fails closed.
+  // parseInt('1abc') -> 1 would release the lock as attempt 1: require
+  // the whole string to be a positive safe integer, else fail closed.
   const value = String(text ?? '').trim();
   if (!/^[1-9][0-9]*$/.test(value)) return null;
   const count = Number(value);

@@ -1,0 +1,45 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 3f3b0d543b844104305b31d58ff0e27a93a38e75..808509542e6746aa1cc443e98d1a9e412857f03d 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -201,6 +201,7 @@ dependencies {
+     implementation 'androidx.fragment:fragment-ktx:1.8.9'
+     implementation 'androidx.transition:transition-ktx:1.7.0'
+     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
++    implementation 'androidx.recyclerview:recyclerview:1.1.0'
+     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+     implementation 'com.google.android.material:material:1.13.0'
+     implementation "androidx.core:core-ktx:1.17.0"
+diff --git a/android/src/main/java/com/swmansion/rnscreens/Screen.kt b/android/src/main/java/com/swmansion/rnscreens/Screen.kt
+index 76bb694854b29d7f779f38244cd48113b429ea1f..fe5ae5b5579c25e719c7caa1d4f0d22cf3b9e3ca 100644
+--- a/android/src/main/java/com/swmansion/rnscreens/Screen.kt
++++ b/android/src/main/java/com/swmansion/rnscreens/Screen.kt
+@@ -16,6 +16,7 @@ import androidx.annotation.RequiresApi
+ import androidx.coordinatorlayout.widget.CoordinatorLayout
+ import androidx.core.view.children
+ import androidx.fragment.app.Fragment
++import androidx.recyclerview.widget.RecyclerView
+ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+ import com.facebook.react.bridge.ReactContext
+ import com.facebook.react.uimanager.PixelUtil
+@@ -462,7 +463,8 @@ class Screen(
+                 endTransitionRecursive(childView.toolbar)
+             }
+ 
+-            if (childView is ViewGroup) {
++            // Match the start traversal: RecyclerView owns its child transitions.
++            if (childView is ViewGroup && childView !is RecyclerView) {
+                 endTransitionRecursive(childView)
+             }
+         }
+@@ -491,7 +493,9 @@ class Screen(
+                     startTransitionRecursive(child.toolbar)
+                 }
+ 
+-                if (child is ViewGroup) {
++                // Transition RecyclerView as a unit. Transitioning its pages retains
++                // their parent after removal, which violates the recycling contract.
++                if (child is ViewGroup && child !is RecyclerView) {
+                     startTransitionRecursive(child)
+                 }
+             }

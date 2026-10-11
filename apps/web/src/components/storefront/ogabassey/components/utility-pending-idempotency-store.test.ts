@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  clearPendingVtuSnapshot,
+  loadPendingVtuSnapshot,
   parsePendingVtuSnapshot,
+  savePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './utility-pending-idempotency-store';
 
@@ -73,5 +76,25 @@ describe('utility-pending-idempotency-store', () => {
     expect(
       parsePendingVtuSnapshot(JSON.stringify([['nope'], [42, {}], null]))
     ).toEqual([]);
+  });
+});
+
+describe('pending VTU snapshot backend', () => {
+  beforeEach(() => {
+    clearPendingVtuSnapshot();
+    localStorage.clear();
+  });
+
+  it('persists snapshots in localStorage so a new tab recalls the key', () => {
+    // Tab-scoped storage would mint a fresh key on new-tab retry and
+    // the route would debit a second transaction.
+    savePendingVtuSnapshot('{"probe":true}');
+
+    expect(loadPendingVtuSnapshot()).toBe('{"probe":true}');
+    expect(localStorage.length).toBe(1);
+
+    clearPendingVtuSnapshot();
+    expect(loadPendingVtuSnapshot()).toBeNull();
+    expect(localStorage.length).toBe(0);
   });
 });

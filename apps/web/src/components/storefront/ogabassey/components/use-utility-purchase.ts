@@ -108,8 +108,10 @@ export function useUtilityPurchase({
   // the submitter when a checkout resolves so an account switch (or
   // sign-out) mid-flight discards the stale result instead of writing
   // one customer's balance update + reference into another's session.
+  // User-first: customer-first would flip on row hydration and
+  // misclassify it as a switch (discard + double-debit the retry).
   const latestIdentityRef = useRef<string | null>(null);
-  latestIdentityRef.current = customer?.id ?? user?.id ?? null;
+  latestIdentityRef.current = user?.id ?? customer?.id ?? null;
   const {
     captureAttemptKey,
     forgetScopedKey,
@@ -142,9 +144,8 @@ export function useUtilityPurchase({
     }
 
     setLoading(true);
-    const submittingIdentity = customer?.id ?? user?.id ?? null;
-    // Raw auth user id for route-side binding (NOT the customer
-    // fallback): the route rejects when the ambient session differs.
+    const submittingIdentity = user?.id ?? customer?.id ?? null;
+    // Raw auth user id for route-side binding (no customer fallback).
     const submittingUserId = user?.id ?? null;
     const customerName =
       [customer?.first_name, customer?.last_name]

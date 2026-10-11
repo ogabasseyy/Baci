@@ -52,8 +52,9 @@ export const INSUFFICIENT_WALLET_BALANCE_MESSAGE =
  * Match both the strict and the wrapped form so a future supabase-js
  * bump can't silently route every wallet-race into the
  * non-balance-error branch (which would turn each insufficient-balance
- * into a `VtuPersistenceError`, a webhook retry loop, and leave the
- * customer's card-portion never refunded).
+ * into a `VtuPersistenceError` and a webhook retry loop instead of the
+ * clean insufficient-funds path — wallet-only checkout has no card
+ * portion to fall back to).
  */
 export function isInsufficientWalletBalanceError(
   error: { message?: string; code?: string } | null | undefined
@@ -426,22 +427,25 @@ function setMetadataValue(
 }
 
 /**
- * Refund a failed VTU vend's payment to the customer wallet so the customer
- * can retry from wallet credit instead of waiting on a card refund.
+ * Refund a failed VTU vend's wallet debit back to the customer wallet so
+ * the customer can retry from restored credit. Wallet-only: utilities
+ * are paid exclusively from wallet balance (gateway and saved-card
+ * utility routes return VTU_WALLET_ONLY without collecting), so there
+ * is no card portion to refund — do not reintroduce split-payment
+ * refund logic here.
  *
  * Gates:
  *  - row.customer_id must be set (no wallet to credit otherwise)
  *  - row.amount must be positive
- *  - row.source === 'checkout' — only checkout-sourced VTU transactions
- *    actually collect money (via Paystack initialize OR saved-card charge);
- *    'direct' and 'storefront_modal' are blocked at the API layer before
- *    a row is ever created, and 'loyalty_reward' / 'gift' are funded by
- *    points / merchant, not the customer's payment method.
+ *  - row.source === 'checkout' — only checkout-sourced VTU rows move
+ *    customer money (the wallet-only route debits the wallet before
+ *    vending); 'direct' and 'storefront_modal' are blocked at the API
+ *    layer before a row is ever created, and 'loyalty_reward' / 'gift'
+ *    are funded by points / merchant, not the customer's wallet.
  *
- * Note: an earlier draft gated on metadata.paymentReference but the
- * saved-card charge path stores that on the transactions row only, not
- * on vtu_transactions.metadata, so it would have skipped the refund for
- * saved-card customers (the exact case we most want to cover).
+ * Note: an earlier draft gated on metadata.paymentReference, but not
+ * every collecting path stores that on vtu_transactions.metadata —
+ * gating on it would skip refunds this gate must cover.
  *
  * Idempotent at the RPC layer via pg_advisory_xact_lock + a uniqueness
  * lookup on (source_type='vtu_transaction_refund', source_id, type='refund').

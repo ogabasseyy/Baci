@@ -1,9 +1,15 @@
 /**
- * Session persistence for pending VTU idempotency keys (web).
+ * Cross-tab persistence for pending VTU idempotency keys (web).
  *
- * Pure snapshot helpers plus the sessionStorage backend. The registry
+ * Pure snapshot helpers plus the localStorage backend. The registry
  * keeps the live map and binds these to it; splitting them out keeps
- * both files under the 300-line modularity budget.
+ * both files under the 300-line modularity budget. localStorage (not
+ * sessionStorage): a timeout followed by a retry in a new tab must
+ * recall the same key — tab-scoped storage would mint fresh and the
+ * route would debit a second transaction. Entries stay owner+merchant
+ * scoped with the same 24h TTL, so another account still cannot recall
+ * them; concurrent-tab writes are last-wins (documented residual —
+ * same as any localStorage design).
  */
 
 /**
@@ -112,10 +118,10 @@ export function parsePendingVtuSnapshot(
 
 export function loadPendingVtuSnapshot(): string | null {
   try {
-    if (typeof sessionStorage === 'undefined') {
+    if (typeof localStorage === 'undefined') {
       return null;
     }
-    return sessionStorage.getItem(VTU_PENDING_KEYS_STORAGE_KEY);
+    return localStorage.getItem(VTU_PENDING_KEYS_STORAGE_KEY);
   } catch {
     return null;
   }
@@ -123,10 +129,10 @@ export function loadPendingVtuSnapshot(): string | null {
 
 export function savePendingVtuSnapshot(serialized: string): void {
   try {
-    if (typeof sessionStorage === 'undefined') {
+    if (typeof localStorage === 'undefined') {
       return;
     }
-    sessionStorage.setItem(VTU_PENDING_KEYS_STORAGE_KEY, serialized);
+    localStorage.setItem(VTU_PENDING_KEYS_STORAGE_KEY, serialized);
   } catch {
     // Private-mode quota errors and friends: persistence is best
     // effort; the in-memory registry still dedupes this session.
@@ -135,8 +141,8 @@ export function savePendingVtuSnapshot(serialized: string): void {
 
 export function clearPendingVtuSnapshot(): void {
   try {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.removeItem(VTU_PENDING_KEYS_STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(VTU_PENDING_KEYS_STORAGE_KEY);
     }
   } catch {
     // Best effort (see savePendingVtuSnapshot).

@@ -354,6 +354,28 @@ describe('vtu-checkout service', () => {
     });
 
     expect(result).toMatchObject({ status: 'successful' });
+    expect(parseMockRequestBody()).toMatchObject({ expectedUserId: 'user-1' });
+  });
+
+  it('chargeWalletForVtu: omits expectedUserId from the body when uncaptured', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'successful',
+        reference: 'VTU-456',
+        amount: 1000,
+      }),
+    });
+
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: '11111111-2222-3333-4444-555555555555',
+    });
+
     expect(parseMockRequestBody()).not.toHaveProperty('expectedUserId');
   });
 

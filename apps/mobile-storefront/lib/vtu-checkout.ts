@@ -64,7 +64,9 @@ export async function chargeWalletForVtu(
      * Auth user id captured by the handler before dispatch. When
      * provided, the acquired token must belong to this user or the
      * checkout aborts before any POST — otherwise a mid-flight
-     * account switch would debit the wrong customer's wallet.
+     * account switch would debit the wrong customer's wallet. Also
+     * sent in the body so the route's 409 guard backstops both
+     * clients identically.
      */
     expectedUserId?: string | null;
   }
@@ -82,6 +84,7 @@ export async function chargeWalletForVtu(
     },
     body: JSON.stringify({
       ...normalized,
+      ...(expectedUserId ? { expectedUserId } : {}),
       merchantSlug: CONFIG.MERCHANT_SLUG,
     }),
   });

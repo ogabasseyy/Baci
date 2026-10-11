@@ -683,11 +683,18 @@ describe('useUtilityPurchase', () => {
         })
     );
     const customerB = { ...customer, id: 'customer-2' };
+    const userB = { ...user, id: 'user-2' };
     const setWalletBalance = vi.fn();
     const { result, rerender } = renderHook(
-      (props: { customer: Customer }) =>
-        useUtilityPurchase(baseParams({ customer: props.customer, setWalletBalance })),
-      { initialProps: { customer } }
+      (props: { customer: Customer; user: CustomerUser }) =>
+        useUtilityPurchase(
+          baseParams({
+            customer: props.customer,
+            user: props.user,
+            setWalletBalance,
+          })
+        ),
+      { initialProps: { customer, user } }
     );
 
     act(() => {
@@ -696,7 +703,7 @@ describe('useUtilityPurchase', () => {
     expect(result.current.loading).toBe(true);
 
     // Shared browser switches to customer B before A's request settles.
-    rerender({ customer: customerB });
+    rerender({ customer: customerB, user: userB });
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -716,6 +723,57 @@ describe('useUtilityPurchase', () => {
     expect(result.current.step).toBe('details');
     expect(result.current.transactionRef).toBe('');
     expect(result.current.loading).toBe(false);
+  });
+
+  it('applies the result when the customer row hydrates mid-flight (same user)', async () => {
+    // Hydration is not a switch: submitting with a user-only identity
+    // and settling after the customer row lands must apply, not
+    // discard — discarding would forget the terminal key and the
+    // retry would double-debit with a fresh key.
+    let resolveSubmit!: (value: {
+      kind: 'wallet-success';
+      reference: string;
+      amount: number;
+      processing: boolean;
+    }) => void;
+    mockSubmit.mockImplementation(
+      () =>
+        new Promise<{
+          kind: 'wallet-success';
+          reference: string;
+          amount: number;
+          processing: boolean;
+        }>((resolve) => {
+          resolveSubmit = resolve;
+        })
+    );
+    const setWalletBalance = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: { customer: Customer | null }) =>
+        useUtilityPurchase(
+          baseParams({ customer: props.customer, setWalletBalance })
+        ),
+      { initialProps: { customer: null as Customer | null } }
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    // Customer row hydrates before A's request settles.
+    rerender({ customer });
+    await act(async () => {
+      resolveSubmit({
+        kind: 'wallet-success',
+        reference: 'REF-A',
+        amount: 1000,
+        processing: false,
+      });
+    });
+
+    expect(result.current.step).toBe('success');
+    expect(result.current.transactionRef).toBe('REF-A');
+    expect(setWalletBalance).toHaveBeenCalled();
   });
 
   it('forgets the submitter key on switch-discard so the returnee mints fresh', async () => {
@@ -751,16 +809,19 @@ describe('useUtilityPurchase', () => {
       }
     );
     const customerB = { ...customer, id: 'customer-2' };
+    const userB = { ...user, id: 'user-2' };
     const { result, rerender } = renderHook(
-      (props: { customer: Customer }) =>
-        useUtilityPurchase(baseParams({ customer: props.customer })),
-      { initialProps: { customer } }
+      (props: { customer: Customer; user: CustomerUser }) =>
+        useUtilityPurchase(
+          baseParams({ customer: props.customer, user: props.user })
+        ),
+      { initialProps: { customer, user } }
     );
 
     act(() => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
-    rerender({ customer: customerB });
+    rerender({ customer: customerB, user: userB });
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -771,7 +832,7 @@ describe('useUtilityPurchase', () => {
     });
 
     // A switches back and repeats the same purchase: fresh key, new vend.
-    rerender({ customer });
+    rerender({ customer, user });
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });

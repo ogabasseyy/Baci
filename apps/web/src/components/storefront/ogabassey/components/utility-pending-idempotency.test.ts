@@ -277,8 +277,8 @@ describe('utility-pending-idempotency', () => {
     const key = getPendingVtuKey('{"reload":true}');
     notePendingVtuReference('{"reload":true}', 'REF-RELOAD');
 
-    // A reload re-executes the module with an empty map; the tab's
-    // sessionStorage entry must restore the pending purchase.
+    // A reload re-executes the module with an empty map; the
+    // localStorage entry must restore the pending purchase.
     vi.resetModules();
     const fresh =
       await import('./utility-pending-idempotency');

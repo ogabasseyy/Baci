@@ -29,10 +29,10 @@ import {
  * (success, key-rotating 4xx) MUST forget the signature, or a later
  * legitimate repeat purchase would reattach to a dead key.
  *
- * Durability: entries persist in sessionStorage (tab-scoped) so a page
- * reload between a timed-out submit and its retry still replays the
- * same key instead of minting a fresh one and debiting twice. All
- * entries expire after a uniform 24h horizon (persisted and live
+ * Durability: entries persist in localStorage (cross-tab) so a page
+ * reload — or a retry in a new tab after a timeout — still replays
+ * the same key instead of minting a fresh one and debiting twice.
+ * All entries expire after a uniform 24h horizon (persisted and live
  * recall alike, regardless of reference state): 24h dwarfs any
  * plausible processing duration, while infinite retention would
  * accumulate unboundedly. Within the TTL the 5-minute stale window
@@ -102,7 +102,7 @@ interface PendingVtuPurchase {
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
-/** Serializes live entries for sessionStorage (prunes TTL-expired). */
+/** Serializes live entries for localStorage (prunes TTL-expired). */
 export function serializePendingVtuPurchases(now: number = Date.now()): string {
   return serializePendingVtuEntries(pendingPurchases, now);
 }
@@ -127,7 +127,7 @@ function persistPendingVtuPurchases(): void {
   savePendingVtuSnapshot(serializePendingVtuPurchases());
 }
 
-// Reload recovery: rehydrate before any submit runs in this tab.
+// Reload recovery: rehydrate before any submit runs in this browser.
 hydratePendingVtuPurchases(loadPendingVtuSnapshot());
 
 /**

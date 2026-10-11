@@ -145,7 +145,9 @@ vi.mock('./utility/BillPaymentForm', () => ({
 }));
 
 vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: () => ({ merchant: { slug: 'ogabassey' } }),
+  useMerchantSafe: () => ({
+    merchant: { id: 'merchant-1', slug: 'ogabassey' },
+  }),
 }));
 
 vi.mock('@/contexts/customer-auth-context', () => ({

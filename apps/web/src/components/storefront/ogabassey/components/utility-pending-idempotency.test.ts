@@ -7,6 +7,7 @@ import {
   clearPendingVtuKeys,
   forgetPendingVtuPurchase,
   getPendingVtuKey,
+  hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
@@ -156,6 +157,16 @@ describe('utility-pending-idempotency', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('recognizes a noted reference as the replay of its processing vend', () => {
+    const signature = '{"noted":true}';
+    getPendingVtuKey(signature);
+
+    expect(hasNotedPendingVtuReference(signature, 'REF-1')).toBe(false);
+    notePendingVtuReference(signature, 'REF-1');
+    expect(hasNotedPendingVtuReference(signature, 'REF-1')).toBe(true);
+    expect(hasNotedPendingVtuReference(signature, 'REF-OTHER')).toBe(false);
   });
 
   it('lets reference-less entries resolve normally even past the window', () => {

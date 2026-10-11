@@ -88,6 +88,7 @@ export const UtilityModal = ({
     customer,
     isAuthLoading,
     isAuthenticated,
+    merchantId: merchant?.id,
     merchantSlug: merchant?.slug,
     onInsufficientWalletBalance: openForInsufficientBalance,
     refreshWallet,

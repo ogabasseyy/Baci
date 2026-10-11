@@ -37,6 +37,7 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     customer,
     isAuthLoading: false,
     isAuthenticated: true,
+    merchantId: 'merchant-1',
     merchantSlug: 'ogabassey',
     refreshWallet: vi.fn(),
     setWalletBalance: vi.fn(),
@@ -491,6 +492,50 @@ describe('useUtilityPurchase', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('refreshes (never double-decrements) when a noted processing vend resolves', async () => {
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        request.getWalletIdempotencyKey('SIG');
+        return mockSubmit.mock.calls.length === 1
+          ? {
+              kind: 'wallet-success',
+              reference: 'REF-NOTED',
+              amount: 1000,
+              processing: true,
+            }
+          : {
+              kind: 'wallet-success',
+              reference: 'REF-NOTED',
+              amount: 1000,
+              processing: false,
+            };
+      }
+    );
+    const refreshWallet = vi.fn();
+    const setWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet, setWalletBalance }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    // Processing defers the effect and fires a refresh.
+    expect(setWalletBalance).not.toHaveBeenCalled();
+    expect(refreshWallet).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    // Noted replay: refresh for server truth, never a local decrement —
+    // the debit is already reflected (remounts refetch too).
+    await waitFor(() => expect(result.current.step).toBe('success'));
+    expect(setWalletBalance).not.toHaveBeenCalled();
+    expect(refreshWallet).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces an error toast and stays on the form when checkout fails', async () => {

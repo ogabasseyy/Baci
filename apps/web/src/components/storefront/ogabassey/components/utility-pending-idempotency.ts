@@ -144,6 +144,23 @@ export function notePendingVtuReference(
 }
 
 /**
+ * True when this reference resolves a previously-noted processing
+ * response: the purchase already fired a refresh (and remounts
+ * refetch), so the displayed balance already reflects the debit and
+ * callers must refresh for server truth instead of decrementing
+ * locally a second time.
+ */
+export function hasNotedPendingVtuReference(
+  payloadSignature: string,
+  reference: string
+): boolean {
+  return (
+    pendingPurchases.get(scopedSignature(payloadSignature))?.reference ===
+    reference
+  );
+}
+
+/**
  * True when a success response replays an already-completed purchase
  * instead of resolving the current submit: same remembered reference,
  * but the original submit is older than the recall window. Callers

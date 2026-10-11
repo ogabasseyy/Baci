@@ -19,6 +19,7 @@ interface UseUtilityPurchaseParams {
   customer: Customer | null;
   isAuthLoading: boolean;
   isAuthenticated: boolean;
+  merchantId: string | undefined;
   merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
   refreshWallet: () => void;
@@ -79,6 +80,7 @@ export function useUtilityPurchase({
   customer,
   isAuthLoading,
   isAuthenticated,
+  merchantId,
   merchantSlug,
   onInsufficientWalletBalance,
   refreshWallet,
@@ -99,11 +101,12 @@ export function useUtilityPurchase({
   const {
     forgetAttemptKey,
     getWalletIdempotencyKey,
+    isAttemptReplay,
     isAttemptStale,
     noteAttemptReference,
   } = useUtilityIdempotencyKey({
     customerId: customer?.id,
-    merchantSlug,
+    merchantId,
     userId: user?.id,
   });
 
@@ -147,6 +150,10 @@ export function useUtilityPurchase({
       // is never replayed, so refresh instead of decrementing: a stale
       // HIGH balance would let the underfunded pre-check pass a purchase
       // the server will reject.
+      // Capture replay-ness BEFORE forgetting: forget drops the attempt
+      // signature the check reads.
+      const replayResolvesProcessing =
+        !result.processing && isAttemptReplay(result.reference);
       if (!result.processing) {
         if (isAttemptStale(result.reference)) {
           // The remembered purchase completed long ago: this replay
@@ -172,10 +179,15 @@ export function useUtilityPurchase({
       // references, so genuine repeat buys still decrement. Non-terminal
       // `processing` defers the effect entirely (without recording the
       // reference): the vend may still fail and refund, and a stale-low
-      // balance would wrongly block the next submit as underfunded. The
-      // later success replay carries the same reference and applies the
-      // decrement exactly once.
-      if (
+      // balance would wrongly block the next submit as underfunded.
+      // A success that resolves a NOTED processing response is a replay
+      // whose debit the earlier refresh already picked up (remounts
+      // refetch too) — refresh for server truth instead of decrementing
+      // a second time.
+      if (replayResolvesProcessing) {
+        appliedBalanceRefs.current.add(result.reference);
+        refreshWallet();
+      } else if (
         !result.processing &&
         !appliedBalanceRefs.current.has(result.reference)
       ) {

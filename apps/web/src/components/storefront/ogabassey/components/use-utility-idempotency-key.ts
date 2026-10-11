@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import {
   forgetPendingVtuPurchase,
   getPendingVtuKey,
+  hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   setPendingVtuOwnerScope,
@@ -11,13 +12,14 @@ import {
 
 interface UseUtilityIdempotencyKeyInput {
   customerId?: string;
-  merchantSlug?: string;
+  merchantId?: string;
   userId?: string;
 }
 
 interface UseUtilityIdempotencyKeyResult {
   forgetAttemptKey: () => void;
   getWalletIdempotencyKey: (payloadSignature: string) => string;
+  isAttemptReplay: (reference: string) => boolean;
   isAttemptStale: (reference: string) => boolean;
   noteAttemptReference: (reference: string) => void;
 }
@@ -31,12 +33,15 @@ interface UseUtilityIdempotencyKeyResult {
  */
 export function useUtilityIdempotencyKey({
   customerId,
-  merchantSlug,
+  merchantId,
   userId,
 }: UseUtilityIdempotencyKeyInput): UseUtilityIdempotencyKeyResult {
   // Same owner fallback the wallet reads with: a key remembered for one
   // customer must never be recalled for another after sign-out / switch.
-  setPendingVtuOwnerScope(customerId ?? userId, merchantSlug);
+  // Merchant is the immutable ID, never the slug: the route resolves a
+  // renamed slug through aliases to the same merchant, so a slug-scoped
+  // retry would miss the stored key and debit twice.
+  setPendingVtuOwnerScope(customerId ?? userId, merchantId);
   const lastPayloadSignatureRef = useRef<string | null>(null);
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
@@ -67,9 +72,20 @@ export function useUtilityIdempotencyKey({
     );
   };
 
+  const isAttemptReplay = (reference: string) => {
+    if (!lastPayloadSignatureRef.current) {
+      return false;
+    }
+    return hasNotedPendingVtuReference(
+      lastPayloadSignatureRef.current,
+      reference
+    );
+  };
+
   return {
     forgetAttemptKey,
     getWalletIdempotencyKey,
+    isAttemptReplay,
     isAttemptStale,
     noteAttemptReference,
   };

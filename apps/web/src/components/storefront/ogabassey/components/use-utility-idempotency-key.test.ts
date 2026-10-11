@@ -77,6 +77,23 @@ describe('useUtilityIdempotencyKey', () => {
     expect(recalled).toBe(key);
   });
 
+  it('recognizes a noted reference as a replay of its processing vend', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+
+    act(() => {
+      result.current.getWalletIdempotencyKey('SIG');
+    });
+    expect(result.current.isAttemptReplay('REF-1')).toBe(false);
+
+    act(() => {
+      result.current.noteAttemptReference('REF-1');
+    });
+    expect(result.current.isAttemptReplay('REF-1')).toBe(true);
+    expect(result.current.isAttemptReplay('REF-OTHER')).toBe(false);
+  });
+
   it('reports a success stale only when the noted reference is past the window', () => {
     vi.useFakeTimers();
     try {

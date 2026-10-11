@@ -295,7 +295,12 @@ jest.mock('@/services/cart-reprice', () => {
   );
   return {
     ...actual,
-    repriceCartItems: jest.fn(async () => ({ priceById: {}, changes: [] })),
+    repriceCartItems: jest.fn(async () => ({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+    })),
   };
 });
 

@@ -59,6 +59,7 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -78,6 +79,7 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -100,6 +102,7 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -108,6 +111,7 @@ describe('CartScreen price-change modal', () => {
 
     mockRepriceHolder.current = {
       priceChanges: [],
+      conditionChanges: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
     rerender(<CartScreen />);

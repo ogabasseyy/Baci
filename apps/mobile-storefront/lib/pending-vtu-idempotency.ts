@@ -47,7 +47,23 @@ const DESCRIPTOR_FIELDS = [
 /** Sequential mobile UX never has more than a couple of pendings in flight. */
 const MAX_PENDING_PURCHASES = 32;
 
-const pendingKeys = new Map<string, string>();
+/**
+ * Recall window for a remembered key. Genuine resolutions land within
+ * seconds of the submit; a success replay older than this is a NEW
+ * purchase intent reusing a completed transaction's key, and applying
+ * it would present the earlier vend as the new purchase.
+ */
+export const PENDING_VTU_STALE_AFTER_MS = 5 * 60 * 1000;
+
+interface PendingVtuPurchase {
+  key: string;
+  /** Server reference once a response arrives; null while unsent/unanswered. */
+  reference: string | null;
+  /** Client-local timestamp of the original submit (elapsed math only). */
+  rememberedAt: number;
+}
+
+const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
 /**
  * Canonical descriptor for a wallet-only VTU payload. Field order is
@@ -67,7 +83,7 @@ export function buildVtuPurchaseDescriptor(
 
 /** Key previously used for this exact purchase, if it is still pending. */
 export function recallPendingVtuKey(descriptor: string): string | null {
-  return pendingKeys.get(descriptor) ?? null;
+  return pendingPurchases.get(descriptor)?.key ?? null;
 }
 
 /**
@@ -80,16 +96,50 @@ export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string
 ): void {
-  pendingKeys.delete(descriptor);
-  pendingKeys.set(descriptor, key);
-  while (pendingKeys.size > MAX_PENDING_PURCHASES) {
-    const oldest = pendingKeys.keys().next();
+  pendingPurchases.delete(descriptor);
+  pendingPurchases.set(descriptor, {
+    key,
+    reference: null,
+    rememberedAt: Date.now(),
+  });
+  while (pendingPurchases.size > MAX_PENDING_PURCHASES) {
+    const oldest = pendingPurchases.keys().next();
     if (oldest.done) break;
-    pendingKeys.delete(oldest.value);
+    pendingPurchases.delete(oldest.value);
   }
+}
+
+/** Attaches the server reference once a non-terminal response arrives. */
+export function notePendingVtuReference(
+  descriptor: string,
+  reference: string
+): void {
+  const pending = pendingPurchases.get(descriptor);
+  if (pending) pending.reference = reference;
+}
+
+/**
+ * True when a success response replays an already-completed purchase
+ * instead of resolving the current submit: same remembered reference,
+ * but the original submit is older than the recall window. Callers
+ * MUST forget the descriptor and prompt a fresh submit instead of
+ * presenting the earlier vend as the new purchase. Reference-less
+ * entries (network-error submits that never got a response) always
+ * resolve normally — their first success IS the resolution.
+ */
+export function isStalePendingVtuSuccess(
+  descriptor: string,
+  reference: string,
+  now: number = Date.now()
+): boolean {
+  const pending = pendingPurchases.get(descriptor);
+  return (
+    pending?.reference === reference &&
+    now - pending.rememberedAt > PENDING_VTU_STALE_AFTER_MS
+  );
 }
 
 /** Drops the recall entry once its purchase reaches a terminal outcome. */
 export function forgetPendingVtuPurchase(descriptor: string): void {
-  pendingKeys.delete(descriptor);
+  pendingPurchases.delete(descriptor);
 }

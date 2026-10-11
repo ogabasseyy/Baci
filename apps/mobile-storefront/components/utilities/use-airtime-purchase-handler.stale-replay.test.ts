@@ -1,0 +1,137 @@
+import { jest } from '@jest/globals';
+import { renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import {
+  buildVtuPurchaseDescriptor,
+  notePendingVtuReference,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';
+
+type PaymentState = ReturnType<typeof useUtilityPayment>;
+
+const mockChargeWalletForVtu =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+
+jest.mock('@/lib/vtu-checkout', () => {
+  const actual =
+    jest.requireActual<typeof import('@/lib/vtu-checkout')>(
+      '@/lib/vtu-checkout'
+    );
+  return {
+    ...actual,
+    chargeWalletForVtu: (...args: unknown[]) => mockChargeWalletForVtu(...args),
+  };
+});
+
+jest.mock('@/lib/utility-wallet-readiness', () => ({
+  ensureUtilityWalletReady: jest.fn(() => true),
+}));
+
+describe('airtime stale success replay', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function renderHandler(
+    overrides: {
+      onSuccess?: jest.Mock;
+      resetWalletIdempotencyKey?: jest.Mock;
+    } = {}
+  ) {
+    return renderHook(() =>
+      useAirtimePurchaseHandler({
+        amount: '500',
+        numericAmount: 500,
+        phoneNumber: '08037654321',
+        selectedProvider: 'mtn',
+        payment: {
+          canFundByBankTransfer: false,
+          isAuthenticated: true,
+          refetchWallet: jest.fn(),
+          walletBalance: 5000,
+          walletError: null,
+          walletIsLoading: false,
+          getWalletIdempotencyKey: jest.fn(() => 'stale-airtime-key'),
+          resetWalletIdempotencyKey:
+            overrides.resetWalletIdempotencyKey ?? jest.fn(),
+        } as PaymentState,
+        customer: null,
+        onSuccess: overrides.onSuccess ?? jest.fn(),
+        dismissKeyboard: jest.fn(),
+      })
+    );
+  }
+
+  function seedPendingFromLastCall(reference: string) {
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    rememberPendingVtuPurchase(
+      buildVtuPurchaseDescriptor(submitted),
+      'stale-airtime-key'
+    );
+    notePendingVtuReference(buildVtuPurchaseDescriptor(submitted), reference);
+  }
+
+  it('prompts a fresh submit instead of presenting a stale replay as new', async () => {
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'processing',
+      amount: 500,
+      reference: 'WAL-STALE-AIR',
+    });
+    const first = renderHandler({ onSuccess, resetWalletIdempotencyKey });
+    await first.result.current.handlePurchase();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    seedPendingFromLastCall('WAL-STALE-AIR');
+
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(Date.now() + 6 * 60 * 1000);
+    try {
+      mockChargeWalletForVtu.mockResolvedValueOnce({
+        status: 'successful',
+        amount: 500,
+        reference: 'WAL-STALE-AIR',
+      });
+      // Fresh mount, as after Back to Home + reopen Utilities.
+      const second = renderHandler({ onSuccess, resetWalletIdempotencyKey });
+      await second.result.current.handlePurchase();
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Purchase Already Completed',
+      expect.stringContaining('WAL-STALE-AIR')
+    );
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies a fresh success normally', async () => {
+    const onSuccess = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-FRESH-AIR',
+    });
+    const { result } = renderHandler({ onSuccess });
+    await result.current.handlePurchase();
+    expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'successful',
+        reference: 'WAL-FRESH-AIR',
+      })
+    );
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+});

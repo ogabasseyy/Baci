@@ -1,6 +1,10 @@
 import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
-import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-idempotency';
+import {
+  buildVtuPurchaseDescriptor,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+} from '@/lib/pending-vtu-idempotency';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
@@ -138,12 +142,25 @@ export function createBillFormPurchaseHandler({
         // server-side. Keep the key so a retry hits the route's
         // dedupe row instead of creating a second VTU transaction.
         if (result.status === 'processing') {
+          notePendingVtuReference(descriptor, result.reference);
           emitSuccess({
             amount: result.amount ?? numericAmount,
             customerIdentifier: customerId,
             reference: result.reference,
             status: 'processing',
           });
+          return;
+        }
+        if (isStalePendingVtuSuccess(descriptor, result.reference)) {
+          // The remembered purchase completed long ago: this replay
+          // answers a NEW intent with the old vend. Forget so the next
+          // tap mints a fresh key, and say so instead of presenting the
+          // earlier purchase as the new one.
+          payment.resetWalletIdempotencyKey(descriptor);
+          Alert.alert(
+            'Purchase Already Completed',
+            `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
+          );
           return;
         }
         // Terminal success — rotate the key so the next user-initiated

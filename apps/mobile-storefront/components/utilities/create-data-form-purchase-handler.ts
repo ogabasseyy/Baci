@@ -1,6 +1,10 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
-import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-idempotency';
+import {
+  buildVtuPurchaseDescriptor,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+} from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
@@ -115,6 +119,24 @@ export function createDataFormPurchaseHandler({
         // vend is still in flight server-side; rotating now would let
         // a user-initiated retry bypass the route's dedupe row and
         // create a duplicate VTU transaction.
+        if (result.status === 'processing') {
+          notePendingVtuReference(descriptor, result.reference);
+        }
+        if (
+          result.status === 'successful' &&
+          isStalePendingVtuSuccess(descriptor, result.reference)
+        ) {
+          // The remembered purchase completed long ago: this replay
+          // answers a NEW intent with the old vend. Forget so the next
+          // tap mints a fresh key, and say so instead of presenting the
+          // earlier purchase as the new one.
+          payment.resetWalletIdempotencyKey(descriptor);
+          Alert.alert(
+            'Purchase Already Completed',
+            `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
+          );
+          return;
+        }
         if (result.status === 'successful') {
           payment.resetWalletIdempotencyKey(descriptor);
         }

@@ -1,6 +1,9 @@
 import {
   buildVtuPurchaseDescriptor,
   forgetPendingVtuPurchase,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './pending-vtu-idempotency';
@@ -53,6 +56,54 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(descriptor)).toBe('key-1');
     forgetPendingVtuPurchase(descriptor);
     expect(recallPendingVtuKey(descriptor)).toBeNull();
+  });
+
+  it('flags a success replay as stale only past the recall window', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 2,
+      phoneNumber: 'stale-check',
+    });
+    const rememberedAt = Date.now();
+    rememberPendingVtuPurchase(descriptor, 'key-stale');
+    notePendingVtuReference(descriptor, 'REF-OLD');
+    expect(isStalePendingVtuSuccess(descriptor, 'REF-OLD', rememberedAt)).toBe(
+      false
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-OLD',
+        rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+    // A different reference is a different transaction, never stale.
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-NEW',
+        rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
+  });
+
+  it('never flags a reference-less entry as stale', () => {
+    // Network-error submits never got a response: their first success
+    // IS the resolution, however late it arrives.
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'data',
+      amount: 3,
+      phoneNumber: 'no-ref-yet',
+    });
+    const rememberedAt = Date.now();
+    rememberPendingVtuPurchase(descriptor, 'key-noref');
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-FIRST',
+        rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
   });
 
   it('evicts the oldest entry past the cap', () => {

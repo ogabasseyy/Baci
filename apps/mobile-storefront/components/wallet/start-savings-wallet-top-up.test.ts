@@ -6,6 +6,14 @@ jest.mock('./wallet-screen.handlers', () => ({ fundWallet: jest.fn() }));
 describe('startSavingsWalletTopUp', () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it('does not start a payment without a selected savings goal', async () => {
+    await startSavingsWalletTopUp({
+      fundAmount: '500',
+      setIsFundPending: jest.fn(),
+    });
+    expect(fundWallet).not.toHaveBeenCalled();
+  });
+
   it('encodes the goal and amount in the resumable savings destination', async () => {
     const setIsFundPending = jest.fn();
     await startSavingsWalletTopUp({

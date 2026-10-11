@@ -1,6 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
 import type { Href } from 'expo-router';
-import { sanitizeWalletReturnTo } from './sanitize-wallet-return-to';
+import {
+  isWalletSavingsReturnHref,
+  sanitizeWalletReturnTo,
+} from './sanitize-wallet-return-to';
 
 function acceptNavigationHref(_href: Href) {}
 
@@ -9,6 +12,11 @@ describe('sanitizeWalletReturnTo', () => {
     '/',
     '/imei-check',
     '/wallet/history',
+    '/checkout',
+    '/wallet?action=savings&savingsGoalId=goal-1',
+    // Single-encoded paths keep working: one decode yields no
+    // traversal, and there is no re-encodable `%` left to decode.
+    '/wallet/%E2%9C%93',
   ])('keeps valid wallet return path %s', (value) => {
     expect(sanitizeWalletReturnTo(value)).toBe(value);
   });
@@ -33,6 +41,10 @@ describe('sanitizeWalletReturnTo', () => {
     '/a%2fb',
     '/A%2Fb',
     '/%252f',
+    // Multi-order encodings: one decode yields no literal traversal,
+    // but a second decode downstream would navigate outside the app.
+    '/%252e%252e/foo',
+    '/%25252e%25252e/foo',
     '/a\\b',
     '/a%5cb',
     '/%E0%A4%A',
@@ -90,5 +102,27 @@ describe('sanitizeWalletReturnTo', () => {
     ])('rejects unsafe wallet return href %s', (href) => {
       expect(sanitizeWalletReturnTo(href)).toBeUndefined();
     });
+  });
+});
+
+describe('isWalletSavingsReturnHref', () => {
+  it.each([
+    '/wallet?action=savings',
+    '/wallet?action=savings&savingsGoalId=owned-goal',
+    '/wallet?savingsAmount=125&action=savings&savingsGoalId=owned-goal',
+  ])('recognizes a savings handoff %s', (href) => {
+    expect(isWalletSavingsReturnHref(href)).toBe(true);
+  });
+  it.each([
+    undefined,
+    null,
+    '',
+    '/wallet',
+    '/wallet?action=topup',
+    '/wallet?savingsGoalId=owned-goal',
+    'https://evil.test/wallet?action=savings',
+    '/wallet?action=savings&next=/orders',
+  ])('rejects a non-savings handoff %p', (href) => {
+    expect(isWalletSavingsReturnHref(href)).toBe(false);
   });
 });

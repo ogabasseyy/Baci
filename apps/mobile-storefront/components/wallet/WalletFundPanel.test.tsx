@@ -25,6 +25,14 @@ const fundingAccount: WalletDisplayFundingAccount = {
   provider: 'paystack',
 };
 
+it('does not advertise Paystack fees on a PiggyVest funding account', () => {
+  renderPanel({ fundingAccount: { ...fundingAccount, provider: 'piggyvest' } });
+  expect(
+    screen.getByText(/after PiggyVest confirms receipt/)
+  ).toBeOnTheScreen();
+  expect(screen.queryByText(/1% fee/)).toBeNull();
+});
+
 function renderPanel(
   overrides: Partial<Parameters<typeof WalletFundPanel>[0]> = {}
 ) {

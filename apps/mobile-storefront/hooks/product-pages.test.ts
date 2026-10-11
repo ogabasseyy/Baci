@@ -182,7 +182,12 @@ describe('fetchProductsPage catalog variant hydration', () => {
     const result = await fetchProductsPage('merchant-1', { limit: 20 }, 0);
 
     expect(mockRpc).toHaveBeenCalledTimes(1);
-    expect(result.products).toEqual([productRow]);
+    // The page stays available, but rows carry the hydration-failure
+    // marker so exact variant links fail closed instead of rendering
+    // a normal PDP with no retry state.
+    expect(result.products).toEqual([
+      { ...productRow, variants_hydration_failed: true },
+    ]);
   });
 });
 

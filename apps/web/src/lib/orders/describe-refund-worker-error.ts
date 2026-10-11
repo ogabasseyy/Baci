@@ -6,10 +6,11 @@
 export function describeRefundWorkerError(message: string): string {
   if (message.startsWith('cancellation_refund_awaiting_'))
     return 'Refund in progress — waiting for the remaining money to arrive.';
+  const lowered = message.toLowerCase();
   if (
-    message.includes('requires review') ||
-    message.includes('review required') ||
-    message.includes('reconciliation')
+    lowered.includes('requires review') ||
+    lowered.includes('review required') ||
+    lowered.includes('reconciliation')
   )
     return 'This refund needs review before it can continue.';
   return 'The refund ran into a problem. Support has the details.';

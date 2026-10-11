@@ -42,9 +42,9 @@ CREATE OR REPLACE FUNCTION private.describe_refund_worker_error_v1(
     WHEN p_message IS NULL THEN NULL
     WHEN LEFT(p_message, 29) = 'cancellation_refund_awaiting_'
       THEN 'Refund in progress — waiting for the remaining money to arrive.'
-    WHEN POSITION('requires review' IN p_message) > 0
-      OR POSITION('review required' IN p_message) > 0
-      OR POSITION('reconciliation' IN p_message) > 0
+    WHEN POSITION('requires review' IN lower(p_message)) > 0
+      OR POSITION('review required' IN lower(p_message)) > 0
+      OR POSITION('reconciliation' IN lower(p_message)) > 0
       THEN 'This refund needs review before it can continue.'
     ELSE 'The refund ran into a problem. Support has the details.'
   END;

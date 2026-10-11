@@ -61,6 +61,17 @@ BEGIN
                 -- while the reversal never runs.
                 AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
                   NOT IN ('WALLET', 'SAVINGS')
+                -- A manual row positively declared as Paystack is only
+                -- a merchant claim about provider money: it needs
+                -- provider confirmation before it can count, mirroring
+                -- the claim gate's method/provider rule verbatim.
+                -- Counting it here would flip the label to refunded
+                -- while the claim still sees the leg uncovered and
+                -- never finalizes (UI-refunded / DB-paid strand).
+                AND (
+                  refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+                  OR refund.metadata->>'provider_refund_status' = 'processed'
+                )
               )
               OR public.normalized_gateway_name_v1(refund.gateway)
                 = public.normalized_gateway_name_v1(leg.gateway)

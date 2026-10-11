@@ -440,9 +440,11 @@ describe('getOrder', () => {
   function mockGetOrderQueries(options?: {
     orderRows?: (typeof mockOrder)[];
     orderError?: { message: string } | null;
+    transactionsError?: { message: string } | null;
   }) {
     const orderRows = options?.orderRows ?? [mockOrder];
     const orderError = options?.orderError ?? null;
+    const transactionsError = options?.transactionsError ?? null;
     const orderNumberLookups: string[] = [];
     const ordersMaybeSingle = vi
       .fn()
@@ -464,7 +466,7 @@ describe('getOrder', () => {
     });
     const transactionsOrder = vi
       .fn()
-      .mockResolvedValue({ data: [], error: null });
+      .mockResolvedValue({ data: [], error: transactionsError });
     const ordersSelect = vi.fn(() => ({
       eq: vi.fn((column: string, value: string) => {
         if (column !== 'merchant_id' || value !== MERCHANT_ID) {
@@ -498,9 +500,15 @@ describe('getOrder', () => {
     const productsSelect = vi.fn(() => ({ in: productsIn }));
     const transactionsSelect = vi.fn(() => ({
       eq: vi.fn((column: string, value: string) => {
-        expect(column).toBe('order_id');
-        expect(value).toBe(ORDER_ID);
-        return { order: transactionsOrder };
+        expect(column).toBe('merchant_id');
+        expect(value).toBe(MERCHANT_ID);
+        return {
+          eq: vi.fn((nestedColumn: string, nestedValue: string) => {
+            expect(nestedColumn).toBe('order_id');
+            expect(nestedValue).toBe(ORDER_ID);
+            return { order: transactionsOrder };
+          }),
+        };
       }),
     }));
 
@@ -641,6 +649,19 @@ describe('getOrder', () => {
     expect(transactionsOrder).toHaveBeenCalledWith('created_at', {
       ascending: false,
     });
+  });
+
+  it('leaves funding unknown when the transactions read fails', async () => {
+    mockGetOrderQueries({
+      transactionsError: { message: 'connection reset' },
+    });
+
+    const order = await getOrder(MERCHANT_ID, ORDER_ID);
+
+    // The page still renders; undefined funding fails the refund
+    // panel open instead of hiding recovery on a transient error.
+    expect(order?.id).toBe(ORDER_ID);
+    expect(order?.transactions).toBeUndefined();
   });
 
   it('preserves storefront order sources for dashboard labels', async () => {

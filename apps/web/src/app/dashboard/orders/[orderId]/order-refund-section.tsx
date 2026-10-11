@@ -22,12 +22,17 @@ export function OrderRefundSection({
   // leg with moved money (completed, or refund_pending mid-flight)
   // keeps the panel visible and only truly unfunded orders hide it.
   if (!['Canceled', 'Cancelled'].includes(order.shippingStatus)) return null;
-  const hasFundedPaymentLeg = (order.transactions ?? []).some(
-    (leg) =>
-      leg.transaction_type === 'payment' &&
-      (leg.status === 'completed' || leg.status === 'refund_pending') &&
-      leg.amount > 0
-  );
+  // Unknown funding (transactions read failed server-side and was
+  // logged) fails open: the panel's RPC is the real gate, and hiding
+  // recovery on a transient read error strands funded orders.
+  const hasFundedPaymentLeg =
+    order.transactions === undefined ||
+    order.transactions.some(
+      (leg) =>
+        leg.transaction_type === 'payment' &&
+        (leg.status === 'completed' || leg.status === 'refund_pending') &&
+        leg.amount > 0
+    );
   if (
     !['Paid', 'Partially Paid', 'Refunded', 'Bnpl Approved'].includes(
       order.paymentStatus

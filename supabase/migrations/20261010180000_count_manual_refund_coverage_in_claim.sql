@@ -31,7 +31,19 @@ BEGIN
      AND (
        o.shipping_status IN ('cancelled', 'canceled')
        OR o.cancelled_at IS NOT NULL
-     );
+     )
+    -- Take the same orders-row lock the manager holds for its whole
+    -- manual transaction, so claim-vs-manual serialization is explicit
+    -- at claim start: a mid-flight manual blocks this claim until it
+    -- commits (and this short, provider-call-free claim blocks a
+    -- starting manual until the row shows claimed). The side-effect
+    -- FK's KEY SHARE would serialize the late upsert anyway, but an
+    -- incidental lock is not a contract: without a shared lock here,
+    -- a manual that read a missing side-effect row could commit
+    -- between the worker's ledger read and its provider POST,
+    -- double-paying the customer. Lock order matches the manager
+    -- (orders, then side-effect): no deadlock.
+    FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'cancelled_order_not_found' USING ERRCODE = 'P0002';
   END IF;

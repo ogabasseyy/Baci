@@ -147,7 +147,9 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000026', v_merchant_id, 'REFUND-026',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000027', v_merchant_id, 'REFUND-027',
-      100, 100, 'paid', 'cancelled');
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000034', v_merchant_id, 'REFUND-034',
+      200, 200, 'paid', 'cancelled');
     -- Per-leg coverage fixtures (028+) live in
     -- order_refund_management_per_leg_coverage.sql per the 300-line
     -- boundary.
@@ -182,7 +184,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000024',
       '9ef11000-0000-4000-8000-000000000025',
       '9ef11000-0000-4000-8000-000000000026',
-      '9ef11000-0000-4000-8000-000000000027');
+      '9ef11000-0000-4000-8000-000000000027',
+      '9ef11000-0000-4000-8000-000000000034');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -367,7 +370,22 @@ BEGIN
     -- A direct-Paystack manual record lands here via the RPC below.
     ('9ef12000-0000-4000-8000-000000000044', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000027', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'cap-27', '{}'::jsonb);
+      'completed', 'paystack', 'cap-27', '{}'::jsonb),
+    -- A mixed order whose worker finished while the cash leg still
+    -- awaited its manual: verified provider money, an outstanding
+    -- internal balance, and a completed side-effect row.
+    ('9ef12000-0000-4000-8000-000000000045', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000034', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-34', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000046', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000034', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'pp-34-ok',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000045',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000047', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000034', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-34', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -379,7 +397,9 @@ BEGIN
       'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL),
     ('9ef11000-0000-4000-8000-000000000020', v_merchant_id, 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000020', 0,
-      'Insufficient balance');
+      'Insufficient balance'),
+    ('9ef11000-0000-4000-8000-000000000034', v_merchant_id, 'refund',
+      'completed', '9ef13000-0000-4000-8000-000000000034', 1, NULL);
 
   INSERT INTO public.customer_wallets (id, customer_id, merchant_id) VALUES
     ('9ef14000-0000-4000-8000-000000000001', v_customer_id, v_merchant_id);
@@ -1031,17 +1051,35 @@ BEGIN
   -- Per-leg coverage assertions (028+) live in
   -- order_refund_management_per_leg_coverage.sql.
 
-  -- A full manual declared as a direct Paystack refund records (the
-  -- manager counts merchant-attested rows) but must not satisfy the
-  -- claim's completion gate without provider confirmation; the
-  -- claim test below asserts it defers to the worker instead.
+  -- A full manual declared as a direct Paystack refund records but
+  -- stays in-flight without provider confirmation: the response is
+  -- processing (pending, recording blocked) and the order label
+  -- stays paid — never refunded while the claim still sees the
+  -- leg uncovered. The claim test below asserts it defers to the
+  -- worker instead.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000027', 'manual', 100,
     '2026-09-28T12:00:00Z', 'paystack', 'direct-paystack-1', NULL, true
   ) INTO v_result;
-  IF v_result->>'status' <> 'refunded' THEN
-    RAISE EXCEPTION 'direct-paystack manual did not record, got %',
+  IF v_result->>'status' <> 'processing' THEN
+    RAISE EXCEPTION 'unverified paystack manual not processing, got %',
       v_result->>'status';
+  END IF;
+  IF (v_result->>'pending')::numeric <> 100 THEN
+    RAISE EXCEPTION 'unverified paystack manual pending = %, want 100',
+      v_result->>'pending';
+  END IF;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'unverified paystack manual remaining = %, want 100',
+      v_result->>'remaining';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'unverified paystack manual allows double-record';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000027';
+  IF v_label = 'refunded' THEN
+    RAISE EXCEPTION 'unverified paystack manual flipped the order label';
   END IF;
 
   -- Missing and foreign orders are indistinguishable to callers.
@@ -1297,6 +1335,8 @@ DO $refund_claim_finalize$
 DECLARE
   v_won boolean;
   v_status text;
+  v_label text;
+  v_result jsonb;
 BEGIN
   -- A fully manual refund routes through the trusted aggregate
   -- finalization: the next claim sees manual-row coverage and runs
@@ -1361,6 +1401,35 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000027');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'unverified paystack manual finalized, got %', v_status;
+  END IF;
+  -- The claim pins its orders-row lock explicitly: claim-vs-manual
+  -- serialization must not rest on the incidental side-effect FK.
+  IF pg_get_functiondef(
+    'public.claim_order_cancellation_side_effect(uuid,text,uuid)'::regprocedure
+  ) NOT LIKE '%FOR UPDATE%' THEN
+    RAISE EXCEPTION 'claim lost its explicit orders lock';
+  END IF;
+  -- Provider confirmation converts the merchant claim into returned
+  -- money: the label flips and the manager reports refunded. The
+  -- status write fires the sync trigger (metadata-only updates do
+  -- not), mirroring the 018 provider-confirmation pattern.
+  UPDATE public.transactions
+     SET status = 'completed',
+         metadata = metadata || '{"provider_refund_status":"processed"}'::jsonb
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000027'
+     AND transaction_type = 'refund';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000027';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'confirmed paystack manual did not flip label, got %',
+      v_label;
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000027'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'confirmed paystack manual status = %, want refunded',
+      v_result->>'status';
   END IF;
   -- Per-leg claim assertions (028+) live in
   -- order_refund_management_per_leg_coverage.sql.
@@ -1427,6 +1496,61 @@ BEGIN
   END IF;
 END;
 $refund_mixed_cash_claim$;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000002',
+  true
+);
+
+DO $refund_completed_row_requeue$
+DECLARE
+  v_result jsonb;
+  v_row_status text;
+BEGIN
+  -- The final manual on a worker-completed row requeues it as failed
+  -- so the drain reclaims it; a preserved completed status would
+  -- strand settlement reversal, notifications, and review close.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000034', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'cash', 'cash34-1', NULL, true
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'final internal manual did not complete, got %',
+      v_result->>'status';
+  END IF;
+  SELECT status INTO v_row_status FROM public.order_cancellation_side_effects
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000034'
+    AND step = 'refund';
+  IF v_row_status <> 'failed' THEN
+    RAISE EXCEPTION 'completed row not requeued, got %', v_row_status;
+  END IF;
+END;
+$refund_completed_row_requeue$;
+
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_completed_row_claim$
+DECLARE
+  v_won boolean;
+  v_status text;
+BEGIN
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000034', 'refund',
+    '9ef13000-0000-4000-8000-000000000036');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'requeued mixed order did not finalize, got %', v_status;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.paystack_cancellation_refund_notifications
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000034') THEN
+    RAISE EXCEPTION 'requeued finalization skipped notifications';
+  END IF;
+END;
+$refund_completed_row_claim$;
 
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
@@ -1549,6 +1673,16 @@ BEGIN
     'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'direct private refund RPC allowed';
+  END IF;
+
+  -- Worker-error labels match review keywords case-insensitively.
+  IF private.describe_refund_worker_error_v1('Review required: mismatch')
+    <> 'This refund needs review before it can continue.' THEN
+    RAISE EXCEPTION 'capitalized review keyword missed';
+  END IF;
+  IF private.describe_refund_worker_error_v1('RECONCILIATION pending')
+    <> 'This refund needs review before it can continue.' THEN
+    RAISE EXCEPTION 'uppercase reconciliation keyword missed';
   END IF;
 END;
 $refund_ledger_asserts$;

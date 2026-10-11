@@ -524,19 +524,36 @@ export async function getOrder(
   );
 
   // Fetch transactions (transaction_type lets the refund section tell
-  // funded pending orders from unfunded ones).
-  const { data: transactions } = await supabase
+  // funded pending orders from unfunded ones). Merchant-scoped like the
+  // order read above; RLS is not the only tenant boundary relied upon.
+  const { data: transactions, error: transactionsError } = await supabase
     .from('transactions')
     .select(
       'id, gateway_reference, transaction_type, status, amount, currency, gateway, created_at'
     )
+    .eq('merchant_id', authorizedMerchantId)
     .eq('order_id', order.id)
     .order('created_at', { ascending: false });
+
+  if (transactionsError) {
+    // Fail open on visibility: an empty list would hide the refund
+    // recovery panel exactly when it may be needed, so leave funding
+    // unknown (the section shows the panel) and log for operators.
+    logger.error({
+      message: 'Error fetching order transactions',
+      error: transactionsError,
+      merchantId: authorizedMerchantId,
+      orderId: order.id,
+      route: 'dashboard/orders/getOrder',
+    });
+  }
 
   return mapDashboardOrderRecord(order, {
     includeDetails: true,
     orderItemImageMap,
-    transactions: (transactions || []) as Transaction[],
+    transactions: transactionsError
+      ? undefined
+      : ((transactions || []) as Transaction[]),
   });
 }
 

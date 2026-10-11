@@ -61,6 +61,9 @@ BEGIN
   -- 'processed'), mirroring the claim gate and the executor
   -- matcher: counting an unverified row would understate the
   -- remainder while aggregate finalization keeps deferring.
+  -- The same holds for a manual row declared as Paystack
+  -- (metadata method = 'paystack'): a merchant claim about
+  -- provider money, verified or pending but never coverage.
   -- Unverified rows are in-flight money that blocks manual
   -- recording (like refund_pending legs) — never invisible money
   -- the merchant could double-record beside the provider refund.
@@ -89,7 +92,9 @@ BEGIN
       p_order_id, v_order.merchant_id, v_order.currency),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
       OR (status IN ('completed','refunded')
-        AND public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
+        AND (public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
+          OR (public.normalized_gateway_name_v1(gateway)='MANUAL'
+            AND metadata->>'method'='paystack'))
         AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')
       OR (status IN ('completed','refunded')
         AND NOT COALESCE((EXISTS (SELECT 1 FROM public.transactions leg
@@ -223,6 +228,18 @@ BEGIN
     v_step_error := v_manual->>'stepError';
     v_step_attempts := (v_manual->>'stepAttempts')::integer;
     v_step_retry_requests := (v_manual->>'stepRetryRequests')::integer;
+    -- A manual declared as Paystack is a merchant claim about
+    -- provider money, not returned money: reclassify the recorded
+    -- amount from coverage to in-flight pending so this response
+    -- matches what a follow-up status call computes (and the UI
+    -- never flashes refunded while the claim still defers). The
+    -- zero-balance upsert above still re-arms the row — the drain
+    -- must invoke the claim so the worker API-verifies the claim.
+    IF p_method = 'paystack' THEN
+      v_refunded := v_refunded - p_amount;
+      v_remaining := v_remaining + p_amount;
+      v_pending := v_pending + p_amount;
+    END IF;
   END IF;
   -- Response shaping lives in the response helper (part 3).
   RETURN private.refund_status_response(p_order_id,

@@ -16,6 +16,17 @@ describe('refund worker error labels', () => {
       )
     ).toContain('needs review');
   });
+  it('matches review keywords case-insensitively', () => {
+    expect(
+      describeRefundWorkerError('Review required: amount mismatch')
+    ).toContain('needs review');
+    expect(describeRefundWorkerError('Requires Review by ops')).toContain(
+      'needs review'
+    );
+    expect(describeRefundWorkerError('RECONCILIATION pending')).toContain(
+      'needs review'
+    );
+  });
   it('falls back to a generic label for unknown messages', () => {
     const label = describeRefundWorkerError(
       'Paystack/insufficient-balance (acquirer 51)'

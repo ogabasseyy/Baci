@@ -59,12 +59,24 @@ describe('OrderRefundSection', () => {
     const setOrder = vi.fn();
     render(
       <OrderRefundSection
-        order={orderWith({ paymentStatus: 'Unpaid' })}
+        order={orderWith({ paymentStatus: 'Unpaid', transactions: [] })}
         setOrder={setOrder}
       />
     );
     expect(screen.queryByText('Refund')).not.toBeInTheDocument();
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+  it('shows the refund panel when funding is unknown', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({ paymentStatus: 'Pending', transactions: undefined })}
+        setOrder={setOrder}
+      />
+    );
+    // A failed transactions read fails open so recovery stays
+    // visible; the panel RPC remains the permission gate.
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
   });
   it('shows the refund panel for BNPL-approved cancelled orders', async () => {
     const setOrder = vi.fn();
@@ -128,7 +140,7 @@ describe('OrderRefundSection', () => {
     const setOrder = vi.fn();
     render(
       <OrderRefundSection
-        order={orderWith({ paymentStatus: 'Pending' })}
+        order={orderWith({ paymentStatus: 'Pending', transactions: [] })}
         setOrder={setOrder}
       />
     );

@@ -147,6 +147,10 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000026', v_merchant_id, 'REFUND-026',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000027', v_merchant_id, 'REFUND-027',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000028', v_merchant_id, 'REFUND-028',
+      200, 200, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000029', v_merchant_id, 'REFUND-029',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -179,7 +183,9 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000024',
       '9ef11000-0000-4000-8000-000000000025',
       '9ef11000-0000-4000-8000-000000000026',
-      '9ef11000-0000-4000-8000-000000000027');
+      '9ef11000-0000-4000-8000-000000000027',
+      '9ef11000-0000-4000-8000-000000000028',
+      '9ef11000-0000-4000-8000-000000000029');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -364,7 +370,33 @@ BEGIN
     -- A direct-Paystack manual record lands here via the RPC below.
     ('9ef12000-0000-4000-8000-000000000044', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000027', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'cap-27', '{}'::jsonb);
+      'completed', 'paystack', 'cap-27', '{}'::jsonb),
+    -- An overfunded first leg: a verified 200 refund linked to one
+    -- 100 leg must not cover the sibling 100 leg.
+    ('9ef12000-0000-4000-8000-000000000045', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000028', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-28a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000046', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000028', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-28b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000047', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000028', 'refund', 200, 'NGN',
+      'completed', 'paystack', 'pp-28-over',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000045',
+        'provider_refund_status', 'processed')),
+    -- A cash leg with a manual row declared as Paystack: a merchant
+    -- claim about provider money, not internal-leg coverage without
+    -- provider confirmation.
+    ('9ef12000-0000-4000-8000-000000000048', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000029', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-29', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000049', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000029', 'refund', 100, 'NGN',
+      'completed', 'manual', 'man-29-ps',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000048',
+        'method', 'paystack'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -1026,6 +1058,23 @@ BEGIN
     RAISE EXCEPTION 'cross-gateway row flipped payment label to %', v_label;
   END IF;
 
+  -- An overfunded leg caps at its own amount: the 200 linked to the
+  -- first 100 leg counts 100, leaving the sibling leg outstanding
+  -- with the label held.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000028'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'overfunded leg spilled into sibling coverage, got %/%',
+      v_result->>'refunded', v_result->>'remaining';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000028';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'overfunded leg flipped payment label to %', v_label;
+  END IF;
+
   -- A full manual declared as a direct Paystack refund records (the
   -- manager counts merchant-attested rows) but must not satisfy the
   -- claim's completion gate without provider confirmation; the
@@ -1314,6 +1363,25 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000027');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'unverified paystack manual finalized, got %', v_status;
+  END IF;
+  -- The overfunded first leg leaves its sibling uncovered: the claim
+  -- stays in the worker branch instead of finalizing.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000028', 'refund',
+    '9ef13000-0000-4000-8000-000000000028');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'overfunded leg finalized early, got %', v_status;
+  END IF;
+  -- A manual Paystack declaration on an internal leg is a merchant
+  -- claim about provider money, not internal-leg coverage: like the
+  -- external-leg gate, the claim defers without provider proof.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000029', 'refund',
+    '9ef13000-0000-4000-8000-000000000029');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'unverified internal paystack manual finalized, got %', v_status;
   END IF;
   -- The worker defers on the outstanding cash manual; mirror the
   -- deferral so the merchant's completion below re-arms the row.

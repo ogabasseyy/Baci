@@ -49,6 +49,81 @@ DROP TRIGGER IF EXISTS audit_order_refund_step ON public.order_cancellation_side
 CREATE TRIGGER audit_order_refund_step AFTER INSERT OR UPDATE OF status,attempts,retry_requests
   ON public.order_cancellation_side_effects FOR EACH ROW EXECUTE FUNCTION private.audit_order_refund_step();
 
+-- Terminal refund coverage capped per payment leg, shared by the
+-- manager aggregate and the status trigger below. An overfunded
+-- leg's excess is an anomaly for review, never coverage of sibling
+-- legs: without the cap, one over-linked refund zeroes the remainder
+-- and flips the order refunded while legs sit uncovered and the
+-- worker initiates them again (double refund). Attribution mirrors
+-- the pre-cap aggregates exactly (linked gateway-matched rows plus
+-- sole-external-leg unlinked rows, provider-verified Paystack only);
+-- only the per-leg LEAST is new.
+CREATE OR REPLACE FUNCTION private.capped_refund_coverage_v1(
+  p_order_id uuid, p_merchant_id uuid, p_currency text
+) RETURNS numeric LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+DECLARE
+  v_sole_id uuid;
+  v_sole_gateway text;
+  v_total numeric;
+BEGIN
+  -- No max(uuid) aggregate exists: with exactly one candidate row,
+  -- its id is the sole leg's.
+  SELECT CASE WHEN count(*) = 1 THEN (array_agg(leg.id))[1] END,
+         CASE WHEN count(*) = 1
+           THEN max(public.normalized_gateway_name_v1(leg.gateway)) END
+    INTO v_sole_id, v_sole_gateway
+    FROM public.transactions leg
+   WHERE leg.order_id = p_order_id
+     AND leg.merchant_id = p_merchant_id
+     AND leg.transaction_type = 'payment'
+     AND leg.status = 'completed'
+     AND leg.amount > 0
+     AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '') NOT IN (
+       'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+       'PAY_ON_DELIVERY');
+  SELECT COALESCE(SUM(LEAST(per_leg.total, GREATEST(per_leg.leg_amount, 0))), 0)
+    INTO v_total
+    FROM (
+      SELECT leg.amount AS leg_amount, SUM(refund.amount) AS total
+        FROM public.transactions leg
+        JOIN public.transactions refund
+          ON refund.order_id = p_order_id
+         AND refund.merchant_id = p_merchant_id
+         AND refund.transaction_type = 'refund'
+         AND refund.status IN ('completed', 'refunded')
+         AND refund.amount > 0
+         AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(p_currency))
+         AND (public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'
+              OR refund.metadata->>'provider_refund_status' = 'processed')
+         AND (
+           (refund.metadata->>'payment_transaction_id' = leg.id::text
+            AND (public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
+                 OR public.normalized_gateway_name_v1(refund.gateway)
+                   = public.normalized_gateway_name_v1(leg.gateway)))
+           OR (refund.metadata->>'payment_transaction_id' IS NULL
+               AND v_sole_id IS NOT NULL
+               AND leg.id = v_sole_id
+               AND public.normalized_gateway_name_v1(refund.gateway) = v_sole_gateway)
+         )
+       WHERE leg.order_id = p_order_id
+         AND leg.merchant_id = p_merchant_id
+         AND leg.transaction_type = 'payment'
+       GROUP BY leg.id, leg.amount
+    ) per_leg;
+  RETURN v_total;
+END; $$;
+REVOKE ALL ON FUNCTION private.capped_refund_coverage_v1(uuid,uuid,text)
+  FROM PUBLIC,anon,authenticated;
+-- service_role fires the sync trigger, so it needs EXECUTE; without
+-- it, Postgres 18 segfaults on the denial path instead of raising
+-- 42501 (pre-existing backend bug, reproducible on any revoked private
+-- function). authenticated gets EXECUTE too so any hypothetical
+-- invocation fails at the schema-USAGE check (clean 42501) rather
+-- than the crashing function-ACL check; the private-schema boundary
+-- itself stays USAGE-denied, as the suite asserts.
+GRANT EXECUTE ON FUNCTION private.capped_refund_coverage_v1(uuid,uuid,text)
+  TO service_role, authenticated;
+
 -- The confirmation parameter changes the signature: without a DROP the
 -- 7-argument overload would survive beside the new one, leaving an
 -- unattested entry point behind.
@@ -130,19 +205,12 @@ BEGIN
     AND sole.transaction_type='payment' AND sole.status='completed' AND sole.amount>0
     AND COALESCE(public.normalized_gateway_name_v1(sole.gateway),'') NOT IN (
       'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
-  SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')
-      AND (public.normalized_gateway_name_v1(gateway)<>'PAYSTACK'
-        OR metadata->>'provider_refund_status'='processed')
-      AND (EXISTS (SELECT 1 FROM public.transactions leg
-          WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
-            AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
-            AND leg.transaction_type='payment'
-            AND (public.normalized_gateway_name_v1(transactions.gateway)='MANUAL'
-              OR public.normalized_gateway_name_v1(transactions.gateway)
-                =public.normalized_gateway_name_v1(leg.gateway)))
-        OR (transactions.metadata->>'payment_transaction_id' IS NULL
-          AND v_sole_external_leg
-          AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway))),0),
+  -- Terminal coverage comes capped per payment leg from the shared
+  -- helper: an overfunded leg's excess must not zero the remainder
+  -- while sibling legs sit uncovered. Pending stays a global sum:
+  -- over-counting in-flight money only blocks actions safely.
+  SELECT private.capped_refund_coverage_v1(
+      p_order_id, v_order.merchant_id, v_order.currency),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
       OR (status IN ('completed','refunded')
         AND public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
@@ -437,9 +505,6 @@ GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamp
 -- A provider confirmation updates payment status without changing amount paid.
 CREATE OR REPLACE FUNCTION private.sync_cancelled_order_refund_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
-DECLARE
-  v_trig_has_sole_leg boolean;
-  v_trig_sole_gateway text;
 BEGIN
   -- Order-less ledger refunds (e.g. the PiggyVest external-principal flow)
   -- have no order to audit: the events table requires order_id, so skip
@@ -458,43 +523,15 @@ BEGIN
           'reference',COALESCE(NEW.metadata->>'reference',NEW.gateway_reference)));
     END IF;
     -- Coverage counts matching money only (a foreign-currency row must
-    -- not flip the label while matching money is still owed) and
-    -- includes self-terminal refunded payment legs. Unlinked rows
-    -- attribute only to a sole completed external leg with a
-    -- matching gateway, like the status aggregate.
-    SELECT count(*)=1,
-      max(public.normalized_gateway_name_v1(gateway))
-      INTO v_trig_has_sole_leg,v_trig_sole_gateway
-      FROM public.transactions only_payment
-      WHERE only_payment.order_id=NEW.order_id
-        AND only_payment.merchant_id=NEW.merchant_id
-        AND only_payment.transaction_type='payment'
-        AND only_payment.status='completed'
-        AND only_payment.amount>0
-        AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway),'') NOT IN (
-          'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
+    -- not flip the label while matching money is still owed), capped
+    -- per payment leg via the shared helper so an overfunded leg's
+    -- excess cannot flip the label while sibling legs sit uncovered,
+    -- and includes self-terminal refunded payment legs.
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
-        AND o.amount_paid <= (SELECT COALESCE(sum(t.amount),0) FROM public.transactions t
-          WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
-            AND t.transaction_type='refund' AND t.status IN ('completed','refunded')
-            AND upper(btrim(t.currency))=upper(btrim(o.currency))
-            -- Mirror the status aggregate: unverified Paystack rows
-            -- are in-flight, not returned, and unlinked rows
-            -- attribute only to a sole completed external leg.
-            AND (public.normalized_gateway_name_v1(t.gateway)<>'PAYSTACK'
-              OR t.metadata->>'provider_refund_status'='processed')
-            AND ((t.metadata->>'payment_transaction_id' IS NULL
-              AND v_trig_has_sole_leg
-              AND public.normalized_gateway_name_v1(t.gateway)=v_trig_sole_gateway)
-              OR EXISTS (SELECT 1 FROM public.transactions leg
-                WHERE leg.id::text = t.metadata->>'payment_transaction_id'
-                  AND leg.order_id=o.id AND leg.merchant_id=o.merchant_id
-                  AND leg.transaction_type='payment'
-                  AND (public.normalized_gateway_name_v1(t.gateway)='MANUAL'
-                    OR public.normalized_gateway_name_v1(t.gateway)
-                      =public.normalized_gateway_name_v1(leg.gateway)))))
+        AND o.amount_paid <= private.capped_refund_coverage_v1(
+            o.id, o.merchant_id, o.currency)
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
           WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
             AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0

@@ -218,6 +218,14 @@ BEGIN
             AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(internal_leg.currency))
             AND public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
             AND refund.metadata->>'payment_transaction_id' = internal_leg.id::text
+            -- Same positive Paystack gate as the external-leg branch:
+            -- a manual row declared as Paystack is a merchant claim
+            -- about provider money, never internal-leg coverage
+            -- without provider confirmation.
+            AND (
+              refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+              OR refund.metadata->>'provider_refund_status' = 'processed'
+            )
        ) < internal_leg.amount
   ) THEN
     -- Every funded leg has terminal refund evidence, but the last leg may

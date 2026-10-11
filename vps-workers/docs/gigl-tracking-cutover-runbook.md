@@ -289,8 +289,10 @@ API, in both directions:
 - Every promote records `<sha>:<in-flight-run-ids>` in the
   `ops/gigl-promote-record` branch (single file
   `.gigl-promote-record`, created automatically on first promote;
-  plain commits with no `[skip ci]` so the Ops Promote Record workflow
-  validates every push server-side) — TWICE: immediately before the
+  plain commits with no `[skip ci]`; the Ops Promote Record workflow
+  re-validates the branch from the last validated tip on a 15-minute
+  schedule, so detection lags up to the interval) — TWICE:
+  immediately before the
   flip as a
   fail-closed gate (a broken record path refuses the promote before
   anything is mutated, so a promote can never land that no workflow

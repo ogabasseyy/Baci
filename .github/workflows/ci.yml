@@ -482,6 +482,7 @@ jobs:
           .github/scripts/release-production.test.mjs
           .github/scripts/verify-coordinated-release.test.mjs
           ci_scripts/validate-promote-record.test.mjs
+          .github/scripts/ops-promote-record-contract.test.mjs
           && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'

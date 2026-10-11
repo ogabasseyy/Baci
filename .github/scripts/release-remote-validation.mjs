@@ -51,4 +51,12 @@ export function assertCleanWorkerDeployEnv(env = process.env) {
   if (env.GH_HOST && String(env.GH_HOST).toLowerCase() !== 'github.com') {
     throw new Error(`refusing release with GH_HOST=${env.GH_HOST}; unset it so gh queries github.com`);
   }
+  // The barrier-ID suffix is test-only (set by the promote fixtures):
+  // a fixed suffix removes host/PID uniqueness, so two coordinators
+  // promoting the same SHA could share one barrier and the first
+  // post-flip refresh would clear it while the second promotion is
+  // still active, reopening the mid-stall publication hole.
+  if (env.PROMOTE_BARRIER_ID_SUFFIX) {
+    throw new Error(`refusing release with PROMOTE_BARRIER_ID_SUFFIX=${env.PROMOTE_BARRIER_ID_SUFFIX}; unset it so barriers stay unique per deploy`);
+  }
 }

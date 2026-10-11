@@ -111,6 +111,28 @@ _set_inflight_repo() {
       fi
       inflight_remote="${_remote_scheme}://${_remote_host}${_remote_path}"
       ;;
+    git@*:*)
+      # scp-like: lowercase user@host (before the first colon) so
+      # git@GitHub.com resolves like the case-insensitive coordinator
+      # match. The path stays case-sensitive.
+      _scp_head="${inflight_remote%%:*}"
+      _scp_tail="${inflight_remote#*:}"
+      inflight_remote="$(printf '%s' "$_scp_head" | tr '[:upper:]' '[:lower:]'):${_scp_tail}"
+      ;;
+    ssh://*)
+      # Lowercase scheme://authority; the path stays case-sensitive.
+      # The scheme is rebuilt lowercase too: the coordinator accepts
+      # SSH:// while the match below requires ssh://.
+      _ssh_rest="${inflight_remote#*://}"
+      _ssh_head="${_ssh_rest%%/*}"
+      _ssh_tail="${_ssh_rest#*/}"
+      if [ "$_ssh_tail" = "$_ssh_rest" ]; then
+        _ssh_tail=""
+      else
+        _ssh_tail="/${_ssh_tail}"
+      fi
+      inflight_remote="ssh://$(printf '%s' "$_ssh_head" | tr '[:upper:]' '[:lower:]')${_ssh_tail}"
+      ;;
   esac
   while :; do
     case "$inflight_remote" in
@@ -314,10 +336,12 @@ record_deploy_workflow_promote() {
 _push_promote_record() {
   push_value="$1"
   push_ref="refs/baci-tmp/promote-record"
-  # No [skip ci]: the Ops Promote Record workflow must validate every
-  # push to this branch server-side (the pre-push hook is bypassable).
-  # No other push workflow triggers on this branch, so record pushes
-  # run only that validator.
+  # No [skip ci]: the pre-push hook is bypassable, so the Ops
+  # Promote Record workflow re-validates this branch from the last
+  # validated tip on a 15-minute schedule (a push trigger cannot work:
+  # the orphan branch never contains workflow files). Detection lags
+  # up to the schedule interval — a --no-verify push is NOT
+  # immediately server-validated.
   push_msg="record worker promote overlap ${push_value%%:*}"
   # Plumbing only: no checkout touched. Committer identity rides on
   # the command line so a bare-bones operator clone (no user.name or

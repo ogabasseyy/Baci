@@ -37,6 +37,8 @@ test('accepts every canonical GitHub remote spelling', () => {
     'https://x-access-token:sekret@github.com/ogabasseyy/Baci.git',
     'https://ogabasseyy:sekret@github.com/ogabasseyy/Baci',
     'https://GitHub.com/ogabasseyy/Baci.git',
+    'git@GitHub.com:ogabasseyy/Baci.git',
+    'ssh://git@GitHub.com/ogabasseyy/Baci.git',
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }
@@ -209,6 +211,10 @@ test('refuses inherited worker-deploy safety overrides', () => {
   assert.throws(
     () => assertCleanWorkerDeployEnv({ GH_HOST: 'ghe.example.com' }),
     /GH_HOST/
+  );
+  assert.throws(
+    () => assertCleanWorkerDeployEnv({ PROMOTE_BARRIER_ID_SUFFIX: 'fixed-for-tests' }),
+    /PROMOTE_BARRIER_ID_SUFFIX/
   );
 });
 

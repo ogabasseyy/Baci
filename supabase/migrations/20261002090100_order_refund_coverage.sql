@@ -20,6 +20,10 @@ DECLARE
   v_sole_gateway text;
   v_total numeric;
 BEGIN
+  -- Null or blank order currencies (legacy rows) price in the
+  -- established NGN default, mirroring the manager and dashboard, so
+  -- the status trigger and any future caller compare matching money.
+  p_currency := COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN');
   -- Defense in depth: EXECUTE stays granted below so denial lands on
   -- the clean schema-USAGE check (revoking crashes, see note there).
   -- This membership gate keeps the helper from becoming a

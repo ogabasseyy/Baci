@@ -61,6 +61,8 @@ BEGIN
     ('9ef21000-0000-4000-8000-000000000031', v_merchant_id, 'PERLEG-031',
       100, 100, 'paid', 'cancelled'),
     ('9ef21000-0000-4000-8000-000000000032', v_merchant_id, 'PERLEG-032',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef21000-0000-4000-8000-000000000036', v_merchant_id, 'PERLEG-036',
       100, 100, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
@@ -69,7 +71,11 @@ BEGIN
       '9ef21000-0000-4000-8000-000000000029',
       '9ef21000-0000-4000-8000-000000000030',
       '9ef21000-0000-4000-8000-000000000031',
-      '9ef21000-0000-4000-8000-000000000032');
+      '9ef21000-0000-4000-8000-000000000032',
+      '9ef21000-0000-4000-8000-000000000036');
+  -- Legacy null-currency order: legs price in NGN.
+  UPDATE public.orders SET currency = NULL
+  WHERE id = '9ef21000-0000-4000-8000-000000000036';
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -133,7 +139,10 @@ BEGIN
     ('9ef22000-0000-4000-8000-000000000055', v_merchant_id,
       '9ef21000-0000-4000-8000-000000000032', 'refund', 100, 'NGN',
       'completed', 'paystack', 'pp-32-ngn',
-      jsonb_build_object('provider_refund_status', 'processed'));
+      jsonb_build_object('provider_refund_status', 'processed')),
+    ('9ef22000-0000-4000-8000-000000000062', v_merchant_id,
+      '9ef21000-0000-4000-8000-000000000036', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-36', '{}'::jsonb);
 
   -- Status calls read the label as the merchant manager; grants exist
   -- in-transaction and roll back with the check.
@@ -216,6 +225,16 @@ BEGIN
   WHERE id = '9ef21000-0000-4000-8000-000000000032';
   IF v_label <> 'paid' THEN
     RAISE EXCEPTION 'foreign sole leg flipped payment label to %', v_label;
+  END IF;
+  -- A null-currency order prices in NGN like the dashboard: the
+  -- manual record lands instead of raising currency review.
+  SELECT public.manage_order_refund(
+    '9ef21000-0000-4000-8000-000000000036', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'null-ccy-36', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'null-currency manual left remaining %',
+      v_result->>'remaining';
   END IF;
 END;
 $per_leg_manager$;

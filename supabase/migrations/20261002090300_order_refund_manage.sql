@@ -44,6 +44,11 @@ BEGIN
   -- forbidden responses would let any authenticated caller probe order
   -- existence across tenants.
   IF NOT FOUND THEN RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501'; END IF;
+  -- Legacy orders may carry a null or blank currency while their
+  -- payment legs price in NGN: normalize to the established default
+  -- before any comparison, or every manual attempt spuriously raises
+  -- payment_currency_requires_review. Mirrors the dashboard fallback.
+  v_order.currency := COALESCE(NULLIF(BTRIM(v_order.currency), ''), 'NGN');
   v_can_manage := EXISTS (SELECT 1 FROM public.merchants WHERE id=v_order.merchant_id AND user_id=v_actor)
     OR public.check_staff_permission(v_actor,v_order.merchant_id,'orders','refund');
   IF NOT (v_can_manage OR (p_action='status'

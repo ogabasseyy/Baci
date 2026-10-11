@@ -23,6 +23,11 @@ export const orderRefundSchema = z.discriminatedUnion('action', [
       reference: z.string().trim().min(1).max(100),
       note: z.string().trim().max(500).optional(),
       confirmed: z.literal(true),
+      // Optional leg pin: a Paystack attestation verifies against one
+      // capture's listing, so multi-leg orders must name the refunded
+      // leg instead of letting FIFO allocation guess it. Ownership
+      // and fit are validated inside the RPC.
+      paymentTransactionId: z.string().uuid().optional(),
     })
     .strict(),
 ]);

@@ -1,7 +1,8 @@
--- Manual-record and response helpers (3/5): the manager RPC's two
--- cohesive subroutines, extracted so each migration stays under the
--- 300-line limit. Called only from private.manage_order_refund (part 4),
--- which runs SECURITY DEFINER; both stay SECURITY INVOKER.
+-- Manual-record helper (3a/5): the manager RPC's record subroutine,
+-- split from the response helper (part 3b) so each migration stays
+-- under the 300-line limit. Called only from
+-- private.manage_order_refund (part 4), which runs SECURITY DEFINER;
+-- both stay SECURITY INVOKER.
 
 -- Records an attested manual transfer: validates the input, allocates
 -- the amount across allocatable payment legs (one row per leg sharing
@@ -9,6 +10,7 @@
 -- finalization when the balance hits zero. Returns the updated money
 -- and step state as jsonb; raises the same refund_* errors the
 -- manager surface maps.
+DROP FUNCTION IF EXISTS private.record_manual_order_refund(uuid,uuid,text,timestamptz,uuid,numeric,timestamptz,text,text,boolean,text,numeric,numeric,text,text,integer,integer);
 CREATE OR REPLACE FUNCTION private.record_manual_order_refund(
   p_order_id uuid,
   p_merchant_id uuid,
@@ -26,7 +28,8 @@ CREATE OR REPLACE FUNCTION private.record_manual_order_refund(
   p_step_status text,
   p_step_error text,
   p_step_attempts integer,
-  p_step_retry_requests integer
+  p_step_retry_requests integer,
+  p_leg_id uuid
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_payment record;
@@ -35,6 +38,9 @@ DECLARE
   v_leg_index integer := 0;
   v_allocatable_outstanding numeric;
   v_constraint text;
+  v_pinned_leg uuid;
+  v_pin_candidates uuid[];
+  v_pin_outstanding numeric;
   v_refunded numeric := p_refunded;
   v_remaining numeric := p_remaining;
   v_step_status text := p_step_status;
@@ -64,6 +70,68 @@ BEGIN
       AND transaction_type='payment' AND status='completed'
       AND upper(btrim(currency)) IS DISTINCT FROM upper(btrim(p_currency))) THEN
       RAISE EXCEPTION 'payment_currency_requires_review' USING ERRCODE='P0001';
+    END IF;
+    -- A Paystack attestation verifies against ONE capture's provider
+    -- listing, so FIFO allocation across several paystack legs can
+    -- link it to the wrong capture: verification then queries the
+    -- wrong listing and quarantines a valid refund. An explicit pin
+    -- allocates there first; otherwise a paystack record with
+    -- exactly one external leg still needing money is unambiguous
+    -- and pins itself; any other paystack record routes to review
+    -- instead of guessing. A pin to a non-allocatable leg, or a
+    -- paystack pin that cannot hold the whole amount, is rejected:
+    -- paystack attestations never spill across captures.
+    IF p_leg_id IS NOT NULL THEN
+      SELECT id INTO v_pinned_leg FROM public.transactions
+        WHERE id=p_leg_id AND order_id=p_order_id AND merchant_id=p_merchant_id
+        AND transaction_type='payment' AND status='completed'
+        AND (gateway IS NULL OR btrim(gateway)=''
+          OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS'));
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
+      END IF;
+      IF p_method='paystack' THEN
+        SELECT id INTO v_pinned_leg FROM public.transactions leg
+          WHERE leg.id=p_leg_id
+          AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
+            OR upper(btrim(leg.gateway)) NOT IN
+              ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'));
+        IF NOT FOUND THEN
+          RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
+        END IF;
+      END IF;
+    ELSIF p_method='paystack' THEN
+      SELECT array_agg(leg.id) INTO v_pin_candidates
+        FROM public.transactions leg
+        WHERE leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
+        AND leg.transaction_type='payment' AND leg.status='completed' AND leg.amount>0
+        AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
+          OR upper(btrim(leg.gateway)) NOT IN
+            ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
+        AND leg.amount>(SELECT COALESCE(SUM(r.amount),0) FROM public.transactions r
+          WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+          AND r.status IN ('completed','refunded')
+          AND upper(btrim(r.currency))=upper(btrim(leg.currency))
+          AND r.metadata->>'payment_transaction_id'=leg.id::text);
+      IF array_length(v_pin_candidates,1) IS DISTINCT FROM 1 THEN
+        RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
+      END IF;
+      v_pinned_leg := v_pin_candidates[1];
+    END IF;
+    -- A paystack attestation never spills across captures: the pinned
+    -- leg (explicit or unambiguous) must hold the whole amount.
+    IF p_method='paystack' AND v_pinned_leg IS NOT NULL THEN
+      SELECT GREATEST(leg.amount-COALESCE(sum(r.amount),0),0)
+        INTO v_pin_outstanding FROM public.transactions leg
+        LEFT JOIN public.transactions r
+          ON r.order_id=p_order_id AND r.transaction_type='refund'
+          AND r.status IN ('completed','refunded')
+          AND upper(btrim(r.currency))=upper(btrim(leg.currency))
+          AND r.metadata->>'payment_transaction_id'=leg.id::text
+        WHERE leg.id=v_pinned_leg GROUP BY leg.amount;
+      IF v_pin_outstanding<p_amount THEN
+        RAISE EXCEPTION 'refund_exceeds_remaining' USING ERRCODE='P0001';
+      END IF;
     END IF;
     -- An overfunded ledger (allocatable legs exceed what manuals
     -- can still record) can never finalize: recording would zero
@@ -105,7 +173,7 @@ BEGIN
       AND transaction_type='payment' AND status='completed'
       AND (gateway IS NULL OR btrim(gateway)=''
         OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS'))
-      ORDER BY created_at,id
+      ORDER BY CASE WHEN id=v_pinned_leg THEN 0 ELSE 1 END,created_at,id
     LOOP
       SELECT GREATEST(v_payment.amount-COALESCE(sum(amount),0),0) INTO v_leg_remaining
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
@@ -171,83 +239,10 @@ BEGIN
     'stepStatus',v_step_status,'stepError',v_step_error,
     'stepAttempts',v_step_attempts,'stepRetryRequests',v_step_retry_requests);
 END; $$;
-REVOKE ALL ON FUNCTION private.record_manual_order_refund(uuid,uuid,text,timestamptz,uuid,numeric,timestamptz,text,text,boolean,text,numeric,numeric,text,text,integer,integer)
+REVOKE ALL ON FUNCTION private.record_manual_order_refund(uuid,uuid,text,timestamptz,uuid,numeric,timestamptz,text,text,boolean,text,numeric,numeric,text,text,integer,integer,uuid)
   FROM PUBLIC,anon,authenticated;
 -- Mirrors capped_refund_coverage_v1: service_role fires the manager,
 -- and authenticated EXECUTE keeps any hypothetical direct call on the
 -- clean schema-USAGE denial instead of the crashing function-ACL path.
-GRANT EXECUTE ON FUNCTION private.record_manual_order_refund(uuid,uuid,text,timestamptz,uuid,numeric,timestamptz,text,text,boolean,text,numeric,numeric,text,text,integer,integer)
-  TO service_role, authenticated;
-
--- Shapes the manager response: bounded refund history plus the
--- bounded audit-event tail, the derived status label, and the
--- capability flags. Pure read over the computed money/step state.
-CREATE OR REPLACE FUNCTION private.refund_status_response(
-  p_order_id uuid,
-  p_merchant_id uuid,
-  p_currency text,
-  p_amount_paid numeric,
-  p_refunded numeric,
-  p_remaining numeric,
-  p_pending numeric,
-  p_reversed_internal numeric,
-  p_step_status text,
-  p_step_error text,
-  p_step_attempts integer,
-  p_step_retry_requests integer,
-  p_can_manage boolean,
-  p_manual_partial boolean
-) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
-DECLARE
-  v_history jsonb;
-BEGIN
-  -- Bound like the audit events: one row per partial manual with 30s
-  -- status polling would otherwise grow every response unbounded.
-  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'amount',h.amount,'status',h.status,
-    'method',COALESCE(h.metadata->>'method',h.gateway),
-    'reference',COALESCE(h.metadata->>'reference',h.gateway_reference),
-    'date',COALESCE(h.metadata->>'refunded_at',to_json(h.created_at)#>>'{}'),
-    'recorded_by',h.metadata->>'recorded_by')
-    ORDER BY h.created_at DESC),'[]') INTO v_history
-    FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at
-      FROM public.transactions
-      WHERE order_id=p_order_id AND merchant_id=p_merchant_id AND transaction_type='refund'
-      ORDER BY created_at DESC LIMIT 50) h;
-  RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
-    'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
-    'reversedInternal',p_reversed_internal,
-    -- A terminal quarantined step reports review before anything
-    -- else: delivery_uncertain rows never resume, so pending
-    -- evidence (or even full coverage) must not relabel them as
-    -- processing or refunded and suppress the review guidance.
-    'status',CASE WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
-      WHEN p_pending>0 THEN 'processing'
-      WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
-      WHEN p_step_status='claimed' THEN 'processing'
-      WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
-      WHEN p_step_status='failed' THEN 'failed' ELSE 'not_started' END,
-    -- Raw worker/provider text never leaves the RPC: direct REST
-    -- callers bypass the route masking, so map to the fixed labels
-    -- here and derive the Paystack review signal as structured
-    -- data (substring, mirroring the retired route rule: any
-    -- mention of the provider means the review concerns Paystack).
-    'error',private.describe_refund_worker_error_v1(p_step_error),
-    'needsPaystackCheck',COALESCE(POSITION('paystack' IN LOWER(p_step_error))>0,FALSE),
-    'attempts',COALESCE(p_step_attempts,0),
-    'retryRequests',COALESCE(p_step_retry_requests,0),'history',v_history,
-    'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
-      'details',x.details,'date',x.created_at,'actor',x.actor_id) ORDER BY x.created_at DESC)
-      FROM (SELECT id,action,details,created_at,actor_id FROM public.order_refund_events
-        WHERE order_id=p_order_id AND merchant_id=p_merchant_id
-        ORDER BY created_at DESC LIMIT 50) x),'[]'::jsonb),
-    'canRetry',p_step_status='failed' AND p_step_error IS NOT NULL AND p_remaining>0 AND p_pending=0
-      AND NOT p_manual_partial,
-    'canRecordManual',p_remaining>0 AND p_pending=0,
-    'canManageRefunds',p_can_manage
-      AND COALESCE(p_step_status,'') NOT IN ('claimed','delivery_uncertain'));
-END; $$;
-REVOKE ALL ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean)
-  FROM PUBLIC,anon,authenticated;
--- Same rationale as record_manual_order_refund above.
-GRANT EXECUTE ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean)
+GRANT EXECUTE ON FUNCTION private.record_manual_order_refund(uuid,uuid,text,timestamptz,uuid,numeric,timestamptz,text,text,boolean,text,numeric,numeric,text,text,integer,integer,uuid)
   TO service_role, authenticated;

@@ -155,6 +155,36 @@ describe('order refund route', () => {
       })
     );
   });
+  it('forwards an optional leg pin for manual refunds', async () => {
+    const legId = '9ef12000-0000-4000-8000-000000000044';
+    const body = {
+      action: 'manual',
+      amount: 100,
+      refundedAt: '2026-09-28T12:00:00Z',
+      reference: 'ps-2',
+      method: 'paystack',
+      confirmed: true,
+      paymentTransactionId: legId,
+    };
+    expect((await POST(request(body), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'manage_order_refund',
+      expect.objectContaining({ p_payment_transaction_id: legId })
+    );
+    const unpinned = {
+      action: 'manual',
+      amount: 100,
+      refundedAt: '2026-09-28T12:00:00Z',
+      reference: 'ps-2',
+      method: 'paystack',
+      confirmed: true,
+    };
+    expect((await POST(request(unpinned), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'manage_order_refund',
+      expect.objectContaining({ p_payment_transaction_id: null })
+    );
+  });
   it('normalizes empty manual-refund notes to null', async () => {
     const body = {
       action: 'manual',

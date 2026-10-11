@@ -1,17 +1,19 @@
 -- Manager RPC (4/5): private.manage_order_refund owns auth, coverage
 -- math, and the retry path; the manual-record branch and the response
--- shape live in the part-3 helpers. The public delegate and the status
--- trigger follow in part 5.
+-- shape live in the part-3 helpers (3a record, 3b response). The
+-- public delegate and the status trigger follow in part 5.
 
--- The confirmation parameter changes the signature: without a DROP the
--- 7-argument overload would survive beside the new one, leaving an
--- unattested entry point behind.
+-- The confirmation and leg-pin parameters change the signature:
+-- without DROPs the older overloads would survive beside the new
+-- one, leaving unattested entry points behind (and the 1-argument
+-- status call would stop resolving uniquely).
 DROP FUNCTION IF EXISTS private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text);
+DROP FUNCTION IF EXISTS private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean);
 CREATE OR REPLACE FUNCTION private.manage_order_refund(
   p_order_id uuid, p_action text DEFAULT 'status', p_amount numeric DEFAULT NULL,
   p_refunded_at timestamptz DEFAULT NULL, p_method text DEFAULT NULL,
   p_reference text DEFAULT NULL, p_note text DEFAULT NULL,
-  p_confirmed boolean DEFAULT NULL
+  p_confirmed boolean DEFAULT NULL, p_payment_transaction_id uuid DEFAULT NULL
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_actor uuid := auth.uid();
@@ -203,7 +205,12 @@ BEGIN
     IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0) THEN
       RAISE EXCEPTION 'refund_processing_or_requires_review' USING ERRCODE='P0001';
     END IF;
-    IF p_action <> 'status' AND v_remaining<=0 THEN
+    -- A failed step under full coverage may still retry: the money
+    -- is home but trusted finalization never ran, and rearming is
+    -- its only recovery (covered legs never re-initiate).
+    IF p_action <> 'status' AND v_remaining<=0
+      AND NOT (p_action='retry' AND v_refunded>0
+        AND v_step_status='failed' AND v_step_error IS NOT NULL) THEN
       RAISE EXCEPTION 'already_refunded' USING ERRCODE='P0001';
     END IF;
   END IF;
@@ -230,11 +237,14 @@ BEGIN
   ELSIF p_action='manual' THEN
     -- Allocation and zero-balance finalization live in the record
     -- helper (part 3); unpack its updated money/step state here.
+    -- The leg pin is manual-only: the helper validates and allocates
+    -- by it, while retry ignores it (rearming carries no amount).
     v_manual := private.record_manual_order_refund(p_order_id,
       v_order.merchant_id,v_order.currency,v_order.cancelled_at,v_actor,
       p_amount,p_refunded_at,p_method,p_note,p_confirmed,v_reference,
       v_remaining,v_refunded,
-      v_step_status,v_step_error,v_step_attempts,v_step_retry_requests);
+      v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,
+      p_payment_transaction_id);
     v_refunded := (v_manual->>'refunded')::numeric;
     v_remaining := (v_manual->>'remaining')::numeric;
     v_step_status := v_manual->>'stepStatus';
@@ -267,5 +277,5 @@ BEGIN
     v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,
     v_can_manage,v_manual_partial);
 END; $$;
-REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
+REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   FROM PUBLIC,anon,authenticated;

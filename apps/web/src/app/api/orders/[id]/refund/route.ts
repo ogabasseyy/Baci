@@ -114,6 +114,7 @@ async function handle(
         p_reference: body.reference,
         p_note: body.note ? body.note : null,
         p_confirmed: body.confirmed,
+        p_payment_transaction_id: body.paymentTransactionId ?? null,
       });
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);

@@ -1203,7 +1203,16 @@ BEGIN
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000041',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-041',
-      100, 100, 'paid', 'cancelled', pg_catalog.now());
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000042',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-042',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000043',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-043',
+      200, 200, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000044',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-044',
+      200, 200, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
   WHERE id = '9ef11000-0000-4000-8000-000000000040';
@@ -1248,7 +1257,34 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000054',
       '9ef10100-0000-4000-8000-000000000001',
       '9ef11000-0000-4000-8000-000000000041', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'pp-41', '{}'::jsonb);
+      'completed', 'paystack', 'pp-41', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000055',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000042', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-42', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000056',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000042', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777002',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000055',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000057',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000043', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-43a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000058',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000043', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-43b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000059',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000044', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-44a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000060',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000044', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-44b', '{}'::jsonb);
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1267,7 +1303,11 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000041',
       '9ef10100-0000-4000-8000-000000000001', 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000041', 5,
-      'Insufficient balance');
+      'Insufficient balance'),
+    ('9ef11000-0000-4000-8000-000000000042',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000042', 5,
+      'settlement_wallet_missing');
   -- A null-currency order's self-terminal NGN leg flips the label:
   -- without the NGN default the currency comparison is NULL and
   -- the leg never counts.
@@ -1363,8 +1403,152 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
   END;
+  -- Full coverage with a failed finalize reports failed (not
+  -- refunded) and stays retryable: rearming reruns trusted
+  -- finalization, the only recovery when the claim rolled back.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000042'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'failed' THEN
+    RAISE EXCEPTION 'failed finalize reports %, want failed',
+      v_result->>'status';
+  END IF;
+  IF NOT (v_result->>'canRetry')::boolean THEN
+    RAISE EXCEPTION 'failed finalize is not retryable';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000042', 'retry'
+  ) INTO v_result;
+  IF (v_result->>'retryRequests')::integer <> 1 THEN
+    RAISE EXCEPTION 'finalize rerun was not counted';
+  END IF;
+  -- A Paystack attestation without a leg pin routes to review when
+  -- several external legs still need money: FIFO would link the
+  -- wrong capture and verification would quarantine a valid refund.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'paystack', 'ambiguous-43', NULL, true);
+    RAISE EXCEPTION 'ambiguous paystack record was FIFO-linked';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
+  END;
+  -- A pin to a missing leg is rejected as invalid input.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'bad-pin-43', NULL, true,
+      p_payment_transaction_id => 'ffffffff-0000-4000-8000-000000000000');
+    RAISE EXCEPTION 'dangling leg pin was accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'invalid_manual_refund' THEN RAISE; END IF;
+  END;
+  -- A paystack attestation larger than its pinned leg is rejected:
+  -- attestations never spill across captures.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000043', 'manual', 150,
+      '2026-09-28T12:00:00Z', 'paystack', 'over-pin-43', NULL, true,
+      p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000057');
+    RAISE EXCEPTION 'oversized pinned attestation was accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
+  END;
+  -- A pinned Paystack attestation lands on its leg as in-flight
+  -- money: the claim pends provider verification, so the balance
+  -- stays open while pending carries it (link asserted below).
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'paystack', 'pin-2', NULL, true,
+    p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000058'
+  ) INTO v_result;
+  IF (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 200 THEN
+    RAISE EXCEPTION 'pinned attestation left pending % remaining %',
+      v_result->>'pending', v_result->>'remaining';
+  END IF;
+  -- The unverified attestation pends further records until the
+  -- provider confirms it: the processing guard layers over the pin.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'paystack', 'pin-1', NULL, true,
+      p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000057');
+    RAISE EXCEPTION 'second pin slipped past pending evidence';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+  -- A non-paystack pin allocates pinned-first, then spills FIFO.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000044', 'manual', 150,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'spill-1', NULL, true,
+    p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000060'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 50 THEN
+    RAISE EXCEPTION 'spillover record left remaining %', v_result->>'remaining';
+  END IF;
+  -- A sole outstanding external leg pins itself: no review, no
+  -- guess. The attestation still pends verification beside the 30
+  -- already covered (link asserted below).
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000035', 'manual', 70,
+    '2026-09-28T12:00:00Z', 'paystack', 'implicit-pin-35', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'pending')::numeric <> 70
+    OR (v_result->>'remaining')::numeric <> 70 THEN
+    RAISE EXCEPTION 'implicit pin left pending % remaining %',
+      v_result->>'pending', v_result->>'remaining';
+  END IF;
 END;
 $refund_round33_status$;
+
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_round36_links$
+DECLARE
+  v_link text;
+  v_count integer;
+BEGIN
+  -- The pinned row links its named leg.
+  SELECT metadata->>'payment_transaction_id' INTO v_link
+  FROM public.transactions
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000043'
+  AND gateway_reference = 'pin-2#1';
+  IF v_link <> '9ef12000-0000-4000-8000-000000000058' THEN
+    RAISE EXCEPTION 'pin-2 linked %, want leg 058', v_link;
+  END IF;
+  -- The spillover split pinned-first: 100 to leg 060, 50 to leg 059.
+  SELECT COUNT(*) INTO v_count FROM public.transactions
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000044'
+  AND gateway_reference = 'spill-1#1'
+  AND metadata->>'payment_transaction_id' = '9ef12000-0000-4000-8000-000000000060'
+  AND amount = 100;
+  IF v_count <> 1 THEN RAISE EXCEPTION 'spillover first slice mislinked'; END IF;
+  SELECT COUNT(*) INTO v_count FROM public.transactions
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000044'
+  AND gateway_reference = 'spill-1#2'
+  AND metadata->>'payment_transaction_id' = '9ef12000-0000-4000-8000-000000000059'
+  AND amount = 50;
+  IF v_count <> 1 THEN RAISE EXCEPTION 'spillover second slice mislinked'; END IF;
+  -- The implicit pin resolved to the sole outstanding leg.
+  SELECT metadata->>'payment_transaction_id' INTO v_link
+  FROM public.transactions
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000035'
+  AND gateway_reference = 'implicit-pin-35#1';
+  IF v_link <> '9ef12000-0000-4000-8000-000000000048' THEN
+    RAISE EXCEPTION 'implicit pin linked %, want leg 048', v_link;
+  END IF;
+END;
+$refund_round36_links$;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000002',
+  true
+);
 
 DO $refund_history_bound$
 DECLARE
@@ -1854,7 +2038,7 @@ BEGIN
 
   -- Anonymous callers and direct private access stay denied.
   IF pg_catalog.has_function_privilege('anon',
-    'public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)',
+    'public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'anonymous callers can execute the refund RPC';
   END IF;
@@ -1862,7 +2046,7 @@ BEGIN
     RAISE EXCEPTION 'private schema boundary open to authenticated';
   END IF;
   IF pg_catalog.has_function_privilege('authenticated',
-    'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)',
+    'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'direct private refund RPC allowed';
   END IF;

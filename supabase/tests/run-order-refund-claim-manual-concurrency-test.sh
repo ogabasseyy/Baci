@@ -124,6 +124,7 @@ if [ "${SKIP_REFRESH:-0}" != '1' ]; then
   psql -X -q -v ON_ERROR_STOP=1 \
     -f "$repo_root/supabase/migrations/20261002090100_order_refund_coverage.sql" \
     -f "$repo_root/supabase/migrations/20261002090200_order_refund_record_helpers.sql" \
+    -f "$repo_root/supabase/migrations/20261002090250_order_refund_response.sql" \
     -f "$repo_root/supabase/migrations/20261002090300_order_refund_manage.sql" \
     -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"
 fi

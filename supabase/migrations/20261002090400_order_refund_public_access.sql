@@ -5,17 +5,18 @@
 -- Preserve the repository boundary: authenticated callers have no private-schema usage.
 -- This narrow delegate executes only the private function, which checks auth.uid and permissions.
 DROP FUNCTION IF EXISTS public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text);
+DROP FUNCTION IF EXISTS public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean);
 CREATE OR REPLACE FUNCTION public.manage_order_refund(
   p_order_id uuid,p_action text DEFAULT 'status',p_amount numeric DEFAULT NULL,
   p_refunded_at timestamptz DEFAULT NULL,p_method text DEFAULT NULL,
   p_reference text DEFAULT NULL,p_note text DEFAULT NULL,
-  p_confirmed boolean DEFAULT NULL
+  p_confirmed boolean DEFAULT NULL,p_payment_transaction_id uuid DEFAULT NULL
 ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$
- SELECT private.manage_order_refund(p_order_id,p_action,p_amount,p_refunded_at,p_method,p_reference,p_note,p_confirmed);
+ SELECT private.manage_order_refund(p_order_id,p_action,p_amount,p_refunded_at,p_method,p_reference,p_note,p_confirmed,p_payment_transaction_id);
 $$;
-REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
+REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean)
+GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   TO authenticated;
 
 -- A provider confirmation updates payment status without changing amount paid.

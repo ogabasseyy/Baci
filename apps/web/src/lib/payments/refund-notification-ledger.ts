@@ -217,6 +217,42 @@ export async function refundNotificationLedgerAmount({
     (sum, leg) => sum + Number(leg.amount),
     0
   );
+  // Internal reversals return outside the refund ledger — wallet
+  // reversals credit customer_wallets, savings reversals restore the
+  // goal — but the refund manager counts both as refunded coverage,
+  // so the notification total must too or mixed orders understate
+  // (a ₦50 cash leg plus a ₦50 wallet reversal would read ₦50 of
+  // ₦100 returned). Mirror the manager's predicates verbatim: the
+  // wallet source_type and the savings reversed_at key.
+  const { data: walletRows, error: walletError } = await supabase
+    .from('customer_wallet_transactions')
+    .select('amount')
+    .eq('source_id', order.id)
+    .eq('merchant_id', merchantId)
+    .eq('source_type', 'order_reversal');
+  if (walletError) throw new Error('refund_notification_ledger_lookup_failed');
+  const { data: savingsRows, error: savingsError } = await supabase
+    .from('customer_savings_redemptions')
+    .select('amount, metadata')
+    .eq('order_id', order.id)
+    .eq('merchant_id', merchantId);
+  if (savingsError) throw new Error('refund_notification_ledger_lookup_failed');
+  const reversalAmount =
+    (walletRows ?? []).reduce(
+      (sum: number, row: { amount: number }) => sum + Number(row.amount),
+      0
+    ) +
+    (savingsRows ?? [])
+      .filter(
+        (row: { metadata: unknown }) =>
+          row.metadata !== null &&
+          typeof row.metadata === 'object' &&
+          'reversed_at' in row.metadata
+      )
+      .reduce(
+        (sum: number, row: { amount: number }) => sum + Number(row.amount),
+        0
+      );
   // Normalize the order currency once: a legacy padded code must
   // compare equal AND format — Intl.NumberFormat throws on ' NGN '.
   const orderCurrency = normalizeCurrencyCode(order.currency) || 'NGN';
@@ -230,5 +266,5 @@ export async function refundNotificationLedgerAmount({
   ) {
     throw new Error('refund_notification_ledger_mismatch');
   }
-  return formatAmount(refundAmount, orderCurrency);
+  return formatAmount(refundAmount + reversalAmount, orderCurrency);
 }

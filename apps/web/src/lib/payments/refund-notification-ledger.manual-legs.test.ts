@@ -35,6 +35,45 @@ describe('refundNotificationLedgerAmount manual legs', () => {
     expect(amount).toContain('100');
   });
 
+  it('adds wallet and savings reversals to the notification total', async () => {
+    // A ₦50 cash leg plus a ₦30 wallet reversal and a ₦20 reversed
+    // savings goal reads ₦100: internal reversals return outside
+    // the refund ledger but count as refunded coverage. The
+    // unreversed savings goal stays out.
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 50,
+          currency: 'NGN',
+          gateway: 'cash',
+          id: 'pay-cash',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 50,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-cash' },
+        },
+      ],
+      savingsReversals: [
+        { amount: 20, metadata: { reversed_at: '2026-09-28T12:00:00Z' } },
+        { amount: 999, metadata: {} },
+      ],
+      walletReversals: [{ amount: 30 }],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
   it('includes a manually covered cash leg beside provider legs', async () => {
     const { supabase } = database({
       payments: [

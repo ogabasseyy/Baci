@@ -6,10 +6,11 @@
 // shrinkage or growth fails before expectations derive. There is no
 // unpinned mode: an omitted pin fails instead of certifying an unknown
 // sample. Extracted from preflight-offline.mjs under the 300-line ceiling.
+import { MAX_INVENTORY_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   fail,
   pass,
-  readJson,
+  readBoundedJson,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
 export async function checkSamplePin({
@@ -29,7 +30,7 @@ export async function checkSamplePin({
   }
   let expected;
   try {
-    expected = await readJson(expectSample);
+    expected = await readBoundedJson(expectSample, MAX_INVENTORY_BYTES);
   } catch (error) {
     fail(
       checks,

@@ -26,4 +26,11 @@ describe('lab stores mirror', () => {
     await writeFile(path, JSON.stringify([entry, entry]));
     await expect(readLabStores(path)).rejects.toThrow(/duplicate entries/);
   });
+
+  it('rejects an oversized mirror on size instead of buffering it', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-lab-stores-'));
+    const path = join(dir, 'giant.json');
+    await writeFile(path, Buffer.alloc(1024 * 1024 + 1, 0x5b));
+    await expect(readLabStores(path)).rejects.toThrow(/byte budget/);
+  });
 });

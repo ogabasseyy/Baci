@@ -1207,3 +1207,88 @@ test('commitGeneration binds the manifest to the validated job', async () => {
     /does not match/
   );
 });
+
+test('commitGeneration refuses planted commit and generations symlinks', async () => {
+  const { mkdir, readdir, symlink } = await import('node:fs/promises');
+  async function committable() {
+    const { expectedSha256, ladder, root, stagingDir } =
+      await realLadderStaging();
+    const encoderIdentity = buildEncoderIdentity();
+    const generationId = generationIdFor({
+      encoderIdentity,
+      job: JOB,
+      recipeId: 'pilot-r1-0123456789abcdef',
+      sourceSha256: expectedSha256,
+    });
+    const manifest = validManifest({
+      assetId: JOB.assetId,
+      encoder: encoderIdentity,
+      merchantId: JOB.merchantId,
+      source: {
+        bytes: 85,
+        format: 'png',
+        orientedHeight: ladder.source.orientedHeight,
+        orientedWidth: ladder.source.orientedWidth,
+        sha256: expectedSha256,
+      },
+      tiers: ladder.tiers.map((tier) => ({
+        actualWidth: tier.actualWidth,
+        bytes: tier.bytes,
+        contentType: tier.contentType,
+        format: tier.format,
+        height: tier.height,
+        path: outputFileName(tier.sha256, tier.format),
+        quality: tier.quality,
+        requestedWidth: tier.requestedWidth,
+        sha256: tier.sha256,
+        width: tier.width,
+      })),
+    });
+    const files = ladder.tiers
+      .filter(
+        (tier, index, all) =>
+          all.findIndex((other) => other.path === tier.path) === index
+      )
+      .map((tier) => ({
+        from: tier.path,
+        name: outputFileName(tier.sha256, tier.format),
+      }));
+    return {
+      files,
+      generationId,
+      job: { ...JOB, expectedSha256 },
+      manifest,
+      outputRoot: root,
+      stagingDir,
+    };
+  }
+  const codeIs = (code) => (error) => {
+    assert.equal(error?.code, code);
+    return true;
+  };
+  // A planted staging/commit symlink would sail through recursive
+  // creation and push the renames outside the output root.
+  {
+    const commit = await committable();
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-outside-'));
+    await symlink(outside, join(commit.stagingDir, 'commit'));
+    await assert.rejects(
+      () => commitGeneration(commit),
+      codeIs('unsafe-commit-directory')
+    );
+    assert.deepEqual(await readdir(outside), []);
+  }
+  // A planted generations symlink would publish the generation outside
+  // the output root at the visibility rename.
+  {
+    const commit = await committable();
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-outside-'));
+    await mkdir(join(outside, 'trap'), { recursive: true });
+    await symlink(join(outside, 'trap'), join(commit.outputRoot, 'generations'));
+    await assert.rejects(
+      () => commitGeneration(commit),
+      codeIs('unsafe-generations-directory')
+    );
+    assert.deepEqual(await readdir(join(outside, 'trap')), []);
+  }
+});

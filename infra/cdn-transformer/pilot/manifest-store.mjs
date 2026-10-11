@@ -8,7 +8,7 @@ import {
   lstat,
   mkdir,
   open,
-  readFile,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
@@ -17,6 +17,7 @@ import { readUpToBytes, removeOwnedStaging } from './disk-guards.mjs';
 import { generationIdFor } from './generation-identity.mjs';
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { generationDir, loadGeneration } from './manifest-store-load.mjs';
+import { tryReuseGeneration } from './manifest-store-reuse.mjs';
 
 export { loadGeneration };
 
@@ -35,6 +36,24 @@ async function defaultFsync(path) {
 // than publish a potentially non-durable or corrupted result.
 function isUnsupportedSyncError(error) {
   return error?.code === 'ENOSYS' || error?.code === 'EINVAL';
+}
+
+// Owned-directory verification, mirroring prepareOwnedStaging: the path
+// must be a real directory resolving exactly to its expected location.
+// A planted symlink here would sail through recursive creation and push
+// the commit renames (or the published generation) outside the tree.
+async function assertOwnedDir(dir, expectedReal, label) {
+  const info = await lstat(dir);
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    (await realpath(dir)) !== expectedReal
+  ) {
+    throw new PilotManifestError(
+      `unsafe-${label}-directory`,
+      `${label} must be a confined directory, not a symlink`
+    );
+  }
 }
 
 export async function commitGeneration({
@@ -124,67 +143,29 @@ export async function commitGeneration({
   if (exists) {
     // Never overwrite: reuse only after full validation AND a complete
     // identity comparison with the requested generation.
-    const loaded = await loadGeneration(outputRoot, generationId);
-    const sameEncoder =
-      loaded.manifest.encoder.name === valid.encoder.name &&
-      loaded.manifest.encoder.sharpVersion === valid.encoder.sharpVersion &&
-      loaded.manifest.encoder.libvipsVersion === valid.encoder.libvipsVersion;
-    if (
-      loaded.manifest.merchantId !== valid.merchantId ||
-      loaded.manifest.assetId !== valid.assetId ||
-      loaded.manifest.role !== valid.role ||
-      loaded.manifest.source.sha256 !== valid.source.sha256 ||
-      loaded.manifest.recipeId !== valid.recipeId ||
-      !sameEncoder
-    ) {
-      throw new PilotManifestError(
-        'generation-misbound',
-        'existing generation identity does not match the requested generation'
-      );
-    }
-    // Byte-identity before reuse: the id pins sharp/libvips versions but
-    // not codec builds or architecture, so a generation directory reused
-    // or copied from another machine can hold different lossy bytes under
-    // the same id. The job reports the freshly encoded tiers, so reusing
-    // mismatched retained bytes would certify output the gate never saw.
-    // Both manifests are zod-normalized, so the serialized ladders
-    // compare canonically. Mismatch fails closed: clear the foreign
-    // generation directory and re-run on one encoder build.
-    if (JSON.stringify(loaded.manifest.tiers) !== JSON.stringify(valid.tiers)) {
-      throw new PilotManifestError(
-        'generation-misbound',
-        'existing generation bytes differ from the requested generation'
-      );
-    }
-    // A failed reuse-path removal must surface: the caller skips its own
-    // removal for reused generations, so a swallowed error would strand a
-    // complete staging directory on every reuse until the disk floor stops
-    // the pipeline. Returned (not thrown): the generation is published and
-    // reusable, so the caller records a warning and retries cleanup.
-    let stagingCleanupError = null;
-    try {
-      await removeStaging(outputRoot, stagingDir);
-    } catch (error) {
-      stagingCleanupError =
-        `reuse-path staging cleanup failed (${error?.code ?? 'unknown'}): ` +
-        `${error instanceof Error ? error.message : String(error)}`.slice(
-          0,
-          200
-        ) +
-        `; generation ${generationId} is published and reusable`;
-    }
-    // Reuse reports the publish-time verdict, never an assumed 'synced':
-    // a generation published where fsync is unsupported must not gain
-    // power-loss durability by being read later.
-    return {
-      durability: await readPersistedDurability(dir),
-      path: dir,
-      reused: true,
-      ...(stagingCleanupError ? { stagingCleanupError } : {}),
-    };
+    return tryReuseGeneration({
+      dir,
+      generationId,
+      job,
+      outputRoot,
+      removeStaging,
+      stagingDir,
+      valid,
+    });
   }
   const commitDir = join(stagingDir, 'commit');
-  await (deps.mkdir ?? mkdir)(commitDir, { recursive: true });
+  // Exclusive create: a pre-planted symlink must fail here instead of
+  // being followed by the renames below. EEXIST (a crash-recovery rerun
+  // finding its own directory) is verified, not trusted.
+  try {
+    await (deps.mkdir ?? mkdir)(commitDir);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') {
+      throw error;
+    }
+  }
+  const realStaging = await realpath(stagingDir);
+  await assertOwnedDir(commitDir, join(realStaging, 'commit'), 'commit');
   for (const name of uniquePaths) {
     await rename(stagedByName.get(name), join(commitDir, name));
   }
@@ -209,9 +190,19 @@ export async function commitGeneration({
     // honestly reported instead of claimed on this filesystem.
     durability = 'sync-unsupported';
   }
-  await (deps.mkdir ?? mkdir)(join(outputRoot, 'generations'), {
-    recursive: true,
-  });
+  const generationsDir = join(outputRoot, 'generations');
+  await (deps.mkdir ?? mkdir)(generationsDir, { recursive: true });
+  // Re-verify both directories immediately before the visibility rename:
+  // either could have been swapped for a symlink after creation, and the
+  // rename would then publish outside the output root (or publish the
+  // symlink itself as the generation).
+  const realRoot = await realpath(outputRoot);
+  await assertOwnedDir(
+    generationsDir,
+    join(realRoot, 'generations'),
+    'generations'
+  );
+  await assertOwnedDir(commitDir, join(realStaging, 'commit'), 'commit');
   // Recheck the job deadline immediately before the visibility rename:
   // verification and the fsync loop above can consume the remaining
   // budget, and publishing an overdue generation (then reporting the job
@@ -274,24 +265,4 @@ export async function commitGeneration({
     JSON.stringify({ durability })
   ).catch(() => undefined);
   return { durability, path: dir, reused: false };
-}
-
-async function readPersistedDurability(dir) {
-  try {
-    const parsed = JSON.parse(
-      await readFile(join(dir, 'durability.json'), 'utf8')
-    );
-    if (
-      parsed?.durability === 'synced' ||
-      parsed?.durability === 'sync-unsupported'
-    ) {
-      return parsed.durability;
-    }
-  } catch {
-    // Missing or corrupt provenance (pre-sidecar generations, operator
-    // deletion, torn write) fails honest: durability is unknown, not
-    // 'synced'. This is advisory reporting only — reuse validation still
-    // runs through loadGeneration plus the identity comparison above.
-  }
-  return 'unknown';
 }

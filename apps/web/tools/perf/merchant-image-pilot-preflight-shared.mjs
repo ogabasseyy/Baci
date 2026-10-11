@@ -2,7 +2,7 @@
 // small predicates. Every preflight module builds on these; nothing here
 // knows about inventories, manifests, or served pages.
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PILOT_UUID_PATTERN } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
@@ -117,13 +117,9 @@ export function pass(checks, name) {
   checks.push({ name, ok: true });
 }
 
-export async function readJson(path) {
-  return JSON.parse(await readFile(path, 'utf8'));
-}
-
 // Bounded JSON read: at most maxBytes + 1 stream through the handle, so
 // a huge corrupt file rejects on size instead of exhausting the gate
-// before validation runs. Throws on overflow, like readJson on bad JSON.
+// before validation runs. Throws on overflow or unparsable JSON.
 export async function readBoundedJson(path, maxBytes) {
   const { bytes, truncated } = await readUpToBytes(path, maxBytes);
   if (truncated) {

@@ -6,7 +6,8 @@
 // source of truth.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readJson } from './merchant-image-pilot-preflight-shared.mjs';
+import { MAX_INVENTORY_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { readBoundedJson } from './merchant-image-pilot-preflight-shared.mjs';
 
 export const DEFAULT_LAB_STORES = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -14,7 +15,7 @@ export const DEFAULT_LAB_STORES = join(
 );
 
 export async function readLabStores(path) {
-  const parsed = await readJson(path);
+  const parsed = await readBoundedJson(path, MAX_INVENTORY_BYTES);
   if (
     !Array.isArray(parsed) ||
     !parsed.every(

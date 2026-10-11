@@ -74,18 +74,14 @@ export async function assertServedDescriptors(
         continue;
       }
       // Loader-param URLs (?w&q from the original renderers) name a
-      // REQUESTED width, not the encoded width: the staged file must
-      // exist and decode, but no descriptor match applies.
-      if (path !== base) {
-        try {
-          await sharp(join(publicDir, base)).metadata();
-        } catch {
-          failures.push(`${name}: staged file does not decode: "${base}"`);
-        }
-        continue;
-      }
-      if (candidate.descriptor === null) {
-        // Bare lab URLs (no-op control srcSets, standalone img src):
+      // REQUESTED width, not the encoded width — but only control
+      // originals are loader-rendered. A queried generation URL (a
+      // cache-buster) still claims its descriptor against the static
+      // staged file, so it falls through to verification below.
+      const loaderExempt =
+        path !== base && base.startsWith('/__pilot/originals/');
+      if (loaderExempt || candidate.descriptor === null) {
+        // Exempt or bare (no-op control srcSets, standalone img src):
         // the staged file must exist and decode.
         try {
           await sharp(join(publicDir, base)).metadata();

@@ -101,7 +101,10 @@ export function verifyCacheProvenance(text, pages, sourceLabel) {
 // same-navigation binding a stale screenshot from another iteration
 // (e.g. DPR-2) can certify the wrong HAR (e.g. DPR-1). The runner
 // artifact binds the exact screenshot bytes (sha256) to the HAR page's
-// single-use _meta.runId within the capture window.
+// single-use _meta.runId within the capture window. It also records the
+// run's CSS viewport and deviceScaleFactor: PNG pixels only prove the
+// viewport×DPR product, so a 750x1334@1 run would otherwise certify a
+// 375x667@2 expectation. The gate compares each independently.
 export function verifyScreenshotProvenance(
   text,
   pages,
@@ -135,11 +138,20 @@ export function verifyScreenshotProvenance(
     typeof artifact.screenshotSha256 !== 'string' ||
     !/^[0-9a-f]{64}$/.test(artifact.screenshotSha256) ||
     typeof artifact.capturedAt !== 'string' ||
-    !Number.isFinite(Date.parse(artifact.capturedAt))
+    !Number.isFinite(Date.parse(artifact.capturedAt)) ||
+    !artifact.viewport ||
+    typeof artifact.viewport !== 'object' ||
+    !Number.isInteger(artifact.viewport.width) ||
+    artifact.viewport.width <= 0 ||
+    !Number.isInteger(artifact.viewport.height) ||
+    artifact.viewport.height <= 0 ||
+    typeof artifact.deviceScaleFactor !== 'number' ||
+    !Number.isFinite(artifact.deviceScaleFactor) ||
+    artifact.deviceScaleFactor <= 0
   ) {
     return {
       error:
-        'screenshot-provenance artifact must be a runner screenshot-capture record {event, tool, runId, screenshotSha256, capturedAt}',
+        'screenshot-provenance artifact must be a runner screenshot-capture record {event, tool, runId, screenshotSha256, capturedAt, viewport{width,height}, deviceScaleFactor}',
       ok: false,
     };
   }
@@ -197,5 +209,13 @@ export function verifyScreenshotProvenance(
       ok: false,
     };
   }
-  return { ok: true, summary: `${artifact.tool}@${artifact.capturedAt}` };
+  return {
+    deviceScaleFactor: artifact.deviceScaleFactor,
+    ok: true,
+    summary: `${artifact.tool}@${artifact.capturedAt}`,
+    viewport: {
+      height: artifact.viewport.height,
+      width: artifact.viewport.width,
+    },
+  };
 }

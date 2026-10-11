@@ -111,15 +111,19 @@ describe('merchant-image-pilot-settings provenance', () => {
     const sha = createHash('sha256').update(shot).digest('hex');
     const valid = JSON.stringify({
       capturedAt: '2026-10-04T00:10:30.000Z',
+      deviceScaleFactor: 2,
       event: 'screenshot-capture',
       runId: 'run-navigation-1',
       screenshotSha256: sha,
       tool: 'browsertime',
+      viewport: { height: 667, width: 375 },
     });
     expect(verifyScreenshotProvenance(valid, pages, shot, 'shot.json')).toEqual(
       {
+        deviceScaleFactor: 2,
         ok: true,
         summary: 'browsertime@2026-10-04T00:10:30.000Z',
+        viewport: { height: 667, width: 375 },
       }
     );
     expect(
@@ -140,6 +144,12 @@ describe('merchant-image-pilot-settings provenance', () => {
       ['run-long', { runId: 'r'.repeat(129) }],
       ['sha', { screenshotSha256: 'zz' }],
       ['time', { capturedAt: 'yesterday' }],
+      ['viewport-missing', { viewport: undefined }],
+      ['viewport-fraction', { viewport: { height: 667, width: 375.5 } }],
+      ['viewport-zero', { viewport: { height: 0, width: 375 } }],
+      ['dpr-missing', { deviceScaleFactor: undefined }],
+      ['dpr-string', { deviceScaleFactor: '2' }],
+      ['dpr-zero', { deviceScaleFactor: 0 }],
     ]) {
       const broken = JSON.stringify({ ...JSON.parse(valid), ...patch });
       expect(

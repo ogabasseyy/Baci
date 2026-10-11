@@ -102,6 +102,61 @@ describe('assertServedDescriptors', () => {
     });
     expect(failures).toEqual([]);
   });
+
+  it('verifies queried generation URLs but exempts loader originals', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-query-'));
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    await mkdir(join(publicDir, '__pilot', 'originals'), { recursive: true });
+    const tier = `/__pilot/${GEN}/tier-384.webp`;
+    await writeFile(
+      join(publicDir, tier),
+      await sharp({
+        create: { background: '#1c1917', channels: 3, height: 200, width: 384 },
+      })
+        .webp()
+        .toBuffer()
+    );
+    const original = `/__pilot/originals/${MERCHANT}-logo-a.png`;
+    await writeFile(
+      join(publicDir, original),
+      await sharp({
+        create: { background: '#1c1917', channels: 3, height: 60, width: 90 },
+      })
+        .png()
+        .toBuffer()
+    );
+    const check = (inner) =>
+      assertServedDescriptors(
+        section({
+          binding: `${MERCHANT}/logo-a`,
+          inner,
+          slot: 'header-logo',
+        }),
+        { arm: 'pilot', origin: 'http://localhost:3000', publicDir }
+      );
+    // A cache-busted tier URL still claims its descriptor against the
+    // static staged file: a lying descriptor must fail, not skip.
+    expect(
+      await check(
+        `<picture><source srcSet="${tier}?v=1 1280w" type="image/webp"/></picture>`
+      )
+    ).toEqual([
+      expect.stringMatching(
+        /descriptor 1280w does not match oriented width 384/
+      ),
+    ]);
+    expect(
+      await check(
+        `<picture><source srcSet="${tier}?v=1 384w" type="image/webp"/></picture>`
+      )
+    ).toEqual([]);
+    // Loader-rendered originals name a requested width: exempt as before.
+    expect(
+      await check(
+        `<picture><source srcSet="${original}?w=48&q=75 48w" type="image/png"/></picture>`
+      )
+    ).toEqual([]);
+  });
 });
 
 describe('assertServedResponseBytes', () => {

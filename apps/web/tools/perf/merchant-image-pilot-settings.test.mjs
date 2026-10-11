@@ -44,10 +44,12 @@ async function screenshotProvenanceArg(dir, pngBytes, overrides = {}) {
     path,
     JSON.stringify({
       capturedAt: '2026-10-04T00:10:30.000Z',
+      deviceScaleFactor: 2,
       event: 'screenshot-capture',
       runId: 'run-navigation-1',
       screenshotSha256: createHash('sha256').update(pngBytes).digest('hex'),
       tool: 'browsertime',
+      viewport: { height: 667, width: 375 },
       ...overrides,
     })
   );
@@ -154,7 +156,12 @@ describe('merchant-image-pilot-settings gate', () => {
     expect(harOnly.error).toBe(null);
     expect(harOnly.stdout).toMatch(/lighthouse\.skipped/);
     // ±2px DPR rounding passes (750x1334 fixture vs 375x668@2 = 750x1336),
-    // but a wrong DPR still fails.
+    // but a wrong DPR still fails. The provenance pair is exact (recorded
+    // configuration has no rounding), so the rounded expectation carries
+    // matching provenance.
+    const shot668 = await screenshotProvenanceArg(dir, pngBytes, {
+      viewport: { height: 668, width: 375 },
+    });
     const rounded = await run([
       '--expect-iterations=1',
       '--expect-connectivity=native',
@@ -162,7 +169,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-viewport=375x668',
       '--expect-dpr=2',
       provenance,
-      shot,
+      shot668,
     ]);
     expect(rounded.error).toBe(null);
     const wrongDpr = await run([
@@ -275,6 +282,70 @@ describe('merchant-image-pilot-settings gate', () => {
     const wrongMode = await run([`--lighthouse=${lhDesktop}`, ...lhArgs]);
     expect(wrongMode.error).not.toBe(null);
     expect(wrongMode.stdout).toMatch(/lighthouse\.emulation-mode/);
+  });
+
+  it('rejects a same-product viewport/DPR pair from provenance', async () => {
+    // PNG pixels only prove viewport×DPR: a 750x1334 screenshot satisfies
+    // both 375x667@2 and 750x1334@1, so the product check passes while the
+    // run profile is wrong. The runner-recorded pair breaks the tie —
+    // each compared independently, exactly.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-settings-pair-'));
+    const harPath = join(dir, 'browsertime.har');
+    const pngPath = join(dir, 'shot.png');
+    const provenance = await provenanceArg(dir);
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: [
+            {
+              request: {
+                headers: [
+                  { name: 'User-Agent', value: 'X Chrome/154.0.0.0 Y' },
+                ],
+              },
+              response: { status: 200 },
+            },
+          ],
+          pages: [{ ...DATED_PAGE }],
+        },
+      })
+    );
+    const pngBytes = await pngBuffer(750, 1334);
+    await writeFile(pngPath, pngBytes);
+    const shotWrongPair = await screenshotProvenanceArg(dir, pngBytes, {
+      deviceScaleFactor: 1,
+      viewport: { height: 1334, width: 750 },
+    });
+    const { execFile } = await import('node:child_process');
+    const { error, stdout } = await new Promise((resolve) => {
+      execFile(
+        process.execPath,
+        [
+          join(
+            // @ts-expect-error import.meta.dirname is provided by vitest.
+            import.meta.dirname,
+            'merchant-image-pilot-settings.mjs'
+          ),
+          `--har=${harPath}`,
+          `--screenshot=${pngPath}`,
+          '--expect-iterations=1',
+          '--expect-connectivity=native',
+          '--expect-chrome-major=154',
+          '--expect-viewport=375x667',
+          '--expect-dpr=2',
+          provenance,
+          shotWrongPair,
+        ],
+        (execError, execStdout) =>
+          resolve({ error: execError, stdout: execStdout })
+      );
+    });
+    expect(error).not.toBe(null);
+    expect(stdout).toMatch(
+      /provenance viewport 750x1334 is not expected 375x667/
+    );
+    expect(stdout).toMatch(/provenance deviceScaleFactor 1 is not expected 2/);
   });
 
   it('matches the recorded Lighthouse network profile, not just the method', async () => {

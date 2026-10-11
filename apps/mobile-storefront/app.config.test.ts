@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
@@ -303,13 +305,13 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     ]);
   });
 
-  it('loads the production builder through the explicit .ts require when no dev-mode flag is set', () => {
+  it('loads the production builder through the explicit .js require when no dev-mode flag is set', () => {
     const appConfig = loadAppConfigWithEnv({
       EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
       STOREFRONT_FACEBOOK_APP_ID: '123456789',
       STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'client-token',
     });
-    // Same explicit `.ts` specifier app.config.ts uses: pins the
+    // Same explicit `.js` specifier app.config.ts uses: pins the
     // production branch (not the dev closure) and fails loudly if the
     // specifier stops resolving under a future loader. Rendered markers
     // cannot distinguish the branches (slug/scheme/bundle id match).
@@ -317,6 +319,28 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
       typeof import('./config/development-storefront-expo-config-production')
     >('./config/development-storefront-expo-config-production.js');
     expect(appConfig).toBe(production.buildStorefrontConfig);
+  });
+
+  it('keeps the production .ts shim free of logic', () => {
+    // The .js file is the runtime source of truth; any behavior added to
+    // the .ts shim alone would silently do nothing, so pin its exact
+    // shape: type import plus a pure re-export, nothing else.
+    const shimSource = readFileSync(
+      path.join(
+        __dirname,
+        'config/development-storefront-expo-config-production.ts'
+      ),
+      'utf-8'
+    );
+    const codeLines = shimSource
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('//'));
+    expect(codeLines).toEqual([
+      `import type { ConfigContext, ExpoConfig } from 'expo/config';`,
+      'export const buildStorefrontConfig: (context: ConfigContext) => ExpoConfig =',
+      `require('./development-storefront-expo-config-production.js').buildStorefrontConfig;`,
+    ]);
   });
 
   it('allows Android to adapt orientation and resizability on large screens', () => {

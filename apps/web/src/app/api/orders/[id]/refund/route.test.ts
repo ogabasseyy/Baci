@@ -203,6 +203,22 @@ describe('order refund route', () => {
       code: 'manual_completion_required',
     });
   });
+  it('does not match a known token embedded in a larger word', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message:
+          'duplicate key value violates constraint "ck_manual_reference_conflict_seen"',
+      },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Unable to manage refund',
+      code: 'internal_error',
+    });
+  });
   it('leaves unexpected unique violations as internal errors', async () => {
     // The RPC converts its own reference race; a residual 23505 is
     // genuinely unexpected and must not masquerade as a conflict.

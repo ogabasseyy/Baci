@@ -94,11 +94,14 @@ async function handle(
     // converts its own reference race to manual_reference_conflict, so
     // any residual 23505 here is genuinely unexpected (500), never a
     // blanket-mapped conflict that could mask an unrelated violation.
-    // Match tolerantly: drivers can wrap the RAISE text with context,
-    // and a wrapped known failure must keep its code, not collapse
-    // to internal_error while callers see a distinct status.
+    // Match on whole identifier tokens: drivers can wrap the RAISE
+    // text with surrounding context, but a bare substring would also
+    // match an unrelated word that merely contains a known token
+    // (e.g. a constraint name). Token membership keeps wrapped known
+    // failures coded while unknown text falls back to internal_error.
+    const messageTokens = (error.message ?? '').split(/[^a-z0-9_]+/);
     const matchedError = Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
-      error.message?.includes(known)
+      messageTokens.includes(known)
     );
     const code = matchedError ?? 'internal_error';
     return NextResponse.json(

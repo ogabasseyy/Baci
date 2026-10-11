@@ -40,6 +40,7 @@ const PAYMENT_STATUS_ICONS: Record<PaymentStatus, ElementType> = {
   Pending: Hourglass,
   'Partially Paid': CircleDot,
   Refunded: Undo2,
+  'Bnpl Approved': CreditCard,
 };
 
 const SHIPPING_STATUS_ICONS: Record<ShippingStatus, ElementType> = {

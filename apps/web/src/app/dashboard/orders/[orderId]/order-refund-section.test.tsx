@@ -71,7 +71,7 @@ describe('OrderRefundSection', () => {
     render(
       <OrderRefundSection
         order={orderWith({
-          paymentStatus: 'Bnpl Approved' as Order['paymentStatus'],
+          paymentStatus: 'Bnpl Approved',
         })}
         setOrder={setOrder}
       />

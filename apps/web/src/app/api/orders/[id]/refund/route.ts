@@ -30,6 +30,30 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
     'Confirm that the money already moved before recording',
 };
 
+// HTTP status per known application error. Genuine state conflicts
+// (busy, already done, reference race, review-blocked) stay 409;
+// malformed requests are 400, failed state preconditions are 422,
+// and identity errors mirror their transport status. Callers branch
+// on the code field; the status keeps caches and telemetry honest.
+const KNOWN_REFUND_STATUS: Record<string, number> = {
+  not_authenticated: 401,
+  refund_forbidden: 403,
+  order_not_found: 404,
+  cancelled_paid_order_required: 422,
+  refund_processing_or_requires_review: 409,
+  invalid_manual_refund: 400,
+  already_refunded: 409,
+  failed_refund_required: 422,
+  refund_exceeds_remaining: 422,
+  manual_reference_conflict: 409,
+  unallocated_refund_requires_review: 409,
+  manual_completion_required: 409,
+  payment_currency_requires_review: 409,
+  payment_ledger_requires_review: 409,
+  invalid_refund_action: 400,
+  refund_confirmation_required: 400,
+};
+
 async function handle(
   request: NextRequest,
   params: Promise<{ id: string }>,
@@ -77,18 +101,6 @@ async function handle(
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);
   if (error) {
-    const status =
-      error.code === '42501'
-        ? 403
-        : error.code === '28000'
-          ? 401
-          : error.code === 'P0002'
-            ? 404
-            : error.code === 'P0001'
-              ? 409
-              : error.code === '22023'
-                ? 400
-                : 500;
     // Callers only branch on the application-level code: raw SQLSTATEs
     // stay server-side so error classes are not fingerprinted. The RPC
     // converts its own reference race to manual_reference_conflict, so
@@ -104,6 +116,21 @@ async function handle(
       messageTokens.includes(known)
     );
     const code = matchedError ?? 'internal_error';
+    // A matched application error carries its own semantic status;
+    // unmatched errors keep the SQLSTATE-derived transport status.
+    const status =
+      (matchedError ? KNOWN_REFUND_STATUS[matchedError] : undefined) ??
+      (error.code === '42501'
+        ? 403
+        : error.code === '28000'
+          ? 401
+          : error.code === 'P0002'
+            ? 404
+            : error.code === 'P0001'
+              ? 409
+              : error.code === '22023'
+                ? 400
+                : 500);
     return NextResponse.json(
       {
         error:

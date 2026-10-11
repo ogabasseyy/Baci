@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { orderRefundStatusLabels } from '@/config/order-refund';
+import {
+  orderRefundMethodLabels,
+  orderRefundStatusLabels,
+} from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
@@ -175,8 +178,9 @@ export function OrderRefundPanel({
             </p>
             {summary.status === 'requires_review' && (
               <p className="text-sm">
-                Verify the existing refund in Paystack before taking further
-                action.
+                {summary.error?.toLowerCase().includes('paystack')
+                  ? 'Verify the existing refund in Paystack before taking further action.'
+                  : 'Review the flagged refund details before taking further action.'}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -261,7 +265,9 @@ export function OrderRefundPanel({
                 {summary.history.map((item) => (
                   <li key={item.id} className="border-t pt-2">
                     <p>
-                      {money(item.amount)} · {item.status} · {item.method}
+                      {money(item.amount)} ·{' '}
+                      {orderRefundStatusLabels[item.status] ?? item.status} ·{' '}
+                      {orderRefundMethodLabels[item.method] ?? item.method}
                     </p>
                     <p className="break-all">{item.reference}</p>
                     <p>{new Date(item.date).toLocaleString()}</p>

@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
 import ProductRequest from './ProductRequest';
 
@@ -129,5 +130,13 @@ it('allows a new request after a successful request and query change', async () 
   await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
   expect(jest.mocked(submitProductRequest).mock.calls[1][1].query).toBe(
     'Galaxy S99'
+  );
+});
+it('isolates the open form behind a modal accessibility boundary', () => {
+  render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  expect(screen.getByLabelText('Email or phone number')).toBeTruthy();
+  expect(screen.UNSAFE_getByType(Modal).props.accessibilityViewIsModal).toBe(
+    true
   );
 });

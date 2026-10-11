@@ -55,6 +55,15 @@ _set_inflight_repo() {
       _remote_scheme_part="$(printf '%s' "${inflight_remote%%://*}" | tr '[:upper:]' '[:lower:]')"
       _remote_after_scheme="${inflight_remote#*://}"
       _remote_authority="${_remote_after_scheme%%/*}"
+      # Decide path presence BEFORE userinfo stripping: for a
+      # credential-bearing URL without a path, stripping first makes a
+      # pathless authority look pathed and reinserts the credential
+      # into the rebuilt URL (and its error message).
+      if [ "$_remote_after_scheme" = "$_remote_authority" ]; then
+        _remote_path_suffix=""
+      else
+        _remote_path_suffix="/${_remote_after_scheme#*/}"
+      fi
       case "$_remote_authority" in
         *@*)
           _remote_userinfo="$(printf '%s' "${_remote_authority%%@*}" | tr '[:upper:]' '[:lower:]')"
@@ -63,11 +72,6 @@ _set_inflight_repo() {
           fi
           ;;
       esac
-      if [ "$_remote_after_scheme" = "$_remote_authority" ]; then
-        _remote_path_suffix=""
-      else
-        _remote_path_suffix="/${_remote_after_scheme#*/}"
-      fi
       inflight_remote="${_remote_scheme_part}://${_remote_authority}${_remote_path_suffix}"
       ;;
   esac

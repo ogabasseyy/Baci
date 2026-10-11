@@ -87,7 +87,7 @@ test('an approval-gated sibling aborts the release like any in-flight run', asyn
   const setup = fixture({
     listCoordinatedRuns: async () => [{
       databaseId: 43, event: 'workflow_dispatch', headSha: commit,
-      status: 'action_required', title: 'Coordinated release other-id',
+      status: 'completed', conclusion: 'action_required', title: 'Coordinated release other-id',
     }],
   });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
@@ -123,9 +123,11 @@ test('refuses an older checkout before changing workers', async () => {
 });
 
 test('refuses a concurrent deployment before changing workers', async () => {
-  const setup = fixture({ listRuns: async () => [{ status: 'in_progress' }] });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /in flight/);
-  assert.ok(!setup.calls.includes('updateWorkers'));
+  for (const runs of [[{ status: 'in_progress' }], [{ status: 'completed', conclusion: 'action_required' }]]) {
+    const setup = fixture({ listRuns: async () => runs });
+    await assert.rejects(coordinateRelease(setup.operations, coordinationId), /in flight/);
+    assert.ok(!setup.calls.includes('updateWorkers'));
+  }
 });
 
 test('never dispatches after failed worker verification', async () => {

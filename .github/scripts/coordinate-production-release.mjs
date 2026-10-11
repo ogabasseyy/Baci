@@ -49,7 +49,8 @@ export function selectCoordinatedRun(runs, baseline, coordinationId, commit = nu
 // Enumerated for the list-workflow-runs status filter AND the sibling
 // classifier: a production run parked awaiting environment approval
 // (action_required) is still an in-flight deployment that must block
-// a second coordinator.
+// a second coordinator. Approval gating arrives as a conclusion on a
+// completed status, so the guards check conclusion as well as status.
 export const IN_FLIGHT_RUN_STATUSES = new Set([
   'queued',
   'in_progress',
@@ -65,7 +66,7 @@ export function selectSiblingCoordinatedRuns(runs, baseline, coordinationId) {
     run.event === 'workflow_dispatch' &&
     typeof run.title === 'string' && run.title.startsWith('Coordinated release ') &&
     run.title !== `Coordinated release ${coordinationId}` &&
-    IN_FLIGHT_RUN_STATUSES.has(run.status));
+    IN_FLIGHT_RUN_STATUSES.has(run.status) || run.conclusion === 'action_required');
 }
 
 export async function coordinateRelease(operations, coordinationId) {
@@ -73,12 +74,12 @@ export async function coordinateRelease(operations, coordinationId) {
   if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('invalid release commit');
   if (await operations.readMain() !== commit) throw new Error('main changed; prepare a clean current checkout');
   const before = await operations.listRuns();
-  if (before.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
+  if (before.some(run => run.status !== 'completed' || run.conclusion === 'action_required')) throw new Error('production deployment in flight');
   await operations.updateWorkers(commit);
   await operations.verifyWorkers(commit);
   if (await operations.readMain() !== commit) throw new Error('main changed during worker preparation; publication refused');
   const baseline = await operations.listRuns();
-  if (baseline.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
+  if (baseline.some(run => run.status !== 'completed' || run.conclusion === 'action_required')) throw new Error('production deployment in flight');
   // Re-check main immediately before dispatch: dispatch pins --ref
   // main, so a tip advance since the baseline would orphan a run that
   // SHA-filtered discovery can never correlate (and that only the

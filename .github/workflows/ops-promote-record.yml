@@ -51,6 +51,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # A tracked .ops-promote-last-tip would survive a cache miss and
+      # masquerade as the validated baseline, bypassing confirm_reseed
+      # recovery: clear the path so only a cache hit provides it.
+      - name: Clear workspace tip file before cache restore
+        run: rm -f .ops-promote-last-tip
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ops-promote-last-tip

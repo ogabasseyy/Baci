@@ -145,7 +145,7 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
     process.env.FAKE_GH_PAGES = '100,3';
     const runs = readRuns('status=queued', true);
     assert.equal(runs.length, 103);
-    assert.deepEqual(Object.keys(runs[0]).sort(), ['databaseId', 'event', 'headSha', 'status', 'title']);
+    assert.deepEqual(Object.keys(runs[0]).sort(), ['conclusion', 'databaseId', 'event', 'headSha', 'status', 'title']);
     assert.equal(runs[102].databaseId, 2002);
     const calls = readFileSync(log, 'utf8').trim().split('\n');
     assert.equal(calls.length, 2);
@@ -261,6 +261,7 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://github.com/ogabasseyy/./Baci.git',
     'https://github.com//ogabasseyy/Baci.git',
     'https://github.com:0443/ogabasseyy/Baci.git',
+    'GIT@github.com:ogabasseyy/Baci.git',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }

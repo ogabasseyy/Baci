@@ -125,7 +125,7 @@ export const RUNS_MAX_PAGES = 5;
 
 export function slimWorkflowRun(run) {
   return {
-    databaseId: run.id, headSha: run.head_sha, status: run.status, event: run.event, title: run.display_title,
+    databaseId: run.id, headSha: run.head_sha, status: run.status, conclusion: run.conclusion, event: run.event, title: run.display_title,
   };
 }
 

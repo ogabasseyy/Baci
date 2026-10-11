@@ -8,10 +8,15 @@ export function originRepoSlug(remoteUrl) {
   // scp-like and ssh:// forms carry no userinfo ambiguity: the user
   // is part of the match, so handle them before URL parsing (which
   // would reject the scp-like form outright).
-  const direct = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/)(.+)$/i.exec(
-    raw.replace(/\/+$/, '').replace(/\.git$/, '')
-  );
-  if (direct) return direct[1].toLowerCase();
+  const stripped = raw.replace(/\/+$/, '').replace(/\.git$/, '');
+  const direct = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/)(.+)$/i.exec(stripped);
+  if (direct) {
+    // The worker guard only enters scp normalization for lowercase
+    // git@ (ssh:// authority is lowercased downstream instead), so a
+    // GIT@ scp spelling would pass here and abort the deploy.
+    if (/^git@/i.test(stripped) && !stripped.startsWith('git@')) return '';
+    return direct[1].toLowerCase();
+  }
   // Parse https with the URL class instead of regex-stripping '@':
   // a fragment like https://evil.com#@github.com/org/repo has host
   // evil.com, but a strip-to-last-'@' would forge a github.com match.

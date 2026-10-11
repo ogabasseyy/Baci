@@ -41,6 +41,14 @@ test('the cache key is unique per attempt so reruns can persist a new tip', () =
   assert.match(workflow, /key: ops-promote-last-tip-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
 });
 
+test('a tracked tip file cannot masquerade as cached state on a cache miss', () => {
+  assert.match(workflow, /rm -f \.ops-promote-last-tip/);
+  assert.ok(
+    workflow.indexOf('rm -f .ops-promote-last-tip') < workflow.indexOf('actions/cache@'),
+    'clear step must precede cache restore',
+  );
+});
+
 test('a cache miss fails closed instead of silently re-seeding the tip', () => {
   assert.match(workflow, /confirm_reseed/);
   assert.match(workflow, /refusing to silently re-seed/);

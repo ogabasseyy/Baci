@@ -189,6 +189,16 @@ test('refuses query-bearing remotes that forge a github.com host', () => {
   assert.equal(ghArgs, '');
 });
 
+test('no-path credential remotes never leak the secret into errors', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://ghp_LEAKPROBE@github.com\'; else exit 1; fi',
+  });
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.stderr, /ghp_LEAKPROBE/);
+  assert.equal(ghArgs, '');
+});
 test('honors the explicit repo override for exotic remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

@@ -139,6 +139,20 @@ describe('createBillFormPurchaseHandler', () => {
     );
   });
 
+  it('does not enter submitting state when validation rejects the purchase', async () => {
+    const setIsSubmitting = jest.fn();
+    const handlePurchase = createValidHandler({
+      selectedBiller: null,
+      setIsSubmitting,
+    });
+
+    await handlePurchase();
+
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    expect(setIsSubmitting).not.toHaveBeenCalledWith(true);
+    expect(setIsSubmitting).toHaveBeenCalledWith(false);
+  });
+
   it('checks wallet readiness before charging and skips the charge when not ready', async () => {
     const payment = createPaymentState({ walletBalance: 200 });
     const handlePurchase = createValidHandler({

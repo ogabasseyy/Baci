@@ -267,6 +267,53 @@ describe('useUtilityPurchase', () => {
     expect(seenKeys[1]).toBe(seenKeys[0]);
   });
 
+  it('refreshes (does not decrement) when a recalled key resolves after a lost response', async () => {
+    // P2: the first POST's response is lost with no reference noted;
+    // after a reload the balance refetch already reflects the debit
+    // while the registry recalls the original key. The replay success
+    // is unrecognized (no noted reference), so without the recalled-key
+    // check the hook would decrement the already-debited balance again
+    // and block valid follow-ups as underfunded.
+    let calls = 0;
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        request.getWalletIdempotencyKey('SIG');
+        calls += 1;
+        if (calls === 1) {
+          return { kind: 'error', message: 'timeout' };
+        }
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-1',
+          amount: 1000,
+          processing: false,
+        };
+      }
+    );
+    const refreshWallet = vi.fn();
+    const setWalletBalance = vi.fn();
+    const first = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet, setWalletBalance }))
+    );
+    await act(async () => {
+      first.result.current.handleAirtimeDataSubmit(airtime);
+    });
+    first.unmount();
+
+    const second = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet, setWalletBalance }))
+    );
+    await act(async () => {
+      second.result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await waitFor(() => expect(second.result.current.step).toBe('success'));
+
+    expect(refreshWallet).toHaveBeenCalled();
+    expect(setWalletBalance).not.toHaveBeenCalled();
+  });
+
   it('rotates the idempotency key after a terminal success so buy-again is a fresh purchase', async () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(

@@ -58,7 +58,6 @@ export function createBillFormPurchaseHandler({
       return;
     }
 
-    setIsSubmitting(true);
     try {
       if (!selectedBiller) {
         Alert.alert('Missing Provider', 'Please select a provider.');
@@ -92,6 +91,13 @@ export function createBillFormPurchaseHandler({
       ) {
         return;
       }
+
+      // Only enter the submitting state after validation and the wallet
+      // readiness gate pass — matches the airtime/data handlers and avoids
+      // flashing submitting UI on every validation rejection. Everything
+      // above is synchronous, so the getIsSubmitting reentrancy guard at
+      // the top still holds.
+      setIsSubmitting(true);
 
       const { customerName, customerAddress } = resolveBillCustomerOfRecord({
         customer,

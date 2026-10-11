@@ -40,6 +40,23 @@ describe('pending-vtu-idempotency-store', () => {
     ).toEqual([]);
   });
 
+  it('keeps TTL-expired REFERENCED entries on serialize and parse', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const expired = entry({ reference: 'REF-A' });
+
+    expect(
+      parsePendingVtuSnapshot(
+        serializePendingVtuEntries([['a', expired]], Date.now() + dayMs + 1)
+      )
+    ).toEqual([['a', expired]]);
+
+    expect(
+      parsePendingVtuSnapshot(
+        JSON.stringify([['a', entry({ reference: 'REF-A', rememberedAt: 1 })]])
+      )
+    ).toEqual([['a', entry({ reference: 'REF-A', rememberedAt: 1 })]]);
+  });
+
   it('ignores corrupt snapshots on parse', () => {
     expect(parsePendingVtuSnapshot('{oops')).toEqual([]);
     expect(parsePendingVtuSnapshot('"just-a-string"')).toEqual([]);

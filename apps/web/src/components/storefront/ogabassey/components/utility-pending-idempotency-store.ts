@@ -44,14 +44,22 @@ function isPersistedEntry(
   );
 }
 
-/** Serializes live entries for storage (prunes TTL-expired). */
+/**
+ * Serializes live entries for storage (prunes TTL-expired
+ * reference-less entries; referenced entries are exempt — mirrors live
+ * recall — so a still-processing vend keeps its key across reloads
+ * instead of minting a fresh debit).
+ */
 export function serializePendingVtuEntries(
   entries: Iterable<PendingVtuEntryInput>,
   now: number = Date.now()
 ): string {
   const live: [string, PersistedPendingVtuEntry][] = [];
   for (const [scoped, entry] of entries) {
-    if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) {
+    if (
+      entry.reference ||
+      now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS
+    ) {
       live.push([
         scoped,
         {
@@ -67,7 +75,8 @@ export function serializePendingVtuEntries(
 
 /**
  * Parses a snapshot back into entries. Corrupt snapshots and
- * TTL-expired entries are dropped.
+ * TTL-expired reference-less entries are dropped; referenced entries
+ * are exempt (mirrors live recall).
  */
 export function parsePendingVtuSnapshot(
   serialized: string | null,
@@ -91,7 +100,10 @@ export function parsePendingVtuSnapshot(
       continue;
     }
     const [scoped, entry] = item;
-    if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
+    if (
+      !entry.reference &&
+      now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS
+    ) {
       continue;
     }
     entries.push([

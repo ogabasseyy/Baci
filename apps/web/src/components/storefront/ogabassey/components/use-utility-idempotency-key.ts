@@ -7,6 +7,7 @@ import {
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
+  recallPendingVtuKey,
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 
@@ -22,6 +23,7 @@ interface UseUtilityIdempotencyKeyResult {
   isAttemptReplay: (reference: string) => boolean;
   isAttemptStale: (reference: string) => boolean;
   noteAttemptReference: (reference: string) => void;
+  wasAttemptKeyRecalled: () => boolean;
 }
 
 /**
@@ -46,6 +48,11 @@ export function useUtilityIdempotencyKey({
   // account switch mid-flight cannot redirect this submission's
   // completion onto another customer's entry.
   const lastScopedSignatureRef = useRef<string | null>(null);
+  // True when the in-flight attempt reused a previously-submitted key.
+  // A recalled key's success is definitionally ambiguous (the debit may
+  // already be reflected in the displayed balance), so callers refresh
+  // for server truth instead of decrementing locally.
+  const lastAttemptRecalledRef = useRef(false);
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
     const scoped = scopePendingVtuSignature(
@@ -54,6 +61,8 @@ export function useUtilityIdempotencyKey({
       payloadSignature
     );
     lastScopedSignatureRef.current = scoped;
+    lastAttemptRecalledRef.current =
+      recallPendingVtuKey(scoped) !== undefined;
     return getPendingVtuKey(scoped);
   };
 
@@ -90,11 +99,14 @@ export function useUtilityIdempotencyKey({
     );
   };
 
+  const wasAttemptKeyRecalled = () => lastAttemptRecalledRef.current;
+
   return {
     forgetAttemptKey,
     getWalletIdempotencyKey,
     isAttemptReplay,
     isAttemptStale,
     noteAttemptReference,
+    wasAttemptKeyRecalled,
   };
 }

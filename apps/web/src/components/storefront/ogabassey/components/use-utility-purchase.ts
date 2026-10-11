@@ -110,6 +110,7 @@ export function useUtilityPurchase({
     isAttemptReplay,
     isAttemptStale,
     noteAttemptReference,
+    wasAttemptKeyRecalled,
   } = useUtilityIdempotencyKey({
     customerId: customer?.id,
     merchantId,
@@ -175,6 +176,14 @@ export function useUtilityPurchase({
       // signature the check reads.
       const replayResolvesProcessing =
         !result.processing && isAttemptReplay(result.reference);
+      // A recalled key means an identical submit already went out, so a
+      // non-processing success is ambiguous even with no noted reference
+      // (lost response + reload: the refetch already reflects the debit).
+      // Refresh for server truth instead of decrementing. When the first
+      // POST never reached the server, this submit performed the debit —
+      // refresh observes that too, just asynchronously.
+      const recalledKeySuccess =
+        !result.processing && wasAttemptKeyRecalled();
       if (!result.processing) {
         if (isAttemptStale(result.reference)) {
           // The remembered purchase completed long ago: this replay
@@ -205,7 +214,7 @@ export function useUtilityPurchase({
       // whose debit the earlier refresh already picked up (remounts
       // refetch too) — refresh for server truth instead of decrementing
       // a second time.
-      if (replayResolvesProcessing) {
+      if (replayResolvesProcessing || recalledKeySuccess) {
         appliedBalanceRefs.current.add(result.reference);
         refreshWallet();
       } else if (

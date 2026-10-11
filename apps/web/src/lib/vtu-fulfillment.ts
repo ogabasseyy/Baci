@@ -18,6 +18,13 @@ import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provide
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
+import {
+  RetryableVtuError,
+  throwIfVtuRefundUnconfirmed,
+} from '@/lib/vtu-refund-guard';
+
+export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
+export { RetryableVtuError };
 
 /**
  * Wire contract with `redeem_vtu_wallet_payment` (Phase B.1 migration).
@@ -176,12 +183,6 @@ function getProviderTransactionId(row: VtuTransactionRow) {
 function getProcessingProviderResponseMessage(row: VtuTransactionRow) {
   const message = row.error_message?.trim();
   return message ? message : null;
-}
-
-function requiresVtuCustomerWalletRefund(row: VtuTransactionRow) {
-  return Boolean(
-    row.customer_id && row.source === 'checkout' && Number(row.amount) > 0
-  );
 }
 
 function getVoucherPinFromMetadata(metadata: Record<string, unknown> | null) {
@@ -742,24 +743,6 @@ export class VtuPersistenceError extends Error {
     super(message);
     Object.setPrototypeOf(this, VtuPersistenceError.prototype);
     this.name = 'VtuPersistenceError';
-  }
-}
-
-interface RetryableVtuErrorContext {
-  failedMessage?: string;
-  failedMetadata?: Record<string, unknown>;
-  refundedAmount?: number;
-  transactionId: string;
-}
-
-export class RetryableVtuError extends Error {
-  context: RetryableVtuErrorContext;
-
-  constructor(message: string, context: RetryableVtuErrorContext) {
-    super(message);
-    Object.setPrototypeOf(this, RetryableVtuError.prototype);
-    this.name = 'RetryableVtuError';
-    this.context = context;
   }
 }
 
@@ -2135,17 +2118,14 @@ async function reconcileProcessingVtuTransaction({
           );
         }
       }
-      if (requiresVtuCustomerWalletRefund(currentRow) && !refund.refundIssued) {
-        throw new RetryableVtuError(
-          `Unable to confirm VTU refund before finalizing provider failure for ${currentRow.id}`,
-          {
-            failedMessage,
-            failedMetadata: getSafeMetadataDiagnostics(failedMetadata),
-            refundedAmount: refund.refundedAmount,
-            transactionId: currentRow.id,
-          }
-        );
-      }
+      throwIfVtuRefundUnconfirmed({
+        row: currentRow,
+        refundIssued: refund.refundIssued,
+        refundedAmount: refund.refundedAmount,
+        failedMessage,
+        failedMetadata: getSafeMetadataDiagnostics(failedMetadata),
+        message: `Unable to confirm VTU refund before finalizing provider failure for ${currentRow.id}`,
+      });
       return {
         amount: Number(currentRow.amount) || 0,
         error: failedMessage,
@@ -2421,17 +2401,14 @@ export async function fulfillPendingVtuTransaction({
       row,
       supabase,
     });
-    if (requiresVtuCustomerWalletRefund(row) && !refund.refundIssued) {
-      throw new RetryableVtuError(
-        `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
-        {
-          failedMessage: row.error_message ?? undefined,
-          failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
-          refundedAmount: refund.refundedAmount,
-          transactionId: row.id,
-        }
-      );
-    }
+    throwIfVtuRefundUnconfirmed({
+      row,
+      refundIssued: refund.refundIssued,
+      refundedAmount: refund.refundedAmount,
+      failedMessage: row.error_message ?? undefined,
+      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+      message: `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
+    });
     if (refund.metadataChanged) {
       const { error: refundMetadataUpdateError } = await supabase
         .from('vtu_transactions')
@@ -2912,23 +2889,19 @@ export async function fulfillPendingVtuTransaction({
         );
       }
     }
-    if (requiresVtuCustomerWalletRefund(row) && !refund.refundIssued) {
-      // Fresh vend failure with an unconfirmed wallet refund: fail
-      // retryable (routes map this to 5xx) so both clients keep their
-      // idempotency key and the retry dedupes onto this same row,
-      // re-attempting the refund — instead of minting a fresh debit
-      // while the original charge stands unreversed. Mirrors the
-      // replay-path and reconciliation guards.
-      throw new RetryableVtuError(
-        `Unable to confirm VTU refund for failed purchase ${row.id}`,
-        {
-          failedMessage: result.message ?? undefined,
-          failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
-          refundedAmount: refund.refundedAmount,
-          transactionId: row.id,
-        }
-      );
-    }
+    // Fresh vend failure with an unconfirmed wallet refund: fail retryable
+    // (routes map this to 5xx) so both clients keep their idempotency key
+    // and the retry dedupes onto this same row, re-attempting the refund —
+    // instead of minting a fresh debit while the original charge stands
+    // unreversed.
+    throwIfVtuRefundUnconfirmed({
+      row,
+      refundIssued: refund.refundIssued,
+      refundedAmount: refund.refundedAmount,
+      failedMessage: result.message ?? undefined,
+      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+      message: `Unable to confirm VTU refund for failed purchase ${row.id}`,
+    });
     return {
       amount: Number(row.amount) || 0,
       error: result.message,

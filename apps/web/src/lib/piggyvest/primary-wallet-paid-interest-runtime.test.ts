@@ -21,6 +21,37 @@ const env = {
 it('is disabled unless explicitly enabled', () => {
   expect(readPrimaryWalletPaidInterestRuntime({ NODE_ENV: 'test' })).toBeNull();
 });
+it('drains acknowledged receipts through a rollback without new intake', () => {
+  const rolledBack = {
+    ...env,
+    PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED: 'false',
+  };
+  expect(readPrimaryWalletPaidInterestRuntime(rolledBack)).toBeNull();
+  expect(readPrimaryWalletPaidInterestRuntime(rolledBack, 'drain')).toEqual(
+    fixture.config
+  );
+});
+it('still fails drain mode closed on environment and credentials', () => {
+  const rolledBack = {
+    ...env,
+    PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED: 'false',
+  };
+  expect(() =>
+    readPrimaryWalletPaidInterestRuntime(
+      { ...rolledBack, VERCEL_ENV: 'preview' },
+      'drain'
+    )
+  ).toThrow('environment mismatch');
+  expect(() =>
+    readPrimaryWalletPaidInterestRuntime(
+      {
+        ...rolledBack,
+        PIGGYVEST_PRIMARY_PAID_INTEREST_API_TOKEN: undefined,
+      },
+      'drain'
+    )
+  ).toThrow('configuration unavailable');
+});
 it('reads a strictly production-bound dedicated evidence configuration', () => {
   expect(readPrimaryWalletPaidInterestRuntime(env)).toEqual(fixture.config);
 });

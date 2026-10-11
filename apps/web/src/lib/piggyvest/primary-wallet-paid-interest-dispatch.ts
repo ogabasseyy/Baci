@@ -10,8 +10,14 @@ export async function dispatchPrimaryWalletPaidInterest(input: {
   signature: string | null;
   env?: NodeJS.ProcessEnv;
   fetchImplementation?: typeof fetch;
+  // The inbox worker drains through 'drain' so a flag rollback cannot
+  // strand acknowledged receipts; direct webhook intake stays 'intake'.
+  mode?: 'intake' | 'drain';
 }) {
-  const configuration = readPrimaryWalletPaidInterestRuntime(input.env);
+  const configuration = readPrimaryWalletPaidInterestRuntime(
+    input.env,
+    input.mode ?? 'intake'
+  );
   if (!configuration) return 'disabled' as const;
   const store = createPrimaryWalletPaidInterestStore(configuration);
   return await applyPrimaryWalletSignedPaidInterest({

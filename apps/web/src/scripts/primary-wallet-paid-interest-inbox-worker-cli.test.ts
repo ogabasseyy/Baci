@@ -25,6 +25,9 @@ it('launches at most one receipt with bounded runtime and no financial/customer 
   const env = { NODE_ENV: 'test' as const, PIGGYVEST_PRIMARY_PAID_INTEREST_WORKER_APPROVED: 'true' };
   const write = vi.fn();
   expect(await runPrimaryWalletPaidInterestInboxCli({ argv: ['--once'], env, write })).toBe(0);
+  // Drain mode: a flag rollback must not refuse the worker start while
+  // acknowledged receipts still queue.
+  expect(mocks.bridge).toHaveBeenCalledWith(env, 'drain');
   expect(mocks.drain).toHaveBeenCalledWith({ env, batchSize: 1, signal: expect.any(AbortSignal) });
   expect(write).toHaveBeenCalledWith('{"claimed":1,"processed":0,"deferred":1,"quarantined":0}');
 });

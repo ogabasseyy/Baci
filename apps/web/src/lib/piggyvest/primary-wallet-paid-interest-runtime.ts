@@ -2,9 +2,18 @@ import 'server-only';
 import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
 
 export function readPrimaryWalletPaidInterestRuntime(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  mode: 'intake' | 'drain' = 'intake'
 ) {
-  if (env.PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED !== 'true') return null;
+  // Intake stops at the flag (no new payouts while disabled); the drain
+  // ignores it so a rollback cannot strand provider-acknowledged
+  // receipts (same rule as the inbox runtime). Credentials, bindings,
+  // and environment still fail closed in both modes.
+  if (
+    mode === 'intake' &&
+    env.PIGGYVEST_PRIMARY_PAID_INTEREST_ENABLED !== 'true'
+  )
+    return null;
   if (env.VERCEL_ENV !== 'production')
     throw new Error('Primary paid-interest environment mismatch');
   let retainedWebhookSecrets: unknown = [];

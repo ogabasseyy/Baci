@@ -25,7 +25,7 @@ export async function runPrimaryWalletPaidInterestInboxCli(input: {
       env
     );
     if (env.PIGGYVEST_PRIMARY_PAID_INTEREST_WORKER_APPROVED !== 'true' ||
-      !configuration || !readPrimaryWalletPaidInterestRuntime(env))
+      !configuration || !readPrimaryWalletPaidInterestRuntime(env, 'drain'))
       throw new Error('Worker configuration unavailable');
     await createPrimaryWalletPaidInterestInboxStore(configuration).readiness();
     if (input.argv[0] === '--readiness') {

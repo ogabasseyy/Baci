@@ -69,6 +69,7 @@ export async function drainPrimaryWalletPaidInterestInbox(input: {
               },
               rawBody,
               signature: claim.signature,
+              mode: 'drain',
             });
             // Enqueue already gates on crosswalk involvement, so a decline here
             // means the crosswalk vanished mid-flight: quarantine for

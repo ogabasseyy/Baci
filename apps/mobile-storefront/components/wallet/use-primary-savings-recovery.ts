@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
   rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
@@ -20,18 +19,17 @@ export function usePrimarySavingsRecovery({
   setAmount: (value: string) => void;
 }) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
-  // An unknown verdict (null) enables the lookup but never readiness: a
-  // rolled-out non-pilot merchant whose probe failed transiently reads
-  // non-primary from the static allowlist, yet a primary transfer may
-  // still be pending. An authoritative false must NOT skip the lookup:
-  // a mid-flight NOT_READY rollback caches false while a dispatched
-  // transfer is still pending, and releasing legacy submissions there
-  // would debit twice. The lookup drains durable state even with the
-  // flags off, so only its durable null releases legacy.
+  // The lookup is verdict-independent: the client cannot distinguish a
+  // never-primary merchant from a rolled-out one mid-rollback (both
+  // read non-primary with an authoritative false cached), so gating
+  // the lookup on the verdict would skip durable recovery exactly when
+  // a dispatched transfer may still settle — releasing legacy
+  // submissions and debiting twice. The lookup drains durable state
+  // even with the flags off, so only its durable null releases legacy.
+  // An unknown verdict (null) still withholds readiness below: a
+  // transient probe failure must wait for the verdict, not take legacy.
   const verdictUnknown = primaryCapability === null;
-  const enabled =
-    (isPiggyvestPrimaryMerchant(merchantId) || verdictUnknown) &&
-    Boolean(userId && goalId);
+  const enabled = Boolean(userId && goalId);
   const key = JSON.stringify([merchantId, userId, goalId]);
   const boundKey = useRef<string | null>(null);
   const [revision, setRevision] = useState(0);

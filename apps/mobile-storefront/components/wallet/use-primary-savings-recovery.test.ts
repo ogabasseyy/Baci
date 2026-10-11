@@ -149,6 +149,45 @@ it('releases legacy only after a durable null while unconfigured', async () => {
   expect(result.current.ready).toBe(true);
   expect(result.current.error).toBe(false);
 });
+it('recovers pending operations for a non-pilot merchant with a negative verdict', async () => {
+  // The rollback race on a non-pilot merchant: static allowlist false
+  // plus cached false must still run the lookup, or a settling primary
+  // transfer debits twice alongside legacy.
+  mockUseCapability.mockReturnValue(false);
+  mockRecover.mockResolvedValue({
+    operationId: 'op-1',
+    goalId: 'goal-1',
+    amountKobo: 2000,
+  });
+  const props = {
+    ...input(),
+    merchantId: '22222222-2222-4222-8222-222222222222',
+  };
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(props.operationRef.current).toBe('op-1');
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
+});
+it('releases legacy only after a durable null for a non-pilot negative verdict', async () => {
+  mockUseCapability.mockReturnValue(false);
+  mockRecover.mockResolvedValue(null);
+  const props = {
+    ...input(),
+    merchantId: '22222222-2222-4222-8222-222222222222',
+  };
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  expect(result.current.ready).toBe(false);
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
+});
 it('blocks submissions while the capability verdict is unknown', async () => {
   // Rolled-out non-pilot merchant whose probe failed transiently: the
   // observed cache is unknown, so the static allowlist reports

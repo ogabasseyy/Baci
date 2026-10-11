@@ -23,7 +23,7 @@ describe('invalidateSavingsWalletCache', () => {
     });
 
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['wallet', 'data', 'v3', 'customer-a', 'merchant-a'],
+      queryKey: ['wallet', 'data', 'v4', 'customer-a', 'merchant-a'],
     });
   });
 

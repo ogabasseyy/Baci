@@ -115,17 +115,39 @@ it('keeps blocking when savings is unreachable while an operation is bound', asy
   expect(result.current.ready).toBe(false);
   expect(props.operationRef.current).toBe('existing-operation');
 });
-it('stays ready without recovering when the server reports unconfigured', async () => {
+it('recovers pending operations even when the server reports unconfigured', async () => {
+  // Rollback race: a mid-flight NOT_READY caches false while a
+  // dispatched transfer is still pending. Skipping the lookup would
+  // release legacy submissions and debit twice.
   mockUseCapability.mockReturnValue(false);
+  mockRecover.mockResolvedValue({
+    operationId: 'op-1',
+    goalId: 'goal-1',
+    amountKobo: 2000,
+  });
   const props = input();
   const { result } = renderHook(() => usePrimarySavingsRecovery(props));
-  expect(result.current.ready).toBe(true);
-  expect(result.current.error).toBe(false);
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
   await act(async () => {
     await Promise.resolve();
   });
-  expect(mockRecover).not.toHaveBeenCalled();
-  expect(props.setAmount).not.toHaveBeenCalled();
+  expect(props.operationRef.current).toBe('op-1');
+  expect(props.setAmount).toHaveBeenCalledWith('20');
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
+});
+it('releases legacy only after a durable null while unconfigured', async () => {
+  mockUseCapability.mockReturnValue(false);
+  mockRecover.mockResolvedValue(null);
+  const props = input();
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  expect(result.current.ready).toBe(false);
+  await waitFor(() => expect(mockRecover).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
 });
 it('blocks submissions while the capability verdict is unknown', async () => {
   // Rolled-out non-pilot merchant whose probe failed transiently: the

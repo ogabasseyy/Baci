@@ -147,7 +147,11 @@ function createTestClient() {
 function setupHook() {
   const queryClient = createTestClient();
   queryClient.setQueryData<WalletQueryData>(
-    walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+    walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-1',
+    }),
     {
       wallet: { balance: 0, loyalty_points: 1000 },
       transactions: [],
@@ -553,6 +557,89 @@ describe('useWallet', () => {
     queryClient.clear();
   });
 
+  it('holds the wallet query while customer and user identities disagree', async () => {
+    const { tableCalls } = setupWalletTableMocks();
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-1',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    const queryClient = createTestClient();
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(result.current.data).toBeUndefined();
+    expect(tableCalls).toEqual([]);
+
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-2',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.wallet.balance).toBe(750);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('fetches a fresh wallet after a user rotation instead of serving stale cache', async () => {
+    setupWalletTableMocks();
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-2',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    const queryClient = createTestClient();
+    queryClient.setQueryData<WalletQueryData>(
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
+      {
+        wallet: { balance: 3210, loyalty_points: 400 },
+        transactions: [],
+      }
+    );
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.wallet).toMatchObject({
+      balance: 750,
+      loyalty_points: 1200,
+    });
+
+    unmount();
+    queryClient.clear();
+  });
+
   it('returns an empty wallet when customer lookup has no rows', async () => {
     const { tableCalls } = setupWalletTableMocks({
       customerResult: createQueryResult([]),
@@ -796,6 +883,7 @@ describe('useWallet', () => {
       queryKey: walletKeys.data({
         merchantId: 'merchant-1',
         ownerId: 'customer-1',
+        userId: 'user-1',
       }),
     });
 
@@ -807,7 +895,11 @@ describe('useWallet', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 3210, loyalty_points: 400 },
         transactions: [],
@@ -833,7 +925,11 @@ describe('useWallet', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 3210, loyalty_points: 400 },
         transactions: [],
@@ -968,7 +1064,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -987,7 +1087,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -1006,7 +1110,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -1024,10 +1132,12 @@ describe('useRedeemPoints', () => {
     const originalQueryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     const changedQueryKey = walletKeys.data({
       merchantId: 'merchant-2',
       ownerId: 'customer-2',
+      userId: 'user-2',
     });
     queryClient.setQueryData<WalletQueryData>(originalQueryKey, {
       wallet: { balance: 0, loyalty_points: 1000 },
@@ -1081,6 +1191,7 @@ describe('useRedeemPoints', () => {
     const queryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     queryClient.setQueryData<WalletQueryData>(queryKey, {
       wallet: { balance: 0, loyalty_points: 50 },
@@ -1182,6 +1293,7 @@ describe('useRedeemPoints', () => {
     const queryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     queryClient.setQueryData<WalletQueryData>(queryKey, {
       wallet: { balance: 0, loyalty_points: 200 },
@@ -1325,7 +1437,11 @@ describe('useRedeemPoints', () => {
 
     const { result, unmount, queryClient } = setupHook();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 0, loyalty_points: 800 },
         transactions: [],
@@ -1447,7 +1563,11 @@ describe('useRedeemPoints', () => {
       });
     });
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-2', ownerId: 'customer-2' }),
+      walletKeys.data({
+        merchantId: 'merchant-2',
+        ownerId: 'customer-2',
+        userId: 'user-2',
+      }),
       {
         wallet: { balance: 0, loyalty_points: 1000 },
         transactions: [],
@@ -1508,6 +1628,7 @@ describe('useCreateWalletFundingAccount', () => {
       queryKey: walletKeys.data({
         merchantId: 'merchant-1',
         ownerId: 'customer-1',
+        userId: 'user-1',
       }),
     });
 

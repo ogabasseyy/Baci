@@ -1,7 +1,33 @@
 import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { piggyvestPrimaryWalletIdentitySchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
+import {
+  piggyvestPrimaryWalletIdentitySchema,
+  piggyvestPrimaryWalletReadIdentitySchema,
+} from '@/schemas/piggyvest-primary-wallet-onboarding';
 
+type IdentityInput = {
+  supabase: SupabaseClient;
+  user: User;
+  merchantId: string;
+};
+
+export async function resolvePrimaryWalletIdentity(
+  input: IdentityInput & { forOnboarding: true }
+): Promise<ReturnType<
+  typeof piggyvestPrimaryWalletIdentitySchema.parse
+> | null>;
+export async function resolvePrimaryWalletIdentity(
+  input: IdentityInput & { forOnboarding: false }
+): Promise<ReturnType<
+  typeof piggyvestPrimaryWalletReadIdentitySchema.parse
+> | null>;
+export async function resolvePrimaryWalletIdentity(
+  input: IdentityInput & { forOnboarding: boolean }
+): Promise<
+  | ReturnType<typeof piggyvestPrimaryWalletIdentitySchema.parse>
+  | ReturnType<typeof piggyvestPrimaryWalletReadIdentitySchema.parse>
+  | null
+>;
 export async function resolvePrimaryWalletIdentity(input: {
   supabase: SupabaseClient;
   user: User;
@@ -30,6 +56,21 @@ export async function resolvePrimaryWalletIdentity(input: {
       data.email.toLowerCase() !== input.user.email.toLowerCase())
   )
     return null;
+  // Name and phone are mutable profile fields required only to CREATE
+  // the provider customer. Post-onboarding authorization resolves on
+  // the immutable IDs plus the verified auth email, so clearing an
+  // optional phone never locks the customer out of reads, recovery, or
+  // submissions to an already-bound wallet.
+  if (!input.forOnboarding) {
+    const read = piggyvestPrimaryWalletReadIdentitySchema.safeParse({
+      merchantId: input.merchantId,
+      customerId: data.id,
+      userId: input.user.id,
+      email: input.user.email.toLowerCase(),
+      emailVerified: true,
+    });
+    return read.success ? read.data : null;
+  }
   const identity = piggyvestPrimaryWalletIdentitySchema.safeParse({
     merchantId: input.merchantId,
     customerId: data.id,

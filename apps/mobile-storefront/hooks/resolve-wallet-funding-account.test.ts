@@ -60,12 +60,11 @@ it('settles failed reads as unavailable instead of throwing the wallet load', as
   });
 });
 
-it('keeps the last-known legacy account when PiggyVest reads fail', async () => {
+it('surfaces no account on transient read failure instead of a superseded DVA', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
   const primary = await readPrimaryFundingAccount(merchantId, userId);
-  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
-    legacy
-  );
+  expect(primary).toEqual({ status: 'unavailable' });
+  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toBeNull();
 });
 
 it('keeps the working legacy account when the server reports primary unconfigured', async () => {

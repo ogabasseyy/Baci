@@ -23,11 +23,13 @@ export function usePrimarySavingsRecovery({
   // An unknown verdict (null) enables the lookup but never readiness: a
   // rolled-out non-pilot merchant whose probe failed transiently reads
   // non-primary from the static allowlist, yet a primary transfer may
-  // still be pending. Only an authoritative false skips the lookup and
-  // releases legacy submissions.
+  // still be pending. An authoritative false must NOT skip the lookup:
+  // a mid-flight NOT_READY rollback caches false while a dispatched
+  // transfer is still pending, and releasing legacy submissions there
+  // would debit twice. The lookup drains durable state even with the
+  // flags off, so only its durable null releases legacy.
   const verdictUnknown = primaryCapability === null;
   const enabled =
-    primaryCapability !== false &&
     (isPiggyvestPrimaryMerchant(merchantId) || verdictUnknown) &&
     Boolean(userId && goalId);
   const key = JSON.stringify([merchantId, userId, goalId]);

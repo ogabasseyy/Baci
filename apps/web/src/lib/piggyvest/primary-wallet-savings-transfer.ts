@@ -179,6 +179,12 @@ async function verifyWallets(
       source.id === reservation.sourceWalletId &&
       destination.id === reservation.destinationWalletId &&
       source.api_customer_id === reservation.providerCustomerId &&
+      // The destination wallet ID must still belong to the reserved
+      // provider customer: ID reassignment at the provider (or a
+      // poisoned reservation) would otherwise move funds into another
+      // customer's wallet, and the transfer proof binds only the
+      // source side so it cannot catch this later.
+      destination.api_customer_id === reservation.providerCustomerId &&
       source.business_id === reservation.businessId &&
       destination.business_id === reservation.businessId &&
       source.balance >= reservation.amountKobo

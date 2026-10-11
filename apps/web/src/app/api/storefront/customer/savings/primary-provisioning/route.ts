@@ -37,7 +37,7 @@ async function handle(
       { status: 400 }
     );
   try {
-    const runtime = readPrimarySavingsProvisioningRuntime();
+    const runtime = readPrimarySavingsProvisioningRuntime(process.env, mode);
     if (!runtime || runtime.onboarding.merchantId !== parsed.data.merchantId)
       return NextResponse.json(
         {

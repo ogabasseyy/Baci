@@ -16,6 +16,19 @@ export const piggyvestPrimaryWalletIdentitySchema = z.strictObject({
   phone: z.string().trim().min(7).max(20),
 });
 
+// Post-onboarding authorization: immutable IDs plus the verified auth
+// email only. Name and phone are mutable profile contact data —
+// clearing an optional phone must never lock a customer out of wallet
+// reads, recovery, or submissions to an already-bound wallet.
+export const piggyvestPrimaryWalletReadIdentitySchema =
+  piggyvestPrimaryWalletIdentitySchema.pick({
+    merchantId: true,
+    customerId: true,
+    userId: true,
+    email: true,
+    emailVerified: true,
+  });
+
 export const piggyvestPrimaryWalletConfigurationSchema = z.strictObject({
   environment: z.enum(['staging', 'production']),
   merchantId: z.uuid(),

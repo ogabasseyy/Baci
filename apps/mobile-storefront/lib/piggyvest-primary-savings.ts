@@ -1,6 +1,7 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
 import { addSavingsContribution } from './customer-savings';
 import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
+import { recoverPiggyvestPrimarySavings } from './piggyvest-primary-savings-recovery';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 export async function addPiggyvestPrimarySavingsContribution(input: {
@@ -45,6 +46,21 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     // the contribution through the working legacy flow instead of failing.
     if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
       throw error;
+    // The primary POST may have dispatched before the server disabled
+    // the rail: legacy dedupes only within its own rail, so retrying
+    // there while a primary operation is still pending would debit
+    // twice. Reconcile the goal's pending primary operation first (the
+    // lookup drains durable state even with the savings flags off);
+    // only fall back when primary holds nothing, and block when the
+    // lookup itself fails.
+    const pending = await recoverPiggyvestPrimarySavings({
+      merchantId: input.merchantId,
+      goalId: input.goalId,
+    });
+    if (pending)
+      throw new Error(
+        'Your contribution is still processing. Check its status before trying again.'
+      );
     return addSavingsContribution({
       amount: input.amount,
       goalId: input.goalId,

@@ -159,7 +159,7 @@ export async function reconcilePrimaryWalletCardCheckoutReversal(input: {
     // reference; its tenant IDs must equal the deployment's. No email
     // participates: the webhook cannot supply a trustworthy one, and
     // the status-recovery rule excludes it.
-    const intent = schemas.intent.parse(
+    const intent = schemas.reversalIntent.parse(
       await execute('reversal_intent', [transactionReference])
     );
     if (

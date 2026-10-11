@@ -1,8 +1,12 @@
 \ir ../../../../../supabase/migrations/20261008091300_primary_card_treasury_release.sql
 -- Mirror production version order: the checkout chain already applies the
--- stale-init superset, so re-apply it after the treasury base to keep the
--- chain's terminal function versions identical to a migrated database.
+-- stale-init superset, so re-apply it after the treasury base, then the
+-- expiry drain (3-argument assert_scope) and the flag-retention fix, to
+-- keep the chain's terminal function versions identical to a migrated
+-- database.
 \ir ../../../../../supabase/migrations/20261008091500_primary_card_stale_init_reentry.sql
+\ir ../../../../../supabase/migrations/20261008092300_primary_card_expiry_drain.sql
+\ir ../../../../../supabase/migrations/20261008095100_primary_card_flag_retains_treasury.sql
 BEGIN;
 INSERT INTO prefunded_card.treasury_snapshots VALUES('90000000-0000-4000-8000-000000000002','stale-local',2,now()-interval '16 minutes',980000,'fixture_verifier',now());
 SET SESSION AUTHORIZATION baci_primary_card_transfer;
@@ -69,7 +73,7 @@ DO $$ DECLARE fixture record; BEGIN
 END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
- IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id=(SELECT fixture.operation_id FROM public.custody_fixture fixture WHERE fixture.label='fourth@example.test'))<>'released' THEN RAISE EXCEPTION 'flag kept reservation'; END IF;
- IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>35000 THEN RAISE EXCEPTION 'flag kept treasury capacity'; END IF;
+ IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id=(SELECT fixture.operation_id FROM public.custody_fixture fixture WHERE fixture.label='fourth@example.test'))<>'reserved' THEN RAISE EXCEPTION 'flag released reservation'; END IF;
+ IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>60000 THEN RAISE EXCEPTION 'flag released treasury capacity'; END IF;
 END $$;
 ROLLBACK;

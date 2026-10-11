@@ -83,6 +83,29 @@ it('allows unrelated legacy inflows only after authoritative ownership lookup sa
     await dispatchPrimaryWalletBankInboxIntake({ ...fixture, env: fixture.env })
   ).toEqual({ outcome: 'not_handled', response: null });
 });
+it('enqueues authentic receipts with nested identity mismatch for conflict retention', async () => {
+  const { createHmac } = await import('node:crypto');
+  const mismatched = {
+    ...fixture.event,
+    eventData: { ...fixture.event.eventData, customer_id: 'intruder' },
+  };
+  const rawBody = Buffer.from(JSON.stringify(mismatched));
+  const signature = createHmac('sha512', fixture.config.webhookSecret)
+    .update(rawBody)
+    .digest('hex');
+  mocks.enqueue.mockResolvedValue('conflict');
+  const result = await dispatchPrimaryWalletBankInboxIntake({
+    rawBody,
+    signature,
+    env: fixture.env,
+  });
+  expect(result.outcome).toBe('conflict');
+  expect(result.response?.status).toBe(200);
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: rawBody.toString('hex'),
+    signature,
+  });
+});
 it.each([
   'signature',
   'configuration',

@@ -11,8 +11,11 @@ export async function recoverPiggyvestPrimarySavings(input: {
   const client = createStorefrontCustomerApiClient();
   const parsed = schemas.recoveryRequest.parse(input);
   // Never translate a failed lookup into "no operation": the pending
-  // endpoint answers SAVINGS_NOT_READY without consulting durable state,
-  // so only a successful response may clear the client operation context.
+  // endpoint drains durable state through the recovery runtime whenever
+  // base credentials exist (even with the savings flags off), so a
+  // throw means the durable state is genuinely unknown — a merchant
+  // mismatch answered without consulting storage, or a lookup failure.
+  // Only a successful response may clear the client operation context.
   // Callers treat a throw as unknown and must block new contributions.
   const payload: unknown = await client.fetchJson({
     path: `/api/storefront/customer/savings/primary-transfer/pending?merchantId=${encodeURIComponent(parsed.merchantId)}&goalId=${encodeURIComponent(parsed.goalId)}`,

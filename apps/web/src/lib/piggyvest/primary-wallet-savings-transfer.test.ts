@@ -317,6 +317,26 @@ it('cancels before dispatch when the source wallet belongs to another provider c
   expect(dependencies.claimDispatch).not.toHaveBeenCalled();
   expect(dependencies.transfer).not.toHaveBeenCalled();
 });
+it('cancels before dispatch when the destination wallet belongs to another provider customer', async () => {
+  const dependencies = ports();
+  dependencies.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id:
+      id === 'destination' ? 'foreign-customer' : 'source-customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 10000,
+  }));
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'unavailable' });
+  expect(dependencies.cancelBeforeDispatch).toHaveBeenCalledWith(
+    request.operationId
+  );
+  expect(dependencies.claimDispatch).not.toHaveBeenCalled();
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
 it('never accepts substituted destination or amount from storage', async () => {
   const dependencies = ports();
   dependencies.reserve.mockResolvedValue({

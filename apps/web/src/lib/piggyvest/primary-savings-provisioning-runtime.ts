@@ -5,16 +5,31 @@ import { createPrimarySavingsProvisioningExecutor } from './primary-savings-prov
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';
 import { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
-import { readPrimaryWalletRuntime } from './primary-wallet-runtime';
+import {
+  readPrimaryWalletRuntime,
+  readPrimaryWalletRuntimeDrain,
+} from './primary-wallet-runtime';
 import { retrievePiggyvestFundingAccounts } from './wallet-funding';
 import { createPiggyvestWallet, retrievePiggyvestWallet } from './wallets';
 
 export function readPrimarySavingsProvisioningRuntime(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  mode: 'provision' | 'recover' = 'provision'
 ) {
-  if (env.PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED !== 'true')
+  // Recover mode ignores only the rollout flag: an interrupted
+  // provisioning already holds a verified wallet plus adopted pending
+  // intents, and the same preconditions, bindings, and credentials
+  // still apply. Rolling back the flag must drain those orphans, not
+  // strand them behind a 503 that no flag state can clear.
+  if (
+    mode === 'provision' &&
+    env.PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED !== 'true'
+  )
     return null;
-  const primary = readPrimaryWalletRuntime(env);
+  const primary =
+    mode === 'recover'
+      ? readPrimaryWalletRuntimeDrain(env)
+      : readPrimaryWalletRuntime(env);
   if (!primary) return null;
   const parsed = schemas.runtime.safeParse({
     ...primary,

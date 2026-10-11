@@ -2,6 +2,7 @@ import { beforeEach, expect, it, jest } from '@jest/globals';
 
 const mockFetchJson = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockLegacyAdd = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockRecover = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockCreateClient = jest.fn((..._args: unknown[]) => ({
   fetchJson: mockFetchJson,
 }));
@@ -11,6 +12,9 @@ jest.mock('./storefront-customer-api-client', () => ({
 }));
 jest.mock('./customer-savings', () => ({
   addSavingsContribution: (...args: unknown[]) => mockLegacyAdd(...args),
+}));
+jest.mock('./piggyvest-primary-savings-recovery', () => ({
+  recoverPiggyvestPrimarySavings: (...args: unknown[]) => mockRecover(...args),
 }));
 const { addPiggyvestPrimarySavingsContribution } =
   require('./piggyvest-primary-savings') as typeof import('./piggyvest-primary-savings');
@@ -73,11 +77,40 @@ it('routes the contribution through legacy savings when primary is unconfigured'
   mockFetchJson.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
   );
+  mockRecover.mockResolvedValue(null);
   mockLegacyAdd.mockResolvedValue({ status: 'pending' });
   await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual({
     status: 'pending',
   });
+  expect(mockRecover).toHaveBeenCalledWith({
+    merchantId: input.merchantId,
+    goalId: input.goalId,
+  });
   expect(mockLegacyAdd).toHaveBeenCalledWith(input);
+});
+it('blocks legacy fallback while a primary operation is still pending', async () => {
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  mockRecover.mockResolvedValue({
+    operationId: input.idempotencyKey,
+    goalId: input.goalId,
+    amountKobo: 2000,
+  });
+  await expect(addPiggyvestPrimarySavingsContribution(input)).rejects.toThrow(
+    'still processing'
+  );
+  expect(mockLegacyAdd).not.toHaveBeenCalled();
+});
+it('blocks legacy fallback when the pending lookup itself fails', async () => {
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  mockRecover.mockRejectedValue(new Error('lookup down'));
+  await expect(addPiggyvestPrimarySavingsContribution(input)).rejects.toThrow(
+    'lookup down'
+  );
+  expect(mockLegacyAdd).not.toHaveBeenCalled();
 });
 it('surfaces ambiguous failures instead of silently switching rails', async () => {
   mockFetchJson.mockRejectedValue(new Error('timeout'));

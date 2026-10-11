@@ -1,8 +1,11 @@
 \set ON_ERROR_STOP on
 \ir primary-wallet-card-custody-settlement-fence.integration.sql
-\ir ../../../../../supabase/migrations/20261008092300_primary_card_expiry_drain.sql
+-- The expiry drain (092300) already applied via the custody chain's
+-- treasury-rejections include; re-applying would fail on the plain
+-- CREATE FUNCTION for the drain assert_scope overload.
 \ir ../../../../../supabase/migrations/20261008094500_primary_card_checkout_reversals.sql
 \ir ../../../../../supabase/migrations/20261008094600_primary_card_reversal_intent_lookup.sql
+\ir ../../../../../supabase/migrations/20261008095200_primary_card_reversal_retention.sql
 -- Reversal conformance: Paystack refund/dispute webhooks land in
 -- checkout_reversals and fence the ledger. The fence chain above ends
 -- post-expiry ('third' settled, 'fourth' collected-but-unsettled), so
@@ -12,7 +15,7 @@ INSERT INTO public.customers VALUES('50000000-0000-4000-8000-000000000002','1000
 INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
 VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000003',repeat('e',64),'verified','fifth@example.test','fifth@example.test-wallet');
 CREATE TABLE public.reversal_fixture(label text PRIMARY KEY,scope jsonb,operation_id uuid);
-GRANT SELECT,UPDATE ON public.reversal_fixture TO baci_primary_card_authorizer,baci_primary_card_evidence;
+GRANT SELECT,UPDATE,INSERT ON public.reversal_fixture TO baci_primary_card_authorizer,baci_primary_card_evidence;
 INSERT INTO public.reversal_fixture(label,scope)
 SELECT 'fifth@example.test',original.scope||jsonb_build_object('customerId','50000000-0000-4000-8000-000000000002','userId','50000000-0000-4000-8000-000000000003','email','fifth@example.test')
 FROM public.card_fixture original WHERE original.scope->>'email'='customer@example.test';
@@ -106,10 +109,73 @@ BEGIN
   IF (intent->>'operationId')::uuid=(SELECT fixture.operation_id FROM public.reversal_fixture fixture WHERE label='fifth@example.test') THEN
     RAISE EXCEPTION 'reversal did not free unresolved slot';
   END IF;
+  INSERT INTO public.reversal_fixture(label,scope,operation_id)
+    VALUES('fifth-second@example.test',scope,(intent->>'operationId')::uuid);
 END $$;
 RESET SESSION AUTHORIZATION;
 UPDATE piggyvest_primary_card.settings SET expires_at='2020-01-01T00:00:00Z'
   WHERE integration_id='10000000-0000-4000-8000-000000000004';
+-- Partial refund pre-collection: records the fence and flags for
+-- operator reconciliation instead of abandoning; the reservation and
+-- treasury capacity are retained for the unrefunded remainder. Reuses
+-- the fifth customer's second (still reserved) checkout.
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  partial record;
+  scope jsonb;
+  payload jsonb;
+BEGIN
+  SELECT * INTO partial FROM public.reversal_fixture WHERE label='fifth-second@example.test';
+  scope := partial.scope||'{"expiresAt":"2020-01-01T00:00:00Z"}';
+  payload := jsonb_build_object('event','refund.processed','kind','refund','resolution',NULL,'amountKobo',10000,'currency','NGN','status','processed',
+    'transactionReference','pvb-first-primary-'||partial.operation_id);
+  IF piggyvest_primary_card.record_checkout_reversal(scope,partial.operation_id,'refund','evt-refund-partial-1',payload)->>'outcome'<>'recorded' THEN
+    RAISE EXCEPTION 'partial refund not recorded';
+  END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ DECLARE
+  op_id uuid := (SELECT fixture.operation_id FROM public.reversal_fixture fixture WHERE label='fifth-second@example.test');
+BEGIN
+  IF (SELECT state FROM piggyvest_primary_card.operations WHERE id=op_id)<>'reconciliation_required' THEN RAISE EXCEPTION 'partial refund abandoned checkout'; END IF;
+  IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id=op_id)<>'reserved' THEN RAISE EXCEPTION 'partial refund released reservation'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals WHERE operation_id=op_id)<>1 THEN RAISE EXCEPTION 'partial refund fence not recorded'; END IF;
+END $$;
+-- Detached owners (account deleted; operation kept with customer_id
+-- NULL) still record their money-out evidence: the write binds
+-- tenant-only. Simulate the deletion detach directly (no deletion
+-- trigger in this chain) with a production-faithful null-customer
+-- scope; a mismatched business binding must still fail closed.
+ALTER TABLE piggyvest_primary_card.operations ALTER COLUMN customer_id DROP NOT NULL;
+UPDATE piggyvest_primary_card.operations SET customer_id=NULL
+  WHERE id=(SELECT fixture.operation_id FROM public.reversal_fixture fixture WHERE label='fifth-second@example.test');
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  partial record;
+  scope jsonb;
+  payload jsonb;
+BEGIN
+  SELECT * INTO partial FROM public.reversal_fixture WHERE label='fifth-second@example.test';
+  scope := partial.scope||'{"expiresAt":"2020-01-01T00:00:00Z","customerId":null,"userId":null}';
+  payload := jsonb_build_object('event','refund.processed','kind','refund','resolution',NULL,'amountKobo',25000,'currency','NGN','status','processed',
+    'transactionReference','pvb-first-primary-'||partial.operation_id);
+  IF piggyvest_primary_card.record_checkout_reversal(scope,partial.operation_id,'refund','evt-refund-detached-1',payload)->>'outcome'<>'recorded' THEN
+    RAISE EXCEPTION 'detached reversal not recorded';
+  END IF;
+  BEGIN
+    PERFORM piggyvest_primary_card.record_checkout_reversal(scope||'{"businessId":"intruder-business"}',partial.operation_id,'refund','evt-refund-detached-2',payload);
+    RAISE EXCEPTION 'detached reversal escaped tenant binding';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%card ownership unavailable%' THEN RAISE; END IF;
+  END;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ DECLARE
+  op_id uuid := (SELECT fixture.operation_id FROM public.reversal_fixture fixture WHERE label='fifth-second@example.test');
+BEGIN
+  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals WHERE operation_id=op_id)<>2 THEN RAISE EXCEPTION 'detached fence not recorded'; END IF;
+  IF (SELECT state FROM piggyvest_primary_card.operations WHERE id=op_id)<>'reconciliation_required' THEN RAISE EXCEPTION 'detached reversal moved absorbing state'; END IF;
+END $$;
 -- The reversal intent lookup resolves the reference tail without a
 -- scope: documented refund webhooks carry no metadata, so ownership
 -- binds stored IDs against the runtime instead of webhook fields.
@@ -242,7 +308,7 @@ BEGIN
 END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
-  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals)<>4 THEN RAISE EXCEPTION 'reversal tally wrong'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.checkout_reversals)<>6 THEN RAISE EXCEPTION 'reversal tally wrong'; END IF;
   IF (SELECT count(*) FROM piggyvest_primary_card.settlements)<>2 THEN RAISE EXCEPTION 'won dispute did not settle'; END IF;
   IF (SELECT resolution FROM piggyvest_primary_card.checkout_reversals WHERE provider_event_id='evt-dispute-fourth-1')<>'won' THEN RAISE EXCEPTION 'won resolution not stored'; END IF;
   IF (SELECT resolution FROM piggyvest_primary_card.checkout_reversals WHERE provider_event_id='evt-dispute-third-1')<>'lost' THEN RAISE EXCEPTION 'lost resolution not stored'; END IF;
@@ -253,7 +319,7 @@ DO $$ BEGIN
   IF (SELECT available_balance FROM public.customer_wallets WHERE customer_id='40000000-0000-4000-8000-000000000002')<>292 THEN RAISE EXCEPTION 'won settlement double-credited wallet'; END IF;
   IF EXISTS(SELECT 1 FROM public.customer_wallet_transactions WHERE customer_id='40000000-0000-4000-8000-000000000002' AND source_type='piggyvest_primary_card_custody') THEN RAISE EXCEPTION 'won settlement credited wallet'; END IF;
   IF (SELECT state FROM piggyvest_primary_card.transfer_outbox WHERE operation_id=(SELECT operation_id FROM public.custody_fixture WHERE label='fourth@example.test'))<>'completed' THEN RAISE EXCEPTION 'won settlement did not complete outbox'; END IF;
-  IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE customer_id='50000000-0000-4000-8000-000000000002' AND state='reserved')<>1 THEN RAISE EXCEPTION 're-reserve missing'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE email='fifth@example.test' AND customer_id IS NULL AND state='reconciliation_required')<>1 THEN RAISE EXCEPTION 'partially refunded re-reserve missing'; END IF;
   IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>35000 THEN RAISE EXCEPTION 'reversal treasury tally wrong'; END IF;
   IF (SELECT consumed_kobo FROM prefunded_card.treasury_bindings)<>70000 THEN RAISE EXCEPTION 'won settlement did not consume treasury'; END IF;
 END $$;

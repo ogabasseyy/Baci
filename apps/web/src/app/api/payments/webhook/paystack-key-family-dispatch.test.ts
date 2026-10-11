@@ -17,6 +17,7 @@ vi.mock(
 
 import {
   dispatchPaystackCheckoutOnlyWebhook,
+  dispatchPaystackSharedKeyWebhook,
   matchPaystackWebhookSecrets,
 } from './paystack-key-family-dispatch';
 
@@ -147,4 +148,34 @@ it('returns the retry boundary for an unresolved reversal-shaped event', async (
   const response = await dispatchPaystackCheckoutOnlyWebhook(body);
   expect(response.status).toBe(503);
   expect(response.headers.get('retry-after')).toBe('60');
+});
+
+it('routes shared-key reversals to the reversal record first', async () => {
+  const reversed = Response.json({ received: true }, { status: 200 });
+  mocks.reversal.mockResolvedValueOnce(reversed);
+  const body = {
+    event: 'refund.processed',
+    data: { transaction_reference: 'pvb-first-primary-op-1' },
+  };
+  await expect(dispatchPaystackSharedKeyWebhook(body)).resolves.toBe(reversed);
+  expect(mocks.reversal).toHaveBeenCalledWith({ body });
+  expect(mocks.reconcile).not.toHaveBeenCalled();
+});
+
+it('routes shared-key terminal charges through card reconciliation', async () => {
+  const reconciled = Response.json({ received: true }, { status: 200 });
+  mocks.reconcile.mockResolvedValueOnce(reconciled);
+  const body = { event: 'charge.failed' };
+  await expect(dispatchPaystackSharedKeyWebhook(body)).resolves.toBe(
+    reconciled
+  );
+  expect(mocks.reversal).toHaveBeenCalledWith({ body });
+  expect(mocks.reconcile).toHaveBeenCalledWith({ body });
+});
+
+it('returns null for unrecognized shared-key events so legacy handles them', async () => {
+  const body = { event: 'charge.success', data: { reference: 'REF123' } };
+  await expect(dispatchPaystackSharedKeyWebhook(body)).resolves.toBeNull();
+  expect(mocks.reversal).toHaveBeenCalledWith({ body });
+  expect(mocks.reconcile).toHaveBeenCalledWith({ body });
 });

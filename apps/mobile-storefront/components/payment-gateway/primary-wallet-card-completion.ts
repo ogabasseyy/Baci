@@ -17,6 +17,12 @@ const TERMINAL_DIRECTIVE_COPY =
 // re-adopts any surviving server operation, so nothing is lost either way.
 const DROPPED_DIRECTIVE_COPY =
   'We could not find this funding on this device. Start a new funding to try again — any completed checkout will still be found and credited.';
+// A non-Paystack gateway reaches completion only through a misrouted
+// or tampered launch: the details may be complete, so the incomplete
+// copy would mislead. Name the supported rail explicitly — the gateway
+// value itself is caller-controlled and must not be interpolated.
+const UNSUPPORTED_GATEWAY_COPY =
+  'Primary card funding uses Paystack checkout. This funding arrived with a different gateway, so no charge was started here — return to your wallet to start a new funding.';
 
 export function beginPrimaryWalletCardCompletion(
   input: Parameters<typeof beginWalletTopUpCompletion>[0]
@@ -33,6 +39,7 @@ export function beginPrimaryWalletCardCompletion(
   void (async () => {
     let failureCause:
       | 'incomplete_details'
+      | 'unsupported_gateway'
       | 'account_changed'
       | 'operation_dropped'
       | 'recovery_unconfirmed' = 'recovery_unconfirmed';
@@ -45,14 +52,13 @@ export function beginPrimaryWalletCardCompletion(
       // non-pilot recovery (and its retries) before the persisted
       // operation could be verified. Merchants without primary simply
       // have no persisted operation, so recover() rejects the same way.
-      if (
-        !userId ||
-        !input.merchantId ||
-        !input.reference ||
-        input.gateway !== 'paystack'
-      ) {
+      if (!userId || !input.merchantId || !input.reference || !input.gateway) {
         failureCause = 'incomplete_details';
         throw new Error('Primary card funding details are incomplete.');
+      }
+      if (input.gateway !== 'paystack') {
+        failureCause = 'unsupported_gateway';
+        throw new Error('Primary card funding requires Paystack checkout.');
       }
       const result = await client.recover({
         merchantId: input.merchantId,
@@ -139,6 +145,12 @@ export function beginPrimaryWalletCardCompletion(
       if (failureCause === 'operation_dropped') {
         input.setErrorMessage(DROPPED_DIRECTIVE_COPY);
         input.setTerminalDirective?.(DROPPED_DIRECTIVE_COPY);
+      } else if (failureCause === 'unsupported_gateway') {
+        // The error view redacts raw messages and only displays the
+        // terminal directive on statusError, so curated terminal copy
+        // travels through the directive channel — never the message.
+        input.setErrorMessage(UNSUPPORTED_GATEWAY_COPY);
+        input.setTerminalDirective?.(UNSUPPORTED_GATEWAY_COPY);
       } else
         input.setErrorMessage(
           'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'

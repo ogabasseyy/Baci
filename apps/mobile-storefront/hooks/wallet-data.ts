@@ -27,6 +27,31 @@ import {
   normalizeWalletTransaction,
 } from './wallet-transaction-normalize';
 
+// The primary provider probe may take up to its 30s network timeout;
+// the wallet load must never wait that long for one funding rail. A
+// stalled probe settles as unknown (surfaced as no account, never a
+// possibly superseded legacy DVA) while the rest of the load
+// proceeds; the next load refetches.
+const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
+
+function readPrimaryFundingAccountSoon(merchantId: string, userId: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<
+    Awaited<ReturnType<typeof readPrimaryFundingAccount>>
+  >((resolve) => {
+    timer = setTimeout(
+      () => resolve({ status: 'unavailable' }),
+      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
+    );
+  });
+  return Promise.race([
+    readPrimaryFundingAccount(merchantId, userId).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+    }),
+    timeout,
+  ]);
+}
+
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
   return {
@@ -151,10 +176,11 @@ export async function fetchWalletData(
     // explicit unavailable marker, so the wallet still loads.
     fetchWalletSavingsInterest(merchantId),
     // Same contract for the primary provider lookup: it resolves
-    // alongside the database reads instead of serializing the load.
+    // alongside the database reads instead of serializing the load,
+    // with a short budget so a stalled probe cannot hold the wallet.
     // Scoped to the authenticated identity so a snapshot-bearing probe
     // can never leak across an account switch.
-    readPrimaryFundingAccount(merchantId, userId ?? resolvedCustomerId),
+    readPrimaryFundingAccountSoon(merchantId, userId ?? resolvedCustomerId),
   ]);
 
   if (fundingAccountResult.error) {

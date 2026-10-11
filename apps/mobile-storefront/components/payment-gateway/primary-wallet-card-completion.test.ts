@@ -201,6 +201,26 @@ it('never re-reads scope when details are incomplete', async () => {
   expect(mockReadPending).not.toHaveBeenCalled();
   expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
 });
+it('names the supported rail when a non-Paystack gateway reaches completion', async () => {
+  const setTerminalDirective = jest.fn();
+  const input = { ...fixture(), gateway: 'korapay', setTerminalDirective };
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  await flush();
+  expect(mockRecover).not.toHaveBeenCalled();
+  expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Primary card funding uses Paystack checkout')
+  );
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('no charge was started here')
+  );
+  // The error view redacts raw messages: curated copy must also ride
+  // the terminal-directive channel to be displayed on statusError.
+  expect(setTerminalDirective).toHaveBeenCalledWith(
+    expect.stringContaining('Primary card funding uses Paystack checkout')
+  );
+});
 it('directs a new funding when retry finds no retained operation', async () => {
   const input = fixture();
   mockRecover.mockRejectedValueOnce(new Error('No matching operation'));

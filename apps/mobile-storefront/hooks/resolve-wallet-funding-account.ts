@@ -1,5 +1,8 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
-import { getPiggyvestPrimaryCapabilitySnapshot } from '@/lib/piggyvest-primary-capability';
+import {
+  getPiggyvestPrimaryCapabilitySnapshot,
+  isPrimaryWalletNotReady,
+} from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -12,6 +15,12 @@ type PrimarySnapshot = Awaited<
 >;
 export type SettledPrimaryFundingAccount =
   | { status: 'ready'; account: PrimarySnapshot['account'] }
+  // Primary definitively has no account for this customer (server
+  // unconfigured, or enabled but never provisioned): the legacy
+  // projection is authoritative, not stale.
+  | { status: 'not_ready' }
+  // Unknown (transient failure, parse error, account-switch race):
+  // surface no account rather than a possibly superseded legacy DVA.
   | { status: 'unavailable' };
 
 // The funding-account snapshot belongs to whoever the session
@@ -28,10 +37,13 @@ function settleBoundAccount(
   account: PrimarySnapshot['account'] | undefined
 ): SettledPrimaryFundingAccount {
   // Post-fetch bind: reject a snapshot that landed after an account
-  // switch, even when the session matched at fetch start. Unavailable
-  // is non-fatal: the wallet still loads and refetches.
-  if (account === undefined || readActiveAuthUserId() !== expectedUserId)
+  // switch, even when the session matched at fetch start. Unknown is
+  // non-fatal: the wallet still loads and refetches.
+  if (readActiveAuthUserId() !== expectedUserId)
     return { status: 'unavailable' };
+  // Enabled but never provisioned: the legacy projection is the
+  // customer's actual funding path, not a stale fallback.
+  if (account === undefined) return { status: 'not_ready' };
   return { status: 'ready', account };
 }
 
@@ -64,7 +76,9 @@ export async function readPrimaryFundingAccount(
         merchantId,
         userId
       );
-      if (!snapshot.available) return { status: 'unavailable' };
+      // The snapshot resolves unavailable only on the server's
+      // explicit not-ready signal; anything else rejects.
+      if (!snapshot.available) return { status: 'not_ready' };
       if (snapshot.account !== undefined)
         return settleBoundAccount(userId, snapshot.account);
     } catch {
@@ -77,7 +91,11 @@ export async function readPrimaryFundingAccount(
       userId
     );
     return settleBoundAccount(userId, account);
-  } catch {
+  } catch (error) {
+    // Only an authoritative not-ready keeps the legacy projection;
+    // transient failures surface unavailable instead of a DVA the
+    // primary account may have superseded.
+    if (isPrimaryWalletNotReady(error)) return { status: 'not_ready' };
     return { status: 'unavailable' };
   }
 }
@@ -96,9 +114,11 @@ export function resolveWalletFundingAccount(
       bank_name: primary.account.bankName,
       provider: primary.account.provider,
     };
-  // Primary unconfirmed, not yet provisioned, or unreachable: keep the
-  // last-known legacy projection instead of discarding the funding
-  // section. Freshly onboarded primary customers have no legacy rows, so
-  // this still resolves to null for them.
-  return parseProjectWalletFundingAccount(data);
+  // Primary definitively absent (server unconfigured, or enabled but
+  // never provisioned): the legacy projection is authoritative. When
+  // primary is merely unreachable, surface no account rather than a
+  // DVA the primary account may have superseded.
+  if (primary.status === 'not_ready')
+    return parseProjectWalletFundingAccount(data);
+  return null;
 }

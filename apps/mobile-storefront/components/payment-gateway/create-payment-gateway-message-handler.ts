@@ -149,6 +149,14 @@ export function createPaymentGatewayMessageHandler({
         data.type === 'payment_success')
     ) {
       if (confirmServerPayment) confirmServerPayment();
+      // Unwired drops are fail-closed by design, but must not be
+      // silent: without this warn a future caller omitting the
+      // confirmer would strand the checkout on loading with no
+      // triage signal. Redacted: message type only, no payload.
+      else
+        console.warn(
+          `[payment-gateway] dropped primary success-claim without confirmer: ${data.type}`
+        );
       return;
     }
 

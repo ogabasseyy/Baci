@@ -8,7 +8,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const repository = path.resolve(directory, '../../..');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const frozen = {
-  '20261007220000_piggyvest_primary_interest_storage.sql':
+  '20261007212100_piggyvest_primary_interest_storage.sql':
     '7a1c7765a5d5dd971fc369df4202ecf9e9bcc908216b3d9c24fff19831a38992',
   '20261007220001_piggyvest_primary_interest_evidence.sql':
     '4440296cabca96c99fe0091c0e71e5ae0b9adb8783bb7209da1dc312cbce2a13',

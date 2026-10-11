@@ -93,6 +93,23 @@ export async function dispatchPaystackCheckoutOnlyWebhook(
   );
 }
 
+/**
+ * Handle a delivery verified by BOTH the legacy and checkout secrets
+ * (shared-key deployments). Card-shaped terminal events — failed
+ * charges, refunds, disputes — route through the card reconcilers
+ * first so abandoned checkouts release and reversals fence; anything
+ * the card paths do not recognize returns null and the caller falls
+ * through to the legacy handlers below. Unlike the checkout-only
+ * dispatcher this never acknowledges: legacy owns unrelated events.
+ */
+export async function dispatchPaystackSharedKeyWebhook(
+  body: unknown
+): Promise<Response | null> {
+  const reversed = await reconcilePrimaryWalletCardCheckoutReversal({ body });
+  if (reversed) return reversed;
+  return await reconcilePrimaryWalletCardCheckoutWebhook({ body });
+}
+
 function timingSafeHexEqual(
   providedSignature: string,
   expectedSignature: string

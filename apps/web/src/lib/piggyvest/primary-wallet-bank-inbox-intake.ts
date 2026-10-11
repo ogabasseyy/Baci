@@ -1,8 +1,8 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { bankTransferInflowSuccessEventSchema } from '@/schemas/piggyvest/events';
 import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
 import { createPrimaryWalletBankInboxStore } from './primary-wallet-bank-inbox-store';
-import { preparePrimaryWalletInflowReceipt } from './primary-wallet-inflow-receipt';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
 
 export async function dispatchPrimaryWalletBankInboxIntake(input: {
@@ -30,7 +30,15 @@ export async function dispatchPrimaryWalletBankInboxIntake(input: {
     const event: unknown = JSON.parse(
       new TextDecoder('utf-8', { fatal: true }).decode(input.rawBody)
     );
-    preparePrimaryWalletInflowReceipt(event);
+    // Envelope-only gate: malformed deliveries still 503 here, but
+    // semantic mismatches (nested customer/amount identity) must reach
+    // the inbox. The database classifies attributable mismatches as
+    // conflicts and preserves the signed bytes; the worker blocks
+    // unprocessable receipts. Throwing before enqueue would 503 a
+    // permanent failure until provider retries expire, losing the only
+    // record of a potentially funded deposit.
+    if (!bankTransferInflowSuccessEventSchema.safeParse(event).success)
+      throw new Error('Invalid wallet inflow receipt');
     if (!input.signature) throw new Error('Missing signature');
     const store = createPrimaryWalletBankInboxStore(config);
     await store.readiness();

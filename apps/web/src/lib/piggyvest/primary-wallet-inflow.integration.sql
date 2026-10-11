@@ -44,6 +44,24 @@ DO $$ BEGIN
   IF has_function_privilege(SESSION_USER,'piggyvest_primary.apply_inflow(uuid,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'unscoped credit permitted'; END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+-- Minimal surface for the terminal apply_inflow: the bank-authority,
+-- alias, and card-prerequisite tables live in sibling chains outside
+-- this fixture. Empty stubs preserve direct-inflow behavior while the
+-- event-identity fence stays fully exercised.
+CREATE TABLE piggyvest_primary.bank_inbox_authorities(integration_id uuid,merchant_id uuid,business_id text,environment text,worker_login name,enabled boolean);
+CREATE TABLE piggyvest_primary.custody_transaction_aliases(integration_id uuid,provider_transaction_id text,receipt_id uuid);
+CREATE SCHEMA piggyvest_primary_card;
+CREATE TABLE piggyvest_primary_card.operations(integration_id uuid,merchant_id uuid,customer_id uuid,state text,amount_kobo bigint);
+\ir ../../../../../supabase/migrations/20261008095000_primary_inflow_event_identity.sql
+SET SESSION AUTHORIZATION primary_evidence_fixture;
+DO $$
+DECLARE
+  integration uuid := '00000000-0000-4000-8000-000000000004';
+  receipt jsonb := '{"eventId":"event","providerTransactionId":"txn","providerCustomerId":"customer","providerWalletId":"wallet","eventDataId":"detail","amountKobo":10000,"feeKobo":100,"currency":"NGN","reference":"ref","sessionId":null,"creditedAt":"2026-10-07T00:00:00.000Z","financialFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bodyDigest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}';
+BEGIN
+  IF piggyvest_primary.apply_inflow_environment(integration,'staging',jsonb_set(receipt,'{providerTransactionId}','"retry-txn"')) <> 'conflict' THEN RAISE EXCEPTION 'event identity reused'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
   IF (SELECT available_balance FROM public.customer_wallets) <> 108.50 THEN RAISE EXCEPTION 'wrong balance'; END IF;
   IF (SELECT total_earned FROM public.customer_wallets) <> 2.00 THEN RAISE EXCEPTION 'deposit counted as earnings'; END IF;

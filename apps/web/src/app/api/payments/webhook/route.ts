@@ -77,6 +77,7 @@ import {
 import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
 import {
   dispatchPaystackCheckoutOnlyWebhook,
+  dispatchPaystackSharedKeyWebhook,
   matchPaystackWebhookSecrets,
 } from './paystack-key-family-dispatch';
 
@@ -560,11 +561,13 @@ export async function POST(request: NextRequest) {
     // Verify webhook signature based on gateway
     let isValidSignature = false;
     let paystackCheckoutOnly = false;
+    let paystackSharedKey = false;
     if (gateway === 'paystack') {
       const signature = request.headers.get('x-paystack-signature');
       const matched = matchPaystackWebhookSecrets(signature, rawBody);
       isValidSignature = matched.legacy || matched.checkout;
       paystackCheckoutOnly = matched.checkout && !matched.legacy;
+      paystackSharedKey = matched.checkout && matched.legacy;
     } else {
       const signature = request.headers.get('x-korapay-signature');
       isValidSignature = verifyKorapayWebhookSignature(signature, rawBody);
@@ -621,6 +624,15 @@ export async function POST(request: NextRequest) {
       // reconcile path (see the key-family helper). Legacy handlers
       // (merchant wallets, invoices, savings) never see it.
       return await dispatchPaystackCheckoutOnlyWebhook(body);
+    }
+
+    if (gateway === 'paystack' && paystackSharedKey) {
+      // Shared-key deployments verify under both families: try the
+      // card reconcilers first so failed charges abandon (releasing
+      // treasury) and checkout-shaped refunds/disputes fence, then
+      // fall through to the legacy branches for unrelated events.
+      const shared = await dispatchPaystackSharedKeyWebhook(body);
+      if (shared) return shared;
     }
 
     if (

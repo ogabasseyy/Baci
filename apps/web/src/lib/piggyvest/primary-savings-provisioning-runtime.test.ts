@@ -7,6 +7,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   primary: vi.fn(),
+  drain: vi.fn(),
   executor: vi.fn(),
   store: vi.fn(),
   provision: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('server-only', () => ({}));
 vi.mock('./primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: mocks.primary,
+  readPrimaryWalletRuntimeDrain: mocks.drain,
 }));
 vi.mock('./primary-savings-provisioning-executor', () => ({
   createPrimarySavingsProvisioningExecutor: mocks.executor,
@@ -41,6 +43,7 @@ vi.mock('./wallet-funding', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.primary.mockReturnValue(provisioningFixture.configuration);
+  mocks.drain.mockReturnValue(provisioningFixture.configuration);
   mocks.provision.mockResolvedValue({ status: 'pending' });
 });
 it('stays disabled without explicit provisioning activation', () => {
@@ -48,6 +51,25 @@ it('stays disabled without explicit provisioning activation', () => {
     readPrimarySavingsProvisioningRuntime({ NODE_ENV: 'test' })
   ).toBeNull();
   expect(mocks.primary).not.toHaveBeenCalled();
+});
+it('drains interrupted provisioning after the rollout flag rolls back', () => {
+  const result = readPrimarySavingsProvisioningRuntime(
+    {
+      NODE_ENV: 'test',
+      PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD: 'test-only-password',
+    },
+    'recover'
+  );
+  expect(result?.database.login).toBe(
+    'baci_piggyvest_primary_goal_provisioner'
+  );
+  expect(mocks.drain).toHaveBeenCalled();
+  expect(mocks.primary).not.toHaveBeenCalled();
+});
+it('still requires restricted credentials while draining', () => {
+  expect(
+    readPrimarySavingsProvisioningRuntime({ NODE_ENV: 'test' }, 'recover')
+  ).toBeNull();
 });
 it('requires a separately provisioned restricted database credential', () => {
   expect(

@@ -95,6 +95,24 @@ describe('primary wallet restricted executor', () => {
       ])
     ).rejects.toThrow('Primary wallet database unavailable');
   });
+  it('permits the onboarding release RPC with its three bound arguments', async () => {
+    await createPrimaryWalletExecutor(config)(
+      PRIMARY_WALLET_STATEMENTS.release,
+      [
+        '{}',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002',
+      ]
+    );
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      PRIMARY_WALLET_STATEMENTS.release,
+      [
+        '{}',
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002',
+      ]
+    );
+  });
   it('rejects arbitrary SQL before opening a connection', async () => {
     await expect(
       createPrimaryWalletExecutor(config)('SELECT * FROM public.customers', [])

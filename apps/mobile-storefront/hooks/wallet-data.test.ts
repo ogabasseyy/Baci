@@ -26,6 +26,17 @@ jest.mock('@/services/analytics', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }));
 
+const mockReadPrimary = jest.fn<() => Promise<unknown>>();
+jest.mock('./resolve-wallet-funding-account', () => {
+  const actual = jest.requireActual(
+    './resolve-wallet-funding-account'
+  ) as typeof import('./resolve-wallet-funding-account');
+  return {
+    ...actual,
+    readPrimaryFundingAccount: () => mockReadPrimary(),
+  };
+});
+
 function createResult(data: unknown, error: unknown = null): QueryResult {
   return { data, error };
 }
@@ -106,6 +117,7 @@ function setupSupabaseTables(
 describe('fetchWalletData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReadPrimary.mockResolvedValue({ status: 'unavailable' });
   });
 
   it('hydrates customer-hidden variants for every owned goal before mapping', async () => {
@@ -579,5 +591,34 @@ describe('fetchWalletData', () => {
     await expect(
       fetchWalletData('customer-1', 'merchant-1', 'user-1')
     ).rejects.toThrow(`${tableName} failed`);
+  });
+
+  it('loads the wallet without waiting for a stalled primary probe', async () => {
+    jest.useFakeTimers();
+    try {
+      setupSupabaseTables({
+        customer_wallet_payment_accounts: createResult({
+          account_name: 'Ogabassey/Jane Doe',
+          account_number: '1234567890',
+          bank_name: 'Titan Paystack',
+          provider: 'paystack',
+        }),
+      });
+      // Pilot merchant with a legacy DVA row: a stalled probe must
+      // surface no account instead of holding the load or showing a
+      // DVA the primary account may have superseded.
+      mockReadPrimary.mockReturnValue(new Promise(() => {}));
+      const pending = fetchWalletData(
+        'customer-1',
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        'user-1'
+      );
+      await jest.advanceTimersByTimeAsync(5000);
+      const result = await pending;
+      expect(result.wallet.funding_account).toBeNull();
+      expect(result.wallet.requires_funding_account_consent).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

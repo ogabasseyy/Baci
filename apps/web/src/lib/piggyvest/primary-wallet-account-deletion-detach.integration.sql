@@ -27,6 +27,7 @@ END $$;
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093200_primary_card_unsettled_deletion_block.sql
 \ir ../../../../../supabase/migrations/20261008093300_primary_card_reconciliation_deletion_detach.sql
+\ir ../../../../../supabase/migrations/20261008095100_primary_card_flag_retains_treasury.sql
 \ir ../../../../../supabase/migrations/20261008093400_primary_savings_unsettled_deletion_block.sql
 \ir ../../../../../supabase/migrations/20261008093500_primary_card_saved_token_deletion_purge.sql
 \ir ../../../../../supabase/migrations/20261008093800_primary_trigger_function_privilege_hygiene.sql
@@ -156,10 +157,13 @@ BEGIN
   DELETE FROM public.customers WHERE id = v_blocked;
   IF (SELECT customer_id FROM piggyvest_primary_card.operations WHERE email = 'blocked@example.test') IS NOT NULL THEN RAISE EXCEPTION 'settled operation not detached'; END IF;
 END $$;
--- reconciliation_required operations hold no live money-movement state
--- (flag_reconciliation releases the reservation; record_collection
--- rejects the state so no collection or transfer_outbox row can exist),
--- so detaching them strands no dispatch. The deletion guard must let
+-- reconciliation_required operations keep their treasury reservation
+-- (flag_reconciliation retains it: the flag fires on ambiguity, and the
+-- customer may already have been charged; record_collection rejects the
+-- state so no collection or transfer_outbox row can exist). Detaching
+-- them is still safe because the detach kills the scope-bound recovery
+-- path — the customer row is gone — so the deletion guard releases the
+-- reservation and returns capacity at detach time. The guard must let
 -- them detach: blocking this absorbing state would lock the account
 -- permanently with no terminal transition.
 DO $$ DECLARE
@@ -170,6 +174,27 @@ BEGIN
   VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_review,'50000000-0000-4000-8000-000000000032','staging','fixture-business','review@example.test','50000000-0000-4000-8000-000000000033',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('f',64),'review-wallet','review-customer','reconciliation_required');
   DELETE FROM public.customers WHERE id = v_review;
   IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE email = 'review@example.test' AND customer_id IS NULL AND amount_kobo = 25000 AND state = 'reconciliation_required') <> 1 THEN RAISE EXCEPTION 'review operation not retained'; END IF;
+END $$;
+-- Minimal treasury surface: the deletion guard releases the retained
+-- reservation exactly once at detach (no double-free on later deletes).
+CREATE SCHEMA prefunded_card;
+CREATE TABLE prefunded_card.treasury_bindings(id uuid PRIMARY KEY, reserved_kobo bigint);
+CREATE TABLE piggyvest_primary_card.reservations(operation_id uuid PRIMARY KEY, treasury_binding_id uuid, state text);
+DO $$ DECLARE
+  v_treasury uuid := '50000000-0000-4000-8000-000000000034';
+  v_customer uuid := '50000000-0000-4000-8000-000000000035';
+  v_user uuid := '50000000-0000-4000-8000-000000000036';
+  v_operation uuid := '50000000-0000-4000-8000-000000000037';
+BEGIN
+  INSERT INTO public.customers VALUES(v_customer, '10000000-0000-4000-8000-000000000001', v_user, 'treasury-release@example.test');
+  INSERT INTO piggyvest_primary_card.operations(id,integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
+  VALUES(v_operation,'10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_customer,v_user,'staging','fixture-business','treasury-release@example.test','50000000-0000-4000-8000-000000000038',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('f',64),'release-wallet','release-customer','reconciliation_required');
+  INSERT INTO prefunded_card.treasury_bindings VALUES(v_treasury, 25000);
+  INSERT INTO piggyvest_primary_card.reservations VALUES(v_operation, v_treasury, 'reserved');
+  DELETE FROM public.customers WHERE id = v_customer;
+  IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id = v_operation) <> 'released' THEN RAISE EXCEPTION 'detach kept reservation'; END IF;
+  IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings WHERE id = v_treasury) <> 0 THEN RAISE EXCEPTION 'detach kept treasury capacity'; END IF;
+  IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE email = 'treasury-release@example.test' AND customer_id IS NULL AND state = 'reconciliation_required') <> 1 THEN RAISE EXCEPTION 'released operation not retained'; END IF;
 END $$;
 -- Deletion is rejected while a savings transfer is dispatched: detaching
 -- the goal and wallet transaction would leave settle_savings unable to

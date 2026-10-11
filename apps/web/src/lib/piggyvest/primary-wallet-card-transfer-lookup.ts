@@ -73,6 +73,20 @@ export function createPrimaryCardTransferLookup(input: {
       normalized.data.data.destination_wallet === command.destinationWalletId
     )
       return 'submitted';
+    // Bound terminal failure: the provider definitively reports this
+    // reference as failed with all reservation fields matching, so no
+    // money moved. Report absent so the worker resubmits with the
+    // identical reference; consigning this to uncertain would strand a
+    // collected checkout as unrecoverable unknown instead of retrying.
+    const failed = verification.richFailed.safeParse(response);
+    if (
+      failed.success &&
+      failed.data.data.third_party_reference === command.reference &&
+      failed.data.data.amount === command.amountKobo &&
+      failed.data.data.source_wallet === command.sourceWalletId &&
+      failed.data.data.destination_wallet === command.destinationWalletId
+    )
+      return 'absent';
     return 'uncertain';
   };
 }

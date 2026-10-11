@@ -54,11 +54,45 @@ describe('primary wallet authenticated identity', () => {
       userId,
       email: 'customer@example.com',
       emailVerified: true,
-      name: 'Test Customer',
-      phone: '08000000000',
     });
     expect(input.eq).toHaveBeenCalledWith('merchant_id', merchantId);
     expect(input.eq).toHaveBeenCalledWith('user_id', userId);
+  });
+  it.each([
+    { phone: '' },
+    { phone: null },
+    { first_name: '', last_name: '' },
+  ])('keeps wallet access when mutable profile contact is cleared: %j', async (change) => {
+    // Post-onboarding authorization resolves on immutable IDs plus
+    // the verified auth email: clearing an optional phone (or name)
+    // must not lock the customer out of reads, recovery, or
+    // submissions to an already-bound wallet.
+    const input = fixture();
+    input.maybeSingle.mockResolvedValue({
+      data: { ...input.row, ...change },
+      error: null,
+    });
+    await expect(
+      resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: false,
+      })
+    ).resolves.toMatchObject({ merchantId, customerId, userId });
+  });
+  it('still requires contact details to create the provider customer', async () => {
+    const input = fixture();
+    input.maybeSingle.mockResolvedValue({
+      data: { ...input.row, phone: '' },
+      error: null,
+    });
+    expect(
+      await resolvePrimaryWalletIdentity({
+        ...input,
+        merchantId,
+        forOnboarding: true,
+      })
+    ).toBeNull();
   });
   it('requires verified auth email before reading a customer', async () => {
     const input = fixture();
@@ -76,7 +110,6 @@ describe('primary wallet authenticated identity', () => {
     { user_id: null },
     { user_id: customerId },
     { merchant_id: customerId },
-    { phone: null },
   ])('does not use mismatched customer identity: %j', async (change) => {
     const input = fixture();
     input.maybeSingle.mockResolvedValue({

@@ -55,15 +55,35 @@ describe('authoritative transfer reference lookup', () => {
     });
     expect(await lookup(fixture.command, fixture.context)).toBe('uncertain');
   });
-  it('reports uncertain for failed or malformed provider evidence', async () => {
+  it('reports uncertain for malformed provider evidence', async () => {
     for (const body of [
-      { ...success, data: { ...success.data, status: 'failed' } },
       { status: true, data: { status: 'successful' } },
       'not-json-at-all{{{',
     ]) {
       const { lookup } = lookupWith(body);
       expect(await lookup(fixture.command, fixture.context)).toBe('uncertain');
     }
+  });
+  it('reports absent for bound terminal-failure evidence so the worker retries', async () => {
+    // Definitive provider failure with all reservation fields bound:
+    // no money moved, so the identical reference is safe to resubmit.
+    const { lookup } = lookupWith({
+      ...success,
+      data: { ...success.data, status: 'failed' },
+    });
+    expect(await lookup(fixture.command, fixture.context)).toBe('absent');
+  });
+  it.each([
+    { third_party_reference: 'another-reference' },
+    { amount: fixture.command.amountKobo + 1 },
+    { source_wallet: 'another-wallet' },
+    { destination_wallet: 'another-wallet' },
+  ])('reports uncertain for unbound failure evidence: %j', async (change) => {
+    const { lookup } = lookupWith({
+      ...success,
+      data: { ...success.data, status: 'failed', ...change },
+    });
+    expect(await lookup(fixture.command, fixture.context)).toBe('uncertain');
   });
   it('reports absent only on an authoritative 404', async () => {
     const { lookup } = lookupWith({ status: false, message: 'not found' }, 404);

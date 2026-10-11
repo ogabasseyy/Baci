@@ -32,14 +32,24 @@ it('ignores raw success messages when no server confirmer is wired', async () =>
   // Defense in depth alongside the production-wiring case: even if a
   // primary handler were created without the server-checkout confirmer,
   // raw WebView success claims credit nothing and clear nothing.
-  const { handler, clearCart, setSuccessStatus } = createHandler({
-    paymentKind: 'primary_wallet_card',
-  });
-  await sendMessage(handler, { type: 'payment_success' });
-  await sendMessage(handler, { type: 'success' });
-  expect(mockCrypto).not.toHaveBeenCalled();
-  expect(clearCart).not.toHaveBeenCalled();
-  expect(setSuccessStatus).not.toHaveBeenCalled();
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const { handler, clearCart, setSuccessStatus } = createHandler({
+      paymentKind: 'primary_wallet_card',
+    });
+    await sendMessage(handler, { type: 'payment_success' });
+    await sendMessage(handler, { type: 'success' });
+    expect(mockCrypto).not.toHaveBeenCalled();
+    expect(clearCart).not.toHaveBeenCalled();
+    expect(setSuccessStatus).not.toHaveBeenCalled();
+    // Audible drop: the fail-closed path warns (message type only) so
+    // a future unwired caller leaves a triage signal, not silence.
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped primary success-claim')
+    );
+  } finally {
+    warn.mockRestore();
+  }
 });
 it('routes raw success messages through server confirmation only under production wiring', async () => {
   mockCrypto.mockClear();

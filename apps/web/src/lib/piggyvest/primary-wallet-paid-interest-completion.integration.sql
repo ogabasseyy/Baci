@@ -253,4 +253,106 @@ SELECT pg_temp.assert_true(NOT has_function_privilege('authenticated','piggyvest
   AND NOT has_function_privilege('primary_evidence_fixture','piggyvest_primary.settle_savings_before_completion(uuid,text,jsonb)','EXECUTE')
   AND NOT has_function_privilege('primary_authorizer_fixture','piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)','EXECUTE'),
   'No customer, service-role or ledger-worker access to private completion projections/reviews');
+-- Swap floor includes credited interest: N90 principal + N20 interest
+-- must reject a N100 retarget (principal-only floor would accept and
+-- complete at N110 against the lower target) and complete at N110.
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'authenticated'::text $$;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-4000-8000-000000000003'::uuid $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+END $$;
+GRANT authenticated TO primary_authorizer_fixture, primary_evidence_fixture;
+ALTER TABLE public.customer_savings_goals ADD COLUMN product_id uuid;
+ALTER TABLE public.customer_savings_goals ADD COLUMN variant_id uuid;
+ALTER TABLE public.customer_savings_goals ADD COLUMN title text;
+ALTER TABLE public.customer_savings_goals ADD COLUMN product_snapshot jsonb;
+ALTER TABLE public.customer_savings_goals ADD COLUMN updated_at timestamptz;
+CREATE TABLE public.products(id uuid PRIMARY KEY,merchant_id uuid,status text);
+CREATE TABLE public.product_variants(id uuid PRIMARY KEY,product_id uuid,merchant_id uuid);
+CREATE TABLE public.customer_savings_events(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),goal_id uuid,merchant_id uuid,customer_id uuid,
+  event_type text,actor_type text,actor_id uuid,metadata jsonb DEFAULT '{}'
+);
+INSERT INTO public.products VALUES('00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001','active');
+INSERT INTO public.product_variants VALUES('00000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001');
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,target_amount,current_amount)
+VALUES(pg_temp.goal_id(21),'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',130,90);
+INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
+SELECT integration_id,pg_temp.goal_id(21),id,'interest-goal-21',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
+INSERT INTO piggyvest_savings_ledger.bindings(goal_id,integration_id,merchant_id,customer_id,authorized_login,enabled)
+VALUES(pg_temp.goal_id(21),'10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','primary_interest_fixture',true);
+SET SESSION AUTHORIZATION primary_interest_fixture;
+SELECT pg_temp.apply_interest(21,pg_temp.command(121,'credit_eligible_paid_interest',2000));
+RESET SESSION AUTHORIZATION;
+\ir ../../../../../supabase/migrations/20260611120000_swap_customer_savings_goal_device.sql
+\ir ../../../../../supabase/migrations/20261008092100_piggyvest_primary_savings_swap_guard.sql
+\ir ../../../../../supabase/migrations/20261008095300_primary_savings_swap_interest_floor.sql
+SET SESSION AUTHORIZATION primary_authorizer_fixture;
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.swap_customer_savings_goal_device(
+      pg_temp.goal_id(21),'00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000031',
+      'Swapped device','{}',100);
+    RAISE EXCEPTION 'interest-funded goal swapped below funded total';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%target_amount_below_current_savings%' THEN RAISE; END IF;
+  END;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION primary_authorizer_fixture;
+DO $$ DECLARE outcome record; BEGIN
+  SELECT * INTO outcome FROM public.swap_customer_savings_goal_device(
+    pg_temp.goal_id(21),'00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000031',
+    'Swapped device','{}',110);
+  IF outcome.success IS DISTINCT FROM true OR outcome.goal_status <> 'completed' THEN RAISE EXCEPTION 'funded swap did not complete'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SELECT pg_temp.assert_true((SELECT target_amount=110 AND status='completed' FROM public.customer_savings_goals WHERE id=pg_temp.goal_id(21)),
+  'Interest-aware swap applies target and completion');
+-- Legacy fence: a legacy allocation that fits the principal-only
+-- remainder but overflows once primary-held capacity counts must fail
+-- with the exceeds-remaining marker; true leftover still allocates,
+-- and goals without primary destinations are unaffected.
+\ir ../../../../../supabase/migrations/20260521131000_customer_device_savings_rpcs.sql
+\ir ../../../../../supabase/migrations/20261008095400_legacy_savings_primary_capacity_fence.sql
+ALTER TABLE public.customer_wallet_transactions ADD COLUMN metadata jsonb DEFAULT '{}';
+ALTER TABLE public.customer_wallet_transactions ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.customer_savings_contributions ADD COLUMN transaction_id uuid;
+ALTER TABLE public.customer_savings_contributions ADD COLUMN updated_at timestamptz;
+UPDATE public.customer_wallets SET available_balance=500 WHERE customer_id='00000000-0000-4000-8000-000000000002';
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,target_amount,current_amount)
+VALUES(pg_temp.goal_id(22),'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',200,0);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,target_amount,current_amount)
+VALUES(pg_temp.goal_id(23),'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',200,0);
+INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
+SELECT integration_id,pg_temp.goal_id(22),id,'destination-fence',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
+SET SESSION AUTHORIZATION primary_authorizer_fixture;
+DO $$ BEGIN
+  IF piggyvest_primary.reserve_savings(pg_temp.primary_scope(),jsonb_build_object('goalId',pg_temp.goal_id(22),
+    'operationId','00000000-0000-4000-8000-0000000000f1','amountKobo',2000))->>'status'<>'claimed' THEN RAISE EXCEPTION 'fence reservation failed'; END IF;
+  IF NOT piggyvest_primary.manage_savings(pg_temp.primary_scope(),'00000000-0000-4000-8000-0000000000f1','dispatch') THEN RAISE EXCEPTION 'fence dispatch failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.allocate_customer_savings_contribution(pg_temp.goal_id(22),'00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000001',199,'wallet',NULL,'fence-key-overflow','fence probe');
+    RAISE EXCEPTION 'legacy allocation raced primary capacity';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%savings_contribution_exceeds_remaining_target%' THEN RAISE; END IF;
+  END;
+END $$;
+DO $$ DECLARE outcome record; BEGIN
+  SELECT * INTO outcome FROM public.allocate_customer_savings_contribution(pg_temp.goal_id(22),'00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000001',180,'wallet',NULL,'fence-key-leftover','fence probe');
+  IF outcome.success IS DISTINCT FROM true THEN RAISE EXCEPTION 'true leftover blocked'; END IF;
+  SELECT * INTO outcome FROM public.allocate_customer_savings_contribution(pg_temp.goal_id(23),'00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000001',200,'wallet',NULL,'fence-key-legacy','fence probe');
+  IF outcome.success IS DISTINCT FROM true THEN RAISE EXCEPTION 'primary-free goal fenced'; END IF;
+END $$;
+SELECT pg_temp.assert_true((SELECT current_amount=180 FROM public.customer_savings_goals WHERE id=pg_temp.goal_id(22)),
+  'Legacy fence preserves exact leftover allocation');
 SELECT 'PRIMARY paid-interest completion regressions passed' AS result;

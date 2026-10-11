@@ -45,30 +45,43 @@ const session = z.strictObject({
       }
     }),
 });
-const intent = scope
+const intentBase = scope.extend({
+  operationId: uuid,
+  amountKobo: request.shape.amountKobo,
+  consent: request.shape.consent,
+  reference,
+  destinationWalletId: identifier,
+  destinationCustomerId: identifier,
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  status: z.enum([
+    'reserved',
+    'initializing',
+    'init_unknown',
+    'ready',
+    'custody_pending',
+    'reconciliation_required',
+    'completed',
+    'abandoned',
+  ]),
+  authorizationUrl: session.shape.authorizationUrl.nullable(),
+});
+const intentReferenceMatchesOperation = (value: {
+  reference: string;
+  operationId: string;
+}) => value.reference === `pvb-first-primary-${value.operationId}`;
+const intent = intentBase.refine(intentReferenceMatchesOperation);
+// Archived owners (account deleted; operation kept with customer_id
+// NULL) still need their money-out evidence recorded: the intent
+// lookup returns null owner IDs for them, and the reversal write
+// binds tenant-only on that path. Owner IDs stay mandatory
+// everywhere else.
+const reversalIntent = intentBase
   .extend({
-    operationId: uuid,
-    amountKobo: request.shape.amountKobo,
-    consent: request.shape.consent,
-    reference,
-    destinationWalletId: identifier,
-    destinationCustomerId: identifier,
-    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    status: z.enum([
-      'reserved',
-      'initializing',
-      'init_unknown',
-      'ready',
-      'custody_pending',
-      'reconciliation_required',
-      'completed',
-      'abandoned',
-    ]),
-    authorizationUrl: session.shape.authorizationUrl.nullable(),
+    customerId: uuid.nullable(),
+    userId: uuid.nullable(),
+    email: z.email().max(254).nullable(),
   })
-  .refine(
-    (value) => value.reference === `pvb-first-primary-${value.operationId}`
-  );
+  .refine(intentReferenceMatchesOperation);
 const token = z.strictObject({
   authorizationCode: z
     .string()
@@ -87,6 +100,7 @@ export const primaryWalletCardCheckoutSchemas = {
   request,
   session,
   intent,
+  reversalIntent,
   token,
   identity: z.strictObject({
     id: uuid,

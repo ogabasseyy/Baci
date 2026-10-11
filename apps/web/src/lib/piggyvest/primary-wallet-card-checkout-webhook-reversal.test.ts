@@ -78,6 +78,27 @@ describe('primary card checkout webhook reversal', () => {
     expect(await response?.json()).toEqual({ received: true });
   });
 
+  it('records reversals for archived owners with tenant-only scope', async () => {
+    const { execute, runtime } = setup('completed');
+    execute.mockImplementationOnce(async (action: string) => {
+      if (action === 'reversal_intent')
+        return { ...fixture.intent, status: 'completed', customerId: null };
+      throw new Error(`Invalid test action ${action}`);
+    });
+    const response = await reconcilePrimaryWalletCardCheckoutReversal({
+      body: body(),
+      runtime,
+      execute: execute as never,
+    });
+    expect(response?.status).toBe(200);
+    const reversalParams = (execute.mock.calls[1]?.[1] ?? []) as string[];
+    expect(JSON.parse(reversalParams[0] ?? '{}')).toMatchObject({
+      customerId: null,
+      merchantId: fixture.settings.merchantId,
+      integrationId: fixture.settings.integrationId,
+    });
+  });
+
   it('rejects a reference that names no checkout instead of recording', async () => {
     const { execute, runtime } = setup();
     expect(

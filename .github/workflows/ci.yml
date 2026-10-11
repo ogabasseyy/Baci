@@ -43,6 +43,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Test release retries and dependency update policy
+        run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3

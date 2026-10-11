@@ -1,3 +1,4 @@
+import { hasLinePriceDrift } from '@/services/cart-reprice-offer-lines';
 import type { CartItem } from './cart-store.types';
 
 const NGN_PRICE_FORMATTER = new Intl.NumberFormat('en-NG', {
@@ -55,9 +56,10 @@ export function clearGroupNegotiation(items: CartItem[]): CartItem[] {
 /**
  * Reconciles cart line prices (and refreshed offer conditions) against live
  * catalog values keyed by cart line id, returning the cart-store partial to
- * apply. Lines within the ±₦1 parity tolerance are treated as unchanged
- * (so an accepted negotiated price is not cleared for rounding noise). A
- * condition refresh counts as a real change (the line's economics moved),
+ * apply. Lines whose extended line total is within the ±₦1 parity tolerance
+ * are treated as unchanged (so an accepted negotiated price is not cleared
+ * for rounding noise). A condition refresh counts as a real change (the
+ * line's economics moved),
  * so it clears the line negotiation like a price drift does. When a real
  * drift clears any negotiation and a cart-wide deal is active, the whole
  * group is reset.
@@ -71,10 +73,13 @@ export function applyReprice(
   let items = state.items.map((item) => {
     const livePrice = priceById[item.id];
     const liveCondition = conditionById[item.id];
+    // Same line-total basis as drift detection: checkout rejects an
+    // extended-total move past tolerance, so the store must not drop a
+    // sub-tolerance unit move on quantity > 1 that detection reported.
     const priceDrifted =
       typeof livePrice === 'number' &&
       Number.isFinite(livePrice) &&
-      Math.abs(livePrice - item.price) > 1;
+      hasLinePriceDrift(livePrice, item.price, item.quantity);
     const conditionDrifted =
       typeof liveCondition === 'string' &&
       liveCondition !== '' &&

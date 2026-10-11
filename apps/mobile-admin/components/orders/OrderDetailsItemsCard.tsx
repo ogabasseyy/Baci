@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import * as Clipboard from 'expo-clipboard';
 import { Pressable, Text, View } from 'react-native';
 import SafeImage from '@/components/ui/SafeImage';
 import type { ThemeColors } from '@/constants/theme';
@@ -87,10 +88,6 @@ export function OrderDetailsItemsCard({
                 const offerParts = [
                   item.offer_grade ? `Grade ${item.offer_grade}` : null,
                   item.offer_condition_notes ?? null,
-                  // Full id: an 8-char prefix can collide across offers
-                  // and this detail view is where admins resolve exactly
-                  // which condition offer a line refers to.
-                  item.offer_id ? `ref ${String(item.offer_id)}` : null,
                 ].filter(Boolean);
                 return offerParts.length > 0 ? (
                   <Text
@@ -103,6 +100,33 @@ export function OrderDetailsItemsCard({
                   </Text>
                 ) : null;
               })()}
+              {item.offer_id ? (
+                // Truncated for scannability: an 8-char prefix can collide
+                // across offers, so the full id stays one tap away via
+                // copy (and in the accessibility label for screen readers).
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Copy full offer reference ${String(item.offer_id)}`}
+                  onPress={() =>
+                    void Clipboard.setStringAsync(String(item.offer_id))
+                  }
+                  style={styles.offerRefRow}
+                >
+                  <Text
+                    style={[
+                      styles.itemVariant,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    ref {String(item.offer_id).slice(0, 8)}
+                  </Text>
+                  <Ionicons
+                    color={colors.textSecondary}
+                    name="copy-outline"
+                    size={12}
+                  />
+                </Pressable>
+              ) : null}
               {item.variant_name ? (
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}

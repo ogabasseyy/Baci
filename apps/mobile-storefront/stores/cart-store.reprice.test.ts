@@ -214,4 +214,26 @@ describe('cart-store reprice', () => {
     expect(item.negotiatedPrice).toBe(201000);
     expect(item.negotiationStatus).toBe('accepted');
   });
+
+  it('applies a sub-tolerance unit move when the extended line total exceeds tolerance', () => {
+    const { addItem } = useCartStore.getState();
+    addItem({
+      product_id: 'product-1',
+      slug: 'iphone-xr',
+      name: 'iPhone XR',
+      price: 205000,
+      quantity: 2,
+    });
+    const lineId = useCartStore.getState().items[0].id;
+    useCartStore.getState().applyNegotiatedPrice(lineId, 201000);
+
+    // ₦0.75 × 2 = ₦1.50 past tolerance: the store must apply the drift
+    // that detection reported, matching what checkout will accept.
+    useCartStore.getState().repriceItems({ [lineId]: 205000.75 });
+
+    const item = useCartStore.getState().items[0];
+    expect(item.price).toBe(205000.75);
+    expect(item.negotiatedPrice).toBeUndefined();
+    expect(item.negotiationStatus).toBeUndefined();
+  });
 });

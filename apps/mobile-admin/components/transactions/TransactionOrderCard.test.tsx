@@ -77,6 +77,14 @@ vi.mock('@react-native-vector-icons/ionicons', async () => {
   };
 });
 
+const clipboardMocks = vi.hoisted(() => ({
+  setStringAsync: vi.fn(),
+}));
+
+vi.mock('expo-clipboard', () => ({
+  setStringAsync: clipboardMocks.setStringAsync,
+}));
+
 vi.mock('@/components/transactions/transactions.styles', () => ({
   styles: {},
 }));
@@ -331,7 +339,51 @@ describe('TransactionOrderCard', () => {
     );
 
     expect(screen.getByText(/Condition /)).toHaveTextContent(
-      'Condition Open Box · Grade B · Light wear · Offer 55555555-5555-4555-8555-555555555555'
+      'Condition Open Box · Grade B · Light wear'
+    );
+    expect(screen.getByText('Offer 55555555')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/55555555-5555-4555-8555-555555555555/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('copies the full offer id when the truncated transaction ref is pressed', () => {
+    const offerItem = {
+      ...editableItem,
+      offerId: '55555555-5555-4555-8555-555555555555',
+    };
+
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={vi.fn()}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [offerItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: /copy full offer reference/i })
+    );
+
+    expect(clipboardMocks.setStringAsync).toHaveBeenCalledWith(
+      '55555555-5555-4555-8555-555555555555'
     );
   });
 

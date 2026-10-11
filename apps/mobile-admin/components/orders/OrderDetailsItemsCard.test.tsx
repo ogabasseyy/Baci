@@ -8,6 +8,11 @@ import type { OrderDetailsItem } from './order-details.types';
 
 const mocks = vi.hoisted(() => ({
   safeImage: vi.fn(),
+  setStringAsync: vi.fn(),
+}));
+
+vi.mock('expo-clipboard', () => ({
+  setStringAsync: mocks.setStringAsync,
 }));
 
 vi.mock('@/components/ui/SafeImage', async () => {
@@ -178,7 +183,7 @@ describe('OrderDetailsItemsCard', () => {
     expect(onSelectItem).toHaveBeenCalledWith(items[1]);
   });
 
-  it('renders the selected offer grade, notes, and full ref', () => {
+  it('renders the selected offer grade, notes, and a truncated copyable ref', () => {
     render(
       <OrderDetailsItemsCard
         colors={colors}
@@ -195,11 +200,34 @@ describe('OrderDetailsItemsCard', () => {
       />
     );
 
+    expect(screen.getByText('Offer: Grade B · Light wear')).toBeInTheDocument();
+    expect(screen.getByText('ref 55555555')).toBeInTheDocument();
     expect(
-      screen.getByText(
-        'Offer: Grade B · Light wear · ref 55555555-5555-4555-8555-555555555555'
-      )
-    ).toBeInTheDocument();
+      screen.queryByText(/55555555-5555-4555-8555-555555555555/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('copies the full offer id when the truncated ref is pressed', () => {
+    const onSelectItem = vi.fn();
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={onSelectItem}
+      />
+    );
+
+    fireEvent.click(screen.getByText('ref 55555555'));
+
+    expect(mocks.setStringAsync).toHaveBeenCalledWith(
+      '55555555-5555-4555-8555-555555555555'
+    );
   });
 
   it('renders snapshot labels without a ref when the offer was deleted', () => {
@@ -223,7 +251,7 @@ describe('OrderDetailsItemsCard', () => {
     expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
   });
 
-  it('renders only the full ref when the offer labels are unresolved', () => {
+  it('renders only the truncated ref when the offer labels are unresolved', () => {
     render(
       <OrderDetailsItemsCard
         colors={colors}
@@ -238,8 +266,7 @@ describe('OrderDetailsItemsCard', () => {
       />
     );
 
-    expect(
-      screen.getByText('Offer: ref 55555555-5555-4555-8555-555555555555')
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Offer:/)).not.toBeInTheDocument();
+    expect(screen.getByText('ref 55555555')).toBeInTheDocument();
   });
 });

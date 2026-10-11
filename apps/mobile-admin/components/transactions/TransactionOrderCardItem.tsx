@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import * as Clipboard from 'expo-clipboard';
 import { Pressable, Text, View } from 'react-native';
 import { styles } from '@/components/transactions/transactions.styles';
 import type { ThemeColors } from '@/constants/theme';
@@ -73,7 +74,7 @@ export function TransactionOrderCardItem({
             S/N {item.serialValues[0]}
           </Text>
         ) : null}
-        {item.condition || item.offerId ? (
+        {item.condition || item.offerGrade || item.offerConditionNotes ? (
           <Text style={[styles.itemDetailText, { color: colors.textMuted }]}>
             {[
               item.condition
@@ -81,13 +82,26 @@ export function TransactionOrderCardItem({
                 : null,
               item.offerGrade ? `Grade ${item.offerGrade}` : null,
               item.offerConditionNotes ?? null,
-              // Full id: a truncated prefix can collide across offers and
-              // this row is where admins tell two condition offers apart.
-              item.offerId ? `Offer ${String(item.offerId)}` : null,
             ]
               .filter(Boolean)
               .join(' · ')}
           </Text>
+        ) : null}
+        {item.offerId ? (
+          // Truncated for scannability: a prefix can collide across
+          // offers, so the full id stays one tap away via copy (and in
+          // the accessibility label for screen readers).
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Copy full offer reference ${String(item.offerId)}`}
+            onPress={() => void Clipboard.setStringAsync(String(item.offerId))}
+            style={styles.offerRefRow}
+          >
+            <Text style={[styles.itemDetailText, { color: colors.textMuted }]}>
+              Offer {String(item.offerId).slice(0, 8)}
+            </Text>
+            <Ionicons color={colors.textMuted} name="copy-outline" size={12} />
+          </Pressable>
         ) : null}
       </View>
       <View style={styles.itemMeta}>

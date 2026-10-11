@@ -163,8 +163,14 @@ export async function coordinateRelease(operations, coordinationId) {
 }
 
 export function assertLiveDeployment(deployment, commit, projectId) {
+  // CLI prebuilt deployments carry gitCommitSha (auto-attached from
+  // the checkout), not githubCommitSha (git-integration deploys
+  // only): verified live on the production deployment, whose meta
+  // has gitCommitSha with source cli and no githubCommitSha. Accept
+  // either so verification matches the field the deploy path sets.
+  const deployedSha = deployment?.meta?.githubCommitSha ?? deployment?.meta?.gitCommitSha;
   if (!deployment || typeof deployment !== 'object' || Array.isArray(deployment) ||
-    deployment.projectId !== projectId || deployment.meta?.githubCommitSha !== commit ||
+    deployment.projectId !== projectId || deployedSha !== commit ||
     deployment.readyState !== 'READY' || deployment.target !== 'production') {
     throw new Error('live production deployment does not match the verified release');
   }

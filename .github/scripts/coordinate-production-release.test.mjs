@@ -284,8 +284,12 @@ test('refuses a successful workflow whose live alias remains stale', async () =>
 test('live verification requires matching project, production target, state and SHA', () => {
   const deployment = { projectId: 'baci', meta: { githubCommitSha: commit }, readyState: 'READY', target: 'production' };
   assert.doesNotThrow(() => assertLiveDeployment(deployment, commit, 'baci'));
+  // CLI prebuilt deployments carry gitCommitSha instead of
+  // githubCommitSha (verified live on production): accept it.
+  assert.doesNotThrow(() => assertLiveDeployment({ ...deployment, meta: { gitCommitSha: commit } }, commit, 'baci'));
   for (const change of [
     { projectId: 'other' }, { meta: { githubCommitSha: 'c'.repeat(40) } },
+    { meta: { gitCommitSha: 'c'.repeat(40) } }, { meta: {} },
     { readyState: 'ERROR' }, { target: 'preview' },
   ]) {
     assert.throws(() => assertLiveDeployment({ ...deployment, ...change }, commit, 'baci'), /does not match/);

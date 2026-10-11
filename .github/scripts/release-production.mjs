@@ -238,7 +238,10 @@ async function main() {
   } finally {
     if (!holdLock) {
       assertRemovableLockPath(lockPath);
-      rmSync(lockPath, { recursive: true });
+      // force: the lock lives for the whole multi-hour release and
+      // operators may remove it manually mid-run; cleanup must never
+      // throw ENOENT and mask the real release outcome.
+      rmSync(lockPath, { recursive: true, force: true });
     }
   }
 }

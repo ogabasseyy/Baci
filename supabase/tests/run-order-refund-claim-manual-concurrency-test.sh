@@ -14,17 +14,28 @@
 # Phase 2 (end-to-end): after a full manual commits, the claim must see
 # full coverage and finalize instead of claiming the worker branch.
 #
-# Local-only: needs the full replayed schema in the baci-refund-pg
-# scratch container. Refreshes the functions under test from the working
-# tree first, so the proof tracks current code rather than scratch age.
+# The full run is local-only: it needs the full replayed schema in the
+# baci-refund-pg scratch container. It refreshes the functions under
+# test from the working tree first, so the proof tracks current code
+# rather than scratch age. MINIMAL_PHASE1=1 instead self-provisions a
+# throwaway postgres with a minimal fixture (roles, jwt-reading
+# auth.role stub, bare orders table) plus the working-tree claim, and
+# runs Phase 1 only: the blocking proof needs nothing past the lock
+# point, since unreached PL/pgSQL statements never compile. That is
+# the mode CI runs — the lock cannot be removed unnoticed — while
+# Phase 2's finalize-after-manual stays covered replay-natively by the
+# main suite's claim-finalize assertions.
 #
 # USAGE:
 #   bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
+#   MINIMAL_PHASE1=1 bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export PGHOST=127.0.0.1 PGPORT=55433 PGUSER=postgres PGPASSWORD=postgres PGDATABASE=postgres
+# Connection overrides keep CI (supabase start defaults) and local
+# scratch on the same runner: only the port usually differs.
+export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-55433}" PGUSER="${PGUSER:-postgres}" PGPASSWORD="${PGPASSWORD:-postgres}" PGDATABASE="${PGDATABASE:-postgres}"
 
 OWNER_ID=9ef40000-0000-4000-8000-000000000001
 MANAGER_ID=9ef40000-0000-4000-8000-000000000002
@@ -33,7 +44,12 @@ ORDER_ID=9ef41000-0000-4000-8000-000000000001
 PAYMENT_ID=9ef42000-0000-4000-8000-000000000001
 HOLD_MARKER=/tmp/order-refund-claim-race-holding
 
+minimal_container="baci-refund-race-ci-$$"
+
 cleanup() {
+  if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
+    docker rm -f "$minimal_container" >/dev/null 2>&1 || true
+  fi
   psql -X -q -v ON_ERROR_STOP=0 <<'SQL' >/dev/null 2>&1 || true
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
 DELETE FROM public.order_refund_events WHERE order_id = '9ef41000-0000-4000-8000-000000000001';
@@ -51,11 +67,56 @@ SQL
 }
 trap cleanup EXIT
 
-if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then
-  echo 'scratch baci-refund-pg is not reachable on 127.0.0.1:55433' >&2
-  exit 1
+if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
+  # Self-provisioned throwaway postgres (CI mode): the Phase-1
+  # blocking proof only reaches the claim's role gate and its
+  # orders-row lock, so a bare orders table plus the working-tree
+  # claim file is the whole closure. The auth.role stub reads the
+  # JWT claim like the platform function (current_user would see
+  # the definer, not the caller, inside SECURITY DEFINER).
+  docker run --name "$minimal_container" -e POSTGRES_PASSWORD=postgres \
+    -d -p 127.0.0.1::5432 postgres:17-alpine >/dev/null
+  PGPORT="$(docker port "$minimal_container" 5432 | head -n 1 | cut -d: -f2)"
+  export PGPORT
+  for _ in $(seq 1 60); do
+    if pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then
+    echo 'minimal postgres did not become ready' >&2
+    docker logs "$minimal_container" >&2 || true
+    exit 1
+  fi
+  psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE service_role NOLOGIN;
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS
+  $$ SELECT current_setting('request.jwt.claim.role', true) $$;
+CREATE TABLE public.orders (
+  id uuid PRIMARY KEY,
+  merchant_id uuid NOT NULL,
+  shipping_status text,
+  cancelled_at timestamptz
+);
+SQL
+  psql -X -q -v ON_ERROR_STOP=1 \
+    -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"
+  psql -X -q -v ON_ERROR_STOP=1 <<SQL
+INSERT INTO public.orders (id, merchant_id, shipping_status, cancelled_at)
+VALUES ('$ORDER_ID', '$MERCHANT_ID', 'cancelled', now());
+SQL
+else
+  if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then
+    echo "target postgres is not reachable on $PGHOST:$PGPORT" >&2
+    exit 1
+  fi
 fi
 
+# Full mode only below: the minimal fixture is already current (the
+# claim file applied fresh above) and seeded with its single row.
+if [ "${MINIMAL_PHASE1:-0}" != '1' ]; then
 # Functions under test, refreshed from the working tree (all files are
 # CREATE OR REPLACE plus grants, safe to re-apply onto scratch).
 # SKIP_REFRESH=1 keeps scratch as-is (negative-control runs).
@@ -104,6 +165,7 @@ INSERT INTO public.transactions (
 ) VALUES ('$PAYMENT_ID', '$MERCHANT_ID', '$ORDER_ID', 'payment', 100, 'NGN',
   'completed', 'paystack', 'race-1', '{}'::jsonb);
 SQL
+fi # MINIMAL_PHASE1 full-seed skip
 
 rm -f "$HOLD_MARKER"
 
@@ -144,7 +206,13 @@ if psql -X -q -v ON_ERROR_STOP=1 \
   wait "$session_a" || true
   exit 1
 fi
-if ! grep -qi 'timeout\|cancel' /tmp/order-refund-claim-race-b.log; then
+# Match the timeout precisely: Postgres reports 'canceling statement
+# due to statement timeout'. A bare 'cancel' would also match the
+# function's own name in CONTEXT lines
+# (claim_order_cancellation_side_effect), misclassifying every error
+# — including a lock regression that errors past the lock point in
+# the minimal fixture — as a successful block.
+if ! grep -qi 'statement timeout' /tmp/order-refund-claim-race-b.log; then
   echo 'claim failed without blocking (unexpected error):' >&2
   cat /tmp/order-refund-claim-race-b.log >&2
   wait "$session_a" || true
@@ -152,6 +220,11 @@ if ! grep -qi 'timeout\|cancel' /tmp/order-refund-claim-race-b.log; then
 fi
 
 wait "$session_a"
+
+if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
+  echo 'Order-refund claim/manual Phase-1 serialization PostgreSQL test passed'
+  exit 0
+fi
 
 # Phase 2: record a full manual for real, then the claim must see full
 # coverage and finalize — never claim the worker branch under money.

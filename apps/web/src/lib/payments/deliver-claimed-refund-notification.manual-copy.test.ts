@@ -22,11 +22,23 @@ const row = {
   order_id: 'order-1',
 } as const;
 
-function buildSupabase(refundGateways: Array<{ gateway: unknown }>) {
+function buildSupabase(
+  refundGateways: Array<{ gateway: unknown; status: string }>
+) {
+  const chains: Record<string, Record<string, unknown>> = {};
   const from = vi.fn((table: string) => {
     const chain: Record<string, unknown> = {};
     chain.select = vi.fn().mockReturnValue(chain);
     chain.eq = vi.fn().mockReturnValue(chain);
+    // Emulate the terminal-status filter so failed provider rows
+    // never reach the worker, exactly like the database query.
+    let visible = refundGateways;
+    chain.in = vi.fn((column: string, values: string[]) => {
+      if (column === 'status') {
+        visible = visible.filter((refund) => values.includes(refund.status));
+      }
+      return chain;
+    });
     if (table === 'orders') {
       chain.single = vi.fn().mockResolvedValue({
         data: {
@@ -57,24 +69,27 @@ function buildSupabase(refundGateways: Array<{ gateway: unknown }>) {
       // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
       chain.then = (resolve: (value: unknown) => void) =>
         Promise.resolve({
-          data: refundGateways,
+          data: visible,
           error: null,
         }).then(resolve);
     }
+    chains[table] = chain;
     return chain;
   });
-  return { from };
+  return { chains, from };
 }
 
-function deliver(refundGateways: Array<{ gateway: unknown }>) {
+function deliver(refundGateways: Array<{ gateway: unknown; status: string }>) {
   const sendEmail = vi
     .fn()
     .mockResolvedValue({ deliveryOutcome: undefined, success: true });
+  const client = buildSupabase(refundGateways);
   return {
+    chains: client.chains,
     promise: deliverClaimedRefundNotification({
       row: { ...row },
       sendEmail,
-      supabase: { from: buildSupabase(refundGateways).from } as never,
+      supabase: { from: client.from } as never,
     }),
     sendEmail,
   };
@@ -92,8 +107,8 @@ describe('deliverClaimedRefundNotification manual copy', () => {
 
   it('uses neutral copy when every refund row is manual', async () => {
     const { promise, sendEmail } = deliver([
-      { gateway: 'manual' },
-      { gateway: 'manual' },
+      { gateway: 'manual', status: 'completed' },
+      { gateway: 'manual', status: 'completed' },
     ]);
 
     await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
@@ -106,8 +121,8 @@ describe('deliverClaimedRefundNotification manual copy', () => {
 
   it('keeps the provider timeline when any refund row is non-manual', async () => {
     const { promise, sendEmail } = deliver([
-      { gateway: 'manual' },
-      { gateway: 'paystack' },
+      { gateway: 'manual', status: 'completed' },
+      { gateway: 'paystack', status: 'completed' },
     ]);
 
     await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
@@ -118,13 +133,32 @@ describe('deliverClaimedRefundNotification manual copy', () => {
 
   it('fails toward the provider copy on unknown gateways', async () => {
     const { promise, sendEmail } = deliver([
-      { gateway: null },
-      { gateway: '' },
+      { gateway: null, status: 'completed' },
+      { gateway: '', status: 'completed' },
     ]);
 
     await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
     expect(vi.mocked(sendEmail).mock.calls[0][0].textContent).toContain(
       '10 business days'
     );
+  });
+
+  it('ignores failed provider rows when choosing email copy', async () => {
+    // A failed automatic Paystack refund beside a manual cash
+    // completion moved no provider money: the probe filters it out
+    // and the customer gets the neutral copy.
+    const { chains, promise, sendEmail } = deliver([
+      { gateway: 'paystack', status: 'failed' },
+      { gateway: 'manual', status: 'completed' },
+    ]);
+
+    await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
+    expect(chains.transactions.in).toHaveBeenCalledWith('status', [
+      'completed',
+      'refunded',
+    ]);
+    const message = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(message.textContent).toContain('If you have any questions');
+    expect(message.textContent).not.toContain('business days');
   });
 });

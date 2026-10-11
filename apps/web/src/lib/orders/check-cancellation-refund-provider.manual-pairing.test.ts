@@ -162,4 +162,32 @@ describe('checkCancellationRefundProvider manual pairing', () => {
       })
     ).rejects.toThrow('reconciliation');
   });
+  it('pairs legacy refunded-status manual rows like completed ones', async () => {
+    // An exact processed pair passes for the refunded status too.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    const refundedManual = {
+      gateway_reference: 'merchant-ref-1',
+      amount: 1,
+      status: 'refunded',
+      currency: 'NGN',
+      metadata: { method: 'paystack' },
+    };
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [refundedManual],
+      })
+    ).resolves.toBeUndefined();
+    // And an empty provider listing leaves it unpaired: without this
+    // the caller would stamp proof no provider row confirms.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [refundedManual],
+      })
+    ).rejects.toThrow('exceed provider-confirmed amounts');
+  });
 });

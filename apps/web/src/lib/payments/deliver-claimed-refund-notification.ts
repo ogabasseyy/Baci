@@ -167,15 +167,18 @@ export async function deliverClaimedRefundNotification({
         throw new Error('refund_customer_email_missing');
       // A manual-only refund (cash handed over, transfer already sent)
       // must not promise a provider timeline: probe whether any
-      // non-manual refund row exists. Unknown or blank gateways fail
-      // toward the provider copy.
+      // terminal non-manual refund row exists. Failed provider
+      // attempts moved no money, so a failed Paystack row beside a
+      // manual cash completion must not select the provider copy.
+      // Unknown or blank gateways fail toward the provider copy.
       const { data: refundGatewayRows, error: refundGatewayError } =
         await supabase
           .from('transactions')
           .select('gateway')
           .eq('order_id', order.id)
           .eq('merchant_id', row.merchant_id)
-          .eq('transaction_type', 'refund');
+          .eq('transaction_type', 'refund')
+          .in('status', ['completed', 'refunded']);
       if (refundGatewayError) {
         throw new Error('refund_notification_ledger_lookup_failed');
       }

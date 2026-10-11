@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { dirname, join } from 'node:path';
@@ -20,7 +20,7 @@ import {
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
-const workerPath = join(here, 'encode-worker.mjs');
+const workerPath = join(here, 'encode-worker-main.mjs');
 const fixture = (name) => join(here, 'fixtures', name);
 
 async function runWorker(op) {
@@ -275,4 +275,22 @@ test('worker rejects protocol misuse with a non-zero exit', async () => {
       timeout: 10_000,
     })
   );
+});
+
+test('worker input reads reject past MAX_INPUT_BYTES before buffering', async () => {
+  const { MAX_INPUT_BYTES } = await import('./constants.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-'));
+  const codeIs = (code) => (error) => {
+    assert.equal(error?.code, code);
+    return true;
+  };
+  // One byte past the ceiling: the size gate trips, not the decoder.
+  const giant = join(dir, 'giant.bin');
+  await writeFile(giant, Buffer.alloc(MAX_INPUT_BYTES + 1, 0));
+  await assert.rejects(() => handleMetadataOp({ input: giant }), codeIs('input-too-large'));
+  // Exactly at the ceiling: the size gate passes and the undecodable
+  // zeros fail later, at the decoder — proving the boundary.
+  const edge = join(dir, 'edge.bin');
+  await writeFile(edge, Buffer.alloc(MAX_INPUT_BYTES, 0));
+  await assert.rejects(() => handleMetadataOp({ input: edge }), codeIs('unreadable-input'));
 });

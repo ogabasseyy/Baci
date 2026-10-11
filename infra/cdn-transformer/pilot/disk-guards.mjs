@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { open, realpath, rm, statfs } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { MAX_STAGING_BYTES, MIN_FREE_BYTES } from './constants.mjs';
@@ -61,6 +63,19 @@ export function createStagingBudget(capBytes = MAX_STAGING_BYTES) {
 // lab-config-stage-io.ts (TS cannot import infra) and re-exported for
 // the preflight stages.
 const READ_CHUNK_BYTES = 64 * 1024;
+
+// Constant-memory file hash: a replaced or grown file hashes without
+// ever buffering it whole, so hash verification cannot OOM the reader
+// no matter how large the file became. Read errors propagate raw, like
+// readFile's — callers map them to their own error types.
+export async function sha256File(path) {
+  const hash = createHash('sha256');
+  const stream = createReadStream(path);
+  for await (const chunk of stream) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
 
 export async function readUpToBytes(path, maxBytes) {
   const handle = await open(path, 'r');

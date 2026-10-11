@@ -10,6 +10,7 @@ import {
   resolveNewSnapshotPath,
   snapshotNameForAsset,
   verifySnapshotHash,
+  writeNewSnapshot,
 } from './input-store.mjs';
 
 const PNG_BYTES = Buffer.from(
@@ -134,4 +135,18 @@ test('resolveNewSnapshotPath refuses symlink squatting', async () => {
   await symlink(join(outside, 'x.png'), join(root, 'squat.png'));
   await assert.rejects(() => resolveNewSnapshotPath(root, 'squat.png'));
   await assert.rejects(() => resolveNewSnapshotPath(root, '../evil.png'));
+});
+
+test('writeNewSnapshot writes durably and never clobbers a rival', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { outside, root } = await makeRoots();
+  void outside;
+  const target = join(root, 'snap.png');
+  const bytes = Buffer.from('snapshot-bytes');
+  await writeNewSnapshot(target, bytes);
+  assert.deepEqual(await readFile(target), bytes);
+  // A rival winning the same-asset race keeps its bytes: EEXIST
+  // propagates and the existing file is left untouched, never unlinked.
+  await assert.rejects(() => writeNewSnapshot(target, Buffer.from('rival')), /EEXIST/);
+  assert.deepEqual(await readFile(target), bytes);
 });

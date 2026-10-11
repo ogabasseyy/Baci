@@ -145,7 +145,7 @@ export function assertControlPurity(html, { origin } = {}) {
 
 export async function assertServedResponseBytes(
   html,
-  { arm, origin, publicDir, timeoutMs }
+  { arm, origin, publicDir, stagedHashes = {}, timeoutMs }
 ) {
   const failures = [];
   const name = `served:${arm}:response-bytes`;
@@ -184,6 +184,13 @@ export async function assertServedResponseBytes(
     // Loader-param URLs fetch with the query (as browsers do) but hash
     // against the query-stripped staged file (static serving ignores it).
     const stagedPath = stripQuery(urlPath, origin);
+    // Both copies compare against the offline-verified digest — never
+    // each other, or a file replaced between phases agrees with itself.
+    const pinned = stagedHashes[stagedPath];
+    if (!pinned) {
+      failures.push(`${name}: no offline-verified hash for "${stagedPath}"`);
+      continue;
+    }
     // Bounded by the staged ceiling BEFORE the served-body cap derives
     // from it: a swapped-in giant would otherwise load fully here and
     // exhaust the preflight process. Generator contract caps staged
@@ -204,6 +211,12 @@ export async function assertServedResponseBytes(
       expected = staged.bytes;
     } catch {
       failures.push(`${name}: no staged file for "${stagedPath}"`);
+      continue;
+    }
+    if (sha256Hex(expected) !== pinned) {
+      failures.push(
+        `${name}: staged bytes changed after offline verification: "${stagedPath}"`
+      );
       continue;
     }
     // Absolute same-origin lab URLs fetch as-is; relative ones resolve
@@ -276,9 +289,9 @@ export async function assertServedResponseBytes(
       );
       continue;
     }
-    if (sha256Hex(served.bytes) !== sha256Hex(expected)) {
+    if (sha256Hex(served.bytes) !== pinned) {
       failures.push(
-        `served:${arm}:response-bytes: served bytes differ from the staged hash: "${urlPath}"`
+        `served:${arm}:response-bytes: served bytes differ from the offline-verified hash: "${urlPath}"`
       );
     }
   }

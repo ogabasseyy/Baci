@@ -49,7 +49,11 @@ test('a crashed holder (dead pid) is reclaimed', async () => {
   await mkdir(join(outputRoot, 'locks'), { recursive: true });
   await writeFile(
     lockPath(outputRoot),
-    JSON.stringify({ pid: deadPid(), startedAt: new Date().toISOString() })
+    JSON.stringify({
+      pid: deadPid(),
+      startedAt: new Date().toISOString(),
+      token: 'crashed-holder-token',
+    })
   );
   const lock = await acquireEncoderLock(outputRoot);
   await lock.release();
@@ -60,9 +64,45 @@ test('a live holder is never evicted', async () => {
   await mkdir(join(outputRoot, 'locks'), { recursive: true });
   await writeFile(
     lockPath(outputRoot),
-    JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
+    JSON.stringify({
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      token: 'live-holder-token',
+    })
   );
   await assert.rejects(acquireEncoderLock(outputRoot), /encoder lock/);
+});
+
+test('shapeless claims fail closed instead of stealing', async () => {
+  // Valid JSON without a holder shape ({}, a pid without a token, a
+  // token without a pid) is tampering or disk fault — atomic
+  // publication means our writer never emits it. The old code read a
+  // missing pid as dead and deleted the lock, admitting a second
+  // encoder alongside a possibly live original.
+  const shapeless = [
+    {},
+    [],
+    { pid: 123456789 },
+    { token: 'orphan-token' },
+    { pid: '123', token: 'string-pid' },
+    { pid: -1, token: 'negative-pid' },
+    { pid: 123456789, token: '' },
+  ];
+  for (const claim of shapeless) {
+    const outputRoot = await setupRoot();
+    await mkdir(join(outputRoot, 'locks'), { recursive: true });
+    await writeFile(lockPath(outputRoot), JSON.stringify(claim));
+    await assert.rejects(
+      acquireEncoderLock(outputRoot),
+      (error) => {
+        assert.equal(error?.code, 'encoder-lock-corrupt');
+        return true;
+      },
+      `claim ${JSON.stringify(claim)} must fail closed`
+    );
+    // Fail-closed keeps the evidence for the operator: nothing reaped.
+    assert.equal(await readFile(lockPath(outputRoot), 'utf8'), JSON.stringify(claim));
+  }
 });
 
 test('a symlinked locks directory is refused, never followed', async () => {

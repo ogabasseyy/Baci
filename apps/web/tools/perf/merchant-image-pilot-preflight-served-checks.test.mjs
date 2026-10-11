@@ -10,6 +10,7 @@ import {
   assertServedDescriptors,
   assertServedResponseBytes,
 } from './merchant-image-pilot-preflight-served-checks.mjs';
+import { sha256Hex } from './merchant-image-pilot-preflight-shared.mjs';
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const GEN = 'c'.repeat(64);
@@ -142,6 +143,7 @@ describe('assertServedResponseBytes', () => {
         arm: 'pilot',
         origin,
         publicDir,
+        stagedHashes: { [staged]: sha256Hex(bytes) },
         timeoutMs: 2000,
       });
       expect(failures).toHaveLength(1);
@@ -175,6 +177,7 @@ describe('assertServedResponseBytes', () => {
       arm: 'pilot',
       origin: 'http://127.0.0.1:1',
       publicDir,
+      stagedHashes: { [staged]: '0'.repeat(64) },
       timeoutMs: 2000,
     });
     expect(failures).toHaveLength(1);
@@ -203,6 +206,7 @@ describe('assertServedResponseBytes', () => {
         arm: 'pilot',
         origin,
         publicDir,
+        stagedHashes: { [staged]: sha256Hex(bytes) },
         timeoutMs: 2000,
       });
       expect(failures).toEqual([]);

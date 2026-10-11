@@ -99,6 +99,30 @@ export function parsePilotJob(value) {
   return { job: parsed.data, ok: true };
 }
 
+// Acquisition identity: the same contract the job schema and snapshot
+// namer enforce, so a bad id fails before the remote image downloads.
+// Split from acquire.mjs under the repo line ceiling; issues are field
+// paths, mirroring the job parser's shape for its caller.
+const AcquireIdentitySchema = z
+  .object({
+    assetId: z.string().regex(ASSET_ID_PATTERN),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
+    role: z.enum(ROLES),
+    slot: z.string().min(1).max(128),
+  })
+  .strict();
+
+export function parseAcquireIdentity(value) {
+  const parsed = AcquireIdentitySchema.safeParse(value);
+  if (!parsed.success) {
+    return {
+      issues: parsed.error.issues.map((issue) => issue.path.join('.')),
+      ok: false,
+    };
+  }
+  return { identity: parsed.data, ok: true };
+}
+
 export function pilotJobKey(job) {
   return `${job.merchantId}/${job.assetId}/${job.role}`;
 }

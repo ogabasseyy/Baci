@@ -47,9 +47,19 @@ describe('preflight served gate', () => {
     try {
       const address = server.address();
       const origin = `http://127.0.0.1:${address.port}`;
+      const [only] = fixture.assets;
       const report = await fetchServedAgreement(origin, {
         arms: ['pilot', 'control'],
         publicDir: fixture.publicDir,
+        stagedHashes: {
+          ...Object.fromEntries(
+            fixture.tiers.map((tier) => [
+              `/__pilot/${fixture.generationId}/${tier.path}`,
+              tier.sha256,
+            ])
+          ),
+          [original]: only.sourceSha,
+        },
       });
       expect(report.failures).toEqual([]);
       expect(report.ok).toBe(true);

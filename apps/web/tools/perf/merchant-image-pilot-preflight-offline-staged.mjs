@@ -1,6 +1,8 @@
 // Offline staged stage: staged derivatives and the staged original hash
 // identically to their committed and frozen bytes.
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { stagedOriginalName } from './merchant-image-pilot-preflight-records.mjs';
 import {
   fail,
@@ -85,4 +87,41 @@ export async function checkBindingStaged({
   }
   pass(checks, `${name}:staged`);
   return true;
+}
+
+// Filler pins for the served phase, keyed by served path. Fillers have no
+// acceptance anchor (their hash pins live in the app's build/boot gate,
+// which fails the origin itself when they drift), so offline blesses the
+// on-disk bytes and the served gate detects swaps after this point.
+// Best-effort by design: an absent dir, an overfull dir, or an unreadable
+// file simply yields no entry, and the served gate then fails closed on
+// any filler URL it meets instead of comparing two mutable views.
+export async function collectFillerHashes({ publicDir }) {
+  const hashes = {};
+  let entries;
+  try {
+    entries = await readdir(join(publicDir, '__pilot', 'fillers'));
+  } catch {
+    return hashes;
+  }
+  // Legit dirs hold three pinned files; past this the dir is planted or
+  // corrupt, and blessing nothing fails the served filler URLs loudly.
+  if (entries.length > 64) {
+    return hashes;
+  }
+  for (const file of entries) {
+    let read;
+    try {
+      read = await readUpToBytes(
+        join(publicDir, '__pilot', 'fillers', file),
+        MAX_INPUT_BYTES
+      );
+    } catch {
+      continue;
+    }
+    if (!read.truncated) {
+      hashes[`/__pilot/fillers/${file}`] = sha256Hex(read.bytes);
+    }
+  }
+  return hashes;
 }

@@ -8,6 +8,9 @@
 // value from a space-separated `--flag value`) is rejected instead of
 // silently dropped, so a green report always proves the matrix the caller
 // meant to configure.
+import { MAX_INVENTORY_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
+
 export const READINESS_CLI_OPTIONS = [
   'chrome',
   'hero-stores',
@@ -193,6 +196,25 @@ export function parseMountsJson(text) {
     slotId: mount.slotId,
     stagedOriginal: mount.stagedOriginal,
   }));
+}
+
+// Bounded --mounts read: a corrupted or replaced multi-gigabyte file must
+// reject on size instead of buffering whole before parseMountsJson can
+// enforce its small expected shape. Same operator-JSON ceiling as the
+// offline inventory inputs.
+export async function readMountsFile(mountsPath) {
+  let read;
+  try {
+    read = await readUpToBytes(mountsPath, MAX_INVENTORY_BYTES);
+  } catch {
+    throw new Error(`bad --mounts: cannot read ${mountsPath}`);
+  }
+  if (read.truncated) {
+    throw new Error(
+      `bad --mounts: file exceeds the ${MAX_INVENTORY_BYTES}-byte budget`
+    );
+  }
+  return parseMountsJson(read.bytes.toString('utf8'));
 }
 
 export function parseProfiles(value) {

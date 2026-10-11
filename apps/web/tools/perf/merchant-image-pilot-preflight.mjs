@@ -229,6 +229,7 @@ export async function runPreflight(options) {
     expectedMounts: offline.accepted,
     pages,
     publicDir: options.publicDir,
+    stagedHashes: offline.stagedHashes,
     timeoutMs: options.timeoutMs ?? 10_000,
   });
   const ok = offline.ok && served.ok;

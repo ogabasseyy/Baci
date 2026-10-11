@@ -12,7 +12,10 @@ import {
 } from './merchant-image-pilot-preflight-offline-input.mjs';
 import { checkBindingManifest } from './merchant-image-pilot-preflight-offline-manifest.mjs';
 import { checkSamplePin } from './merchant-image-pilot-preflight-offline-sample.mjs';
-import { checkBindingStaged } from './merchant-image-pilot-preflight-offline-staged.mjs';
+import {
+  checkBindingStaged,
+  collectFillerHashes,
+} from './merchant-image-pilot-preflight-offline-staged.mjs';
 import { checkBindingTiers } from './merchant-image-pilot-preflight-offline-tiers.mjs';
 import {
   acceptanceKey,
@@ -41,12 +44,18 @@ export async function runOfflinePreflight(options) {
   // swapped inventory between phases fails closed instead of silently
   // emptying the route matrix. Null until inventory-parse passes.
   let validatedInventory = null;
+  // Offline-verified staged digests, keyed by served path: the served
+  // response-bytes gate compares both the staged reread and the served
+  // body against these instead of comparing two mutable views — a staged
+  // file replaced between phases would otherwise agree with itself.
+  const stagedHashes = {};
   const report = (ok) => ({
     accepted,
     checks,
     failures,
     inventory: validatedInventory,
     ok,
+    stagedHashes,
   });
   const effectiveRecipe = options.recipe ?? RECIPE_ID;
   if (effectiveRecipe !== RECIPE_ID) {
@@ -249,6 +258,19 @@ export async function runOfflinePreflight(options) {
     if (!(await checkBindingStaged({ ...stage, acceptance, manifest }))) {
       continue;
     }
+    // The staged bytes matched at this point, so the accepted digests —
+    // manifest tier hashes plus the validated inventory source hash — are
+    // pinned for the served phase. Only accepted bindings land entries:
+    // anything else fails closed downstream.
+    for (const tier of manifest.tiers) {
+      stagedHashes[`/__pilot/${acceptance.generationId}/${tier.path}`] =
+        tier.sha256;
+    }
+    const originalName = stagedOriginalName(
+      { assetId: record.assetId, merchantId: record.merchantId },
+      manifest.source.format
+    );
+    stagedHashes[`/__pilot/originals/${originalName}`] = record.sha256;
     accepted.push({
       assetId: record.assetId,
       binding: acceptanceKey(record),
@@ -256,11 +278,9 @@ export async function runOfflinePreflight(options) {
       merchantId: record.merchantId,
       role: record.role,
       slotId: record.slot,
-      stagedOriginal: `/__pilot/originals/${stagedOriginalName(
-        { assetId: record.assetId, merchantId: record.merchantId },
-        manifest.source.format
-      )}`,
+      stagedOriginal: `/__pilot/originals/${originalName}`,
     });
   }
+  Object.assign(stagedHashes, await collectFillerHashes(options));
   return report(failures.length === 0);
 }

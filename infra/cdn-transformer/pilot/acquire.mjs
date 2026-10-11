@@ -1,23 +1,17 @@
 import { createHash } from 'node:crypto';
-import { open, stat, unlink } from 'node:fs/promises';
+import { stat, unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
 import {
   EXTENSION_FOR_CONTENT_TYPE,
   fetchBoundedBytes,
 } from './acquire-fetch.mjs';
 import { parseCliArgs } from './cli-args.mjs';
-import {
-  MAX_INPUT_BYTES,
-  OP_TIMEOUT_MS,
-  PILOT_UUID_PATTERN,
-  ROLES,
-} from './constants.mjs';
+import { MAX_INPUT_BYTES, OP_TIMEOUT_MS } from './constants.mjs';
 import { readUpToBytes } from './disk-guards.mjs';
 import {
-  ASSET_ID_PATTERN,
   resolveNewSnapshotPath,
   snapshotNameForAsset,
+  writeNewSnapshot,
 } from './input-store.mjs';
 import {
   appendInventoryRecord,
@@ -28,20 +22,9 @@ import {
   PilotAcquireError,
   PilotInventoryEvictedError,
 } from './inventory-store.mjs';
-import { parsePilotJob } from './job-schema.mjs';
+import { parseAcquireIdentity, parsePilotJob } from './job-schema.mjs';
 
 export { EXTENSION_FOR_CONTENT_TYPE };
-
-const AcquireIdentitySchema = z
-  .object({
-    // Same contract the shared job schema and snapshot namer enforce, so a
-    // bad id fails here instead of after the whole remote image downloads.
-    assetId: z.string().regex(ASSET_ID_PATTERN),
-    merchantId: z.string().regex(PILOT_UUID_PATTERN),
-    role: z.enum(ROLES),
-    slot: z.string().min(1).max(128),
-  })
-  .strict();
 
 // Decoded-format to MIME map for the acquisition content-type cross-check.
 // Sharp reports 'jpeg' (never 'jpg'); anything unmapped fails closed.
@@ -71,16 +54,10 @@ export async function acquireSnapshot(options) {
     timeoutMs = OP_TIMEOUT_MS,
     url,
   } = options ?? {};
-  const identity = AcquireIdentitySchema.safeParse({
-    assetId,
-    merchantId,
-    role,
-    slot,
-  });
-  if (!identity.success) {
-    const fields = identity.error.issues.map((issue) => issue.path.join('.'));
+  const identity = parseAcquireIdentity({ assetId, merchantId, role, slot });
+  if (!identity.ok) {
     throw new PilotAcquireError(
-      `acquire: invalid identity (${fields.join(', ')})`
+      `acquire: invalid identity (${identity.issues.join(', ')})`
     );
   }
   // The snapshot stem is "<merchantId>-<assetId>" capped at 128 chars; a
@@ -124,25 +101,7 @@ export async function acquireSnapshot(options) {
   }
   let wroteSnapshot = false;
   if (!existing) {
-    // Durable before publish: the bytes are written and fsync'd through
-    // one open descriptor before the inventory record that references
-    // them can commit — a crash between an unfsync'd write and the
-    // publish would otherwise leave a record pointing at a torn or
-    // missing snapshot. EEXIST (a rival won the same-asset race)
-    // propagates untouched, exactly as the writeFile form did; only a
-    // file this call created is unlinked when the write or sync fails.
-    const handle = await open(target, 'wx');
-    let synced = false;
-    try {
-      await handle.writeFile(bytes);
-      await handle.sync();
-      synced = true;
-    } finally {
-      await handle.close();
-      if (!synced) {
-        await unlink(target).catch(() => undefined);
-      }
-    }
+    await writeNewSnapshot(target, bytes);
     wroteSnapshot = true;
   }
   // Overlap guard: two acquisitions for the same asset can interleave so

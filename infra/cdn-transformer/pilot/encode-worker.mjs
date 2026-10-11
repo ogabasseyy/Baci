@@ -1,25 +1,27 @@
-// Killable single-operation Sharp worker. The parent (encoder.mjs) spawns one
-// process per native operation with a JSON op in argv[2]; the worker prints a
+// Killable single-operation Sharp worker: the op handlers. The parent
+// (encoder.mjs) spawns one process per native operation via
+// encode-worker-main.mjs with a JSON op in argv[2]; the worker prints a
 // single JSON result to stdout. Handled outcomes (including input rejections)
 // exit 0 with { ok: true|false }; protocol misuse or unexpected crashes exit
 // non-zero so the parent can distinguish rejection from worker failure.
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { stat } from 'node:fs/promises';
 import sharp from 'sharp';
 import {
   ACCEPTED_INPUT_FORMATS,
   ENCODER_OPTIONS,
   MAX_AXIS_PIXELS,
   MAX_DECODED_PIXELS,
+  MAX_INPUT_BYTES,
   SHARP_LIMITS,
 } from './constants.mjs';
+import { readUpToBytes, sha256File } from './disk-guards.mjs';
 import {
   normalizeFormat,
   orientedDimensions,
 } from './encode-worker-formats.mjs';
 
-export { normalizeFormat, orientedDimensions };
+export { errorMessage, normalizeFormat, orientedDimensions };
 
 export class WorkerInputError extends Error {
   constructor(code, message) {
@@ -97,16 +99,31 @@ function sharpBuffer(bytes) {
 
 // Every handler captures its input with a single read and decodes the
 // captured buffer — never the path. A file replacement after the verified
-// read cannot change the encoded or verified pixels.
+// read cannot change the encoded or verified pixels. Production reads are
+// capped at MAX_INPUT_BYTES: legitimate inputs (snapshots, frozen copies,
+// staged tiers) never exceed it by construction, so anything larger is a
+// replaced or grown file that must reject before buffering, never OOM the
+// worker. The io seam injects test buffers and keeps its exact behavior.
 async function readInputOnce(input, read) {
-  return read(input).catch(() => {
+  if (read) {
+    return read(input).catch(() => {
+      throw new WorkerInputError('unreadable-input', 'cannot read input file');
+    });
+  }
+  const capped = await readUpToBytes(input, MAX_INPUT_BYTES).catch(() => {
     throw new WorkerInputError('unreadable-input', 'cannot read input file');
   });
+  if (capped.truncated) {
+    throw new WorkerInputError(
+      'input-too-large',
+      `input exceeds ${MAX_INPUT_BYTES} bytes`
+    );
+  }
+  return capped.bytes;
 }
 
 export async function handleMetadataOp(op, io = {}) {
-  const read = io.readFile ?? readFile;
-  const bytes = await readInputOnce(op.input, read);
+  const bytes = await readInputOnce(op.input, io.readFile);
   let meta;
   try {
     meta = await sharpBuffer(bytes).metadata();
@@ -151,7 +168,7 @@ export async function handleEncodeOp(op, io = {}) {
   ) {
     throw new WorkerInputError('bad-request', 'invalid encode quality');
   }
-  const inputBytes = await readInputOnce(op.input, io.readFile ?? readFile);
+  const inputBytes = await readInputOnce(op.input, io.readFile);
   const inputSha = createHash('sha256').update(inputBytes).digest('hex');
   if (inputSha !== op.expectedInputSha256) {
     throw new WorkerInputError(
@@ -188,14 +205,17 @@ export async function handleEncodeOp(op, io = {}) {
     );
   }
   const info = await stat(op.output);
-  const outBytes = await readFile(op.output);
+  // Streamed, never buffered: the output is hashed without loading it
+  // whole, so a swapped-in giant hashes in constant memory instead of
+  // OOMing the worker before the parent's rung-ceiling comparison.
+  const outSha256 = await sha256File(op.output);
   const scale = Math.min(1, op.width / oriented.width);
   return {
     bytes: info.size,
     height: Math.round(oriented.height * scale),
     ok: true,
     output: op.output,
-    sha256: createHash('sha256').update(outBytes).digest('hex'),
+    sha256: outSha256,
     width: Math.min(op.width, oriented.width),
   };
 }
@@ -204,7 +224,7 @@ export async function handleVerifyOp(op, io = {}) {
   if (op.expectedFormat !== 'avif' && op.expectedFormat !== 'webp') {
     throw new WorkerInputError('bad-request', 'invalid verify format');
   }
-  const bytes = await readInputOnce(op.input, io.readFile ?? readFile);
+  const bytes = await readInputOnce(op.input, io.readFile);
   let meta;
   try {
     await sharpBuffer(bytes).stats();
@@ -230,66 +250,4 @@ export async function handleVerifyOp(op, io = {}) {
 
 function errorMessage(error) {
   return (error instanceof Error ? error.message : String(error)).slice(0, 300);
-}
-
-function parseOp(raw) {
-  if (!raw) {
-    throw new WorkerInputError('bad-request', 'missing op JSON');
-  }
-  let op;
-  try {
-    op = JSON.parse(raw);
-  } catch {
-    throw new WorkerInputError('bad-request', 'op is not valid JSON');
-  }
-  if (!op || typeof op !== 'object' || typeof op.input !== 'string') {
-    throw new WorkerInputError('bad-request', 'op requires an input path');
-  }
-  if (op.op !== 'metadata' && op.op !== 'encode' && op.op !== 'verify') {
-    throw new WorkerInputError('bad-request', `unknown op "${op?.op}"`);
-  }
-  if (op.op === 'encode' && typeof op.output !== 'string') {
-    throw new WorkerInputError('bad-request', 'encode requires an output path');
-  }
-  return op;
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  (async () => {
-    let op;
-    try {
-      op = parseOp(process.argv[2]);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : error);
-      process.exitCode = 2;
-      return;
-    }
-    try {
-      // Worker self-report for job memory accounting: max RSS at op start
-      // and completion. Single-shot workers hold their peak through result
-      // serialization, so the end sample approximates the op peak; spikes
-      // inside one native call may exceed it (documented at the consumer).
-      const startRss = process.memoryUsage().rss;
-      const result =
-        op.op === 'metadata'
-          ? await handleMetadataOp(op)
-          : op.op === 'encode'
-            ? await handleEncodeOp(op)
-            : await handleVerifyOp(op);
-      result.workerPeakRssBytes = Math.max(
-        startRss,
-        process.memoryUsage().rss
-      );
-      process.stdout.write(`${JSON.stringify(result)}\n`);
-    } catch (error) {
-      if (error instanceof WorkerInputError) {
-        process.stdout.write(
-          `${JSON.stringify({ code: error.code, message: error.message, ok: false })}\n`
-        );
-        return;
-      }
-      console.error(errorMessage(error));
-      process.exitCode = 1;
-    }
-  })();
 }

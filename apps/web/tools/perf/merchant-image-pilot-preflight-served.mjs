@@ -61,6 +61,7 @@ export async function fetchServedAgreement(
     fetchImpl,
     pages,
     publicDir,
+    stagedHashes = {},
     timeoutMs = 10_000,
   }
 ) {
@@ -185,6 +186,7 @@ export async function fetchServedAgreement(
           arm,
           origin,
           publicDir,
+          stagedHashes,
           timeoutMs,
         })) {
           fail(

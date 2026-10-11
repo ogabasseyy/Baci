@@ -811,4 +811,22 @@ describe('preflight offline gate', () => {
       stagedOriginal: `/__pilot/originals/${MERCHANT}-logo-a.png`,
     });
   });
+
+  it('pins offline-verified staged digests for the served phase', async () => {
+    const fixture = await setupOffline();
+    const report = await runOfflinePreflight(offlineOptions(fixture));
+    expect(report.ok).toBe(true);
+    // Manifest tier hashes plus the validated inventory source hash,
+    // keyed by served path: the served response-bytes gate compares
+    // both copies against these instead of against each other.
+    const [only] = fixture.assets;
+    const expected = Object.fromEntries(
+      fixture.tiers.map((tier) => [
+        `/__pilot/${fixture.generationId}/${tier.path}`,
+        tier.sha256,
+      ])
+    );
+    expected[only.stagedOriginal] = only.sourceSha;
+    expect(report.stagedHashes).toEqual(expected);
+  });
 });

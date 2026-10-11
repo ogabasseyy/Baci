@@ -22,7 +22,6 @@
 // not just the primary surface. Mobile-only bindings (the md:hidden hero)
 // invert on desktop profiles: the section must render, but hidden —
 // decode verdicts stay with the mobile profiles that show it.
-import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import {
   crossArmProblems,
@@ -31,11 +30,11 @@ import {
 import { collectSurface } from './merchant-image-pilot-readiness-collect.mjs';
 import {
   parseArgs,
-  parseMountsJson,
   parseProfiles,
   parseStoreMap,
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
+  readMountsFile,
 } from './merchant-image-pilot-readiness-config.mjs';
 
 async function run() {
@@ -69,7 +68,7 @@ async function run() {
   let stores;
   let expectedMounts;
   try {
-    expectedMounts = parseMountsJson(await readFile(args.mounts, 'utf8'));
+    expectedMounts = await readMountsFile(args.mounts);
     stores = parseStoreMap(args['store-map'], expectedMounts);
   } catch (error) {
     fail('usage', error instanceof Error ? error.message : String(error));

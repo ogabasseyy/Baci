@@ -202,8 +202,9 @@ export async function acquireEncoderLock(outputRoot) {
 }
 
 // Returns true when the caller may retry publication, false when the
-// lock is held, or 'corrupt' when the file is unparseable (atomic
-// publication makes a mid-write corrupt read impossible).
+// lock is held, or 'corrupt' when the file is unparseable or shapeless
+// (atomic publication makes a mid-write corrupt read impossible, and
+// the writer always records a pid plus a token).
 async function stealWhenStale(path, locksDir) {
   let text;
   try {
@@ -219,6 +220,20 @@ async function stealWhenStale(path, locksDir) {
     holder = null;
   }
   if (!holder || typeof holder !== 'object') {
+    return 'corrupt';
+  }
+  // Shape before liveness: atomic publication means our writer's claims
+  // always carry a positive integer pid and a token string, so a
+  // well-formed-JSON-but-shapeless file ({}, [], a pid without a token)
+  // is tampering or disk fault — never a holder mid-write. Treating it
+  // as a dead claim would delete the lock and admit a second encoder
+  // alongside a possibly live original; fail closed for the operator.
+  if (
+    !Number.isInteger(holder.pid) ||
+    holder.pid <= 0 ||
+    typeof holder.token !== 'string' ||
+    holder.token.length === 0
+  ) {
     return 'corrupt';
   }
   if (holderAlive(holder.pid)) {

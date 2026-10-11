@@ -10,7 +10,10 @@ import {
   sha256,
   tierBytes,
 } from './merchant-image-pilot-preflight-offline-output-fixtures.mjs';
-import { checkBindingStaged } from './merchant-image-pilot-preflight-offline-staged.mjs';
+import {
+  checkBindingStaged,
+  collectFillerHashes,
+} from './merchant-image-pilot-preflight-offline-staged.mjs';
 
 describe('checkBindingStaged', () => {
   it('passes staged copies that hash identically, incl. the original', async () => {
@@ -136,5 +139,31 @@ describe('checkBindingStaged', () => {
     });
     expect(ok).toBe(false);
     expect(failures.join('\n')).toMatch(/staged derivative missing/);
+  });
+});
+
+describe('collectFillerHashes', () => {
+  it('blesses on-disk filler bytes keyed by served path', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-offline-fillers-'));
+    const dir = join(publicDir, '__pilot', 'fillers');
+    await mkdir(dir, { recursive: true });
+    const bytes = Buffer.from('filler-bytes');
+    await writeFile(join(dir, 'grid-filler-600x400-a.png'), bytes);
+    expect(await collectFillerHashes({ publicDir })).toEqual({
+      '/__pilot/fillers/grid-filler-600x400-a.png': sha256(bytes),
+    });
+  });
+
+  it('blesses nothing when the fillers dir is absent or planted', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-offline-fillers-'));
+    expect(await collectFillerHashes({ publicDir })).toEqual({});
+    const dir = join(publicDir, '__pilot', 'fillers');
+    await mkdir(dir, { recursive: true });
+    for (let i = 0; i < 65; i += 1) {
+      await writeFile(join(dir, `planted-${i}.png`), Buffer.from('x'));
+    }
+    // Past the entry cap the served filler URLs fail closed instead of
+    // trusting a planted directory.
+    expect(await collectFillerHashes({ publicDir })).toEqual({});
   });
 });

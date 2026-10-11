@@ -9,6 +9,7 @@ import {
   getAvailableBytes,
   readUpToBytes,
   removeOwnedStaging,
+  sha256File,
 } from './disk-guards.mjs';
 
 test('reports available bytes and enforces the free-space floor', async () => {
@@ -102,4 +103,20 @@ test('readUpToBytes streams multi-chunk files to the cap', async () => {
   const capped = await readUpToBytes(big, 100 * 1024);
   assert.equal(capped.truncated, true);
   assert.deepEqual(capped.bytes, payload.subarray(0, 100 * 1024));
+});
+
+test('sha256File hashes in constant memory, identical to a buffered hash', async () => {
+  const { createHash } = await import('node:crypto');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-disk-'));
+  const target = join(dir, 'multi-chunk.bin');
+  // Multi-chunk payload so the test crosses stream boundaries.
+  const payload = Buffer.alloc(300 * 1024, 0);
+  for (let i = 0; i < payload.length; i += 4096) {
+    payload[i] = i % 251;
+  }
+  await writeFile(target, payload);
+  const expected = createHash('sha256').update(payload).digest('hex');
+  assert.equal(await sha256File(target), expected);
+  // Read errors propagate raw, like readFile's: callers map them.
+  await assert.rejects(() => sha256File(join(dir, 'missing')), /ENOENT/);
 });

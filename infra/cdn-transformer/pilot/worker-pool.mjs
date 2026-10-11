@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { JOB_TIMEOUT_MS, OP_TIMEOUT_MS } from './constants.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const WORKER_PATH = join(here, 'encode-worker.mjs');
+const WORKER_PATH = join(here, 'encode-worker-main.mjs');
 const KILL_GRACE_MS = 2000;
 const MAX_STDOUT_BYTES = 64 * 1024;
 const MAX_STDERR_BYTES = 4 * 1024;

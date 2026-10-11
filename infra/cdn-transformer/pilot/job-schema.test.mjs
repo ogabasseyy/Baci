@@ -4,6 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  parseAcquireIdentity,
   parsePilotJob,
   pilotJobKey,
   readInventoryJobs,
@@ -244,4 +245,26 @@ test('readInventoryJobs refuses route-rejected duplicates', async () => {
     JSON.stringify([record(), record({ assetId: 'logo-b' })])
   );
   await assert.rejects(() => readInventoryJobs(path), /duplicate slot/);
+});
+
+test('parseAcquireIdentity accepts valid identities with field-path issues', () => {
+  const valid = parseAcquireIdentity({
+    assetId: 'logo-a',
+    merchantId: MERCHANT_A,
+    role: 'logo',
+    slot: 'header-logo',
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.identity.assetId, 'logo-a');
+  const bad = parseAcquireIdentity({
+    assetId: '../evil',
+    merchantId: 'not-a-uuid',
+    role: 'banner',
+    slot: '',
+  });
+  assert.equal(bad.ok, false);
+  assert.deepEqual(
+    [...bad.issues].sort(),
+    ['assetId', 'merchantId', 'role', 'slot']
+  );
 });

@@ -44,10 +44,17 @@ describe('preflight served gate', () => {
       const address = server.address();
       const origin = `http://127.0.0.1:${address.port}`;
       const expectedBindings = [`${MERCHANT}/hero-s0`, `${MERCHANT}/logo-a`];
+      const stagedHashes = Object.fromEntries(
+        fixture.tiers.map((tier) => [
+          `/__pilot/${fixture.generationId}/${tier.path}`,
+          tier.sha256,
+        ])
+      );
       const covered = await fetchServedAgreement(origin, {
         arms: ['pilot'],
         expectedBindings,
         publicDir: fixture.publicDir,
+        stagedHashes,
       });
       expect(covered.failures).toEqual([]);
       expect(covered.ok).toBe(true);
@@ -55,6 +62,7 @@ describe('preflight served gate', () => {
         arms: ['pilot'],
         expectedBindings: [...expectedBindings, `${MERCHANT}/ghost`],
         publicDir: fixture.publicDir,
+        stagedHashes,
       });
       expect(dropped.ok).toBe(false);
       expect(dropped.failures.join('\n')).toMatch(/binding-coverage/);
@@ -271,6 +279,7 @@ describe('preflight served gate', () => {
           },
         ],
         publicDir: fixture.publicDir,
+        stagedHashes: { [card.stagedOriginal]: card.sourceSha },
       });
       expect(report.failures).toEqual([]);
       expect(report.ok).toBe(true);

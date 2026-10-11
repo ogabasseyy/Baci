@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { lstat, open, realpath, stat } from 'node:fs/promises';
+import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from './constants.mjs';
 
@@ -151,4 +151,26 @@ export async function resolveNewSnapshotPath(inputRoot, fileName) {
     throw new PilotInputError(`snapshot path is a symlink: ${fileName}`);
   }
   return target;
+}
+
+// Durable snapshot creation, split from acquire.mjs under the repo line
+// ceiling. The bytes are written and fsync'd through one open descriptor
+// before any inventory record that references them can commit — a crash
+// between an unfsync'd write and the publish would otherwise leave a
+// record pointing at a torn or missing snapshot. EEXIST (a rival won the
+// same-asset race) propagates untouched; only a file this call created
+// is unlinked when the write or sync fails.
+export async function writeNewSnapshot(target, bytes) {
+  const handle = await open(target, 'wx');
+  let synced = false;
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+    synced = true;
+  } finally {
+    await handle.close();
+    if (!synced) {
+      await unlink(target).catch(() => undefined);
+    }
+  }
 }

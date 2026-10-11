@@ -1,3 +1,6 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_READINESS_PROFILES,
@@ -7,6 +10,7 @@ import {
   parseStoreMap,
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
+  readMountsFile,
   SETTINGS_CLI_OPTIONS,
 } from './merchant-image-pilot-readiness-config.mjs';
 
@@ -173,6 +177,40 @@ describe('merchant-image-pilot-readiness expected mounts', () => {
         ])
       )
     ).toThrow(/generationId/);
+  });
+
+  it('reads --mounts through the operator-JSON byte budget', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-readiness-'));
+    const valid = join(dir, 'mounts.json');
+    await writeFile(
+      valid,
+      JSON.stringify([
+        {
+          binding: 'm/logo-a',
+          generationId: 'g',
+          merchantId: 'm',
+          slotId: 'header-logo',
+          stagedOriginal: '/__pilot/originals/x.png',
+        },
+      ])
+    );
+    expect(await readMountsFile(valid)).toEqual([
+      {
+        binding: 'm/logo-a',
+        generationId: 'g',
+        merchantId: 'm',
+        slotId: 'header-logo',
+        stagedOriginal: '/__pilot/originals/x.png',
+      },
+    ]);
+    // A corrupted or replaced giant rejects on size instead of
+    // buffering whole before shape validation runs.
+    const giant = join(dir, 'giant.json');
+    await writeFile(giant, Buffer.alloc(1024 * 1024 + 1, 0x5b));
+    await expect(readMountsFile(giant)).rejects.toThrow(/byte budget/);
+    await expect(readMountsFile(join(dir, 'missing.json'))).rejects.toThrow(
+      /cannot read/
+    );
   });
 });
 

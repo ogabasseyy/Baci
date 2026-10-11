@@ -36,6 +36,15 @@ export function originRepoSlug(remoteUrl) {
   if (parsed.search !== '' || parsed.hash !== '') {
     return '';
   }
+  // Reject spellings the URL parser normalizes away: dot segments
+  // (github.com/evil/../owner/repo) collapse in pathname, but the
+  // worker guard parses the raw path and would refuse the checkout
+  // downstream. The raw path must equal the serialized pathname.
+  const pathStart = raw.indexOf('/', raw.indexOf('://') + 3);
+  const rawPath = pathStart === -1 ? '/' : raw.slice(pathStart);
+  if (rawPath !== parsed.pathname) {
+    return '';
+  }
   const path = parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');
   return path ? path.toLowerCase() : '';
 }

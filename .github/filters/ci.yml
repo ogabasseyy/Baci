@@ -207,6 +207,7 @@ deploy_scripts:
   - '.github/scripts/release-subprocess.mjs'
   - '.github/scripts/release-discovery.test.mjs'
   - '.github/scripts/ops-promote-record-contract.test.mjs'
+  - '.github/scripts/release-budget-contract.test.mjs'
   - '.github/workflows/ops-promote-record.yml'
   - 'ci_scripts/validate-promote-record.mjs'
   - 'ci_scripts/validate-promote-record.test.mjs'

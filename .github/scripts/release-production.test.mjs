@@ -18,7 +18,6 @@ import {
   parseJobsPayload,
   readRuns,
   readWorkflowRunStatus,
-  RUN_WATCH_TIMEOUT_MS,
   RUNS_MAX_PAGES,
   parseRunAttempt,
   shouldHoldReleaseLock,
@@ -71,13 +70,10 @@ test('reads raw gh --jq scalars without JSON parsing', () => {
 
 test('requires authenticated Vercel access to the production project', () => {
   assert.doesNotThrow(() => assertVercelAccess(() => 'dpl_abc123'));
-  assert.throws(() => assertVercelAccess(() => {
-    throw new Error('vercel failed');
-  }), {
+  assert.throws(() => assertVercelAccess(() => { throw new Error('vercel failed'); }), {
     message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry',
   });
-  const transport = new Error('serving alias response unreadable; retry the read (oops)');
-  transport.keepOriginalMessage = true;
+  const transport = Object.assign(new Error('serving alias response unreadable; retry the read (oops)'), { keepOriginalMessage: true });
   assert.throws(() => assertVercelAccess(() => { throw transport; }), { message: transport.message });
 });
 
@@ -93,7 +89,6 @@ test('waits for run completion by polling the run endpoint', async () => {
   });
   assert.deepEqual(sleeps, [10, 10]);
   assert.deepEqual(waits.map(([status]) => status), ['queued', 'in_progress']);
-  assert.ok(RUN_WATCH_TIMEOUT_MS >= (35 + 150) * 60 * 1000);
   const timeout = await waitForRunCompletion(42, async () => 'in_progress', {
     timeoutMs: 0,
     sleep: async () => {},
@@ -262,6 +257,8 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://github.com:8443/ogabasseyy/Baci.git',
     'https://github.com/ogabasseyy/Baci.git#fragment',
     'https://github.com/ogabasseyy/Baci.git?x=1',
+    'https://github.com/evil/../ogabasseyy/Baci.git',
+    'https://github.com/ogabasseyy/./Baci.git',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }

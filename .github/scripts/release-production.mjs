@@ -49,11 +49,11 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
   }
 }
 
-// Covers the production workflow's full allowed duration
-// (db-migrations 35 min + deploy-production 150 min) plus queue
-// and environment-approval slack, so a healthy slow build is never
-// abandoned while it may still publish.
-export const RUN_WATCH_TIMEOUT_MS = 240 * 60 * 1000;
+// Covers the sequential job allowance (10 + 50 + 10 + 150 = 220 min:
+// vps-drain-readiness, db-migrations, gigl-worker-capability,
+// deploy-production) plus queue and environment-approval slack, so
+// a healthy slow release is never abandoned while it may publish.
+export const RUN_WATCH_TIMEOUT_MS = 300 * 60 * 1000;
 // Worker deploy + verify steps are single-digit minutes when healthy;
 // 30 minutes bounds a hung deploy.sh or SSH session loudly.
 export const WORKER_STEP_TIMEOUT_MS = 30 * 60 * 1000;

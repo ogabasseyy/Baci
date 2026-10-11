@@ -1,8 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
-  copyFileSync,
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -10,57 +8,15 @@ import {
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  APP_CONFIG_PATH,
+  INFO_PLIST_PATH,
+  PRODUCTION_CONFIG_PATH,
+  PROJECT_ROOT,
+  copyRequiredProjectFiles,
+} from './check-ad-tracking-native-config.test-utils';
 
 const SCRIPT_PATH = path.join(__dirname, 'check-ad-tracking-native-config.mjs');
-const PROJECT_ROOT = path.resolve(__dirname, '..');
-const APP_CONFIG_PATH = path.join(PROJECT_ROOT, 'app.config.ts');
-const INFO_PLIST_PATH = path.join(
-  PROJECT_ROOT,
-  'ios',
-  'Ogabassey',
-  'Info.plist'
-);
-const XCODE_PROJECT_PATH = path.join(
-  PROJECT_ROOT,
-  'ios',
-  'Ogabassey.xcodeproj',
-  'project.pbxproj'
-);
-const FASTFILE_PATH = path.join(PROJECT_ROOT, 'fastlane', 'Fastfile');
-const PRODUCTION_CONFIG_PATH = path.join(
-  PROJECT_ROOT,
-  'config',
-  'development-storefront-expo-config-production.ts'
-);
-
-function copyRequiredProjectFiles(tempRoot: string) {
-  mkdirSync(path.join(tempRoot, 'ios', 'Ogabassey.xcodeproj'), {
-    recursive: true,
-  });
-  mkdirSync(path.join(tempRoot, 'ios', 'Ogabassey'), { recursive: true });
-  mkdirSync(path.join(tempRoot, 'fastlane'), { recursive: true });
-  mkdirSync(path.join(tempRoot, 'config'), { recursive: true });
-  copyFileSync(APP_CONFIG_PATH, path.join(tempRoot, 'app.config.ts'));
-  if (existsSync(PRODUCTION_CONFIG_PATH)) {
-    copyFileSync(
-      PRODUCTION_CONFIG_PATH,
-      path.join(
-        tempRoot,
-        'config',
-        'development-storefront-expo-config-production.ts'
-      )
-    );
-  }
-  copyFileSync(
-    INFO_PLIST_PATH,
-    path.join(tempRoot, 'ios', 'Ogabassey', 'Info.plist')
-  );
-  copyFileSync(
-    XCODE_PROJECT_PATH,
-    path.join(tempRoot, 'ios', 'Ogabassey.xcodeproj', 'project.pbxproj')
-  );
-  copyFileSync(FASTFILE_PATH, path.join(tempRoot, 'fastlane', 'Fastfile'));
-}
 
 function runNativeAdConfigCheck(projectRoot = PROJECT_ROOT) {
   return spawnSync(process.execPath, [SCRIPT_PATH, '--project-root', projectRoot], {
@@ -102,7 +58,7 @@ describe('check-ad-tracking-native-config', () => {
         ? path.join(
             tempRoot,
             'config',
-            'development-storefront-expo-config-production.ts'
+            'development-storefront-expo-config-production.js'
           )
         : path.join(tempRoot, 'app.config.ts');
       const appConfigSource = readFileSync(declarationsPath, 'utf8')

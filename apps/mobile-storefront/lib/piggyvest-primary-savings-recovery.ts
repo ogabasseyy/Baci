@@ -1,4 +1,5 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
+import { useAuthStore } from '@/stores/auth-store';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 export async function recoverPiggyvestPrimarySavings(input: {
@@ -17,9 +18,15 @@ export async function recoverPiggyvestPrimarySavings(input: {
   // mismatch answered without consulting storage, or a lookup failure.
   // Only a successful response may clear the client operation context.
   // Callers treat a throw as unknown and must block new contributions.
+  // Pin the lookup to the initiating user: without this, a switch
+  // before the session read sends the new user's Bearer [REDACTED] with the
+  // old goal id, and the resulting GOAL_NOT_FOUND blocks recovery of a
+  // valid pending contribution. The pin fails locally instead.
+  const expectedUserId = useAuthStore.getState().user?.id;
   const payload: unknown = await client.fetchJson({
     path: `/api/storefront/customer/savings/primary-transfer/pending?merchantId=${encodeURIComponent(parsed.merchantId)}&goalId=${encodeURIComponent(parsed.goalId)}`,
     method: 'GET',
+    expectedUserId: expectedUserId ?? undefined,
   });
   const response = schemas.recoveryResponse.safeParse(payload);
   if (

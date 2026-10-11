@@ -8,6 +8,14 @@ jest.mock('./storefront-customer-api-client', () => ({
   createStorefrontCustomerApiClient: (...args: unknown[]) =>
     mockCreateClient(...args),
 }));
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
 const { recoverPiggyvestPrimarySavings } =
   require('./piggyvest-primary-savings-recovery') as typeof import('./piggyvest-primary-savings-recovery');
 const input = {
@@ -21,6 +29,16 @@ it('uses a read-only recovery request for the selected goal', async () => {
     path: `/api/storefront/customer/savings/primary-transfer/pending?merchantId=${input.merchantId}&goalId=${input.goalId}`,
     method: 'GET',
   });
+});
+it('pins the recovery lookup to the initiating user', async () => {
+  jest.clearAllMocks();
+  mockAuthUserId = 'user-A';
+  mockFetchJson.mockResolvedValue({ operation: null });
+  await recoverPiggyvestPrimarySavings(input);
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: 'user-A' })
+  );
+  mockAuthUserId = null;
 });
 it('rejects a recovered operation belonging to a different goal', async () => {
   mockFetchJson.mockResolvedValue({

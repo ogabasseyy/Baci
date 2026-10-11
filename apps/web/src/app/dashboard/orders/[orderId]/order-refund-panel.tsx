@@ -32,13 +32,11 @@ export function OrderRefundPanel({
   const [note, setNote] = useState('');
   const [confirmed, setConfirmed] = useState(false);
 
-  // A refunded order, or a failed one with no actions left, never
-  // changes without a new submission: stop the status poll there.
-  const terminal =
-    summary?.status === 'refunded' ||
-    (summary?.status === 'failed' &&
-      !summary.canRetry &&
-      !summary.canRecordManual);
+  // Only a refunded order is terminal: a failed row can still
+  // transition asynchronously (drain retries, provider
+  // reconciliation), and the ledger-derived balance would go stale
+  // without the poll.
+  const terminal = summary?.status === 'refunded';
   useRefundStatusPolling({
     onError: setError,
     onSummary: setSummary,

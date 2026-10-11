@@ -94,13 +94,18 @@ async function handle(
     // converts its own reference race to manual_reference_conflict, so
     // any residual 23505 here is genuinely unexpected (500), never a
     // blanket-mapped conflict that could mask an unrelated violation.
-    const code =
-      KNOWN_REFUND_ERRORS[error.message] === undefined
-        ? 'internal_error'
-        : error.message;
+    // Match tolerantly: drivers can wrap the RAISE text with context,
+    // and a wrapped known failure must keep its code, not collapse
+    // to internal_error while callers see a distinct status.
+    const matchedError = Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
+      error.message?.includes(known)
+    );
+    const code = matchedError ?? 'internal_error';
     return NextResponse.json(
       {
-        error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',
+        error:
+          (matchedError ? KNOWN_REFUND_ERRORS[matchedError] : undefined) ??
+          'Unable to manage refund',
         code,
       },
       { status }

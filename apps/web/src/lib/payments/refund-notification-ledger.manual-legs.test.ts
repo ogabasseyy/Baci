@@ -148,4 +148,103 @@ describe('refundNotificationLedgerAmount manual legs', () => {
     expect(amount).toContain('60');
     expect(amount).not.toContain('100');
   });
+
+  it('counts explicitly linked manual rows as coverage', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('counts legacy refunded rows as terminal coverage', async () => {
+    const { refundQuery, supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+    // Both terminal statuses are fetched: the claim finalizes on
+    // refunded rows, so fetching completed-only would dead-letter.
+    expect(vi.mocked(refundQuery.in)).toHaveBeenCalledWith('status', [
+      'completed',
+      'refunded',
+    ]);
+  });
+
+  it('still rejects unlinked manual rows', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: {},
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
 });

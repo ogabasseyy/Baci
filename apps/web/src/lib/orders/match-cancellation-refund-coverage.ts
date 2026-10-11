@@ -52,7 +52,9 @@ export function matchCancellationRefundCoverage({
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
   const manualLinkedLegIds = new Set<string>();
-  const badManualLegIds = new Set<string>();
+  // Manual-linked legs that quarantine instead of counting: wrong
+  // currency, or a Paystack declaration without provider proof.
+  const manualReviewLegIds = new Set<string>();
   const unverifiedLinkedLegIds = new Set<string>();
   let unattributedUnlinkedCount = 0;
   for (const row of refundRows ?? []) {
@@ -84,8 +86,25 @@ export function matchCancellationRefundCoverage({
       // Explicitly linked manual rows always block provider initiation
       // on their leg; matching-money rows below also count as coverage.
       manualLinkedLegIds.add(paymentId);
+      const rowMetadata = row.metadata as {
+        method?: unknown;
+        provider_refund_status?: unknown;
+      } | null;
       if (!currencyMatches) {
-        badManualLegIds.add(paymentId);
+        manualReviewLegIds.add(paymentId);
+        continue;
+      }
+      // A manual row declared as Paystack is only a merchant claim
+      // about provider money: without provider confirmation it must
+      // quarantine for review like the claim gate, or the executor
+      // would mark the leg covered and finish without settlement
+      // reversal or notifications. No reconciler stamps manual rows
+      // today, so such rows always quarantine for now.
+      if (
+        rowMetadata?.method === 'paystack' &&
+        rowMetadata?.provider_refund_status !== 'processed'
+      ) {
+        manualReviewLegIds.add(paymentId);
         continue;
       }
     } else if (isManualRow) {
@@ -138,7 +157,7 @@ export function matchCancellationRefundCoverage({
     if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
       refundedPaymentIds.add(leg.id);
     } else if (
-      badManualLegIds.has(leg.id) ||
+      manualReviewLegIds.has(leg.id) ||
       (completedLinkedLegIds.has(leg.id) && !manualLinkedLegIds.has(leg.id))
     ) {
       mismatchedTransactions.push(leg);

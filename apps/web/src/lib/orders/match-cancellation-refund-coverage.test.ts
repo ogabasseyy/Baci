@@ -227,4 +227,63 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
   });
+
+  it('quarantines unverified manual rows declared as Paystack', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          gateway: 'manual',
+          metadata: {
+            method: 'paystack',
+            payment_transaction_id: 'payment-1',
+          },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    // A merchant claim about provider money is not coverage: the
+    // executor must quarantine for review, never mark the leg
+    // covered and finish without settlement reversal.
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('counts provider-confirmed manual Paystack rows as coverage', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          gateway: 'manual',
+          metadata: {
+            method: 'paystack',
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
+
+  it('counts off-provider manual rows without a declared method', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'payment-1' },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
 });

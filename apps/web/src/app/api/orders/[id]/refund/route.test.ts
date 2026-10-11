@@ -187,6 +187,22 @@ describe('order refund route', () => {
       code: expectedCode,
     });
   });
+  it('keeps the code when drivers wrap a known failure message', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message:
+          'manual_completion_required: finish the balance first (context: rpc manage_order_refund)',
+      },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Finish the remaining balance as a manual refund before retrying',
+      code: 'manual_completion_required',
+    });
+  });
   it('leaves unexpected unique violations as internal errors', async () => {
     // The RPC converts its own reference race; a residual 23505 is
     // genuinely unexpected and must not masquerade as a conflict.

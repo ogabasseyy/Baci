@@ -1,0 +1,78 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  initiateRefund: vi.fn(),
+}));
+
+vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('@/lib/initiate-paystack-refund', () => ({
+  initiateRefund: mocks.initiateRefund,
+}));
+vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
+  buildOrderCancellationEmailMessage: vi.fn(),
+}));
+
+import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import {
+  auditReviewsQuery,
+  merchant,
+  order,
+  transactionQuery,
+} from './execute-order-cancellation-side-effect.test-support';
+import { DeferredError } from './run-order-cancellation-side-effect';
+
+describe('cancellation refund manual-linked-leg deferral', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('defers while a manual-linked leg still has an uncovered balance', async () => {
+    const paymentQuery = transactionQuery([
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+        status: 'completed',
+      },
+    ]);
+    const refundQuery = transactionQuery([
+      {
+        amount: 40,
+        currency: 'NGN',
+        gateway: 'manual',
+        gateway_reference: 'split-1#1',
+        id: 'refund-1',
+        metadata: { payment_transaction_id: 'payment-1' },
+        status: 'completed',
+      },
+    ]);
+    const resetEq = vi.fn().mockReturnThis();
+    const resetUpdate = vi.fn().mockReturnValue({ eq: resetEq });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce(refundQuery)
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update: resetUpdate });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    // Never complete under a pending manual: the final record would
+    // land on a completed row no drain reselects, stranding the
+    // trusted aggregate finalization. No quarantine either — the
+    // merchant simply has not finished recording.
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_manual_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(resetUpdate).toHaveBeenCalledWith({ attempts: 0 });
+  });
+});

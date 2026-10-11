@@ -170,19 +170,19 @@ BEGIN
               -- coverage in matching money, mirroring the executor
               -- matcher; they never sole-attribute, so an unlinked manual
               -- row stays out of coverage for review. A manual row
-              -- declared as Paystack is only a merchant claim about
-              -- provider money: it must carry provider confirmation
+              -- positively declared as Paystack is only a merchant claim
+              -- about provider money: it must carry provider confirmation
               -- before it can satisfy this completion gate, or a
               -- mistyped direct refund would reverse settlement and
               -- notify without matching any processed Paystack refund.
               -- No reconciler stamps manual rows today, so such rows
-              -- defer to the executor's API-verified provider check.
+              -- defer to the executor's provider check and quarantine.
               OR (
                 public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
                 AND refund.metadata->>'payment_transaction_id' = payment.id::text
-                AND NOT (
-                  refund.metadata->>'method' = 'paystack'
-                  AND refund.metadata->>'provider_refund_status' IS DISTINCT FROM 'processed'
+                AND (
+                  refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+                  OR refund.metadata->>'provider_refund_status' = 'processed'
                 )
               )
             )

@@ -271,6 +271,34 @@ describe('OrderRefundPanel', () => {
       vi.useRealTimers();
     }
   });
+  it('keeps polling a failed refund with no actions left', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            ...summary,
+            canRecordManual: false,
+            canRetry: false,
+            status: 'failed',
+          }),
+        })
+      );
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
+      );
+      // The drain or provider reconciliation can still transition
+      // the row, so the poll must continue past action exhaustion.
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('validates reference, confirmation, and decimals before submitting', async () => {
     render(<OrderRefundPanel orderId="order-1" />);
     fireEvent.click(

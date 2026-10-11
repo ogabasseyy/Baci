@@ -21,7 +21,7 @@ export function readAppConfigSourceWithSplitFallback(projectRoot) {
   const productionConfigPath = path.join(
     projectRoot,
     'config',
-    'development-storefront-expo-config-production.ts'
+    'development-storefront-expo-config-production.js'
   );
   const appConfigSource = readRequiredFile(appConfigPath);
   if (!existsSync(productionConfigPath)) {

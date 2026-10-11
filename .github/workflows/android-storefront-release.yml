@@ -45,6 +45,7 @@ permissions:
   contents: read
 
 env:
+  EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
   BACI_MOBILE_BUILD_PLATFORM: android
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
@@ -196,7 +197,9 @@ jobs:
           SENTRY_URL: ${{ secrets.SENTRY_URL }}
           STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
           STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
-        run: pnpm exec expo prebuild --platform android --clean
+        run: |
+          pnpm exec expo config --type public --json | node ../../.github/scripts/sentry-storefront-provenance.mjs android
+          pnpm exec expo prebuild --platform android --clean
 
       - name: Fix splash screen resource reference
         # expo-splash-screen adds a windowSplashScreenAnimatedIcon style item

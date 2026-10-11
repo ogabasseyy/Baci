@@ -359,3 +359,5 @@ patchedDependencies:
   "next@16.3.6": "patches/next@16.3.6.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   node-forge@1.4.0: patches/node-forge@1.4.0.patch
+  # Pause RecyclerView recycling while retaining exit content (screens PR 4755).
+  react-native-screens@4.26.2: patches/react-native-screens@4.26.2.patch

@@ -52,8 +52,7 @@ class PublisherTests(unittest.TestCase):
     @patch("publisher.api_request")
     def test_public_verification_failure_remains_retryable(self, api, verify):
         api.side_effect = self.responses()
-        with self.assertRaises(ValueError):
-            publisher.run(CONFIG, self.state)
+        self.assertEqual(publisher.run(CONFIG, self.state)[0]["status"], "failed")
         self.assertFalse(json.loads(self.state.read_text())[RELEASE]["verified"])
 
     @patch("publisher.api_request")

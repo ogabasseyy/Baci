@@ -119,16 +119,23 @@ def run(config: dict, state_path: Path, *, dry_run: bool = False) -> list[dict]:
         if dry_run:
             results.append({"release_id": release_id, "title": release["title"]})
             continue
-        published = api_request("/rest/v1/rpc/publish_approved_baci_blog_release", config["api_key"], token, {
-            "p_release_id": release_id,
-        })
-        UUID(published["post_id"])
-        state[release_id] = {**published, "verified": False}
-        save_state(state_path, state)
-        url = verify_public_page(published["slug"], release["title"])
-        state[release_id]["verified"] = True
-        save_state(state_path, state)
-        results.append({"release_id": release_id, "post_id": published["post_id"], "url": url})
+        failed_result = {"release_id": release_id, "status": "failed"}
+        try:
+            published = api_request("/rest/v1/rpc/publish_approved_baci_blog_release", config["api_key"], token, {
+                "p_release_id": release_id,
+            })
+            UUID(published["post_id"])
+            failed_result["post_id"] = published["post_id"]
+            state[release_id] = {**published, "verified": False}
+            save_state(state_path, state)
+            url = verify_public_page(published["slug"], release["title"])
+            state[release_id]["verified"] = True
+            save_state(state_path, state)
+            results.append({"release_id": release_id, "post_id": published["post_id"], "url": url})
+        except urllib.error.HTTPError as error:
+            results.append({**failed_result, "http_status": error.code})
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            results.append({**failed_result, "error_type": type(error).__name__})
     return results
 
 
@@ -138,8 +145,10 @@ def main() -> int:
     args = arguments.parse_args()
     try:
         results = run(read_config(CONFIG_PATH), STATE_PATH, dry_run=args.dry_run)
-        print(json.dumps({"status": "dry_run" if args.dry_run else "completed", "releases": results}))
-        return 0
+        failed = any(result.get("status") == "failed" for result in results)
+        status = "failed" if failed else "dry_run" if args.dry_run else "completed"
+        print(json.dumps({"status": status, "releases": results}))
+        return 1 if failed else 0
     except urllib.error.HTTPError as error:
         print(json.dumps({"status": "failed", "http_status": error.code}))
     except (OSError, ValueError, KeyError, TypeError) as error:

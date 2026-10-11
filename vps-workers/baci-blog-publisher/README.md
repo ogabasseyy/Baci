@@ -22,6 +22,12 @@ releases assigned to its dedicated ordinary Supabase Auth identity.
    Published releases remain discoverable for recovery even after approval expiry;
    unpublished expired and all revoked releases remain unavailable.
 
+A failed release is reported by ID without raw provider error details and does
+not block later approved releases. The run still exits nonzero. Verification
+failures retain the published receipt for idempotent recovery on the next run.
+An invalid Auth response or malformed approval listing still fails closed before
+processing that entry; the database list contract supplies UUID release IDs.
+
 ## Installed layout
 
 - `/home/bassey/.config/baci/blog-publisher.json`: mode 0600, dedicated identity

@@ -9,7 +9,6 @@ import {
   assertCleanWorkerDeployEnv,
   originRepoSlug,
 } from './release-remote-validation.mjs';
-import { createRunner } from './release-subprocess.mjs';
 import {
   assertRemovableLockPath,
   assertServingDeploymentStable,
@@ -23,8 +22,6 @@ import {
   shouldHoldReleaseLock,
   waitForRunCompletion,
 } from './release-production.mjs';
-
-const { command } = createRunner(process.cwd());
 
 test('accepts every canonical GitHub remote spelling', () => {
   for (const remote of [
@@ -274,6 +271,7 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://git\thub.com/ogabasseyy/Baci.git',
     'https://github.com/ogaba\tsey/Baci.git',
     'https://github.com/ogabasseyy/Baci.git\n',
+    'https://github.com\\./ogabasseyy/Baci',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }
@@ -287,26 +285,4 @@ test('parses run attempt counts, failing closed on garbage', () => {
   }
 });
 
-test('a timed-out child holds the lock and names the signal', () => {
-  let error;
-  try {
-    command('sleep', ['30'], true, { timeoutMs: 50 });
-  } catch (thrown) {
-    error = thrown;
-  }
-  assert.match(error.message, /ETIMEDOUT/);
-  assert.match(error.message, /SIGTERM/);
-  assert.equal(error.indeterminateDispatch, true);
-});
-
-test('a signal-killed child names the signal without the timeout tag', () => {
-  let error;
-  try {
-    command('sh', ['-c', 'kill -TERM $$'], true);
-  } catch (thrown) {
-    error = thrown;
-  }
-  assert.match(error.message, /signal SIGTERM/);
-  assert.equal(error.indeterminateDispatch, undefined);
-});
-
+/* Bounded-child-execution cases live in release-subprocess.test.mjs. */

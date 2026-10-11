@@ -10,8 +10,10 @@ export function originRepoSlug(remoteUrl) {
   // normalized copy passes preflight for a checkout git refuses.
   // Also reject embedded ASCII whitespace outright: the WHATWG URL
   // parser silently strips tabs/newlines, so an internal tab would
-  // validate against a host git never sees.
-  if (raw !== raw.trim() || /\s/.test(raw)) return '';
+  // validate against a host git never sees. Backslashes likewise:
+  // URL treats them as slashes for https, but git rejects the raw
+  // remote, so any backslash fails preflight closed.
+  if (raw !== raw.trim() || /\s/.test(raw) || raw.includes('\\')) return '';
   // scp-like and ssh:// forms carry no userinfo ambiguity: the user
   // is part of the match, so handle them before URL parsing (which
   // would reject the scp-like form outright).

@@ -13,7 +13,10 @@ function run(binary, args, cwd, capture, timeoutMs, trim = true) {
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
     timeout: timeoutMs,
-    killSignal: 'SIGTERM',
+    // SIGKILL, not SIGTERM: spawnSync sends the signal once and then
+    // waits, so a SIGTERM-ignoring child would wedge the release with
+    // the lock held. Hung gh/vercel/ssh children need no grace.
+    killSignal: 'SIGKILL',
   });
   if (result.error || result.status !== 0) {
     // Keep reconciliation context: which call failed, how (including

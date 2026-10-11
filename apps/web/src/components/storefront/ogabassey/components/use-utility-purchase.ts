@@ -244,13 +244,13 @@ export function useUtilityPurchase({
           : `Your ${activeTab} purchase was successful!`,
       });
     } else if (result.kind === 'error') {
-      // Definitive route 4xx already persisted its outcome server-side:
-      // rotate so a corrected retry is a fresh attempt instead of
-      // replaying the dead transaction. Pre-route 401/403/413/415/429,
-      // 5xx, and non-responses stay ambiguous — keep the key.
+      // Definitive 4xx: outcome recorded, rotate so retry is fresh.
+      // Pre-route/5xx/unknown: keep the key so the retry dedupes.
       if (captured.attempt && shouldRotateVtuKeyForStatus(result.status)) {
         forgetScopedKey(captured.attempt.scoped);
       }
+      // A failed vend may have restored the debit: refetch for the next check.
+      refreshWallet();
       toast({
         title: 'Transaction Failed',
         description: result.message,

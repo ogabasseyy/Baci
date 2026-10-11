@@ -39,6 +39,26 @@ describe('pending-vtu-idempotency', () => {
     expect(a).toBe(b);
   });
 
+  it('ignores validationReference: re-verification must not split retries', () => {
+    // The provider can issue a new reference when the same meter is
+    // re-verified after a timeout/202. Including it would miss recall,
+    // mint fresh, and debit a second transaction while the first is
+    // still unresolved.
+    const a = buildVtuPurchaseDescriptor({
+      type: 'electricity',
+      amount: 1000,
+      customerIdentifier: '43901766923',
+      validationReference: 'VAL-123',
+    });
+    const b = buildVtuPurchaseDescriptor({
+      type: 'electricity',
+      amount: 1000,
+      customerIdentifier: '43901766923',
+      validationReference: 'VAL-456',
+    });
+    expect(a).toBe(b);
+  });
+
   it('distinguishes payloads that differ in any fingerprint field', () => {
     const base = { type: 'airtime', amount: 500, phoneNumber: '0801' };
     expect(buildVtuPurchaseDescriptor({ ...base, amount: 1000 })).not.toBe(

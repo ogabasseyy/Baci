@@ -68,24 +68,40 @@ describe('computeVtuWalletRequestFingerprint', () => {
     );
   });
 
-  it('produces a different hash when Monnify validation reference fields change', () => {
-    const withoutValidationReference = computeVtuWalletRequestFingerprint({
+  it('ignores the ephemeral validationReference (re-verification must not split retries)', () => {
+    // validationReference is a per-verification artifact: re-verifying
+    // the same meter can issue a new one. Hashing it would miss recall
+    // on retry, mint a fresh key, and debit a second transaction while
+    // the first remains unresolved. requireValidationRef still
+    // participates (it changes the purchase requirements).
+    const firstVerification = computeVtuWalletRequestFingerprint({
       ...BASE_AIRTIME,
       billerCode: 'IKEDC',
       productCode: 'IKEDC_PREPAID',
       provider: 'monnify',
+      requireValidationRef: true,
+      validationReference: 'VAL-123',
     });
 
-    expect(withoutValidationReference).not.toBe(
+    expect(
       computeVtuWalletRequestFingerprint({
         ...BASE_AIRTIME,
         billerCode: 'IKEDC',
         productCode: 'IKEDC_PREPAID',
         provider: 'monnify',
         requireValidationRef: true,
-        validationReference: 'VAL-123',
+        validationReference: 'VAL-456',
       })
-    );
+    ).toBe(firstVerification);
+
+    expect(
+      computeVtuWalletRequestFingerprint({
+        ...BASE_AIRTIME,
+        billerCode: 'IKEDC',
+        productCode: 'IKEDC_PREPAID',
+        provider: 'monnify',
+      })
+    ).not.toBe(firstVerification);
   });
 
   it('produces the same hash regardless of object key insertion order', () => {

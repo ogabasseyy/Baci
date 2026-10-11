@@ -66,7 +66,7 @@ export function UtilityPaymentMethodSelector({
       )}
 
       {!walletLoading && !showWalletRow ? (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-store-background-text/70">
           Sign in and fund your wallet to pay for utilities.
         </p>
       ) : null}

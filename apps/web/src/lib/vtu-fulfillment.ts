@@ -2686,11 +2686,17 @@ export async function fulfillPendingVtuTransaction({
       monnifyTransientVendError: getErrorMessage(error),
       monnifyTransientVendRetryableAt: new Date().toISOString(),
     };
+    // Keep status 'processing' (NOT 'pending'): the wallet is already
+    // debited, and only 'processing' rows are selected by the
+    // reconciliation cron. Downgrading to 'pending' would strand the
+    // row whenever the customer closes the screen without retrying —
+    // paid, no vend, no refund. 'pending' stays reserved for rows that
+    // never reached the debit.
     const retryableUpdateError = await updateVtuPurchaseResultWithRetry({
       payload: {
         error_message: getErrorMessage(error),
         metadata: retryableMetadata,
-        status: 'pending',
+        status: 'processing',
         transaction_id: row.transaction_id,
       },
       expectedStatus: 'processing',

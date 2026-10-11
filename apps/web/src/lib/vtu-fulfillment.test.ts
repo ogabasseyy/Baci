@@ -2517,7 +2517,7 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  it('restores Monnify transient vend failures without transaction reference to retryable pending', async () => {
+  it('keeps Monnify transient vend failures processing so the cron resolves them', async () => {
     const transientError = new Error('Transient vend outcome: timeout');
     transientError.name = 'MonnifyTransientVendError';
     mockMonnifyPurchaseBill.mockRejectedValue(transientError);
@@ -2562,7 +2562,7 @@ describe('fulfillPendingVtuTransaction', () => {
       expect.arrayContaining([
         expect.objectContaining({
           error_message: 'Transient vend outcome: timeout',
-          status: 'pending',
+          status: 'processing',
           transaction_id: null,
           metadata: expect.objectContaining({
             monnifyTransientVendError: 'Transient vend outcome: timeout',

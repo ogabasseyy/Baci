@@ -27,7 +27,10 @@ const FINGERPRINT_FIELDS = [
   'provider',
   'requireValidationRef',
   'type',
-  'validationReference',
+  // NOTE: validationReference is deliberately excluded — it is an
+  // ephemeral per-verification artifact (re-verifying the same meter
+  // can issue a new one). Hashing it would split a retry across
+  // re-verification into a fresh key and a second debit.
   'walletAmount',
 ] as const;
 

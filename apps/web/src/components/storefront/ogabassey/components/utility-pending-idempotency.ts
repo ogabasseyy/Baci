@@ -64,7 +64,8 @@ const SIGNATURE_FIELDS = [
   'provider',
   'requireValidationRef',
   'type',
-  'validationReference',
+  // NOTE: validationReference excluded (ephemeral per-verification
+  // artifact — see the server fingerprint note). Lockstep applies.
   'walletAmount',
 ] as const;
 

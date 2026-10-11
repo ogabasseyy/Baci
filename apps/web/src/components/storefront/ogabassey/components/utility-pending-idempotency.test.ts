@@ -192,6 +192,29 @@ describe('utility-pending-idempotency', () => {
     expect(after).toBe(before);
   });
 
+  it('ignores validationReference: re-verification must not split retries', () => {
+    // The provider can issue a new reference when the same meter is
+    // re-verified after a timeout/202. Including it would miss recall,
+    // mint fresh, and debit a second transaction while the first is
+    // still unresolved.
+    const base = {
+      amount: 1000,
+      type: 'electricity',
+      customerIdentifier: '43901766923',
+      walletAmount: 1000,
+    };
+    const before = buildVtuWalletPayloadSignature({
+      ...base,
+      validationReference: 'VAL-123',
+    });
+    const after = buildVtuWalletPayloadSignature({
+      ...base,
+      validationReference: 'VAL-456',
+    });
+
+    expect(after).toBe(before);
+  });
+
   it('distinguishes intents that differ in any fingerprint field', () => {
     const base = {
       amount: 500,

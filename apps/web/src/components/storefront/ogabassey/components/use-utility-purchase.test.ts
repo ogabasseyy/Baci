@@ -401,6 +401,26 @@ describe('useUtilityPurchase', () => {
     expect(seenKeys[0]).not.toBe(seenKeys[1]);
   });
 
+  it('refetches the wallet after a terminal failure so the retry sees restored credit', async () => {
+    // A failed vend may have refunded the debit; without a refetch the
+    // readiness gate would reject the retry on a stale-low balance.
+    mockSubmit.mockResolvedValue({
+      kind: 'error',
+      message: 'Payment failed',
+      status: 400,
+    });
+    const refreshWallet = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(refreshWallet).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the idempotency key after a 5xx so the retry replays instead of double-charging', async () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(

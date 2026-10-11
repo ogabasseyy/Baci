@@ -21,7 +21,10 @@ import {
   order,
   transactionQuery,
 } from './execute-order-cancellation-side-effect.test-support';
-import { DeferredError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
 describe('cancellation refund manual-linked-leg deferral', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -74,5 +77,58 @@ describe('cancellation refund manual-linked-leg deferral', () => {
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
     expect(resetUpdate).toHaveBeenCalledWith({ attempts: 0 });
+  });
+
+  it('quarantines an internal-only order blocked by an unverified manual Paystack claim', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'cash',
+            gateway_reference: 'cash-1',
+            id: 'cash-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'manual',
+            gateway_reference: 'man-1',
+            metadata: {
+              method: 'paystack',
+              payment_transaction_id: 'cash-1',
+            },
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    // No external leg exists to verify provider money against: the
+    // run must file a reconciliation review and terminalize there,
+    // not throw an ordinary failure the drain burns retries on.
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: { unverified_manual_paystack_leg_ids: ['cash-1'] },
+      })
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 });

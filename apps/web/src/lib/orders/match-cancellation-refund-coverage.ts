@@ -1,4 +1,5 @@
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { isUnverifiedManualPaystackRefund } from './is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 
 interface CancellationRefundRow {
@@ -86,24 +87,15 @@ export function matchCancellationRefundCoverage({
       // Explicitly linked manual rows always block provider initiation
       // on their leg; matching-money rows below also count as coverage.
       manualLinkedLegIds.add(paymentId);
-      const rowMetadata = row.metadata as {
-        method?: unknown;
-        provider_refund_status?: unknown;
-      } | null;
       if (!currencyMatches) {
         manualReviewLegIds.add(paymentId);
         continue;
       }
-      // A manual row declared as Paystack is only a merchant claim
-      // about provider money: without provider confirmation it must
-      // quarantine for review like the claim gate, or the executor
-      // would mark the leg covered and finish without settlement
-      // reversal or notifications. No reconciler stamps manual rows
-      // today, so such rows always quarantine for now.
-      if (
-        rowMetadata?.method === 'paystack' &&
-        rowMetadata?.provider_refund_status !== 'processed'
-      ) {
+      // Shared with the executor's internal-only branch: without
+      // provider confirmation the row must quarantine for review like
+      // the claim gate, or the leg would mark covered and finish
+      // without settlement reversal or notifications.
+      if (isUnverifiedManualPaystackRefund(row)) {
         manualReviewLegIds.add(paymentId);
         continue;
       }

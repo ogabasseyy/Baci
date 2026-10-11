@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
+import { toLadderThreshold } from '@/lib/loyalty-tier-threshold';
 import { createClient } from '@/lib/supabase/server';
 import {
   type StorefrontLoyaltyStatusResult,
@@ -132,28 +133,32 @@ export async function GET(request: NextRequest) {
     }
 
     // Normalize merchant-saved tiers before validation: the settings API
-    // accepts arbitrary tier JSON, so minPoints can arrive null (which would
-    // 500 below) while the route needs finite numbers for threshold
-    // arithmetic. Clamp to 0, the same floor as the default ladder.
+    // accepts arbitrary tier JSON, so entries can be null and minPoints can
+    // arrive null (which would 500 below) while the route needs finite
+    // numbers for threshold arithmetic. toLadderThreshold coerces
+    // digit-strings like calculate_loyalty_tier, else clamps to the 0 floor.
     // Multiplier/perks ride through for benefit display (null/empty when
     // the merchant never set them); non-arrays and non-strings are dropped
     // rather than failing the whole status read.
-    const rawTiers: Array<{
+    type RawTierEntry = {
       name?: unknown;
       minPoints?: unknown;
       multiplier?: unknown;
       perks?: unknown;
-    }> = Array.isArray(result.tiers) ? result.tiers : [];
+    };
+    const candidates: unknown[] = Array.isArray(result.tiers)
+      ? result.tiers
+      : [];
+    const rawTiers: RawTierEntry[] = candidates.filter(
+      (entry): entry is RawTierEntry =>
+        typeof entry === 'object' && entry !== null
+    );
     const normalizedResult = {
       ...result,
       tiers: rawTiers.map((entry) => ({
         ...entry,
         name: typeof entry.name === 'string' ? entry.name : '',
-        minPoints:
-          typeof entry.minPoints === 'number' &&
-          Number.isFinite(entry.minPoints)
-            ? entry.minPoints
-            : 0,
+        minPoints: toLadderThreshold(entry.minPoints),
         multiplier:
           typeof entry.multiplier === 'number' &&
           Number.isFinite(entry.multiplier)
@@ -279,9 +284,10 @@ export async function GET(request: NextRequest) {
       settings: {
         points_per_naira: currencyUnit > 0 ? perCurrency / currencyUnit : 0.01,
         naira_per_point: perCurrency > 0 ? currencyUnit / perCurrency : 100,
-        welcome_bonus: status.signup_bonus_points,
-        referral_bonus_referrer: status.referral_bonus_points,
-        referral_bonus_referee: status.referral_bonus_points,
+        // Clamp like the enrollment RPC so the form never advertises negatives.
+        welcome_bonus: Math.max(0, status.signup_bonus_points),
+        referral_bonus_referrer: Math.max(0, status.referral_bonus_points),
+        referral_bonus_referee: Math.max(0, status.referral_bonus_points),
       },
     });
   } catch (error) {

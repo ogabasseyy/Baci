@@ -166,4 +166,71 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
     expect(response.status).toBe(200);
     expect(body.tier).toBe('diamond');
   });
+
+  it('drops null tier entries instead of 500ing', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        tiers: [
+          null,
+          { name: 'Bronze', minPoints: 0 },
+          { name: 'Silver', minPoints: 1000 },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tiers).toHaveLength(2);
+    expect(body.next_tier).toBe('silver');
+  });
+
+  it('coerces numeric-string thresholds like the SQL tier calculator', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        tiers: [
+          { name: 'Bronze', minPoints: 0 },
+          { name: 'Silver', minPoints: '1000' },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tier_thresholds.silver).toBe(1000);
+    expect(body.next_tier).toBe('silver');
+    expect(body.points_to_next_tier).toBe(500);
+  });
+
+  it('clamps negative bonus config to zero like the enrollment RPC', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        signup_bonus_points: -50,
+        referral_bonus_points: -100,
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.settings.welcome_bonus).toBe(0);
+    expect(body.settings.referral_bonus_referrer).toBe(0);
+    expect(body.settings.referral_bonus_referee).toBe(0);
+  });
 });

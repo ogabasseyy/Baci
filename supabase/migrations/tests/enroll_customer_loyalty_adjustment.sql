@@ -4,10 +4,18 @@
 -- unaffected.
 
 -- Owner and staff identities for merchant 1 (user 103 stays a plain
--- customer for the non-member negative below).
+-- customer for the non-member negative below). The ownership write runs
+-- as service_role like the setup/award merchants seeds: the
+-- reject_staff_merchant_credential_writes trigger reads auth.role() from
+-- the request JWT, and the stale 'authenticated' claim left by earlier
+-- as_user calls would otherwise reject this as a staff ownership grab
+-- (42501). Case 29's as_user re-establishes caller claims right after.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 UPDATE public.merchants
 SET user_id = '01aa0000-0000-4000-8000-000000000101'
 WHERE id = '01aa0000-0000-4000-8000-000000000001';
+RESET ROLE;
 
 INSERT INTO public.staff_members (merchant_id, user_id, email, status)
 VALUES

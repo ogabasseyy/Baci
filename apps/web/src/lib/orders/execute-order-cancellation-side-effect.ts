@@ -5,7 +5,6 @@ import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-bl
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
 import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
-import { isUnverifiedManualPaystackRefund } from '@/lib/orders/is-unverified-manual-paystack-refund';
 import { matchCancellationRefundCoverage } from '@/lib/orders/match-cancellation-refund-coverage';
 import type {
   CancellationEmailSender,
@@ -13,6 +12,7 @@ import type {
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
 import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-cancellation-refund-initiation';
+import { quarantineInternalOnlyManualPaystack } from '@/lib/orders/quarantine-internal-only-manual-paystack';
 import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
@@ -85,40 +85,11 @@ export async function executeOrderCancellationSideEffect({
     throw new Error('Unable to verify existing cancellation refunds');
   }
   if (!transactions.length) {
-    // Internal-only cancellation (cash/store-credit/manual/POD legs):
-    // the completion gate finalizes fully verified manuals, so reaching
-    // the executor means an unverified manual Paystack claim blocks
-    // completion. No external leg exists to verify provider money
-    // against: quarantine for human review instead of throwing an
-    // ordinary failure the drain burns retries on without recourse.
-    const unverifiedPaystackLegIds = [
-      ...new Set(
-        (refundRows ?? [])
-          .filter(isUnverifiedManualPaystackRefund)
-          .map(
-            (row) =>
-              (
-                row.metadata as {
-                  payment_transaction_id?: unknown;
-                } | null
-              )?.payment_transaction_id
-          )
-          .filter(
-            (id): id is string =>
-              typeof id === 'string' && allLegs.some((leg) => leg.id === id)
-          )
-      ),
-    ];
-    await quarantineRefund({
-      metadata: {
-        unverified_manual_paystack_leg_ids: unverifiedPaystackLegIds,
-      },
+    await quarantineInternalOnlyManualPaystack({
+      allLegs,
       order,
-      preflight: true,
-      reason:
-        'Manual Paystack refunds on an internal-only order need provider verification; no external leg exists to verify them against',
+      refundRows: refundRows ?? [],
       supabase,
-      transactions: allLegs,
     });
   }
   const auditBlockedLegIds = await fetchAuditBlockedCancellationLegIds({

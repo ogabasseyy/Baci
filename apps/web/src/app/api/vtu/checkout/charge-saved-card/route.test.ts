@@ -124,4 +124,22 @@ describe('POST /api/vtu/checkout/charge-saved-card', () => {
     expect(response.status).toBe(400);
     expect(data.code).toBe('VTU_WALLET_ONLY');
   });
+
+  it('returns a generic 500 without echoing guard errors when auth throws', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockAuthenticateApiRequest.mockRejectedValueOnce(
+      new Error('fetch failed: https://xyz.supabase.co/auth/v1/token')
+    );
+
+    const response = await POST(makeRequest(validPayload));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to charge saved card.');
+    expect(JSON.stringify(data)).not.toContain('supabase.co');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 });

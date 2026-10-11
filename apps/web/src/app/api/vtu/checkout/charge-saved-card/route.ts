@@ -38,14 +38,16 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
+    // Don't echo raw error messages: the only throw sources are the
+    // auth/CSRF guards, and their messages can leak Supabase URL/schema
+    // fragments. Log server-side and return a generic 500 (a guard throw
+    // is an infrastructure failure, not a VTU_WALLET_ONLY routing case).
+    console.error('Saved-card charge stub failed:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to charge saved card',
-      },
-      { status: 400 }
+      { error: 'Failed to charge saved card.' },
+      { status: 500 }
     );
   }
 }

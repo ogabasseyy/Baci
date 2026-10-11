@@ -47,7 +47,7 @@ export function normalizeVtuCheckoutPayload<T extends object>(payload: T): T {
   };
 }
 
-export async function getAccessToken() {
+export async function getAccessToken(expectedUserId?: string | null) {
   const {
     data: { user },
     error: userError,
@@ -62,6 +62,16 @@ export async function getAccessToken() {
 
   if (!session?.access_token) {
     throw new Error('Authentication required. Please sign in again.');
+  }
+
+  // Bind the token to the submitter when the caller captured one: an
+  // account switch between getUser and getSession (or before both)
+  // would otherwise hand back another customer's token, and the
+  // server debits whoever the token belongs to. Compare against the
+  // SESSION's user — atomic with the token object — not getUser's,
+  // which a mid-flight switch can already have invalidated.
+  if (expectedUserId && session.user?.id !== expectedUserId) {
+    throw new Error('Account changed during checkout. Please try again.');
   }
 
   return session.access_token;

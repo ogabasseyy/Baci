@@ -278,6 +278,19 @@ describe('useUtilityPayment', () => {
     );
   });
 
+  it('captures the raw auth user id for token binding (no customer fallback)', () => {
+    // The checkout token belongs to the auth user, so the binding
+    // capture must not use the scope owner's customer fallback: with
+    // no auth user but customer-a still present, it is undefined.
+    const { result } = renderHook(() => useUtilityPayment());
+    expect(result.current.captureSubmittingUserId()).toBe('user-a');
+
+    mockAuthState.session = null;
+    mockAuthState.user = null;
+    const { result: signedOut } = renderHook(() => useUtilityPayment());
+    expect(signedOut.current.captureSubmittingUserId()).toBeUndefined();
+  });
+
   it('detects a sign-out between capture and settle', () => {
     const { result, rerender } = renderHook(() => useUtilityPayment());
     const submittingOwner = result.current.captureSubmittingOwner();

@@ -39,7 +39,9 @@ type MockUserResult = {
 };
 
 type MockSessionResult = {
-  data: { session: { access_token: string } | null };
+  data: {
+    session: { access_token: string; user?: { id: string } | null } | null;
+  };
 };
 
 const mockFetchWithTimeout =
@@ -96,7 +98,9 @@ beforeEach(() => {
     error: null,
   });
   mockGetSession.mockResolvedValue({
-    data: { session: { access_token: 'token-123' } },
+    data: {
+      session: { access_token: 'token-123', user: { id: 'user-1' } },
+    },
   });
 });
 
@@ -327,6 +331,54 @@ describe('vtu-checkout service', () => {
     // body field — leaking it into the body would defeat the
     // schema's parsed shape and could expose the key in logs.
     expect(body).not.toHaveProperty('idempotencyKey');
+  });
+
+  it('chargeWalletForVtu: proceeds when the token belongs to the captured user', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'successful',
+        reference: 'VTU-456',
+        amount: 1000,
+      }),
+    });
+
+    const result = await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      expectedUserId: 'user-1',
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(parseMockRequestBody()).not.toHaveProperty('expectedUserId');
+  });
+
+  it('chargeWalletForVtu: aborts before any POST when the token belongs to another user', async () => {
+    // getUser validated user-1, but the account switched before
+    // getSession: the token in hand is user-2's. Debit would land on
+    // the wrong wallet, so fail closed without dispatching.
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-user-2', user: { id: 'user-2' } },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu({
+        amount: 1000,
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: '11111111-2222-3333-4444-555555555555',
+        expectedUserId: 'user-1',
+      })
+    ).rejects.toThrow('Account changed during checkout. Please try again.');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 });
 

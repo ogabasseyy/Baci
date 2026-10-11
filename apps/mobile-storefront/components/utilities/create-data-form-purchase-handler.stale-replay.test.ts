@@ -60,6 +60,7 @@ describe('data stale success replay', () => {
         getWalletIdempotencyKey: jest.fn(() => 'stale-data-key'),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
+        captureSubmittingUserId: () => 'test-user',
         invalidateWallets: jest.fn(),
         isSubmittingOwnerCurrent:
           overrides.isSubmittingOwnerCurrent ?? (() => true),

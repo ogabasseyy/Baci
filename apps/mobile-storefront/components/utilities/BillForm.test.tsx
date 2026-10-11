@@ -154,6 +154,7 @@ describe('BillForm', () => {
       getWalletIdempotencyKey: jest.fn(() => 'test-key'),
       scopePendingVtuDescriptor: (d: string) => d,
       captureSubmittingOwner: () => 'test-owner',
+      captureSubmittingUserId: () => 'test-user',
       isSubmittingOwnerCurrent: () => true,
       resetWalletIdempotencyKey: jest.fn(),
     });

@@ -60,10 +60,17 @@ export async function chargeWalletForVtu(
   payload: VTUCheckoutPayload & {
     walletAmount: number;
     idempotencyKey: string;
+    /**
+     * Auth user id captured by the handler before dispatch. When
+     * provided, the acquired token must belong to this user or the
+     * checkout aborts before any POST — otherwise a mid-flight
+     * account switch would debit the wrong customer's wallet.
+     */
+    expectedUserId?: string | null;
   }
 ) {
-  const accessToken = await getAccessToken();
-  const { idempotencyKey, ...rest } = payload;
+  const { expectedUserId, idempotencyKey, ...rest } = payload;
+  const accessToken = await getAccessToken(expectedUserId);
   const normalized = normalizeVtuCheckoutPayload(rest);
   const response = await fetchWithTimeout(VTU_CHECKOUT_WALLET_ONLY_URL, {
     method: 'POST',

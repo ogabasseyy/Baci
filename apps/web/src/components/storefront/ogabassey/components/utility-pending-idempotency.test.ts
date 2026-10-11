@@ -289,16 +289,21 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
-  it('lets reference-less entries resolve normally even past the window', () => {
+  it('flags reference-less entries as stale only past the window', () => {
+    // Within the window the first success IS the resolution (retry of
+    // a lost response). Past it the submit is a NEW intent, and the
+    // replay would present the prior transaction as the new purchase
+    // without a new debit or vend.
     const signature = '{"noref":true}';
     getPendingVtuKey(signature);
 
+    expect(isStalePendingVtuSuccess(signature, 'REF-FIRST')).toBe(false);
     expect(
       isStalePendingVtuSuccess(
         signature,
         'REF-FIRST',
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 });

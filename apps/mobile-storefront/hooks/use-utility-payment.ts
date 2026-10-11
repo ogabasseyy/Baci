@@ -35,6 +35,10 @@ export function useUtilityPayment() {
   const ownerId = useAuthStore((state) =>
     resolveIdempotencyScopeOwnerId(state.user?.id, state.customer?.id)
   );
+  // Raw auth user id for token binding: the scope owner above falls
+  // back to the customer row, but the checkout token belongs to the
+  // auth user, so the binding capture must not use the fallback.
+  const submittingUserId = useAuthStore((state) => state.user?.id);
   const merchantId = useAuthStore((state) => state.merchantId);
   // Latest signed-in owner, refreshed every render. Compared against
   // the submitter when a checkout settles so an account switch (or
@@ -71,6 +75,12 @@ export function useUtilityPayment() {
      * `isSubmittingOwnerCurrent` once it settles.
      */
     captureSubmittingOwner: () => ownerId,
+    /**
+     * Captures the auth user id at submit time. Handlers MUST pass it
+     * as `expectedUserId` so a token acquired after a mid-flight
+     * account switch aborts instead of debiting the wrong wallet.
+     */
+    captureSubmittingUserId: () => submittingUserId,
     isAuthenticated,
     /**
      * True while the capture from `captureSubmittingOwner` still

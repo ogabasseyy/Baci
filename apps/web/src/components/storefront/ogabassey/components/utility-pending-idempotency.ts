@@ -243,13 +243,16 @@ export function hasNotedPendingVtuReference(
 
 /**
  * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: same remembered reference,
- * but the original submit is older than the recall window. Callers
- * MUST forget the signature and prompt a fresh submit instead of
- * presenting the earlier vend as the new purchase. Reference-less
- * entries within the TTL always resolve normally — their first
- * success IS the resolution; past the TTL recall already dropped
- * them, so this predicate never sees them.
+ * instead of resolving the current submit: the original submit is
+ * older than the recall window, so this submit is a NEW intent, not a
+ * retry. Callers MUST forget the signature and prompt a fresh submit
+ * instead of presenting the earlier vend as the new purchase.
+ * Reference-less entries (lost/timeout responses keep reference null
+ * while the TTL retains them) are stale past the window too: their
+ * first success past the window is the PRIOR transaction's, and
+ * presenting it as the new purchase skips the new debit and vend.
+ * Past the TTL recall already dropped them, so this predicate never
+ * sees them.
  */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,
@@ -257,10 +260,10 @@ export function isStalePendingVtuSuccess(
   now: number = Date.now()
 ): boolean {
   const pending = pendingPurchases.get(payloadSignature);
-  return (
-    pending?.reference === reference &&
-    now - pending.rememberedAt > PENDING_VTU_STALE_AFTER_MS
-  );
+  if (!pending || now - pending.rememberedAt <= PENDING_VTU_STALE_AFTER_MS) {
+    return false;
+  }
+  return pending.reference === null || pending.reference === reference;
 }
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {

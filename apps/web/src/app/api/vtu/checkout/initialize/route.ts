@@ -36,9 +36,13 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    return createErrorResponse(
-      error instanceof Error ? error.message : 'Failed to initialize payment',
-      400
-    );
+    // Don't echo raw error messages: the only throw sources are the
+    // auth/CSRF guards, and their messages can leak Supabase URL/schema
+    // fragments. Log server-side and return a generic 500 (a guard throw
+    // is an infrastructure failure, not a VTU_WALLET_ONLY routing case).
+    console.error('Gateway initialize stub failed:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return createErrorResponse('Failed to initialize payment.', 500);
   }
 }

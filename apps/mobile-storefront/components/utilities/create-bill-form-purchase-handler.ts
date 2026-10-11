@@ -144,9 +144,11 @@ export function createBillFormPurchaseHandler({
       );
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       const submittingOwner = payment.captureSubmittingOwner();
+      const submittingUserId = payment.captureSubmittingUserId();
       try {
         const result = await chargeWalletForVtu({
           ...request,
+          expectedUserId: submittingUserId,
           idempotencyKey,
         });
         if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {

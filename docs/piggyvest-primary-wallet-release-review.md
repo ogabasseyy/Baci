@@ -25,8 +25,10 @@ authorize deployment, database changes, provider funding, or payment execution.
   retained the required `NODE_ENV` field. Their 11 focused regression tests passed.
 - The provider-directory CodeRabbit review refused 208 files against its 150-file
   limit. A complete scoped review remains required; do not treat refusal as approval.
-- Mobile review findings were fixed with regression tests. Current-head CI and review
-  must still run after publication.
+- Mobile review findings were fixed with regression tests. Current-head CI ran
+  green on d7fa4b39c7 (Quality Gate, all test shards, lint, typecheck, DB
+  replay); re-run after any further push. The refused provider-directory
+  review and deployment/live-delivery gates below remain open.
 - Deployment, restricted-role readiness, treasury/provider bindings, real signed
   delivery, and physical phone/push checks remain separate unverified gates.
 

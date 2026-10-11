@@ -58,19 +58,32 @@ export async function executeOrderCancellationSideEffect({
   // Mirror the completion gate's funded-leg statuses: refund-state legs
   // (e.g. PayPal flips the payment row itself while its provider refund
   // is pending) must stay visible so they quarantine or defer instead of
-  // slipping to false completion.
+  // slipping to false completion. Self-terminal refunded legs load too
+  // so the empty-actionable case below can tell them from a corrupt
+  // order with no payment evidence at all.
   const { data: transactionRows, error: transactionError } = await supabase
     .from('transactions')
     .select('id, amount, currency, gateway, gateway_reference, status')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'payment')
-    .in('status', ['completed', 'refund_pending'])
+    .in('status', ['completed', 'refund_pending', 'refunded'])
     .order('created_at', { ascending: true });
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
   }
-  const allLegs = transactionRows as GatewayPaymentTransaction[];
+  const actionableLegs = transactionRows.filter(
+    (row) => row.status !== 'refunded'
+  );
+  if (actionableLegs.length === 0) {
+    // Every leg self-terminalized (no separate refund row to initiate
+    // or verify): defer so the drain reclaims and the claim observes
+    // the terminal evidence and finalizes, instead of failing a row
+    // with nothing actionable or completing past the finalizer.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
+  }
+  const allLegs = actionableLegs as GatewayPaymentTransaction[];
   // Link validity spans every funded leg (manuals allocate to cash legs).
   const transactions = allLegs.filter((t) =>
     isExternalPaymentGateway(t.gateway)

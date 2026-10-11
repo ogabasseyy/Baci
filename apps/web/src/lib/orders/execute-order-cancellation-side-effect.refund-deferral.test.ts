@@ -125,4 +125,68 @@ describe('cancellation refund in-flight deferral', () => {
     expect(eq).toHaveBeenCalledWith('order_id', 'order-1');
     expect(eq).toHaveBeenCalledWith('step', 'refund');
   });
+
+  it('defers a self-terminal-only order instead of failing it', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-ref',
+            id: 'payment-1',
+            status: 'refunded',
+          },
+        ])
+      )
+      .mockReturnValueOnce({ update });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+  });
+
+  it('ignores refunded legs while processing actionable ones', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-ref',
+            id: 'payment-paypal',
+            status: 'refunded',
+          },
+          payment('payment-1', 100, 'paystack-ref'),
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(auditReviewsQuery([]));
+
+    const result = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    expect(result).toEqual({ refundIds: [] });
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
 });

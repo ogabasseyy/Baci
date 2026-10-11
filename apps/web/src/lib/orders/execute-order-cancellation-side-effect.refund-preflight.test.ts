@@ -138,6 +138,7 @@ describe('cancellation refund preflight quarantine', () => {
     expect(paymentQuery.in).toHaveBeenCalledWith('status', [
       'completed',
       'refund_pending',
+      'refunded',
     ]);
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
     // No terminal review: payments lookup, the empty refund lookup, the

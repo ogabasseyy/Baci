@@ -12,6 +12,11 @@ describe('toLagosRefundInstant', () => {
       '2026-09-28T13:00:45+01:00'
     );
   });
+  it('preserves fractional seconds instead of truncating them', () => {
+    expect(toLagosRefundInstant('2026-09-28T13:00:45.123')).toBe(
+      '2026-09-28T13:00:45.123+01:00'
+    );
+  });
   it('parses to the same instant regardless of viewer timezone', () => {
     const previous = process.env.TZ;
     try {

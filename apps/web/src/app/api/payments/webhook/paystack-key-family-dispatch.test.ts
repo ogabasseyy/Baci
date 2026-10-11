@@ -179,3 +179,22 @@ it('returns null for unrecognized shared-key events so legacy handles them', asy
   expect(mocks.reversal).toHaveBeenCalledWith({ body });
   expect(mocks.reconcile).toHaveBeenCalledWith({ body });
 });
+
+it('keeps unresolved shared-key reversals retryable instead of falling to legacy', async () => {
+  // Both reconcilers see a recognizable primary reversal but cannot
+  // resolve it yet (runtime/database transiently unavailable). Falling
+  // through would let legacy ack the delivery — the refund handler
+  // reconciles the unknown reference and disputes ack as non-success
+  // — so Paystack stops retrying before the reversal fence is
+  // durably recorded.
+  const body = {
+    event: 'refund.processed',
+    data: {
+      transaction_reference:
+        'pvb-first-primary-10000000-0000-4000-8000-000000000005',
+    },
+  };
+  const response = await dispatchPaystackSharedKeyWebhook(body);
+  expect(response?.status).toBe(503);
+  expect(response?.headers.get('retry-after')).toBe('60');
+});

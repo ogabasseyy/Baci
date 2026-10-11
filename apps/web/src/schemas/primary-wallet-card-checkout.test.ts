@@ -38,4 +38,25 @@ describe('primary card checkout schema', () => {
       schemas.settings.safeParse({ ...fixture.settings, callbackUrl }).success
     ).toBe(false);
   });
+  it('accepts a reference with a strict UUID tail', () => {
+    expect(
+      schemas.session.safeParse({
+        reference: 'pvb-first-primary-10000000-0000-4000-8000-000000000005',
+        authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      }).success
+    ).toBe(true);
+  });
+  it.each([
+    `pvb-first-primary-${'-'.repeat(36)}`,
+    'pvb-first-primary-10000000-0000-4000-8000-00000000005',
+    'pvb-first-primary-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    'pvb-first-primary-op-9',
+  ])('rejects a reference with a non-UUID tail %s', (reference) => {
+    expect(
+      schemas.session.safeParse({
+        reference,
+        authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
+      }).success
+    ).toBe(false);
+  });
 });

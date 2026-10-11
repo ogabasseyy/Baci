@@ -9,6 +9,18 @@ import type { Href } from 'expo-router';
 const ENCODED_PATH_SEPARATOR_PATTERN = /%(?:2f|5c)/i;
 
 /**
+ * Any multi-order encoding (`%252e`, `%25252f`, …) contains a literal `%25`
+ * in the raw path, since encoding `%` itself yields `%25`. This app's
+ * same-app destinations never legitimately contain one, so the raw path
+ * rejects it outright: a single decode of `/%252e%252e/foo` yields
+ * `/%2e%2e/foo`, which carries no literal traversal and would otherwise
+ * pass — and a second decode downstream (storage round-trip, router
+ * parsing) would then navigate `/../foo`. Single-encoded paths keep
+ * working; only re-encodable `%` is banned.
+ */
+const ENCODED_PERCENT_PATTERN = /%25/i;
+
+/**
  * Query keys that would nest another destination inside the destination and
  * hand an attacker a second, unvalidated hop out of the app.
  */
@@ -33,6 +45,9 @@ function decode(value: string): string | undefined {
  */
 function isSafePath(path: string): boolean {
   if (ENCODED_PATH_SEPARATOR_PATTERN.test(path)) {
+    return false;
+  }
+  if (ENCODED_PERCENT_PATTERN.test(path)) {
     return false;
   }
 

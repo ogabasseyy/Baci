@@ -99,15 +99,22 @@ export async function dispatchPaystackCheckoutOnlyWebhook(
  * charges, refunds, disputes — route through the card reconcilers
  * first so abandoned checkouts release and reversals fence; anything
  * the card paths do not recognize returns null and the caller falls
- * through to the legacy handlers below. Unlike the checkout-only
- * dispatcher this never acknowledges: legacy owns unrelated events.
+ * through to the legacy handlers below. A recognizable primary shape
+ * the reconcilers cannot resolve yet (runtime/database/provider
+ * transient) takes the same 503 retry boundary as checkout-only
+ * deliveries instead of falling through: legacy would ack the unknown
+ * reference (refunds) or ignore it as a non-success event (disputes),
+ * stopping Paystack retries before the reversal fence is durable.
+ * Only genuinely unrelated events return null: legacy owns those.
  */
 export async function dispatchPaystackSharedKeyWebhook(
   body: unknown
 ): Promise<Response | null> {
   const reversed = await reconcilePrimaryWalletCardCheckoutReversal({ body });
   if (reversed) return reversed;
-  return await reconcilePrimaryWalletCardCheckoutWebhook({ body });
+  const reconciled = await reconcilePrimaryWalletCardCheckoutWebhook({ body });
+  if (reconciled) return reconciled;
+  return primaryWalletCardCheckoutWebhookBoundary(body);
 }
 
 function timingSafeHexEqual(

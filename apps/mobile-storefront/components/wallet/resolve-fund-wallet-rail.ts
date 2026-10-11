@@ -12,6 +12,13 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
  * ('blocked', after alerting) rather than guessing a rail with money on
  * the line — the verdict stays fail-closed, but the alert offers a retry
  * (via onRetry) so a transient probe failure is not a dead end.
+ *
+ * A blank merchant id is NOT an unknown verdict: it is a supported
+ * slug-scoped funding mode (initialize falls back to the auth/config
+ * merchant slug, so scope is never missing at money time), and primary
+ * is unreachable without an id (pilot, observed, and probe paths all
+ * key on it). Defaulting 'legacy' there is the only servable rail, not
+ * a guess — blocking would break slug-fallback top-ups.
  */
 export async function resolveFundWalletRail(
   activeMerchantId?: string,

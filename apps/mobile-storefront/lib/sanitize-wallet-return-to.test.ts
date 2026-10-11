@@ -14,6 +14,9 @@ describe('sanitizeWalletReturnTo', () => {
     '/wallet/history',
     '/checkout',
     '/wallet?action=savings&savingsGoalId=goal-1',
+    // Single-encoded paths keep working: one decode yields no
+    // traversal, and there is no re-encodable `%` left to decode.
+    '/wallet/%E2%9C%93',
   ])('keeps valid wallet return path %s', (value) => {
     expect(sanitizeWalletReturnTo(value)).toBe(value);
   });
@@ -38,6 +41,10 @@ describe('sanitizeWalletReturnTo', () => {
     '/a%2fb',
     '/A%2Fb',
     '/%252f',
+    // Multi-order encodings: one decode yields no literal traversal,
+    // but a second decode downstream would navigate outside the app.
+    '/%252e%252e/foo',
+    '/%25252e%25252e/foo',
     '/a\\b',
     '/a%5cb',
     '/%E0%A4%A',

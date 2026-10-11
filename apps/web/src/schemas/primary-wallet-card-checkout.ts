@@ -3,7 +3,16 @@ import { z } from 'zod';
 const uuid = z.uuid();
 const environment = z.enum(['staging', 'production']);
 const identifier = z.string().min(1).max(512).regex(/^\S+$/);
-const reference = z.string().regex(/^pvb-first-primary-[0-9a-f-]{36}$/);
+// Strict UUID tail: the loose 36-char hex-or-hyphen class accepted
+// non-UUID mixes (even all hyphens). References are generated as
+// `pvb-first-primary-${operationId}` with uuid operation ids, and the
+// intent-level refine re-checks the full string — this rejects
+// malformed references at the boundary instead.
+const reference = z
+  .string()
+  .regex(
+    /^pvb-first-primary-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+  );
 const scope = z.strictObject({
   environment,
   integrationId: uuid,

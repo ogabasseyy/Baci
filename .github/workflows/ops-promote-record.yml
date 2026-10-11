@@ -13,13 +13,22 @@ name: Ops Promote Record
 # when every rewritten tree is shape-valid. A red check means the
 # branch holds an invalid or non-fast-forward record — reconcile the
 # branch, do not push more on top of it. Detection latency is bounded
-# by the schedule interval. If the cache entry is ever evicted, the
-# next run falls back to full-history validation (shape-validity
-# only) and re-seeds the tip.
+# by the schedule interval. A cache miss (first run or eviction)
+# fails closed WITHOUT re-seeding: silently re-seeding would launder
+# a rewritten history as the new fast-forward base. Recover by
+# verifying the branch history out-of-band, then running a manual
+# dispatch with confirm_reseed. Rotating keys (~100 bytes each, LRU'd
+# after 7 idle days) are negligible against the 10GB cache quota.
 on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      confirm_reseed:
+        description: 'Cache miss recovery only: re-seed the tip after out-of-band history verification'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -62,6 +71,12 @@ jobs:
             exit 1
           fi
           tip="$(git rev-parse FETCH_HEAD)"
+          if [ ! -f .ops-promote-last-tip ] && [ "${{ inputs.confirm_reseed }}" != 'true' ]; then
+            echo '::error::no cached tip (first run or cache eviction); refusing to silently re-seed. Verify the branch history out-of-band, then re-run with confirm_reseed.'
+            # Report shape state for signal, but fail closed regardless.
+            node ci_scripts/validate-promote-record.mjs "$tip" '0000000000000000000000000000000000000000' || true
+            exit 1
+          fi
           previous='0000000000000000000000000000000000000000'
           if [ -f .ops-promote-last-tip ]; then
             previous="$(cat .ops-promote-last-tip)"

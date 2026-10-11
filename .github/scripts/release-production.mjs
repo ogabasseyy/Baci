@@ -129,6 +129,25 @@ export function slimWorkflowRun(run) {
   };
 }
 
+export const DISPATCH_DISCOVERY_ATTEMPTS = 36;
+export const DISPATCH_DISCOVERY_POLL_MS = 5000;
+
+// Two-phase dispatch discovery: the new dispatch is newest-first, so
+// phase 1 polls page 1 only (36 x 5s against slow API visibility);
+// once a candidate is visible, phase 2 runs one full pagination to
+// confirm it and enforce cross-page ambiguity. Worst case ~41 API
+// calls instead of ~180. A phase-1 ambiguity throws immediately.
+export async function findProductionDispatchRun(readPage, readAll, baseline, coordinationId, commit, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  for (let attempt = 0; attempt < DISPATCH_DISCOVERY_ATTEMPTS; attempt++) {
+    const visible = selectCoordinatedRun(readPage(), baseline, coordinationId, commit);
+    if (visible) {
+      return selectCoordinatedRun(readAll(), baseline, coordinationId, commit);
+    }
+    await sleep(DISPATCH_DISCOVERY_POLL_MS);
+  }
+  throw new Error('dispatch outcome unknown; inspect GitHub before retrying');
+}
+
 export function readRuns(filter, paginate = false) {
   const runs = [];
   const lastPage = paginate ? RUNS_MAX_PAGES : 1;
@@ -190,21 +209,13 @@ async function main() {
         `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
-      findRun: async (commit, baseline) => {
-        // 36 x 5s: API visibility for a healthy dispatch can lag past
-        // two minutes; a false-negative here holds the release lock
-        // for manual reconciliation, so poll patiently.
-        for (let attempt = 0; attempt < 36; attempt++) {
-          // Bounded pagination like listRuns: with 100+ recent
-          // dispatches the new run can fall outside the first page,
-          // which would wrongly report 'dispatch outcome unknown' on
-          // a healthy run.
-          const candidate = selectCoordinatedRun(readRuns('event=workflow_dispatch', true), baseline, coordinationId, commit);
-          if (candidate) return candidate;
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
-        throw new Error('dispatch outcome unknown; inspect GitHub before retrying');
-      },
+      findRun: async (commit, baseline) => findProductionDispatchRun(
+        () => readRuns('event=workflow_dispatch', false),
+        () => readRuns('event=workflow_dispatch', true),
+        baseline,
+        coordinationId,
+        commit
+      ),
       // Poll the run endpoint, not `gh run watch`: watch requires
       // checks:read and cannot authenticate with fine-grained PATs,
       // while the Actions API reads work. Conclusion is asserted by

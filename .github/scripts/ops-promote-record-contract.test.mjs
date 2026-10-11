@@ -28,6 +28,11 @@ test('the scheduled backstop validates the operational branch from the last vali
   assert.match(workflow, /node ci_scripts\/validate-promote-record\.mjs "\$tip" "\$previous"/);
 });
 
+test('a cache miss fails closed instead of silently re-seeding the tip', () => {
+  assert.match(workflow, /confirm_reseed/);
+  assert.match(workflow, /refusing to silently re-seed/);
+});
+
 test('touching the backstop workflow or its suite triggers the deployment script suite', () => {
   for (const path of [
     '.github/workflows/ops-promote-record.yml',

@@ -78,7 +78,9 @@ in the clean release checkout; do not disable global hooks to make an old checko
   cannot work: GitHub sources push workflows from the pushed ref, which
   never contains CI files). Validating from the cached tip enforces
   fast-forward, so force-push rewrites fail even when every rewritten
-  tree is shape-valid.
+  tree is shape-valid. A cache miss fails closed without re-seeding
+  (recover via manual dispatch with confirm_reseed after out-of-band
+  verification), so an eviction can never launder a rewrite.
 
 ## Sources
 

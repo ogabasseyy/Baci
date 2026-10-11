@@ -90,8 +90,10 @@ _set_inflight_repo() {
   # Normalize credential-bearing and trailing-slash HTTPS spellings to
   # the same canonical form the coordinator accepts. Credentials must
   # never reach the match below or the error message after it.
+  # Plaintext http is refused like the coordinator: releases require
+  # https or ssh.
   case "$inflight_remote" in
-    https://* | http://*)
+    https://*)
       _remote_scheme="${inflight_remote%%://*}"
       _remote_rest="${inflight_remote#*://}"
       _remote_host="${_remote_rest%%/*}"
@@ -103,6 +105,12 @@ _set_inflight_repo() {
       # ships bash 3 without ${var,,}) or a GitHub.com remote passes
       # validation then aborts the worker deploy as unresolvable.
       _remote_host="$(printf '%s' "$_remote_host" | tr '[:upper:]' '[:lower:]')"
+      # Strip the default HTTPS port, which the coordinator's URL
+      # parse normalizes away: github.com:443 must resolve, while any
+      # other port falls through to the refusal below.
+      case "$_remote_host" in
+        *:443) _remote_host="${_remote_host%:443}" ;;
+      esac
       _remote_path="${_remote_rest#*/}"
       if [ "$_remote_path" = "$_remote_rest" ]; then
         _remote_path=""
@@ -142,7 +150,7 @@ _set_inflight_repo() {
   done
   inflight_repo=""
   case "$inflight_remote" in
-    https://github.com/* | http://github.com/* | git@github.com:* | ssh://git@github.com/*)
+    https://github.com/* | git@github.com:* | ssh://git@github.com/*)
       inflight_repo="${inflight_remote%.git}"
       inflight_repo="${inflight_repo##*github.com[:/]}"
       ;;

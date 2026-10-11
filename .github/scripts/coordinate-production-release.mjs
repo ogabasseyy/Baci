@@ -22,8 +22,10 @@ export function selectCoordinatedRun(runs, baseline, coordinationId, commit = nu
   // known, require it too, so a planted same-title run on another SHA
   // is ignored instead of forcing the mismatch-cancel path. A planted
   // same-title same-SHA run still degrades to ambiguous/indeterminate
-  // (release-blocking, never a wrong release), and planting one needs
-  // dispatch permission plus the unguessable coordination id.
+  // (release-blocking, never a wrong release). The id is unguessable
+  // only until first dispatch — deploy.yml publishes it in the run
+  // title, visible to run readers — so planting needs dispatch
+  // permission plus a disclosed id, and can only DoS, never divert.
   const candidates = runs.filter(run => !knownIds.has(run.databaseId) &&
     run.event === 'workflow_dispatch' && run.title === `Coordinated release ${coordinationId}` &&
     (commit === null || run.headSha === commit));

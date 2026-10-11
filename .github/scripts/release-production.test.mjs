@@ -39,6 +39,7 @@ test('accepts every canonical GitHub remote spelling', () => {
     'https://GitHub.com/ogabasseyy/Baci.git',
     'git@GitHub.com:ogabasseyy/Baci.git',
     'ssh://git@GitHub.com/ogabasseyy/Baci.git',
+    'https://github.com:443/ogabasseyy/Baci.git',
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }
@@ -248,7 +249,10 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://evil.com#@github.com/ogabasseyy/Baci',
     'https://github.com@evil.com/ogabasseyy/Baci.git',
     'https://evil.com?x=@github.com/ogabasseyy/Baci',
+    'http://github.com/ogabasseyy/Baci.git',
+    'https://github.com:8443/ogabasseyy/Baci.git',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }
 });
+

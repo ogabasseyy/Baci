@@ -90,6 +90,35 @@ test('resolves mixed-case SSH hosts like the coordinator', () => {
   }
 });
 
+test('resolves the default HTTPS port like the coordinator', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com:443/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('refuses plaintext and non-default-port remotes like the coordinator', () => {
+  for (const remote of [
+    'http://github.com/example-owner/example-repo.git',
+    'https://github.com:8443/example-owner/example-repo.git',
+  ]) {
+    const { result, ghArgs } = runCheck({
+      ghBody: RECORD_ARGS,
+      gitBody: `if [ "$1 $2 $3" = "remote get-url origin" ]; then echo '${remote}'; else exit 1; fi`,
+    });
+
+    assert.equal(result.status, 1, remote);
+    assert.equal(ghArgs, '', remote);
+  }
+});
+
 test('resolves trailing-slash remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

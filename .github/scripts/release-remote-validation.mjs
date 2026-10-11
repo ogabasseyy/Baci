@@ -12,19 +12,22 @@ export function originRepoSlug(remoteUrl) {
     raw.replace(/\/+$/, '').replace(/\.git$/, '')
   );
   if (direct) return direct[1].toLowerCase();
-  // Parse http(s) with the URL class instead of regex-stripping '@':
+  // Parse https with the URL class instead of regex-stripping '@':
   // a fragment like https://evil.com#@github.com/org/repo has host
   // evil.com, but a strip-to-last-'@' would forge a github.com match.
   // URL separates userinfo, host, path, query, and fragment, so only
   // a true github.com host passes. Credentials in userinfo never
-  // reach the match or any error message.
+  // reach the match or any error message. Plaintext http is refused:
+  // a release checkout must use https or ssh. Non-default ports are
+  // refused too (URL normalizes :443 away, so any surviving port is
+  // one the worker guard would abort on).
   let parsed;
   try {
     parsed = new URL(raw);
   } catch {
     return '';
   }
-  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.hostname.toLowerCase() !== 'github.com') {
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com' || parsed.port !== '') {
     return '';
   }
   const path = parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');

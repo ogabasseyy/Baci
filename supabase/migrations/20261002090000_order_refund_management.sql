@@ -78,6 +78,7 @@ BEGIN
      AND leg.transaction_type = 'payment'
      AND leg.status = 'completed'
      AND leg.amount > 0
+     AND UPPER(BTRIM(leg.currency)) = UPPER(BTRIM(p_currency))
      AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '') NOT IN (
        'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
        'PAY_ON_DELIVERY');
@@ -119,6 +120,11 @@ BEGIN
        WHERE leg.order_id = p_order_id
          AND leg.merchant_id = p_merchant_id
          AND leg.transaction_type = 'payment'
+         -- The leg itself must price in the order currency: a legacy
+         -- foreign-currency leg never absorbs order-currency refunds,
+         -- mirroring the claim gate (otherwise the remainder zeroes
+         -- and the label flips while the claim keeps the leg open).
+         AND UPPER(BTRIM(leg.currency)) = UPPER(BTRIM(p_currency))
        GROUP BY leg.id, leg.amount
     ) per_leg;
   RETURN v_total;

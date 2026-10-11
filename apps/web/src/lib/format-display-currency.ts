@@ -105,7 +105,9 @@ export function formatDisplayCurrency(
   currency = 'NGN',
   options: DisplayCurrencyOptions = {}
 ) {
-  const normalizedCurrency = currency.toUpperCase();
+  // Legacy rows can store padded codes (' NGN '); Intl rejects them,
+  // so trim before uppercasing. Truly invalid codes still throw.
+  const normalizedCurrency = currency.trim().toUpperCase();
   const locale = getDisplayCurrencyLocale(normalizedCurrency);
   const defaultMaximumFractionDigits = getDefaultMaximumFractionDigits(
     normalizedCurrency,

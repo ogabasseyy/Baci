@@ -51,7 +51,10 @@ BEGIN
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
           WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
             AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0
-            AND upper(btrim(p.currency))=upper(btrim(o.currency))
+            -- Legacy null-currency orders price in NGN like the
+            -- manager and helper: without the default this
+            -- comparison is NULL and the leg never counts.
+            AND upper(btrim(p.currency))=upper(COALESCE(NULLIF(BTRIM(o.currency),''),'NGN'))
             AND COALESCE(public.normalized_gateway_name_v1(p.gateway),'') NOT IN (
               'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
         + (SELECT COALESCE(sum(w.amount),0) FROM public.customer_wallet_transactions w

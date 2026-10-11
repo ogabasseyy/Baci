@@ -7,7 +7,7 @@ import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 // reconciler stamps manual rows today, so such rows always quarantine
 // for now.
 export function isUnverifiedManualPaystackRefund(row: {
-  gateway: unknown;
+  gateway?: unknown;
   metadata: unknown;
 }): boolean {
   if (normalizeRefundMoneyField(row.gateway) !== 'MANUAL') return false;

@@ -245,6 +245,12 @@ BEGIN
       v_remaining := v_remaining + p_amount;
       v_pending := v_pending + p_amount;
     END IF;
+    -- The flag above was computed before this insert: a first manual
+    -- record that leaves a balance behind is partial by definition
+    -- (the helper raises unless it allocated, and the replay path
+    -- implies a pre-existing row), so refresh it or this response
+    -- advertises a retry the next call rejects until the next poll.
+    v_manual_partial := v_remaining > 0;
   END IF;
   -- Response shaping lives in the response helper (part 3).
   RETURN private.refund_status_response(p_order_id,

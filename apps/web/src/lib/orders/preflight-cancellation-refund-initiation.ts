@@ -1,11 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { isUnverifiedManualPaystackRefund } from '@/lib/orders/is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from '@/lib/orders/normalize-refund-money-field';
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import { DeferredError } from '@/lib/orders/run-order-cancellation-side-effect';
+import { stampVerifiedManualPaystackRefunds } from '@/lib/orders/stamp-verified-manual-paystack-refunds';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
 // Worst-case sizing for one leg's provider preflight: a verify plus a
@@ -24,7 +26,9 @@ const REFUND_INITIATION_LEG_WORST_MS = 38_000;
 interface CancellationRefundLedgerRow {
   amount: number;
   currency?: string | null;
+  gateway?: unknown;
   gateway_reference?: string | null;
+  id: string;
   metadata: Record<string, unknown> | null;
   status: string;
 }
@@ -34,7 +38,11 @@ interface CancellationRefundLedgerRow {
  * Withheld (mismatched, audit-blocked) and fully refunded legs need no
  * initiation, so the currency, amount-cap, and provider guards scope to
  * outstanding initiation legs only — a settled foreign-currency leg must
- * not strand the remaining legs. Throws (never returns partial sets).
+ * not strand the remaining legs. Manual Paystack claims verify in a
+ * separate set: they never initiate (merchant money plus a provider
+ * refund would double-pay), but provider confirmation converts the
+ * claim into stamped coverage instead of a blind quarantine.
+ * Throws (never returns partial sets).
  */
 export async function preflightCancellationRefundInitiation({
   auditBlockedLegIds,
@@ -61,6 +69,7 @@ export async function preflightCancellationRefundInitiation({
 }): Promise<{
   auditBlockedTransactions: GatewayPaymentTransaction[];
   initiationTransactions: GatewayPaymentTransaction[];
+  verifiedManualPaystackLegIds: string[];
 }> {
   const auditBlockedTransactions = transactions.filter(
     (transaction) =>
@@ -138,7 +147,37 @@ export async function preflightCancellationRefundInitiation({
       transaction.gateway_reference !== null &&
       transaction.gateway_reference !== ''
   );
-  for (const [index, transaction] of paystackLegs.entries()) {
+  // Manual Paystack claims verify like provider legs: a merchant record
+  // against an external Paystack leg carries the merchant reference,
+  // not the provider ID, so the check pairs it by exact amount. Manual
+  // legs never initiate, so without this set the leg skips the check
+  // and the withheld handling quarantines it even when the provider
+  // holds an exactly matching processed refund. Reference-less and
+  // non-Paystack manual legs stay out: with nothing to list, no
+  // provider proof can confirm them.
+  const manualVerifyLegs = transactions.filter(
+    (
+      transaction
+    ): transaction is GatewayPaymentTransaction & {
+      gateway_reference: string;
+    } =>
+      manualLinkedLegIds.has(transaction.id) &&
+      !refundedPaymentIds.has(transaction.id) &&
+      normalizePaymentGateway(transaction.gateway) === 'PAYSTACK' &&
+      transaction.gateway_reference !== null &&
+      transaction.gateway_reference !== '' &&
+      (refundRows ?? []).some(
+        (row) =>
+          (row.status === 'completed' || row.status === 'refunded') &&
+          linkedPaymentId(row) === transaction.id &&
+          isUnverifiedManualPaystackRefund(row)
+      )
+  );
+  const totalVerifyLegs = paystackLegs.length + manualVerifyLegs.length;
+  const verifyLeg = async (
+    transaction: GatewayPaymentTransaction & { gateway_reference: string },
+    verifyIndex: number
+  ): Promise<void> => {
     // Reserve the full remaining worst case before starting another
     // provider verification — this and later verifications plus the
     // initiation legs that follow — or a slow-but-successful check
@@ -149,7 +188,7 @@ export async function preflightCancellationRefundInitiation({
         ? undefined
         : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
     const requiredMs =
-      (paystackLegs.length - index) * PREFLIGHT_PROVIDER_CALL_WORST_MS +
+      (totalVerifyLegs - verifyIndex) * PREFLIGHT_PROVIDER_CALL_WORST_MS +
       outstandingTransactions.length * REFUND_INITIATION_LEG_WORST_MS;
     if (remainingMs !== undefined && remainingMs < requiredMs) {
       // Starvation is not failure: reset the budget the claim
@@ -195,6 +234,29 @@ export async function preflightCancellationRefundInitiation({
       }
       throw error;
     }
+  };
+  for (const [index, transaction] of paystackLegs.entries()) {
+    await verifyLeg(transaction, index);
   }
-  return { auditBlockedTransactions, initiationTransactions };
+  // A verified manual claim persists its proof before the caller
+  // quarantines withheld legs: the stamp converts the merchant claim
+  // into coverage, and the returned ids keep provider-confirmed legs
+  // out of the blind quarantine. Check failures quarantine with
+  // provider-specific evidence inside the check itself.
+  const verifiedManualPaystackLegIds: string[] = [];
+  for (const [offset, transaction] of manualVerifyLegs.entries()) {
+    await verifyLeg(transaction, paystackLegs.length + offset);
+    await stampVerifiedManualPaystackRefunds({
+      linkedPaymentId,
+      refundRows: refundRows ?? [],
+      supabase,
+      transactionId: transaction.id,
+    });
+    verifiedManualPaystackLegIds.push(transaction.id);
+  }
+  return {
+    auditBlockedTransactions,
+    initiationTransactions,
+    verifiedManualPaystackLegIds,
+  };
 }

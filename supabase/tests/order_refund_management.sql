@@ -939,6 +939,17 @@ BEGIN
     RAISE EXCEPTION 'mixed cash balance wrong, got %/%',
       v_result->>'refunded', v_result->>'remaining';
   END IF;
+  -- The status response masks the failed step's raw worker error
+  -- (direct REST callers bypass the route) and derives no Paystack
+  -- signal from a provider-less message.
+  IF v_result->>'error'
+    <> 'The refund ran into a problem. Support has the details.' THEN
+    RAISE EXCEPTION 'status response leaked raw worker text: %',
+      v_result->>'error';
+  END IF;
+  IF (v_result->>'needsPaystackCheck')::boolean THEN
+    RAISE EXCEPTION 'paystack signal derived from a provider-less error';
+  END IF;
 
   -- An overfunded ledger routes manuals to review: the leg exceeds
   -- the recorded balance, so the remainder could never cover it and
@@ -1166,6 +1177,96 @@ BEGIN
 END;
 $refund_audit_masking$;
 
+-- Round-33 fixtures: partial-first manual (035), review precedence
+-- with pending (038) and with full coverage (039), and the
+-- null-currency self-terminal trigger order (040). Isolated orders
+-- no other block touches.
+DO $refund_round33_fixtures$
+DECLARE
+  v_label text;
+BEGIN
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status, cancelled_at
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000035',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-035',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000038',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-038',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000039',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-039',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000040',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-040',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
+  -- Legacy null-currency order: its NGN leg still prices in NGN.
+  UPDATE public.orders SET currency = NULL
+  WHERE id = '9ef11000-0000-4000-8000-000000000040';
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('9ef12000-0000-4000-8000-000000000048',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000035', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-35', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000049',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000038', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-38', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000050',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000038', 'refund', 100, 'NGN',
+      'completed', 'manual', 'm-38#1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000049',
+        'method', 'paystack', 'reference', 'm-38')),
+    ('9ef12000-0000-4000-8000-000000000051',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000039', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-39', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000052',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000039', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777001',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000051',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000053',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000040', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-40', '{}'::jsonb);
+  INSERT INTO public.order_cancellation_side_effects (
+    order_id, merchant_id, step, status, claim_token, attempts, error
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000035',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000035', 5,
+      'Paystack/timeout (acquirer 91)'),
+    ('9ef11000-0000-4000-8000-000000000038',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'delivery_uncertain', '9ef13000-0000-4000-8000-000000000038', 5,
+      'Manual Paystack refunds exceed provider-confirmed amounts; review required'),
+    ('9ef11000-0000-4000-8000-000000000039',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'delivery_uncertain', '9ef13000-0000-4000-8000-000000000039', 5,
+      'An existing Paystack refund requires reconciliation before retry');
+  -- A null-currency order's self-terminal NGN leg flips the label:
+  -- without the NGN default the currency comparison is NULL and
+  -- the leg never counts.
+  UPDATE public.transactions SET status = 'refunded'
+  WHERE id = '9ef12000-0000-4000-8000-000000000053';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000040';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'null-currency self-terminal leg did not flip label, got %',
+      v_label;
+  END IF;
+END;
+$refund_round33_fixtures$;
+
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(
@@ -1173,6 +1274,63 @@ SELECT pg_catalog.set_config(
   '9ef10000-0000-4000-8000-000000000002',
   true
 );
+
+DO $refund_round33_status$
+DECLARE
+  v_result jsonb;
+BEGIN
+  -- A first manual record that leaves a balance behind is partial in
+  -- the same response: the panel must not advertise a retry the
+  -- next call rejects until the next poll.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000035', 'manual', 30,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-first-35', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 70 THEN
+    RAISE EXCEPTION 'partial-first manual left remaining %',
+      v_result->>'remaining';
+  END IF;
+  IF (v_result->>'canRetry')::boolean THEN
+    RAISE EXCEPTION 'retry advertised in the partial-first response';
+  END IF;
+  -- The status response carries fixed labels, never raw worker
+  -- text, with the Paystack review signal as structured data.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000035'
+  ) INTO v_result;
+  IF v_result->>'error'
+    <> 'The refund ran into a problem. Support has the details.'
+    OR v_result->>'error' LIKE '%Paystack%' THEN
+    RAISE EXCEPTION 'status response leaked raw worker text: %',
+      v_result->>'error';
+  END IF;
+  IF NOT (v_result->>'needsPaystackCheck')::boolean THEN
+    RAISE EXCEPTION 'paystack signal missing for a provider error';
+  END IF;
+  -- Terminal quarantine reports review before pending evidence:
+  -- the drain never resumes these rows.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000038'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'requires_review' THEN
+    RAISE EXCEPTION 'quarantined pending order reports %, want requires_review',
+      v_result->>'status';
+  END IF;
+  IF v_result->>'error'
+    <> 'This refund needs review before it can continue.' THEN
+    RAISE EXCEPTION 'review error mislabeled: %', v_result->>'error';
+  END IF;
+  -- ... and before full coverage: an open terminal review stays
+  -- visible even once the money lands.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000039'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'requires_review' THEN
+    RAISE EXCEPTION 'quarantined covered order reports %, want requires_review',
+      v_result->>'status';
+  END IF;
+END;
+$refund_round33_status$;
 
 DO $refund_history_bound$
 DECLARE

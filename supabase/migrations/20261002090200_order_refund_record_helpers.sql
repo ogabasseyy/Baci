@@ -216,12 +216,24 @@ BEGIN
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
     'reversedInternal',p_reversed_internal,
-    'status',CASE WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
-      WHEN p_pending>0 THEN 'processing' WHEN p_step_status='claimed' THEN 'processing'
-      WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
+    -- A terminal quarantined step reports review before anything
+    -- else: delivery_uncertain rows never resume, so pending
+    -- evidence (or even full coverage) must not relabel them as
+    -- processing or refunded and suppress the review guidance.
+    'status',CASE WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
+      WHEN p_pending>0 THEN 'processing'
+      WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
+      WHEN p_step_status='claimed' THEN 'processing'
       WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
       WHEN p_step_status='failed' THEN 'failed' ELSE 'not_started' END,
-    'error',p_step_error,'attempts',COALESCE(p_step_attempts,0),
+    -- Raw worker/provider text never leaves the RPC: direct REST
+    -- callers bypass the route masking, so map to the fixed labels
+    -- here and derive the Paystack review signal as structured
+    -- data (substring, mirroring the retired route rule: any
+    -- mention of the provider means the review concerns Paystack).
+    'error',private.describe_refund_worker_error_v1(p_step_error),
+    'needsPaystackCheck',COALESCE(POSITION('paystack' IN LOWER(p_step_error))>0,FALSE),
+    'attempts',COALESCE(p_step_attempts,0),
     'retryRequests',COALESCE(p_step_retry_requests,0),'history',v_history,
     'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
       'details',x.details,'date',x.created_at,'actor',x.actor_id) ORDER BY x.created_at DESC)

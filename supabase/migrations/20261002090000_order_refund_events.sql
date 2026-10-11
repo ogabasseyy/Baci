@@ -29,12 +29,12 @@ CREATE POLICY merchant_refund_events_read ON public.order_refund_events FOR SELE
     OR public.check_staff_permission(auth.uid(),merchant_id,'orders','view'));
 CREATE POLICY service_refund_events ON public.order_refund_events FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Fixed labels for worker/provider strings stored in the readable
--- audit table. order_refund_events grants SELECT to authenticated
--- owners and view staff, so raw exception text must never land here:
--- direct REST readers bypass the route masking. Mirrors
--- describeRefundWorkerError branch for branch; raw text stays in the
--- service-role-only side_effects table. NULL stays NULL (no error).
+-- Fixed labels for worker/provider strings in readable surfaces.
+-- order_refund_events grants SELECT to authenticated owners and view
+-- staff, and the status response serves direct REST callers, so raw
+-- exception text must never land in either: both bypass route
+-- masking. Raw text stays in the service-role-only side_effects
+-- table. NULL stays NULL (no error).
 CREATE OR REPLACE FUNCTION private.describe_refund_worker_error_v1(
   p_message text
 ) RETURNS text LANGUAGE sql IMMUTABLE SET search_path='' AS $$

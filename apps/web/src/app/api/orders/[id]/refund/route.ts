@@ -2,14 +2,13 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
 import { orderRefundSchema } from '@/schemas/order-refund';
 
 // Fixed user-facing messages for known refund identifiers. Raw database
 // exception text must never reach the client (CWE-209): unknown
-// identifiers fall back to the generic message. Success payloads get
-// the same treatment via maskRefundWorkerText below, so worker and
-// provider strings never reach API consumers on either path.
+// identifiers fall back to the generic message. Success payloads
+// arrive pre-masked from the RPC (direct REST callers bypass this
+// route), so the summary error passes through untouched below.
 const KNOWN_REFUND_ERRORS: Record<string, string> = {
   not_authenticated: 'Authentication required',
   refund_forbidden: 'You do not have permission to manage this refund',
@@ -57,26 +56,18 @@ const KNOWN_REFUND_STATUS: Record<string, number> = {
   refund_confirmation_required: 400,
 };
 
-// Success payloads carry the RPC's raw summary.error; map it to a fixed
-// label here so provider internals never reach API consumers, and
-// expose the Paystack signal the panel's requires-review guidance
-// needs as structured data. Event details arrive pre-mapped: the
-// audit trigger maps error text at write time because the events table
-// is directly readable by staff and route masking cannot protect REST
-// readers — mapping here again would corrupt the labels (the mapper
-// is not idempotent), so details pass through untouched.
-function maskRefundWorkerText(data: { error?: unknown }) {
-  const error = typeof data.error === 'string' ? data.error : null;
-  // Substring, not token membership, is intended here: unlike error
-  // codes (where a token inside a larger word means something else),
-  // any mention of paystack — even inside an identifier like
-  // paystack_reference — means the review concerns Paystack. No
-  // unrelated word contains the provider name.
-  const needsPaystackCheck = error?.toLowerCase().includes('paystack') ?? false;
+// Success payloads carry the RPC's pre-mapped summary error and the
+// structured Paystack signal the panel's requires-review guidance
+// needs. Both are derived at the data layer because direct REST
+// callers bypass this route; pass them through untouched and only
+// normalize the flag's shape here.
+function maskRefundWorkerText(data: {
+  error?: unknown;
+  needsPaystackCheck?: unknown;
+}) {
   return {
     ...data,
-    error: error ? describeRefundWorkerError(error) : error,
-    needsPaystackCheck,
+    needsPaystackCheck: data.needsPaystackCheck === true,
   };
 }
 

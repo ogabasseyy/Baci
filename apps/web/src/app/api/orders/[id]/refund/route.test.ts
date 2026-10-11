@@ -77,10 +77,9 @@ describe('order refund route', () => {
       p_action: 'status',
     });
   });
-  it('maps the summary error and passes pre-mapped event details through', async () => {
-    // Event details arrive mapped from the audit trigger (the events
-    // table is directly readable, so mapping happens at write time);
-    // only the service-role-side summary error is mapped here.
+  it('passes the pre-mapped summary error and Paystack signal through', async () => {
+    // Both arrive derived at the data layer (direct REST callers
+    // bypass this route); the route only normalizes the flag shape.
     const events = [
       {
         id: 'event-1',
@@ -98,7 +97,8 @@ describe('order refund route', () => {
     mocks.rpc.mockResolvedValue({
       data: {
         status: 'requires_review',
-        error: 'Paystack/insufficient-balance (acquirer 51)',
+        error: 'The refund ran into a problem. Support has the details.',
+        needsPaystackCheck: true,
         events,
       },
       error: null,
@@ -112,18 +112,18 @@ describe('order refund route', () => {
       events,
     });
   });
-  it('flags the Paystack check for provider mentions inside identifiers', async () => {
+  it('normalizes a missing Paystack signal to false', async () => {
     mocks.rpc.mockResolvedValue({
       data: {
-        status: 'requires_review',
-        error: 'mismatch on paystack_reference leg-1',
+        status: 'failed',
+        error: 'The refund ran into a problem. Support has the details.',
       },
       error: null,
     });
     const response = await GET(request(), context);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(
-      expect.objectContaining({ needsPaystackCheck: true })
+      expect.objectContaining({ needsPaystackCheck: false })
     );
   });
   it('queues retries without invoking a payment provider', async () => {

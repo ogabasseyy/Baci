@@ -298,7 +298,9 @@ test('worker input reads reject past MAX_INPUT_BYTES before buffering', async ()
 test('encode refuses a symlinked output without touching its target', async () => {
   const { lstat, symlink } = await import('node:fs/promises');
   const verifiedBytes = await readFile(fixture('tiny-48x48.png'));
-  const expectedInputSha256 = createHash('sha256').update(verifiedBytes).digest('hex');
+  const expectedInputSha256 = createHash('sha256')
+    .update(verifiedBytes)
+    .digest('hex');
   const io = { readFile: async () => verifiedBytes };
   const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-link-'));
   const outside = join(dir, 'outside.txt');
@@ -353,7 +355,9 @@ test('encode refuses a symlinked output without touching its target', async () =
 
 test('encode reclaims a stale regular output and certifies the fresh bytes', async () => {
   const verifiedBytes = await readFile(fixture('tiny-48x48.png'));
-  const expectedInputSha256 = createHash('sha256').update(verifiedBytes).digest('hex');
+  const expectedInputSha256 = createHash('sha256')
+    .update(verifiedBytes)
+    .digest('hex');
   const io = { readFile: async () => verifiedBytes };
   const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-stale-'));
   const output = join(dir, 'out.webp');
@@ -372,4 +376,12 @@ test('encode reclaims a stale regular output and certifies the fresh bytes', asy
   );
   assert.equal(encoded.ok, true);
   assert.equal(encoded.width, 48);
+  // The certified hash names the bytes published through the held
+  // descriptor — not a pathname reopen a swap could redirect.
+  const published = await readFile(output);
+  assert.equal(
+    createHash('sha256').update(published).digest('hex'),
+    encoded.sha256
+  );
+  assert.equal(published.length, encoded.bytes);
 });

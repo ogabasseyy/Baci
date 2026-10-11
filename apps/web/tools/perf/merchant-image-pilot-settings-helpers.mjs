@@ -237,6 +237,45 @@ export function verifyHarRoute(pages, expectRoute) {
   return { ok: true };
 }
 
+// Lighthouse navigation binding: the report's navigated URL and its
+// redirect result must both be the expected route. Device and
+// throttling settings cannot tell a matching-profile report for another
+// store or comparison arm from the intended navigation, so a report
+// with identical settings but wrong-page metrics would otherwise pass.
+export function verifyLighthouseRoute(report, expectRoute) {
+  let expected;
+  try {
+    expected = new URL(expectRoute).href;
+  } catch {
+    return { error: `bad --expect-route: ${expectRoute}`, ok: false };
+  }
+  for (const field of ['requestedUrl', 'finalDisplayedUrl']) {
+    const value = report?.[field];
+    if (!value) {
+      return {
+        error: `Lighthouse report has no ${field} to bind to the route`,
+        ok: false,
+      };
+    }
+    let actual;
+    try {
+      actual = new URL(value).href;
+    } catch {
+      return {
+        error: `Lighthouse ${field} is not a valid URL: ${value}`,
+        ok: false,
+      };
+    }
+    if (actual !== expected) {
+      return {
+        error: `Lighthouse ${field} is ${actual}, expected ${expected}`,
+        ok: false,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 export function verifyBrowserVersion(version, expectMajor) {
   if (!/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
     return {

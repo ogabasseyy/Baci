@@ -3,11 +3,13 @@
 // Verifies the RECORDED configSettings of a Lighthouse report against
 // expectations — never the command-line labels. Fails closed on any
 // mismatch or unreadable artifact.
-import { readFile } from 'node:fs/promises';
+import { MAX_LIGHTHOUSE_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 import {
   parseDimensions,
   parseNonNegativeNumber,
   parsePositiveNumber,
+  verifyLighthouseRoute,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 // Method-relevant network fields: the throttling method and CPU
@@ -55,10 +57,24 @@ const NETWORK_FIELDS = {
 export async function checkLighthouse(args, pass, fail, recorded) {
   let report;
   try {
-    report = JSON.parse(await readFile(args.lighthouse, 'utf8'));
+    const bounded = await readUpToBytes(args.lighthouse, MAX_LIGHTHOUSE_BYTES);
+    if (bounded.truncated) {
+      fail(
+        'lighthouse.readable',
+        `${args.lighthouse} exceeds the lighthouse byte budget`
+      );
+      return;
+    }
+    report = JSON.parse(bounded.bytes.toString('utf8'));
   } catch {
     fail('lighthouse.readable', `cannot parse ${args.lighthouse}`);
     return;
+  }
+  const routeCheck = verifyLighthouseRoute(report, args['expect-route']);
+  if (!routeCheck.ok) {
+    fail('lighthouse.route', routeCheck.error);
+  } else {
+    pass('lighthouse.route');
   }
   const settings = report?.configSettings ?? {};
   const emulation = settings.screenEmulation ?? {};

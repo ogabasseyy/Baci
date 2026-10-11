@@ -240,3 +240,29 @@ test('a symlinked claims dir is refused before publishing anything', async () =>
   assert.equal(error.code, 'unsafe-claims-directory');
   assert.deepEqual(await readdir(outside), []);
 });
+
+test('non-positive pids fail as corrupt instead of blocking as held', async () => {
+  // kill(0, 0) probes the current process group (always live) and
+  // negative pids probe process groups: without the positivity check
+  // these malformed claims would classify as live owners and block the
+  // asset as claim-held indefinitely.
+  for (const pid of [0, -1, -process.pid]) {
+    const root = await outputRoot();
+    const token = `bad-pid-${pid}`;
+    await mkdir(join(root, 'claims'), { recursive: true });
+    await writeFile(
+      join(root, 'claims', `${claimKeyForJob(JOB)}.json`),
+      JSON.stringify({
+        createdAt: new Date().toISOString(),
+        jobKey: 'x',
+        pid,
+        runToken: token,
+        stagingDirName: `staging-${token}`,
+      })
+    );
+    const error = await recoverAbandonedClaim(root, JOB).catch(
+      (value) => value
+    );
+    assert.equal(error.code, 'claim-corrupt', `pid ${pid}`);
+  }
+});

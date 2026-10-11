@@ -55,6 +55,22 @@ export const MAX_QUALITY_SHEET_EMBEDDED_BYTES = 512 * 1024 * 1024;
 // while the settings gate must read the artifact before it can parse it.
 export const MAX_HAR_BYTES = 256 * 1024 * 1024;
 
+// Single encoded tier held in memory: rung outputs run kilobytes to low
+// megabytes (the pipeline resizes before encoding), so a 100 MiB ceiling
+// only ever trips on a corrupt expansion — while the worker must hold
+// the bytes to publish them through the claimed descriptor.
+export const MAX_ENCODED_BYTES = 100 * 1024 * 1024;
+
+// Lighthouse JSON report: full reports run hundreds of kilobytes to low
+// megabytes (audits and thumbnails, no response bodies), so a 64 MiB
+// ceiling only ever trips on a wrong or hostile file.
+export const MAX_LIGHTHOUSE_BYTES = 64 * 1024 * 1024;
+
+// Evidence screenshot PNG: viewport-sized captures run well under a
+// megabyte photographic, so a 64 MiB ceiling only ever trips on a wrong
+// or hostile file — while the geometry check must read the artifact.
+export const MAX_SCREENSHOT_BYTES = 64 * 1024 * 1024;
+
 // Merchant UUID predicate shared by every contract mirror. Zod 3's
 // .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
 // so both sides spell the rule explicitly instead: versions 1-8 plus the

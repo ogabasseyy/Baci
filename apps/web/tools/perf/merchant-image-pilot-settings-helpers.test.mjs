@@ -15,6 +15,8 @@ import {
   verifyBrowserVersion,
   verifyHarConnectivity,
   verifyHarIterations,
+  verifyHarRoute,
+  verifyLighthouseRoute,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,6 +206,47 @@ describe('merchant-image-pilot-settings helpers', () => {
     );
     expect(verifyBrowserVersion('debian-chromium', '154').error).toMatch(
       /not a dotted browser build/
+    );
+  });
+
+  it('binds every HAR page to the expected route', () => {
+    const route = 'http://localhost:3000/pilot-lab/store/id?arm=pilot';
+    expect(verifyHarRoute([{ _url: route }, { title: route }], route)).toEqual({
+      ok: true,
+    });
+    expect(
+      verifyHarRoute([{ _url: route }, { _url: `${route}&x=1` }], route).error
+    ).toMatch(/navigated .* expected /);
+    expect(verifyHarRoute([], route).error).toMatch(/no pages/);
+    expect(verifyHarRoute([{}], route).error).toMatch(/no navigation URL/);
+    expect(verifyHarRoute([{ title: 'u run 1' }], route).error).toMatch(
+      /not a valid URL/
+    );
+    expect(verifyHarRoute([{ _url: route }], '::bad::').error).toMatch(
+      /bad --expect-route/
+    );
+  });
+
+  it('binds Lighthouse navigations and redirect results to the route', () => {
+    const route = 'http://localhost:3000/pilot-lab/store/id?arm=pilot';
+    const report = { finalDisplayedUrl: route, requestedUrl: route };
+    expect(verifyLighthouseRoute(report, route)).toEqual({ ok: true });
+    expect(
+      verifyLighthouseRoute({ ...report, requestedUrl: `${route}&x=1` }, route)
+        .error
+    ).toMatch(/requestedUrl is .* expected /);
+    expect(
+      verifyLighthouseRoute(
+        { ...report, finalDisplayedUrl: 'http://localhost:3000/other' },
+        route
+      ).error
+    ).toMatch(/finalDisplayedUrl is .* expected /);
+    expect(verifyLighthouseRoute({}, route).error).toMatch(/no requestedUrl/);
+    expect(
+      verifyLighthouseRoute({ ...report, requestedUrl: 'u run 1' }, route).error
+    ).toMatch(/not a valid URL/);
+    expect(verifyLighthouseRoute(report, '::bad::').error).toMatch(
+      /bad --expect-route/
     );
   });
 });

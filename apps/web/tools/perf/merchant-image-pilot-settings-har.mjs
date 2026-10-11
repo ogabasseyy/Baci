@@ -4,10 +4,12 @@
 // repository's 300-line ceiling: recorded HAR settings, screenshot
 // geometry + navigation binding, cold-cache evidence, and the
 // attested browser executable.
-import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
 import {
   MAX_HAR_BYTES,
   MAX_INVENTORY_BYTES,
+  MAX_SCREENSHOT_BYTES,
+  SHARP_LIMITS,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 import {
@@ -22,6 +24,26 @@ import {
   verifyHarIterations,
   verifyHarRoute,
 } from './merchant-image-pilot-settings-helpers.mjs';
+
+// IDAT presence is not evidence: a structurally valid PNG with garbage
+// compressed pixels (valid CRCs, positive IHDR) would otherwise satisfy
+// geometry and hash provenance with no reviewable visual artifact. A
+// full pixel decode with scanline dimensions matching the IHDR proves
+// the screenshot is viewable at the attested size, under the same
+// generator decode limits.
+async function assertPngDecodes(bytes, dimensions) {
+  let info;
+  try {
+    ({ info } = await sharp(bytes, { ...SHARP_LIMITS })
+      .raw()
+      .toBuffer({ resolveWithObject: true }));
+  } catch {
+    throw new Error('screenshot pixels do not decode');
+  }
+  if (info.width !== dimensions.width || info.height !== dimensions.height) {
+    throw new Error('screenshot decoded dimensions differ from its IHDR');
+  }
+}
 
 // Bounded operator-artifact read: an unconsumed multi-gigabyte file must
 // fail the gate by size, never exhaust the collector before parsing.
@@ -97,8 +119,19 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   const viewport = parseDimensions(args['expect-viewport'], 'expect-viewport');
   const dpr = parsePositiveNumber(args['expect-dpr'], 'expect-dpr');
   try {
-    const screenshotBytes = await readFile(args.screenshot);
+    // The geometry check must read the artifact, but a corrupted or
+    // replaced multi-gigabyte file fails by size instead of exhausting
+    // the settings process before validation.
+    const boundedShot = await readUpToBytes(
+      args.screenshot,
+      MAX_SCREENSHOT_BYTES
+    );
+    if (boundedShot.truncated) {
+      throw new Error('screenshot exceeds the screenshot byte budget');
+    }
+    const screenshotBytes = boundedShot.bytes;
     const png = pngDimensions(screenshotBytes);
+    await assertPngDecodes(screenshotBytes, png);
     recorded.screenshot = `${png.width}x${png.height}`;
     const geometryProblems = [];
     // ±2px absorbs DPR rounding (667@3 → 2000); a wrong DPR or viewport

@@ -40,12 +40,17 @@ function parseClaimFile(text) {
   } catch {
     throw new PilotClaimError('claim-corrupt', 'claim file is not valid JSON');
   }
+  // PIDs must be strictly positive: kill(0, 0) probes the current
+  // process GROUP (always live) and negative PIDs probe process groups,
+  // so a pid-0 claim would classify as a live owner and block the asset
+  // as claim-held forever instead of failing as the corrupt file it is.
   if (
     !parsed ||
     typeof parsed !== 'object' ||
     typeof parsed.runToken !== 'string' ||
     typeof parsed.pid !== 'number' ||
     !Number.isInteger(parsed.pid) ||
+    parsed.pid <= 0 ||
     typeof parsed.stagingDirName !== 'string'
   ) {
     throw new PilotClaimError('claim-corrupt', 'claim file has a bad shape');

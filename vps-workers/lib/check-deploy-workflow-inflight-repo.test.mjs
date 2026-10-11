@@ -72,10 +72,12 @@ test('resolves mixed-case github.com hosts like the coordinator', () => {
   );
 });
 
-test('resolves mixed-case SSH hosts like the coordinator', () => {
+test('resolves mixed-case schemes and hosts like the coordinator', () => {
   for (const remote of [
     'git@GitHub.com:example-owner/example-repo.git',
     'ssh://git@GitHub.com/example-owner/example-repo.git',
+    'SSH://git@GitHub.com/example-owner/example-repo.git',
+    'HTTPS://GitHub.com/example-owner/example-repo.git',
   ]) {
     const { result, ghArgs } = runCheck({
       ghBody: RECORD_ARGS,

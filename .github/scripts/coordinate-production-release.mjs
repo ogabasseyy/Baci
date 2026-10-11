@@ -160,7 +160,15 @@ export async function coordinateRelease(operations, coordinationId) {
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
     throw new Error('production publication did not succeed; inspect the workflow');
   }
-  await operations.verifyLive(commit);
+  // verifyLive runs after a confirmed publication: any failure —
+  // unreadable alias state or a definitive live mismatch — means
+  // production needs reconciliation before the next release, so hold
+  // the lock instead of freeing it for an immediate rerun.
+  try {
+    await operations.verifyLive(commit);
+  } catch (error) {
+    tagIndeterminate(error);
+  }
   return { commit, runId: run.databaseId };
 }
 

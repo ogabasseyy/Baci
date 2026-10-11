@@ -63,6 +63,13 @@ jobs:
             exit 1
           fi
           if [ -z "$ref_info" ]; then
+            # A missing ref is a no-op only before the first validation:
+            # with a cached tip it means the branch was deleted, which
+            # the pre-push hook forbids — fail closed, do not re-seed.
+            if [ -f .ops-promote-last-tip ]; then
+              echo '::error::ops/gigl-promote-record was deleted after successful validation; failing closed.' >&2
+              exit 1
+            fi
             echo 'ops/gigl-promote-record does not exist yet; nothing to validate.'
             exit 0
           fi

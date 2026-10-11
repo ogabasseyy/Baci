@@ -268,17 +268,19 @@ test('tags dispatch-window failures as indeterminate dispatches', async () => {
   );
   assert.match(abortError.message, /concurrent coordination detected; our-run cancellation failed/);
   assert.equal(abortError.indeterminateDispatch, true);
+  // verifyLive failures tag indeterminate too — covered with the flag
+  // assertion in 'refuses a successful workflow whose live alias
+  // remains stale' below.
+});
+
+test('refuses a successful workflow whose live alias remains stale', async () => {
   const setup = fixture({ verifyLive: async () => { throw new Error('stale live alias'); } });
   const error = await coordinateRelease(setup.operations, coordinationId).then(
     () => { throw new Error('expected rejection'); },
     rejection => rejection
   );
-  assert.equal(error.indeterminateDispatch, undefined);
-});
-
-test('refuses a successful workflow whose live alias remains stale', async () => {
-  const setup = fixture({ verifyLive: async () => { throw new Error('stale live alias'); } });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /stale live alias/);
+  assert.match(error.message, /stale live alias/);
+  assert.equal(error.indeterminateDispatch, true);
 });
 
 test('live verification requires matching project, production target, state and SHA', () => {

@@ -41,6 +41,8 @@ test('accepts every canonical GitHub remote spelling', () => {
     'git@GitHub.com:ogabasseyy/Baci.git',
     'ssh://git@GitHub.com/ogabasseyy/Baci.git',
     'https://github.com:443/ogabasseyy/Baci.git',
+    'SSH://git@GitHub.com/ogabasseyy/Baci.git',
+    'HTTPS://GitHub.com/ogabasseyy/Baci.git',
   ]) {
     assert.equal(originRepoSlug(remote), 'ogabasseyy/baci');
   }

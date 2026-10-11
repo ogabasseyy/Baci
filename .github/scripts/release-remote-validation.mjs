@@ -8,7 +8,10 @@ export function originRepoSlug(remoteUrl) {
   // Reject surrounding whitespace instead of trimming it: URL
   // parsing strips it, but git uses the raw remote, so validating a
   // normalized copy passes preflight for a checkout git refuses.
-  if (raw !== raw.trim()) return '';
+  // Also reject embedded ASCII whitespace outright: the WHATWG URL
+  // parser silently strips tabs/newlines, so an internal tab would
+  // validate against a host git never sees.
+  if (raw !== raw.trim() || /\s/.test(raw)) return '';
   // scp-like and ssh:// forms carry no userinfo ambiguity: the user
   // is part of the match, so handle them before URL parsing (which
   // would reject the scp-like form outright).

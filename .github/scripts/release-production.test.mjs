@@ -261,6 +261,9 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://github.com:0443/ogabasseyy/Baci.git',
     'GIT@github.com:ogabasseyy/Baci.git',
     ' https://github.com/ogabasseyy/Baci.git',
+    'https://git\thub.com/ogabasseyy/Baci.git',
+    'https://github.com/ogaba\tsey/Baci.git',
+    'https://github.com/ogabasseyy/Baci.git\n',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }

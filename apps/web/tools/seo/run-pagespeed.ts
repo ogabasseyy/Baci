@@ -36,13 +36,27 @@ function evaluatePageSpeedResult(
     payload.lighthouseResult?.runtimeError?.code
   );
   // Lighthouse reports runtimeError.code NO_ERROR on success; only any
-  // other code is a genuine runtime failure.
+  // other code is a genuine runtime failure. A present-but-unsanitizable
+  // code fails closed with a fixed message (never interpolated) rather
+  // than passing silently.
+  const rawRuntimeCode = payload.lighthouseResult?.runtimeError?.code;
   if (runtimeCode && runtimeCode !== 'NO_ERROR') {
     failures.push({
       metric: 'request',
       actual: null,
       threshold: 0,
       message: `Lighthouse runtime error: ${runtimeCode}`,
+    });
+  } else if (
+    rawRuntimeCode !== undefined &&
+    rawRuntimeCode !== null &&
+    runtimeCode === null
+  ) {
+    failures.push({
+      metric: 'request',
+      actual: null,
+      threshold: 0,
+      message: 'Lighthouse runtime error: (unrecognized code format)',
     });
   }
   for (const metric of [

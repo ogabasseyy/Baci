@@ -29,5 +29,9 @@
 
 # --- Build / CI / branch protection config ---
 /.github/                                   @ogabasseyy
+# Privileged reviewer workflow: pin upgrades follow the manual SARIF-audit
+# procedure in .github/muse-code-review.md — owner review must confirm
+# that procedure on every PR touching this file.
+/.github/workflows/muse-code-review.yml    @ogabasseyy
 /turbo.json                                 @ogabasseyy
 /vercel.json                                @ogabasseyy

@@ -219,6 +219,51 @@ describe('run-pagespeed failures', () => {
     }
   });
 
+  it('fails closed on a present-but-unsanitizable runtime code', async () => {
+    const fetchImpl: typeof fetch = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            lighthouseResult: {
+              runtimeError: { code: 'BAD CODE!' },
+              categories: {
+                performance: { score: 0.92 },
+                accessibility: { score: 0.99 },
+                seo: { score: 0.98 },
+                'best-practices': { score: 0.95 },
+              },
+              audits: {
+                'largest-contentful-paint': { numericValue: 1800 },
+                'cumulative-layout-shift': { numericValue: 0.04 },
+                'total-blocking-time': { numericValue: 90 },
+                'interaction-to-next-paint': { numericValue: 180 },
+              },
+            },
+          })
+        )
+      )
+    );
+
+    const results = await pageSpeedTools.runPageSpeedAudit({
+      apiKey: undefined,
+      baseUrl: 'https://usebaci.com',
+      extraUrls: [],
+      fetchImpl,
+      strategies: ['mobile'],
+    });
+
+    expect(results).toHaveLength(5);
+    for (const result of results) {
+      expect(result.passed).toBe(false);
+      expect(result.failures).toContainEqual({
+        metric: 'request',
+        actual: null,
+        threshold: 0,
+        message: 'Lighthouse runtime error: (unrecognized code format)',
+      });
+    }
+  });
+
   it('falls back to an omitted-count message for non-token audit IDs', async () => {
     const fetchImpl: typeof fetch = vi.fn(() =>
       Promise.resolve(

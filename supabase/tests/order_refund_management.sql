@@ -137,6 +137,12 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000021', v_merchant_id, 'REFUND-021',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000022', v_merchant_id, 'REFUND-022',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000023', v_merchant_id, 'REFUND-023',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000024', v_merchant_id, 'REFUND-024',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000025', v_merchant_id, 'REFUND-025',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -164,7 +170,10 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000019',
       '9ef11000-0000-4000-8000-000000000020',
       '9ef11000-0000-4000-8000-000000000021',
-      '9ef11000-0000-4000-8000-000000000022');
+      '9ef11000-0000-4000-8000-000000000022',
+      '9ef11000-0000-4000-8000-000000000023',
+      '9ef11000-0000-4000-8000-000000000024',
+      '9ef11000-0000-4000-8000-000000000025');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -188,8 +197,12 @@ BEGIN
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004',
         'provider_refund_status', 'processed')),
+    -- Split tender with the wallet/savings reversals below: the
+    -- external leg must equal the reversal-adjusted remainder, or the
+    -- overfunded-ledger guard (and the claim's full-leg coverage)
+    -- could never let a capped manual finish the order.
     ('9ef12000-0000-4000-8000-000000000006', v_merchant_id,
-      '9ef11000-0000-4000-8000-000000000004', 'payment', 100, 'NGN',
+      '9ef11000-0000-4000-8000-000000000004', 'payment', 50, 'NGN',
       'completed', 'paystack', 'cap-4', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000007', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000005', 'payment', 100, 'NGN',
@@ -304,7 +317,34 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000035', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000022', 'refund', 100, 'NGN',
       'completed', 'paystack', 'unlinked-22',
-      jsonb_build_object('provider_refund_status', 'processed'));
+      jsonb_build_object('provider_refund_status', 'processed')),
+    -- A sole leg with an unlinked refund from another gateway: the
+    -- claim requires a gateway match, so this waits in pending.
+    ('9ef12000-0000-4000-8000-000000000036', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000023', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-23', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000037', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000023', 'refund', 100, 'NGN',
+      'completed', 'korapay', 'unlinked-23', '{}'::jsonb),
+    -- An unlinked manual row never sole-attributes, like the claim.
+    ('9ef12000-0000-4000-8000-000000000038', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000024', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-24', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000039', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000024', 'refund', 100, 'NGN',
+      'completed', 'manual', 'man-24', '{}'::jsonb),
+    -- Partial coverage on an overfunded leg: the outstanding 90 fits
+    -- the recorded 100 but not the live remainder of 80, so no
+    -- manual can finish it.
+    ('9ef12000-0000-4000-8000-000000000040', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000025', 'payment', 110, 'NGN',
+      'completed', 'paystack', 'cap-25', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000041', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000025', 'refund', 20, 'NGN',
+      'completed', 'paystack', 'pp-25',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000040',
+        'provider_refund_status', 'processed'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -904,6 +944,45 @@ BEGIN
     RAISE EXCEPTION 'manual accepted beside multi-leg unlinked money';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- Sole-leg attribution still requires the claim's gateway match:
+  -- a foreign-gateway row and an unlinked manual row both wait in
+  -- pending without flipping the label.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000023'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'foreign-gateway row misattributed, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000023';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'foreign-gateway row flipped payment label to %', v_label;
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000024'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'unlinked manual row misattributed, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+
+  -- The overfunded guard compares against the live remainder: partial
+  -- coverage of 20 leaves 80 recordable against 90 outstanding, so
+  -- recording would strand finalization with a zero balance.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000025', 'manual', 80,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'overfunded-partial',NULL,true);
+    RAISE EXCEPTION 'manual accepted on a partially covered overfunded leg';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
   END;
 
   -- Missing and foreign orders are indistinguishable to callers.

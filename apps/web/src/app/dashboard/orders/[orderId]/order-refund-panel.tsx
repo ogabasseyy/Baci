@@ -11,6 +11,7 @@ import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-e
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
+import { useRefundStatusPolling } from './use-refund-status-polling';
 
 export function OrderRefundPanel({
   orderId,
@@ -31,44 +32,20 @@ export function OrderRefundPanel({
   const [note, setNote] = useState('');
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    async function load() {
-      const startedRevision = revision.current;
-      try {
-        const response = await fetch(
-          `/api/orders/${encodeURIComponent(orderId)}/refund`,
-          {
-            signal: controller.signal,
-            cache: 'no-store',
-            credentials: 'include',
-          }
-        );
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok)
-          throw new Error(data.error || 'Unable to load refund');
-        if (active && startedRevision === revision.current) {
-          setSummary(data);
-          setError(null);
-        }
-      } catch (e) {
-        if (
-          active &&
-          startedRevision === revision.current &&
-          !controller.signal.aborted
-        )
-          setError(e instanceof Error ? e.message : 'Unable to load refund');
-      }
-    }
-    void load();
-    const timer = setInterval(() => void load(), 30_000);
-    return () => {
-      active = false;
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [orderId]);
+  // A refunded order, or a failed one with no actions left, never
+  // changes without a new submission: stop the status poll there.
+  const terminal =
+    summary?.status === 'refunded' ||
+    (summary?.status === 'failed' &&
+      !summary.canRetry &&
+      !summary.canRecordManual);
+  useRefundStatusPolling({
+    onError: setError,
+    onSummary: setSummary,
+    orderId,
+    revision,
+    terminal,
+  });
 
   // The parent passes an inline callback, so its identity changes on
   // every parent render: fire the completion callback once per order.
@@ -95,7 +72,10 @@ export function OrderRefundPanel({
     if (action === 'manual') {
       const validationError = validateManualRefundInput({
         amount,
+        confirmed,
         date,
+        method,
+        reference,
         remaining: summary?.remaining ?? null,
       });
       if (validationError) {
@@ -186,7 +166,7 @@ export function OrderRefundPanel({
               )}
             </dl>
             {summary.error && (
-              <p className="text-sm text-destructive" title={summary.error}>
+              <p className="text-sm text-destructive">
                 {describeRefundWorkerError(summary.error)}
               </p>
             )}
@@ -257,7 +237,8 @@ export function OrderRefundPanel({
                 <ul className="space-y-2 text-sm" aria-label="Refund activity">
                   {summary.events.map((event) => {
                     // Worker strings never render verbatim here either:
-                    // fixed label visible, raw text in the title.
+                    // Fixed labels only: raw worker/provider text stays
+                    // out of the DOM like the route's error masking.
                     const eventError =
                       event.details.error || event.details.previousError;
                     return (
@@ -268,9 +249,7 @@ export function OrderRefundPanel({
                           · {new Date(event.date).toLocaleString()}
                         </p>
                         {eventError && (
-                          <p title={eventError}>
-                            {describeRefundWorkerError(eventError)}
-                          </p>
+                          <p>{describeRefundWorkerError(eventError)}</p>
                         )}
                       </li>
                     );

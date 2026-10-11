@@ -43,16 +43,16 @@ describe('OrderRefundPanel', () => {
     });
     render(<OrderRefundPanel orderId="order-1" />);
     const button = await screen.findByRole('button', { name: 'Retry refund' });
-    // Worker errors render a fixed label; the raw string stays in
-    // the title for support, never as visible merchant-facing text.
+    // Worker errors render a fixed label; the raw string stays out
+    // of the DOM entirely, like the route's error masking.
     const label = screen.getByText(
       'The refund ran into a problem. Support has the details.'
     );
     expect(label).toBeInTheDocument();
-    expect(label).toHaveAttribute(
-      'title',
-      'Insufficient balance to process refund'
-    );
+    expect(label).not.toHaveAttribute('title');
+    expect(
+      screen.queryByText('Insufficient balance to process refund')
+    ).not.toBeInTheDocument();
     fireEvent.click(button);
     await waitFor(() =>
       expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
@@ -227,12 +227,91 @@ describe('OrderRefundPanel', () => {
     const label = await screen.findByText(
       'The refund ran into a problem. Support has the details.'
     );
-    expect(label).toHaveAttribute(
-      'title',
-      'Paystack/insufficient-balance (acquirer 51)'
-    );
+    expect(label).not.toHaveAttribute('title');
     expect(
       screen.queryByText('Paystack/insufficient-balance (acquirer 51)')
     ).not.toBeInTheDocument();
+  });
+  it('stops polling once the refund reaches a terminal state', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ ...summary, status: 'refunded' }),
+        })
+      );
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(screen.getAllByText('Refunded').length).toBeGreaterThan(0)
+      );
+      // Mount and terminal-transition loads settle, then quiet: a
+      // full minute must add no further status polls.
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('keeps polling while the refund can still change', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Retry refund' })
+        ).toBeInTheDocument()
+      );
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('validates reference, confirmation, and decimals before submitting', async () => {
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    fireEvent.change(screen.getByLabelText('Refund date and time'), {
+      target: { value: '2026-09-28T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText(/Amount/), {
+      target: { value: '10' },
+    });
+    const form = screen
+      .getByRole('button', { name: 'Save manual refund' })
+      .closest('form');
+    if (!form) throw new Error('expected the manual refund form');
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: '' },
+    });
+    fireEvent.submit(form);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Enter the transfer reference.'
+    );
+    expect(apiPost).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: 'bank-1' },
+    });
+    fireEvent.change(screen.getByLabelText(/Amount/), {
+      target: { value: '10.291' },
+    });
+    fireEvent.submit(form);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'at most two decimals'
+    );
+    expect(apiPost).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/Amount/), {
+      target: { value: '10' },
+    });
+    fireEvent.submit(form);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Confirm that the money already moved.'
+    );
+    expect(apiPost).not.toHaveBeenCalled();
   });
 });

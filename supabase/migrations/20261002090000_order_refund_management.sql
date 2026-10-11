@@ -77,6 +77,7 @@ DECLARE
   v_allocation numeric;
   v_leg_remaining numeric;
   v_sole_external_leg boolean;
+  v_sole_leg_gateway text;
   v_allocatable_outstanding numeric;
   v_constraint text;
   v_history jsonb;
@@ -112,13 +113,17 @@ BEGIN
   -- Unverified rows are in-flight money that blocks manual
   -- recording (like refund_pending legs) — never invisible money
   -- the merchant could double-record beside the provider refund.
-  -- Unlinked rows attribute only to a sole completed external leg,
-  -- mirroring the claim gate and the executor matcher: counting one
-  -- across several legs would zero the balance and flip the label
-  -- while finalization defers and the worker quarantines, with the
-  -- unallocated gate then blocking every manual recovery. Across
-  -- several legs the row waits in pending instead.
-  SELECT count(*)=1 INTO v_sole_external_leg FROM public.transactions sole
+  -- Unlinked rows attribute only to a sole completed external leg
+  -- with a matching gateway, mirroring the claim gate and the
+  -- executor matcher (manual rows never sole-attribute — the sole
+  -- leg is external by construction): counting one across several
+  -- legs, or against the wrong gateway, would zero the balance and
+  -- flip the label while finalization defers and the worker
+  -- quarantines, with the unallocated gate then blocking every
+  -- manual recovery. Unattributable rows wait in pending instead.
+  SELECT count(*)=1,
+    max(public.normalized_gateway_name_v1(sole.gateway))
+    INTO v_sole_external_leg,v_sole_leg_gateway FROM public.transactions sole
     WHERE sole.order_id=p_order_id AND sole.merchant_id=v_order.merchant_id
     AND sole.transaction_type='payment' AND sole.status='completed' AND sole.amount>0
     AND COALESCE(public.normalized_gateway_name_v1(sole.gateway),'') NOT IN (
@@ -127,14 +132,16 @@ BEGIN
       AND (public.normalized_gateway_name_v1(gateway)<>'PAYSTACK'
         OR metadata->>'provider_refund_status'='processed')
       AND (metadata->>'payment_transaction_id' IS NOT NULL
-        OR v_sole_external_leg)),0),
+        OR (v_sole_external_leg
+          AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway))),0),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
       OR (status IN ('completed','refunded')
         AND public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
         AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')
       OR (status IN ('completed','refunded')
         AND metadata->>'payment_transaction_id' IS NULL
-        AND NOT v_sole_external_leg)),0)
+        AND NOT COALESCE((v_sole_external_leg
+          AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway),false))),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
     AND upper(btrim(currency))=upper(btrim(v_order.currency))
@@ -266,12 +273,14 @@ BEGIN
       AND upper(btrim(currency)) IS DISTINCT FROM upper(btrim(v_order.currency))) THEN
       RAISE EXCEPTION 'payment_currency_requires_review' USING ERRCODE='P0001';
     END IF;
-    -- An overfunded ledger (allocatable legs exceed the recorded
-    -- amount paid) can never finalize through manuals: recording the
-    -- remainder would zero the balance and flip the label while the
-    -- claim still sees uncovered legs, with no further manual or
-    -- retry able to finish. Mirror the worker preflight and route
-    -- to review before allocating against these legs.
+    -- An overfunded ledger (allocatable legs exceed what manuals
+    -- can still record) can never finalize: recording would zero
+    -- the balance and flip the label while the claim still sees
+    -- uncovered legs, with no further manual or retry able to
+    -- finish. Compare against the live remainder, not the recorded
+    -- amount paid — partial coverage shrinks what is recordable
+    -- while the legs stay short. Mirror the worker preflight and
+    -- route to review before allocating against these legs.
     SELECT COALESCE(SUM(GREATEST(leg.amount-COALESCE((
       SELECT SUM(r.amount) FROM public.transactions r
       WHERE r.order_id=p_order_id AND r.transaction_type='refund'
@@ -283,7 +292,7 @@ BEGIN
     AND leg.transaction_type='payment' AND leg.status='completed'
     AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
       OR upper(btrim(leg.gateway)) NOT IN ('WALLET','SAVINGS'));
-    IF v_allocatable_outstanding>v_order.amount_paid THEN
+    IF v_allocatable_outstanding>v_remaining THEN
       RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
     END IF;
     v_allocation := p_amount;
@@ -412,6 +421,9 @@ GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamp
 -- A provider confirmation updates payment status without changing amount paid.
 CREATE OR REPLACE FUNCTION private.sync_cancelled_order_refund_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+DECLARE
+  v_trig_has_sole_leg boolean;
+  v_trig_sole_gateway text;
 BEGIN
   -- Order-less ledger refunds (e.g. the PiggyVest external-principal flow)
   -- have no order to audit: the events table requires order_id, so skip
@@ -431,7 +443,20 @@ BEGIN
     END IF;
     -- Coverage counts matching money only (a foreign-currency row must
     -- not flip the label while matching money is still owed) and
-    -- includes self-terminal refunded payment legs.
+    -- includes self-terminal refunded payment legs. Unlinked rows
+    -- attribute only to a sole completed external leg with a
+    -- matching gateway, like the status aggregate.
+    SELECT count(*)=1,
+      max(public.normalized_gateway_name_v1(gateway))
+      INTO v_trig_has_sole_leg,v_trig_sole_gateway
+      FROM public.transactions only_payment
+      WHERE only_payment.order_id=NEW.order_id
+        AND only_payment.merchant_id=NEW.merchant_id
+        AND only_payment.transaction_type='payment'
+        AND only_payment.status='completed'
+        AND only_payment.amount>0
+        AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway),'') NOT IN (
+          'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
@@ -445,12 +470,8 @@ BEGIN
             AND (public.normalized_gateway_name_v1(t.gateway)<>'PAYSTACK'
               OR t.metadata->>'provider_refund_status'='processed')
             AND ((t.metadata->>'payment_transaction_id' IS NULL
-              AND 1=(SELECT count(*) FROM public.transactions sole
-                WHERE sole.order_id=o.id AND sole.merchant_id=o.merchant_id
-                AND sole.transaction_type='payment' AND sole.status='completed'
-                AND sole.amount>0
-                AND COALESCE(public.normalized_gateway_name_v1(sole.gateway),'') NOT IN (
-                  'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY')))
+              AND v_trig_has_sole_leg
+              AND public.normalized_gateway_name_v1(t.gateway)=v_trig_sole_gateway)
               OR EXISTS (SELECT 1 FROM public.transactions leg
                 WHERE leg.id::text = t.metadata->>'payment_transaction_id'
                   AND leg.order_id=o.id AND leg.merchant_id=o.merchant_id

@@ -30,6 +30,40 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'refund_order_mismatch';
   END IF;
+  -- Internal cash-like legs need full manual coverage before the order
+  -- can finalize: provider reconciliation only observes external legs,
+  -- so finalizing here on a verified Paystack leg alone would flip a
+  -- mixed order (label, settlement reversal, notifications) before the
+  -- merchant returns the internal portion. Mirrors the completion gate
+  -- (manual rows with the Paystack method gate); vacuous when no
+  -- internal legs exist. Skips quietly: the recording caller keeps its
+  -- verdict and the claim finalizes once internal coverage lands.
+  IF EXISTS (
+    SELECT 1 FROM public.transactions internal_leg
+     WHERE internal_leg.order_id = p_order_id
+       AND internal_leg.merchant_id = p_merchant_id
+       AND internal_leg.transaction_type = 'payment'
+       AND internal_leg.status IN ('completed', 'refund_pending')
+       AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
+         'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
+       AND (
+         SELECT COALESCE(SUM(refund.amount), 0) FROM public.transactions refund
+          WHERE refund.order_id = p_order_id
+            AND refund.merchant_id = p_merchant_id
+            AND refund.transaction_type = 'refund'
+            AND refund.status IN ('completed', 'refunded')
+            AND refund.amount > 0
+            AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(internal_leg.currency))
+            AND public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
+            AND refund.metadata->>'payment_transaction_id' = internal_leg.id::text
+            AND (
+              refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+              OR refund.metadata->>'provider_refund_status' = 'processed'
+            )
+       ) < internal_leg.amount
+  ) THEN
+    RETURN;
+  END IF;
   UPDATE public.orders SET payment_status = 'refunded', updated_at = now()
     WHERE id = p_order_id AND payment_status IN ('paid', 'partially_paid', 'pending');
   -- Reverse the order's settlements atomically with the refund

@@ -59,7 +59,9 @@ BEGIN
     ('9ef21000-0000-4000-8000-000000000031', v_merchant_id, 'PERLEG-031',
       100, 100, 'paid', 'cancelled'),
     ('9ef21000-0000-4000-8000-000000000032', v_merchant_id, 'PERLEG-032',
-      100, 100, 'paid', 'cancelled');
+      100, 100, 'paid', 'cancelled'),
+    ('9ef21000-0000-4000-8000-000000000033', v_merchant_id, 'PERLEG-033',
+      200, 200, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
   WHERE id IN (
@@ -67,7 +69,8 @@ BEGIN
       '9ef21000-0000-4000-8000-000000000029',
       '9ef21000-0000-4000-8000-000000000030',
       '9ef21000-0000-4000-8000-000000000031',
-      '9ef21000-0000-4000-8000-000000000032');
+      '9ef21000-0000-4000-8000-000000000032',
+      '9ef21000-0000-4000-8000-000000000033');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -131,7 +134,22 @@ BEGIN
     ('9ef22000-0000-4000-8000-000000000055', v_merchant_id,
       '9ef21000-0000-4000-8000-000000000032', 'refund', 100, 'NGN',
       'completed', 'paystack', 'pp-32-ngn',
-      jsonb_build_object('provider_refund_status', 'processed'));
+      jsonb_build_object('provider_refund_status', 'processed')),
+    -- A mixed order: verified Paystack leg beside an outstanding cash
+    -- leg. Provider reconciliation must not finalize the order (label,
+    -- settlement, notifications) before the internal portion returns.
+    ('9ef22000-0000-4000-8000-000000000056', v_merchant_id,
+      '9ef21000-0000-4000-8000-000000000033', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-33', '{}'::jsonb),
+    ('9ef22000-0000-4000-8000-000000000057', v_merchant_id,
+      '9ef21000-0000-4000-8000-000000000033', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'pp-33-ok',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef22000-0000-4000-8000-000000000056',
+        'provider_refund_status', 'processed')),
+    ('9ef22000-0000-4000-8000-000000000058', v_merchant_id,
+      '9ef21000-0000-4000-8000-000000000033', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-33', '{}'::jsonb);
 
   -- Status calls read the label as the merchant manager; grants exist
   -- in-transaction and roll back with the check.
@@ -263,5 +281,53 @@ BEGIN
   END IF;
 END;
 $per_leg_claims$;
+
+DO $per_leg_finalizer$
+DECLARE
+  v_label text;
+  v_notifications integer;
+BEGIN
+  -- Direct finalization skips mixed orders with outstanding internal
+  -- legs: no label flip, no notifications.
+  PERFORM public.finalize_refunded_cancellation_order_v1(
+    '9ef21000-0000-4000-8000-000000000033',
+    '9ef20100-0000-4000-8000-000000000001');
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef21000-0000-4000-8000-000000000033';
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = '9ef21000-0000-4000-8000-000000000033';
+  IF v_label <> 'paid' OR v_notifications <> 0 THEN
+    RAISE EXCEPTION 'finalizer ran with open internal leg: %/%',
+      v_label, v_notifications;
+  END IF;
+  -- Once the merchant returns the internal portion, finalization runs.
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES (
+    '9ef22000-0000-4000-8000-000000000059',
+    '9ef20100-0000-4000-8000-000000000001',
+    '9ef21000-0000-4000-8000-000000000033', 'refund', 100, 'NGN',
+    'completed', 'manual', 'man-33',
+    jsonb_build_object(
+      'payment_transaction_id', '9ef22000-0000-4000-8000-000000000058',
+      'method', 'bank_transfer',
+      'reference', 'man-33',
+      'refunded_at', '2026-09-28T12:00:00Z'));
+  PERFORM public.finalize_refunded_cancellation_order_v1(
+    '9ef21000-0000-4000-8000-000000000033',
+    '9ef20100-0000-4000-8000-000000000001');
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef21000-0000-4000-8000-000000000033';
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = '9ef21000-0000-4000-8000-000000000033';
+  IF v_label <> 'refunded' OR v_notifications <> 2 THEN
+    RAISE EXCEPTION 'finalizer skipped covered mixed order: %/%',
+      v_label, v_notifications;
+  END IF;
+END;
+$per_leg_finalizer$;
 
 ROLLBACK;

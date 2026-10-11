@@ -1086,6 +1086,48 @@ BEGIN
 END;
 $refund_history_bulk$;
 
+-- The readable audit table stores fixed labels, never raw worker or
+-- provider text: direct REST readers bypass route masking, so the
+-- trigger maps at write time while raw text stays in side_effects.
+DO $refund_audit_masking$
+DECLARE
+  v_details jsonb;
+  v_raw text;
+BEGIN
+  -- Isolated order: no other block touches it, so its single event is
+  -- deterministic (created_at ties make latest-row queries ambiguous).
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status
+  ) VALUES (
+    '9ef11000-0000-4000-8000-000000000099',
+    '9ef10100-0000-4000-8000-000000000001', 'REFUND-099',
+    100, 100, 'paid', 'cancelled');
+  INSERT INTO public.order_cancellation_side_effects (
+    order_id, merchant_id, step, status, claim_token, attempts, error
+  ) VALUES (
+    '9ef11000-0000-4000-8000-000000000099',
+    '9ef10100-0000-4000-8000-000000000001', 'refund',
+    'failed', '9ef13000-0000-4000-8000-000000000099', 1,
+    'Paystack/insufficient-balance (acquirer 51)');
+  SELECT details INTO v_details FROM public.order_refund_events
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000099';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'audit trigger did not fire for side_effects insert';
+  END IF;
+  IF v_details->>'error' <> 'The refund ran into a problem. Support has the details.'
+    OR v_details::text LIKE '%Paystack%' THEN
+    RAISE EXCEPTION 'audit event leaked raw worker text: %', v_details;
+  END IF;
+  SELECT error INTO v_raw FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000099'
+     AND step = 'refund';
+  IF v_raw IS DISTINCT FROM 'Paystack/insufficient-balance (acquirer 51)' THEN
+    RAISE EXCEPTION 'side_effects raw error not retained';
+  END IF;
+END;
+$refund_audit_masking$;
+
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(

@@ -77,23 +77,29 @@ describe('order refund route', () => {
       p_action: 'status',
     });
   });
-  it('maps worker strings to fixed labels on success payloads', async () => {
+  it('maps the summary error and passes pre-mapped event details through', async () => {
+    // Event details arrive mapped from the audit trigger (the events
+    // table is directly readable, so mapping happens at write time);
+    // only the service-role-side summary error is mapped here.
+    const events = [
+      {
+        id: 'event-1',
+        action: 'retry_requested',
+        date: '2026-10-01T12:00:00Z',
+        actor: null,
+        details: {
+          error:
+            'Refund in progress — waiting for the remaining money to arrive.',
+          previousError:
+            'The refund ran into a problem. Support has the details.',
+        },
+      },
+    ];
     mocks.rpc.mockResolvedValue({
       data: {
         status: 'requires_review',
         error: 'Paystack/insufficient-balance (acquirer 51)',
-        events: [
-          {
-            id: 'event-1',
-            action: 'retry_requested',
-            date: '2026-10-01T12:00:00Z',
-            actor: null,
-            details: {
-              error: 'cancellation_refund_awaiting_paystack',
-              previousError: 'boom',
-            },
-          },
-        ],
+        events,
       },
       error: null,
     });
@@ -103,20 +109,7 @@ describe('order refund route', () => {
       status: 'requires_review',
       error: 'The refund ran into a problem. Support has the details.',
       needsPaystackCheck: true,
-      events: [
-        {
-          id: 'event-1',
-          action: 'retry_requested',
-          date: '2026-10-01T12:00:00Z',
-          actor: null,
-          details: {
-            error:
-              'Refund in progress — waiting for the remaining money to arrive.',
-            previousError:
-              'The refund ran into a problem. Support has the details.',
-          },
-        },
-      ],
+      events,
     });
   });
   it('flags the Paystack check for provider mentions inside identifiers', async () => {

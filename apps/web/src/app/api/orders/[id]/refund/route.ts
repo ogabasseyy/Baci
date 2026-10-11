@@ -57,22 +57,15 @@ const KNOWN_REFUND_STATUS: Record<string, number> = {
   refund_confirmation_required: 400,
 };
 
-// Success payloads carry the RPC's raw worker strings (summary.error,
-// event details); map them to fixed labels here so provider internals
-// never reach API consumers, and expose the Paystack signal the
-// panel's requires-review guidance needs as structured data.
-// Contract: these are the only worker-text carriers today (history
-// and detail data fields carry merchant data, not worker text); if
-// the RPC gains another worker-text field, map it here.
-function maskRefundWorkerText(data: {
-  error?: unknown;
-  events?: Array<{
-    details?: {
-      error?: unknown;
-      previousError?: unknown;
-    };
-  }>;
-}) {
+// Success payloads carry the RPC's raw summary.error; map it to a fixed
+// label here so provider internals never reach API consumers, and
+// expose the Paystack signal the panel's requires-review guidance
+// needs as structured data. Event details arrive pre-mapped: the
+// audit trigger maps error text at write time because the events table
+// is directly readable by staff and route masking cannot protect REST
+// readers — mapping here again would corrupt the labels (the mapper
+// is not idempotent), so details pass through untouched.
+function maskRefundWorkerText(data: { error?: unknown }) {
   const error = typeof data.error === 'string' ? data.error : null;
   // Substring, not token membership, is intended here: unlike error
   // codes (where a token inside a larger word means something else),
@@ -84,22 +77,6 @@ function maskRefundWorkerText(data: {
     ...data,
     error: error ? describeRefundWorkerError(error) : error,
     needsPaystackCheck,
-    events: data.events?.map((event) => ({
-      ...event,
-      details: {
-        ...event.details,
-        ...(typeof event.details?.error === 'string'
-          ? { error: describeRefundWorkerError(event.details.error) }
-          : null),
-        ...(typeof event.details?.previousError === 'string'
-          ? {
-              previousError: describeRefundWorkerError(
-                event.details.previousError
-              ),
-            }
-          : null),
-      },
-    })),
   };
 }
 

@@ -15,10 +15,33 @@ CREATE OR REPLACE FUNCTION private.capped_refund_coverage_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text
 ) RETURNS numeric LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
+  v_actor uuid;
   v_sole_id uuid;
   v_sole_gateway text;
   v_total numeric;
 BEGIN
+  -- Defense in depth: EXECUTE stays granted below so denial lands on
+  -- the clean schema-USAGE check (revoking crashes, see note there).
+  -- This membership gate keeps the helper from becoming a
+  -- cross-tenant probing oracle even if a future grant ever opened
+  -- private-schema USAGE, mirroring the manager's read rule (owner or
+  -- orders refund/view staff). Uid-less contexts (service_role
+  -- triggers and claims) carry no end-user identity to confine and
+  -- bypass, like everywhere else.
+  v_actor := (SELECT auth.uid());
+  IF v_actor IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM public.merchants
+        WHERE id = p_merchant_id AND user_id = v_actor
+     )
+     AND NOT public.check_staff_permission(
+       v_actor, p_merchant_id, 'orders', 'refund'
+     )
+     AND NOT public.check_staff_permission(
+       v_actor, p_merchant_id, 'orders', 'view'
+     ) THEN
+    RAISE EXCEPTION 'refund_forbidden' USING ERRCODE = '42501';
+  END IF;
   -- No max(uuid) aggregate exists: with exactly one candidate row,
   -- its id is the sole leg's.
   SELECT CASE WHEN count(*) = 1 THEN (array_agg(leg.id))[1] END,

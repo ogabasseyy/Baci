@@ -385,6 +385,7 @@ jobs:
           --sql-check supabase/tests/order_refund_management.sql
           --sql-check supabase/tests/order_refund_management_per_leg_coverage.sql
           --sql-check supabase/tests/order_refund_finalizer_internal_coverage.sql
+          --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

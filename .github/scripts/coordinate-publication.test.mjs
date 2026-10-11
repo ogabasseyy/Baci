@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { assertLiveDeployment, coordinateRelease, DEPLOY_PROMOTE_STEP_NAME } from './coordinate-production-release.mjs';
 import { commit, coordinationId, fixture } from './coordinate-production-release.test-fixtures.mjs';
+import { assertCanonicalOriginPushUrls } from './release-remote-validation.mjs';
 import { runWorkerDeploy, WORKER_UNRECONCILED_EXIT } from './release-subprocess.mjs';
 
 // Split from coordinate-production-release.test.mjs: publication,
@@ -247,4 +248,12 @@ test('a rollback-failed worker deploy holds the lock instead of releasing it', a
     () => assert.fail('coordinator must throw'),
     error => assert.equal(error.indeterminateDispatch, true),
   );
+});
+
+test('rejects push remotes whose config value hides an embedded newline', () => {
+  const clean = 'https://github.com/ogabasseyy/Baci.git';
+  assert.doesNotThrow(() => assertCanonicalOriginPushUrls(`${clean}\n`, () => `remote.origin.pushurl\n${clean}\0`));
+  const evil = `${clean}\n${clean}`;
+  assert.throws(() => assertCanonicalOriginPushUrls(`${clean}\n${clean}\n`, () => `remote.origin.pushurl\n${evil}\0`), /canonical repository/);
+  assert.throws(() => assertCanonicalOriginPushUrls(`${clean}\n`, () => ''), /canonical repository/);
 });

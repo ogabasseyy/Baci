@@ -211,7 +211,7 @@ async function main() {
         if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'], true, { trim: false }).replace(/\n$/, '')) !== repository.toLowerCase()) {
           throw new Error('release checkout must use the canonical repository');
         }
-        assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin'], true, { trim: false }));
+        assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin'], true, { trim: false }), (args) => command('git', args, true, { trim: false }));
         return command('git', ['rev-parse', 'HEAD']);
       },
       readMain: async () => parseGhJqString(gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha // empty']), 'main ref'),

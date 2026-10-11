@@ -142,7 +142,8 @@ _set_inflight_repo() {
       ;;
   esac
   if ! _is_valid_repo_slug "$inflight_repo"; then
-    echo "Refusing worker promotion: cannot resolve the deploy repo from origin '$inflight_remote'. Run from a clean clone of the production repo, or set BACI_DEPLOY_WORKFLOW_REPO=owner/repo." >&2
+    _remote_display="${inflight_remote##*@}"
+    echo "Refusing worker promotion: cannot resolve the deploy repo from origin '$_remote_display'. Run from a clean clone of the production repo, or set BACI_DEPLOY_WORKFLOW_REPO=owner/repo." >&2
     return 1
   fi
   _inflight_owner="${inflight_repo%%/*}"

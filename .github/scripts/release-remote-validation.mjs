@@ -74,13 +74,25 @@ export function originRepoSlug(remoteUrl) {
   return path ? path.toLowerCase() : '';
 }
 
-export function assertCanonicalOriginPushUrls(pushUrls, canonical = CANONICAL_REPOSITORY) {
+export function assertCanonicalOriginPushUrls(pushUrls, readConfig = null, canonical = CANONICAL_REPOSITORY) {
   // Reject surrounding whitespace instead of trimming it: git uses
   // the raw push URL, so validating a normalized copy passes
   // preflight for a remote every later git operation refuses.
   const urls = String(pushUrls ?? '').split('\n').filter(line => line !== '');
   if (urls.length === 0 || urls.some(line => line.trim() !== line) || !urls.every(url => originRepoSlug(url) === canonical.toLowerCase())) {
     throw new Error('release checkout must use the canonical repository');
+  }
+  if (readConfig) {
+    // get-url separates values with newlines, so one config value
+    // containing \n looks like two clean URLs while git push fails
+    // on the raw value. The NUL-delimited config read
+    // disambiguates: any value containing \n is malformed, and zero
+    // records after get-url succeeded is itself incoherent.
+    const blob = String(readConfig(['config', '--null', '--get-regexp', '^remote\\.origin\\.(pushurl|url)$']) ?? '');
+    const records = blob.split('\0').filter(record => record.includes('\n'));
+    if (records.length === 0 || records.some(record => record.slice(record.indexOf('\n') + 1).includes('\n'))) {
+      throw new Error('release checkout must use the canonical repository');
+    }
   }
 }
 

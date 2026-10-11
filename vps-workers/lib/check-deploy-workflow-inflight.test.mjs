@@ -151,6 +151,18 @@ test('refuses promotion while an approval-parked run is listed', () => {
   assert.match(result.stderr, /184400115/);
 });
 
+test('scp-style credentials never leak into refusal errors', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'ghp_SCPLEAK2@github.com:ogabasseyy/Baci.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.stderr, /ghp_SCPLEAK2/);
+  assert.equal(ghArgs, '');
+});
+
 test('fails closed when the run list cannot be fetched', () => {
   const { result } = runCheck({
     ghBody: `${RECORD_ARGS}\necho 'error: authentication required' >&2\nexit 1`,

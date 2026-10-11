@@ -5,10 +5,7 @@ import {
 } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
-import {
-  parseProjectWalletFundingAccount,
-  projectWalletFundingAccount,
-} from './project-wallet-funding-account';
+import { parseProjectWalletFundingAccount } from './project-wallet-funding-account';
 
 type PrimarySnapshot = Awaited<
   ReturnType<typeof piggyvestPrimaryWalletApi.read>
@@ -102,11 +99,8 @@ export async function readPrimaryFundingAccount(
 
 export function resolveWalletFundingAccount(
   data: unknown,
-  merchantId: string,
   primary: SettledPrimaryFundingAccount
 ) {
-  if (!isPiggyvestPrimaryMerchant(merchantId))
-    return projectWalletFundingAccount(data, merchantId);
   if (primary.status === 'ready' && primary.account)
     return {
       account_name: primary.account.accountName,
@@ -114,10 +108,14 @@ export function resolveWalletFundingAccount(
       bank_name: primary.account.bankName,
       provider: primary.account.provider,
     };
-  // Primary definitively absent (server unconfigured, or enabled but
-  // never provisioned): the legacy projection is authoritative. When
-  // primary is merely unreachable, surface no account rather than a
-  // DVA the primary account may have superseded.
+  // The legacy projection answers only an authoritative not_ready
+  // (server unconfigured, or enabled but never provisioned): it is the
+  // customer's actual funding path there, not a stale fallback. A
+  // static merchant allowlist must NOT bypass this — a rolled-out
+  // non-pilot merchant whose first probe times out would otherwise
+  // project a legacy DVA the primary account may have superseded, and
+  // the resolved wallet query never reruns on its own. Unknown
+  // (unavailable) surfaces no account; the wallet refetches next load.
   if (primary.status === 'not_ready')
     return parseProjectWalletFundingAccount(data);
   return null;

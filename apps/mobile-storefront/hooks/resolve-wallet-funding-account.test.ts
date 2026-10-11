@@ -45,7 +45,7 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
     provisioningStatus: 'ready',
   });
   const primary = await readPrimaryFundingAccount(merchantId, userId);
-  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual({
+  expect(resolveWalletFundingAccount(legacy, primary)).toEqual({
     account_name: 'Verified',
     account_number: '0987654321',
     bank_name: 'Provider Bank',
@@ -64,7 +64,20 @@ it('surfaces no account on transient read failure instead of a superseded DVA', 
   read.mockRejectedValue(new Error('Unavailable'));
   const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(primary).toEqual({ status: 'unavailable' });
-  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toBeNull();
+  expect(resolveWalletFundingAccount(legacy, primary)).toBeNull();
+});
+
+it('withholds the legacy DVA while a non-pilot verdict is still unknown', async () => {
+  // Rollout race: the first probe exceeds the wallet-load budget, so
+  // the load settles primary as unavailable before the capability
+  // cache populates. Projecting legacy here would expose a DVA the
+  // primary account may have superseded — and the resolved query
+  // never reruns on its own. Only an authoritative not_ready
+  // projects legacy.
+  read.mockRejectedValueOnce(new Error('timeout'));
+  const primary = await readPrimaryFundingAccount('other', userId);
+  expect(primary).toEqual({ status: 'unavailable' });
+  expect(resolveWalletFundingAccount(legacy, primary)).toBeNull();
 });
 
 it('keeps the working legacy account when the server reports primary unconfigured', async () => {
@@ -72,15 +85,13 @@ it('keeps the working legacy account when the server reports primary unconfigure
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
   const primary = await readPrimaryFundingAccount(merchantId, userId);
-  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
-    legacy
-  );
+  expect(resolveWalletFundingAccount(legacy, primary)).toEqual(legacy);
 });
 
 it('resolves no account for freshly onboarded customers without legacy rows', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
   const primary = await readPrimaryFundingAccount(merchantId, userId);
-  expect(resolveWalletFundingAccount(null, merchantId, primary)).toBeNull();
+  expect(resolveWalletFundingAccount(null, primary)).toBeNull();
 });
 
 it('preserves other merchants accounts while caching the negative probe', async () => {
@@ -88,7 +99,7 @@ it('preserves other merchants accounts while caching the negative probe', async 
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
   const primary = await readPrimaryFundingAccount('other', userId);
-  expect(resolveWalletFundingAccount(legacy, 'other', primary)).toEqual(legacy);
+  expect(resolveWalletFundingAccount(legacy, primary)).toEqual(legacy);
   expect(read).toHaveBeenCalledTimes(1);
   await readPrimaryFundingAccount('other', userId);
   expect(read).toHaveBeenCalledTimes(1);
@@ -104,13 +115,7 @@ it('resolves a server-enabled merchant on first load via one probe', async () =>
     '00000000-0000-4000-8000-000000000000',
     userId
   );
-  expect(
-    resolveWalletFundingAccount(
-      legacy,
-      '00000000-0000-4000-8000-000000000000',
-      primary
-    )
-  ).toEqual({
+  expect(resolveWalletFundingAccount(legacy, primary)).toEqual({
     account_name: 'Verified',
     account_number: '0987654321',
     bank_name: 'Provider Bank',
@@ -161,7 +166,7 @@ it('never shows the previous users account after an account switch', async () =>
   const second = await readPrimaryFundingAccount(merchant, 'user-b');
   expect(read).toHaveBeenLastCalledWith(merchant, 'user-b');
   expect(second).toEqual({ status: 'ready', account: accountB });
-  expect(resolveWalletFundingAccount(legacy, merchant, second)).toEqual({
+  expect(resolveWalletFundingAccount(legacy, second)).toEqual({
     account_name: 'User B',
     account_number: '0222222222',
     bank_name: 'Provider Bank',

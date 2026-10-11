@@ -232,7 +232,6 @@ export async function fetchWalletData(
 
   const fundingAccountData = resolveWalletFundingAccount(
     fundingAccountResult.data,
-    merchantId,
     primaryFunding
   );
 

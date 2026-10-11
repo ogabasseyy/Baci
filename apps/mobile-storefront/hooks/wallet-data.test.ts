@@ -264,6 +264,9 @@ describe('fetchWalletData', () => {
   });
 
   it('combines wallet, funding account, savings balance, and valid transactions', async () => {
+    // Legacy merchant: primary authoritatively absent, so the stored
+    // DVA projects. (An unknown verdict surfaces no account instead.)
+    mockReadPrimary.mockResolvedValue({ status: 'not_ready' });
     const { selectCalls, tableCalls } = setupSupabaseTables({
       customer_wallet_payment_accounts: createResult({
         account_name: 'Ogabassey/Jane Doe',

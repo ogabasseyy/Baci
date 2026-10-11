@@ -62,7 +62,7 @@ test('updates and verifies workers before dispatching the matching release', asy
   assert.deepEqual(await coordinateRelease(setup.operations, coordinationId), { commit, runId: 42 });
   assert.deepEqual(setup.calls, [
     'verifyCheckout', 'readMain', 'listRuns', 'updateWorkers', 'verifyWorkers',
-    'readMain', 'listRuns', 'readMain', 'dispatch', 'findRun', 'listCoordinatedRuns', 'watchRun', 'readJobs', 'verifyLive',
+    'readMain', 'listRuns', 'readMain', 'dispatch', 'findRun', 'listCoordinatedRuns', 'watchRun', 'readJobs', 'verifyLive', 'readMain',
   ]);
 });
 
@@ -139,6 +139,34 @@ test('refuses main advancing during worker preparation', async () => {
   const setup = fixture({ readMain: async () => ++reads === 1 ? commit : 'c'.repeat(40) });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /main changed/);
   assert.ok(!setup.calls.includes('dispatch'));
+});
+
+test('refuses silent success when main advances during the release', async () => {
+  let reads = 0;
+  const setup = fixture({ readMain: async () => ++reads <= 3 ? commit : 'c'.repeat(40) });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /behind tip/);
+  assert.equal(error.indeterminateDispatch, true);
+});
+
+test('an unreadable post-release tip fails closed', async () => {
+  let reads = 0;
+  const setup = fixture({
+    readMain: async () => {
+      reads++;
+      if (reads <= 3) return commit;
+      throw new Error('api flake');
+    },
+  });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /api flake/);
+  assert.equal(error.indeterminateDispatch, true);
 });
 
 test('refuses dispatch when main advances after the baseline', async () => {

@@ -12,9 +12,15 @@ const filters = readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf
 const deployScripts = filters.split(/^deploy_scripts:\s*$/m)[1]?.split(/^\S/m)[0] ?? '';
 const patterns = [...deployScripts.matchAll(/^\s+- '([^']+)'/gm)].map((match) => match[1]);
 
+// paths-filter (dorny) uses minimatch-style semantics: a single '*'
+// does not cross '/', only '**' does. Mirror that so a future
+// wildcard pattern cannot pass here while behaving differently in CI.
 function matches(pattern, path) {
-  const expression = pattern.split('*')
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const expression = pattern
+    .split('**')
+    .map((part) => part.split('*')
+      .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[^/]*'))
     .join('.*');
   return new RegExp(`^${expression}$`).test(path);
 }
@@ -46,4 +52,11 @@ test('touching the backstop workflow or its suite triggers the deployment script
   ]) {
     assert.ok(patterns.some((pattern) => matches(pattern, path)), `${path} must trigger deploy_scripts`);
   }
+});
+
+test('pattern matching mirrors paths-filter glob semantics', () => {
+  assert.ok(matches('.github/scripts/release-remote-validation.mjs', '.github/scripts/release-remote-validation.mjs'));
+  assert.ok(!matches('.github/scripts/*.mjs', '.github/scripts/nested/extra.mjs'));
+  assert.ok(matches('.github/scripts/*.mjs', '.github/scripts/extra.mjs'));
+  assert.ok(matches('vps-workers/**', 'vps-workers/lib/deep/file.sh'));
 });

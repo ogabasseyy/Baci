@@ -200,6 +200,18 @@ export async function coordinateRelease(operations, coordinationId) {
   } catch (error) {
     tagIndeterminate(error);
   }
+  // Re-read main after the multi-hour watch: a push interleaving the
+  // release can land our stale commit last, so alias == commit while
+  // production sits behind tip. Refuse silent success — hold the lock
+  // so the operator reconciles (and re-releases tip) deliberately.
+  // An unreadable tip fails closed for the same reason.
+  try {
+    if (await operations.readMain() !== commit) {
+      tagIndeterminate(new Error('main advanced during release; production serves the release commit behind tip; reconcile and re-release tip'));
+    }
+  } catch (error) {
+    tagIndeterminate(error);
+  }
   return { commit, runId: run.databaseId };
 }
 

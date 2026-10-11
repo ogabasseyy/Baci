@@ -99,6 +99,7 @@ export async function prepareOwnedStaging(outputRoot, runToken) {
 
 export async function runJob({
   deps,
+  encoderLock,
   inputRoot,
   job,
   minFreeBytes,
@@ -124,6 +125,11 @@ export async function runJob({
   const runToken = createRunToken();
   let stagingDir = null;
   try {
+    // A run evicted by a steal-race loser must not claim, stage, or
+    // encode: fail this job fast instead of acting alongside the
+    // successor. The per-attempt check in encodeVariant covers
+    // evictions that land mid-job.
+    await encoderLock?.assertHeld?.();
     await assertMinFreeBytes(outputRoot, minFreeBytes);
     let claim;
     try {
@@ -153,6 +159,9 @@ export async function runJob({
     stagingBudget.charge(snapshot.bytes.length);
     sampleRss();
     const ladder = await encodeRoleLadder({
+      assertEncoderHeld: encoderLock
+        ? () => encoderLock.assertHeld()
+        : undefined,
       deadlineMs,
       expectedSha256: job.expectedSha256,
       role: job.role,

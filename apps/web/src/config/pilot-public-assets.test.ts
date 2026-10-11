@@ -8,8 +8,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { assertPilotPublicAssets } from './pilot-public-assets';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  assertPilotPublicAssets,
+  resolvePilotPublicDir,
+} from './pilot-public-assets';
 
 const roots: string[] = [];
 function root() {
@@ -138,5 +141,29 @@ describe('non-lab public assets gate', () => {
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
       /unsafe pilot public directory/
     );
+  });
+});
+
+describe('resolvePilotPublicDir', () => {
+  const argv1 = process.argv[1];
+  afterEach(() => {
+    process.argv[1] = argv1;
+    vi.unstubAllEnvs();
+  });
+  it('prefers the config-stashed root', () => {
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/app/public');
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
+    expect(resolvePilotPublicDir()).toBe('/app/public');
+  });
+  it('anchors standalone boots to the server script, not cwd', () => {
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
+    process.argv[1] = '/srv/standalone/apps/web/server.js';
+    expect(resolvePilotPublicDir()).toBe('/srv/standalone/apps/web/public');
+  });
+  it('falls back to cwd otherwise', () => {
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
+    expect(resolvePilotPublicDir()).toBe(join(process.cwd(), 'public'));
   });
 });

@@ -459,3 +459,30 @@ test('rejects malformed mount boxes instead of misrendering the clip', async () 
     );
   }
 });
+
+test('the sheet refuses to embed past the aggregate byte budget', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const slots = { 'header-logo': { cssWidth: 40 } };
+  // One byte of budget: the first record alone exceeds it, so the sheet
+  // fails fast before embedding anything — never an OOM mid-render and
+  // never a partial sheet a reviewer might trust as complete.
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath,
+        limits: { maxEmbeddedBytes: 1 },
+        outputRoot,
+        slots,
+      }),
+    /exceeds the 1-byte embed budget/
+  );
+  // The default ceiling still renders the legitimate single-asset sheet.
+  const html = await buildQualitySheet({
+    inputRoot,
+    inventoryPath,
+    outputRoot,
+    slots,
+  });
+  assert.match(html, /tiny-a/);
+});

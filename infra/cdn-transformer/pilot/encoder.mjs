@@ -36,6 +36,7 @@ export async function verifyVariant({
 }
 
 export async function encodeVariant({
+  assertEncoderHeld,
   budgetBytes,
   deadlineMs,
   deps,
@@ -49,6 +50,10 @@ export async function encodeVariant({
   stagingDir,
   width,
 }) {
+  // Displaced runs must not encode: the holder revalidates before every
+  // variant attempt, so a steal-race eviction aborts loudly within one
+  // encode instead of running concurrently with the successor.
+  await assertEncoderHeld?.();
   const output = join(stagingDir, `${fileStem}-w${width}-q${quality}.${format}`);
   // Reserve against the tier ceiling BEFORE the worker writes: charging
   // after the fact lets a large attempt exceed the staging cap on disk
@@ -125,6 +130,7 @@ function tierBudget(budgets, role, tierWidth, format) {
 const CONTENT_TYPE_FOR_FORMAT = { avif: 'image/avif', webp: 'image/webp' };
 
 export async function encodeRoleLadder({
+  assertEncoderHeld,
   budgets,
   deadlineMs,
   deps,
@@ -156,6 +162,7 @@ export async function encodeRoleLadder({
       let floorBytes = 0;
       for (const quality of QUALITY_LADDER) {
         const attempt = await encodeVariant({
+          assertEncoderHeld,
           budgetBytes: ceiling,
           deadlineMs,
           deps,

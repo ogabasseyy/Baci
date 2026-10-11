@@ -395,3 +395,34 @@ test('encodeVariant fails the job when an over-budget output cannot be removed',
   assert.equal(over.status, 'over-budget');
   assert.ok(over.bytes > 100);
 });
+
+test('encodeVariant revalidates the encoder lock before encoding', async () => {
+  const dir = await staging();
+  const input = fixture('photo-1254x1254.jpg');
+  const evicted = Object.assign(new Error('changed owner mid-run'), {
+    code: 'encoder-lock-evicted',
+  });
+  const expectedSha256 = await shaOf(input);
+  await assert.rejects(
+    () =>
+      encodeVariant({
+        assertEncoderHeld: async () => {
+          throw evicted;
+        },
+        budgetBytes: 500_000,
+        deadlineMs: Date.now() + 60_000,
+        expectedSha256,
+        fileStem: 'photo',
+        format: 'webp',
+        quality: 70,
+        snapshotPath: input,
+        stagingBudget: createStagingBudget(),
+        stagingDir: dir,
+        width: 384,
+      }),
+    /changed owner mid-run/
+  );
+  // Refused before any encode: no output staged.
+  const { readdir } = await import('node:fs/promises');
+  assert.deepEqual(await readdir(dir), []);
+});

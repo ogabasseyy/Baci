@@ -4,8 +4,12 @@ import { onRequestError, register } from './instrumentation';
 const registerOTelMock = vi.hoisted(() => vi.fn());
 const initializeLabRuntimeMock = vi.hoisted(() => vi.fn());
 const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
+const resolvePilotPublicDirMock = vi.hoisted(() =>
+  vi.fn(() => '/resolved/public')
+);
 vi.mock('@/config/pilot-public-assets', () => ({
   assertPilotPublicAssets: assertPilotPublicAssetsMock,
+  resolvePilotPublicDir: resolvePilotPublicDirMock,
 }));
 vi.mock('@/app/pilot-lab/lab-route', () => ({
   initializeLabRuntime: initializeLabRuntimeMock,
@@ -63,6 +67,18 @@ describe('instrumentation register', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     await register();
     expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
+  });
+  it('boots the pilot gate against the resolved public dir, never bare cwd', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    await register();
+    // The boot gate must inspect the same tree the build gate did: the
+    // shared resolver (config-stashed, standalone-anchored, or cwd),
+    // not a cwd-joined lookalike that diverges under `next start <dir>`
+    // or a standalone server run from elsewhere.
+    expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
+    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
+      '/resolved/public'
+    );
   });
   it('registers Vercel OpenTelemetry in the Node.js runtime', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');

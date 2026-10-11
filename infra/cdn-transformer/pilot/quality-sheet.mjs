@@ -1,7 +1,10 @@
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseCliArgs } from './cli-args.mjs';
-import { MAX_INVENTORY_BYTES } from './constants.mjs';
+import {
+  MAX_INVENTORY_BYTES,
+  MAX_QUALITY_SHEET_EMBEDDED_BYTES,
+} from './constants.mjs';
 import { readUpToBytes } from './disk-guards.mjs';
 import {
   buildEncoderIdentity,
@@ -84,9 +87,12 @@ async function findGenerationFor(outputRoot, record) {
 export async function buildQualitySheet({
   inputRoot,
   inventoryPath,
+  limits = {},
   outputRoot,
   slots,
 }) {
+  const maxEmbeddedBytes =
+    limits.maxEmbeddedBytes ?? MAX_QUALITY_SHEET_EMBEDDED_BYTES;
   // Bounded before parsing: a corrupt or swapped-in giant file must
   // reject on size instead of exhausting the inspection process ahead
   // of the 20-job cap below.
@@ -125,6 +131,13 @@ export async function buildQualitySheet({
   }
   const sections = [];
   let overSourceTiers = 0;
+  // Aggregate embed budget: per-file bounds still admit gigabytes across
+  // a full inventory, base64-inflated into one HTML string. The running
+  // total trips BEFORE the record that would cross the ceiling is
+  // embedded, so the failure is fail-fast, not an OOM mid-render.
+  // Partial sheets never render: a truncated sheet a reviewer might
+  // trust as complete is worse than no sheet.
+  let embeddedBytes = 0;
   for (const record of records) {
     const geometry = slots?.[record.slot];
     if (
@@ -154,6 +167,16 @@ export async function buildQualitySheet({
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
+    let recordBytes = snapshot.bytes.length;
+    for (const file of files.values()) {
+      recordBytes += file.length;
+    }
+    embeddedBytes += recordBytes;
+    if (embeddedBytes > maxEmbeddedBytes) {
+      throw new PilotSheetError(
+        `quality sheet exceeds the ${maxEmbeddedBytes}-byte embed budget at asset "${record.assetId}"; split the inventory instead of rendering a partial sheet`
+      );
+    }
     const originalUri = `data:${originalContentType(record)};base64,${snapshot.bytes.toString('base64')}`;
     const seenTiers = new Map();
     for (const tier of manifest.tiers) {

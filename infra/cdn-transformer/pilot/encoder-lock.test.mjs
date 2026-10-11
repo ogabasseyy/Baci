@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, symlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireEncoderLock } from './encoder-lock.mjs';
@@ -118,4 +118,25 @@ test('crashed claim temps never block acquisition', async () => {
   await lock.release();
   // The sweep reaps the stale temp best-effort.
   await assert.rejects(readFile(orphan), /ENOENT/);
+});
+
+test('assertHeld throws after a steal-race loser displaces the claim', async () => {
+  const outputRoot = await setupRoot();
+  const holder = await acquireEncoderLock(outputRoot);
+  await holder.assertHeld();
+  // A steal-race loser renames the live claim away (believing it stale)
+  // and a newcomer publishes a replacement on the freed path: the
+  // displaced holder must detect that before its next encode instead of
+  // encoding concurrently with the successor.
+  const path = lockPath(outputRoot);
+  await rename(path, `${path}.stolen`);
+  const successor = await acquireEncoderLock(outputRoot);
+  await assert.rejects(holder.assertHeld(), /changed owner mid-run/);
+  await holder.release();
+  // The displaced release must not unlink the successor's claim.
+  await successor.assertHeld();
+  await assert.rejects(acquireEncoderLock(outputRoot), /encoder lock/);
+  await successor.release();
+  // After the holder's own release the claim is gone: still held is false.
+  await assert.rejects(successor.assertHeld(), /changed owner mid-run/);
 });

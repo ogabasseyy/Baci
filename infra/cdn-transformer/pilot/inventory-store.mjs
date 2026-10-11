@@ -174,8 +174,10 @@ export async function acquireInventoryLock(lockDir, hooks = {}) {
       // other's inventory updates — restore it and retry. Residual: a
       // third contender can mkdir into the microsecond rename-restore
       // window (no flock available), in which case the restore fails and
-      // the evicted holder's end-of-section ownership check throws
-      // loudly instead of publishing silently alongside the newcomer.
+      // the evicted holder's pre-publish ownership check refuses to
+      // rename — fail-safe, with the rival's publish left intact. The
+      // end-of-section check stays as the backstop for an eviction in
+      // the check-then-rename window itself.
       const moved = await readOwnerText(claimed);
       if (moved !== observed) {
         try {
@@ -197,13 +199,14 @@ export async function acquireInventoryLock(lockDir, hooks = {}) {
   }
 }
 
-// End-of-section ownership check: a steal-race loser can rename this
-// section's live lock away mid-section (see the restore race above), in
-// which case the section ran concurrently with another holder and any
-// record it published may have interleaved — fail loudly so the
-// operator reconciles instead of trusting a silently torn inventory.
-// Live holders are never ESRCH-stolen, so a mismatch here is always a
-// real eviction, never a false positive.
+// Lock ownership check: a steal-race loser can rename this section's
+// live lock away mid-section (see the restore race above), in which
+// case the section ran concurrently with another holder. Publishing
+// sections call this BEFORE the rename (fail-safe refusal); the
+// end-of-section call in withInventoryLock stays as the backstop that
+// fails loudly so the operator reconciles instead of trusting a
+// silently torn inventory. Live holders are never ESRCH-stolen, so a
+// mismatch here is always a real eviction, never a false positive.
 export async function assertInventoryLockHeld(lockDir, token) {
   const owner = await readOwnerText(lockDir);
   let liveToken = null;

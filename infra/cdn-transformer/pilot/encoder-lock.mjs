@@ -146,6 +146,31 @@ export async function acquireEncoderLock(outputRoot) {
     await unlink(temp).catch(() => undefined);
     let released = false;
     return {
+      // Mid-run ownership check: a steal-race loser can rename this
+      // run's live claim away and admit a second encoder on the same
+      // root (see stealWhenStale). The run calls this before encoding —
+      // at job start and before every variant attempt — so a displaced
+      // run aborts loudly within one encode instead of encoding
+      // concurrently and contaminating the resource evidence. Residual:
+      // the check-then-encode window itself is unchecked, bounding any
+      // silent overlap to a single variant attempt.
+      async assertHeld() {
+        const text = await readFile(path, 'utf8').catch(() => null);
+        let holder = null;
+        if (text !== null) {
+          try {
+            holder = JSON.parse(text);
+          } catch {
+            holder = null;
+          }
+        }
+        if (holder?.token !== token) {
+          throw new PilotGenerateError(
+            'encoder-lock-evicted',
+            `encoder lock ${path} changed owner mid-run; another encoder holds this output root — aborting instead of encoding concurrently`
+          );
+        }
+      },
       async release() {
         if (released) {
           return;

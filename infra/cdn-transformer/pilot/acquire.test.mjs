@@ -795,3 +795,45 @@ test('a losing append never deletes a published snapshot', async () => {
   // them, so the published record still resolves.
   assert.deepEqual(await readFile(target), PNG_BYTES);
 });
+
+test('a fresh snapshot is fsync-durable before the call returns', async () => {
+  const { open } = await import('node:fs/promises');
+  const inputRoot = await makeInputRoot();
+  // Crash-durability is only observable across a crash, so the regression
+  // pins the mechanism instead: the snapshot write path must issue a real
+  // fsync on the same descriptor it wrote, before returning. The spy
+  // counts FileHandle.sync calls process-wide; this file's tests run
+  // sequentially and the record-only path below performs no other sync.
+  const scratch = await open(join(inputRoot, 'probe.tmp'), 'w');
+  const fileHandleProto = Object.getPrototypeOf(scratch);
+  await scratch.close();
+  const realSync = fileHandleProto.sync;
+  let syncs = 0;
+  fileHandleProto.sync = async function (...args) {
+    syncs += 1;
+    return realSync.apply(this, args);
+  };
+  try {
+    await withServer(
+      (_request, response) => {
+        response.writeHead(200, { 'content-type': 'image/png' });
+        response.end(PNG_BYTES);
+      },
+      async (url) => {
+        await acquireSnapshot({
+          allowPrivateHosts: true,
+          assetId: 'logo-1',
+          inputRoot,
+          merchantId: MERCHANT,
+          probe: stubProbe,
+          role: 'logo',
+          slot: 'header-logo',
+          url,
+        });
+      }
+    );
+  } finally {
+    fileHandleProto.sync = realSync;
+  }
+  assert.ok(syncs >= 1, `expected at least one fsync, saw ${syncs}`);
+});

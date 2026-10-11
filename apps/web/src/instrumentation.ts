@@ -53,11 +53,13 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     // Standalone starts can reuse serialized Next config: recheck the actual
     // runtime public tree, including lab-built artifacts started with flag off.
-    const [{ assertPilotPublicAssets }, { join }] = await Promise.all([
-      import('@/config/pilot-public-assets'),
-      import('node:path'),
-    ]);
-    assertPilotPublicAssets(join(process.cwd(), 'public'));
+    // The root resolves through the shared helper (config-stashed,
+    // standalone-anchored, or cwd) so boot inspects the same tree the
+    // build gate did — never a cwd-dependent lookalike.
+    const { assertPilotPublicAssets, resolvePilotPublicDir } = await import(
+      '@/config/pilot-public-assets'
+    );
+    assertPilotPublicAssets(resolvePilotPublicDir());
     if (process.env.BACI_IMAGE_PILOT_LAB === '1') {
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'

@@ -75,7 +75,15 @@ export async function runPilotGeneration({
   const results = [];
   try {
     for (const job of jobs) {
-      results.push(await runJob({ inputRoot, job, minFreeBytes: floor, outputRoot }));
+      results.push(
+        await runJob({
+          encoderLock,
+          inputRoot,
+          job,
+          minFreeBytes: floor,
+          outputRoot,
+        })
+      );
     }
   } finally {
     await encoderLock.release();

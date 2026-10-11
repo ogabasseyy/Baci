@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 // Only these committed synthetic fixtures may exist in a non-lab public
 // tree. Staged merchant originals and generations must never enter one.
@@ -104,6 +104,30 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
       );
     }
   }
+}
+
+// Runtime public-dir resolution, shared by the build gate (next.config.ts)
+// and the boot gate (instrumentation.ts): both must inspect the SAME
+// tree. The build gate anchors to the config file; the boot gate cannot
+// (it has no config-relative anchor at runtime), so the config stashes
+// its resolved root in the environment it shares with the boot process.
+// Standalone boots may reuse serialized config without evaluating
+// next.config.ts: there the server script's own directory is Next's app
+// root, detected via Next's standalone marker. Plain cwd is the last
+// resort (today's behavior): right whenever the server starts in its app
+// directory. Residual: a custom server with an inline conf object and a
+// cwd outside the app dir defeats every anchor — that boot keeps the
+// legacy cwd check.
+export function resolvePilotPublicDir(): string {
+  const stashed = process.env.BACI_PILOT_PUBLIC_DIR;
+  if (stashed) {
+    return stashed;
+  }
+  if (process.env.__NEXT_PRIVATE_STANDALONE_CONFIG && process.argv[1]) {
+    // resolve: argv[1] may be invoked relative; the gate needs absolute.
+    return join(dirname(resolve(process.argv[1])), 'public');
+  }
+  return join(process.cwd(), 'public');
 }
 
 export function assertPilotPublicAssets(

@@ -444,3 +444,66 @@ test('assertInventoryLockHeld passes while held and throws after release', async
     /changed owner during the critical section/
   );
 });
+
+test('appendInventoryRecord refuses to publish when evicted before the rename', async () => {
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
+  const { PilotInventoryEvictedError } = await import('./inventory-store.mjs');
+  const { mkdir, readdir, rename, rm } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-prepublish-'));
+  const path = join(dir, 'inventory.json');
+  const sha = createHash('sha256').update('x').digest('hex');
+  const record = (assetId, slot) => ({
+    assetId,
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot,
+    sourcePath: `snapshots/${assetId}.png`,
+    url: `https://cdn.example.com/media/${assetId}.png`,
+  });
+  await writeFile(path, JSON.stringify([record('logo-a', 'header-logo')]));
+  const lockDir = `${path}.lock`;
+  await assert.rejects(
+    () =>
+      appendInventoryRecord(path, record('card-b', 'product-card'), {
+        beforeAppend: async () => {
+          // A steal-race loser renames the victim's live lock away and a
+          // rival publishes on the same base, then releases: the victim
+          // must refuse its rename instead of clobbering the rival.
+          await rename(lockDir, `${lockDir}.stolen`);
+          await rm(`${lockDir}.stolen`, { force: true, recursive: true });
+          await mkdir(lockDir);
+          await writeFile(
+            join(lockDir, 'owner.json'),
+            JSON.stringify({
+              pid: process.pid,
+              startedAt: new Date().toISOString(),
+              token: 'rival',
+            })
+          );
+          await writeFile(
+            path,
+            JSON.stringify([
+              record('logo-a', 'header-logo'),
+              record('hero-c', 'mobile-hero-slide-0'),
+            ])
+          );
+          await rm(lockDir, { force: true, recursive: true });
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof PilotInventoryEvictedError);
+      assert.match(error.message, /changed owner during the critical section/);
+      return true;
+    }
+  );
+  // The rival's publish stands: no clobber, no partial victim write.
+  const stored = JSON.parse(await readFile(path, 'utf8'));
+  assert.deepEqual(
+    stored.map((entry) => entry.assetId),
+    ['logo-a', 'hero-c']
+  );
+  // The refused tmp is cleaned, not littered.
+  assert.deepEqual(await readdir(dir), ['inventory.json']);
+});

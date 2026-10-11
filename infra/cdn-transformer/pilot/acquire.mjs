@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { stat, unlink, writeFile } from 'node:fs/promises';
+import { open, stat, unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import {
@@ -124,7 +124,25 @@ export async function acquireSnapshot(options) {
   }
   let wroteSnapshot = false;
   if (!existing) {
-    await writeFile(target, bytes, { flag: 'wx' });
+    // Durable before publish: the bytes are written and fsync'd through
+    // one open descriptor before the inventory record that references
+    // them can commit — a crash between an unfsync'd write and the
+    // publish would otherwise leave a record pointing at a torn or
+    // missing snapshot. EEXIST (a rival won the same-asset race)
+    // propagates untouched, exactly as the writeFile form did; only a
+    // file this call created is unlinked when the write or sync fails.
+    const handle = await open(target, 'wx');
+    let synced = false;
+    try {
+      await handle.writeFile(bytes);
+      await handle.sync();
+      synced = true;
+    } finally {
+      await handle.close();
+      if (!synced) {
+        await unlink(target).catch(() => undefined);
+      }
+    }
     wroteSnapshot = true;
   }
   // Overlap guard: two acquisitions for the same asset can interleave so

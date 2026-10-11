@@ -1,7 +1,7 @@
 // Serialized inventory appender for the merchant image pilot: the lock
 // primitives live in inventory-store.mjs; this module runs record reads,
 // validation, and publication through them.
-import { open, rename } from 'node:fs/promises';
+import { open, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { MAX_INVENTORY_BYTES } from './constants.mjs';
 import { readUpToBytes } from './disk-guards.mjs';
@@ -25,7 +25,13 @@ import {
 export async function withInventoryLock(lockDir, fn, hooks = {}) {
   const token = await acquireInventoryLock(lockDir, hooks);
   try {
-    const result = await fn();
+    // The section receives an ownership revalidator: end-of-section
+    // detection is fail-loud, but a section that publishes must check
+    // BEFORE the rename, while refusing is still fail-safe. Callers
+    // that predate this argument ignore it.
+    const result = await fn({
+      assertHeld: () => assertInventoryLockHeld(lockDir, token),
+    });
     // A section whose lock was renamed away mid-section ran
     // concurrently with another holder: surface that loudly before
     // releasing, while the section's outcome is still actionable.
@@ -65,7 +71,7 @@ export function appendInventoryRecord(inventoryPath, record, options = {}) {
   // Serialized: two concurrent appends must never read the same array and
   // overwrite each other, silently dropping an asset.
   const lockDir = `${inventoryPath}.lock`;
-  return withInventoryLock(lockDir, async () => {
+  return withInventoryLock(lockDir, async ({ assertHeld }) => {
     let records;
     try {
       records = await readInventoryRecords(inventoryPath);
@@ -114,6 +120,19 @@ export function appendInventoryRecord(inventoryPath, record, options = {}) {
       await handle.sync();
     } finally {
       await handle.close();
+    }
+    // Pre-publish ownership: a steal-race loser may have renamed this
+    // section's live lock away after the read, and a rival may already
+    // have published on top of the same base. Renaming now would
+    // silently clobber the rival's update — refuse loudly instead,
+    // leaving the rival's publish intact. Residual: an eviction in the
+    // check-then-rename window still publishes, but the end-of-section
+    // check then throws loudly and the operator reconciles.
+    try {
+      await assertHeld();
+    } catch (error) {
+      await unlink(tmp).catch(() => undefined);
+      throw error;
     }
     await rename(tmp, inventoryPath);
     return records.length;

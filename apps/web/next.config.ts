@@ -24,7 +24,13 @@ import {
 } from './src/lib/posthog/config';
 
 // Public assets bypass route guards; refuse non-lab builds with staged data.
-assertPilotPublicAssets(path.join(__dirname, 'public'));
+const pilotPublicDir = path.join(__dirname, 'public');
+assertPilotPublicAssets(pilotPublicDir);
+// The boot gate (instrumentation.ts) must inspect this same tree but has
+// no config-relative anchor at runtime: stash the config-anchored root in
+// this process's environment, where the boot gate reads it. Unconditional
+// overwrite — the config knows the truth, a stale preset never does.
+process.env.BACI_PILOT_PUBLIC_DIR = pilotPublicDir;
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.

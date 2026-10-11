@@ -71,7 +71,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261008090000_search_processor_filter_bounds.sql',
+      'supabase/migrations/20261008090001_search_processor_filter_bounds.sql',
     sha256: 'c30fbf34615df3d224b68d5451dd214fe62bfa98d34265dd9f4a65c0e2caf864',
   },
   {

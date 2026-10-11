@@ -22,9 +22,15 @@ jest.mock('@/hooks/use-wallet', () => ({
 }));
 
 const mockAuthState: {
+  customer: { id: string } | null;
+  merchantId: string | null;
   session: { access_token: string } | null;
+  user: { id: string } | null;
 } = {
+  customer: { id: 'customer-a' },
+  merchantId: 'merchant-1',
   session: { access_token: 'token-123' },
+  user: { id: 'user-a' },
 };
 
 jest.mock('@/stores/auth-store', () => ({
@@ -42,6 +48,9 @@ describe('useUtilityPayment', () => {
     jest.clearAllMocks();
     mockNextUuid = 0;
     mockAuthState.session = { access_token: 'token-123' };
+    mockAuthState.customer = { id: 'customer-a' };
+    mockAuthState.merchantId = 'merchant-1';
+    mockAuthState.user = { id: 'user-a' };
     mockUseMerchantPaymentSettings.mockReturnValue({
       data: { wallet_paystack_dva_enabled: true },
     });
@@ -162,5 +171,30 @@ describe('useUtilityPayment', () => {
     const airtime = result.current.getWalletIdempotencyKey('airtime-0801');
     const data = result.current.getWalletIdempotencyKey('data-0801');
     expect(airtime).not.toBe(data);
+  });
+
+  it('does not recall another owner’s pending key for the same purchase', () => {
+    // Sign-out regression: customer A’s remembered key must be
+    // unreachable once customer B signs in, or the route rejects B’s
+    // first purchase as belonging to another customer.
+    const firstOwner = renderHook(() => useUtilityPayment());
+    const keyA = firstOwner.result.current.getWalletIdempotencyKey(
+      'owner-scoped-descriptor'
+    );
+    firstOwner.unmount();
+
+    mockAuthState.customer = { id: 'customer-b' };
+    mockAuthState.user = { id: 'user-b' };
+    const secondOwner = renderHook(() => useUtilityPayment());
+    const keyB = secondOwner.result.current.getWalletIdempotencyKey(
+      'owner-scoped-descriptor'
+    );
+
+    expect(keyB).not.toBe(keyA);
+    expect(
+      secondOwner.result.current.getWalletIdempotencyKey(
+        'owner-scoped-descriptor'
+      )
+    ).toBe(keyB);
   });
 });

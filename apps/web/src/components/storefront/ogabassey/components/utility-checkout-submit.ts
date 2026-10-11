@@ -6,6 +6,7 @@ import {
   type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
 } from './utility-checkout';
+import { buildVtuWalletPayloadSignature } from './utility-pending-idempotency';
 
 export interface UtilityCheckoutRequest {
   payload: UtilityCheckoutPayload;
@@ -57,7 +58,7 @@ export const submitUtilityCheckout = async ({
       method: 'POST',
       headers: {
         'Idempotency-Key': getWalletIdempotencyKey(
-          JSON.stringify(walletPayload)
+          buildVtuWalletPayloadSignature(walletPayload)
         ),
       },
       body: JSON.stringify(walletPayload),

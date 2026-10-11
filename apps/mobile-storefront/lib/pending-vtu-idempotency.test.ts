@@ -6,6 +6,7 @@ import {
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
+  setPendingVtuOwnerScope,
 } from './pending-vtu-idempotency';
 
 describe('pending-vtu-idempotency', () => {
@@ -119,5 +120,41 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(descriptors[descriptors.length - 1])).toBe(
       `key-${descriptors[descriptors.length - 1]}`
     );
+  });
+
+  it('isolates remembered keys by owner scope', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 7,
+      phoneNumber: 'scope-me',
+    });
+    setPendingVtuOwnerScope('customer-a', 'merchant-1');
+    rememberPendingVtuPurchase(descriptor, 'key-a');
+
+    // A second customer with the same purchase must not recall it…
+    setPendingVtuOwnerScope('customer-b', 'merchant-1');
+    expect(recallPendingVtuKey(descriptor)).toBeNull();
+    // …and forgetting under the wrong scope must not drop it.
+    forgetPendingVtuPurchase(descriptor);
+    setPendingVtuOwnerScope('customer-a', 'merchant-1');
+    expect(recallPendingVtuKey(descriptor)).toBe('key-a');
+
+    // Hygiene: other tests run under the default scope.
+    setPendingVtuOwnerScope(undefined, undefined);
+  });
+
+  it('isolates remembered keys by merchant scope', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'data',
+      amount: 8,
+      phoneNumber: 'scope-merchant',
+    });
+    setPendingVtuOwnerScope('customer-a', 'merchant-1');
+    rememberPendingVtuPurchase(descriptor, 'key-m1');
+
+    setPendingVtuOwnerScope('customer-a', 'merchant-2');
+    expect(recallPendingVtuKey(descriptor)).toBeNull();
+
+    setPendingVtuOwnerScope(undefined, undefined);
   });
 });

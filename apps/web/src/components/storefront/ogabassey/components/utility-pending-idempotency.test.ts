@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { buildVtuWalletPayloadSignature } from './utility-pending-idempotency';
 import {
   clearPendingVtuKeys,
   forgetPendingVtuPurchase,
@@ -52,5 +53,63 @@ describe('utility-pending-idempotency', () => {
     rememberPendingVtuPurchase('{"amount":100}', key);
 
     expect(recallPendingVtuKey('{"amount":100}')).toBe(key);
+  });
+
+  it('signs identical intents identically regardless of key order', () => {
+    const a = buildVtuWalletPayloadSignature({
+      type: 'airtime',
+      amount: 500,
+      phoneNumber: '0801',
+      walletAmount: 500,
+    });
+    const b = buildVtuWalletPayloadSignature({
+      walletAmount: 500,
+      phoneNumber: '0801',
+      amount: 500,
+      type: 'airtime',
+    });
+
+    expect(a).toBe(b);
+  });
+
+  it('ignores cosmetic fields so hydration races still replay', () => {
+    const base = {
+      amount: 500,
+      type: 'airtime',
+      phoneNumber: '0801',
+      walletAmount: 500,
+    };
+    // customerName normalizes + phone arrives between a timed-out submit
+    // and the retry: the retry MUST reuse the pending key.
+    const before = buildVtuWalletPayloadSignature({
+      ...base,
+      customerName: 'Customer',
+      merchantSlug: 'ogabassey',
+    });
+    const after = buildVtuWalletPayloadSignature({
+      ...base,
+      customerName: 'Test Customer',
+      customerPhone: '0801',
+      customerAddress: '1 Test St',
+      merchantSlug: 'ogabassey',
+    });
+
+    expect(after).toBe(before);
+  });
+
+  it('distinguishes intents that differ in any fingerprint field', () => {
+    const base = {
+      amount: 500,
+      type: 'airtime',
+      phoneNumber: '0801',
+      walletAmount: 500,
+    };
+
+    expect(
+      buildVtuWalletPayloadSignature({ ...base, amount: 1000 })
+    ).not.toBe(buildVtuWalletPayloadSignature(base));
+    expect(
+      buildVtuWalletPayloadSignature({ ...base, phoneNumber: '0802' })
+    ).not.toBe(buildVtuWalletPayloadSignature(base));
   });
 });

@@ -59,6 +59,37 @@ describe('submitUtilityCheckout', () => {
     });
   });
 
+  it('derives the retry signature from intent fields, not cosmetic ones', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({ amount: 100, reference: 'REF1', status: 'successful' })
+    );
+    const seenSignatures: string[] = [];
+
+    await submitUtilityCheckout({
+      ...baseRequest,
+      customerName: 'Customer',
+      customerPhone: undefined,
+      getWalletIdempotencyKey: (signature: string) => {
+        seenSignatures.push(signature);
+        return 'idem-key';
+      },
+    });
+    await submitUtilityCheckout({
+      ...baseRequest,
+      customerName: 'Test Customer',
+      customerPhone: '08012345678',
+      getWalletIdempotencyKey: (signature: string) => {
+        seenSignatures.push(signature);
+        return 'idem-key';
+      },
+    });
+
+    expect(seenSignatures).toHaveLength(2);
+    // Same utility intent despite the hydration delta: same key slot.
+    expect(seenSignatures[1]).toBe(seenSignatures[0]);
+    expect(seenSignatures[0]).not.toContain('Test Customer');
+  });
+
   it('reports a processing wallet purchase without failing', async () => {
     mockFetchWithCsrf.mockResolvedValue(
       jsonResponse({ amount: 100, reference: 'REF1', status: 'processing' })

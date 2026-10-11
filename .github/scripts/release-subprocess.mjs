@@ -25,6 +25,7 @@ function run(binary, args, cwd, capture, timeoutMs) {
     const signal = result.signal ? ` signal ${result.signal}` : '';
     const error = new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${signal}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
     error.status = result.status;
+    error.signal = result.signal;
     // A timeout means unknown remote state: the API call may have
     // landed. Always hold the lock for reconcile-before-removal,
     // even pre-dispatch (where dispatch provably never ran, so the
@@ -48,7 +49,10 @@ export function runWorkerDeploy(invoke) {
   try {
     return invoke();
   } catch (error) {
-    if (error && typeof error === 'object' && error.status === WORKER_UNRECONCILED_EXIT) {
+    // A signal death carries no position: the child may have died
+    // mid-flip, so hold even though a pre-flip kill is also caught
+    // (rare, and the operator confirms clean state before removing).
+    if (error && typeof error === 'object' && (error.status === WORKER_UNRECONCILED_EXIT || error.signal != null)) {
       error.indeterminateDispatch = true;
     }
     throw error;

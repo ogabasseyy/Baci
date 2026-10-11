@@ -241,4 +241,10 @@ test('a rollback-failed worker deploy holds the lock instead of releasing it', a
     () => assert.fail('coordinator must throw'),
     error => assert.equal(error.indeterminateDispatch, true),
   );
+  const signalled = Object.assign(new Error('bash vps-workers/deploy.sh failed with status null signal SIGTERM; inspect preceding diagnostics'), { status: null, signal: 'SIGTERM' });
+  const killed = fixture({ updateWorkers: () => runWorkerDeploy(() => { throw signalled; }) });
+  await coordinateRelease(killed.operations, coordinationId).then(
+    () => assert.fail('coordinator must throw'),
+    error => assert.equal(error.indeterminateDispatch, true),
+  );
 });

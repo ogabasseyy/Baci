@@ -15,8 +15,12 @@ name: Ops Promote Record
 # branch holds an invalid or non-fast-forward record — reconcile the
 # branch, do not push more on top of it. Intended validation cadence
 # is the schedule interval; GitHub can delay or drop scheduled runs,
-# so the interval does not bound detection delay. A cache miss (first
-# run or eviction)
+# so the interval does not bound detection delay. Polling observes
+# states, not events: a promote plus a force-push rewrite inside one
+# interval collapses to the observed tip, so an erased record is
+# undetectable here. Keep a non_fast_forward ruleset on this branch
+# so rewrites are refused server-side. A cache miss (first run or
+# eviction)
 # fails closed WITHOUT re-seeding: silently re-seeding would launder
 # a rewritten history as the new fast-forward base. Recover by
 # verifying the branch history out-of-band, then running a manual

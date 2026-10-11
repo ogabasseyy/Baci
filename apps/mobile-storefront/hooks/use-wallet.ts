@@ -119,6 +119,7 @@ export function useWallet(options: UseWalletOptions = {}) {
       if (isMounted) {
         queryClient.invalidateQueries({
           queryKey: activeWalletQueryKey,
+          exact: false,
         });
       }
     };
@@ -265,6 +266,7 @@ export function useCreateWalletFundingAccount() {
           ownerId: walletOwnerId,
           userId: user?.id ?? undefined,
         }),
+        exact: false,
       });
     },
   });

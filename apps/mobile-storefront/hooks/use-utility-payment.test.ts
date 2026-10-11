@@ -150,6 +150,7 @@ describe('useUtilityPayment', () => {
 
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
       queryKey: walletKeys.all,
+      exact: false,
     });
   });
 
@@ -229,10 +230,9 @@ describe('useUtilityPayment', () => {
 
     mockAuthState.merchantId = 'merchant-1';
     const afterHydration = renderHook(() => useUtilityPayment());
-    const scopedAfter =
-      afterHydration.result.current.scopePendingVtuDescriptor(
-        'merchant-hydration-key'
-      );
+    const scopedAfter = afterHydration.result.current.scopePendingVtuDescriptor(
+      'merchant-hydration-key'
+    );
     expect(scopedAfter).toBe(scopedBefore);
     expect(
       afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)

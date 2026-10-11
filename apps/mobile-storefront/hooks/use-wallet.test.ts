@@ -900,6 +900,7 @@ describe('useWallet', () => {
         ownerId: 'customer-1',
         userId: 'user-1',
       }),
+      exact: false,
     });
 
     unmount();
@@ -1645,6 +1646,7 @@ describe('useCreateWalletFundingAccount', () => {
         ownerId: 'customer-1',
         userId: 'user-1',
       }),
+      exact: false,
     });
 
     unmount();

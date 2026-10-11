@@ -99,7 +99,10 @@ export function useUtilityPayment() {
      * window would serve the cached pre-debit balance.
      */
     invalidateWallets: () => {
-      void queryClient.invalidateQueries({ queryKey: walletKeys.all });
+      void queryClient.invalidateQueries({
+        queryKey: walletKeys.all,
+        exact: false,
+      });
     },
     refetchWallet: () => {
       void wallet.refetch();

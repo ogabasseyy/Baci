@@ -459,6 +459,7 @@ describe('UtilityPurchaseScreen', () => {
           merchantId: TEST_MERCHANT_ID,
           ownerId: 'customer-1',
         }),
+        exact: false,
       });
     });
   });
@@ -482,6 +483,7 @@ describe('UtilityPurchaseScreen', () => {
           merchantId: TEST_MERCHANT_ID,
           ownerId: 'customer-1',
         }),
+        exact: false,
       });
     });
   });
@@ -505,6 +507,7 @@ describe('UtilityPurchaseScreen', () => {
           merchantId: TEST_MERCHANT_ID,
           ownerId: 'user-9',
         }),
+        exact: false,
       });
     });
   });

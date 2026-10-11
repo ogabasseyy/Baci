@@ -160,16 +160,17 @@ export default function UtilityPurchaseScreen() {
       return;
     }
 
-    // Deliberately omit userId: invalidateQueries defaults to prefix
-    // matching, so this {merchantId, ownerId} prefix clears stored keys both
-    // with and without the optional userId segment (sessions with a customer
-    // row but no auth user store the shorter key). Passing userId here would
-    // miss those sessions and leave stale balances cached.
+    // Deliberately omit userId: explicit exact:false prefix matching, so
+    // this {merchantId, ownerId} prefix clears stored keys both with and
+    // without the optional userId segment (sessions with a customer row but
+    // no auth user store the shorter key). Passing userId here would miss
+    // those sessions and leave stale balances cached.
     void queryClient.invalidateQueries({
       queryKey: walletKeys.data({
         merchantId: activeMerchantId,
         ownerId: walletOwnerId,
       }),
+      exact: false,
     });
   }, [
     activeMerchantId,

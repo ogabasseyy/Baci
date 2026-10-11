@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { PILOT_MAX_MANIFEST_BYTES } from '@/schemas/merchant-image-variant-pilot-constants';
 import { labGenerationIdFor } from './lab-generation-identity';
 import { buildLabIndex, lookupPilotTiers, selectPilotTier } from './lab-index';
 
@@ -528,6 +529,44 @@ describe('buildLabIndex', () => {
     });
     expect(result.statuses[0]?.status).toBe('missing-manifest');
     expect(result.statuses[0]?.generationId).toBe(GENERATION_ID);
+  });
+
+  it('rejects an otherwise-valid manifest padded past the 64 KiB ceiling', async () => {
+    // Ceiling pin for PILOT_MAX_MANIFEST_BYTES: trailing JSON
+    // whitespace keeps the manifest schema-valid, but the runtime
+    // loader must reject exactly what the generator and offline
+    // preflight reject (MAX_MANIFEST_BYTES) instead of activating a
+    // generation the evidence gate refuses.
+    const lab = await setupLab();
+    const manifestPath = join(lab.generationDir, 'manifest.json');
+    const text = await readFile(manifestPath, 'utf8');
+    await writeFile(
+      manifestPath,
+      text + ' '.repeat(PILOT_MAX_MANIFEST_BYTES - text.length + 1)
+    );
+    const result = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'n',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(result.statuses[0]?.status).toBe('missing-manifest');
+    expect(Object.keys(result.index.entries)).toHaveLength(0);
   });
 
   it('rejects a symlinked generation entry before reading its manifest', async () => {

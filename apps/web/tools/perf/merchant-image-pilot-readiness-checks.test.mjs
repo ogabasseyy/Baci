@@ -100,6 +100,23 @@ describe('merchant-image-pilot-readiness helpers', () => {
         mount
       )
     ).toEqual(['control selected is not the approved staged original']);
+    // Undecodable staged bytes fail closed: the descriptor is a
+    // requested label and the naturals are density-corrected, so
+    // neither can stand in for the physical width.
+    expect(
+      selectedImageProblems(
+        {
+          ...control,
+          controlBytesUnverified: true,
+          resourceWidth: null,
+        },
+        'control',
+        mount,
+        1
+      )
+    ).toEqual([
+      'selected image control resolution unverifiable (staged bytes unreadable)',
+    ]);
     // Loader params do not change identity: ?w&q still address the same
     // staged original.
     expect(

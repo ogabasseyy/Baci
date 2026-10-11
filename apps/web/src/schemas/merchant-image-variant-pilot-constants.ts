@@ -17,6 +17,14 @@ export const PILOT_MAX_DECODED_PIXELS = 40_000_000;
 // unbounded claim cannot become a bounded-read allocation ceiling.
 // Pinned by the shared contract fixtures.
 export const PILOT_MAX_INPUT_BYTES = 10 * 1024 * 1024;
+// Mirror of MAX_MANIFEST_BYTES in
+// infra/cdn-transformer/pilot/constants.mjs: the runtime loader must
+// accept exactly the manifests the generator and offline preflight
+// accept, or staging/runtime disagrees with the evidence gate about
+// which generation is valid. Pinned by lab-index.test.ts (an
+// otherwise-valid manifest padded past 64 KiB must fail on this
+// mirror exactly as it fails under loadGeneration).
+export const PILOT_MAX_MANIFEST_BYTES = 64 * 1024;
 // Mirror of the channel ceiling in assertAcceptedMetadata
 // (encode-worker.mjs) and SHARP_LIMITS (constants.mjs): lab verification
 // decodes under the same limits as the generator.

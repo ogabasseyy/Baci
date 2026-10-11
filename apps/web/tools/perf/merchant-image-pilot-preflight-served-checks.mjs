@@ -3,9 +3,9 @@
 // bytes vs staged hashes. Staged-asset fetches must serve directly: a
 // redirect to another host or route breaks the promised same-origin
 // delivery topology even when the final bytes hash identically.
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { orientedDimensions } from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
 import {
   extractLabPreloads,
@@ -17,7 +17,10 @@ import {
   srcSetCandidates,
   stripQuery,
 } from './merchant-image-pilot-preflight-html.mjs';
-import { sha256Hex } from './merchant-image-pilot-preflight-shared.mjs';
+import {
+  readUpToBytes,
+  sha256Hex,
+} from './merchant-image-pilot-preflight-shared.mjs';
 
 // Staged lab bytes are images: the served gate pins the response MIME to
 // the staged file's image type. Typed <picture> sources and preloads can
@@ -208,9 +211,24 @@ export async function assertServedResponseBytes(
     // Loader-param URLs fetch with the query (as browsers do) but hash
     // against the query-stripped staged file (static serving ignores it).
     const stagedPath = stripQuery(urlPath, origin);
+    // Bounded by the staged ceiling BEFORE the served-body cap derives
+    // from it: a swapped-in giant would otherwise load fully here and
+    // exhaust the preflight process. Generator contract caps staged
+    // tiers and originals at MAX_INPUT_BYTES, so anything larger is a
+    // controlled failure, never a legitimate staged asset.
     let expected;
     try {
-      expected = await readFile(join(publicDir, stagedPath));
+      const staged = await readUpToBytes(
+        join(publicDir, stagedPath),
+        MAX_INPUT_BYTES
+      );
+      if (staged.truncated) {
+        failures.push(
+          `${name}: staged file exceeds the ${MAX_INPUT_BYTES}-byte staged ceiling: "${stagedPath}"`
+        );
+        continue;
+      }
+      expected = staged.bytes;
     } catch {
       failures.push(`${name}: no staged file for "${stagedPath}"`);
       continue;

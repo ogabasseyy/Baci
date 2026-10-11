@@ -4,6 +4,7 @@ import type {
   PilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
 import { parsePilotManifest } from '@/schemas/merchant-image-variant-pilot';
+import { PILOT_MAX_MANIFEST_BYTES } from '@/schemas/merchant-image-variant-pilot-constants';
 import { readBoundedLabJson } from './lab-bounded-json';
 import {
   LabGenerationConfinementError,
@@ -61,6 +62,9 @@ export async function loadBindingManifest(input: {
   }
   let manifestText: string;
   try {
+    // Same ceiling as the generator and offline preflight: a larger
+    // loader budget would activate generations the evidence gate
+    // rejects.
     manifestText = await readBoundedLabJson(
       join(
         input.outputRoot,
@@ -68,7 +72,7 @@ export async function loadBindingManifest(input: {
         input.generationId,
         'manifest.json'
       ),
-      256 * 1024
+      PILOT_MAX_MANIFEST_BYTES
     );
   } catch {
     return {

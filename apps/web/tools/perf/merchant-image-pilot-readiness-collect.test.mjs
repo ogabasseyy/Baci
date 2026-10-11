@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectSurface } from './merchant-image-pilot-readiness-collect.mjs';
 
@@ -135,6 +139,100 @@ describe('collectSurface', () => {
       'grid'
     );
     expect(collected.geometry.selectedImg?.resourceWidth).toBe(768);
+  });
+
+  it('derives control widths from decoded staged bytes, not descriptors', async () => {
+    // The global loader labels the unchanged staged original with the
+    // requested ?w: trusting 1200w for a 48px original would certify
+    // an under-resolved control surface. The collector replaces the
+    // label with the decoded oriented width.
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-collect-control-'));
+    await mkdir(join(publicDir, '__pilot', 'originals'), { recursive: true });
+    const bytes = await sharp({
+      create: { background: '#1c1917', channels: 3, height: 36, width: 48 },
+    })
+      .png()
+      .toBuffer();
+    await writeFile(join(publicDir, '__pilot', 'originals', 'x.png'), bytes);
+    stubBrowser({
+      selectedImg: fakeImg({
+        currentSrc: 'https://lab/__pilot/originals/x.png?w=1200',
+        getAttribute: (name) =>
+          name === 'srcset'
+            ? 'https://lab/__pilot/originals/x.png?w=1200 1200w'
+            : null,
+        naturalHeight: 12,
+        naturalWidth: 16,
+      }),
+      slotImg: fakeImg({ srcset: null }),
+    });
+    const collected = await collectSurface(
+      fakePage(),
+      'https://lab/pilot-lab/store/omnimart',
+      'grid',
+      { arm: 'control', publicDir }
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBe(48);
+    expect(
+      collected.geometry.selectedImg?.controlBytesUnverified
+    ).toBeUndefined();
+    // Plain-src slot images have no descriptor lie to correct.
+    expect(collected.geometry.slots[0]?.img?.resourceWidth).toBeNull();
+    expect(
+      collected.geometry.slots[0]?.img?.controlBytesUnverified
+    ).toBeUndefined();
+  });
+
+  it('marks control images unverified when staged bytes are unreadable', async () => {
+    // The descriptor label must not survive a failed decode: neither
+    // it nor the density-corrected naturals can stand in, so the
+    // image fails the surface closed instead of certifying 1200w.
+    const publicDir = await mkdtemp(
+      join(tmpdir(), 'pilot-collect-unverified-')
+    );
+    stubBrowser({
+      selectedImg: fakeImg({
+        currentSrc: 'https://lab/__pilot/originals/missing.png?w=1200',
+        getAttribute: (name) =>
+          name === 'srcset'
+            ? 'https://lab/__pilot/originals/missing.png?w=1200 1200w'
+            : null,
+      }),
+      slotImg: null,
+    });
+    const collected = await collectSurface(
+      fakePage(),
+      'https://lab/pilot-lab/store/omnimart',
+      'grid',
+      { arm: 'control', publicDir }
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBeNull();
+    expect(collected.geometry.selectedImg?.controlBytesUnverified).toBe(true);
+  });
+
+  it('leaves pilot descriptors untouched without staged access', async () => {
+    // Pilot tiers are distinct files per candidate, so the collected
+    // descriptor IS the physical width — no decode, no publicDir
+    // needed, and a missing publicDir must not fail the pilot arm.
+    stubBrowser({
+      selectedImg: fakeImg({
+        getAttribute: (name) =>
+          name === 'srcset'
+            ? '/__pilot/abc/x-384.avif 384w, /__pilot/abc/x-768.avif 768w'
+            : null,
+      }),
+      slotImg: fakeImg({ srcset: null }),
+    });
+    const collected = await collectSurface(
+      fakePage(),
+      'https://lab/pilot-lab/store/omnimart',
+      'grid',
+      { arm: 'pilot', publicDir: join(tmpdir(), 'pilot-collect-no-such-dir') }
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBe(768);
+    expect(
+      collected.geometry.selectedImg?.controlBytesUnverified
+    ).toBeUndefined();
   });
 
   it('fails hygiene on successful cross-origin responses', async () => {

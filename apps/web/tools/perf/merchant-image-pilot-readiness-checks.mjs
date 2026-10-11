@@ -32,6 +32,15 @@ function stagedImageProblems(image, arm, label, mount, dpr, options = {}) {
   if (!image) {
     return [`${label} absent`];
   }
+  // Control descriptors are requested labels, not physical widths: when
+  // collection could not derive the width from the decoded staged
+  // bytes, neither the label nor the density-corrected naturals are
+  // trustworthy, so resolution is unverifiable instead of assured.
+  if (image.controlBytesUnverified) {
+    return [
+      `${label} control resolution unverifiable (staged bytes unreadable)`,
+    ];
+  }
   if (!image.complete || (image.naturalWidth ?? 0) < 1) {
     return [`${label} did not decode`];
   }

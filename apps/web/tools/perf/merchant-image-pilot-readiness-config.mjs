@@ -14,6 +14,7 @@ export const READINESS_CLI_OPTIONS = [
   'mounts',
   'origin',
   'profiles',
+  'public-dir',
   'store-map',
 ];
 

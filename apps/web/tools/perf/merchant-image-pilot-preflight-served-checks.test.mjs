@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
+import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   assertControlPurity,
   assertServedDescriptors,
@@ -150,6 +151,34 @@ describe('assertServedResponseBytes', () => {
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
+  });
+
+  it('rejects a swapped-in giant staged file on the byte ceiling', async () => {
+    // A corrupted staged destination (huge regular file) must fail on
+    // the staged ceiling instead of loading fully: the served-body cap
+    // derives from the staged size, so an unbounded read here would
+    // exhaust the preflight process before any comparison runs. No
+    // server needed — the ceiling rejects before the fetch.
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-giant-'));
+    const staged = `/__pilot/${GEN}/${'f'.repeat(64)}.avif`;
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    await writeFile(
+      join(publicDir, staged),
+      Buffer.alloc(MAX_INPUT_BYTES + 1, 7)
+    );
+    const html = section({
+      binding: `${MERCHANT}/logo-a`,
+      inner: `<img src="http://127.0.0.1:1${staged}" alt="logo"/>`,
+      slot: 'header-logo',
+    });
+    const failures = await assertServedResponseBytes(html, {
+      arm: 'pilot',
+      origin: 'http://127.0.0.1:1',
+      publicDir,
+      timeoutMs: 2000,
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/exceeds the .*10485760-byte staged ceiling/);
   });
 
   it('accepts hash-identical bytes served under the staged MIME type', async () => {

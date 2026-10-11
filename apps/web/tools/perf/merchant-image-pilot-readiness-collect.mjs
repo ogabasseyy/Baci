@@ -2,6 +2,41 @@
 // surface in Playwright, records console/request hygiene, image URLs,
 // and the measured geometry the pure checks verdict. Split from the
 // driver (merchant-image-pilot-readiness.mjs) under the repo line ceiling.
+import { join, resolve, sep } from 'node:path';
+import sharp from 'sharp';
+import { orientedDimensions } from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
+
+// Control-arm physical width: the global custom loader appends inert
+// ?w/?q params to the unchanged staged original, so a collected
+// w-descriptor is a REQUESTED label, not the resource's physical width
+// (the served-descriptor gate recognizes the same distinction). Derive
+// it from the decoded staged bytes instead; null fails the surface
+// closed via controlBytesUnverified.
+async function controlPhysicalWidth(currentSrc, publicDir) {
+  let pathname;
+  try {
+    pathname = new URL(currentSrc).pathname;
+  } catch {
+    return null;
+  }
+  if (!pathname.startsWith('/__pilot/')) {
+    return null;
+  }
+  const root = resolve(publicDir);
+  const target = resolve(join(root, pathname));
+  if (target !== root && !target.startsWith(`${root}${sep}`)) {
+    return null;
+  }
+  try {
+    const meta = await sharp(target).metadata();
+    const oriented = orientedDimensions(meta);
+    return Number.isFinite(oriented.width) && oriented.width > 0
+      ? oriented.width
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function collectSurface(page, url, surface, options = {}) {
   const consoleErrors = [];
@@ -196,5 +231,35 @@ export async function collectSurface(page, url, surface, options = {}) {
       viewportWidth: window.innerWidth,
     };
   }, surface);
+  if (options.arm === 'control') {
+    // The descriptor lie exists only where a descriptor was collected:
+    // plain-src control images keep natural pixels (true without
+    // srcset density correction). Decoded width replaces the label;
+    // height still follows the natural aspect, which density
+    // correction preserves.
+    const images = [
+      geometry.selectedImg,
+      ...(geometry.slots ?? []).map((slot) => slot.img),
+    ];
+    for (const image of images) {
+      if (
+        !image ||
+        !Number.isFinite(image.resourceWidth) ||
+        image.resourceWidth <= 0
+      ) {
+        continue;
+      }
+      const physical =
+        options.publicDir === undefined
+          ? null
+          : await controlPhysicalWidth(image.currentSrc, options.publicDir);
+      if (physical === null) {
+        image.controlBytesUnverified = true;
+        image.resourceWidth = null;
+      } else {
+        image.resourceWidth = physical;
+      }
+    }
+  }
   return { avifDisabled, consoleErrors, failedRequests, geometry, imageUrls };
 }

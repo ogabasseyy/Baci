@@ -110,10 +110,36 @@ describe('merchant-image-pilot-readiness gate', () => {
       `--store-map=${MERCHANT}=ogabassey`,
       '--chrome=/nonexistent/chrome-for-tests',
       `--mounts=${mounts}`,
+      '--public-dir=/nonexistent/public',
     ]);
     expect(error).not.toBe(null);
     const report = JSON.parse(stdout);
     expect(report.ok).toBe(false);
     expect(report.failures.join('\n')).toMatch(/browser-launch/);
+  });
+
+  it('fails closed without --public-dir', async () => {
+    // Control resolution derives physical widths from the staged
+    // bytes: without the public dir the gate cannot verify the
+    // control arm, so usage fails before any browser launches.
+    const mounts = await writeMountsFile([
+      {
+        binding: `${MERCHANT}/hero-s0`,
+        generationId: 'g',
+        merchantId: MERCHANT,
+        slotId: 'mobile-hero-slide-0',
+        stagedOriginal: '/__pilot/originals/x.png',
+      },
+    ]);
+    const { error, stdout } = await runCli([
+      '--origin=http://localhost:3122',
+      `--store-map=${MERCHANT}=ogabassey`,
+      '--chrome=/nonexistent/chrome',
+      `--mounts=${mounts}`,
+    ]);
+    expect(error).not.toBe(null);
+    const report = JSON.parse(stdout);
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(/usage/);
   });
 });

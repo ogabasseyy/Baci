@@ -7,11 +7,9 @@ import type {
 } from '@/contexts/customer-auth-context';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
-import {
-  forgetPendingVtuPurchase,
-  getPendingVtuKey,
-} from './utility-pending-idempotency';
 import { submitUtilityCheckout } from './utility-checkout-submit';
+import { useUtilityIdempotencyKey } from './use-utility-idempotency-key';
+import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import type { UtilityTabId } from './UtilityTabs';
 
 interface UseUtilityPurchaseParams {
@@ -94,89 +92,36 @@ export function useUtilityPurchase({
   const [step, setStep] = useState<UtilityPurchaseStep>('details');
   const [transactionRef, setTransactionRef] = useState('');
   const [successAmount, setSuccessAmount] = useState(0);
-  // Keys live in the module registry; this ref tracks the in-flight
-  // signature so rotation forgets exactly that entry.
-  const lastPayloadSignatureRef = useRef<string | null>(null);
   // References whose debit is already reflected in the displayed balance. A
   // retained key replays the SAME transaction on resubmit, so without this
   // guard every processing replay would decrement the balance again.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-
-  const getWalletIdempotencyKey = (payloadSignature: string) => {
-    lastPayloadSignatureRef.current = payloadSignature;
-    return getPendingVtuKey(payloadSignature);
-  };
-
-  const forgetAttemptKey = () => {
-    if (lastPayloadSignatureRef.current) {
-      forgetPendingVtuPurchase(lastPayloadSignatureRef.current);
-      lastPayloadSignatureRef.current = null;
-    }
-  };
+  const {
+    forgetAttemptKey,
+    getWalletIdempotencyKey,
+    isAttemptStale,
+    noteAttemptReference,
+  } = useUtilityIdempotencyKey({
+    customerId: customer?.id,
+    merchantSlug,
+    userId: user?.id,
+  });
 
   const handlePurchase = async (payload: UtilityCheckoutPayload) => {
-    if (isAuthLoading) {
-      toast({
-        title: 'Checking account',
-        description: 'Please wait while we confirm your session.',
-      });
-      return;
-    }
-
-    if (!isAuthenticated || !user) {
-      toast({
-        title: 'Sign in required',
-        description: 'Please sign in to use utility checkout.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // A failed or still-loading wallet fetch also reads as balance 0 — never
-    // report that as insufficient funds. Loading asks for patience; an error
-    // retries the fetch so the customer is not stuck until remount.
-    if (walletLoading) {
-      toast({
-        title: 'Checking wallet balance',
-        description: 'Please wait while we confirm your wallet balance.',
-      });
-      return;
-    }
-
-    if (walletError) {
-      toast({
-        title: 'Wallet unavailable',
-        description:
-          "We couldn't load your wallet balance. Trying again now.",
-        variant: 'destructive',
-      });
-      refreshWallet();
-      return;
-    }
-
-    // Wallet-only checkout: the wallet must cover the full bill — there is
-    // no card fallback. Stop here (before any network call) and let the
-    // caller open the funding panel so the customer can top up. Report only
-    // the remaining shortfall so partial balances don't overfund.
-    if (walletBalance < payload.amount) {
-      const shortfall = payload.amount - walletBalance;
-      if (!canFundByBankTransfer) {
-        // No funding rail on web for this store (DVAs disabled, no card
-        // top-up UI): say so plainly instead of promising a panel that
-        // cannot provision an account.
-        toast({
-          title: 'Insufficient wallet balance',
-          description: `Your wallet balance of ₦${walletBalance.toLocaleString()} is ₦${shortfall.toLocaleString()} short. Wallet top-up isn't available for this store.`,
-          variant: 'destructive',
-        });
-        return;
-      }
-      toast({
-        title: 'Insufficient wallet balance',
-        description: `Fund your wallet with at least ₦${shortfall.toLocaleString()} more to complete this purchase.`,
-        variant: 'destructive',
-      });
-      onInsufficientWalletBalance?.();
+    if (
+      !checkUtilityPurchaseReadiness({
+        amount: payload.amount,
+        canFundByBankTransfer,
+        isAuthLoading,
+        isAuthenticated,
+        onInsufficientWalletBalance,
+        refreshWallet,
+        user,
+        walletBalance,
+        walletError,
+        walletLoading,
+      })
+    ) {
       return;
     }
 
@@ -185,7 +130,7 @@ export function useUtilityPurchase({
       [customer?.first_name, customer?.last_name]
         .filter(Boolean)
         .join(' ')
-        .trim() || customer?.email || user.email || 'Customer';
+        .trim() || customer?.email || user?.email || 'Customer';
     const result = await submitUtilityCheckout({
       payload,
       merchantSlug: merchantSlug || 'ogabassey',
@@ -203,8 +148,22 @@ export function useUtilityPurchase({
       // HIGH balance would let the underfunded pre-check pass a purchase
       // the server will reject.
       if (!result.processing) {
+        if (isAttemptStale(result.reference)) {
+          // The remembered purchase completed long ago: this replay
+          // answers a NEW intent with the old vend. Forget so the next
+          // tap mints fresh, and say so instead of presenting it.
+          forgetAttemptKey();
+          toast({
+            title: 'Purchase Already Completed',
+            description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
         forgetAttemptKey();
       } else {
+        noteAttemptReference(result.reference);
         refreshWallet();
       }
       clearIntent();

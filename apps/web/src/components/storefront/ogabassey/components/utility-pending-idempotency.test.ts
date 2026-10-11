@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildVtuWalletPayloadSignature } from './utility-pending-idempotency';
+import {
+  buildVtuWalletPayloadSignature,
+  setPendingVtuOwnerScope,
+} from './utility-pending-idempotency';
 import {
   clearPendingVtuKeys,
   forgetPendingVtuPurchase,
   getPendingVtuKey,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
@@ -11,6 +17,7 @@ import {
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    setPendingVtuOwnerScope(undefined, undefined);
   });
 
   it('mints a key on first submit and recalls it for the same purchase', () => {
@@ -111,5 +118,56 @@ describe('utility-pending-idempotency', () => {
     expect(
       buildVtuWalletPayloadSignature({ ...base, phoneNumber: '0802' })
     ).not.toBe(buildVtuWalletPayloadSignature(base));
+  });
+
+  it('isolates remembered keys by owner and merchant scope', () => {
+    setPendingVtuOwnerScope('customer-a', 'merchant-1');
+    const key = getPendingVtuKey('{"scoped":true}');
+
+    setPendingVtuOwnerScope('customer-b', 'merchant-1');
+    expect(recallPendingVtuKey('{"scoped":true}')).toBeUndefined();
+    setPendingVtuOwnerScope('customer-a', 'merchant-2');
+    expect(recallPendingVtuKey('{"scoped":true}')).toBeUndefined();
+
+    setPendingVtuOwnerScope('customer-a', 'merchant-1');
+    expect(recallPendingVtuKey('{"scoped":true}')).toBe(key);
+
+    setPendingVtuOwnerScope(undefined, undefined);
+  });
+
+  it('detects a stale success replay only past the recall window', () => {
+    const signature = '{"stale":true}';
+    getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-1');
+
+    expect(isStalePendingVtuSuccess(signature, 'REF-1')).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-1',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+    // A different reference is a different transaction, never stale.
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-2',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
+  });
+
+  it('lets reference-less entries resolve normally even past the window', () => {
+    const signature = '{"noref":true}';
+    getPendingVtuKey(signature);
+
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-FIRST',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
   });
 });

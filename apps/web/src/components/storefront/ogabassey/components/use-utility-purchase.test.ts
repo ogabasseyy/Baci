@@ -430,6 +430,69 @@ describe('useUtilityPurchase', () => {
     expect(setWalletBalance).toHaveBeenCalledTimes(2);
   });
 
+  it('rejects a stale success replay as already-completed instead of presenting the old vend', async () => {
+    vi.useFakeTimers();
+    try {
+      const seenKeys: string[] = [];
+      mockSubmit.mockImplementation(
+        async (request: {
+          getWalletIdempotencyKey: (signature: string) => string;
+        }) => {
+          seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+          // First submit is still processing; the replay lands later.
+          return seenKeys.length === 1
+            ? {
+                kind: 'wallet-success',
+                reference: 'REF-OLD',
+                amount: 1000,
+                processing: true,
+              }
+            : {
+                kind: 'wallet-success',
+                reference: 'REF-OLD',
+                amount: 1000,
+                processing: false,
+              };
+        }
+      );
+      const setWalletBalance = vi.fn();
+      const { result } = renderHook(() =>
+        useUtilityPurchase(baseParams({ setWalletBalance }))
+      );
+
+      await act(async () => {
+        result.current.handleAirtimeDataSubmit(airtime);
+      });
+      // waitFor hangs under fake timers; the awaited act already flushes.
+      expect(result.current.step).toBe('processing');
+
+      // The vend settles while the modal is closed; the customer comes
+      // back much later and buys the same recipient + amount.
+      vi.advanceTimersByTime(6 * 60 * 1000);
+      await act(async () => {
+        result.current.handleAirtimeDataSubmit(airtime);
+      });
+
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Purchase Already Completed',
+        description:
+          'This purchase already completed (REF-OLD). Submit again to make a new purchase.',
+        variant: 'destructive',
+      });
+      // Old vend is not presented as the new purchase…
+      expect(result.current.step).toBe('processing');
+      expect(setWalletBalance).not.toHaveBeenCalled();
+      // …and the dead key is forgotten so the next tap mints fresh.
+      await act(async () => {
+        result.current.handleAirtimeDataSubmit(airtime);
+      });
+      expect(seenKeys).toHaveLength(3);
+      expect(seenKeys[2]).not.toBe(seenKeys[0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('surfaces an error toast and stays on the form when checkout fails', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'error',

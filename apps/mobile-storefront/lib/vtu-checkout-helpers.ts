@@ -92,11 +92,32 @@ export async function parseJsonResponse(response: Response) {
   return data;
 }
 
+/**
+ * Statuses emitted before the checkout handler runs: the proxy security
+ * stage (429 rate limit, 413 payload, 415 content, 403 guard) and the
+ * in-route auth/CSRF guards (401/403). No outcome is recorded for
+ * these, so the key must be kept — rotating after a 429 retry would
+ * mint a fresh key for an already-committed attempt and debit twice.
+ */
+const PRE_ROUTE_NO_ROTATION_STATUSES: ReadonlySet<number> = new Set([
+  401, 403, 413, 415, 429,
+]);
+
+/**
+ * True when a checkout error proves the attempt terminal: a definitive
+ * route response (validation, insufficient balance, key collision, …)
+ * whose outcome the server recorded under this key. Pre-route
+ * 401/403/413/415/429 responses, 5xx, and non-responses stay ambiguous
+ * — keep the key so the retry dedupes.
+ */
 export function shouldRotateWalletIdempotencyKeyForError(
   error: unknown
 ): boolean {
   return (
-    error instanceof HttpError && error.status >= 400 && error.status < 500
+    error instanceof HttpError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    !PRE_ROUTE_NO_ROTATION_STATUSES.has(error.status)
   );
 }
 

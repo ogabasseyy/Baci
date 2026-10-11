@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { HttpError } from '@/lib/fetch-with-timeout';
 import {
   buildVtuPurchaseDescriptor,
   isStalePendingVtuSuccess,
@@ -193,5 +194,38 @@ describe('airtime stale success replay', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
+    // The submitter's retained key would replay the dead
+    // transaction when they retry — finalize it for the submitter
+    // even though the result UI is discarded.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const { result } = renderHandler({
+      resetWalletIdempotencyKey,
+      isSubmittingOwnerCurrent: () => false,
+    });
+
+    await result.current.handlePurchase();
+
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the idempotency key on a pre-route 429 when the account switched', async () => {
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(429, 'Too many requests')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const { result } = renderHandler({
+      resetWalletIdempotencyKey,
+      isSubmittingOwnerCurrent: () => false,
+    });
+
+    await result.current.handlePurchase();
+
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
   });
 });

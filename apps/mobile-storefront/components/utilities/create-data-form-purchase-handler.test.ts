@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { HttpError } from '@/lib/fetch-with-timeout';
 import { createDataFormPurchaseHandler } from './create-data-form-purchase-handler';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -33,7 +34,13 @@ describe('data form purchase cashback', () => {
     jest.restoreAllMocks();
   });
 
-  function runPurchase(onSuccess: jest.Mock) {
+  function runPurchase(
+    onSuccess: jest.Mock,
+    overrides: {
+      isSubmittingOwnerCurrent?: () => boolean;
+      resetWalletIdempotencyKey?: jest.Mock;
+    } = {}
+  ) {
     const handlePurchase = createDataFormPurchaseHandler({
       customer: null,
       dismissKeyboard: jest.fn(),
@@ -51,8 +58,10 @@ describe('data form purchase cashback', () => {
         captureSubmittingOwner: () => 'test-owner',
         captureSubmittingUserId: () => 'test-user',
         invalidateWallets: jest.fn(),
-        isSubmittingOwnerCurrent: () => true,
-        resetWalletIdempotencyKey: jest.fn(),
+        isSubmittingOwnerCurrent:
+          overrides.isSubmittingOwnerCurrent ?? (() => true),
+        resetWalletIdempotencyKey:
+          overrides.resetWalletIdempotencyKey ?? jest.fn(),
       } as PaymentState,
       phoneNumber: '08031234567',
       planAmount: 1000,
@@ -95,5 +104,36 @@ describe('data form purchase cashback', () => {
     expect(onSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ cashback: undefined })
     );
+  });
+
+  it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
+    // The submitter's retained key would replay the dead
+    // transaction when they retry — finalize it for the submitter
+    // even though the result UI is discarded.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+
+    await runPurchase(jest.fn(), {
+      isSubmittingOwnerCurrent: () => false,
+      resetWalletIdempotencyKey,
+    });
+
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the idempotency key on a pre-route 429 when the account switched', async () => {
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(429, 'Too many requests')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+
+    await runPurchase(jest.fn(), {
+      isSubmittingOwnerCurrent: () => false,
+      resetWalletIdempotencyKey,
+    });
+
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ import { submitUtilityCheckout } from './utility-checkout-submit';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
 import {
   finalizeSwitchedAttempt,
+  shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
@@ -237,17 +238,11 @@ export function useUtilityPurchase({
           : `Your ${activeTab} purchase was successful!`,
       });
     } else if (result.kind === 'error') {
-      // Terminal 4xx (validation, failed fulfillment, key collision) already
-      // persisted its outcome server-side: rotate so a corrected retry is a
-      // fresh attempt instead of replaying the dead transaction. Network and
-      // 5xx failures stay ambiguous — keep the key so the retry dedupes.
-      // Mirrors mobile's shouldRotateWalletIdempotencyKeyForError.
-      if (
-        captured.attempt &&
-        typeof result.status === 'number' &&
-        result.status >= 400 &&
-        result.status < 500
-      ) {
+      // Definitive route 4xx already persisted its outcome server-side:
+      // rotate so a corrected retry is a fresh attempt instead of
+      // replaying the dead transaction. Pre-route 401/403/413/415/429,
+      // 5xx, and non-responses stay ambiguous — keep the key.
+      if (captured.attempt && shouldRotateVtuKeyForStatus(result.status)) {
         forgetScopedKey(captured.attempt.scoped);
       }
       toast({

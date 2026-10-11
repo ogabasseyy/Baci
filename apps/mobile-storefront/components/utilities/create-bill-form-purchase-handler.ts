@@ -201,13 +201,19 @@ export function createBillFormPurchaseHandler({
         return;
       } catch (error) {
         if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          // Still finalize status-bearing terminal errors for the
+          // SUBMITTER (descriptor captured at submit): otherwise the
+          // retained key replays the dead transaction when they retry.
+          if (shouldRotateWalletIdempotencyKeyForError(error)) {
+            payment.resetWalletIdempotencyKey(descriptor);
+          }
           return;
         }
         // Keep the idempotency key for any error that leaves room for
         // server state to have been persisted (network, timeout, 5xx,
-        // unknown) so the user's retry hits the route's dedupe table.
-        // Only rotate on 4xx — request was rejected before any state
-        // was created and the same key would just keep failing.
+        // pre-route 401/403/413/415/429, unknown) so the user's retry
+        // hits the route's dedupe table. Only rotate on definitive
+        // route 4xx — the same key would just keep failing.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
         }

@@ -174,11 +174,17 @@ export function createDataFormPurchaseHandler({
         return;
       } catch (error) {
         if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          // Still finalize status-bearing terminal errors for the
+          // SUBMITTER (descriptor captured at submit): otherwise the
+          // retained key replays the dead transaction when they retry.
+          if (shouldRotateWalletIdempotencyKeyForError(error)) {
+            payment.resetWalletIdempotencyKey(descriptor);
+          }
           return;
         }
         // Keep the key for ambiguous failures (network, timeout, 5xx,
-        // unknown) so the route's dedupe table protects retries.
-        // Rotate only on 4xx — request rejected before any state.
+        // pre-route 401/403/413/415/429, unknown) so the route's dedupe
+        // table protects retries. Rotate only on definitive route 4xx.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
         }

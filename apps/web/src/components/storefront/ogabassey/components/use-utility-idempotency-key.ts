@@ -41,22 +41,60 @@ interface UseUtilityIdempotencyKeyResult {
 }
 
 /**
+ * Statuses emitted before the checkout handler runs: the proxy security
+ * stage (429 rate limit, 413 payload, 415 content, 403 guard) and the
+ * in-route auth/CSRF guards (401/403). No outcome is recorded for
+ * these, so the key must be kept — rotating after a 429 retry would
+ * mint a fresh key for an already-committed attempt and debit twice.
+ * Mirrors mobile's shouldRotateWalletIdempotencyKeyForError carve-out.
+ */
+const PRE_ROUTE_NO_ROTATION_STATUSES: ReadonlySet<number> = new Set([
+  401, 403, 413, 415, 429,
+]);
+
+/**
+ * True when an error status proves the attempt terminal: a definitive
+ * route response (validation, insufficient balance, key collision, …)
+ * whose outcome the server recorded under this key. Pre-route
+ * 401/403/413/415/429 responses, 5xx, and missing statuses stay
+ * ambiguous — keep the key so the retry dedupes.
+ */
+export function shouldRotateVtuKeyForStatus(status: unknown): boolean {
+  return (
+    typeof status === 'number' &&
+    status >= 400 &&
+    status < 500 &&
+    !PRE_ROUTE_NO_ROTATION_STATUSES.has(status)
+  );
+}
+
+/**
  * Finalizes a settled attempt whose owner switched mid-flight, before
  * the caller suppresses the result UI. Terminal success forgets the
  * submitter's key (their repeat mints fresh instead of replaying the
  * old vend as a new success); processing notes the reference (replays
- * recognized). Errors keep the key so the retry dedupes.
+ * recognized). Status-bearing terminal errors forget the key too —
+ * otherwise the retained key replays the dead transaction when the
+ * submitter retries. Ambiguous errors keep the key so the retry
+ * dedupes.
  */
 export function finalizeSwitchedAttempt(
   attempt: UtilityIdempotencyAttempt | null,
   result: UtilityCheckoutResult
 ): void {
-  if (!attempt || result.kind !== 'wallet-success') {
+  if (!attempt) {
     return;
   }
-  if (result.processing) {
-    notePendingVtuReference(attempt.scoped, result.reference);
-  } else {
+  if (result.kind === 'wallet-success') {
+    if (result.processing) {
+      notePendingVtuReference(attempt.scoped, result.reference);
+    } else {
+      forgetPendingVtuPurchase(attempt.scoped);
+    }
+  } else if (
+    result.kind === 'error' &&
+    shouldRotateVtuKeyForStatus(result.status)
+  ) {
     forgetPendingVtuPurchase(attempt.scoped);
   }
 }

@@ -126,6 +126,12 @@ async function executeAirtimePurchase({
       return;
     } catch (error) {
       if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+        // Still finalize status-bearing terminal errors for the
+        // SUBMITTER (descriptor captured at submit): otherwise the
+        // retained key replays the dead transaction when they retry.
+        if (shouldRotateWalletIdempotencyKeyForError(error)) {
+          payment.resetWalletIdempotencyKey(descriptor);
+        }
         return;
       }
       if (shouldRotateWalletIdempotencyKeyForError(error)) {

@@ -7,6 +7,7 @@ import {
 } from './utility-pending-idempotency';
 import {
   finalizeSwitchedAttempt,
+  shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
 } from './use-utility-idempotency-key';
 
@@ -293,5 +294,71 @@ describe('finalizeSwitchedAttempt', () => {
       repeat = result.current.captureAttemptKey('SIG').key;
     });
     expect(repeat).toBe(attempt.key);
+  });
+
+  it('forgets a terminal 4xx error so the returnee retries fresh', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    finalizeSwitchedAttempt(attempt, {
+      kind: 'error',
+      message: 'Insufficient funds',
+      status: 400,
+    });
+
+    let repeat = '';
+    act(() => {
+      repeat = result.current.captureAttemptKey('SIG').key;
+    });
+    expect(repeat).not.toBe(attempt.key);
+  });
+
+  it('keeps the key for a pre-route 429 error after a switch', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    finalizeSwitchedAttempt(attempt, {
+      kind: 'error',
+      message: 'Too many requests',
+      status: 429,
+    });
+
+    let repeat = '';
+    act(() => {
+      repeat = result.current.captureAttemptKey('SIG').key;
+    });
+    expect(repeat).toBe(attempt.key);
+  });
+});
+
+describe('shouldRotateVtuKeyForStatus', () => {
+  it('returns true for definitive route 4xx (outcome recorded, key is dead)', () => {
+    for (const status of [400, 404, 409, 422]) {
+      expect(shouldRotateVtuKeyForStatus(status)).toBe(true);
+    }
+  });
+
+  it('returns false for pre-route 401/403/413/415/429 — handler never ran', () => {
+    // A 429 retry of an already-committed attempt must keep the key:
+    // rotating would mint a fresh key and debit a second transaction.
+    for (const status of [401, 403, 413, 415, 429]) {
+      expect(shouldRotateVtuKeyForStatus(status)).toBe(false);
+    }
+  });
+
+  it('returns false for 5xx and missing statuses', () => {
+    expect(shouldRotateVtuKeyForStatus(500)).toBe(false);
+    expect(shouldRotateVtuKeyForStatus(502)).toBe(false);
+    expect(shouldRotateVtuKeyForStatus(undefined)).toBe(false);
   });
 });

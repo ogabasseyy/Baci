@@ -388,6 +388,29 @@ describe('useUtilityPurchase', () => {
     expect(seenKeys[0]).toBe(seenKeys[1]);
   });
 
+  it('keeps the idempotency key after a pre-route 429 so the retry dedupes', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return { kind: 'error', message: 'Too many requests', status: 429 };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).toBe(seenKeys[1]);
+  });
+
   it('applies the server cashback balance instead of decrementing the local balance', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'wallet-success',

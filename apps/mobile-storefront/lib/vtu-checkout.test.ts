@@ -385,22 +385,34 @@ describe('vtu-checkout service', () => {
 describe('shouldRotateWalletIdempotencyKeyForError', () => {
   // The contract: keep the key (return false) for any failure that
   // could leave server state in flight; only rotate (return true) on
-  // 4xx HTTP responses where the request was rejected before any
-  // state was created.
+  // definitive route 4xx responses whose outcome the server recorded
+  // under this key.
 
-  it('returns true for HTTP 400-499 (request rejected, no server state)', () => {
+  it('returns true for definitive route 4xx (outcome recorded, key is dead)', () => {
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(400, 'bad'))
     ).toBe(true);
     expect(
-      shouldRotateWalletIdempotencyKeyForError(new HttpError(401, 'auth'))
+      shouldRotateWalletIdempotencyKeyForError(new HttpError(404, 'missing'))
+    ).toBe(true);
+    expect(
+      shouldRotateWalletIdempotencyKeyForError(new HttpError(409, 'collision'))
     ).toBe(true);
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(422, 'invalid'))
     ).toBe(true);
-    expect(
-      shouldRotateWalletIdempotencyKeyForError(new HttpError(499, 'closed'))
-    ).toBe(true);
+  });
+
+  it('returns false for pre-route 401/403/413/415/429 — handler never ran', () => {
+    // A 429 retry of an already-committed attempt must keep the key:
+    // rotating would mint a fresh key and debit a second transaction.
+    for (const status of [401, 403, 413, 415, 429]) {
+      expect(
+        shouldRotateWalletIdempotencyKeyForError(
+          new HttpError(status, 'pre-route')
+        )
+      ).toBe(false);
+    }
   });
 
   it('returns false for HTTP 5xx — server may have persisted partial state', () => {

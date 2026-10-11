@@ -424,10 +424,9 @@ describe('createBillFormPurchaseHandler', () => {
     });
 
     it('rotates the idempotency key on a 4xx response (request rejected before any state)', async () => {
-      // 4xx means the server validated and rejected the request
-      // before any side effects. A retry with the same key would
-      // just keep failing — fresh key lets the user correct and
-      // resubmit cleanly.
+      // A definitive route 4xx recorded its outcome under the key. A
+      // retry with the same key would just keep failing — fresh key
+      // lets the user correct and resubmit cleanly.
       mockChargeWalletForVtu.mockRejectedValueOnce(
         new HttpError(400, 'Bad Request')
       );
@@ -450,6 +449,71 @@ describe('createBillFormPurchaseHandler', () => {
 
       expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
       expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the idempotency key on a pre-route 429 (handler never ran)', async () => {
+      // No outcome was recorded, so the retry must reuse the key and
+      // dedupe against any already-committed attempt.
+      mockChargeWalletForVtu.mockRejectedValueOnce(
+        new HttpError(429, 'Too many requests')
+      );
+      const resetWalletIdempotencyKey = jest.fn();
+      const handlePurchase = createValidHandler({
+        amount: '1000',
+        numericAmount: 1000,
+        payment: createPaymentState({
+          walletBalance: 1000,
+          isSubmittingOwnerCurrent: () => true,
+          resetWalletIdempotencyKey,
+        }),
+      });
+
+      await handlePurchase();
+
+      expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    });
+
+    it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
+      // The submitter's retained key would replay the dead
+      // transaction when they retry — finalize it for the submitter
+      // even though the result UI is discarded.
+      mockChargeWalletForVtu.mockRejectedValueOnce(
+        new HttpError(400, 'Insufficient funds')
+      );
+      const resetWalletIdempotencyKey = jest.fn();
+      const handlePurchase = createValidHandler({
+        amount: '1000',
+        numericAmount: 1000,
+        payment: createPaymentState({
+          walletBalance: 1000,
+          isSubmittingOwnerCurrent: () => false,
+          resetWalletIdempotencyKey,
+        }),
+      });
+
+      await handlePurchase();
+
+      expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the idempotency key on a pre-route 429 when the account switched', async () => {
+      mockChargeWalletForVtu.mockRejectedValueOnce(
+        new HttpError(429, 'Too many requests')
+      );
+      const resetWalletIdempotencyKey = jest.fn();
+      const handlePurchase = createValidHandler({
+        amount: '1000',
+        numericAmount: 1000,
+        payment: createPaymentState({
+          walletBalance: 1000,
+          isSubmittingOwnerCurrent: () => false,
+          resetWalletIdempotencyKey,
+        }),
+      });
+
+      await handlePurchase();
+
+      expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     });
   });
 });

@@ -34,6 +34,13 @@ test('the scheduled backstop validates the operational branch from the last vali
   assert.match(workflow, /node ci_scripts\/validate-promote-record\.mjs "\$tip" "\$previous"/);
 });
 
+test('the cache key is unique per attempt so reruns can persist a new tip', () => {
+  // Reruns reuse github.run_id and exact-key cache hits skip the
+  // save: without run_attempt a rerun validates a new tip but cannot
+  // persist it, so a later rewrite of that tip goes undetected.
+  assert.match(workflow, /key: ops-promote-last-tip-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+});
+
 test('a cache miss fails closed instead of silently re-seeding the tip', () => {
   assert.match(workflow, /confirm_reseed/);
   assert.match(workflow, /refusing to silently re-seed/);

@@ -30,6 +30,16 @@ export function originRepoSlug(remoteUrl) {
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com' || parsed.port !== '') {
     return '';
   }
+  // Reject noncanonical raw port spellings: URL normalizes :0443 to
+  // the default port (empty), but the worker guard strips only the
+  // literal :443 and would refuse the checkout downstream. The raw
+  // port text must be absent or exactly 443.
+  const authority = raw.slice(raw.indexOf('://') + 3).split(/[\/?#]/, 1)[0];
+  const hostPort = authority.slice(authority.lastIndexOf('@') + 1);
+  const colon = hostPort.indexOf(':');
+  if (colon !== -1 && hostPort.slice(colon + 1) !== '443') {
+    return '';
+  }
   // Reject query/fragment suffixes: the worker guard refuses them, so
   // accepting here would only abort every release from this checkout
   // later with a less direct error. Fail fast at validation instead.

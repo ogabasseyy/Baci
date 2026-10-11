@@ -8,7 +8,8 @@ name: Ops Promote Record
 # default branch validates the operational branch on a schedule
 # instead (plus manual dispatch). The last validated tip persists in
 # the actions cache under a rotating key (an exact-key hit skips the
-# save, so the key must be unique per run); validating from that tip
+# save, so the key must be unique per attempt — reruns reuse run_id);
+# validating from that tip
 # enforces fast-forward, so a force-push rewrite fails the check even
 # when every rewritten tree is shape-valid. A red check means the
 # branch holds an invalid or non-fast-forward record — reconcile the
@@ -53,7 +54,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ops-promote-last-tip
-          key: ops-promote-last-tip-${{ github.run_id }}
+          key: ops-promote-last-tip-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ops-promote-last-tip-
       - name: Validate promote-record history
         run: |

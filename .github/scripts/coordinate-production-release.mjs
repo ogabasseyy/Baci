@@ -162,10 +162,12 @@ export async function coordinateRelease(operations, coordinationId) {
   }
   // gh run view reports the latest attempt's jobs for the single
   // non-matrixed deploy-production job, so exactly one success is the
-  // green shape. Malformed listings refuse publication with the same
-  // error instead of throwing a TypeError.
+  // green shape. A malformed listing (e.g. a success plus a stray null
+  // entry) cannot prove non-publication — the run completed and may
+  // have published — so it holds the lock instead of releasing it and
+  // skipping live verification.
   if (!Array.isArray(jobs) || !jobs.every(job => job && typeof job.name === 'string' && typeof job.conclusion === 'string')) {
-    throw new Error('production publication did not succeed; inspect the workflow');
+    tagIndeterminate(new Error('production publication state unreadable; inspect the workflow before retrying'));
   }
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
     // Attempt supersession is invisible in the jobs listing: if

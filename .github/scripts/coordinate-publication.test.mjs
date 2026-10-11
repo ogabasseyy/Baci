@@ -19,7 +19,7 @@ test('an indeterminate dispatch is not retried', async () => {
   assert.equal(setup.calls.filter(name => name === 'dispatch').length, 1);
 });
 
-test('malformed job listings refuse publication instead of throwing TypeError', async () => {
+test('malformed job listings hold the lock instead of throwing TypeError', async () => {
   for (const readJobs of [
     async () => null,
     async () => ({ message: 'error' }),
@@ -28,10 +28,12 @@ test('malformed job listings refuse publication instead of throwing TypeError', 
     async () => [{ name: 'deploy-production', conclusion: 'success' }, null],
   ]) {
     const setup = fixture({ readJobs });
-    await assert.rejects(
-      coordinateRelease(setup.operations, coordinationId),
-      /production publication did not succeed/
+    const error = await coordinateRelease(setup.operations, coordinationId).then(
+      () => { throw new Error('expected rejection'); },
+      rejection => rejection
     );
+    assert.match(error.message, /publication state unreadable/);
+    assert.equal(error.indeterminateDispatch, true);
   }
 });
 

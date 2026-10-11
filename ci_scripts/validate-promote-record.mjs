@@ -57,6 +57,10 @@ function gitRaw(args) {
   });
 }
 
+// ls-tree -rz lists nested blobs recursively with full relative
+// paths — no tree entries appear, so barriers/<sha>-<host>-<pid>
+// blobs validate directly. The -r flag is load-bearing: without it
+// the root barriers entry would surface as a rejected tree.
 function readTreeEntries(revision) {
   return gitRaw(['ls-tree', '-rz', revision])
     .split('\0')

@@ -54,6 +54,9 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
 // and environment-approval slack, so a healthy slow build is never
 // abandoned while it may still publish.
 export const RUN_WATCH_TIMEOUT_MS = 240 * 60 * 1000;
+// Worker deploy + verify steps are single-digit minutes when healthy;
+// 30 minutes bounds a hung deploy.sh or SSH session loudly.
+export const WORKER_STEP_TIMEOUT_MS = 30 * 60 * 1000;
 
 export async function waitForRunCompletion(runId, readStatus, options = {}) {
   const { pollMs = 10000, timeoutMs = RUN_WATCH_TIMEOUT_MS, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
@@ -211,9 +214,12 @@ async function main() {
       listRuns: async () => [...IN_FLIGHT_RUN_STATUSES]
         .flatMap(status => readRuns(`status=${status}`, true)),
       listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
-      updateWorkers: async () => command('bash', ['vps-workers/deploy.sh'], false),
+      // Generous explicit bounds so a hung deploy or SSH session
+      // fails loudly instead of wedging the operator session forever
+      // with the lock held; healthy runs take single-digit minutes.
+      updateWorkers: async () => command('bash', ['vps-workers/deploy.sh'], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
       verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
-        `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false),
+        `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
         '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
       findRun: async (commit, baseline) => findProductionDispatchRun(

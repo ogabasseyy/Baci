@@ -206,6 +206,19 @@ test('the CLI validates real commit trees and refuses rewritten operational hist
       'space',
     ]);
     assert.throws(() => run(spaced, initial));
+    // A real commit carrying a valid nested barrier passes end to
+    // end: ls-tree -rz enumerates the barrier blob recursively, so
+    // pre-flip barrier pushes are accepted, not rejected as trees.
+    const validSubtree = git(
+      ['mktree'],
+      `100644 blob ${barrierBlob}\t${commit}-runner-1\n`
+    );
+    const validTree = git(
+      ['mktree'],
+      `100644 blob ${blob}\t.gigl-promote-record\n040000 tree ${validSubtree}\tbarriers\n`
+    );
+    const valid = git(['commit-tree', validTree, '-p', initial, '-m', 'barrier']);
+    assert.doesNotThrow(() => run(valid, initial));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

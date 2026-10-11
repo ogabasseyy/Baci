@@ -50,10 +50,20 @@ it('blocks when no device record owns the reference', async () => {
   expect(mockPeekStatus).not.toHaveBeenCalled();
 });
 
-it('blocks when the record lookup throws', async () => {
+it('reports a storage read failure as an error, not proven absence', async () => {
   mockReadPending.mockRejectedValue(new Error('storage unavailable'));
   const { result } = renderHook(() => usePrimaryWalletCardOwnership(input()));
-  await waitFor(() => expect(result.current.ownership).toBe('blocked'));
+  // An I/O throw must not render the blocked "no funding found, start a
+  // new funding" copy: the first funding may still be pending.
+  await waitFor(() => expect(result.current.ownership).toBe('error'));
+});
+
+it('recovers from a transient read failure on retry', async () => {
+  mockReadPending.mockRejectedValueOnce(new Error('storage unavailable'));
+  const { result } = renderHook(() => usePrimaryWalletCardOwnership(input()));
+  await waitFor(() => expect(result.current.ownership).toBe('error'));
+  act(() => result.current.retryBind());
+  await waitFor(() => expect(result.current.ownership).toBe('verified'));
 });
 
 it('blocks without a lookup when auth resolved with no signed-in user', () => {

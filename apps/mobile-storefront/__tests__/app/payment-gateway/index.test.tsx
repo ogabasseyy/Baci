@@ -10,16 +10,20 @@ import PaymentGatewayScreen from '@/app/payment-gateway';
 const mockRetry = jest.fn();
 let mockStatus = 'pending';
 let mockReturnTo: string | undefined;
+let mockReadPendingFails = false;
 jest.mock('@/lib/primary-wallet-card', () => ({
   // These tests route by status, not ownership: the device record
   // always proves the launch belongs to the current user and the
   // server always confirms the checkout URL and amount.
   createPrimaryWalletCardFundingClient: () => ({
-    readPending: async () => ({
-      operationId: '22222222-2222-4222-8222-222222222222',
-      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      userId: '11111111-1111-4111-8111-111111111111',
-    }),
+    readPending: async () => {
+      if (mockReadPendingFails) throw new Error('storage unavailable');
+      return {
+        operationId: '22222222-2222-4222-8222-222222222222',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        userId: '11111111-1111-4111-8111-111111111111',
+      };
+    },
     recover: async () => ({
       authorizationUrl: 'https://checkout.paystack.com/Synthetic123',
       amountKobo: 100000,
@@ -84,6 +88,7 @@ jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockReturnTo = undefined;
+  mockReadPendingFails = false;
 });
 
 it.each([
@@ -132,4 +137,17 @@ it('resumes the saved savings handoff when leaving the pending funding view', as
   );
   fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
   expect(router.replace).toHaveBeenCalledWith(mockReturnTo);
+});
+
+it('shows retry copy without inviting a new funding when the record read fails', async () => {
+  mockStatus = 'pending';
+  mockReadPendingFails = true;
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(screen.getByRole('alert').props.children).toContain(
+      'do not start another funding if you already paid'
+    )
+  );
+  expect(screen.queryByText('View your orders')).toBeNull();
+  expect(screen.queryByText('Payment Failed')).toBeNull();
 });

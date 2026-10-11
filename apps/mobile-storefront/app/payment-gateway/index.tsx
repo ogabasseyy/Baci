@@ -121,8 +121,14 @@ export default function PaymentGatewayScreen() {
       // payment bytes; the wallet fund action resumes the true pending
       // operation. Mismatch offers a re-check: the bind is read-only,
       // so retrying a transient network failure is safe, and a forged
-      // link simply fails the bind again.
-      if (ownership === 'blocked' || ownership === 'mismatch') {
+      // link simply fails the bind again. A storage read failure is neither
+      // proof of absence nor a bind outcome: it gets retry copy that does
+      // not invite a second funding.
+      if (
+        ownership === 'blocked' ||
+        ownership === 'mismatch' ||
+        ownership === 'error'
+      ) {
         return (
           <PrimaryWalletCardPendingView
             colors={colors}
@@ -131,9 +137,11 @@ export default function PaymentGatewayScreen() {
             terminalDirective={
               ownership === 'blocked'
                 ? 'We could not find this funding for this account on this device. Return to your wallet to start a new funding — any completed checkout will still be found and credited.'
-                : 'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
+                : ownership === 'error'
+                  ? 'We could not check this funding on this device. Try again — do not start another funding if you already paid.'
+                  : 'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
             }
-            onCheck={ownership === 'mismatch' ? retryBind : undefined}
+            onCheck={ownership === 'blocked' ? undefined : retryBind}
             onBack={() =>
               router.replace(getWalletReturnHref(controller.returnTo))
             }

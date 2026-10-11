@@ -5,7 +5,8 @@ export type PrimaryWalletCardOwnership =
   | 'pending'
   | 'verified'
   | 'blocked'
-  | 'mismatch';
+  | 'mismatch'
+  | 'error';
 
 // Mount gate for primary wallet card checkouts. Deep-link params are
 // caller-controlled: the stamp alone proves nothing, and the reference
@@ -73,7 +74,10 @@ export function usePrimaryWalletCardOwnership({
       try {
         record = await client.readPending({ merchantId, userId });
       } catch {
-        if (!cancelled) setOwnership('blocked');
+        // A storage I/O failure is not proof of no record: report it as
+        // an error with a retry, never the blocked "not found" copy that
+        // invites starting a second funding while the first may persist.
+        if (!cancelled) setOwnership('error');
         return;
       }
       if (

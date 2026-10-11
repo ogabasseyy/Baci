@@ -153,4 +153,20 @@ describe('OrderRefundPanel manual form', () => {
       else process.env.TZ = previous;
     }
   });
+  it('prefills the manual amount without float artifacts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, remaining: 0.1 + 0.2 }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    expect((screen.getByLabelText(/Amount/) as HTMLInputElement).value).toBe(
+      '0.30'
+    );
+  });
 });

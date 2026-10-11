@@ -89,4 +89,46 @@ describe('OrderRefundPanel status display', () => {
       screen.queryByText(/in Paystack before taking/)
     ).not.toBeInTheDocument();
   });
+  it('renders both error and previous error when they differ', async () => {
+    loadWith({
+      ...summary,
+      events: [
+        {
+          id: 'e-1',
+          action: 'failed',
+          date: '2026-09-28T12:00:00Z',
+          actor: null,
+          details: {
+            error: 'The refund ran into a problem. Support has the details.',
+            previousError: 'Refund in progress — waiting for the money.',
+          },
+        },
+      ],
+    });
+    expect(
+      await screen.findByText(
+        'The refund ran into a problem. Support has the details.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Previously: Refund in progress — waiting for the money.'
+      )
+    ).toBeInTheDocument();
+  });
+  it('renders a fallback for malformed activity dates', async () => {
+    loadWith({
+      ...summary,
+      events: [
+        {
+          id: 'e-1',
+          action: 'failed',
+          date: 'not-a-date',
+          actor: null,
+          details: {},
+        },
+      ],
+    });
+    expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
+  });
 });

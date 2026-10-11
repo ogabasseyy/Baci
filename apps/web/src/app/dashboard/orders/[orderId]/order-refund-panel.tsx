@@ -13,6 +13,7 @@ import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { toLagosRefundInstant } from '@/lib/orders/to-lagos-refund-instant';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
+import { formatRefundActivityInstant } from './format-refund-activity-instant';
 import { OrderRefundManualForm } from './order-refund-manual-form';
 import { useRefundStatusPolling } from './use-refund-status-polling';
 
@@ -201,7 +202,10 @@ export function OrderRefundPanel({
                       disabled={busy}
                       onClick={() => {
                         setConfirmed(false);
-                        setAmount(String(summary.remaining));
+                        // Two-decimal string: a raw float conversion can
+                        // carry binary artifacts (0.30000000000000004)
+                        // that fail the panel's own decimal guard.
+                        setAmount(summary.remaining.toFixed(2));
                         setShowForm(!showForm);
                       }}
                     >
@@ -238,17 +242,27 @@ export function OrderRefundPanel({
                   {summary.events.map((event) => {
                     // Event errors arrive pre-mapped at the API boundary,
                     // so the panel renders them directly, never verbatim
-                    // worker text.
+                    // worker text. When both are present and differ, the
+                    // previous error keeps its own line instead of being
+                    // silently dropped.
                     const eventError =
                       event.details.error || event.details.previousError;
+                    const eventPreviousError =
+                      event.details.error &&
+                      event.details.previousError !== event.details.error
+                        ? event.details.previousError
+                        : undefined;
                     return (
                       <li key={event.id}>
                         <p>
                           {orderRefundStatusLabels[event.action] ||
                             'Refund activity'}{' '}
-                          · {new Date(event.date).toLocaleString()}
+                          · {formatRefundActivityInstant(event.date)}
                         </p>
                         {eventError && <p>{eventError}</p>}
+                        {eventPreviousError && (
+                          <p>Previously: {eventPreviousError}</p>
+                        )}
                       </li>
                     );
                   })}
@@ -265,7 +279,7 @@ export function OrderRefundPanel({
                       {orderRefundMethodLabels[item.method] ?? item.method}
                     </p>
                     <p className="break-all">{item.reference}</p>
-                    <p>{new Date(item.date).toLocaleString()}</p>
+                    <p>{formatRefundActivityInstant(item.date)}</p>
                   </li>
                 ))}
               </ul>

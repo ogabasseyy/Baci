@@ -96,6 +96,31 @@ describe('saved-store', () => {
     expect(item.compare_at_price).toBeUndefined();
   });
 
+  it.each([
+    'addItem',
+    'toggleSaved',
+  ] as const)('persists the matched option price when %s saves a refined result', (method) => {
+    useSavedStore.getState()[method]({
+      id: 'iphone-15',
+      name: 'iPhone 15',
+      slug: 'iphone-15',
+      price: 900000,
+      image: 'https://example.com/iphone-15.jpg',
+      searchMatch: {
+        productId: 'iphone-15',
+        total: 1,
+        price: 750000,
+        offerId: 'offer-open-box',
+        condition: 'open_box',
+      },
+    });
+
+    const [item] = useSavedStore.getState().items;
+
+    expect(item.price).toBe(750000);
+    expect(item.match_offer_id).toBe('offer-open-box');
+  });
+
   it('keeps the parent strike-through for unmatched saves', () => {
     useSavedStore.getState().addItem({
       id: 'iphone-15',

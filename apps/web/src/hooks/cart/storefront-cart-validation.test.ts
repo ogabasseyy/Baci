@@ -61,7 +61,18 @@ describe('storefront-cart-validation', () => {
     ]);
 
     expect(first).toBe(second);
-    expect(first).toBe('a:::10|b::v-b:::20');
+    expect(first).toBe('a:::10:1|b::v-b:::20:1');
+  });
+
+  it('changes the hash when only a line quantity changes', () => {
+    const before = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p', quantity: 1 }),
+    ]);
+    const after = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p', quantity: 2 }),
+    ]);
+
+    expect(before).not.toBe(after);
   });
 
   it('includes variant and condition identity in the cart validation hash', () => {
@@ -75,7 +86,7 @@ describe('storefront-cart-validation', () => {
           variantId: 'variant-used',
         }),
       ])
-    ).toBe('iphone-15::variant-used:used::829000');
+    ).toBe('iphone-15::variant-used:used::829000:1');
   });
 
   it('posts the first 50 cart items for validation and returns the response body', async () => {

@@ -47,7 +47,10 @@ export const createCartHash = (cart: CartItem[]) => {
       const serializedAttributes = serializeVariantAttributes(
         item.variantAttributes
       );
-      return `${itemKey}:${item.condition ?? ''}:${serializedAttributes}:${item.price}`;
+      // Quantity is part of the hash: the validate route enforces line
+      // quantity against live offer allocation, so a quantity-only edit
+      // must revalidate instead of skipping on an identical hash.
+      return `${itemKey}:${item.condition ?? ''}:${serializedAttributes}:${item.price}:${item.quantity}`;
     })
     .sort()
     .join('|');

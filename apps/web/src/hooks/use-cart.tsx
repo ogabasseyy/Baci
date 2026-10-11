@@ -224,7 +224,7 @@ export const CartProvider = ({
   useEffect(() => {
     if (!isHydrated || !isValidationActivated || cart.length === 0) return;
 
-    // 2026 Critical Fix: Create a stable hash of cart item IDs+prices to detect meaningful changes
+    // 2026 Critical Fix: Create a stable hash of cart item IDs+prices+quantities to detect meaningful changes
     // This prevents infinite loops when validation updates prices
     const cartHash = createCartHash(cart);
 

@@ -95,7 +95,10 @@ export const useSavedStore = create<SavedState>()(
             product_id: product.id,
             name: product.name,
             slug: product.slug,
-            price: product.price,
+            // The saved screen renders this price without refreshing it,
+            // so a matched option must persist its own price basis rather
+            // than the parent amount.
+            price: product.searchMatch?.price ?? product.price,
             // A matched option price must never pair with the parent's
             // strike-through: suppress it exactly as the search card does.
             compare_at_price: product.searchMatch
@@ -142,7 +145,10 @@ export const useSavedStore = create<SavedState>()(
             product_id: product.id,
             name: product.name,
             slug: product.slug,
-            price: product.price,
+            // The saved screen renders this price without refreshing it,
+            // so a matched option must persist its own price basis rather
+            // than the parent amount.
+            price: product.searchMatch?.price ?? product.price,
             // A matched option price must never pair with the parent's
             // strike-through: suppress it exactly as the search card does.
             compare_at_price: product.searchMatch

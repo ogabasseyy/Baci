@@ -25,6 +25,7 @@ import {
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
   getDriftedOfferCondition,
+  hasLinePriceDrift,
   pickChangedConditionById,
   pickChangedPriceById,
   resolveOfferLinePrice,
@@ -35,10 +36,6 @@ export { pickChangedConditionById, pickChangedPriceById };
 
 const log = createLogger('CartReprice');
 
-// Mirror the RPC's ±1 NGN parity tolerance so display rounding is not treated
-// as a price change.
-const PRICE_TOLERANCE = 1;
-
 export interface RepriceResult {
   /** Live unit price keyed by cart line id (only lines we could resolve). */
   priceById: Record<string, number>;
@@ -48,7 +45,7 @@ export interface RepriceResult {
    * with the price so checkout no longer rejects the stale condition.
    */
   conditionById: Record<string, string>;
-  /** Lines whose unit price drifted beyond tolerance. */
+  /** Lines whose extended line total drifted beyond tolerance. */
   changes: CartPriceChange[];
   /**
    * Lines whose offer condition drifted without a price move. Tracked
@@ -206,7 +203,10 @@ export async function repriceCartItems(
             if (driftedCondition) {
               result.conditionById[item.id] = driftedCondition;
             }
-            if (Math.abs(live.price - item.price) > PRICE_TOLERANCE) {
+            // Line basis (not unit): checkout rejects an extended-total
+            // drift past tolerance, so a sub-tolerance unit move on
+            // quantity > 1 must still surface and refresh.
+            if (hasLinePriceDrift(live.price, item.price, item.quantity)) {
               result.changes.push({
                 id: item.id,
                 name: item.name,
@@ -264,7 +264,7 @@ export async function repriceCartItems(
       }
 
       result.priceById[item.id] = liveUnitPrice;
-      if (Math.abs(liveUnitPrice - item.price) > PRICE_TOLERANCE) {
+      if (hasLinePriceDrift(liveUnitPrice, item.price, item.quantity)) {
         result.changes.push({
           id: item.id,
           name: item.name,

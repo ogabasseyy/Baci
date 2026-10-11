@@ -202,6 +202,59 @@ describe('repriceCartItems', () => {
     expect(result.changes).toEqual([]);
   });
 
+  it('reports a sub-tolerance unit drift when the extended line total exceeds tolerance', async () => {
+    productQuery.in.mockResolvedValue({
+      data: [{ id: 'product-1', price: 390000.75 }],
+      error: null,
+    });
+
+    const result = await repriceCartItems(
+      [createCartItem({ quantity: 2 })],
+      'merchant-1'
+    );
+
+    expect(result.priceById).toEqual({ 'line-1': 390000.75 });
+    expect(result.changes).toEqual([
+      {
+        id: 'line-1',
+        name: 'iPhone 13',
+        oldPrice: 390000,
+        newPrice: 390000.75,
+      },
+    ]);
+  });
+
+  it('reports a sub-tolerance unit drift on offer lines by extended total', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+      quantity: 2,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 300000.75 }],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({ 'offer-line': 300000.75 });
+    expect(result.changes).toEqual([
+      {
+        id: 'offer-line',
+        name: 'iPhone 13',
+        oldPrice: 300000,
+        newPrice: 300000.75,
+      },
+    ]);
+  });
+
   it('fails open when product lookup fails', async () => {
     productQuery.in.mockResolvedValue({
       data: null,

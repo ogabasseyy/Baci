@@ -523,11 +523,12 @@ export async function getOrder(
     (order.order_items || []).map((item) => item.product_id)
   );
 
-  // Fetch transactions
+  // Fetch transactions (transaction_type lets the refund section tell
+  // funded pending orders from unfunded ones).
   const { data: transactions } = await supabase
     .from('transactions')
     .select(
-      'id, gateway_reference, status, amount, currency, gateway, created_at'
+      'id, gateway_reference, transaction_type, status, amount, currency, gateway, created_at'
     )
     .eq('order_id', order.id)
     .order('created_at', { ascending: false });

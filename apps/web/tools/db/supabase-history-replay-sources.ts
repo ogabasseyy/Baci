@@ -13,6 +13,7 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-order-refund-pending-sources';
 import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
 import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
@@ -222,9 +223,7 @@ da62c84ff85648b528894dbcbb75fd344f1acfcd450e356e7018f114c6815490 20260823010000_
 38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef 20260927060000_plan_tier_authoritative_snapshot_entitlement.sql
 `; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
-  'a219d184e489947d1f2f79f305a587f952d612fc4ed6042012e551f31eef2cc4 20261002090000_order_refund_management.sql',
-  '8237b85b8c7b802995fb117397ed8b687867605fd9e24f2d650c94f4c9128938 20261010120000_restrict_authenticated_refund_inserts.sql',
-  'e397472281007bc152bf8cac08ec1742d33c970d9b7840533a17f009d13a4edf 20261010180000_count_manual_refund_coverage_in_claim.sql',
+  ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',

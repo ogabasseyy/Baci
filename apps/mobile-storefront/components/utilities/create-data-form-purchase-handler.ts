@@ -12,6 +12,7 @@ import {
   creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
+import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -113,11 +114,15 @@ export function createDataFormPurchaseHandler({
         buildVtuPurchaseDescriptor(request)
       );
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
+      const submittingOwner = payment.captureSubmittingOwner();
       try {
         const result = await chargeWalletForVtu({
           ...request,
           idempotencyKey,
         });
+        if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          return;
+        }
         // Only rotate on terminal success. 'processing' means the
         // vend is still in flight server-side; rotating now would let
         // a user-initiated retry bypass the route's dedupe row and
@@ -158,6 +163,9 @@ export function createDataFormPurchaseHandler({
         });
         return;
       } catch (error) {
+        if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          return;
+        }
         // Keep the key for ambiguous failures (network, timeout, 5xx,
         // unknown) so the route's dedupe table protects retries.
         // Rotate only on 4xx — request rejected before any state.

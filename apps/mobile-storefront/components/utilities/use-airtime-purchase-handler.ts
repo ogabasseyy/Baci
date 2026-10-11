@@ -19,6 +19,7 @@ import {
   getAirtimeCustomerName,
   validateAirtimePurchaseInput,
 } from './airtime-form-controller.helpers';
+import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -73,11 +74,15 @@ async function executeAirtimePurchase({
       buildVtuPurchaseDescriptor(request)
     );
     const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
+    const submittingOwner = payment.captureSubmittingOwner();
     try {
       const result = await chargeWalletForVtu({
         ...request,
         idempotencyKey,
       });
+      if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+        return;
+      }
       if (result.status === 'processing') {
         notePendingVtuReference(descriptor, result.reference);
         onSuccess({
@@ -110,6 +115,9 @@ async function executeAirtimePurchase({
       });
       return;
     } catch (error) {
+      if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+        return;
+      }
       if (shouldRotateWalletIdempotencyKeyForError(error)) {
         payment.resetWalletIdempotencyKey(descriptor);
       }

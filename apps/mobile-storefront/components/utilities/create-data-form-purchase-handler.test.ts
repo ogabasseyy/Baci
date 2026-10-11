@@ -48,6 +48,8 @@ describe('data form purchase cashback', () => {
         walletIsLoading: false,
         getWalletIdempotencyKey: jest.fn(() => 'data-key'),
         scopePendingVtuDescriptor: (d: string) => d,
+        captureSubmittingOwner: () => 'test-owner',
+        isSubmittingOwnerCurrent: () => true,
         resetWalletIdempotencyKey: jest.fn(),
       } as PaymentState,
       phoneNumber: '08031234567',

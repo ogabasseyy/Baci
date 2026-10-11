@@ -42,6 +42,7 @@ describe('bill stale success replay', () => {
     overrides: {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
+      isSubmittingOwnerCurrent?: () => boolean;
     } = {}
   ) {
     const handlePurchase = createBillFormPurchaseHandler({
@@ -63,6 +64,9 @@ describe('bill stale success replay', () => {
         walletIsLoading: false,
         getWalletIdempotencyKey: jest.fn(() => 'stale-bill-key'),
         scopePendingVtuDescriptor: (d: string) => d,
+        captureSubmittingOwner: () => 'test-owner',
+        isSubmittingOwnerCurrent:
+          overrides.isSubmittingOwnerCurrent ?? (() => true),
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
       } as PaymentState,
@@ -149,5 +153,21 @@ describe('bill stale success replay', () => {
       })
     );
     expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('discards the result when the account switched mid-flight', async () => {
+    const onSuccess = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 1000,
+      reference: 'WAL-SWITCHED-BILL',
+    });
+    await runPurchase({ onSuccess, isSubmittingOwnerCurrent: () => false });
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      expect.stringContaining('changed while the purchase was processing')
+    );
   });
 });

@@ -16,6 +16,7 @@ import type { CreateBillFormPurchaseHandlerInput } from './bill-form-purchase.ty
 import { getBillPaymentAmountError } from './bill-payment-amount-validation';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
 import { resolveBillFulfillment } from './resolve-bill-fulfillment';
+import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
 
 const GENERIC_PAYMENT_ERROR_MESSAGE = 'Payment failed. Please try again.';
 
@@ -136,11 +137,15 @@ export function createBillFormPurchaseHandler({
         buildVtuPurchaseDescriptor(request)
       );
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
+      const submittingOwner = payment.captureSubmittingOwner();
       try {
         const result = await chargeWalletForVtu({
           ...request,
           idempotencyKey,
         });
+        if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          return;
+        }
         // 'processing' is non-terminal — the vend is still in flight
         // server-side. Keep the key so a retry hits the route's
         // dedupe row instead of creating a second VTU transaction.
@@ -179,6 +184,9 @@ export function createBillFormPurchaseHandler({
         });
         return;
       } catch (error) {
+        if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          return;
+        }
         // Keep the idempotency key for any error that leaves room for
         // server state to have been persisted (network, timeout, 5xx,
         // unknown) so the user's retry hits the route's dedupe table.

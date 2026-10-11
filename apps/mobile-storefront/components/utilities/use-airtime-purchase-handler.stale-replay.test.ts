@@ -43,6 +43,7 @@ describe('airtime stale success replay', () => {
     overrides: {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
+      isSubmittingOwnerCurrent?: () => boolean;
     } = {}
   ) {
     return renderHook(() =>
@@ -60,6 +61,9 @@ describe('airtime stale success replay', () => {
           walletIsLoading: false,
           getWalletIdempotencyKey: jest.fn(() => 'stale-airtime-key'),
           scopePendingVtuDescriptor: (d: string) => d,
+          captureSubmittingOwner: () => 'test-owner',
+          isSubmittingOwnerCurrent:
+            overrides.isSubmittingOwnerCurrent ?? (() => true),
           resetWalletIdempotencyKey:
             overrides.resetWalletIdempotencyKey ?? jest.fn(),
         } as PaymentState,
@@ -134,5 +138,25 @@ describe('airtime stale success replay', () => {
       })
     );
     expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('discards the result when the account switched mid-flight', async () => {
+    const onSuccess = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-SWITCHED-AIR',
+    });
+    const { result } = renderHandler({
+      onSuccess,
+      isSubmittingOwnerCurrent: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      expect.stringContaining('changed while the purchase was processing')
+    );
   });
 });

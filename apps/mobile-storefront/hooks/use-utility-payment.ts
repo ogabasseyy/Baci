@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { useRef } from 'react';
 import { CONFIG } from '@/lib/config';
 import {
   forgetPendingVtuPurchase,
@@ -30,6 +31,12 @@ export function useUtilityPayment() {
   // the same CONFIG fallback as the wallet reads for the same reason.
   const ownerId = useAuthStore((state) => state.user?.id ?? state.customer?.id);
   const merchantId = useAuthStore((state) => state.merchantId);
+  // Latest signed-in owner, refreshed every render. Compared against
+  // the submitter when a checkout settles so an account switch (or
+  // sign-out) mid-flight discards the stale result instead of writing
+  // one customer's success screen into another's session.
+  const latestOwnerRef = useRef<string | undefined>(undefined);
+  latestOwnerRef.current = ownerId;
   const scopePendingVtuDescriptor = (descriptor: string): string =>
     scopePendingVtuKey(ownerId, merchantId || CONFIG.MERCHANT_ID, descriptor);
   // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
@@ -52,7 +59,20 @@ export function useUtilityPayment() {
 
   return {
     canFundByBankTransfer,
+    /**
+     * Captures the submitting owner at submit time. Handlers MUST call
+     * this before the wallet request and check the capture with
+     * `isSubmittingOwnerCurrent` once it settles.
+     */
+    captureSubmittingOwner: () => ownerId,
     isAuthenticated,
+    /**
+     * True while the capture from `captureSubmittingOwner` still
+     * matches the signed-in owner. False after an account switch or
+     * sign-out mid-flight — the caller must discard the result.
+     */
+    isSubmittingOwnerCurrent: (submittingOwner: string | undefined) =>
+      latestOwnerRef.current === submittingOwner,
     refetchWallet: () => {
       void wallet.refetch();
     },

@@ -28,6 +28,8 @@ function createPaymentState(): PaymentState {
     walletIsLoading: false,
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
     scopePendingVtuDescriptor: (d: string) => d,
+    captureSubmittingOwner: () => 'test-owner',
+    isSubmittingOwnerCurrent: () => true,
     resetWalletIdempotencyKey: jest.fn(),
   };
 }

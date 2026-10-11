@@ -134,6 +134,8 @@ describe('DataForm', () => {
       walletIsLoading: false,
       getWalletIdempotencyKey: jest.fn(() => 'test-key'),
       scopePendingVtuDescriptor: (d: string) => d,
+      captureSubmittingOwner: () => 'test-owner',
+      isSubmittingOwnerCurrent: () => true,
       resetWalletIdempotencyKey: jest.fn(),
     });
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);

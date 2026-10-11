@@ -49,6 +49,8 @@ function createPaymentState(
     walletIsLoading: false,
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
     scopePendingVtuDescriptor: (d: string) => d,
+    captureSubmittingOwner: () => 'test-owner',
+    isSubmittingOwnerCurrent: () => true,
     resetWalletIdempotencyKey: jest.fn(),
     ...overrides,
   };
@@ -116,6 +118,8 @@ describe('createBillFormPurchaseHandler', () => {
         walletBalance: 1500,
         getWalletIdempotencyKey: jest.fn(() => 'idem-key-1'),
         scopePendingVtuDescriptor: (d: string) => d,
+        captureSubmittingOwner: () => 'test-owner',
+        isSubmittingOwnerCurrent: () => true,
         resetWalletIdempotencyKey,
       }),
     });
@@ -351,6 +355,8 @@ describe('createBillFormPurchaseHandler', () => {
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-2'),
           scopePendingVtuDescriptor: (d: string) => d,
+          captureSubmittingOwner: () => 'test-owner',
+          isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
         }),
       });
@@ -382,6 +388,8 @@ describe('createBillFormPurchaseHandler', () => {
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-proc'),
           scopePendingVtuDescriptor: (d: string) => d,
+          captureSubmittingOwner: () => 'test-owner',
+          isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
         }),
       });
@@ -412,6 +420,8 @@ describe('createBillFormPurchaseHandler', () => {
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-3'),
           scopePendingVtuDescriptor: (d: string) => d,
+          captureSubmittingOwner: () => 'test-owner',
+          isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
         }),
       });

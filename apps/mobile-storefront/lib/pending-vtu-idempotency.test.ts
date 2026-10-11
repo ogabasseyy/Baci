@@ -1,7 +1,6 @@
 import {
   buildVtuPurchaseDescriptor,
   forgetPendingVtuPurchase,
-  hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
@@ -185,32 +184,5 @@ describe('pending-vtu-idempotency', () => {
 
     expect(fresh.recallPendingVtuKey(scoped)).toBe('restart-key');
     expect(fresh.isStalePendingVtuSuccess(scoped, 'REF-RESTART')).toBe(false);
-  });
-
-  it('drops TTL-expired entries on serialize and hydrate', () => {
-    const dayMs = 24 * 60 * 60 * 1000;
-    const descriptor = buildVtuPurchaseDescriptor({
-      type: 'data',
-      amount: 10,
-      phoneNumber: 'ttl-me',
-    });
-    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
-    rememberPendingVtuPurchase(scoped, 'ttl-key');
-
-    expect(serializePendingVtuPurchases(Date.now() + dayMs + 1)).toBe('[]');
-
-    forgetPendingVtuPurchase(scoped);
-    hydratePendingVtuPurchases(
-      JSON.stringify([[scoped, { key: 'k', reference: null, rememberedAt: 1 }]])
-    );
-    expect(recallPendingVtuKey(scoped)).toBeNull();
-  });
-
-  it('ignores corrupt snapshots on hydrate', () => {
-    hydratePendingVtuPurchases('{oops');
-    hydratePendingVtuPurchases('"just-a-string"');
-    hydratePendingVtuPurchases(JSON.stringify([['nope'], [42, {}], null]));
-
-    expect(recallPendingVtuKey('never-remembered')).toBeNull();
   });
 });

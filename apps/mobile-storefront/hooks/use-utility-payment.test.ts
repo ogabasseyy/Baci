@@ -247,4 +247,32 @@ describe('useUtilityPayment', () => {
       afterSwitch.result.current.scopePendingVtuDescriptor('mid-flight-key')
     ).not.toBe(scopedA);
   });
+
+  it('detects an account switch between capture and settle', () => {
+    const { result, rerender } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(true);
+
+    mockAuthState.user = { id: 'user-b' };
+    mockAuthState.customer = { id: 'customer-b' };
+    rerender(() => useUtilityPayment());
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
+  });
+
+  it('detects a sign-out between capture and settle', () => {
+    const { result, rerender } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+
+    mockAuthState.session = null;
+    mockAuthState.user = null;
+    mockAuthState.customer = null;
+    rerender(() => useUtilityPayment());
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
+  });
 });

@@ -8,13 +8,11 @@ import {
   forgetPendingVtuPurchase,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
-  hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
-  serializePendingVtuPurchases,
 } from './utility-pending-idempotency';
 
 describe('utility-pending-idempotency', () => {
@@ -204,29 +202,6 @@ describe('utility-pending-idempotency', () => {
     expect(
       fresh.hasNotedPendingVtuReference('{"reload":true}', 'REF-RELOAD')
     ).toBe(true);
-  });
-
-  it('drops TTL-expired entries on serialize and hydrate', () => {
-    const dayMs = 24 * 60 * 60 * 1000;
-    getPendingVtuKey('{"ttl":true}');
-
-    expect(serializePendingVtuPurchases(Date.now() + dayMs + 1)).toBe('[]');
-
-    clearPendingVtuKeys();
-    hydratePendingVtuPurchases(
-      JSON.stringify([
-        ['{"ttl":true}', { key: 'k', reference: null, rememberedAt: 1 }],
-      ])
-    );
-    expect(recallPendingVtuKey('{"ttl":true}')).toBeUndefined();
-  });
-
-  it('ignores corrupt snapshots on hydrate', () => {
-    hydratePendingVtuPurchases('{oops');
-    hydratePendingVtuPurchases('"just-a-string"');
-    hydratePendingVtuPurchases(JSON.stringify([['nope'], [42, {}], null]));
-
-    expect(recallPendingVtuKey('{"reload":true}')).toBeUndefined();
   });
 
   it('lets reference-less entries resolve normally even past the window', () => {

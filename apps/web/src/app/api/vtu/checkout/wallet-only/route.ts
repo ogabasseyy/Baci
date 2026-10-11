@@ -4,16 +4,14 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import {
   preparePendingVtuTransaction,
   resolveVtuCustomer,
 } from '@/lib/vtu-pending-transaction';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
+import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
-import { vtuWalletOnlyChargeSchema } from '@/schemas/vtu';
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -131,45 +129,19 @@ export async function POST(request: NextRequest) {
       return csrfResponse ?? createErrorResponse('CSRF validation failed', 403);
     }
 
-    // UUIDs are case-insensitive per RFC 4122 but the DB column is
-    // case-sensitive. Normalize to lowercase before storing/comparing so
-    // a retry with `K` capitalized differently doesn't create a new key
-    // → new vtu_transaction → orphan row.
-    const rawIdempotencyKey = request.headers.get('Idempotency-Key') ?? '';
-    if (!rawIdempotencyKey || !UUID_PATTERN.test(rawIdempotencyKey)) {
-      return createErrorResponse(
-        'Missing or invalid Idempotency-Key header (UUID required for wallet payments).',
-        400
-      );
+    const parsedRequest = await parseWalletOnlyCheckoutRequest(request);
+    if (!parsedRequest.ok) {
+      if (parsedRequest.details !== undefined) {
+        return NextResponse.json(
+          { error: parsedRequest.error, details: parsedRequest.details },
+          { status: parsedRequest.status }
+        );
+      }
+      return createErrorResponse(parsedRequest.error, parsedRequest.status);
     }
-    const idempotencyKey = rawIdempotencyKey.toLowerCase();
+    const { idempotencyKey, input } = parsedRequest;
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      // Malformed JSON body. Don't let it bubble to the generic 500
-      // catch — that would obscure the actual cause from the client.
-      return createErrorResponse('Invalid JSON body.', 400);
-    }
-    const parsed = vtuWalletOnlyChargeSchema.safeParse({
-      ...(typeof body === 'object' && body !== null ? body : {}),
-      source: 'checkout',
-    });
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-    if (parsed.data.walletAmount !== parsed.data.amount) {
-      return createErrorResponse(
-        'wallet-only checkout requires walletAmount === amount; partial wallet coverage is not supported.',
-        400
-      );
-    }
-
-    const requestFingerprint = computeVtuWalletRequestFingerprint(parsed.data);
+    const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     const supabase = createAdminClient();
     const existing = await findExistingIdempotencyRow(supabase, idempotencyKey);
@@ -188,7 +160,7 @@ export async function POST(request: NextRequest) {
       const requestingCustomerId = await resolveRequestingCustomerId(
         supabase,
         auth.user,
-        parsed.data.merchantSlug
+        input.merchantSlug
       );
       if (
         !requestingCustomerId ||
@@ -215,7 +187,7 @@ export async function POST(request: NextRequest) {
     const prepared = await preparePendingVtuTransaction({
       supabase,
       user: auth.user,
-      input: parsed.data,
+      input: input,
       source: 'checkout',
       requireCustomer: true,
     });
@@ -321,38 +293,4 @@ export async function POST(request: NextRequest) {
     });
     return createErrorResponse('Wallet-only checkout failed.', 500);
   }
-}
-
-function mapFulfillmentToResponse(
-  fulfillment: Awaited<ReturnType<typeof fulfillPendingVtuTransaction>>
-) {
-  if (fulfillment.status === 'failed') {
-    return NextResponse.json(
-      {
-        error: fulfillment.error,
-        reference: fulfillment.reference,
-        ...(fulfillment.refundedToWallet !== undefined && {
-          refundedToWallet: fulfillment.refundedToWallet,
-        }),
-      },
-      { status: 400 }
-    );
-  }
-  if (fulfillment.status === 'processing') {
-    return NextResponse.json(
-      { reference: fulfillment.reference, status: 'processing' },
-      { status: 202 }
-    );
-  }
-  return NextResponse.json({
-    amount: fulfillment.amount,
-    cashback: fulfillment.cashback,
-    customerIdentifier: fulfillment.customerIdentifier,
-    ...(fulfillment.loyaltyPoints && {
-      loyaltyPoints: fulfillment.loyaltyPoints,
-    }),
-    reference: fulfillment.reference,
-    status: 'successful',
-    ...(fulfillment.voucherPin && { voucherPin: fulfillment.voucherPin }),
-  });
 }

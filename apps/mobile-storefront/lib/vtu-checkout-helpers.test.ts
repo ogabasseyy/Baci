@@ -1,6 +1,7 @@
 import { HttpError } from './fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from './network-utils';
 import {
+  creditedVtuCashback,
   normalizeConfirmCheckoutStatus,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
@@ -32,5 +33,17 @@ describe('vtu checkout helpers', () => {
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(500, 'bad'))
     ).toBe(false);
+  });
+
+  it('surfaces cashback only when the server credited it', () => {
+    const credited = { amount: 50, credited: true, newBalance: 1200 };
+    expect(creditedVtuCashback(credited)).toBe(credited);
+    // RPC failure still returns a success with credited:false + zero
+    // balance — never show that as received cashback.
+    expect(
+      creditedVtuCashback({ amount: 50, credited: false, newBalance: 0 })
+    ).toBeUndefined();
+    expect(creditedVtuCashback(undefined)).toBeUndefined();
+    expect(creditedVtuCashback(null)).toBeUndefined();
   });
 });

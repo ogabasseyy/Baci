@@ -9,6 +9,7 @@ import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
+  creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
 
@@ -142,12 +143,13 @@ export function createDataFormPurchaseHandler({
         if (result.status === 'successful') {
           payment.resetWalletIdempotencyKey(descriptor);
         }
+        const cashback = creditedVtuCashback(result.cashback);
         onSuccess({
           amount: result.amount ?? planAmount,
-          cashback: result.cashback
+          cashback: cashback
             ? {
-                amount: result.cashback.amount,
-                newBalance: result.cashback.newBalance,
+                amount: cashback.amount,
+                newBalance: cashback.newBalance,
               }
             : undefined,
           reference: result.reference,

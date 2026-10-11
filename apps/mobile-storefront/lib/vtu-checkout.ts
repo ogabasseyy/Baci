@@ -18,6 +18,7 @@ import {
 } from './vtu-checkout-response-schemas';
 
 export {
+  creditedVtuCashback,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
 } from './vtu-checkout-helpers';

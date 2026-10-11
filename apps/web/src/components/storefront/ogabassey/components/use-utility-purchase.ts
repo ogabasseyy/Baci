@@ -98,6 +98,12 @@ export function useUtilityPurchase({
   // retained key replays the SAME transaction on resubmit, so without this
   // guard every processing replay would decrement the balance again.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
+  // Latest signed-in identity, refreshed every render. Compared against
+  // the submitter when a checkout resolves so an account switch (or
+  // sign-out) mid-flight discards the stale result instead of writing
+  // one customer's balance update + reference into another's session.
+  const latestIdentityRef = useRef<string | null>(null);
+  latestIdentityRef.current = customer?.id ?? user?.id ?? null;
   const {
     forgetAttemptKey,
     getWalletIdempotencyKey,
@@ -129,6 +135,7 @@ export function useUtilityPurchase({
     }
 
     setLoading(true);
+    const submittingIdentity = customer?.id ?? user?.id ?? null;
     const customerName =
       [customer?.first_name, customer?.last_name]
         .filter(Boolean)
@@ -141,6 +148,20 @@ export function useUtilityPurchase({
       customerPhone: customer?.phone,
       getWalletIdempotencyKey,
     });
+
+    if (latestIdentityRef.current !== submittingIdentity) {
+      // Shared browser switched (or signed out) while the request was
+      // in flight: the wallet + screen now belong to someone else, so
+      // drop this result instead of debiting their display or showing
+      // them the previous customer's reference.
+      toast({
+        title: 'Account changed',
+        description:
+          'The signed-in account changed while the purchase was processing. The result was discarded.',
+      });
+      setLoading(false);
+      return;
+    }
 
     if (result.kind === 'wallet-success') {
       // Terminal success forgets the key for a fresh buy-again slot.

@@ -10,6 +10,7 @@ import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
+  creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
 import type { Customer } from '@/stores/auth-store.types';
@@ -102,7 +103,7 @@ async function executeAirtimePurchase({
       payment.resetWalletIdempotencyKey(descriptor);
       onSuccess({
         amount: result.amount ?? numericAmount,
-        cashback: result.cashback,
+        cashback: creditedVtuCashback(result.cashback),
         reference: result.reference,
         status: 'successful',
         voucherPin: result.voucherPin,

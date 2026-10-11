@@ -560,4 +560,55 @@ describe('useUtilityPurchase', () => {
     );
     expect(result.current.step).toBe('details');
   });
+
+  it('discards the result when the account switches mid-flight', async () => {
+    let resolveSubmit!: (
+      value:
+        | { kind: 'wallet-success'; reference: string; amount: number; processing: boolean }
+        | { kind: 'error'; message: string }
+    ) => void;
+    mockSubmit.mockImplementation(
+      () =>
+        new Promise<
+          | { kind: 'wallet-success'; reference: string; amount: number; processing: boolean }
+          | { kind: 'error'; message: string }
+        >((resolve) => {
+          resolveSubmit = resolve;
+        })
+    );
+    const customerB = { ...customer, id: 'customer-2' };
+    const setWalletBalance = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: { customer: Customer }) =>
+        useUtilityPurchase(baseParams({ customer: props.customer, setWalletBalance })),
+      { initialProps: { customer } }
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(result.current.loading).toBe(true);
+
+    // Shared browser switches to customer B before A's request settles.
+    rerender({ customer: customerB });
+    await act(async () => {
+      resolveSubmit({
+        kind: 'wallet-success',
+        reference: 'REF-A',
+        amount: 1000,
+        processing: false,
+      });
+    });
+
+    // A's result is dropped: no balance write, no success screen for B.
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Account changed',
+      description:
+        'The signed-in account changed while the purchase was processing. The result was discarded.',
+    });
+    expect(setWalletBalance).not.toHaveBeenCalled();
+    expect(result.current.step).toBe('details');
+    expect(result.current.transactionRef).toBe('');
+    expect(result.current.loading).toBe(false);
+  });
 });

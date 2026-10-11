@@ -8,6 +8,7 @@ import {
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
+  creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
 import { IDENTIFIER_LABELS } from './bill-form.constants';
@@ -170,7 +171,7 @@ export function createBillFormPurchaseHandler({
         payment.resetWalletIdempotencyKey(descriptor);
         emitSuccess({
           amount: result.amount ?? numericAmount,
-          cashback: result.cashback,
+          cashback: creditedVtuCashback(result.cashback),
           customerIdentifier: customerId,
           reference: result.reference,
           status: 'successful',

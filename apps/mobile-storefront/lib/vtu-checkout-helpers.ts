@@ -89,3 +89,22 @@ export function shouldRotateWalletIdempotencyKeyForError(
     error instanceof HttpError && error.status >= 400 && error.status < 500
   );
 }
+
+interface VtuCashbackBlock {
+  amount: number;
+  credited?: boolean;
+  newBalance: number;
+}
+
+/**
+ * Returns the cashback block only when the server actually credited it.
+ * On `credit_customer_wallet` RPC failure the route still returns a
+ * successful purchase with `credited: false` and a default `newBalance`
+ * of 0 — surfacing that would tell the customer they received cashback
+ * and show a wrong wallet balance.
+ */
+export function creditedVtuCashback<T extends VtuCashbackBlock>(
+  cashback: T | null | undefined
+): T | undefined {
+  return cashback?.credited === true ? cashback : undefined;
+}

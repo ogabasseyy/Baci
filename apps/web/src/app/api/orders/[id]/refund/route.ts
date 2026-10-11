@@ -79,8 +79,7 @@ function maskRefundWorkerText(data: {
   // any mention of paystack — even inside an identifier like
   // paystack_reference — means the review concerns Paystack. No
   // unrelated word contains the provider name.
-  const needsPaystackCheck =
-    error?.toLowerCase().includes('paystack') ?? false;
+  const needsPaystackCheck = error?.toLowerCase().includes('paystack') ?? false;
   return {
     ...data,
     error: error ? describeRefundWorkerError(error) : error,

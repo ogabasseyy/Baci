@@ -289,9 +289,11 @@ test('live verification requires matching project, production target, state and 
   // CLI prebuilt deployments carry gitCommitSha instead of
   // githubCommitSha (verified live on production): accept it.
   assert.doesNotThrow(() => assertLiveDeployment({ ...deployment, meta: { gitCommitSha: commit } }, commit, 'baci'));
+  assert.doesNotThrow(() => assertLiveDeployment({ ...deployment, meta: { githubCommitSha: commit, gitCommitSha: commit } }, commit, 'baci'));
   for (const change of [
     { projectId: 'other' }, { meta: { githubCommitSha: 'c'.repeat(40) } },
     { meta: { gitCommitSha: 'c'.repeat(40) } }, { meta: {} },
+    { meta: { githubCommitSha: commit, gitCommitSha: 'c'.repeat(40) } },
     { readyState: 'ERROR' }, { target: 'preview' },
   ]) {
     assert.throws(() => assertLiveDeployment({ ...deployment, ...change }, commit, 'baci'), /does not match/);

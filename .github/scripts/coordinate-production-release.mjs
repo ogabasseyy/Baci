@@ -177,10 +177,15 @@ export function assertLiveDeployment(deployment, commit, projectId) {
   // the checkout), not githubCommitSha (git-integration deploys
   // only): verified live on the production deployment, whose meta
   // has gitCommitSha with source cli and no githubCommitSha. Accept
-  // either so verification matches the field the deploy path sets.
-  const deployedSha = deployment?.meta?.githubCommitSha ?? deployment?.meta?.gitCommitSha;
+  // either so verification matches the field the deploy path sets —
+  // but never silently prefer one: both present with conflicting
+  // values is ambiguous provenance, so fail closed.
+  const githubSha = deployment?.meta?.githubCommitSha ?? null;
+  const gitSha = deployment?.meta?.gitCommitSha ?? null;
+  const conflict = githubSha !== null && gitSha !== null && githubSha !== gitSha;
+  const deployedSha = githubSha ?? gitSha;
   if (!deployment || typeof deployment !== 'object' || Array.isArray(deployment) ||
-    deployment.projectId !== projectId || deployedSha !== commit ||
+    deployment.projectId !== projectId || conflict || deployedSha !== commit ||
     deployment.readyState !== 'READY' || deployment.target !== 'production') {
     throw new Error('live production deployment does not match the verified release');
   }

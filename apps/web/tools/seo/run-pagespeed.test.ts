@@ -180,7 +180,8 @@ describe('PageSpeed blocked-page diagnostics', () => {
       metric: 'seo',
       actual: 0.8,
       threshold: 0.9,
-      message: 'Failing Lighthouse audits: http-status-code, is-crawlable',
+      message:
+        'Failing Lighthouse audits (score 0.8, threshold 0.9): http-status-code, is-crawlable',
     });
     expect(result.passed).toBe(false);
   });

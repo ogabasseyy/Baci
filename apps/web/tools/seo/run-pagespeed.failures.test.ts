@@ -136,6 +136,55 @@ describe('run-pagespeed failures', () => {
     expect(results.slice(1).every((result) => result.passed)).toBe(true);
   });
 
+  it('keeps score and threshold in the audit-list message', async () => {
+    const fetchImpl: typeof fetch = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            lighthouseResult: {
+              categories: {
+                performance: { score: 0.92 },
+                accessibility: { score: 0.99 },
+                seo: {
+                  score: 0.8,
+                  auditRefs: [{ id: 'is-crawlable', weight: 1 }],
+                },
+                'best-practices': { score: 0.95 },
+              },
+              audits: {
+                'is-crawlable': { score: 0 },
+                'largest-contentful-paint': { numericValue: 1800 },
+                'cumulative-layout-shift': { numericValue: 0.04 },
+                'total-blocking-time': { numericValue: 90 },
+                'interaction-to-next-paint': { numericValue: 180 },
+              },
+            },
+          })
+        )
+      )
+    );
+
+    const results = await pageSpeedTools.runPageSpeedAudit({
+      apiKey: undefined,
+      baseUrl: 'https://usebaci.com',
+      extraUrls: [],
+      fetchImpl,
+      strategies: ['mobile'],
+    });
+
+    expect(results).toHaveLength(5);
+    for (const result of results) {
+      expect(result.passed).toBe(false);
+      expect(result.failures).toContainEqual({
+        metric: 'seo',
+        actual: 0.8,
+        threshold: 0.9,
+        message:
+          'Failing Lighthouse audits (score 0.8, threshold 0.9): is-crawlable',
+      });
+    }
+  });
+
   it('falls back to an omitted-count message for non-token audit IDs', async () => {
     const fetchImpl: typeof fetch = vi.fn(() =>
       Promise.resolve(
@@ -179,7 +228,8 @@ describe('run-pagespeed failures', () => {
         metric: 'performance',
         actual: 0.5,
         threshold: 0.87,
-        message: 'Failing Lighthouse audits: 1 omitted (unexpected ID format)',
+        message:
+          'Failing Lighthouse audits (score 0.5, threshold 0.87): 1 omitted (unexpected ID format)',
       });
     }
   });

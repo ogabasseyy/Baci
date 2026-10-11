@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const wrapper = new URL('./posthog-release-cli.sh', import.meta.url);
-function run({ mode, args = ['hermes', 'upload', '--skip-on-conflict'], customMsg }) {
+function run({ mode, args = ['hermes', 'upload'], customMsg }) {
   const root = mkdtempSync(join(tmpdir(), 'posthog-cli-test-'));
   try {
     const cli = join(root, 'cli');
@@ -52,6 +52,12 @@ test('authentication failures fail immediately', () => {
   assert.equal(result.status, 7);
   assert.equal(result.calls.length, 1);
   assert.match(result.stderr, /non-transport output; not retrying/);
+});
+test('hermes upload gains --skip-on-conflict exactly once', () => {
+  const appended = run({ mode: 'auth' });
+  assert.deepEqual(appended.calls, ['hermes upload --skip-on-conflict']);
+  const explicit = run({ mode: 'auth', args: ['hermes', 'upload', '--skip-on-conflict'] });
+  assert.deepEqual(explicit.calls, ['hermes upload --skip-on-conflict']);
 });
 test('Hermes clone failures are never swallowed or retried', () => {
   const result = run({ mode: 'network', args: ['hermes', 'clone'] });

@@ -79,19 +79,23 @@ function evaluatePageSpeedResult(
       const failedAudits = failingRefs
         .map((ref) => readSafeApiToken(ref.id))
         .filter((token): token is string => token !== null);
+      // The summary renders message-bearing failures verbatim, so the
+      // score and threshold must live inside the message or they vanish
+      // from reports for metrics the table omits (seo, accessibility,
+      // best-practices).
+      const scoreText = actual === null ? 'missing' : String(actual);
+      const auditDetail = failedAudits.length
+        ? [...new Set(failedAudits)].join(', ')
+        : `${failingRefs.length} omitted (unexpected ID format)`;
       failures.push({
         metric,
         actual,
         threshold,
-        ...(failedAudits.length
+        ...(failingRefs.length
           ? {
-              message: `Failing Lighthouse audits: ${[...new Set(failedAudits)].join(', ')}`,
+              message: `Failing Lighthouse audits (score ${scoreText}, threshold ${threshold}): ${auditDetail}`,
             }
-          : failingRefs.length
-            ? {
-                message: `Failing Lighthouse audits: ${failingRefs.length} omitted (unexpected ID format)`,
-              }
-            : {}),
+          : {}),
       });
     }
   }

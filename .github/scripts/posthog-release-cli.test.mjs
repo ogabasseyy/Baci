@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const wrapper = new URL('./posthog-release-cli.sh', import.meta.url);
-function run({ mode, args = ['hermes', 'upload', '--skip-on-conflict'] }) {
+function run({ mode, args = ['hermes', 'upload', '--skip-on-conflict'], customMsg }) {
   const root = mkdtempSync(join(tmpdir(), 'posthog-cli-test-'));
   try {
     const cli = join(root, 'cli');
@@ -14,6 +14,7 @@ function run({ mode, args = ['hermes', 'upload', '--skip-on-conflict'] }) {
     writeFileSync(cli, `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CALLS"
 count=$(wc -l < "$CALLS")
+if [[ -n "\${CUSTOM_MSG:-}" ]]; then echo "$CUSTOM_MSG"; exit 8; fi
 if [[ "$MODE" == transient && "$count" == 3 ]]; then exit 0; fi
 if [[ "$MODE" == auth ]]; then echo 'HTTP 401 unauthorized'; exit 7; fi
 echo 'failed to get release from hash: Request error: error sending request for url (https://synthetic.example/api/projects/1/error_tracking/releases/hash/test)'
@@ -24,7 +25,14 @@ exit 8
     chmodSync(join(root, 'sleep'), 0o755);
     const result = spawnSync('bash', [wrapper.pathname, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${root}:${process.env.PATH}`, POSTHOG_RELEASE_CLI: cli, MODE: mode, CALLS: calls },
+      env: {
+        ...process.env,
+        PATH: `${root}:${process.env.PATH}`,
+        POSTHOG_RELEASE_CLI: cli,
+        MODE: mode,
+        CALLS: calls,
+        ...(customMsg === undefined ? {} : { CUSTOM_MSG: customMsg }),
+      },
     });
     return { ...result, calls: readFileSync(calls, 'utf8').trim().split('\n') };
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -50,3 +58,16 @@ test('Hermes clone failures are never swallowed or retried', () => {
   assert.equal(result.status, 8);
   assert.equal(result.calls.length, 1);
 });
+
+for (const message of [
+  'request failed: EAI_AGAIN getaddrinfo registry.example.com',
+  'connection failed: ECONNRESET by peer',
+  'DNS lookup failed: ENOTFOUND registry.example.com',
+  'upload failed: socket hang up',
+]) {
+  test(`retries DNS/TCP transient signature: ${message}`, () => {
+    const result = run({ mode: 'network', customMsg: message });
+    assert.equal(result.status, 8);
+    assert.equal(result.calls.length, 3);
+  });
+}

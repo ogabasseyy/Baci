@@ -21,11 +21,20 @@ export async function tryReuseGeneration({
     loaded.manifest.encoder.name === valid.encoder.name &&
     loaded.manifest.encoder.sharpVersion === valid.encoder.sharpVersion &&
     loaded.manifest.encoder.libvipsVersion === valid.encoder.libvipsVersion;
+  // The complete source object binds, not just its hash: a retained
+  // manifest corrupted or edited to claim different bytes, format, or
+  // dimensions under the same hash stays schema-valid (a raised byte
+  // count with every tier below it) yet describes different source
+  // facts than the snapshot just verified.
   if (
     loaded.manifest.merchantId !== valid.merchantId ||
     loaded.manifest.assetId !== valid.assetId ||
     loaded.manifest.role !== valid.role ||
     loaded.manifest.source.sha256 !== valid.source.sha256 ||
+    loaded.manifest.source.bytes !== valid.source.bytes ||
+    loaded.manifest.source.format !== valid.source.format ||
+    loaded.manifest.source.orientedWidth !== valid.source.orientedWidth ||
+    loaded.manifest.source.orientedHeight !== valid.source.orientedHeight ||
     loaded.manifest.recipeId !== valid.recipeId ||
     !sameEncoder
   ) {

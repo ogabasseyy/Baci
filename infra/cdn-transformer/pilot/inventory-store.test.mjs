@@ -507,3 +507,63 @@ test('appendInventoryRecord refuses to publish when evicted before the rename', 
   // The refused tmp is cleaned, not littered.
   assert.deepEqual(await readdir(dir), ['inventory.json']);
 });
+
+test('appendInventoryRecord syncs the inventory directory after publish', async () => {
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
+  const sha = createHash('sha256').update('x').digest('hex');
+  const record = (overrides = {}) => ({
+    assetId: 'logo-a',
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: 'header-logo',
+    sourcePath: 'snapshots/logo-a.png',
+    url: 'https://cdn.example.com/media/logo-a.png',
+    ...overrides,
+  });
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-append-sync-'));
+  const path = join(dir, 'inventory.json');
+  await writeFile(path, JSON.stringify([record()]));
+  const synced = [];
+  const count = await appendInventoryRecord(
+    path,
+    record({ assetId: 'card-a', slot: 'product-card' }),
+    {
+      fsyncDir: (target) => {
+        synced.push(target);
+      },
+    }
+  );
+  assert.equal(count, 2);
+  assert.deepEqual(synced, [dir]);
+  // A real directory-sync failure throws loudly after the publish (the
+  // record stays published) and the operator reconciles.
+  const failingDir = await mkdtemp(join(tmpdir(), 'pilot-append-sync-fail-'));
+  const failingPath = join(failingDir, 'inventory.json');
+  const error = new Error('sync failed');
+  error.code = 'EIO';
+  await assert.rejects(
+    () =>
+      appendInventoryRecord(failingPath, record(), {
+        fsyncDir: () => {
+          throw error;
+        },
+      }),
+    /inventory directory sync failed \(EIO\)/
+  );
+  const stored = JSON.parse(await readFile(failingPath, 'utf8'));
+  assert.equal(stored.length, 1);
+  // Platforms without sync support proceed, matching the generation
+  // store's downgrade philosophy.
+  const plainDir = await mkdtemp(join(tmpdir(), 'pilot-append-sync-plain-'));
+  const plainPath = join(plainDir, 'inventory.json');
+  const enosys = new Error('not supported');
+  enosys.code = 'ENOSYS';
+  const plainCount = await appendInventoryRecord(plainPath, record(), {
+    fsyncDir: () => {
+      throw enosys;
+    },
+  });
+  assert.equal(plainCount, 1);
+});

@@ -284,5 +284,23 @@ export function surfaceProblems(
       })
     );
   }
+  // A stale --mounts artifact must not narrow coverage by omission: any
+  // rendered mount (a bound section with no status marker) outside the
+  // expected set fails instead of escaping the gate silently. Reporting
+  // rows (status set) are preflight's verdict, not unexpected mounts.
+  const expectedBindings = new Set(
+    expectedMounts.map((mount) => mount.binding)
+  );
+  for (const slot of g.slots ?? []) {
+    if (
+      slot.binding != null &&
+      slot.status == null &&
+      !expectedBindings.has(slot.binding)
+    ) {
+      problems.push(
+        `slot "${slot.slotId}" renders mount for unexpected binding "${slot.binding}" (stale --mounts?)`
+      );
+    }
+  }
   return problems;
 }

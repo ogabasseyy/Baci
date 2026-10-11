@@ -4,7 +4,11 @@
 import { open, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { MAX_INVENTORY_BYTES } from './constants.mjs';
-import { readUpToBytes } from './disk-guards.mjs';
+import {
+  fsyncDir,
+  isUnsupportedSyncError,
+  readUpToBytes,
+} from './disk-guards.mjs';
 import {
   acquireInventoryLock,
   assertInventoryLockHeld,
@@ -135,6 +139,23 @@ export function appendInventoryRecord(inventoryPath, record, options = {}) {
       throw error;
     }
     await rename(tmp, inventoryPath);
+    // Directory-entry durability: the temp-file fsync above persisted
+    // the bytes, not the renamed entry — without this sync a power loss
+    // can roll the publish back while acquisition reported success. A
+    // real sync failure throws loudly (like the end-of-section
+    // ownership check) and the operator reconciles; only platforms
+    // without sync support proceed, matching the generation store's
+    // downgrade philosophy.
+    const syncDir = options.fsyncDir ?? fsyncDir;
+    try {
+      await syncDir(dirname(inventoryPath));
+    } catch (error) {
+      if (!isUnsupportedSyncError(error)) {
+        throw new PilotAcquireError(
+          `acquire: inventory directory sync failed (${error?.code ?? 'unknown'})`
+        );
+      }
+    }
     return records.length;
   });
 }

@@ -150,3 +150,43 @@ test('writeNewSnapshot writes durably and never clobbers a rival', async () => {
   await assert.rejects(() => writeNewSnapshot(target, Buffer.from('rival')), /EEXIST/);
   assert.deepEqual(await readFile(target), bytes);
 });
+
+test('writeNewSnapshot syncs the parent dir and unlinks on sync failure', async () => {
+  const { readFile, stat } = await import('node:fs/promises');
+  const { root } = await makeRoots();
+  const synced = [];
+  const target = join(root, 'snap.png');
+  await writeNewSnapshot(target, Buffer.from('snapshot-bytes'), {
+    fsyncDir: (dir) => {
+      synced.push(dir);
+    },
+  });
+  assert.deepEqual(synced, [root]);
+  assert.deepEqual(await readFile(target), Buffer.from('snapshot-bytes'));
+  // A real directory-sync failure throws and unlinks the file this call
+  // created, so a retry does not misread the leftover as a rival win.
+  const failing = join(root, 'fail.png');
+  const error = new Error('sync failed');
+  error.code = 'EIO';
+  await assert.rejects(
+    () =>
+      writeNewSnapshot(failing, Buffer.from('x'), {
+        fsyncDir: () => {
+          throw error;
+        },
+      }),
+    /sync failed/
+  );
+  await assert.rejects(() => stat(failing), /ENOENT/);
+  // Platforms without sync support proceed: the bytes are written and
+  // the file stays, matching the generation store's downgrade.
+  const unsupported = join(root, 'plain.png');
+  const enosys = new Error('not supported');
+  enosys.code = 'ENOSYS';
+  await writeNewSnapshot(unsupported, Buffer.from('y'), {
+    fsyncDir: () => {
+      throw enosys;
+    },
+  });
+  assert.deepEqual(await readFile(unsupported), Buffer.from('y'));
+});

@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
-import { join, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from './constants.mjs';
+import { fsyncDir, isUnsupportedSyncError } from './disk-guards.mjs';
 
 export const ASSET_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const SNAPSHOT_EXTENSION_PATTERN = /^(png|jpg|jpeg|webp|avif)$/;
@@ -160,12 +161,25 @@ export async function resolveNewSnapshotPath(inputRoot, fileName) {
 // record pointing at a torn or missing snapshot. EEXIST (a rival won the
 // same-asset race) propagates untouched; only a file this call created
 // is unlinked when the write or sync fails.
-export async function writeNewSnapshot(target, bytes) {
+export async function writeNewSnapshot(target, bytes, options = {}) {
   const handle = await open(target, 'wx');
+  // Directory-entry durability, like the inventory publish: the file
+  // sync persists the bytes but not the new entry, so the parent dir
+  // syncs before this call reports success. A real sync failure throws
+  // (unlinking the file this call created, via synced below); only
+  // platforms without sync support proceed.
+  const syncDir = options.fsyncDir ?? fsyncDir;
   let synced = false;
   try {
     await handle.writeFile(bytes);
     await handle.sync();
+    try {
+      await syncDir(dirname(target));
+    } catch (error) {
+      if (!isUnsupportedSyncError(error)) {
+        throw error;
+      }
+    }
     synced = true;
   } finally {
     await handle.close();

@@ -130,3 +130,26 @@ export function ownedStagingPath(outputRoot, runToken) {
   }
   return join(outputRoot, `${STAGING_DIR_PREFIX}${runToken}`);
 }
+
+// Directory-entry durability for publish paths: a file fsync persists the
+// bytes but not the directory entry that names them, so a temp+rename
+// publish (or a direct create) must sync the parent directory after the
+// entry lands — otherwise power loss can roll the publish back while the
+// caller reported success. Throws the platform error; callers classify
+// unsupported sync versus abort-worthy failures.
+export async function fsyncDir(dir) {
+  const handle = await open(dir, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+// fsync failure classification: only "operation not supported" signals
+// a platform that cannot sync. Anything else (ENOSPC, EIO, ...) means
+// the bytes may never have reached stable storage and must abort rather
+// than publish a potentially non-durable result.
+export function isUnsupportedSyncError(error) {
+  return error?.code === 'ENOSYS' || error?.code === 'EINVAL';
+}

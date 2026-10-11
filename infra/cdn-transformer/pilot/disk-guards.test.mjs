@@ -6,7 +6,9 @@ import test from 'node:test';
 import {
   assertMinFreeBytes,
   createStagingBudget,
+  fsyncDir,
   getAvailableBytes,
+  isUnsupportedSyncError,
   readUpToBytes,
   removeOwnedStaging,
   sha256File,
@@ -119,4 +121,18 @@ test('sha256File hashes in constant memory, identical to a buffered hash', async
   assert.equal(await sha256File(target), expected);
   // Read errors propagate raw, like readFile's: callers map them.
   await assert.rejects(() => sha256File(join(dir, 'missing')), /ENOENT/);
+});
+
+test('fsyncDir syncs a directory entry and rejects a missing path', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-fsync-'));
+  await fsyncDir(dir);
+  await assert.rejects(() => fsyncDir(join(dir, 'missing')), /ENOENT/);
+});
+
+test('isUnsupportedSyncError classifies only unsupported sync', () => {
+  assert.equal(isUnsupportedSyncError({ code: 'ENOSYS' }), true);
+  assert.equal(isUnsupportedSyncError({ code: 'EINVAL' }), true);
+  assert.equal(isUnsupportedSyncError({ code: 'EIO' }), false);
+  assert.equal(isUnsupportedSyncError({ code: 'ENOSPC' }), false);
+  assert.equal(isUnsupportedSyncError(undefined), false);
 });

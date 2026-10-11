@@ -13,7 +13,11 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { readUpToBytes, removeOwnedStaging } from './disk-guards.mjs';
+import {
+  isUnsupportedSyncError,
+  readUpToBytes,
+  removeOwnedStaging,
+} from './disk-guards.mjs';
 import { generationIdFor } from './generation-identity.mjs';
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { generationDir, loadGeneration } from './manifest-store-load.mjs';
@@ -28,14 +32,6 @@ async function defaultFsync(path) {
   } finally {
     await handle.close();
   }
-}
-
-// fsync failure classification: only "operation not supported" signals
-// downgrade the durability label. Anything else (ENOSPC, EIO, ...) means
-// the bytes may never have reached stable storage and must abort rather
-// than publish a potentially non-durable or corrupted result.
-function isUnsupportedSyncError(error) {
-  return error?.code === 'ENOSYS' || error?.code === 'EINVAL';
 }
 
 // Owned-directory verification, mirroring prepareOwnedStaging: the path

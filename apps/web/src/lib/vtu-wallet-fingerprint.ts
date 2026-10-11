@@ -31,6 +31,9 @@ const FINGERPRINT_FIELDS = [
   // ephemeral per-verification artifact (re-verifying the same meter
   // can issue a new one). Hashing it would split a retry across
   // re-verification into a fresh key and a second debit.
+  // `customerAddress` is excluded for the same reason: receipt-only
+  // metadata (history + emailed receipts), never a vend input.
+  // Accepted residual: a replayed attempt keeps the earlier address.
   'walletAmount',
 ] as const;
 

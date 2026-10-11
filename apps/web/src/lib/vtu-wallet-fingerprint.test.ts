@@ -104,6 +104,24 @@ describe('computeVtuWalletRequestFingerprint', () => {
     ).not.toBe(firstVerification);
   });
 
+  it('ignores customerAddress (receipt-only; re-verified address must not split retries)', () => {
+    // customerAddress lands only in metadata.address for receipts — never a
+    // vend input. Hashing it would turn a re-verified address into a fresh
+    // key and a second debit. Accepted residual: replay keeps the earlier
+    // receipt address.
+    const first = computeVtuWalletRequestFingerprint({
+      ...BASE_AIRTIME,
+      customerAddress: '12 Old Street, Lagos',
+    });
+
+    expect(
+      computeVtuWalletRequestFingerprint({
+        ...BASE_AIRTIME,
+        customerAddress: '34 New Avenue, Lagos',
+      })
+    ).toBe(first);
+  });
+
   it('produces the same hash regardless of object key insertion order', () => {
     // Pin determinism: the canonical replacer-array stringification
     // means inserting fields in a different order MUST yield the

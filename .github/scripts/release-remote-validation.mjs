@@ -30,6 +30,12 @@ export function originRepoSlug(remoteUrl) {
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com' || parsed.port !== '') {
     return '';
   }
+  // Reject query/fragment suffixes: the worker guard refuses them, so
+  // accepting here would only abort every release from this checkout
+  // later with a less direct error. Fail fast at validation instead.
+  if (parsed.search !== '' || parsed.hash !== '') {
+    return '';
+  }
   const path = parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');
   return path ? path.toLowerCase() : '';
 }

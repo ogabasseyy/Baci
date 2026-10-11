@@ -1,0 +1,13 @@
+--- a/codex_content_agent/prompt_builder.py
++++ b/codex_content_agent/prompt_builder.py
+@@ -5,2 +5,4 @@
+ from pathlib import Path
+ from typing import Any
++
++from codex_content_agent.platform_capabilities import capability_context
+@@ -51,3 +53,5 @@
+         else ""
+     )
++    if task_type == "platform_marketing":
++        platform_rules += capability_context()
+     if candidate and candidate.get("status") == "no_candidate":

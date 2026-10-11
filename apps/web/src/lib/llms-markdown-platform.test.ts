@@ -45,6 +45,14 @@ describe('llms markdown platform builders', () => {
     const result = buildPlatformFeaturesMarkdown('https://usebaci.com');
 
     expect(result).toContain('AI-powered store generation');
+    expect(result).toContain('Jumia');
+    expect(result).toContain('Domain purchase');
+    expect(result).toContain('ACP');
+    expect(result).toContain('UCP');
+    expect(result).toContain(
+      'not automatic ChatGPT or Google shopping admission'
+    );
+    expect(result).toContain('not a list of callable MCP tools');
     expect(result).toContain('https://usebaci.com/pricing');
     expect(result).not.toContain('https://usebaci.com//');
   });

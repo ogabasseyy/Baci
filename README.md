@@ -7,6 +7,7 @@ Baci helps African merchants create complete ecommerce storefronts in under 3 mi
 ## 📚 Documentation
 
 ### Core Resources
+- **[Capability and Agent Access Map](docs/product/agent-access-map.md)**: Start here to locate web/mobile workflows, reviewed capability evidence and actual connector/tool boundaries.
 - **[Project Blueprint](project_brief.md)**: The master plan, product vision, and detailed requirements.
 - **[Architecture Diagrams](docs/architecture/ARCHITECTURE_DIAGRAMS.md)**: Visual flows of the system.
 - **[API Documentation](docs/api/README.md)**: Auto-generated API reference for the codebase.

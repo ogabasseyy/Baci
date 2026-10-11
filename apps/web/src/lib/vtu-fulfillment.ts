@@ -2912,6 +2912,23 @@ export async function fulfillPendingVtuTransaction({
         );
       }
     }
+    if (requiresVtuCustomerWalletRefund(row) && !refund.refundIssued) {
+      // Fresh vend failure with an unconfirmed wallet refund: fail
+      // retryable (routes map this to 5xx) so both clients keep their
+      // idempotency key and the retry dedupes onto this same row,
+      // re-attempting the refund — instead of minting a fresh debit
+      // while the original charge stands unreversed. Mirrors the
+      // replay-path and reconciliation guards.
+      throw new RetryableVtuError(
+        `Unable to confirm VTU refund for failed purchase ${row.id}`,
+        {
+          failedMessage: result.message ?? undefined,
+          failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+          refundedAmount: refund.refundedAmount,
+          transactionId: row.id,
+        }
+      );
+    }
     return {
       amount: Number(row.amount) || 0,
       error: result.message,

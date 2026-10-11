@@ -3913,6 +3913,78 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(result).toMatchObject({ refundedToWallet: 700 });
     });
 
+    it('fresh vend failure with unconfirmed wallet reversal throws retryable (key preserved)', async () => {
+      // P1: wallet debited, vend rejected, reverse_vtu_wallet_payment
+      // transiently fails. Returning failed/400 here would make both
+      // clients rotate the idempotency key, so the retry mints a fresh
+      // debit while the original charge stands unreversed. Throw
+      // RetryableVtuError instead (routes map it to 5xx; clients keep
+      // the key and the retry dedupes onto this same row, re-attempting
+      // the refund). Mirrors the already-failed replay-path guard.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'reverse_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection reset' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      mockPurchaseAirtime.mockResolvedValue({
+        success: false,
+        message: 'Vend rejected (biller status: k11)',
+        amount: 1000,
+        status: 'failed',
+      });
+
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-kuda-fail-unreversed',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-KFAIL-UNREV',
+          transaction_id: null,
+          status: 'pending',
+          metadata: {
+            paymentSplit: { wallet: 300, card: 700 },
+            walletDebited: true,
+          },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-kuda-fail-unreversed',
+        })
+      ).rejects.toMatchObject({
+        context: {
+          refundedAmount: 0,
+          transactionId: 'vtu-kuda-fail-unreversed',
+        },
+        name: 'RetryableVtuError',
+      });
+      expect(rpcImpl).toHaveBeenCalledWith(
+        'reverse_vtu_wallet_payment',
+        expect.objectContaining({
+          p_vtu_transaction_id: 'vtu-kuda-fail-unreversed',
+        })
+      );
+    });
+
     it('wallet-only insufficient balance: marks failed, does NOT call refund RPC (no card portion to refund)', async () => {
       // paymentSplit { wallet: amount, card: 0 } — wallet-only flow. If
       // the wallet RPC raises, there is no gateway charge to refund.

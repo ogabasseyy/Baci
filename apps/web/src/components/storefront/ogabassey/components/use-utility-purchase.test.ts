@@ -353,10 +353,12 @@ describe('useUtilityPurchase', () => {
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
+    // Processing defers the effect: the vend may still fail and refund.
+    expect(setWalletBalance).not.toHaveBeenCalled();
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
-    // Same reference replayed: balance applied once.
+    // Same reference replayed to success: balance applied once.
     expect(setWalletBalance).toHaveBeenCalledTimes(1);
 
     await act(async () => {

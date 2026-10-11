@@ -55,12 +55,14 @@ describe('POST /api/vtu/checkout/initialize', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns 400 for invalid input', async () => {
+  it('returns the wallet-only code even for schema-mismatched bodies', async () => {
+    // Stale clients must get the actionable code, not a generic
+    // validation error: the rejection runs before body parsing.
     const response = await POST(makeRequest({ amount: 1000 }));
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe('Invalid input');
+    expect(data.code).toBe('VTU_WALLET_ONLY');
   });
 
   it('rejects gateway checkout so utilities go through the wallet instead', async () => {

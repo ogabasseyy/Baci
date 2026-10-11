@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-idempotency';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
@@ -105,27 +106,32 @@ export function createBillFormPurchaseHandler({
         selectedBillItemIdentifier ?? undefined
       );
 
-      const idempotencyKey = payment.getWalletIdempotencyKey();
+      const request = {
+        amount: numericAmount,
+        billItemIdentifier: selectedBillItemIdentifier ?? undefined,
+        billerCode: selectedBillerCode,
+        billerName: selectedBillItemPathLabel
+          ? `${selectedBiller.billerName} - ${selectedBillItemPathLabel}`
+          : selectedBiller.billerName,
+        customerIdentifier: customerId,
+        customerName,
+        ...(customerAddress ? { customerAddress } : {}),
+        customerPhone: customer?.phone || undefined,
+        productCode: selectedProductCode,
+        provider: selectedProvider,
+        ...(requireValidationRef !== undefined ? { requireValidationRef } : {}),
+        type: billType,
+        ...(validationReference ? { validationReference } : {}),
+        walletAmount: numericAmount,
+      };
+      // Descriptor-keyed recall: a remount (Back to Home, reopen) after
+      // a 202 processing or a timeout retries with the SAME key, so the
+      // route dedupes instead of debiting a second transaction.
+      const descriptor = buildVtuPurchaseDescriptor(request);
+      const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       try {
         const result = await chargeWalletForVtu({
-          amount: numericAmount,
-          billItemIdentifier: selectedBillItemIdentifier ?? undefined,
-          billerCode: selectedBillerCode,
-          billerName: selectedBillItemPathLabel
-            ? `${selectedBiller.billerName} - ${selectedBillItemPathLabel}`
-            : selectedBiller.billerName,
-          customerIdentifier: customerId,
-          customerName,
-          ...(customerAddress ? { customerAddress } : {}),
-          customerPhone: customer?.phone || undefined,
-          productCode: selectedProductCode,
-          provider: selectedProvider,
-          ...(requireValidationRef !== undefined
-            ? { requireValidationRef }
-            : {}),
-          type: billType,
-          ...(validationReference ? { validationReference } : {}),
-          walletAmount: numericAmount,
+          ...request,
           idempotencyKey,
         });
         // 'processing' is non-terminal — the vend is still in flight
@@ -142,7 +148,7 @@ export function createBillFormPurchaseHandler({
         }
         // Terminal success — rotate the key so the next user-initiated
         // submit gets a fresh dedupe slot.
-        payment.resetWalletIdempotencyKey();
+        payment.resetWalletIdempotencyKey(descriptor);
         emitSuccess({
           amount: result.amount ?? numericAmount,
           cashback: result.cashback,
@@ -159,7 +165,7 @@ export function createBillFormPurchaseHandler({
         // Only rotate on 4xx — request was rejected before any state
         // was created and the same key would just keep failing.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey();
+          payment.resetWalletIdempotencyKey(descriptor);
         }
         throw error;
       }

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
@@ -51,16 +52,23 @@ async function executeAirtimePurchase({
 }: ExecuteAirtimePurchaseInput): Promise<void> {
   try {
     const customerName = getAirtimeCustomerName(customer);
-    const idempotencyKey = payment.getWalletIdempotencyKey();
+    const request = {
+      amount: numericAmount,
+      customerName,
+      customerPhone: customer?.phone,
+      networkProvider: selectedProvider ?? undefined,
+      phoneNumber,
+      type: 'airtime' as const,
+      walletAmount: numericAmount,
+    };
+    // Descriptor-keyed recall: a remount (Back to Home, reopen) after
+    // a 202 processing or a timeout retries with the SAME key, so the
+    // route dedupes instead of debiting a second transaction.
+    const descriptor = buildVtuPurchaseDescriptor(request);
+    const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
     try {
       const result = await chargeWalletForVtu({
-        amount: numericAmount,
-        customerName,
-        customerPhone: customer?.phone,
-        networkProvider: selectedProvider ?? undefined,
-        phoneNumber,
-        type: 'airtime',
-        walletAmount: numericAmount,
+        ...request,
         idempotencyKey,
       });
       if (result.status === 'processing') {
@@ -72,7 +80,7 @@ async function executeAirtimePurchase({
         });
         return;
       }
-      payment.resetWalletIdempotencyKey();
+      payment.resetWalletIdempotencyKey(descriptor);
       onSuccess({
         amount: result.amount ?? numericAmount,
         cashback: result.cashback,
@@ -83,7 +91,7 @@ async function executeAirtimePurchase({
       return;
     } catch (error) {
       if (shouldRotateWalletIdempotencyKeyForError(error)) {
-        payment.resetWalletIdempotencyKey();
+        payment.resetWalletIdempotencyKey(descriptor);
       }
       throw error;
     }

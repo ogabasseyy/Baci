@@ -131,11 +131,36 @@ describe('useUtilityPayment', () => {
   it('returns a stable wallet idempotency key until it is reset', () => {
     const { result } = renderHook(() => useUtilityPayment());
 
-    const first = result.current.getWalletIdempotencyKey();
-    const second = result.current.getWalletIdempotencyKey();
+    const first = result.current.getWalletIdempotencyKey('stable-descriptor');
+    const second = result.current.getWalletIdempotencyKey('stable-descriptor');
     expect(first).toBe(second);
 
-    result.current.resetWalletIdempotencyKey();
-    expect(result.current.getWalletIdempotencyKey()).not.toBe(first);
+    result.current.resetWalletIdempotencyKey('stable-descriptor');
+    expect(
+      result.current.getWalletIdempotencyKey('stable-descriptor')
+    ).not.toBe(first);
+  });
+
+  it('recalls the pending key across hook instances for the same purchase', () => {
+    // Remount regression: Back to Home + reopen Utilities creates a
+    // fresh hook instance; retrying the same purchase MUST reuse the
+    // pending key or the server debits a second transaction.
+    const firstMount = renderHook(() => useUtilityPayment());
+    const key =
+      firstMount.result.current.getWalletIdempotencyKey('remount-descriptor');
+    firstMount.unmount();
+
+    const secondMount = renderHook(() => useUtilityPayment());
+    expect(
+      secondMount.result.current.getWalletIdempotencyKey('remount-descriptor')
+    ).toBe(key);
+  });
+
+  it('mints distinct keys for distinct purchases', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    const airtime = result.current.getWalletIdempotencyKey('airtime-0801');
+    const data = result.current.getWalletIdempotencyKey('data-0801');
+    expect(airtime).not.toBe(data);
   });
 });

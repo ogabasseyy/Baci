@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { vtuSavedCardChargeSchema } from '@/schemas/vtu';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,24 +21,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const parsed = vtuSavedCardChargeSchema.safeParse({
-      ...body,
-      source: 'checkout',
-    });
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-
     // Wallet-only VTU checkout: saved-card charges for utilities are
     // disabled because gateway fees erase the margin. Customers fund their
     // wallet — bearing the funding charges — and pay from wallet balance
     // via /api/vtu/checkout/wallet-only. This route stays mounted so stale
-    // clients get an actionable error instead of a 404.
+    // clients get an actionable error instead of a 404. The rejection runs
+    // before body parsing on purpose: a stale client whose payload no
+    // longer matches the schema must still get the VTU_WALLET_ONLY code,
+    // not a generic validation error.
     return NextResponse.json(
       {
         error:

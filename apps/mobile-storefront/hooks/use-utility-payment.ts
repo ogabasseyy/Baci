@@ -1,5 +1,9 @@
 import * as Crypto from 'expo-crypto';
-import { useRef } from 'react';
+import {
+  forgetPendingVtuPurchase,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
@@ -12,11 +16,11 @@ import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
  */
 export function useUtilityPayment() {
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  // Wallet-only Idempotency-Key. Held in a ref so a network failure
-  // doesn't lose the key — the user's retry MUST send the same key
-  // for the route's `vtu_idempotency_keys` table to dedupe.
+  // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
+  // registry by purchase descriptor — a ref alone loses the key when
+  // the form remounts (Back to Home, reopen Utilities), and the retry
+  // would mint a fresh UUID the server debits as a SECOND transaction.
   // Rotated only after a definitive HTTP response (success or 4xx).
-  const walletIdempotencyKeyRef = useRef<string | null>(null);
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
@@ -40,25 +44,27 @@ export function useUtilityPayment() {
     walletError,
     walletIsLoading: wallet.isLoading,
     /**
-     * Returns the active wallet-only Idempotency-Key (UUID), creating
-     * one on first call. Subsequent calls within the same submit
-     * cycle MUST receive the same key — that's the entire dedupe
-     * contract with the wallet-only route.
+     * Returns the wallet-only Idempotency-Key (UUID) for this purchase
+     * descriptor, recalling a still-pending key across form remounts
+     * and minting + remembering a fresh one otherwise. The same
+     * descriptor MUST receive the same key until reset — that's the
+     * entire dedupe contract with the wallet-only route.
      */
-    getWalletIdempotencyKey: () => {
-      if (!walletIdempotencyKeyRef.current) {
-        walletIdempotencyKeyRef.current = Crypto.randomUUID();
-      }
-      return walletIdempotencyKeyRef.current;
+    getWalletIdempotencyKey: (descriptor: string) => {
+      const recalled = recallPendingVtuKey(descriptor);
+      if (recalled) return recalled;
+      const minted = Crypto.randomUUID();
+      rememberPendingVtuPurchase(descriptor, minted);
+      return minted;
     },
     /**
-     * Clears the cached key after a definitive response (success or
-     * 4xx). The next submit will mint a fresh UUID. Network failures
-     * (TimeoutError / NetworkError) MUST NOT call this — the key
-     * must survive so the user's retry hits the dedupe table.
+     * Forgets the descriptor's key after a definitive response (success
+     * or 4xx). The next submit for it mints a fresh UUID. Network
+     * failures (TimeoutError / NetworkError) MUST NOT call this — the
+     * key must survive so the user's retry hits the dedupe table.
      */
-    resetWalletIdempotencyKey: () => {
-      walletIdempotencyKeyRef.current = null;
+    resetWalletIdempotencyKey: (descriptor: string) => {
+      forgetPendingVtuPurchase(descriptor);
     },
   };
 }

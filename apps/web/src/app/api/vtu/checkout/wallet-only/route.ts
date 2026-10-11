@@ -114,10 +114,9 @@ async function findExistingIdempotencyRow(
  *   4. Service-role client only — no `transactions` row, no Paystack
  *      hop, no anon/authenticated grants on `vtu_idempotency_keys`.
  *
- * The route MUST reject `walletAmount !== amount` with 400 directing
- * the client to use the regular `/api/vtu/checkout/initialize` endpoint
- * for partial-coverage flows. This avoids two paths that could create
- * separate vtu_transaction rows for the same user submit.
+ * The route MUST reject `walletAmount !== amount` with 400: partial
+ * coverage is unsupported everywhere (the gateway routes are disabled
+ * with VTU_WALLET_ONLY), so the wallet must cover the full amount.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -165,7 +164,7 @@ export async function POST(request: NextRequest) {
     }
     if (parsed.data.walletAmount !== parsed.data.amount) {
       return createErrorResponse(
-        'wallet-only checkout requires walletAmount === amount; use /api/vtu/checkout/initialize for partial wallet coverage.',
+        'wallet-only checkout requires walletAmount === amount; partial wallet coverage is not supported.',
         400
       );
     }

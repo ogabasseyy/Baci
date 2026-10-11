@@ -202,8 +202,16 @@ export function useUtilityPurchase({
       clearIntent();
       // A replayed reference is the same debit — only apply the balance
       // effect the first time it is seen. Buy-again purchases mint new
-      // references, so genuine repeat buys still decrement.
-      if (!appliedBalanceRefs.current.has(result.reference)) {
+      // references, so genuine repeat buys still decrement. Non-terminal
+      // `processing` defers the effect entirely (without recording the
+      // reference): the vend may still fail and refund, and a stale-low
+      // balance would wrongly block the next submit as underfunded. The
+      // later success replay carries the same reference and applies the
+      // decrement exactly once.
+      if (
+        !result.processing &&
+        !appliedBalanceRefs.current.has(result.reference)
+      ) {
         appliedBalanceRefs.current.add(result.reference);
         // Prefer the server's post-transaction balance when cashback was
         // credited — the local decrement would otherwise display too low a

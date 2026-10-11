@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
@@ -90,17 +91,24 @@ export function createDataFormPurchaseHandler({
         customer?.email ||
         undefined;
 
-      const idempotencyKey = payment.getWalletIdempotencyKey();
+      const request = {
+        amount: planAmount,
+        customerName,
+        customerPhone: customer?.phone || undefined,
+        dataPlanCode: selectedPlan,
+        networkProvider: selectedProvider,
+        phoneNumber,
+        type: 'data' as const,
+        walletAmount: planAmount,
+      };
+      // Descriptor-keyed recall: a remount (Back to Home, reopen) after
+      // a 202 processing or a timeout retries with the SAME key, so the
+      // route dedupes instead of debiting a second transaction.
+      const descriptor = buildVtuPurchaseDescriptor(request);
+      const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       try {
         const result = await chargeWalletForVtu({
-          amount: planAmount,
-          customerName,
-          customerPhone: customer?.phone || undefined,
-          dataPlanCode: selectedPlan,
-          networkProvider: selectedProvider,
-          phoneNumber,
-          type: 'data',
-          walletAmount: planAmount,
+          ...request,
           idempotencyKey,
         });
         // Only rotate on terminal success. 'processing' means the
@@ -108,7 +116,7 @@ export function createDataFormPurchaseHandler({
         // a user-initiated retry bypass the route's dedupe row and
         // create a duplicate VTU transaction.
         if (result.status === 'successful') {
-          payment.resetWalletIdempotencyKey();
+          payment.resetWalletIdempotencyKey(descriptor);
         }
         onSuccess({
           amount: result.amount ?? planAmount,
@@ -128,7 +136,7 @@ export function createDataFormPurchaseHandler({
         // unknown) so the route's dedupe table protects retries.
         // Rotate only on 4xx — request rejected before any state.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey();
+          payment.resetWalletIdempotencyKey(descriptor);
         }
         throw error;
       }

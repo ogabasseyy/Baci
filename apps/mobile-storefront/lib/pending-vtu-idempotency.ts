@@ -20,10 +20,15 @@
  * (success, key-rotating 4xx) MUST forget the descriptor, or a later
  * legitimate repeat purchase would reattach to a dead key.
  *
- * Durability matches the ref it replaces: in-memory only. An app
- * restart still loses pending keys (restart recovery is a separate
- * feature); this closes the remount gap, not the relaunch gap.
+ * Durability: entries persist in MMKV (device-scoped) so an app
+ * restart between a timed-out submit and its retry still replays the
+ * same key instead of minting a fresh one and debiting twice.
+ * Persisted entries expire after 24h; the 5-minute stale window for
+ * already-completed detection still applies to `rememberedAt`.
  */
+
+import { Platform } from 'react-native';
+import { createMMKV } from 'react-native-mmkv';
 
 // Lockstep with the server fingerprint fields: any field the server
 // hashes that is missing here could attach one key to two payloads
@@ -66,6 +71,151 @@ interface PendingVtuPurchase {
 }
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
+
+/**
+ * How long a persisted entry survives across restarts. Independent of
+ * the 5-minute stale window (which governs already-completed
+ * detection): a restarted-then-retried purchase needs its ORIGINAL key
+ * however old, and the stale check still correctly flags it as
+ * already-completed when the remembered reference matches.
+ */
+const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+
+const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
+
+interface PersistedPendingVtuPurchase {
+  key: string;
+  reference: string | null;
+  rememberedAt: number;
+}
+
+function isPersistedEntry(
+  value: unknown
+): value is [string, PersistedPendingVtuPurchase] {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return false;
+  }
+  const [scoped, entry] = value;
+  return (
+    typeof scoped === 'string' &&
+    typeof entry === 'object' &&
+    entry !== null &&
+    typeof (entry as PersistedPendingVtuPurchase).key === 'string' &&
+    typeof (entry as PersistedPendingVtuPurchase).rememberedAt === 'number'
+  );
+}
+
+/** Serializes live entries for MMKV (prunes TTL-expired). */
+export function serializePendingVtuPurchases(now: number = Date.now()): string {
+  const live: [string, PersistedPendingVtuPurchase][] = [];
+  for (const [scoped, entry] of pendingPurchases) {
+    if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) {
+      live.push([
+        scoped,
+        {
+          key: entry.key,
+          reference: entry.reference,
+          rememberedAt: entry.rememberedAt,
+        },
+      ]);
+    }
+  }
+  return JSON.stringify(live);
+}
+
+/**
+ * Restores entries from a snapshot (same code path as restart).
+ * Corrupt snapshots and TTL-expired entries are dropped; in-memory
+ * entries win over persisted ones so hydration never clobbers a live
+ * attempt.
+ */
+export function hydratePendingVtuPurchases(
+  serialized: string | null,
+  now: number = Date.now()
+): void {
+  if (!serialized) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(parsed)) {
+    return;
+  }
+  for (const item of parsed) {
+    if (!isPersistedEntry(item)) {
+      continue;
+    }
+    const [scoped, entry] = item;
+    if (
+      now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS ||
+      pendingPurchases.has(scoped)
+    ) {
+      continue;
+    }
+    pendingPurchases.set(scoped, {
+      key: entry.key,
+      reference: entry.reference ?? null,
+      rememberedAt: entry.rememberedAt,
+    });
+  }
+}
+
+interface PendingVtuKeyStore {
+  getString: (key: string) => string | null | undefined;
+  set: (key: string, value: string) => void;
+}
+
+let keyStore: PendingVtuKeyStore | null | undefined;
+
+/**
+ * Lazily opens the MMKV bucket (isolated ID so zustand persistence
+ * never collides). Synchronous by design: the submit path needs the
+ * recall inline. Web/SSR and native failures degrade to memory-only.
+ */
+function getPendingVtuStorage(): PendingVtuKeyStore | null {
+  if (keyStore !== undefined) {
+    return keyStore;
+  }
+  try {
+    if (Platform.OS === 'web') {
+      keyStore = null;
+      return keyStore;
+    }
+    keyStore = createMMKV({ id: 'baci-vtu-pending-keys' });
+  } catch {
+    keyStore = null;
+  }
+  return keyStore;
+}
+
+function readPersistedSnapshot(): string | null {
+  try {
+    return (
+      getPendingVtuStorage()?.getString(VTU_PENDING_KEYS_STORAGE_KEY) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function persistPendingVtuPurchases(): void {
+  try {
+    getPendingVtuStorage()?.set(
+      VTU_PENDING_KEYS_STORAGE_KEY,
+      serializePendingVtuPurchases()
+    );
+  } catch {
+    // Persistence is best effort; the in-memory registry still dedupes
+    // this session.
+  }
+}
+
+// Restart recovery: rehydrate before any submit runs in this launch.
+hydratePendingVtuPurchases(readPersistedSnapshot());
 
 /**
  * Binds a purchase descriptor to the submitting owner + merchant. The
@@ -127,6 +277,7 @@ export function rememberPendingVtuPurchase(
     if (oldest.done) break;
     pendingPurchases.delete(oldest.value);
   }
+  persistPendingVtuPurchases();
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */
@@ -135,7 +286,10 @@ export function notePendingVtuReference(
   reference: string
 ): void {
   const pending = pendingPurchases.get(descriptor);
-  if (pending) pending.reference = reference;
+  if (pending) {
+    pending.reference = reference;
+    persistPendingVtuPurchases();
+  }
 }
 
 /**
@@ -162,4 +316,5 @@ export function isStalePendingVtuSuccess(
 /** Drops the recall entry once its purchase reaches a terminal outcome. */
 export function forgetPendingVtuPurchase(descriptor: string): void {
   pendingPurchases.delete(descriptor);
+  persistPendingVtuPurchases();
 }

@@ -20,9 +20,11 @@ import { createWalletIdempotencyKey } from './utility-checkout';
  * (success, key-rotating 4xx) MUST forget the signature, or a later
  * legitimate repeat purchase would reattach to a dead key.
  *
- * Durability matches the ref it replaces: in-memory only. A full page
- * reload still loses pending keys (reload recovery is a separate
- * feature); this closes the remount gap, not the reload gap.
+ * Durability: entries persist in sessionStorage (tab-scoped) so a page
+ * reload between a timed-out submit and its retry still replays the
+ * same key instead of minting a fresh one and debiting twice.
+ * Persisted entries expire after 24h; the 5-minute stale window for
+ * already-completed detection still applies to `rememberedAt`.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
@@ -88,6 +90,126 @@ interface PendingVtuPurchase {
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
 /**
+ * How long a persisted entry survives across reloads. Independent of
+ * the 5-minute stale window (which governs already-completed
+ * detection): a reloaded-then-retried purchase needs its ORIGINAL key
+ * however old, and the stale check still correctly flags it as
+ * already-completed when the remembered reference matches.
+ */
+const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+
+const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
+
+interface PersistedPendingVtuPurchase {
+  key: string;
+  reference: string | null;
+  rememberedAt: number;
+}
+
+function isPersistedEntry(
+  value: unknown
+): value is [string, PersistedPendingVtuPurchase] {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return false;
+  }
+  const [scoped, entry] = value;
+  return (
+    typeof scoped === 'string' &&
+    typeof entry === 'object' &&
+    entry !== null &&
+    typeof (entry as PersistedPendingVtuPurchase).key === 'string' &&
+    typeof (entry as PersistedPendingVtuPurchase).rememberedAt === 'number'
+  );
+}
+
+/** Serializes live entries for sessionStorage (prunes TTL-expired). */
+export function serializePendingVtuPurchases(now: number = Date.now()): string {
+  const live: [string, PersistedPendingVtuPurchase][] = [];
+  for (const [scoped, entry] of pendingPurchases) {
+    if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) {
+      live.push([
+        scoped,
+        {
+          key: entry.key,
+          reference: entry.reference,
+          rememberedAt: entry.rememberedAt,
+        },
+      ]);
+    }
+  }
+  return JSON.stringify(live);
+}
+
+/**
+ * Restores entries from a snapshot (same code path as reload). Corrupt
+ * snapshots and TTL-expired entries are dropped; in-memory entries win
+ * over persisted ones so hydration never clobbers a live attempt.
+ */
+export function hydratePendingVtuPurchases(
+  serialized: string | null,
+  now: number = Date.now()
+): void {
+  if (!serialized) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(parsed)) {
+    return;
+  }
+  for (const item of parsed) {
+    if (!isPersistedEntry(item)) {
+      continue;
+    }
+    const [scoped, entry] = item;
+    if (
+      now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS ||
+      pendingPurchases.has(scoped)
+    ) {
+      continue;
+    }
+    pendingPurchases.set(scoped, {
+      key: entry.key,
+      reference: entry.reference ?? null,
+      rememberedAt: entry.rememberedAt,
+    });
+  }
+}
+
+function readSessionSnapshot(): string | null {
+  try {
+    if (typeof sessionStorage === 'undefined') {
+      return null;
+    }
+    return sessionStorage.getItem(VTU_PENDING_KEYS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function persistPendingVtuPurchases(): void {
+  try {
+    if (typeof sessionStorage === 'undefined') {
+      return;
+    }
+    sessionStorage.setItem(
+      VTU_PENDING_KEYS_STORAGE_KEY,
+      serializePendingVtuPurchases()
+    );
+  } catch {
+    // Private-mode quota errors and friends: persistence is best
+    // effort; the in-memory registry still dedupes this session.
+  }
+}
+
+// Reload recovery: rehydrate before any submit runs in this tab.
+hydratePendingVtuPurchases(readSessionSnapshot());
+
+/**
  * Binds a purchase signature to the submitting owner + merchant. The
  * signature deliberately omits identity (mirroring the server
  * fingerprint), so without this a sign-out + second customer could
@@ -132,6 +254,7 @@ export function rememberPendingVtuPurchase(
     reference: null,
     rememberedAt: Date.now(),
   });
+  persistPendingVtuPurchases();
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */
@@ -140,7 +263,10 @@ export function notePendingVtuReference(
   reference: string
 ): void {
   const pending = pendingPurchases.get(payloadSignature);
-  if (pending) pending.reference = reference;
+  if (pending) {
+    pending.reference = reference;
+    persistPendingVtuPurchases();
+  }
 }
 
 /**
@@ -180,6 +306,7 @@ export function isStalePendingVtuSuccess(
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {
   pendingPurchases.delete(payloadSignature);
+  persistPendingVtuPurchases();
 }
 
 /**
@@ -200,4 +327,11 @@ export function getPendingVtuKey(payloadSignature: string): string {
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(VTU_PENDING_KEYS_STORAGE_KEY);
+    }
+  } catch {
+    // Best effort (see persistPendingVtuPurchases).
+  }
 }

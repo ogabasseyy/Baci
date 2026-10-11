@@ -1,12 +1,14 @@
 import {
   buildVtuPurchaseDescriptor,
   forgetPendingVtuPurchase,
+  hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
   scopePendingVtuKey,
+  serializePendingVtuPurchases,
 } from './pending-vtu-idempotency';
 
 describe('pending-vtu-idempotency', () => {
@@ -158,5 +160,57 @@ describe('pending-vtu-idempotency', () => {
     // …and forgetting under the wrong scope must not drop it.
     forgetPendingVtuPurchase(keyB);
     expect(recallPendingVtuKey(keyA)).toBe('key-a');
+  });
+
+  it('restores the pending key after an app restart', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 9,
+      phoneNumber: 'restart-me',
+    });
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
+    rememberPendingVtuPurchase(scoped, 'restart-key');
+    notePendingVtuReference(scoped, 'REF-RESTART');
+
+    // A restart re-executes the module with an empty map; the MMKV
+    // snapshot taken at persist time must restore the pendings. The
+    // init path calls hydrate with the stored snapshot, so round-trip
+    // through the same functions against a fresh module instance.
+    const snapshot = serializePendingVtuPurchases();
+    jest.resetModules();
+    const fresh = jest.requireActual<
+      typeof import('./pending-vtu-idempotency')
+    >('./pending-vtu-idempotency');
+    fresh.hydratePendingVtuPurchases(snapshot);
+
+    expect(fresh.recallPendingVtuKey(scoped)).toBe('restart-key');
+    expect(fresh.isStalePendingVtuSuccess(scoped, 'REF-RESTART')).toBe(false);
+  });
+
+  it('drops TTL-expired entries on serialize and hydrate', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'data',
+      amount: 10,
+      phoneNumber: 'ttl-me',
+    });
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
+    rememberPendingVtuPurchase(scoped, 'ttl-key');
+
+    expect(serializePendingVtuPurchases(Date.now() + dayMs + 1)).toBe('[]');
+
+    forgetPendingVtuPurchase(scoped);
+    hydratePendingVtuPurchases(
+      JSON.stringify([[scoped, { key: 'k', reference: null, rememberedAt: 1 }]])
+    );
+    expect(recallPendingVtuKey(scoped)).toBeNull();
+  });
+
+  it('ignores corrupt snapshots on hydrate', () => {
+    hydratePendingVtuPurchases('{oops');
+    hydratePendingVtuPurchases('"just-a-string"');
+    hydratePendingVtuPurchases(JSON.stringify([['nope'], [42, {}], null]));
+
+    expect(recallPendingVtuKey('never-remembered')).toBeNull();
   });
 });

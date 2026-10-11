@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildVtuWalletPayloadSignature,
   scopePendingVtuSignature,
@@ -8,11 +8,13 @@ import {
   forgetPendingVtuPurchase,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
+  hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
+  serializePendingVtuPurchases,
 } from './utility-pending-idempotency';
 
 describe('utility-pending-idempotency', () => {
@@ -186,6 +188,45 @@ describe('utility-pending-idempotency', () => {
     notePendingVtuReference(signature, 'REF-1');
     expect(hasNotedPendingVtuReference(signature, 'REF-1')).toBe(true);
     expect(hasNotedPendingVtuReference(signature, 'REF-OTHER')).toBe(false);
+  });
+
+  it('recalls the pending key after a page reload', async () => {
+    const key = getPendingVtuKey('{"reload":true}');
+    notePendingVtuReference('{"reload":true}', 'REF-RELOAD');
+
+    // A reload re-executes the module with an empty map; the tab's
+    // sessionStorage entry must restore the pending purchase.
+    vi.resetModules();
+    const fresh =
+      await import('./utility-pending-idempotency');
+
+    expect(fresh.recallPendingVtuKey('{"reload":true}')).toBe(key);
+    expect(
+      fresh.hasNotedPendingVtuReference('{"reload":true}', 'REF-RELOAD')
+    ).toBe(true);
+  });
+
+  it('drops TTL-expired entries on serialize and hydrate', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    getPendingVtuKey('{"ttl":true}');
+
+    expect(serializePendingVtuPurchases(Date.now() + dayMs + 1)).toBe('[]');
+
+    clearPendingVtuKeys();
+    hydratePendingVtuPurchases(
+      JSON.stringify([
+        ['{"ttl":true}', { key: 'k', reference: null, rememberedAt: 1 }],
+      ])
+    );
+    expect(recallPendingVtuKey('{"ttl":true}')).toBeUndefined();
+  });
+
+  it('ignores corrupt snapshots on hydrate', () => {
+    hydratePendingVtuPurchases('{oops');
+    hydratePendingVtuPurchases('"just-a-string"');
+    hydratePendingVtuPurchases(JSON.stringify([['nope'], [42, {}], null]));
+
+    expect(recallPendingVtuKey('{"reload":true}')).toBeUndefined();
   });
 
   it('lets reference-less entries resolve normally even past the window', () => {

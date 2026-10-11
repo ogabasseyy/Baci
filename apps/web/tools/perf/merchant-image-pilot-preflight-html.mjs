@@ -243,14 +243,23 @@ export function srcSetCandidates(srcSet) {
   if (!value) {
     return [];
   }
-  const described = [...value.matchAll(/(\S+) (\d+)w/g)].map((match) => ({
-    descriptor: Number(match[2]),
-    url: match[1],
-  }));
+  // Width AND density descriptors: a control next/image mount emits the
+  // normal `1x, 2x` density srcset, and a width-only pattern finds
+  // nothing — falling through to the single-candidate fallback below,
+  // which hands downstream gates the whole attribute as one URL. The
+  // first-`?` strip then validates only the first candidate while a
+  // DPR-2 browser selects the second.
+  const described = [...value.matchAll(/(\S+) (\d+(?:\.\d+)?)(w|x)/g)].map(
+    (match) => ({
+      descriptor: Number(match[2]),
+      kind: match[3],
+      url: match[1],
+    })
+  );
   if (described.length > 0) {
     return described;
   }
-  return [{ descriptor: null, url: value }];
+  return [{ descriptor: null, kind: null, url: value }];
 }
 
 // Every served lab URL in one section: picture sources, the section

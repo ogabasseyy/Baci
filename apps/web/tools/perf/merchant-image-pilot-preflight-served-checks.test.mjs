@@ -103,6 +103,36 @@ describe('assertServedDescriptors', () => {
     expect(failures).toEqual([]);
   });
 
+  it('verifies every density candidate without claiming a width', async () => {
+    // A control next/image `1x, 2x` srcset: the 2x file is 48 wide, not
+    // 2 — a width claim would false-fail — but both candidates must
+    // still exist and decode, or the DPR-2 route goes unverified.
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-density-'));
+    await mkdir(join(publicDir, '__pilot', 'originals'), { recursive: true });
+    const one = '/__pilot/originals/one.png';
+    const two = '/__pilot/originals/two.png';
+    for (const file of [one, two]) {
+      const bytes = await sharp({
+        create: { background: '#1c1917', channels: 3, height: 24, width: 48 },
+      })
+        .png()
+        .toBuffer();
+      await writeFile(join(publicDir, file), bytes);
+    }
+    const html = section({
+      binding: `${MERCHANT}/logo-a`,
+      inner: `<picture><source srcSet="${one} 1x, ${two} 2x" type="image/png"/><img src="${one}" alt="logo"/></picture>`,
+      slot: 'header-logo',
+    });
+    expect(
+      await assertServedDescriptors(html, {
+        arm: 'control',
+        origin: 'http://localhost:3000',
+        publicDir,
+      })
+    ).toEqual([]);
+  });
+
   it('verifies queried generation URLs but exempts loader originals', async () => {
     const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-query-'));
     await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });

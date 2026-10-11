@@ -281,6 +281,9 @@ export async function runOfflinePreflight(options) {
       stagedOriginal: `/__pilot/originals/${originalName}`,
     });
   }
-  Object.assign(stagedHashes, await collectFillerHashes(options));
+  Object.assign(
+    stagedHashes,
+    await collectFillerHashes({ ...options, checks, failures })
+  );
   return report(failures.length === 0);
 }

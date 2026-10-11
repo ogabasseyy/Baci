@@ -1,7 +1,8 @@
 // Offline staged stage: staged derivatives and the staged original hash
 // identically to their committed and frozen bytes.
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { stagedOriginalName } from './merchant-image-pilot-preflight-records.mjs';
 import {
@@ -89,27 +90,98 @@ export async function checkBindingStaged({
   return true;
 }
 
+// Committed filler pins, parsed from the app's build/boot gate config:
+// the SAME three hashes pilot-public-assets.ts enforces, so preflight
+// and the origin can never disagree about what a filler must be. Parsed
+// from source (the gate is TypeScript): the FILLERS map shape is the
+// contract, and the empty-map guard below fails closed on drift.
+const GATE_CONFIG_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'config',
+  'pilot-public-assets.ts'
+);
+
+export async function loadCommittedFillerPins(configPath = GATE_CONFIG_PATH) {
+  const text = await readFile(configPath, 'utf8');
+  const blockStart = text.indexOf('const FILLERS');
+  const blockEnd = text.indexOf('\n};', blockStart);
+  const block =
+    blockStart === -1 || blockEnd === -1
+      ? ''
+      : text.slice(blockStart, blockEnd);
+  const pins = {};
+  for (const match of block.matchAll(/'([^']+)':\s*'([0-9a-f]{64})'/g)) {
+    pins[match[1]] = match[2];
+  }
+  return pins;
+}
+
 // Filler pins for the served phase, keyed by served path. Fillers have no
-// acceptance anchor (their hash pins live in the app's build/boot gate,
-// which fails the origin itself when they drift), so offline blesses the
-// on-disk bytes and the served gate detects swaps after this point.
-// Best-effort by design: an absent dir, an overfull dir, or an unreadable
-// file simply yields no entry, and the served gate then fails closed on
-// any filler URL it meets instead of comparing two mutable views.
-export async function collectFillerHashes({ publicDir }) {
+// acceptance anchor, but their hash pins live in the app's build/boot
+// gate — so offline verifies the on-disk bytes against those committed
+// pins and records the PIN, never the disk digest: hashing a replacement
+// swapped in after the build/startup check would bless the mutable bytes
+// and let the served gate pass the same replacement. Best-effort by
+// design: an absent dir, an overfull dir, or an unreadable file simply
+// yields no entry, and the served gate then fails closed on any filler
+// URL it meets instead of comparing two mutable views.
+export async function collectFillerHashes({
+  checks,
+  failures,
+  fillerPins,
+  publicDir,
+}) {
   const hashes = {};
+  const seenFailures = failures.length;
+  const failed = () => failures.length !== seenFailures;
+  const done = () => {
+    if (!failed()) {
+      pass(checks, 'fillers-pinned');
+    }
+    return hashes;
+  };
+  let pins = fillerPins;
+  if (!pins) {
+    try {
+      pins = await loadCommittedFillerPins();
+    } catch {
+      pins = {};
+    }
+  }
+  if (Object.keys(pins).length === 0) {
+    fail(
+      checks,
+      failures,
+      'fillers-pinned',
+      'committed filler pins are missing or unreadable'
+    );
+    return hashes;
+  }
   let entries;
   try {
     entries = await readdir(join(publicDir, '__pilot', 'fillers'));
   } catch {
-    return hashes;
+    return done();
   }
   // Legit dirs hold three pinned files; past this the dir is planted or
-  // corrupt, and blessing nothing fails the served filler URLs loudly.
+  // corrupt, and pinning nothing fails the served filler URLs loudly.
   if (entries.length > 64) {
-    return hashes;
+    return done();
   }
   for (const file of entries) {
+    const expected = pins[file];
+    if (!expected) {
+      fail(
+        checks,
+        failures,
+        'fillers-pinned',
+        `filler is not in the committed pin set: ${file}`
+      );
+      continue;
+    }
     let read;
     try {
       read = await readUpToBytes(
@@ -120,8 +192,17 @@ export async function collectFillerHashes({ publicDir }) {
       continue;
     }
     if (!read.truncated) {
-      hashes[`/__pilot/fillers/${file}`] = sha256Hex(read.bytes);
+      if (sha256Hex(read.bytes) !== expected) {
+        fail(
+          checks,
+          failures,
+          'fillers-pinned',
+          `filler hash mismatch: ${file}`
+        );
+        continue;
+      }
+      hashes[`/__pilot/fillers/${file}`] = expected;
     }
   }
-  return hashes;
+  return done();
 }

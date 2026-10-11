@@ -38,26 +38,27 @@ describe('LabProductCardImage decode parity', () => {
     Object.defineProperty(image, 'decode', { value: decode });
     fireEvent.load(image);
     expect(decode).toHaveBeenCalledOnce();
-    expect(picture?.style.backgroundImage).not.toBe('');
+    expect(image.style.backgroundImage).not.toBe('');
+    expect(picture?.style.backgroundImage).toBe('');
     await act(async () => {
       finish();
     });
-    expect(picture?.style.backgroundImage).toBe('');
+    expect(image.style.backgroundImage).toBe('');
   });
 
   it('handles decode rejection like Next Image', async () => {
-    const { image, picture } = mount();
+    const { image } = mount();
     Object.defineProperty(image, 'decode', {
       value: () => Promise.reject(new Error('decode failed')),
     });
     await act(async () => {
       fireEvent.load(image);
     });
-    expect(picture?.style.backgroundImage).toBe('');
+    expect(image.style.backgroundImage).toBe('');
   });
 
   it('does not update a detached image after decode', async () => {
-    const { image, picture, unmount } = mount();
+    const { image, unmount } = mount();
     let finish: () => void = () => {};
     Object.defineProperty(image, 'decode', {
       value: () =>
@@ -70,7 +71,7 @@ describe('LabProductCardImage decode parity', () => {
     await act(async () => {
       finish();
     });
-    expect(picture?.style.backgroundImage).not.toBe('');
+    expect(image.style.backgroundImage).not.toBe('');
   });
 
   it('clears the blur for an image already complete before hydration', async () => {
@@ -94,9 +95,9 @@ describe('LabProductCardImage decode parity', () => {
       get: () => 48,
     });
     try {
-      const { picture } = mount();
+      const { image } = mount();
       await act(async () => {});
-      expect(picture?.style.backgroundImage).toBe('');
+      expect(image.style.backgroundImage).toBe('');
     } finally {
       if (complete) {
         Object.defineProperty(HTMLImageElement.prototype, 'complete', complete);

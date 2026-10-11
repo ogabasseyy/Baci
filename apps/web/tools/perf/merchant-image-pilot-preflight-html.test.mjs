@@ -3,6 +3,7 @@ import {
   extractLabPictures,
   extractLabPreloads,
   extractLabSections,
+  srcSetCandidates,
   srcSetEveryHasPrefix,
 } from './merchant-image-pilot-preflight-html.mjs';
 
@@ -87,5 +88,38 @@ describe('preflight served HTML extraction', () => {
         ''
       )
     ).toBe(true);
+  });
+});
+
+describe('srcSetCandidates', () => {
+  it('splits width-described candidates', () => {
+    expect(srcSetCandidates('/a.avif 384w, /b.avif 768w')).toEqual([
+      { descriptor: 384, kind: 'w', url: '/a.avif' },
+      { descriptor: 768, kind: 'w', url: '/b.avif' },
+    ]);
+  });
+
+  it('splits density-described candidates individually', () => {
+    // A control next/image mount emits the normal `1x, 2x` density
+    // srcset: collapsing it to one URL would validate only the first
+    // candidate while a DPR-2 browser selects the second.
+    expect(srcSetCandidates('/a.png 1x, /b.png 2x')).toEqual([
+      { descriptor: 1, kind: 'x', url: '/a.png' },
+      { descriptor: 2, kind: 'x', url: '/b.png' },
+    ]);
+    expect(srcSetCandidates('/a.png 1.5x')).toEqual([
+      { descriptor: 1.5, kind: 'x', url: '/a.png' },
+    ]);
+  });
+
+  it('keeps bare and data URLs as a single undescribed candidate', () => {
+    expect(srcSetCandidates('/a.avif')).toEqual([
+      { descriptor: null, kind: null, url: '/a.avif' },
+    ]);
+    expect(srcSetCandidates('')).toEqual([]);
+    const pixel = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    expect(srcSetCandidates(pixel)).toEqual([
+      { descriptor: null, kind: null, url: pixel },
+    ]);
   });
 });

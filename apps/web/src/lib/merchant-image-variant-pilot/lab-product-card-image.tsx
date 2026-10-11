@@ -14,6 +14,9 @@ export function LabProductCardImage({
 }) {
   // Immediate paint parity with the control's next/image blur placeholder
   // (data URL, zero requests); removed on decode like the framework's.
+  // The style stays on the dimensioned <img>, never the default-inline
+  // <picture>: the framework paints the blur on the image box itself,
+  // and a wrapper background paints a different box on cold loads.
   const [loaded, setLoaded] = useState(false);
   const style = loaded
     ? undefined
@@ -29,7 +32,7 @@ export function LabProductCardImage({
       });
   };
   return (
-    <picture data-pilot-lab-card-image="true" style={style}>
+    <picture data-pilot-lab-card-image="true">
       {projection.sources.map((source) => (
         <source
           key={source.format}
@@ -49,6 +52,7 @@ export function LabProductCardImage({
         fetchPriority={projection.fetchPriority}
         decoding="async"
         className="object-cover w-full h-auto aspect-video"
+        style={style}
         ref={(image) => {
           // A manually preloaded candidate can finish before hydration
           // attaches onLoad; the lost event would leave the blur behind

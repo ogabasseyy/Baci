@@ -61,6 +61,16 @@ export async function assertSnapshotMatchesSource(
       `merchant image pilot: snapshot for "${label}" has too many channels`
     );
   }
+  // metadata() is header-only: force a full pixel decode (bounded by the
+  // same generator limits) so a readable header with a truncated payload
+  // fails here instead of certifying as the manifest source facts.
+  try {
+    await sharp(snapshot, { ...PILOT_SHARP_LIMITS }).stats();
+  } catch {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" does not fully decode`
+    );
+  }
   const decodedFormat = normalizeFormat(metadata).toLowerCase();
   if (decodedFormat !== source.format.toLowerCase()) {
     throw new Error(

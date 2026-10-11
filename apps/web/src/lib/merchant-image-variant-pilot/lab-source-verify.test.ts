@@ -151,6 +151,29 @@ describe('assertSnapshotMatchesSource', () => {
     ).rejects.toThrow(/4x6.*claims 6x4/);
   });
 
+  it('rejects a header-readable but pixel-truncated snapshot', async () => {
+    // corrupt-truncated.jpg carries a valid header (metadata reports its
+    // format and dimensions) with a premature-end pixel payload: a
+    // header-only verifier would certify the manifest facts below, but
+    // browsers cannot decode the staged bytes.
+    const snapshot = await readFile(
+      join(GENERATOR_FIXTURES, 'corrupt-truncated.jpg')
+    );
+    const header = await sharp(snapshot).metadata();
+    await expect(
+      assertSnapshotMatchesSource(
+        snapshot,
+        {
+          bytes: snapshot.length,
+          format: 'jpeg',
+          orientedHeight: header.height as number,
+          orientedWidth: header.width as number,
+        },
+        'merchant/slot'
+      )
+    ).rejects.toThrow(/does not fully decode/);
+  });
+
   it('rejects animated bytes like the generator does', async () => {
     // Classic 1x1 GIF with its frame block spliced twice: sharp reports
     // pages 2. The pilot certifies stills only, so animation fails before

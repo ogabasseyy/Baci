@@ -58,7 +58,7 @@ export async function assertServedDescriptors(
     // must match the decoded bytes.
     for (const img of sectionStandaloneImgs(section.html)) {
       if (img.src) {
-        candidates.push({ descriptor: null, url: img.src });
+        candidates.push({ descriptor: null, kind: null, url: img.src });
       }
       candidates.push(...srcSetCandidates(img.srcset));
     }
@@ -80,9 +80,14 @@ export async function assertServedDescriptors(
       // staged file, so it falls through to verification below.
       const loaderExempt =
         path !== base && base.startsWith('/__pilot/originals/');
-      if (loaderExempt || candidate.descriptor === null) {
-        // Exempt or bare (no-op control srcSets, standalone img src):
-        // the staged file must exist and decode.
+      // A density descriptor names no encoded width (a DPR-2 browser can
+      // select the 2x candidate of any pixel width), so density-described
+      // control candidates verify existence+decode like bare URLs instead
+      // of claiming a width they never made.
+      const densityDescriptor = candidate.kind === 'x';
+      if (loaderExempt || candidate.descriptor === null || densityDescriptor) {
+        // Exempt, bare (no-op control srcSets, standalone img src), or
+        // density-described: the staged file must exist and decode.
         try {
           await sharp(join(publicDir, base)).metadata();
         } catch {

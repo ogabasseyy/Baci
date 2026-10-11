@@ -26,6 +26,11 @@ describe('stored original receipt decryption for owner reconciliation', () => {
   it.each([
     { payloadSha256: '0'.repeat(64) },
     { authTag: Buffer.alloc(16).toString('base64') },
+    // Defense-in-depth note: the schema already pins 16-byte tags, so this
+    // row is rejected at parse time; the explicit authTagLength: 16 in the
+    // decipher is a redundant backstop with no observable difference while
+    // the schema holds, and cannot be isolated behaviorally without
+    // weakening validation (which we will not do to test hardening).
     { authTag: Buffer.alloc(12).toString('base64') },
     { nonce: Buffer.alloc(12).toString('base64') },
     { keyVersion: 'staging-v2' },

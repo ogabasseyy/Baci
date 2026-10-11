@@ -183,9 +183,10 @@ export async function refundNotificationLedgerAmount({
   ) {
     throw new Error('refund_notification_ledger_mismatch');
   }
-  const refundAmount = (
-    linkedTotals as Array<{ amount: number }>
-  ).reduce((sum, leg) => sum + Number(leg.amount), 0);
+  const refundAmount = (linkedTotals as Array<{ amount: number }>).reduce(
+    (sum, leg) => sum + Number(leg.amount),
+    0
+  );
   // Normalize the order currency once: a legacy padded code must
   // compare equal AND format — Intl.NumberFormat throws on ' NGN '.
   const orderCurrency = normalizeCurrencyCode(order.currency) || 'NGN';

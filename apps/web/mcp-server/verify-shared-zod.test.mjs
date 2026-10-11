@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { verifySharedZod } from './verify-shared-zod.mjs';
 
 test('rejects the production Zod 3 fallback and accepts the web Zod 4 peer', () => {

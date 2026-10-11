@@ -31,6 +31,7 @@ import type {
 import Colors from '@/constants/Colors';
 import { walletKeys } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
+import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { RouteRepeatParamsSchema } from '@/schemas/utility-purchase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -67,11 +68,11 @@ export default function UtilityPurchaseScreen() {
   const insets = useSafeAreaInsets();
   const headerOffset = Math.max(insets.top, 42);
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  // Mirror useWallet's owner fallback (customer.id ?? user.id) so the
+  // Share useWallet's read-owner policy (customer-first) so the
   // post-purchase invalidation hits the same query key the wallet read
   // uses while customer hydration is still pending.
-  const walletOwnerId = useAuthStore(
-    (state) => state.customer?.id ?? state.user?.id
+  const walletOwnerId = useAuthStore((state) =>
+    resolveWalletReadOwnerId(state.customer?.id, state.user?.id)
   );
   const merchantId = useAuthStore((state) => state.merchantId);
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
@@ -159,6 +160,11 @@ export default function UtilityPurchaseScreen() {
       return;
     }
 
+    // Deliberately omit userId: invalidateQueries defaults to prefix
+    // matching, so this {merchantId, ownerId} prefix clears stored keys both
+    // with and without the optional userId segment (sessions with a customer
+    // row but no auth user store the shorter key). Passing userId here would
+    // miss those sessions and leave stale balances cached.
     void queryClient.invalidateQueries({
       queryKey: walletKeys.data({
         merchantId: activeMerchantId,

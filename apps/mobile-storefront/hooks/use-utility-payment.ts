@@ -8,6 +8,7 @@ import {
   rememberPendingVtuPurchase,
   scopePendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
+import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
@@ -31,7 +32,9 @@ export function useUtilityPayment() {
   // lands later via hydration, and flipping scope mid-session would
   // orphan the pending key and double-debit the retry. Merchant uses
   // the same CONFIG fallback as the wallet reads for the same reason.
-  const ownerId = useAuthStore((state) => state.user?.id ?? state.customer?.id);
+  const ownerId = useAuthStore((state) =>
+    resolveIdempotencyScopeOwnerId(state.user?.id, state.customer?.id)
+  );
   const merchantId = useAuthStore((state) => state.merchantId);
   // Latest signed-in owner, refreshed every render. Compared against
   // the submitter when a checkout settles so an account switch (or

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
 import { supabase } from '@/lib/supabase';
+import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
 import { fetchWalletData } from './wallet-data';
@@ -60,7 +61,7 @@ export function useWallet(options: UseWalletOptions = {}) {
   const savingsInvalidationTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const walletOwnerId = customer?.id ?? user?.id ?? '';
+  const walletOwnerId = resolveWalletReadOwnerId(customer?.id, user?.id);
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
   // Both identities present but disagreeing (customer row linked to a
   // different auth user) means a switch is mid-flight: hold the query
@@ -253,7 +254,7 @@ export function useCreateWalletFundingAccount() {
         merchantSlug: activeMerchantSlug,
       }),
     onSuccess: async () => {
-      const walletOwnerId = customer?.id ?? user?.id ?? '';
+      const walletOwnerId = resolveWalletReadOwnerId(customer?.id, user?.id);
       if (!walletOwnerId || !activeMerchantId) {
         return;
       }

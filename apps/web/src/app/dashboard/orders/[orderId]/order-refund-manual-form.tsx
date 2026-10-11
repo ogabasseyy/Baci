@@ -62,7 +62,7 @@ export function OrderRefundManualForm({
         value={amount}
         onChange={(e) => onAmountChange(e.target.value)}
       />
-      <Label htmlFor="refund-date">Refund date and time</Label>
+      <Label htmlFor="refund-date">Refund date and time (Nigeria time)</Label>
       <Input
         id="refund-date"
         type="datetime-local"

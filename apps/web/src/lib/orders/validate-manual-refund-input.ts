@@ -1,6 +1,8 @@
 // Client-side manual-refund validation: fail fast with the same messages
 // the server enforces, so merchants learn immediately instead of after
 // a round trip. The RPC rechecks everything; this is UX only.
+import { toLagosRefundInstant } from './to-lagos-refund-instant';
+
 export function validateManualRefundInput({
   amount,
   confirmed,
@@ -26,7 +28,10 @@ export function validateManualRefundInput({
     return 'Enter the refund amount with at most two decimals.';
   if (remaining !== null && parsedAmount > remaining)
     return 'Refund amount exceeds the remaining balance.';
-  const parsedDate = new Date(date);
+  // Evaluate the same Lagos-offset instant the panel submits, so a
+  // viewer outside WAT gets the identical future verdict the server
+  // computes from the stored string.
+  const parsedDate = new Date(toLagosRefundInstant(date));
   if (Number.isNaN(parsedDate.getTime()))
     return 'Enter a valid refund date and time.';
   if (parsedDate.getTime() > Date.now())

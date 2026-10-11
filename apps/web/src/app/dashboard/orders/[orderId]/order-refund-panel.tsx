@@ -8,6 +8,7 @@ import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
 import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
+import { toLagosRefundInstant } from '@/lib/orders/to-lagos-refund-instant';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
@@ -91,7 +92,7 @@ export function OrderRefundPanel({
           : {
               action,
               amount: Number(amount),
-              refundedAt: new Date(date).toISOString(),
+              refundedAt: toLagosRefundInstant(date),
               method,
               reference,
               note,

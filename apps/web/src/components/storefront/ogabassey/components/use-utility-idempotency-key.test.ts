@@ -77,6 +77,36 @@ describe('useUtilityIdempotencyKey', () => {
     expect(recalled).toBe(key);
   });
 
+  it('keeps recalling the pending key when customer hydration lands', () => {
+    // Hydration regression: only the session user ID is known at first;
+    // customers.id arrives later and is a DIFFERENT id. Scope must not
+    // flip, or the retry orphans the key and double-debits.
+    const { result, unmount } = renderHook(
+      (props: { customerId?: string; userId?: string }) =>
+        useUtilityIdempotencyKey(props),
+      { initialProps: { userId: 'user-a' } }
+    );
+    let key = '';
+    act(() => {
+      key = result.current.getWalletIdempotencyKey('SIG');
+    });
+    unmount();
+
+    const lateHydration = renderHook(
+      (props: { customerId?: string; userId?: string }) =>
+        useUtilityIdempotencyKey(props),
+      {
+        initialProps: { userId: 'user-a', customerId: 'customer-a' },
+      }
+    );
+    let recalled = '';
+    act(() => {
+      recalled = lateHydration.result.current.getWalletIdempotencyKey('SIG');
+    });
+
+    expect(recalled).toBe(key);
+  });
+
   it('recognizes a noted reference as a replay of its processing vend', () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })

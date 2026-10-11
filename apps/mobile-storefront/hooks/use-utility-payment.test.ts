@@ -173,6 +173,24 @@ describe('useUtilityPayment', () => {
     expect(airtime).not.toBe(data);
   });
 
+  it('keeps recalling the pending key when customer hydration lands', () => {
+    // Hydration regression: at startup only the Supabase user ID is
+    // known; customers.id arrives later and is a DIFFERENT id. Scope
+    // must not flip, or the retry orphans the key and double-debits.
+    mockAuthState.customer = null;
+    mockAuthState.user = { id: 'user-a' };
+    const beforeHydration = renderHook(() => useUtilityPayment());
+    const key =
+      beforeHydration.result.current.getWalletIdempotencyKey('hydration-key');
+    beforeHydration.unmount();
+
+    mockAuthState.customer = { id: 'customer-a' };
+    const afterHydration = renderHook(() => useUtilityPayment());
+    expect(
+      afterHydration.result.current.getWalletIdempotencyKey('hydration-key')
+    ).toBe(key);
+  });
+
   it('does not recall another owner’s pending key for the same purchase', () => {
     // Sign-out regression: customer A’s remembered key must be
     // unreachable once customer B signs in, or the route rejects B’s

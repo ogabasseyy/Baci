@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { CONFIG } from '@/lib/config';
 import {
   forgetPendingVtuPurchase,
   recallPendingVtuKey,
@@ -17,13 +18,17 @@ import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
  */
 export function useUtilityPayment() {
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  // Scope pending-key recall to the current owner + merchant (same owner
-  // fallback the wallet reads with): a key remembered for one customer
-  // must never be recalled for another after sign-out / account switch —
-  // the route would reject it as belonging to the first customer.
-  const ownerId = useAuthStore((state) => state.customer?.id ?? state.user?.id);
+  // Scope pending-key recall to the current owner + merchant: a key
+  // remembered for one customer must never be recalled for another
+  // after sign-out / account switch — the route would reject it as
+  // belonging to the first customer. Owner is the stable Supabase user
+  // ID first (NOT customer-first like the wallet reads): customers.id
+  // lands later via hydration, and flipping scope mid-session would
+  // orphan the pending key and double-debit the retry. Merchant uses
+  // the same CONFIG fallback as the wallet reads for the same reason.
+  const ownerId = useAuthStore((state) => state.user?.id ?? state.customer?.id);
   const merchantId = useAuthStore((state) => state.merchantId);
-  setPendingVtuOwnerScope(ownerId, merchantId);
+  setPendingVtuOwnerScope(ownerId, merchantId || CONFIG.MERCHANT_ID);
   // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
   // registry by purchase descriptor — a ref alone loses the key when
   // the form remounts (Back to Home, reopen Utilities), and the retry

@@ -36,12 +36,13 @@ export function useUtilityIdempotencyKey({
   merchantId,
   userId,
 }: UseUtilityIdempotencyKeyInput): UseUtilityIdempotencyKeyResult {
-  // Same owner fallback the wallet reads with: a key remembered for one
-  // customer must never be recalled for another after sign-out / switch.
-  // Merchant is the immutable ID, never the slug: the route resolves a
-  // renamed slug through aliases to the same merchant, so a slug-scoped
-  // retry would miss the stored key and debit twice.
-  setPendingVtuOwnerScope(customerId ?? userId, merchantId);
+  // Owner is the stable session user ID first (NOT customer-first like
+  // the wallet reads): the customer record hydrates later, and flipping
+  // scope mid-session would orphan the pending key and double-debit the
+  // retry. Merchant is the immutable ID, never the slug: the route
+  // resolves a renamed slug through aliases to the same merchant, so a
+  // slug-scoped retry would miss the stored key and debit twice.
+  setPendingVtuOwnerScope(userId ?? customerId, merchantId);
   const lastPayloadSignatureRef = useRef<string | null>(null);
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 
 // Loads the refund status on mount and re-polls every 30s until the
@@ -20,6 +20,7 @@ export function useRefundStatusPolling({
   revision: { current: number };
   terminal: boolean;
 }) {
+  const loadedOrder = useRef<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
@@ -50,7 +51,13 @@ export function useRefundStatusPolling({
           onError(e instanceof Error ? e.message : 'Unable to load refund');
       }
     }
-    void load();
+    // Load on mount and navigation only: terminal flips re-arm the
+    // timer below, and refetching there would clobber the summary a
+    // submit just installed with a stale read.
+    if (loadedOrder.current !== orderId) {
+      loadedOrder.current = orderId;
+      void load();
+    }
     if (terminal) {
       return () => {
         active = false;

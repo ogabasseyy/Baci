@@ -103,3 +103,16 @@ diff --git a/android/src/main/java/com/swmansion/rnscreens/Screen.kt b/android/s
                  }
  
                  if (child is ViewGroup) {
+diff --git a/android/src/main/java/com/swmansion/rnscreens/stack/views/ScreensCoordinatorLayout.kt b/android/src/main/java/com/swmansion/rnscreens/stack/views/ScreensCoordinatorLayout.kt
+--- a/android/src/main/java/com/swmansion/rnscreens/stack/views/ScreensCoordinatorLayout.kt
++++ b/android/src/main/java/com/swmansion/rnscreens/stack/views/ScreensCoordinatorLayout.kt
+@@ -95,6 +95,9 @@
+         blockFrameworkTransitionFinalization = false
+         needsTransitionFinalization = false
+ 
++        // Cancellation can retain the screen, so detachment cleanup may never run.
++        fragment.screen.endRemovalTransition()
++
+         super.clearAnimation()
+     }
+ 

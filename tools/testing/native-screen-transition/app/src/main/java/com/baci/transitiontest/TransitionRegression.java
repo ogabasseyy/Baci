@@ -20,6 +20,7 @@ public final class TransitionRegression extends Instrumentation {
       Throwable[] mainFailure = new Throwable[1];
       runOnMainSync(() -> {
         try {
+          testAnimationClearedWhileRetained();
           testScrollingAndRetainedPage();
           testOrdinaryTransitions();
           testCancellationAndDetachedRecycler();
@@ -27,12 +28,31 @@ public final class TransitionRegression extends Instrumentation {
         } catch (Throwable error) { mainFailure[0] = error; }
       });
       if (mainFailure[0] != null) throw mainFailure[0];
-      result.putString("tests", "4 native regression cases passed");
+      result.putString("tests", "5 native regression cases passed");
       finish(-1, result);
     } catch (Throwable error) {
       result.putString("failure", error.toString());
       finish(0, result);
     }
+  }
+  private void testAnimationClearedWhileRetained() {
+    Fixture f = new Fixture();
+    CoordinatorTransition coordinator = new CoordinatorTransition(getTargetContext(), f.screen);
+    coordinator.addView(f.screen);
+    coordinator.setBlockFrameworkTransitionFinalization(true);
+    coordinator.setNeedsTransitionFinalization(true);
+    f.screen.startRemovalTransition();
+    if (!f.recycler.isLayoutSuppressed()) throw new AssertionError("Suppression not acquired");
+    // Invoke the library's actual clearAnimation override without detaching the screen.
+    coordinator.clearAnimation();
+    if (f.screen.getParent() != coordinator) throw new AssertionError("Cancellation detached retained screen");
+    if (f.screen.isBeingRemoved() || f.recycler.isLayoutSuppressed()) throw new AssertionError("Animation clear left retained screen frozen");
+    if (coordinator.getBlockFrameworkTransitionFinalization() || coordinator.getNeedsTransitionFinalization()) throw new AssertionError("Finalization flags leaked");
+    f.recycler.scrollBy(100, 0);
+    f.screen.startRemovalTransition();
+    coordinator.clearAnimation();
+    coordinator.clearAnimation();
+    if (f.recycler.isLayoutSuppressed()) throw new AssertionError("Repeated cancellation leaked");
   }
   private void testScrollingAndRetainedPage() {
     Fixture f = new Fixture();
@@ -77,7 +97,7 @@ public final class TransitionRegression extends Instrumentation {
     if (!f.recycler.isLayoutSuppressed()) throw new AssertionError("Suppression not acquired");
     f.screen.removeView(f.recycler);
     // Exercise the actual Screen.onDetachedFromWindow cancellation fallback.
-    f.screen.cancel();
+    f.screen.detachForTest();
     if (f.recycler.isLayoutSuppressed()) throw new AssertionError("Detached recycler stayed suppressed after cancellation");
     if (f.recycler.getParent() != null) throw new AssertionError("Detached recycler transition leaked");
     f.screen.endRemovalTransition(); // Completion after cancellation is safe.
@@ -88,7 +108,8 @@ public final class TransitionRegression extends Instrumentation {
   private void testPreviouslySuppressedRecycler() {
     Fixture f = new Fixture();
     f.recycler.suppressLayout(true);
-    f.screen.startRemovalTransition(); f.screen.cancel();
+    f.screen.startRemovalTransition();
+    new CoordinatorTransition(getTargetContext(), f.screen).clearAnimation();
     if (!f.recycler.isLayoutSuppressed()) throw new AssertionError("Cleared another owner suppression");
     f.recycler.suppressLayout(false);
   }

@@ -11,7 +11,16 @@ const source = readFileSync(
     resolve(root, 'android/src/main/java/com/swmansion/rnscreens/Screen.kt'),
   'utf8'
 );
-function method(name) {
+const coordinatorSource = readFileSync(
+  process.argv[3] ??
+    resolve(
+      root,
+      'android/src/main/java/com/swmansion/rnscreens/stack/views/ScreensCoordinatorLayout.kt'
+    ),
+  'utf8'
+);
+function method(name, sourceText = source) {
+  const source = sourceText;
   const start = source.search(
     new RegExp(`^    (?:(?:private|override) )?fun ${name}\\(`, 'm')
   );
@@ -44,12 +53,19 @@ class ScreenStackHeaderConfig(context: Context): FrameLayout(context) {
 class ScreenTransition(context: Context): FrameLayout(context) {
     var isBeingRemoved = false
 ${(source.match(/^ {4}private val removalTransition(?:Views|Recyclers) = .+$/gm) ?? []).join('\n')}
-    fun cancel() = onDetachedFromWindow()
+    fun detachForTest() = onDetachedFromWindow()
 ${method('startRemovalTransition')}
 ${method('endRemovalTransition')}
 ${method('startTransitionRecursive')}
 ${method('endTransitionRecursive')}
 ${source.includes('    override fun onDetachedFromWindow(') ? method('onDetachedFromWindow') : ''}
+}
+class FragmentFixture(val screen: ScreenTransition)
+class CoordinatorTransition(context: Context, screen: ScreenTransition): FrameLayout(context) {
+    val fragment = FragmentFixture(screen)
+    var blockFrameworkTransitionFinalization = false
+    var needsTransitionFinalization = false
+${method('clearAnimation', coordinatorSource)}
 }
 `;
 writeFileSync(

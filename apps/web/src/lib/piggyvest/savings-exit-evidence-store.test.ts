@@ -68,9 +68,12 @@ describe('restricted local evidence recorder', () => {
       createSavingsExitEvidenceStore({ ...configuration, role: 'service_role' })
     ).toThrow();
     expect(() =>
+      createSavingsExitEvidenceStore({ ...configuration, password: '' })
+    ).toThrow();
+    expect(() =>
       createSavingsExitEvidenceStore({
         ...configuration,
-        password: 'remote-password',
+        password: 'x'.repeat(129),
       })
     ).toThrow();
     const execute = createSavingsExitEvidenceStore(configuration);

@@ -31,7 +31,8 @@ describe('savings exit evidence boundaries', () => {
       { port: 65536 },
       { port: 1.5 },
       { socketDirectory: '/tmp/elsewhere' },
-      { password: 'remote-password' },
+      { password: '' },
+      { password: 'x'.repeat(129) },
       { role: 'service_role' },
     ]) {
       expect(

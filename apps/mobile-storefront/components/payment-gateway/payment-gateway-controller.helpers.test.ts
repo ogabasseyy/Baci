@@ -1,4 +1,5 @@
 import {
+  firstSearchParam,
   getCloseConfirmationMessage,
   getWalletReturnHref,
 } from './payment-gateway-controller.helpers';
@@ -23,4 +24,11 @@ it('preserves a validated in-app savings handoff', () => {
   expect(
     getWalletReturnHref('/wallet?action=savings&savingsGoalId=owned-goal')
   ).toBe('/wallet?action=savings&savingsGoalId=owned-goal');
+});
+
+it('resolves the first raw search param for pre-validation consumers', () => {
+  expect(firstSearchParam('1000.50')).toBe('1000.50');
+  expect(firstSearchParam(['1000.50', '999'])).toBe('1000.50');
+  expect(firstSearchParam(undefined)).toBeUndefined();
+  expect(firstSearchParam([])).toBeUndefined();
 });

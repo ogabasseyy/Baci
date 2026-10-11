@@ -12,6 +12,7 @@ import {
   PAYMENT_GATEWAY_LABELS,
 } from './payment-gateway.helpers';
 import {
+  firstSearchParam,
   getCloseConfirmationMessage,
   parsePaymentGatewayParams,
 } from './payment-gateway-controller.helpers';
@@ -32,15 +33,8 @@ export function usePaymentGatewayController() {
   const params = useLocalSearchParams<Record<string, string>>();
   // Raw amount string for the mount bind: the ownership check parses
   // decimal → integer kobo directly so binary-float rounding can never
-  // turn a legitimate checkout into a fail-closed mismatch. Repeated
-  // query keys resolve to the first value, matching normalizers.
-  const rawAmount = params.amount as unknown;
-  const amountRaw =
-    typeof rawAmount === 'string'
-      ? rawAmount
-      : Array.isArray(rawAmount) && typeof rawAmount[0] === 'string'
-        ? rawAmount[0]
-        : undefined;
+  // turn a legitimate checkout into a fail-closed mismatch.
+  const amountRaw = firstSearchParam(params.amount);
   const webViewRef = useRef<WebView>(null);
   const copiedGatewayTextRef = useRef<string | null>(null);
   const paymentCompletionStartedRef = useRef(false);

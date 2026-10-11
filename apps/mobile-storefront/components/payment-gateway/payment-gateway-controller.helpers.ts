@@ -16,6 +16,15 @@ export function isWalletTopUpGateway(
   return value === 'paystack' || value === 'korapay';
 }
 
+// First-string-or-undefined for raw expo-router params (repeated query
+// keys arrive as string[]). Used for values consumed pre-validation,
+// like the mount bind's raw amount string.
+export function firstSearchParam(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
+  return undefined;
+}
+
 export function getWalletReturnHref(returnTo?: string): Href {
   // Every caller passes schema- or server-validated input, but this helper
   // is the last redirect boundary: re-sanitize so a future

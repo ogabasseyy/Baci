@@ -74,6 +74,12 @@ export async function coordinateRelease(operations, coordinationId) {
   if (await operations.readMain() !== commit) throw new Error('main changed during worker preparation; publication refused');
   const baseline = await operations.listRuns();
   if (baseline.some(run => run.status !== 'completed')) throw new Error('production deployment in flight');
+  // Re-check main immediately before dispatch: dispatch pins --ref
+  // main, so a tip advance since the baseline would orphan a run that
+  // SHA-filtered discovery can never correlate (and that only the
+  // workflow's own verifier gate would stop). Untagged: nothing has
+  // been dispatched yet, so the lock releases for a clean retry.
+  if (await operations.readMain() !== commit) throw new Error('main changed; dispatch refused, prepare a clean current checkout');
   // Dispatch, discovery, and observation of the known run are the
   // indeterminate window: once the dispatch request is sent, any
   // failure (lost response, unknown outcome, ambiguity, unreadable

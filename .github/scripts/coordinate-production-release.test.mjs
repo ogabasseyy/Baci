@@ -170,6 +170,18 @@ test('refuses main advancing during worker preparation', async () => {
   assert.ok(!setup.calls.includes('dispatch'));
 });
 
+test('refuses dispatch when main advances after the baseline', async () => {
+  let reads = 0;
+  const setup = fixture({ readMain: async () => ++reads <= 2 ? commit : 'c'.repeat(40) });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /dispatch refused/);
+  assert.equal(error.indeterminateDispatch, undefined);
+  assert.ok(!setup.calls.includes('dispatch'));
+});
+
 test('never watches a dispatch belonging to another commit', async () => {
   const setup = fixture({ findRun: async () => ({ databaseId: 42, headSha: 'c'.repeat(40) }) });
   const error = await coordinateRelease(setup.operations, coordinationId).then(

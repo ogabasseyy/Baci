@@ -49,6 +49,12 @@ export const MAX_MANIFEST_BYTES = 64 * 1024;
 // hostile inventory fails fast instead of exhausting the reviewer.
 export const MAX_QUALITY_SHEET_EMBEDDED_BYTES = 512 * 1024 * 1024;
 
+// Single-navigation measurement HAR: Sitespeed/Browsertime HARs for one
+// page run kilobytes to low megabytes even with response content, so a
+// quarter-gigabyte ceiling only ever trips on a wrong or hostile file —
+// while the settings gate must read the artifact before it can parse it.
+export const MAX_HAR_BYTES = 256 * 1024 * 1024;
+
 // Merchant UUID predicate shared by every contract mirror. Zod 3's
 // .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
 // so both sides spell the rule explicitly instead: versions 1-8 plus the

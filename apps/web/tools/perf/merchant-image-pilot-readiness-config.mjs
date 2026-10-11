@@ -34,6 +34,7 @@ export const SETTINGS_CLI_OPTIONS = [
   'expect-lh-dpr',
   'expect-lh-viewport',
   'expect-request-latency-ms',
+  'expect-route',
   'expect-rtt-ms',
   'expect-throttling-method',
   'expect-throughput-kbps',

@@ -193,6 +193,50 @@ export function verifyHarConnectivity(pages, expectConnectivity) {
   return { ok: true };
 }
 
+// Navigation-route binding: every recorded page must be the expected
+// navigation, by final URL (_url, else the title many runners record as
+// the URL). Page count, connectivity, browser, and geometry cannot tell
+// a wrong-store, wrong-arm, or redirected navigation from the intended
+// one, and the screenshot/runId provenance binds artifacts to each
+// other — not to the intended route. Exact href comparison after URL
+// normalization, mirroring the sitespeed artifact gate.
+export function verifyHarRoute(pages, expectRoute) {
+  let expected;
+  try {
+    expected = new URL(expectRoute).href;
+  } catch {
+    return { error: `bad --expect-route: ${expectRoute}`, ok: false };
+  }
+  if (pages.length === 0) {
+    return { error: 'HAR has no pages to bind to the route', ok: false };
+  }
+  for (const page of pages) {
+    const finalUrl = page?._url || page?.title;
+    if (!finalUrl) {
+      return {
+        error: 'HAR page carries no navigation URL (_url or title)',
+        ok: false,
+      };
+    }
+    let actual;
+    try {
+      actual = new URL(finalUrl).href;
+    } catch {
+      return {
+        error: `HAR page navigation is not a valid URL: ${finalUrl}`,
+        ok: false,
+      };
+    }
+    if (actual !== expected) {
+      return {
+        error: `HAR page navigated ${actual}, expected ${expected}`,
+        ok: false,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 export function verifyBrowserVersion(version, expectMajor) {
   if (!/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
     return {

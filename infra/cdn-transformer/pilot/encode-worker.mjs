@@ -5,7 +5,7 @@
 // exit 0 with { ok: true|false }; protocol misuse or unexpected crashes exit
 // non-zero so the parent can distinguish rejection from worker failure.
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { lstat, open, stat, unlink } from 'node:fs/promises';
 import sharp from 'sharp';
 import {
   ACCEPTED_INPUT_FORMATS,
@@ -148,6 +148,81 @@ export async function handleMetadataOp(op, io = {}) {
   return { metadata: assertAcceptedMetadata(meta), ok: true };
 }
 
+// Exclusive, confined output claim for encodes. The tier path is
+// predictable (staging dir + stem/width/quality) and the run token is
+// visible in the shared claims, so a quiescent symlink planted before
+// the call would make Sharp overwrite a file outside the staging tree
+// while the stat/hash below follow it. 'wx' creation fails when ANY
+// entry exists: links and non-regular entries refuse loudly, a stale
+// regular file (partial from a previous attempt in this owned dir) is
+// unlinked and retried boundedly. The pinned (dev, ino) lets the
+// post-write check prove Sharp truncated our inode rather than a
+// swapped entry. Residual: Sharp reopens by path, so a swap landing
+// exactly inside its open still writes through — but the post-write
+// identity check then refuses to certify, and the parent's
+// encode-vs-verify comparison plus loadGeneration's symlink rejection
+// fail any publish built on swapped bytes.
+async function claimEncodeOutput(output) {
+  // Quiescent plant first: 'wx' follows a dangling symlink and would
+  // create its outside target, so links and non-regular entries refuse
+  // before any open — not just on the EEXIST path below.
+  const squat = await lstat(output).catch(() => null);
+  if (squat && (squat.isSymbolicLink() || !squat.isFile())) {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode output path is not a regular file'
+    );
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let handle;
+    try {
+      handle = await open(output, 'wx');
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+      const existing = await lstat(output).catch(() => null);
+      if (!existing) {
+        continue;
+      }
+      if (existing.isSymbolicLink() || !existing.isFile()) {
+        throw new WorkerInputError(
+          'output-unsafe',
+          'encode output path is not a regular file'
+        );
+      }
+      await unlink(output);
+      continue;
+    }
+    try {
+      const identity = await handle.stat();
+      return { dev: identity.dev, ino: identity.ino };
+    } finally {
+      await handle.close();
+    }
+  }
+  throw new WorkerInputError(
+    'output-unsafe',
+    'cannot claim an exclusive encode output'
+  );
+}
+
+async function verifyEncodeOutput(output, pinned) {
+  const info = await lstat(output).catch(() => null);
+  if (
+    !info ||
+    info.isSymbolicLink() ||
+    !info.isFile() ||
+    info.dev !== pinned.dev ||
+    info.ino !== pinned.ino
+  ) {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode output changed during the write'
+    );
+  }
+}
+
 export async function handleEncodeOp(op, io = {}) {
   if (
     typeof op.width !== 'number' ||
@@ -196,6 +271,10 @@ export async function handleEncodeOp(op, io = {}) {
   } else {
     pipeline.webp({ effort: ENCODER_OPTIONS.webp.effort, quality: op.quality });
   }
+  // Exclusive output claim (see claimEncodeOutput): without it a symlink
+  // planted at the predictable tier path makes Sharp overwrite a file
+  // outside the staging tree, and the stat/hash below follow it too.
+  const pinned = await claimEncodeOutput(op.output);
   try {
     await pipeline.toFile(op.output);
   } catch (error) {
@@ -204,6 +283,7 @@ export async function handleEncodeOp(op, io = {}) {
       `encoding failed (${errorMessage(error)})`
     );
   }
+  await verifyEncodeOutput(op.output, pinned);
   const info = await stat(op.output);
   // Streamed, never buffered: the output is hashed without loading it
   // whole, so a swapped-in giant hashes in constant memory instead of

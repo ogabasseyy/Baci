@@ -294,3 +294,82 @@ test('worker input reads reject past MAX_INPUT_BYTES before buffering', async ()
   await writeFile(edge, Buffer.alloc(MAX_INPUT_BYTES, 0));
   await assert.rejects(() => handleMetadataOp({ input: edge }), codeIs('unreadable-input'));
 });
+
+test('encode refuses a symlinked output without touching its target', async () => {
+  const { lstat, symlink } = await import('node:fs/promises');
+  const verifiedBytes = await readFile(fixture('tiny-48x48.png'));
+  const expectedInputSha256 = createHash('sha256').update(verifiedBytes).digest('hex');
+  const io = { readFile: async () => verifiedBytes };
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-link-'));
+  const outside = join(dir, 'outside.txt');
+  await writeFile(outside, 'precious');
+  const output = join(dir, 'out.webp');
+  await symlink(outside, output);
+  const codeIs = (code) => (error) => {
+    assert.equal(error?.code, code);
+    return true;
+  };
+  await assert.rejects(
+    () =>
+      handleEncodeOp(
+        {
+          expectedInputSha256,
+          format: 'webp',
+          input: fixture('tiny-48x48.png'),
+          op: 'encode',
+          output,
+          quality: 70,
+          width: 96,
+        },
+        io
+      ),
+    codeIs('output-unsafe')
+  );
+  // The link was never followed: the outside target keeps its bytes.
+  assert.equal(await readFile(outside, 'utf8'), 'precious');
+  assert.equal((await lstat(output)).isSymbolicLink(), true);
+  // A dangling plant refuses before 'wx' can create its outside target.
+  const dangling = join(dir, 'dangling.webp');
+  const nowhere = join(dir, 'nowhere.txt');
+  await symlink(nowhere, dangling);
+  await assert.rejects(
+    () =>
+      handleEncodeOp(
+        {
+          expectedInputSha256,
+          format: 'webp',
+          input: fixture('tiny-48x48.png'),
+          op: 'encode',
+          output: dangling,
+          quality: 70,
+          width: 96,
+        },
+        io
+      ),
+    codeIs('output-unsafe')
+  );
+  await assert.rejects(() => lstat(nowhere), /ENOENT/);
+});
+
+test('encode reclaims a stale regular output and certifies the fresh bytes', async () => {
+  const verifiedBytes = await readFile(fixture('tiny-48x48.png'));
+  const expectedInputSha256 = createHash('sha256').update(verifiedBytes).digest('hex');
+  const io = { readFile: async () => verifiedBytes };
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-stale-'));
+  const output = join(dir, 'out.webp');
+  await writeFile(output, 'stale-partial');
+  const encoded = await handleEncodeOp(
+    {
+      expectedInputSha256,
+      format: 'webp',
+      input: fixture('tiny-48x48.png'),
+      op: 'encode',
+      output,
+      quality: 70,
+      width: 96,
+    },
+    io
+  );
+  assert.equal(encoded.ok, true);
+  assert.equal(encoded.width, 48);
+});

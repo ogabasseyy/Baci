@@ -9,6 +9,7 @@
 //   node merchant-image-pilot-settings.mjs --har=browsertime.har \
 //     --screenshot=afterPageCompleteCheck.png [--lighthouse=report.json ...] \
 //     --expect-iterations=1 --expect-connectivity=native \
+//     --expect-route=https://lab.example.com/pilot-lab/store/id?arm=pilot \
 //     --expect-chrome-major=154 --expect-viewport=375x667 --expect-dpr=3 \
 //     --screenshot-provenance=<runner-capture-artifact.json> \
 //     [--cache-provenance=<runner-reset-artifact.json>] \
@@ -54,6 +55,7 @@ async function run() {
     'screenshot',
     'expect-iterations',
     'expect-connectivity',
+    'expect-route',
     'expect-chrome-major',
     'expect-viewport',
     'expect-dpr',

@@ -6,6 +6,11 @@
 // attested browser executable.
 import { readFile } from 'node:fs/promises';
 import {
+  MAX_HAR_BYTES,
+  MAX_INVENTORY_BYTES,
+} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
+import {
   findCacheHits,
   harUserAgent,
   parseDimensions,
@@ -15,7 +20,23 @@ import {
   verifyBrowserVersion,
   verifyHarConnectivity,
   verifyHarIterations,
+  verifyHarRoute,
 } from './merchant-image-pilot-settings-helpers.mjs';
+
+// Bounded operator-artifact read: an unconsumed multi-gigabyte file must
+// fail the gate by size, never exhaust the collector before parsing.
+async function readBoundedText(path, maxBytes) {
+  try {
+    const read = await readUpToBytes(path, maxBytes);
+    return {
+      text: read.truncated ? null : read.bytes.toString('utf8'),
+      truncated: read.truncated,
+    };
+  } catch {
+    return { text: null, truncated: false };
+  }
+}
+
 import {
   verifyCacheProvenance,
   verifyScreenshotProvenance,
@@ -24,7 +45,12 @@ import {
 export async function checkHar(args, pass, fail, warn, recorded) {
   let har;
   try {
-    har = JSON.parse(await readFile(args.har, 'utf8'));
+    const bounded = await readUpToBytes(args.har, MAX_HAR_BYTES);
+    if (bounded.truncated) {
+      fail('har.readable', `${args.har} exceeds the HAR byte budget`);
+      return;
+    }
+    har = JSON.parse(bounded.bytes.toString('utf8'));
   } catch {
     fail('har.readable', `cannot parse ${args.har}`);
     return;
@@ -48,6 +74,12 @@ export async function checkHar(args, pass, fail, warn, recorded) {
     fail('har.connectivity', connectivityCheck.error);
   } else {
     pass('har.connectivity');
+  }
+  const routeCheck = verifyHarRoute(pages, args['expect-route']);
+  if (!routeCheck.ok) {
+    fail('har.route', routeCheck.error);
+  } else {
+    pass('har.route');
   }
   const ua = harUserAgent(har);
   recorded.browser = ua;
@@ -89,13 +121,25 @@ export async function checkHar(args, pass, fail, warn, recorded) {
         'no screenshot provenance: an unbound PNG cannot certify the HAR navigation (pass --screenshot-provenance=<runner-capture-artifact.json>)'
       );
     } else {
-      const text = await readFile(shotProvenancePath, 'utf8').catch(() => null);
-      const shot = verifyScreenshotProvenance(
-        text,
-        pages,
-        screenshotBytes,
-        shotProvenancePath
+      // Provenance artifacts are small runner JSON records: the
+      // operator-JSON ceiling bounds them like every other operator
+      // JSON input, instead of buffering an unbounded file.
+      const bounded = await readBoundedText(
+        shotProvenancePath,
+        MAX_INVENTORY_BYTES
       );
+      const shot = bounded.truncated
+        ? {
+            error:
+              'screenshot provenance artifact exceeds the operator-JSON budget',
+            ok: false,
+          }
+        : verifyScreenshotProvenance(
+            bounded.text,
+            pages,
+            screenshotBytes,
+            shotProvenancePath
+          );
       if (!shot.ok) {
         geometryProblems.push(shot.error);
       } else {
@@ -137,8 +181,13 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   const provenancePath = args['cache-provenance'];
   let provenanceError = null;
   if (provenancePath !== undefined) {
-    const text = await readFile(provenancePath, 'utf8').catch(() => null);
-    const provenance = verifyCacheProvenance(text, pages, provenancePath);
+    const bounded = await readBoundedText(provenancePath, MAX_INVENTORY_BYTES);
+    const provenance = bounded.truncated
+      ? {
+          error: 'cache provenance artifact exceeds the operator-JSON budget',
+          ok: false,
+        }
+      : verifyCacheProvenance(bounded.text, pages, provenancePath);
     if (!provenance.ok) {
       provenanceError = provenance.error;
     } else {

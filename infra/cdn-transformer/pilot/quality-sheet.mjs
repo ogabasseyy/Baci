@@ -167,9 +167,21 @@ export async function buildQualitySheet({
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
-    let recordBytes = snapshot.bytes.length;
-    for (const file of files.values()) {
-      recordBytes += file.length;
+    // Charge every rendered data-URI occurrence, not each unique file:
+    // the original embeds once per rung row (base64-inflated) and each
+    // tier embeds with its own row, so unique-byte accounting would let
+    // the constructed HTML exceed the ceiling it claims to enforce.
+    const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
+    const rungRows = new Set(manifest.tiers.map((tier) => tier.requestedWidth))
+      .size;
+    const originalPrefix = `data:${originalContentType(record)};base64,`.length;
+    let recordBytes =
+      (originalPrefix + base64Length(snapshot.bytes.length)) * rungRows;
+    for (const tier of manifest.tiers) {
+      const file = files.get(tier.path);
+      recordBytes +=
+        `data:${tier.contentType};base64,`.length +
+        base64Length(file?.length ?? 0);
     }
     embeddedBytes += recordBytes;
     if (embeddedBytes > maxEmbeddedBytes) {

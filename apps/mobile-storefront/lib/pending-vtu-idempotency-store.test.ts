@@ -40,7 +40,10 @@ describe('pending-vtu-idempotency-store', () => {
     ).toEqual([]);
   });
 
-  it('keeps TTL-expired REFERENCED entries on serialize and parse', () => {
+  it('drops TTL-expired entries of any reference state on serialize and parse', () => {
+    // Uniform 24h horizon: no client-side signal proves terminality, so
+    // referenced entries expire exactly like reference-less ones —
+    // mirrors live recall.
     const dayMs = 24 * 60 * 60 * 1000;
     const expired = entry({ reference: 'REF-A' });
 
@@ -48,13 +51,13 @@ describe('pending-vtu-idempotency-store', () => {
       parsePendingVtuSnapshot(
         serializePendingVtuEntries([['a', expired]], Date.now() + dayMs + 1)
       )
-    ).toEqual([['a', expired]]);
+    ).toEqual([]);
 
     expect(
       parsePendingVtuSnapshot(
         JSON.stringify([['a', entry({ reference: 'REF-A', rememberedAt: 1 })]])
       )
-    ).toEqual([['a', entry({ reference: 'REF-A', rememberedAt: 1 })]]);
+    ).toEqual([]);
   });
 
   it('ignores corrupt snapshots on parse', () => {

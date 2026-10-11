@@ -126,19 +126,21 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(descriptor)).toBeNull();
   });
 
-  it('keeps recalling referenced entries past the TTL', () => {
-    // The stale check arbitrates their success replays; expiring them
-    // could mint a fresh key for a still-processing transaction and
-    // debit twice.
+  it('drops TTL-expired referenced entries on recall', () => {
+    // No client-side signal proves terminality (noted references mark
+    // non-terminal processing responses), so the 24h TTL applies
+    // uniformly — including to referenced entries.
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 10,
-      phoneNumber: 'ttl-keep',
+      phoneNumber: 'ttl-ref',
     });
     rememberPendingVtuPurchase(descriptor, 'key-ttl-ref');
     notePendingVtuReference(descriptor, 'REF-TTL');
     const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
-    expect(recallPendingVtuKey(descriptor, expired)).toBe('key-ttl-ref');
+    expect(recallPendingVtuKey(descriptor, expired)).toBeNull();
+    // Deletion sticks: a live recall also misses.
+    expect(recallPendingVtuKey(descriptor)).toBeNull();
   });
 
   it('evicts the oldest entry past the cap', () => {
@@ -156,11 +158,10 @@ describe('pending-vtu-idempotency', () => {
     );
   });
 
-  it('evicts stale-completed entries before unresolved ones at the cap', () => {
-    // The youngest entry completed long ago (provably terminal); the
-    // rest are fresh and potentially unresolved. Evicting the stale
-    // entry is outcome-safe (the repeat correctly mints a fresh
-    // transaction), while evicting an unresolved one could double-debit.
+  it('protects young referenced entries (even stale) from eviction', () => {
+    // Staleness is deliberately NOT a victim criterion: a referenced
+    // entry older than five minutes may still be processing, and the
+    // stale branch needs its key. The oldest live entry goes instead.
     clearPendingVtuKeys();
     jest.useFakeTimers();
     try {
@@ -175,39 +176,46 @@ describe('pending-vtu-idempotency', () => {
           1000
       );
       rememberPendingVtuPurchase('cap-new', 'key-new');
-      // Youngest-but-stale victim evicted…
-      expect(recallPendingVtuKey('cap-31')).toBeNull();
-      // …oldest-but-unresolved survivors kept.
-      expect(recallPendingVtuKey('cap-0')).toBe('key-0');
+      // Youngest-but-stale survivor kept (referenced ⇒ recallable iff present)…
+      expect(recallPendingVtuKey('cap-31')).toBe('key-31');
+      // …oldest live entry evicted instead.
+      expect(recallPendingVtuKey('cap-0')).toBeNull();
       expect(recallPendingVtuKey('cap-new')).toBe('key-new');
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it('evicts recall-dead entries before anything else at the cap', () => {
-    // cap-31 never got a response and aged past the TTL (live recall
-    // would drop it on access anyway); cap-0..30 are stale-completed.
-    // The recall-dead entry must go first even though it is youngest.
+  it('evicts past-TTL entries (even referenced) before live ones', () => {
+    // sig-old is referenced but aged past the TTL (live recall would
+    // drop it on access anyway); the rest are young. The past-TTL
+    // entry goes first — otherwise the cap would wedge once 32
+    // referenced entries accumulate.
     clearPendingVtuKeys();
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-      for (let index = 0; index < 32; index++) {
-        rememberPendingVtuPurchase(`dead-${index}`, `key-${index}`);
-        if (index < 31) {
-          notePendingVtuReference(`dead-${index}`, `REF-${index}`);
-        }
+      rememberPendingVtuPurchase('sig-old', 'key-old');
+      notePendingVtuReference('sig-old', 'REF-OLD');
+      jest.setSystemTime(
+        new Date('2026-01-01T00:00:00Z').getTime() +
+          PERSISTED_VTU_KEY_TTL_MS -
+          60 * 1000
+      );
+      for (let index = 0; index < 31; index++) {
+        rememberPendingVtuPurchase(`live-${index}`, `key-${index}`);
       }
       jest.setSystemTime(
         new Date('2026-01-01T00:00:00Z').getTime() +
           PERSISTED_VTU_KEY_TTL_MS +
           1000
       );
-      rememberPendingVtuPurchase('dead-new', 'key-new');
-      // Oldest-stale survivor kept (referenced ⇒ recallable iff present)…
-      expect(recallPendingVtuKey('dead-0')).toBe('key-0');
-      expect(recallPendingVtuKey('dead-new')).toBe('key-new');
+      rememberPendingVtuPurchase('live-new', 'key-new');
+      // Past-TTL referenced victim evicted…
+      expect(recallPendingVtuKey('sig-old')).toBeNull();
+      // …young survivors kept.
+      expect(recallPendingVtuKey('live-0')).toBe('key-0');
+      expect(recallPendingVtuKey('live-new')).toBe('key-new');
     } finally {
       jest.useRealTimers();
     }

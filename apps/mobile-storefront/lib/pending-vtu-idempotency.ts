@@ -148,10 +148,13 @@ export function buildVtuPurchaseDescriptor(
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
- * Reference-less entries past the 24h TTL are dropped instead of
- * recalled: without a reference the stale check below cannot flag
- * them, so recalling would replay an already-completed transaction
- * as a new purchase. (Referenced entries are exempt — see above.)
+ * Entries past the 24h TTL are dropped instead of recalled — including
+ * referenced ones. No client-side signal proves terminality (noted
+ * references mark non-terminal processing responses, and the server
+ * leaves unconfirmed rows processing indefinitely), so retention is
+ * horizon-based: 24h dwarfs any plausible processing duration, while
+ * infinite retention would accumulate unboundedly and wedge the cap.
+ * The 5min stale check still arbitrates success replays within the TTL.
  */
 export function recallPendingVtuKey(
   descriptor: string,
@@ -159,10 +162,7 @@ export function recallPendingVtuKey(
 ): string | null {
   const pending = pendingPurchases.get(descriptor);
   if (!pending) return null;
-  if (
-    !pending.reference &&
-    now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS
-  ) {
+  if (now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
     pendingPurchases.delete(descriptor);
     persistPendingVtuPurchases();
     return null;
@@ -171,35 +171,17 @@ export function recallPendingVtuKey(
 }
 
 /**
- * Records the key a purchase was submitted with. Oldest entries evict
- * past the cap — eviction only drops the client recall (the server
- * dedupe row is unaffected), and 32 outstanding pendings is unreachable
- * through sequential taps.
- */
-/**
- * Frees one registry slot, preferring victims whose eviction cannot
- * cause a double debit: recall-dead entries first (live recall would
- * drop them on access anyway), then stale-completed entries (provably
- * terminal — evicting one only skips the "already completed" warning;
- * the repeat purchase correctly mints a fresh transaction either way).
- * Only when every entry is potentially unresolved does the oldest go;
- * that needs 33 concurrently-unresolved distinct purchases to matter.
+ * Frees one registry slot. Past-TTL entries go first (live recall
+ * would drop them on access anyway, regardless of reference state).
+ * Otherwise the oldest within-TTL entry goes — no client-side signal
+ * proves terminality, so this documented last resort needs 33 live
+ * purchases inside 24h to matter; staleness is deliberately NOT a
+ * victim criterion (a referenced entry older than five minutes may
+ * still be processing, and the stale branch needs its key).
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
-    if (
-      !entry.reference &&
-      now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS
-    ) {
-      pendingPurchases.delete(scoped);
-      return;
-    }
-  }
-  for (const [scoped, entry] of pendingPurchases) {
-    if (
-      entry.reference &&
-      now - entry.rememberedAt > PENDING_VTU_STALE_AFTER_MS
-    ) {
+    if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
       pendingPurchases.delete(scoped);
       return;
     }
@@ -210,6 +192,7 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   }
 }
 
+/** Records the key a purchase was submitted with (cap-enforced). */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string

@@ -27,9 +27,7 @@ RUN test ! -e ./mcp-server/.env
 COPY --chown=node:node apps/web/src ./src
 COPY --chown=node:node packages/shared /app/packages/shared
 # pnpm --prod omits shared dev links; bind its Zod peer to this consumer.
-RUN mkdir -p /app/packages/shared/node_modules \
-  && ln -s /app/apps/web/node_modules/zod /app/packages/shared/node_modules/zod
-RUN node mcp-server/verify-shared-zod.mjs
+RUN node mcp-server/verify-shared-zod.mjs --link
 
 EXPOSE 8787
 

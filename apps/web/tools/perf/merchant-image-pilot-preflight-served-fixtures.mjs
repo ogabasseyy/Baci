@@ -132,6 +132,7 @@ export async function setupOfflineAssets(assets) {
         assetId: asset.assetId,
         merchantId,
         role: asset.role,
+        schemaVersion: 1,
         sha256: sourceSha,
         slot: asset.slot,
         sourcePath,
@@ -165,6 +166,7 @@ export async function setupOfflineAssets(assets) {
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',
         schemaVersion: 1,
+        slotId: entry.slot,
         sourceSha256: entry.sourceSha,
         verdict: 'accepted',
       }))

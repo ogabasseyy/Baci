@@ -48,6 +48,7 @@ function acceptance(overrides = {}) {
     reviewedAt: '2026-10-01T21:00:00.000Z',
     reviewer: 'pilot-owner',
     schemaVersion: 1,
+    slotId: 'header-logo',
     sourceSha256: SOURCE,
     verdict: 'accepted',
     ...overrides,
@@ -93,13 +94,21 @@ test('parsePilotAcceptance rejects malformed records strictly', () => {
     ).ok,
     false
   );
+  assert.equal(parsePilotAcceptance(acceptance({ slotId: '' })).ok, false);
+  assert.equal(
+    parsePilotAcceptance(acceptance({ slotId: 's'.repeat(129) })).ok,
+    false
+  );
 });
 
 test('matchAcceptance binds every identity and output hash', () => {
   assert.deepEqual(
     matchAcceptance({
       acceptance: acceptance(),
-      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      binding: {
+        originalUrl: 'https://cdn.example.com/media/logo-1.png',
+        slotId: 'header-logo',
+      },
       manifest: manifest(),
     }),
     {
@@ -120,7 +129,10 @@ test('matchAcceptance binds capped rungs positionally, not as a set', () => {
   assert.deepEqual(
     matchAcceptance({
       acceptance: record,
-      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      binding: {
+        originalUrl: 'https://cdn.example.com/media/logo-1.png',
+        slotId: 'header-logo',
+      },
       manifest: deduped,
     }),
     { ok: true }
@@ -128,7 +140,10 @@ test('matchAcceptance binds capped rungs positionally, not as a set', () => {
   const short = acceptance({ outputHashes: [tierHashes()[0]] });
   const result = matchAcceptance({
     acceptance: short,
-    binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+    binding: {
+      originalUrl: 'https://cdn.example.com/media/logo-1.png',
+      slotId: 'header-logo',
+    },
     manifest: deduped,
   });
   assert.equal(result.ok, false);
@@ -182,11 +197,17 @@ test('matchAcceptance invalidates on any drift or rejection', () => {
       acceptance({ originalUrl: 'https://cdn.example.com/media/logo-2.png' }),
       manifest(),
     ],
+    // Same merchant/asset/bytes moved to another slot: the old slot's
+    // visual verdict (dimensions, crop) must not follow the binding.
+    ['moved slot', acceptance({ slotId: 'product-card' }), manifest()],
   ];
   for (const [label, record, manifestValue] of cases) {
     const result = matchAcceptance({
       acceptance: record,
-      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      binding: {
+        originalUrl: 'https://cdn.example.com/media/logo-1.png',
+        slotId: 'header-logo',
+      },
       manifest: manifestValue,
     });
     assert.equal(result.ok, false, label);

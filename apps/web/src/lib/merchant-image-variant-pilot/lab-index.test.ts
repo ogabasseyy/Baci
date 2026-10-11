@@ -168,6 +168,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -206,6 +207,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -236,6 +238,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -270,6 +273,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -313,6 +317,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -350,6 +355,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -375,6 +381,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -427,6 +434,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -450,6 +458,7 @@ describe('buildLabIndex', () => {
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
       schemaVersion: 1,
+      slotId: 'header-logo',
       sourceSha256: SOURCE,
       verdict: 'accepted' as const,
     };
@@ -520,6 +529,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -558,6 +568,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -567,6 +578,35 @@ describe('buildLabIndex', () => {
     });
     expect(result.statuses[0]?.status).toBe('missing-manifest');
     expect(Object.keys(result.index.entries)).toHaveLength(0);
+  });
+
+  it('rejects an acceptance whose slot moved in the bindings', async () => {
+    // The reviewed slot binds the visual verdict: same merchant, asset,
+    // generation, and bytes in another slot needs a new review.
+    const { statuses } = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'Lab review: legible, colors preserved.',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          slotId: 'product-card',
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(statuses[0]?.status).toBe('acceptance-mismatch');
+    expect(statuses[0]?.detail).toBe('slot changed');
   });
 
   it('rejects a symlinked generation entry before reading its manifest', async () => {
@@ -592,6 +632,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -623,6 +664,7 @@ describe('buildLabIndex', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },
@@ -648,6 +690,7 @@ describe('buildLabIndex', () => {
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
       schemaVersion: 1,
+      slotId: 'header-logo',
       sourceSha256: SOURCE,
       verdict: 'accepted' as const,
     };
@@ -690,6 +733,7 @@ describe('buildLabIndex', () => {
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
       schemaVersion: 1,
+      slotId: 'header-logo',
       sourceSha256: SOURCE,
       verdict: 'accepted' as const,
     };
@@ -714,6 +758,7 @@ describe('buildLabIndex', () => {
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
       schemaVersion: 1,
+      slotId: 'header-logo',
       sourceSha256: SOURCE,
       verdict: 'accepted' as const,
     };
@@ -765,6 +810,7 @@ describe('lookupPilotTiers and selectPilotTier', () => {
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
           schemaVersion: 1,
+          slotId: 'header-logo',
           sourceSha256: SOURCE,
           verdict: 'accepted',
         },

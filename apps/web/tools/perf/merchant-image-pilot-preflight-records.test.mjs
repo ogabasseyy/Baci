@@ -51,6 +51,17 @@ describe('sameAcceptance', () => {
         originalUrl: 'https://cdn.example.com/media/logo-b.png',
       })
     ).toBe(false);
+    // Same verdict text for another slot is a different review: slot
+    // dimensions and crop behavior do not transfer.
+    expect(sameAcceptance(base, { ...base, slotId: 'product-card' })).toBe(
+      false
+    );
+    expect(
+      sameAcceptance(
+        { ...base, slotId: 'header-logo' },
+        { ...base, slotId: 'header-logo' }
+      )
+    ).toBe(true);
   });
 });
 
@@ -127,6 +138,7 @@ describe('validInventoryRecord', () => {
     assetId: 'logo-a',
     merchantId: MERCHANT,
     role: 'logo',
+    schemaVersion: 1,
     sha256: 'd'.repeat(64),
     slot: 'header-logo',
     sourcePath: 'snapshots/logo-a.png',
@@ -147,6 +159,8 @@ describe('validInventoryRecord', () => {
       { ...good, sha256: 'short' },
       { ...good, sourcePath: '../escape.png' },
       { ...good, url: 'ftp://cdn.example.com/a.png' },
+      { ...good, schemaVersion: 2 },
+      { ...good, schemaVersion: undefined },
       null,
       [],
     ]) {
@@ -168,6 +182,7 @@ describe('validAcceptanceShape', () => {
     reviewedAt: '2026-10-01T10:00:00Z',
     reviewer: 'lab-operator',
     schemaVersion: 1,
+    slotId: 'header-logo',
     sourceSha256: 'd'.repeat(64),
     verdict: 'accepted',
   };
@@ -189,6 +204,9 @@ describe('validAcceptanceShape', () => {
       { ...good, qualities: ['high'] },
       { ...good, reviewedAt: '2026-10-01' },
       { ...good, schemaVersion: 2 },
+      { ...good, slotId: '' },
+      { ...good, slotId: 's'.repeat(129) },
+      { ...good, slotId: undefined },
       { ...good, generationId: 'short' },
       { ...good, originalUrl: 'ftp://cdn.example.com/media/logo-a.png' },
       { ...good, originalUrl: 'not-a-url' },

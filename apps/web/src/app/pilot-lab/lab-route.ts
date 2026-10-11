@@ -11,6 +11,7 @@ import {
   getFrozenLabRuntime,
   publishLabRuntime,
 } from '@/lib/merchant-image-variant-pilot/lab-runtime';
+import { PILOT_SCHEMA_VERSION } from '@/schemas/merchant-image-variant-pilot-constants';
 import { readBoundedOperatorJson } from './lab-route-operator-json';
 import { isSafeRelativePath } from './lab-safe-path';
 import { verifyStagedBytes } from './lab-staged-verify';
@@ -65,6 +66,14 @@ export function parseRawInventoryRecords(value: unknown): RawInventoryRecord[] {
     if (!isSafeRelativePath(record.sourcePath as string)) {
       throw new Error(
         `merchant image pilot: inventory[${index}].sourcePath must be a safe relative path`
+      );
+    }
+    // The generator's readInventoryJobs rejects non-current versions;
+    // the route must refuse them too instead of normalizing a future
+    // record shape into the current binding.
+    if (record.schemaVersion !== PILOT_SCHEMA_VERSION) {
+      throw new Error(
+        `merchant image pilot: inventory[${index}].schemaVersion must be ${PILOT_SCHEMA_VERSION}`
       );
     }
     return {

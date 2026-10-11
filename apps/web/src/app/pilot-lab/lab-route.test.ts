@@ -73,6 +73,7 @@ const RECORD = {
   assetId: 'logo-a',
   merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
   role: 'logo',
+  schemaVersion: 1,
   sha256: 'd'.repeat(64),
   slot: 'header-logo',
   sourcePath: 'logo-a.png',
@@ -81,7 +82,19 @@ const RECORD = {
 
 describe('parseRawInventoryRecords', () => {
   it('passes through well-formed records', () => {
-    expect(parseRawInventoryRecords([RECORD])).toEqual([RECORD]);
+    // The version gates parsing but is not part of the normalized
+    // binding shape downstream.
+    expect(parseRawInventoryRecords([RECORD])).toEqual([
+      {
+        assetId: RECORD.assetId,
+        merchantId: RECORD.merchantId,
+        role: RECORD.role,
+        sha256: RECORD.sha256,
+        slot: RECORD.slot,
+        sourcePath: RECORD.sourcePath,
+        url: RECORD.url,
+      },
+    ]);
     expect(
       parseRawInventoryRecords([
         { ...RECORD, sourcePath: 'nested/dir/logo-a.png' },
@@ -98,6 +111,17 @@ describe('parseRawInventoryRecords', () => {
     expect(() =>
       parseRawInventoryRecords([{ ...RECORD, assetId: undefined }])
     ).toThrow(/inventory\[0\].assetId/);
+  });
+
+  it('rejects future or missing inventory schema versions', () => {
+    // The generator refuses non-current versions; the route must not
+    // normalize them into current-shape bindings.
+    expect(() =>
+      parseRawInventoryRecords([{ ...RECORD, schemaVersion: 2 }])
+    ).toThrow(/inventory\[0\].schemaVersion must be 1/);
+    expect(() =>
+      parseRawInventoryRecords([{ ...RECORD, schemaVersion: undefined }])
+    ).toThrow(/inventory\[0\].schemaVersion must be 1/);
   });
 
   it('rejects missing, non-string, and unsafe source paths', () => {
@@ -497,6 +521,7 @@ async function setupRouteFiles() {
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',
         schemaVersion: 1,
+        slotId: 'header-logo',
         sourceSha256,
         verdict: 'accepted',
       },
@@ -509,6 +534,7 @@ async function setupRouteFiles() {
         assetId: 'logo-1',
         merchantId: ROUTE_MERCHANT,
         role: 'logo',
+        schemaVersion: 1,
         sha256: sourceSha256,
         slot: 'header-logo',
         sourcePath: 'logo-1.png',

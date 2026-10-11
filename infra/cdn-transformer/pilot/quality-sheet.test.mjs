@@ -14,7 +14,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runPilotGeneration } from './generate.mjs';
 import { currentRecipeId } from './generation-identity.mjs';
-import { buildQualitySheet } from './quality-sheet.mjs';
+import { buildQualitySheet, readSlotsGeometry } from './quality-sheet.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
@@ -52,6 +52,28 @@ async function setupPilot(
   await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
   return { base, inputRoot, inventoryPath, outputRoot };
 }
+
+test('rejects an oversized slots file before parsing', async () => {
+  const dir = join(
+    tmpdir(),
+    `pilot-slots-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  await mkdir(dir, { recursive: true });
+  const slotsPath = join(dir, 'slots.json');
+  // Same operator ceiling as the inventory input: slot geometry is
+  // small, so a giant file is corruption, not geometry.
+  await writeFile(slotsPath, Buffer.alloc(1024 * 1024 + 1, 120));
+  await assert.rejects(() => readSlotsGeometry(slotsPath), /exceeds 1048576/);
+  await writeFile(slotsPath, 'not json{');
+  await assert.rejects(() => readSlotsGeometry(slotsPath), /not valid JSON/);
+  await writeFile(
+    slotsPath,
+    JSON.stringify({ 'header-logo': { cssWidth: 40 } })
+  );
+  assert.deepEqual(await readSlotsGeometry(slotsPath), {
+    'header-logo': { cssWidth: 40 },
+  });
+});
 
 test('rejects an oversized inventory before parsing', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();

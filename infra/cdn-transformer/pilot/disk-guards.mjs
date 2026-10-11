@@ -55,27 +55,34 @@ export function createStagingBudget(capBytes = MAX_STAGING_BYTES) {
 // read may return short). Returns truncated: true when the file is
 // longer, so callers reject the size mismatch without ever allocating
 // the whole file. Throws when unreadable (callers map that to their
-// missing-input error). Mirrored by readUpToBytes in web
+// missing-input error). Chunked: streams 64 KiB at a time instead of
+// allocating maxBytes + 1 upfront, so a large ceiling never becomes a
+// large allocation on its own. Mirrored by readUpToBytes in web
 // lab-config-stage-io.ts (TS cannot import infra) and re-exported for
 // the preflight stages.
+const READ_CHUNK_BYTES = 64 * 1024;
+
 export async function readUpToBytes(path, maxBytes) {
   const handle = await open(path, 'r');
   try {
-    const probe = Buffer.alloc(maxBytes + 1);
+    const chunks = [];
     let bytesRead = 0;
-    let short = false;
-    while (bytesRead < probe.length && !short) {
-      const chunk = await handle.read(
-        probe,
-        bytesRead,
-        probe.length - bytesRead,
-        bytesRead
-      );
+    for (;;) {
+      const want = Math.min(READ_CHUNK_BYTES, maxBytes + 1 - bytesRead);
+      if (want <= 0) {
+        break;
+      }
+      const probe = Buffer.alloc(want);
+      const chunk = await handle.read(probe, 0, want, bytesRead);
+      if (chunk.bytesRead === 0) {
+        break;
+      }
+      chunks.push(probe.subarray(0, chunk.bytesRead));
       bytesRead += chunk.bytesRead;
-      short = chunk.bytesRead === 0;
     }
+    const buffered = Buffer.concat(chunks);
     return {
-      bytes: Buffer.from(probe.subarray(0, Math.min(bytesRead, maxBytes))),
+      bytes: buffered.subarray(0, Math.min(bytesRead, maxBytes)),
       truncated: bytesRead > maxBytes,
     };
   } finally {

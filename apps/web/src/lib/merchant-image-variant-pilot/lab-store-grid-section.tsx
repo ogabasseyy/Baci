@@ -8,9 +8,9 @@ import {
 } from './lab-fixtures';
 import type { PilotBindingStatus } from './lab-index';
 import { PilotLabNotOptimized } from './lab-not-optimized';
+import { type LabGridFiller, LabStoreGrid } from './lab-store-grid';
 import type { PilotLabStore } from './lab-store-registry';
 import { resolveBinding } from './lab-store-resolve';
-import { type LabGridFiller, LabStoreGrid } from './lab-store-shells';
 import { projectPilotNextImage } from './next-image-adapter';
 
 export const LAB_GRID_FILLERS: readonly LabGridFiller[] = [

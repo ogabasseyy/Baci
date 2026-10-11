@@ -84,3 +84,22 @@ test('readUpToBytes caps allocation at the claim plus one byte', async () => {
   });
   await assert.rejects(() => readUpToBytes(join(base, 'missing.bin'), 10));
 });
+
+test('readUpToBytes streams multi-chunk files to the cap', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'pilot-read-chunked-'));
+  const big = join(base, 'big.bin');
+  const payload = Buffer.alloc(200 * 1024);
+  for (let i = 0; i < payload.length; i += 1) {
+    payload[i] = i % 251;
+  }
+  await writeFile(big, payload);
+  // Under the cap: full content across chunk boundaries.
+  assert.deepEqual(await readUpToBytes(big, 300 * 1024), {
+    bytes: payload,
+    truncated: false,
+  });
+  // Over the cap: exactly cap bytes plus the truncation signal.
+  const capped = await readUpToBytes(big, 100 * 1024);
+  assert.equal(capped.truncated, true);
+  assert.deepEqual(capped.bytes, payload.subarray(0, 100 * 1024));
+});

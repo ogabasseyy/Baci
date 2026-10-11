@@ -17,27 +17,37 @@ const MAX_STAGED_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 // the full file — a corrupted tier concatenated into a huge file must
 // fail closed, not exhaust the server. Throws when unreadable (callers
 // map that to their missing-input error).
+const READ_CHUNK_BYTES = 64 * 1024;
+
 export async function readUpToBytes(
   path: string,
   maxBytes: number
 ): Promise<{ bytes: Buffer; truncated: boolean }> {
   const handle = await open(path, 'r');
   try {
-    const probe = Buffer.alloc(maxBytes + 1);
+    // Chunked probe: stream 64 KiB at a time instead of allocating
+    // maxBytes + 1 upfront, so a large ceiling (per-entry staged sizes
+    // up to the 256 MiB set budget) never becomes a large allocation
+    // on its own — memory grows with actual file content, capped at
+    // maxBytes + 1 total.
+    const chunks: Buffer[] = [];
     let bytesRead = 0;
-    let short = false;
-    while (bytesRead < probe.length && !short) {
-      const chunk = await handle.read(
-        probe,
-        bytesRead,
-        probe.length - bytesRead,
-        bytesRead
-      );
+    for (;;) {
+      const want = Math.min(READ_CHUNK_BYTES, maxBytes + 1 - bytesRead);
+      if (want <= 0) {
+        break;
+      }
+      const probe = Buffer.alloc(want);
+      const chunk = await handle.read(probe, 0, want, bytesRead);
+      if (chunk.bytesRead === 0) {
+        break;
+      }
+      chunks.push(probe.subarray(0, chunk.bytesRead));
       bytesRead += chunk.bytesRead;
-      short = chunk.bytesRead === 0;
     }
+    const buffered = Buffer.concat(chunks);
     return {
-      bytes: Buffer.from(probe.subarray(0, Math.min(bytesRead, maxBytes))),
+      bytes: buffered.subarray(0, Math.min(bytesRead, maxBytes)),
       truncated: bytesRead > maxBytes,
     };
   } finally {

@@ -87,6 +87,7 @@ function sameAcceptance(
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
     left.originalUrl === right.originalUrl &&
+    left.slotId === right.slotId &&
     left.outputHashes.length === right.outputHashes.length &&
     left.outputHashes.every(
       (hash, index) => hash === right.outputHashes[index]

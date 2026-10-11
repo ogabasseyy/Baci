@@ -118,6 +118,7 @@ async function setupLabFiles() {
     reviewedAt: '2026-10-01T21:00:00.000Z',
     reviewer: 'pilot-owner',
     schemaVersion: 1,
+    slotId: 'header-logo',
     sourceSha256,
     verdict: 'accepted',
   };

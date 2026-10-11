@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseCliArgs } from './cli-args.mjs';
 import { MAX_INVENTORY_BYTES } from './constants.mjs';
@@ -95,9 +95,7 @@ export async function buildQualitySheet({
     MAX_INVENTORY_BYTES
   );
   if (truncated) {
-    throw new PilotSheetError(
-      `inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
-    );
+    throw new PilotSheetError(`inventory exceeds ${MAX_INVENTORY_BYTES} bytes`);
   }
   const records = JSON.parse(bytes.toString('utf8'));
   if (!Array.isArray(records) || records.length === 0) {
@@ -208,6 +206,26 @@ ${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth, crop, com
 ${overSourceNote}${sections.join('\n')}</body></html>\n`;
 }
 
+export async function readSlotsGeometry(slotsPath) {
+  // Bounded like the adjacent inventory input: slot geometry is a
+  // small operator file, so anything past the operator ceiling is a
+  // corrupt or swapped-in giant, not a geometry map.
+  const { bytes, truncated } = await readUpToBytes(
+    slotsPath,
+    MAX_INVENTORY_BYTES
+  );
+  if (truncated) {
+    throw new PilotSheetError(
+      `slots file exceeds ${MAX_INVENTORY_BYTES} bytes`
+    );
+  }
+  try {
+    return JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new PilotSheetError('slots file is not valid JSON');
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   (async () => {
     const args = parseCliArgs(process.argv.slice(2), [
@@ -217,7 +235,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       'slots',
       'out',
     ]);
-    const slots = JSON.parse(await readFile(args.slots, 'utf8'));
+    const slots = await readSlotsGeometry(args.slots);
     const html = await buildQualitySheet({
       inputRoot: args['input-root'],
       inventoryPath: args.inventory,

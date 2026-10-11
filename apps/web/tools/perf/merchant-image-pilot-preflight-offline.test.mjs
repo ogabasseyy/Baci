@@ -154,6 +154,7 @@ async function setupOfflineAssets(assets) {
         assetId: asset.assetId,
         merchantId,
         role: asset.role,
+        schemaVersion: 1,
         sha256: sourceSha,
         slot: asset.slot,
         sourcePath,
@@ -187,6 +188,7 @@ async function setupOfflineAssets(assets) {
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',
         schemaVersion: 1,
+        slotId: entry.slot,
         sourceSha256: entry.sourceSha,
         verdict: 'accepted',
       }))
@@ -763,6 +765,7 @@ describe('preflight offline gate', () => {
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',
         schemaVersion: 1,
+        slotId: 'header-logo',
         sourceSha256: JSON.parse(
           await readFile(fixture.inventoryPath, 'utf8')
         )[0].sha256,
@@ -779,6 +782,20 @@ describe('preflight offline gate', () => {
     const conflict = await runOfflinePreflight(offlineOptions(fixture));
     expect(conflict.ok).toBe(false);
     expect(conflict.failures.join('\n')).toMatch(/duplicate|conflict/i);
+  });
+
+  it('rejects an acceptance whose slot moved in the inventory', async () => {
+    // Mirror of the route matcher: the reviewed slot binds the visual
+    // verdict, so a binding moved to another slot needs a new review.
+    const fixture = await setupOffline();
+    const acceptances = JSON.parse(
+      await readFile(fixture.acceptancesPath, 'utf8')
+    );
+    acceptances[0].slotId = 'product-card';
+    await writeFile(fixture.acceptancesPath, JSON.stringify(acceptances));
+    const moved = await runOfflinePreflight(offlineOptions(fixture));
+    expect(moved.ok).toBe(false);
+    expect(moved.failures.join('\n')).toMatch(/slot differs from inventory/);
   });
 
   it('returns the offline-accepted bindings with staged identities', async () => {

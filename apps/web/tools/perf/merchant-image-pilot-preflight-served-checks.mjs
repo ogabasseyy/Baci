@@ -17,6 +17,7 @@ import {
   srcSetCandidates,
   stripQuery,
 } from './merchant-image-pilot-preflight-html.mjs';
+import { readBoundedBody } from './merchant-image-pilot-preflight-served-body.mjs';
 import {
   readUpToBytes,
   sha256Hex,
@@ -35,34 +36,6 @@ const CONTENT_TYPE_FOR_EXTENSION = {
   svg: 'image/svg+xml',
   webp: 'image/webp',
 };
-
-// Bounded response read: at most maxBytes stream through the reader, so a
-// runaway origin cannot exhaust the validator. Reports truncation (the
-// caller fails the byte check) and cancels the body on overflow.
-export async function readBoundedBody(response, maxBytes) {
-  if (!response.body) {
-    return { bytes: Buffer.alloc(0), truncated: false };
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        return { bytes: Buffer.concat(chunks), truncated: false };
-      }
-      total += value.byteLength;
-      if (total > maxBytes) {
-        return { bytes: Buffer.alloc(0), truncated: true };
-      }
-      chunks.push(Buffer.from(value));
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-}
 
 export async function assertServedDescriptors(
   html,

@@ -57,6 +57,7 @@ export const ACCEPTANCE_KEYS = new Set([
   'reviewedAt',
   'reviewer',
   'schemaVersion',
+  'slotId',
   'sourceSha256',
   'verdict',
 ]);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
@@ -326,8 +327,10 @@ test('commitGeneration refuses reuse when retained bytes differ', async () => {
     entries.map((entry) => ({ from: fromFor(entry), name: entry.path }));
   const boundJob = { ...JOB, expectedSha256: first.expectedSha256 };
   await commitGeneration({
-    files: filesFor(ladderTiers, (entry) =>
-      first.ladder.tiers.find((tier) => tier.sha256 === entry.sha256).path
+    files: filesFor(
+      ladderTiers,
+      (entry) =>
+        first.ladder.tiers.find((tier) => tier.sha256 === entry.sha256).path
     ),
     generationId,
     job: boundJob,
@@ -376,8 +379,7 @@ test('commitGeneration refuses reuse when retained bytes differ', async () => {
         stagingDir: second.stagingDir,
       }),
     (error) =>
-      error.code === 'generation-misbound' &&
-      /bytes differ/.test(error.message)
+      error.code === 'generation-misbound' && /bytes differ/.test(error.message)
   );
   const after = await stat(
     join(first.root, 'generations', generationId, 'manifest.json')
@@ -967,6 +969,126 @@ test('commitGeneration unpublishes on post-commit directory fsync errors', async
   await assert.rejects(
     () => loadGeneration(fixture.root, fixture.generationId),
     /not published/
+  );
+});
+
+test('commitGeneration rejects a swapped-in giant staged tier on size', async () => {
+  const fixture = await commitFixture('pilot-r1-giant-tier');
+  // The staged file dwarfs its manifest claim: the commit must reject
+  // on the claim+1 truncation probe instead of loading the whole file
+  // ahead of the length comparison.
+  await writeFile(fixture.files[0].from, Buffer.alloc(2 * 1024 * 1024, 9));
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) =>
+      error.code === 'staged-file-mismatch' &&
+      /staged bytes differ/.test(error.message)
+  );
+  await assert.rejects(
+    () => loadGeneration(fixture.root, fixture.generationId),
+    /not published/
+  );
+});
+
+test('commitGeneration quarantines when unpublish removal fails', async () => {
+  const fixture = await commitFixture('pilot-r1-quarantine');
+  // Post-rename fsync fails AND the unpublish rm fails (read-only
+  // directory): the rejected generation must move out of the
+  // generations namespace so reuse can never validate it, and the
+  // cleanup failure must surface instead of being swallowed.
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          fsyncDir: (path) => {
+            if (path.endsWith('generations')) {
+              return Promise.reject(
+                Object.assign(new Error('io error'), { code: 'EIO' })
+              );
+            }
+            return Promise.resolve();
+          },
+          rm: () =>
+            Promise.reject(
+              Object.assign(new Error('denied'), { code: 'EACCES' })
+            ),
+        },
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) =>
+      error.code === 'sync-failed' &&
+      /removal failed \(EACCES\)/.test(error.message) &&
+      /quarantined at/.test(error.message)
+  );
+  await assert.rejects(
+    () => loadGeneration(fixture.root, fixture.generationId),
+    /not published/
+  );
+  const entries = await readdir(fixture.root);
+  assert.match(
+    entries.join(','),
+    new RegExp(`\\.quarantined-${fixture.generationId}-`)
+  );
+});
+
+test('commitGeneration stays loud when quarantine also fails', async () => {
+  const fixture = await commitFixture('pilot-r1-quarantine-fail');
+  const { rename: fsRename } = await import('node:fs/promises');
+  // Disk-level failure of rm, then of the quarantine rename: nothing
+  // can move the rejected directory, so the error must name both
+  // failures plus the visible path and its operator fix.
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          fsyncDir: (path) => {
+            if (path.endsWith('generations')) {
+              return Promise.reject(
+                Object.assign(new Error('io error'), { code: 'EIO' })
+              );
+            }
+            return Promise.resolve();
+          },
+          rename: (from, to) => {
+            if (String(to).includes('.quarantined-')) {
+              return Promise.reject(
+                Object.assign(new Error('no parent write'), {
+                  code: 'EACCES',
+                })
+              );
+            }
+            return fsRename(from, to);
+          },
+          rm: () =>
+            Promise.reject(
+              Object.assign(new Error('denied'), { code: 'EACCES' })
+            ),
+        },
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) =>
+      error.code === 'sync-failed' &&
+      /removal failed \(EACCES\)/.test(error.message) &&
+      /quarantine failed \(EACCES\)/.test(error.message) &&
+      /remove it before retrying/.test(error.message)
   );
 });
 

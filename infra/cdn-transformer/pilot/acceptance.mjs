@@ -48,6 +48,10 @@ export const PilotAcceptanceSchema = z
     reviewedAt: z.string().datetime({ offset: true }),
     reviewer: z.string().min(1).max(128),
     schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
+    // Mirror of the web acceptance slotId: the exact slot the reviewer
+    // approved. A binding moved to a different slot must not activate
+    // the old slot's visual verdict.
+    slotId: z.string().min(1).max(128),
     sourceSha256: z.string().regex(/^[0-9a-f]{64}$/),
     verdict: z.enum(['accepted', 'rejected']),
   })
@@ -82,6 +86,9 @@ export function matchAcceptance({ acceptance, binding, manifest }) {
   }
   if (acceptance.originalUrl !== binding?.originalUrl) {
     return { ok: false, reason: 'original URL changed' };
+  }
+  if (acceptance.slotId !== binding?.slotId) {
+    return { ok: false, reason: 'slot changed' };
   }
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };

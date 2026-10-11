@@ -74,6 +74,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         acceptance: fixtures.validAcceptance,
         binding: {
           originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
         } as never,
         manifest: fixtures.validManifest,
       })
@@ -98,6 +99,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     };
     const binding = {
       originalUrl: fixtures.validAcceptance.originalUrl,
+      slotId: fixtures.validAcceptance.slotId,
     } as never;
     expect(
       matchPilotAcceptance({ acceptance: record, binding, manifest: deduped })
@@ -125,6 +127,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         acceptance: fixtures.validAcceptance,
         binding: {
           originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
         } as never,
         manifest: swapped,
       })
@@ -146,6 +149,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         acceptance: fixtures.validAcceptance,
         binding: {
           originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
         } as never,
         manifest: regraded,
       })
@@ -159,10 +163,25 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         acceptance: fixtures.matcherRejections.changedUrl,
         binding: {
           originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
         } as never,
         manifest: fixtures.validManifest,
       })
     ).toEqual({ ok: false, reason: 'original URL changed' });
+  });
+
+  it('rejects a moved slot with everything else unchanged', async () => {
+    const fixtures = await loadFixtures();
+    expect(
+      matchPilotAcceptance({
+        acceptance: fixtures.matcherRejections.changedSlot,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
+        } as never,
+        manifest: fixtures.validManifest,
+      })
+    ).toEqual({ ok: false, reason: 'slot changed' });
   });
 
   it('rejects every shared invalid acceptance schema', async () => {
@@ -172,6 +191,15 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     )) {
       expect(parsePilotAcceptance(candidate).ok, label).toBe(false);
     }
+    expect(
+      parsePilotAcceptance({ ...fixtures.validAcceptance, slotId: '' }).ok
+    ).toBe(false);
+    expect(
+      parsePilotAcceptance({
+        ...fixtures.validAcceptance,
+        slotId: 's'.repeat(129),
+      }).ok
+    ).toBe(false);
   });
 
   it('rejects every shared matcher drift', async () => {
@@ -183,6 +211,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         acceptance: candidate as never,
         binding: {
           originalUrl: fixtures.validAcceptance.originalUrl,
+          slotId: fixtures.validAcceptance.slotId,
         } as never,
         manifest: fixtures.validManifest,
       });

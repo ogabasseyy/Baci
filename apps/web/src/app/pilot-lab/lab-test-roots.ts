@@ -209,6 +209,7 @@ export async function setupLabRoots(input: {
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
       schemaVersion: 1,
+      slotId: asset.slot,
       sourceSha256: record.sha256,
       verdict: 'accepted',
     });

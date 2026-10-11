@@ -2,7 +2,7 @@
 // fsync-then-rename commits plus reuse. Verified loads live in
 // manifest-store-load.mjs (re-exported here); schemas, identity, and
 // parsing stay in manifest.mjs.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   rename as fsRename,
   lstat,
@@ -13,7 +13,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { removeOwnedStaging } from './disk-guards.mjs';
+import { readUpToBytes, removeOwnedStaging } from './disk-guards.mjs';
 import { generationIdFor } from './generation-identity.mjs';
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { generationDir, loadGeneration } from './manifest-store-load.mjs';
@@ -47,6 +47,7 @@ export async function commitGeneration({
   stagingDir,
 }) {
   const rename = deps.rename ?? fsRename;
+  const removeDir = deps.rm ?? rm;
   const fsyncFile = deps.fsyncFile ?? defaultFsync;
   const fsyncDir = deps.fsyncDir ?? defaultFsync;
   const assertDeadline = deps.assertDeadline ?? (() => undefined);
@@ -79,15 +80,24 @@ export async function commitGeneration({
       );
     }
     const tier = valid.tiers.find((entry) => entry.path === name);
-    const bytes = await readFile(from).catch(() => {
+    // Bounded by the manifest claim + 1: a corrupted staged tier
+    // replaced with a huge file rejects on truncation instead of
+    // exhausting the generator ahead of the length comparison. The
+    // claim is schema-capped (MAX_INPUT_BYTES), so the +1 probe
+    // cannot become an unbounded allocation.
+    let staged;
+    try {
+      staged = await readUpToBytes(from, tier.bytes + 1);
+    } catch {
       throw new PilotManifestError(
         'staged-file-mismatch',
         `cannot read staged file: ${name}`
       );
-    });
+    }
     if (
-      bytes.length !== tier.bytes ||
-      createHash('sha256').update(bytes).digest('hex') !== tier.sha256
+      staged.truncated ||
+      staged.bytes.length !== tier.bytes ||
+      createHash('sha256').update(staged.bytes).digest('hex') !== tier.sha256
     ) {
       throw new PilotManifestError(
         'staged-file-mismatch',
@@ -140,9 +150,7 @@ export async function commitGeneration({
     // Both manifests are zod-normalized, so the serialized ladders
     // compare canonically. Mismatch fails closed: clear the foreign
     // generation directory and re-run on one encoder build.
-    if (
-      JSON.stringify(loaded.manifest.tiers) !== JSON.stringify(valid.tiers)
-    ) {
+    if (JSON.stringify(loaded.manifest.tiers) !== JSON.stringify(valid.tiers)) {
       throw new PilotManifestError(
         'generation-misbound',
         'existing generation bytes differ from the requested generation'
@@ -217,10 +225,41 @@ export async function commitGeneration({
       // The rename is visible but may not be durable: unpublish so the
       // failure leaves no reusable output, then report failed. A
       // concurrent reuse reader fails loudly (fail-closed) and retries.
-      await rm(dir, { force: true, recursive: true }).catch(() => undefined);
+      const removal = await removeDir(dir, {
+        force: true,
+        recursive: true,
+      }).catch((rmError) => rmError);
+      if (removal === undefined) {
+        throw new PilotManifestError(
+          'sync-failed',
+          `post-commit directory fsync failed (${error?.code ?? 'unknown'}); unpublished`
+        );
+      }
+      // Removal failed too: the rejected generation is still visible,
+      // so move it out of the generations namespace — reuse resolves
+      // by id and must never validate output the publishing run
+      // rejected. The quarantine rename needs parent-write only, so it
+      // succeeds exactly when a read-only directory defeats rm.
+      const quarantine = join(
+        outputRoot,
+        `.quarantined-${generationId}-${randomUUID()}`
+      );
+      try {
+        await rename(dir, quarantine);
+      } catch (quarantineError) {
+        throw new PilotManifestError(
+          'sync-failed',
+          `post-commit directory fsync failed (${error?.code ?? 'unknown'}); ` +
+            `removal failed (${removal?.code ?? 'unknown'}) and quarantine failed ` +
+            `(${quarantineError?.code ?? 'unknown'}); generation left visible at ` +
+            `${dir} — remove it before retrying`
+        );
+      }
       throw new PilotManifestError(
         'sync-failed',
-        `post-commit directory fsync failed (${error?.code ?? 'unknown'}); unpublished`
+        `post-commit directory fsync failed (${error?.code ?? 'unknown'}); ` +
+          `removal failed (${removal?.code ?? 'unknown'}) — quarantined at ` +
+          `${quarantine}; remove it before retrying`
       );
     }
     durability = 'sync-unsupported';

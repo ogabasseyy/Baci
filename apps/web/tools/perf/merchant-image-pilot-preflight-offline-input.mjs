@@ -173,6 +173,17 @@ export function checkBindingAcceptance({
     );
     return null;
   }
+  // Mirror of the route matcher: the reviewed slot binds the visual
+  // verdict, so a binding moved to another slot needs a new review.
+  if (acceptance.slotId !== record.slot) {
+    fail(
+      checks,
+      failures,
+      `${name}:acceptance`,
+      'acceptance slot differs from inventory'
+    );
+    return null;
+  }
   pass(checks, `${name}:acceptance`);
   return acceptance;
 }

@@ -3,24 +3,23 @@
 // and atomic commit for one inventory job. Orchestration (inventory
 // fan-out, report writing) and the executable CLI stay in
 // generate.mjs.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { JOB_TIMEOUT_MS } from './constants.mjs';
 import {
   acquireClaim,
   createRunToken,
   recoverAbandonedClaim,
   releaseClaim,
 } from './claims.mjs';
+import { JOB_TIMEOUT_MS } from './constants.mjs';
+import { applyDeliveryGuard } from './delivery.mjs';
 import {
   assertMinFreeBytes,
   createStagingBudget,
   ownedStagingPath,
   removeOwnedStaging,
 } from './disk-guards.mjs';
-import { applyDeliveryGuard } from './delivery.mjs';
 import { encodeRoleLadder } from './encoder.mjs';
-import { takePeakWorkerRssBytes } from './worker-pool.mjs';
 import { readInputSnapshot, verifySnapshotHash } from './input-store.mjs';
 import {
   buildEncoderIdentity,
@@ -29,6 +28,7 @@ import {
   outputFileName,
 } from './manifest.mjs';
 import { commitGeneration } from './manifest-store.mjs';
+import { takePeakWorkerRssBytes } from './worker-pool.mjs';
 
 export class PilotGenerateError extends Error {
   constructor(code, message) {
@@ -67,8 +67,44 @@ export async function assertPreCommitGuards({
   await assertMinFreeBytes(outputRoot, minFreeBytes);
 }
 
+// Owned staging establishment: exclusive create plus confinement
+// verification. The run token is visible in the published claim, so a
+// pre-planted symlink must fail here instead of being followed by
+// recursive creation (whose snapshot and encoder outputs would land
+// outside the output root). EEXIST is verified, not trusted:
+// crash-recovery reruns legitimately find their own directory, but a
+// symlink, file, or escape fails closed before the first snapshot write.
+export async function prepareOwnedStaging(outputRoot, runToken) {
+  const stagingDir = ownedStagingPath(outputRoot, runToken);
+  try {
+    await mkdir(stagingDir);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') {
+      throw error;
+    }
+  }
+  const info = await lstat(stagingDir);
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    (await realpath(stagingDir)) !==
+      join(await realpath(outputRoot), `staging-${runToken}`)
+  ) {
+    throw new PilotGenerateError(
+      'unsafe-staging-directory',
+      'staging must be a confined directory, not a symlink'
+    );
+  }
+  return stagingDir;
+}
 
-export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot }) {
+export async function runJob({
+  deps,
+  inputRoot,
+  job,
+  minFreeBytes,
+  outputRoot,
+}) {
   const releaseClaimFn = deps?.releaseClaim ?? releaseClaim;
   const removeStagingFn = deps?.removeOwnedStaging ?? removeOwnedStaging;
   const startedAt = Date.now();
@@ -104,11 +140,13 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
     sampleRss();
     const snapshot = await readInputSnapshot(inputRoot, job.sourcePath);
     if (!verifySnapshotHash(snapshot, job.expectedSha256)) {
-      throw new PilotGenerateError('source-mismatch', 'source bytes differ from the validated hash');
+      throw new PilotGenerateError(
+        'source-mismatch',
+        'source bytes differ from the validated hash'
+      );
     }
     assertJobDeadline(deadlineMs, 'snapshot');
-    stagingDir = ownedStagingPath(outputRoot, claim.runToken);
-    await mkdir(stagingDir, { recursive: true });
+    stagingDir = await prepareOwnedStaging(outputRoot, claim.runToken);
     const frozenCopy = join(stagingDir, 'source.snapshot');
     await writeFile(frozenCopy, snapshot.bytes, { flag: 'wx' });
     assertJobDeadline(deadlineMs, 'staging');
@@ -247,7 +285,10 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
     } catch (error) {
       const fresh =
         `post-commit cleanup failed (${error?.code ?? 'unknown'}): ` +
-        `${error instanceof Error ? error.message : String(error)}`.slice(0, 200) +
+        `${error instanceof Error ? error.message : String(error)}`.slice(
+          0,
+          200
+        ) +
         `; generation ${generationId} is published and reusable`;
       cleanupWarning = cleanupWarning ? `${cleanupWarning}; ${fresh}` : fresh;
     }
@@ -280,16 +321,23 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
   } catch (error) {
     sampleRss();
     if (stagingDir) {
-      await removeStagingFn(outputRoot, stagingDir).catch(() => {});
+      await removeStagingFn(outputRoot, stagingDir).catch(() => {
+        // Best-effort: the original error below is the actionable one.
+      });
     }
-    await releaseClaimFn(outputRoot, job, runToken).catch(() => {});
+    await releaseClaimFn(outputRoot, job, runToken).catch(() => {
+      // Best-effort: claim release must not mask the job failure.
+    });
     const peakWorkerRssBytes = takePeakWorkerRssBytes();
     return {
       assetId: job.assetId,
       code: error?.code ?? 'unknown',
       elapsedMs: Date.now() - startedAt,
       merchantId: job.merchantId,
-      message: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+      message: (error instanceof Error ? error.message : String(error)).slice(
+        0,
+        500
+      ),
       peakCombinedUpperBoundBytes: sampledParentRss + peakWorkerRssBytes,
       peakWorkerRssBytes,
       sampledParentRssBytes: sampledParentRss,

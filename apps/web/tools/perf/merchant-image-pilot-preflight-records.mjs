@@ -1,6 +1,7 @@
 // Preflight record mirrors: inventory/acceptance shape checks that must
 // agree with the lab route's contracts (offline must never report ok for
 // inputs the route rejects).
+import { PILOT_SCHEMA_VERSION } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   ACCEPTANCE_KEYS,
   ASSET_ID,
@@ -26,6 +27,7 @@ export function sameAcceptance(left, right) {
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
     left.originalUrl === right.originalUrl &&
+    left.slotId === right.slotId &&
     left.outputHashes.length === right.outputHashes.length &&
     left.outputHashes.every(
       (hash, index) => hash === right.outputHashes[index]
@@ -79,7 +81,11 @@ export function validInventoryRecord(record) {
     record.slot.length <= 128 &&
     HEX64.test(record.sha256 ?? '') &&
     isSafeRelativePath(record.sourcePath) &&
-    isHttpUrl(record.url)
+    isHttpUrl(record.url) &&
+    // Mirror of the route parser and readInventoryJobs: a future or
+    // otherwise unsupported schema version must fail here, not
+    // activate as a current-shape record.
+    record.schemaVersion === PILOT_SCHEMA_VERSION
   );
 }
 
@@ -192,6 +198,7 @@ export function validAcceptanceShape(record) {
     ) &&
     text(record.note, 500) &&
     text(record.reviewer, 128) &&
+    text(record.slotId, 128) &&
     isRouteDatetime(record.reviewedAt) &&
     record.schemaVersion === 1
   );

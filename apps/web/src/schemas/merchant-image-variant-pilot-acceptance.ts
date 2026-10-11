@@ -43,6 +43,11 @@ export const pilotAcceptanceSchema = z
     reviewedAt: z.iso.datetime({ offset: true }),
     reviewer: z.string().min(1).max(128),
     schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
+    // The exact slot the reviewer approved: a binding moved to a
+    // different slot (different dimensions or crop behavior) must not
+    // activate the old slot's visual verdict, per the frozen-binding
+    // contract. Mirrors the inventory slot shape (1-128 chars).
+    slotId: z.string().min(1).max(128),
     sourceSha256: z.string().regex(PILOT_SHA256_PATTERN),
     verdict: z.enum(['accepted', 'rejected']),
   })

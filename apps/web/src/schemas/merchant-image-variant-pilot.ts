@@ -249,6 +249,9 @@ export function matchPilotAcceptance(input: {
   if (acceptance.originalUrl !== binding.originalUrl) {
     return { ok: false, reason: 'original URL changed' };
   }
+  if (acceptance.slotId !== binding.slotId) {
+    return { ok: false, reason: 'slot changed' };
+  }
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };
   }

@@ -24,8 +24,15 @@ export interface PageSpeedAuditResult {
 
 export interface PageSpeedApiResponse {
   lighthouseResult?: {
-    categories?: Record<string, { score?: number | null }>;
-    audits?: Record<string, { numericValue?: number | null }>;
+    runtimeError?: { code?: string };
+    categories?: Record<
+      string,
+      { score?: number | null; auditRefs?: { id: string; weight: number }[] }
+    >;
+    audits?: Record<
+      string,
+      { numericValue?: number | null; score?: number | null }
+    >;
   };
   loadingExperience?: {
     metrics?: Record<string, { percentile?: number | null }>;

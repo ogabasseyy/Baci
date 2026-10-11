@@ -184,7 +184,7 @@ test('the CI quality gate runs the provenance regressions', () => {
     'utf8'
   );
   assert.match(
-    workflow,
+    workflow.split('  cwv-runner-contracts:')[0],
     /run: node --test \.github\/scripts\/sentry-storefront-provenance\.test\.mjs/
   );
 });

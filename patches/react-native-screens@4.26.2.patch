@@ -1,20 +1,18 @@
 diff --git a/android/build.gradle b/android/build.gradle
-index 3f3b0d543b844104305b31d58ff0e27a93a38e75..808509542e6746aa1cc443e98d1a9e412857f03d 100644
 --- a/android/build.gradle
 +++ b/android/build.gradle
-@@ -201,6 +201,7 @@ dependencies {
+@@ -201,6 +201,7 @@
      implementation 'androidx.fragment:fragment-ktx:1.8.9'
      implementation 'androidx.transition:transition-ktx:1.7.0'
      implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
-+    implementation 'androidx.recyclerview:recyclerview:1.1.0'
++    implementation 'androidx.recyclerview:recyclerview:1.3.2'
      implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
      implementation 'com.google.android.material:material:1.13.0'
      implementation "androidx.core:core-ktx:1.17.0"
 diff --git a/android/src/main/java/com/swmansion/rnscreens/Screen.kt b/android/src/main/java/com/swmansion/rnscreens/Screen.kt
-index 76bb694854b29d7f779f38244cd48113b429ea1f..fe5ae5b5579c25e719c7caa1d4f0d22cf3b9e3ca 100644
 --- a/android/src/main/java/com/swmansion/rnscreens/Screen.kt
 +++ b/android/src/main/java/com/swmansion/rnscreens/Screen.kt
-@@ -16,6 +16,7 @@ import androidx.annotation.RequiresApi
+@@ -16,6 +16,7 @@
  import androidx.coordinatorlayout.widget.CoordinatorLayout
  import androidx.core.view.children
  import androidx.fragment.app.Fragment
@@ -22,24 +20,86 @@ index 76bb694854b29d7f779f38244cd48113b429ea1f..fe5ae5b5579c25e719c7caa1d4f0d22c
  import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
  import com.facebook.react.bridge.ReactContext
  import com.facebook.react.uimanager.PixelUtil
-@@ -462,7 +463,8 @@ class Screen(
-                 endTransitionRecursive(childView.toolbar)
-             }
+@@ -72,6 +73,8 @@
+     var screenId: String? = null
+     var isStatusBarAnimated: Boolean? = null
+     var isBeingRemoved = false
++    private val removalTransitionViews = ArrayList<Pair<ViewGroup, View>>()
++    private val removalTransitionRecyclers = ArrayList<RecyclerView>()
  
--            if (childView is ViewGroup) {
-+            // Match the start traversal: RecyclerView owns its child transitions.
-+            if (childView is ViewGroup && childView !is RecyclerView) {
-                 endTransitionRecursive(childView)
-             }
+     // Props for controlling modal presentation
+     var isSheetGrabberVisible: Boolean = false
+@@ -439,6 +442,12 @@
+ 
+     var nativeBackButtonDismissalEnabled: Boolean = true
+ 
++    override fun onDetachedFromWindow() {
++        // Detachment is terminal even if an interrupted animation never ends.
++        endRemovalTransition()
++        super.onDetachedFromWindow()
++    }
++
+     fun startRemovalTransition() {
+         if (!isBeingRemoved) {
+             isBeingRemoved = true
+@@ -451,20 +460,22 @@
+             return
          }
-@@ -491,7 +493,9 @@ class Screen(
-                     startTransitionRecursive(child.toolbar)
+         isBeingRemoved = false
+-        endTransitionRecursive(this)
+-    }
+-
+-    private fun endTransitionRecursive(parent: ViewGroup) {
+-        parent.children.forEach { childView ->
+-            parent.endViewTransition(childView)
+-
+-            if (childView is ScreenStackHeaderConfig) {
+-                endTransitionRecursive(childView.toolbar)
+-            }
+-
+-            if (childView is ViewGroup) {
+-                endTransitionRecursive(childView)
+-            }
++        endTransitionRecursive()
++    }
++
++    private fun endTransitionRecursive() {
++        // Use the captured views: Fabric may already have removed descendants.
++        try {
++            for ((parent, child) in removalTransitionViews.asReversed()) {
++                parent.endViewTransition(child)
++            }
++        } finally {
++            removalTransitionViews.clear()
++            // Restore only suppression acquired by this removal transition.
++            for (recycler in removalTransitionRecyclers) {
++                recycler.suppressLayout(false)
++            }
++            removalTransitionRecyclers.clear()
+         }
+     }
+ 
+@@ -482,13 +493,22 @@
+                     // TODO: find a better way to handle this scenario
+                     it.addView(View(context), i)
+                 } else {
+-                    child?.let { view -> it.startViewTransition(view) }
++                    child?.let { view ->
++                        it.startViewTransition(view)
++                        removalTransitionViews.add(it to view)
++                    }
                  }
  
--                if (child is ViewGroup) {
-+                // Transition RecyclerView as a unit. Transitioning its pages retains
-+                // their parent after removal, which violates the recycling contract.
-+                if (child is ViewGroup && child !is RecyclerView) {
-                     startTransitionRecursive(child)
+                 if (child is ScreenStackHeaderConfig) {
+                     // we want to start transition on children of the toolbar too,
+                     // which is not a child of ScreenStackHeaderConfig
+                     startTransitionRecursive(child.toolbar)
++                }
++
++                if (child is RecyclerView && !child.isLayoutSuppressed) {
++                    // Stop scroll/layout recycling while retaining pages for drawing.
++                    child.suppressLayout(true)
++                    removalTransitionRecyclers.add(child)
                  }
-             }
+ 
+                 if (child is ViewGroup) {

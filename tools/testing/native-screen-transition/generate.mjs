@@ -7,11 +7,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const root = dirname(require.resolve('react-native-screens/package.json'));
 const source = readFileSync(
-  resolve(root, 'android/src/main/java/com/swmansion/rnscreens/Screen.kt'),
+  process.argv[2] ??
+    resolve(root, 'android/src/main/java/com/swmansion/rnscreens/Screen.kt'),
   'utf8'
 );
 function method(name) {
-  const start = source.indexOf(`    private fun ${name}(`);
+  const start = source.search(
+    new RegExp(`^    (?:(?:private|override) )?fun ${name}\\(`, 'm')
+  );
   if (start < 0) throw new Error(`Missing native method: ${name}`);
   const opening = source.indexOf('{', start);
   let depth = 1;
@@ -38,11 +41,15 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 class ScreenStackHeaderConfig(context: Context): FrameLayout(context) {
     val toolbar = FrameLayout(context)
 }
-class ScreenTransition(private val context: Context) {
-    fun begin(parent: ViewGroup) = startTransitionRecursive(parent)
-    fun end(parent: ViewGroup) = endTransitionRecursive(parent)
+class ScreenTransition(context: Context): FrameLayout(context) {
+    var isBeingRemoved = false
+${(source.match(/^ {4}private val removalTransition(?:Views|Recyclers) = .+$/gm) ?? []).join('\n')}
+    fun cancel() = onDetachedFromWindow()
+${method('startRemovalTransition')}
+${method('endRemovalTransition')}
 ${method('startTransitionRecursive')}
 ${method('endTransitionRecursive')}
+${source.includes('    override fun onDetachedFromWindow(') ? method('onDetachedFromWindow') : ''}
 }
 `;
 writeFileSync(

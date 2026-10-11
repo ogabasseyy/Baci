@@ -30,6 +30,18 @@ export function initializeErrorMonitoring(
     enableNative: true,
     enableNativeCrashHandling: true,
     enableTombstone: true,
+    // Receipt capabilities and address/session queries must never enter network
+    // spans or breadcrumbs. Keep native frame and explicit surface tracing.
+    integrations: [
+      Sentry.reactNativeTracingIntegration({
+        traceFetch: false,
+        traceXHR: false,
+      }),
+    ],
+    beforeBreadcrumb: (breadcrumb) =>
+      ['http', 'fetch', 'xhr'].includes(breadcrumb.category ?? '')
+        ? null
+        : breadcrumb,
     environment:
       (env?.EXPO_PUBLIC_SENTRY_ENVIRONMENT ?? bundledEnvironment)?.trim() ||
       'production',

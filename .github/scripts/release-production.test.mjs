@@ -268,7 +268,7 @@ test('rejects non-GitHub and non-repository remotes', () => {
 test('parses run attempt counts, failing closed on garbage', () => {
   assert.equal(parseRunAttempt('1\n'), 1);
   assert.equal(parseRunAttempt('3'), 3);
-  for (const text of ['', '   ', 'null', 'x', null, undefined]) {
+  for (const text of ['', '   ', 'null', 'x', null, undefined, '1abc', '1.5', '0', '0x10', '-1', '9'.repeat(40)]) {
     assert.equal(parseRunAttempt(text), null);
   }
 });

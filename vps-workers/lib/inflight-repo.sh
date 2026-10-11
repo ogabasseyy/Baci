@@ -34,9 +34,11 @@ _set_inflight_repo() {
   inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
   # A '#' starts a URL fragment, so https://evil.com#@github.com/org/repo
   # has host evil.com while a strip-to-last-'@' would forge a github.com
-  # match. Legitimate remotes never contain a fragment marker: refuse.
+  # match. A '?' terminates the authority the same way (RFC 3986), so
+  # https://evil.example?x=@github.com/org/repo would forge identically.
+  # Legitimate remotes never contain a fragment or query marker: refuse.
   case "$inflight_remote" in
-    *'#'*) echo 'Refusing worker promotion: origin URL must not contain a fragment.' >&2; return 1 ;;
+    *'#'*|*'?'*) echo 'Refusing worker promotion: origin URL must not contain a fragment or query.' >&2; return 1 ;;
   esac
   # Schemes are case-insensitive and the coordinator matches them
   # case-insensitively (URL normalizes Https:, the SSH regex has /i):

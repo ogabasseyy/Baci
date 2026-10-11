@@ -123,10 +123,22 @@ test('refuses plaintext and non-default-port remotes like the coordinator', () =
 
 test('refused remotes never leak credentials from any scheme', () => {
   for (const [remote, secret] of [
-    ['http://operator:s3krit-http@github.com/example-owner/example-repo.git', 's3krit-http'],
-    ['http://s3krit-bare@github.com/example-owner/example-repo.git', 's3krit-bare'],
-    ['ssh://operator:s3krit-ssh@github.com/example-owner/example-repo.git', 's3krit-ssh'],
-    ['https://operator:s3krit-port@github.com:8443/example-owner/example-repo.git', 's3krit-port'],
+    [
+      'http://operator:s3krit-http@github.com/example-owner/example-repo.git',
+      's3krit-http',
+    ],
+    [
+      'http://s3krit-bare@github.com/example-owner/example-repo.git',
+      's3krit-bare',
+    ],
+    [
+      'ssh://operator:s3krit-ssh@github.com/example-owner/example-repo.git',
+      's3krit-ssh',
+    ],
+    [
+      'https://operator:s3krit-port@github.com:8443/example-owner/example-repo.git',
+      's3krit-port',
+    ],
   ]) {
     const { result } = runCheck({
       ghBody: RECORD_ARGS,
@@ -162,6 +174,18 @@ test('refuses fragment-embedded remotes that forge a github.com host', () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /must not contain a fragment/);
+  assert.equal(ghArgs, '');
+});
+
+test('refuses query-bearing remotes that forge a github.com host', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example?x=@github.com/example-owner/example-repo\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must not contain a fragment or query/);
   assert.equal(ghArgs, '');
 });
 

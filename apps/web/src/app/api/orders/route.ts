@@ -24,6 +24,7 @@ import type { createTransactionDiscountProof } from '@/lib/checkout/create-trans
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
+import { hasExistingStorefrontOrderForKey } from '@/lib/checkout/has-existing-storefront-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
@@ -980,31 +981,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Exact condition offers must name a live offer of their own product:
-    // two offers can share one condition, so the stored id is the only
-    // thing distinguishing them at fulfillment time.
-    const offerEconomics = await resolveOrderOfferEconomics(
-      (productId) =>
-        supabase.rpc('get_product_offers', {
-          p_product_id: productId,
-        }) as unknown as Promise<OrderOfferQueryResult>,
-      orderItemsPayload
-    );
-    if (!offerEconomics.ok) {
-      if (offerEconomics.reason === 'verification_failed') {
-        console.error('Order offer verification failed:', offerEconomics.error);
+    // F1 (offer economics): an idempotent retry must replay the ORIGINAL
+    // order before it can be re-judged against the merchant's CURRENT
+    // offers. The offer was live when the first attempt validated; if the
+    // merchant has since deleted, deactivated, or sold it out, running
+    // live verification here would 400 a retry whose completed order the
+    // RPC would otherwise replay. Probe for the keyed order first (same
+    // lookup the RPC replays on) and skip mutable offer verification on a
+    // hit — downstream preflights fall back to parent prices, the
+    // discount/rate recomputes below are bypassed the same way, and the
+    // RPC's request-hash check remains the authority for conflicts.
+    const isIdempotentOfferOrderReplay =
+      requestIdempotencyKey && orderItemsPayload.some((item) => item.offer_id)
+        ? await hasExistingStorefrontOrderForKey({
+            merchantId: merchant_id,
+            requestIdempotencyKey,
+            supabase,
+          })
+        : false;
+    let liveOfferPrices = new Map<string, number>();
+    let liveOfferConditions = new Map<string, string>();
+    if (!isIdempotentOfferOrderReplay) {
+      // Exact condition offers must name a live offer of their own product:
+      // two offers can share one condition, so the stored id is the only
+      // thing distinguishing them at fulfillment time.
+      const offerEconomics = await resolveOrderOfferEconomics(
+        (productId) =>
+          supabase.rpc('get_product_offers', {
+            p_product_id: productId,
+          }) as unknown as Promise<OrderOfferQueryResult>,
+        orderItemsPayload
+      );
+      if (!offerEconomics.ok) {
+        if (offerEconomics.reason === 'verification_failed') {
+          console.error(
+            'Order offer verification failed:',
+            offerEconomics.error
+          );
+          return NextResponse.json(
+            { error: 'Failed to verify order offers' },
+            { status: 500 }
+          );
+        }
         return NextResponse.json(
-          { error: 'Failed to verify order offers' },
-          { status: 500 }
+          { error: 'Invalid condition offer for order item' },
+          { status: 400 }
         );
       }
-      return NextResponse.json(
-        { error: 'Invalid condition offer for order item' },
-        { status: 400 }
-      );
+      liveOfferPrices = offerEconomics.liveOfferPrices;
+      liveOfferConditions = offerEconomics.liveOfferConditions;
     }
-    const liveOfferPrices = offerEconomics.liveOfferPrices;
-    const liveOfferConditions = offerEconomics.liveOfferConditions;
 
     // Offer assurance fees recompute below, after the negotiation preflight
     // validates (and possibly prices) the client basis: the fee follows the
@@ -1240,39 +1266,46 @@ export async function POST(request: NextRequest) {
     // live offer) line price, but it adds the route-recomputed `assurance_fee`
     // into the subtotal, so an unvalidated below-catalog price would leak an
     // uncapped assurance discount. The derived discount is only APPLIED below.
-    let negotiationDiscount: Awaited<
-      ReturnType<typeof computeOrderNegotiationDiscount>
-    >;
-    try {
-      negotiationDiscount = await computeOrderNegotiationDiscount({
-        items: orderItemsPayload,
-        merchantId: merchant_id,
-        offerPrices: liveOfferPrices,
-        supabase,
-        vatRegistered,
-      });
-    } catch (negotiationDiscountError) {
-      if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
-        logger.warn({
+    // Exception: a confirmed idempotent retry (F1 offer bypass above) skips
+    // this preflight — with unverified offer economics the catalog basis
+    // falls back to parent prices and a legitimately offer-priced line
+    // would false-positive as below-catalog. The RPC replays the stored
+    // order (or rejects conflicts by hash) without these recomputes.
+    let negotiationDiscount:
+      | Awaited<ReturnType<typeof computeOrderNegotiationDiscount>>
+      | undefined;
+    if (!isIdempotentOfferOrderReplay) {
+      try {
+        negotiationDiscount = await computeOrderNegotiationDiscount({
+          items: orderItemsPayload,
+          merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
+          supabase,
+          vatRegistered,
+        });
+      } catch (negotiationDiscountError) {
+        if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
+          logger.warn({
+            error: negotiationDiscountError,
+            merchantId: merchant_id,
+            message:
+              'Storefront order received malformed identifier during negotiation discount lookup',
+          });
+          return NextResponse.json(
+            { error: 'Failed to create order', details: 'invalid_items' },
+            { status: 400 }
+          );
+        }
+        logger.error({
           error: negotiationDiscountError,
           merchantId: merchant_id,
-          message:
-            'Storefront order received malformed identifier during negotiation discount lookup',
+          message: 'Storefront order negotiation discount recompute failed',
         });
         return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
+          { error: 'Internal server error' },
+          { status: 500 }
         );
       }
-      logger.error({
-        error: negotiationDiscountError,
-        merchantId: merchant_id,
-        message: 'Storefront order negotiation discount recompute failed',
-      });
-      return NextResponse.json(
-        { error: 'Internal server error' },
-        { status: 500 }
-      );
     }
 
     // Reject tampered lines before any side effects (non-negotiable below
@@ -1699,48 +1732,57 @@ export async function POST(request: NextRequest) {
       }
       discountCodeId = discountRow.id;
 
-      try {
-        canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-          items: orderItemsPayload,
-          merchantId: merchant_id,
-          offerPrices: liveOfferPrices,
-          supabase,
-        });
-      } catch (subtotalError) {
-        if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
+      // F1 (offer economics): a confirmed idempotent retry replays the
+      // stored order, so live-offer-dependent recomputation is bypassed —
+      // the subtotal helper throws when verified offer economics are
+      // absent, which would 500 a retry the RPC would otherwise replay.
+      // discountCodeAmount stays 0; the RPC ignores it on replay and its
+      // request-hash check rejects true conflicts first.
+      if (isIdempotentOfferOrderReplay) {
+        discountCodeAmount = 0;
+      } else {
+        try {
+          canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+            items: orderItemsPayload,
+            merchantId: merchant_id,
+            offerPrices: liveOfferPrices,
+            supabase,
+          });
+        } catch (subtotalError) {
+          if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
+            return NextResponse.json(
+              { error: 'Failed to create order', details: 'invalid_items' },
+              { status: 400 }
+            );
+          }
+          logger.error({
+            error: subtotalError,
+            merchantId: merchant_id,
+            message: 'Discount canonical subtotal recompute failed',
+          });
+          return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+          );
+        }
+        if (canonicalOrderSubtotal == null) {
           return NextResponse.json(
             { error: 'Failed to create order', details: 'invalid_items' },
             { status: 400 }
           );
         }
-        logger.error({
-          error: subtotalError,
-          merchantId: merchant_id,
-          message: 'Discount canonical subtotal recompute failed',
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
+        discountCodeAmount = computeDiscountAmountForSubtotal(
+          {
+            discount_type:
+              discountRow.discount_type === 'fixed_amount'
+                ? 'fixed'
+                : 'percentage',
+            discount_value: Number(discountRow.discount_value),
+            maximum_discount_amount: discountRow.maximum_discount_amount,
+          },
+          canonicalOrderSubtotal
         );
       }
-      if (canonicalOrderSubtotal == null) {
-        return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
-        );
-      }
-
-      discountCodeAmount = computeDiscountAmountForSubtotal(
-        {
-          discount_type:
-            discountRow.discount_type === 'fixed_amount'
-              ? 'fixed'
-              : 'percentage',
-          discount_value: Number(discountRow.discount_value),
-          maximum_discount_amount: discountRow.maximum_discount_amount,
-        },
-        canonicalOrderSubtotal
-      );
     }
 
     // === MERCHANT SHIPPING RATE ENFORCEMENT (money path) ===
@@ -1791,7 +1833,15 @@ export async function POST(request: NextRequest) {
             shippingRateId: body.shipping_rate_id,
           })
         : false;
-    if (body.shipping_rate_id && !isIdempotentMerchantRateReplay) {
+    // isIdempotentOfferOrderReplay joins the F1 bypass: with unverified
+    // (empty) offer economics the subtotal recompute below would throw and
+    // 500 a retry the RPC would otherwise replay. The RPC's request-hash
+    // check rejects true conflicts first.
+    if (
+      body.shipping_rate_id &&
+      !isIdempotentMerchantRateReplay &&
+      !isIdempotentOfferOrderReplay
+    ) {
       if (canonicalOrderSubtotal == null) {
         try {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({

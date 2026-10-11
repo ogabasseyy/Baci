@@ -304,6 +304,7 @@ interface RpcOverrides {
   };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
+  get_product_offers?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
@@ -5220,6 +5221,101 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     });
   });
 
+  it('rejects a fresh order whose offer was deleted before validation', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string) => {
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'refurbished',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid condition offer for order item',
+    });
+  });
+
+  it('replays an idempotent retry past a deleted offer instead of rejecting it', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const createSpy = vi.fn().mockResolvedValue({
+      data: [{ ...baseOrderRow, idempotency_replayed: true }],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      const originalRpc = sb.rpc.bind(sb);
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_product_offers') {
+          // The offer was live for the first attempt but deleted since.
+          return Promise.resolve({ data: [], error: null });
+        }
+        if (name === 'create_storefront_order') {
+          return createSpy(args);
+        }
+        return originalRpc(name);
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'checkout-key-retry-1' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'refurbished',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_checkout_idempotency_key: 'checkout-key-retry-1',
+        p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-idempotency-replayed')).toBe('true');
+  });
+
   it('persists the live offer condition when the caller spelling canonically matches', async () => {
     const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
     const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
@@ -9160,6 +9256,57 @@ describe('POST /api/orders — discount code', () => {
       expect.objectContaining({
         p_discount_code_id: DISCOUNT_CODE_ROW.id,
         p_discount_amount: 100,
+      })
+    );
+  });
+
+  it('replays a discount-code retry with a deleted offer instead of failing the subtotal', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabase = await setupDiscount(
+      {
+        get_storefront_discount_code: {
+          data: [DISCOUNT_CODE_ROW],
+          error: null,
+        },
+        get_product_offers: { data: [], error: null },
+        has_storefront_order_idempotency_key: { data: true, error: null },
+        create_storefront_order_with_discount_code: {
+          data: [{ ...orderRowWithDiscount, idempotency_replayed: true }],
+          error: null,
+        },
+      },
+      {
+        productRows: [{ id: OFFER_PRODUCT_ID, price: 400_000 }],
+      }
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'checkout-key-discount-retry' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          discount_code: 'SAVE10',
+          items: [
+            {
+              product_id: OFFER_PRODUCT_ID,
+              quantity: 1,
+              price: 400_000,
+              name: 'Refurbished Phone',
+              condition: 'refurbished',
+              offerId: LIVE_OFFER_ID,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(response.status).toBeLessThan(400);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_discount_code',
+      expect.objectContaining({
+        p_checkout_idempotency_key: 'checkout-key-discount-retry',
       })
     );
   });

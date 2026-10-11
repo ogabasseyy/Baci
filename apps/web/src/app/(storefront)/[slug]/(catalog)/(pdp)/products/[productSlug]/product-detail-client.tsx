@@ -156,6 +156,7 @@ export default function ProductDetailClient({
     isOutOfStock,
     isStockManaged,
     routeOfferMissing,
+    routeVariantMissing,
     selectedCondition,
     selectedImage,
     selectedOffer,
@@ -493,6 +494,16 @@ export default function ProductDetailClient({
                   sold — choose a condition to continue.
                 </p>
               )}
+              {routeVariantMissing && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                >
+                  <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  This option is no longer available. It may have been removed
+                  or sold — choose an option to continue.
+                </p>
+              )}
 
               {/* Variant Selection */}
               {product.has_variants && attributeOptions.length > 0 && (
@@ -720,6 +731,7 @@ export default function ProductDetailClient({
                       disabled={
                         isOutOfStock ||
                         routeOfferMissing ||
+                        routeVariantMissing ||
                         (product.has_variants && !currentVariantSelection)
                       }
                       onClick={handleAddToCart}
@@ -774,7 +786,7 @@ export default function ProductDetailClient({
         selectedPrice={currentPrice}
         selectedStock={currentStock}
         selectedVariant={currentVariantSelection?.variant ?? effectiveVariant}
-        purchaseDisabled={routeOfferMissing}
+        purchaseDisabled={routeOfferMissing || routeVariantMissing}
       />
     </>
   );

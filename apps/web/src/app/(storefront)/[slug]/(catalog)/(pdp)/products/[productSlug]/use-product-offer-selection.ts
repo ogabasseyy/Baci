@@ -18,6 +18,7 @@ import {
   isRouteOfferMissing,
   matchRouteOfferId,
 } from './resolve-route-offer-match';
+import { isRouteVariantMissing } from './resolve-route-variant-match';
 import { useProductRouteSelection } from './use-product-route-selection';
 
 /**
@@ -69,6 +70,17 @@ export function useProductOfferSelection(product: Product) {
   // Explicit shopper pick from a condition button, keyed by identity so a
   // click on a later same-condition offer keeps its own price/stock.
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  // Dead exact-variant deep links (listing/search cards link the advertised
+  // option id) surface as missing instead of silently rendering the
+  // default variant; any explicit attribute/condition pick moves past it.
+  const [ignoredRouteVariantId, setIgnoredRouteVariantId] = useState<
+    string | null
+  >(null);
+  const routeVariantMissing = isRouteVariantMissing(
+    routeVariantId,
+    ignoredRouteVariantId,
+    product.variants
+  );
   const routeOfferId = matchRouteOfferId(
     offerIdParam,
     ignoredRouteOfferId,
@@ -144,6 +156,7 @@ export function useProductOfferSelection(product: Product) {
     setPrevRouteSeedKey(routeSeedKey);
     setIgnoredRouteOfferId(null);
     setIgnoredRouteBaseMatch(false);
+    setIgnoredRouteVariantId(null);
     setSelectedOfferId(null);
 
     if (!usesVariantRouteSelection) {
@@ -259,11 +272,13 @@ export function useProductOfferSelection(product: Product) {
       offerIdParam,
       product,
       routeSelectionAttributes,
+      routeVariantId,
       selectedAttributes,
       selectedCondition,
       selectionAttributes,
       setIgnoredRouteBaseMatch,
       setIgnoredRouteOfferId,
+      setIgnoredRouteVariantId,
       setSelectedAttributes,
       setSelectedCondition,
       setSelectedImage,
@@ -290,6 +305,7 @@ export function useProductOfferSelection(product: Product) {
     isOutOfStock,
     isStockManaged,
     routeOfferMissing,
+    routeVariantMissing,
     selectedCondition,
     selectedImage,
     selectedOffer,

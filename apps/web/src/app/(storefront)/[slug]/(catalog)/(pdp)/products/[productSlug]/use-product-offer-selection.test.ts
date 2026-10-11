@@ -137,6 +137,52 @@ describe('useProductOfferSelection', () => {
     });
     expect(result.current.routeOfferMissing).toBe(false);
   });
+
+  it('flags a missing exact variant instead of silently discarding it', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('variant_id=v-gone')
+    );
+    const { result } = renderHook(() =>
+      useProductOfferSelection(variantProduct)
+    );
+    expect(result.current.routeVariantMissing).toBe(true);
+  });
+
+  it('clears the variant-missing flag for live variants, absent links, and unhydrated variants', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('variant_id=v1'));
+    const { result: live } = renderHook(() =>
+      useProductOfferSelection(variantProduct)
+    );
+    expect(live.current.routeVariantMissing).toBe(false);
+
+    mockUseSearchParams.mockReturnValue(new URLSearchParams());
+    const { result: noLink } = renderHook(() =>
+      useProductOfferSelection(variantProduct)
+    );
+    expect(noLink.current.routeVariantMissing).toBe(false);
+
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('variant_id=v-gone')
+    );
+    const { result: unhydrated } = renderHook(() =>
+      useProductOfferSelection({ ...variantProduct, variants: undefined })
+    );
+    expect(unhydrated.current.routeVariantMissing).toBe(false);
+  });
+
+  it('clears the variant-missing flag once the shopper picks an attribute', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('variant_id=v-gone')
+    );
+    const { result } = renderHook(() =>
+      useProductOfferSelection(variantProduct)
+    );
+    expect(result.current.routeVariantMissing).toBe(true);
+    act(() => {
+      result.current.handleAttributeChange('storage', '128 GB');
+    });
+    expect(result.current.routeVariantMissing).toBe(false);
+  });
   it('preserves an explicit condition constraint that conflicts with the offer', () => {
     mockUseSearchParams.mockReturnValue(
       new URLSearchParams('condition=new&offer_id=o1')

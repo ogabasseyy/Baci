@@ -36,6 +36,7 @@ function setup(overrides: Partial<ProductSelectionHandlerInputs> = {}) {
   const setters = {
     setIgnoredRouteBaseMatch: vi.fn(),
     setIgnoredRouteOfferId: vi.fn(),
+    setIgnoredRouteVariantId: vi.fn(),
     setSelectedAttributes: vi.fn(),
     setSelectedCondition: vi.fn(),
     setSelectedImage: vi.fn(),
@@ -46,6 +47,7 @@ function setup(overrides: Partial<ProductSelectionHandlerInputs> = {}) {
     offerIdParam: null,
     product: variantProduct,
     routeSelectionAttributes: {},
+    routeVariantId: undefined,
     selectedAttributes: {},
     selectedCondition: 'new',
     selectionAttributes: {},
@@ -136,5 +138,23 @@ describe('createProductSelectionHandlers', () => {
     handleConditionChange('used');
 
     expect(setSelectedVariant).toHaveBeenCalled();
+  });
+
+  it('moves past a dead exact-variant link on explicit picks', () => {
+    const { handleAttributeChange, setIgnoredRouteVariantId } = setup({
+      routeVariantId: 'v-gone',
+    });
+    handleAttributeChange('storage', '256 GB');
+
+    expect(setIgnoredRouteVariantId).toHaveBeenCalledWith('v-gone');
+  });
+
+  it('moves past a dead exact-variant link on condition picks', () => {
+    const { handleConditionChange, setIgnoredRouteVariantId } = setup({
+      routeVariantId: 'v-gone',
+    });
+    handleConditionChange('used');
+
+    expect(setIgnoredRouteVariantId).toHaveBeenCalledWith('v-gone');
   });
 });

@@ -231,6 +231,36 @@ describe('ProductDetailClient', () => {
     );
   });
 
+  it('blocks purchase with an unavailable notice when the linked variant is gone', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('variant_id=variant-gone')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      has_variants: true,
+      variants: [
+        {
+          id: 'variant-new-128',
+          product_id: 'product-1',
+          merchant_id: 'merchant-1',
+          attributes: { storage: '128GB' },
+          condition: 'new',
+          price_override: 550000,
+          stock_quantity: 10,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /This option is no longer available/
+    );
+    expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
+    expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ purchaseDisabled: true })
+    );
+  });
+
   it('falls back to the default priced variant when route params cannot be resolved', async () => {
     mockUseSearchParams.mockReturnValue(
       new URLSearchParams('condition=unknown&storage=999GB&utm_source=google')

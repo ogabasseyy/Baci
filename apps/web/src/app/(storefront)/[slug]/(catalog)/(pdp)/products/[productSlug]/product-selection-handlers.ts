@@ -9,11 +9,13 @@ export interface ProductSelectionHandlerInputs {
   offerIdParam: string | null;
   product: Product;
   routeSelectionAttributes: Record<string, string>;
+  routeVariantId: string | undefined;
   selectedAttributes: Record<string, string>;
   selectedCondition: ProductCondition;
   selectionAttributes: Record<string, string>;
   setIgnoredRouteBaseMatch: (ignored: boolean) => void;
   setIgnoredRouteOfferId: (offerId: string | null) => void;
+  setIgnoredRouteVariantId: (variantId: string | null) => void;
   setSelectedAttributes: (attributes: Record<string, string>) => void;
   setSelectedCondition: (condition: ProductCondition) => void;
   setSelectedImage: (image: string) => void;
@@ -35,11 +37,13 @@ export function createProductSelectionHandlers(
     offerIdParam,
     product,
     routeSelectionAttributes,
+    routeVariantId,
     selectedAttributes,
     selectedCondition,
     selectionAttributes,
     setIgnoredRouteBaseMatch,
     setIgnoredRouteOfferId,
+    setIgnoredRouteVariantId,
     setSelectedAttributes,
     setSelectedCondition,
     setSelectedImage,
@@ -52,6 +56,8 @@ export function createProductSelectionHandlers(
   const handleAttributeChange = (attributeKey: string, value: string) => {
     const newAttributes = { ...selectedAttributes, [attributeKey]: value };
     setSelectedAttributes(newAttributes);
+    // An explicit attribute pick moves past a dead exact-variant link.
+    setIgnoredRouteVariantId(routeVariantId ?? null);
 
     if (!product.variants) {
       return;
@@ -99,6 +105,8 @@ export function createProductSelectionHandlers(
     offerId?: string | null
   ) => {
     setIgnoredRouteOfferId(offerIdParam);
+    // An explicit condition pick moves past a dead exact-variant link too.
+    setIgnoredRouteVariantId(routeVariantId ?? null);
     // Any explicit pick re-enables offers on a base-row entry.
     setIgnoredRouteBaseMatch(true);
     // Normalize aliases at the boundary: matching and pricing compare

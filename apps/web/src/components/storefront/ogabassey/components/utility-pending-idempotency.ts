@@ -1,5 +1,6 @@
 import { createWalletIdempotencyKey } from './utility-checkout';
 import {
+  PERSISTED_VTU_KEY_TTL_MS,
   clearPendingVtuSnapshot,
   loadPendingVtuSnapshot,
   parsePendingVtuSnapshot,
@@ -31,7 +32,13 @@ import {
  * Durability: entries persist in sessionStorage (tab-scoped) so a page
  * reload between a timed-out submit and its retry still replays the
  * same key instead of minting a fresh one and debiting twice.
- * Persisted entries expire after 24h; the 5-minute stale window for
+ * Persisted entries expire after 24h, and live recall enforces the
+ * same TTL for reference-less entries (a timed-out submit that reached
+ * the server completed long ago; replaying its key would present the
+ * old success as a new purchase). Referenced entries keep recalling
+ * however old — the stale check arbitrates their success replays, and
+ * expiring them could mint a fresh key for a still-processing
+ * transaction (double debit). The 5-minute stale window for
  * already-completed detection still applies to `rememberedAt`.
  */
 
@@ -143,10 +150,30 @@ export function scopePendingVtuSignature(
   return `${merchantId ?? ''}:${ownerId ?? ''}:${payloadSignature}`;
 }
 
+/**
+ * Key previously used for this exact purchase, if it is still pending.
+ * Reference-less entries past the 24h TTL are dropped instead of
+ * recalled: without a reference the stale check below cannot flag
+ * them, so recalling would replay an already-completed transaction
+ * as a new purchase. (Referenced entries are exempt — the stale
+ * check arbitrates their success replays, and expiring them could
+ * mint a fresh key for a still-processing transaction.)
+ */
 export function recallPendingVtuKey(
-  payloadSignature: string
+  payloadSignature: string,
+  now: number = Date.now()
 ): string | undefined {
-  return pendingPurchases.get(payloadSignature)?.key;
+  const pending = pendingPurchases.get(payloadSignature);
+  if (!pending) return undefined;
+  if (
+    !pending.reference &&
+    now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS
+  ) {
+    pendingPurchases.delete(payloadSignature);
+    persistPendingVtuPurchases();
+    return undefined;
+  }
+  return pending.key;
 }
 
 export function rememberPendingVtuPurchase(
@@ -205,8 +232,9 @@ export function hasNotedPendingVtuReference(
  * but the original submit is older than the recall window. Callers
  * MUST forget the signature and prompt a fresh submit instead of
  * presenting the earlier vend as the new purchase. Reference-less
- * entries (network-error submits that never got a response) always
- * resolve normally — their first success IS the resolution.
+ * entries within the TTL always resolve normally — their first
+ * success IS the resolution; past the TTL recall already dropped
+ * them, so this predicate never sees them.
  */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,

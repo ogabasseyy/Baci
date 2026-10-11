@@ -9,6 +9,7 @@ import {
   scopePendingVtuKey,
   serializePendingVtuPurchases,
 } from './pending-vtu-idempotency';
+import { PERSISTED_VTU_KEY_TTL_MS } from './pending-vtu-idempotency-store';
 
 describe('pending-vtu-idempotency', () => {
   it('describes identical payloads identically regardless of key order', () => {
@@ -106,6 +107,37 @@ describe('pending-vtu-idempotency', () => {
         rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('drops TTL-expired reference-less entries on recall', () => {
+    // Without a reference the stale check cannot flag them, so
+    // recalling would replay an already-completed transaction as a
+    // new purchase.
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 9,
+      phoneNumber: 'ttl-drop',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-ttl');
+    const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
+    expect(recallPendingVtuKey(descriptor, expired)).toBeNull();
+    // Deletion sticks: a live recall also misses.
+    expect(recallPendingVtuKey(descriptor)).toBeNull();
+  });
+
+  it('keeps recalling referenced entries past the TTL', () => {
+    // The stale check arbitrates their success replays; expiring them
+    // could mint a fresh key for a still-processing transaction and
+    // debit twice.
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 10,
+      phoneNumber: 'ttl-keep',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-ttl-ref');
+    notePendingVtuReference(descriptor, 'REF-TTL');
+    const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
+    expect(recallPendingVtuKey(descriptor, expired)).toBe('key-ttl-ref');
   });
 
   it('evicts the oldest entry past the cap', () => {

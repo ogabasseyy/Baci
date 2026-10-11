@@ -21,7 +21,7 @@ interface PersistedPendingVtuPurchase {
  * its ORIGINAL key however old, and the stale check still correctly
  * flags it as already-completed when the remembered reference matches.
  */
-const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+export const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
 
 const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
 

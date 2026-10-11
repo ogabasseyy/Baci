@@ -14,6 +14,7 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
+import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-idempotency-store';
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
@@ -40,6 +41,27 @@ describe('utility-pending-idempotency', () => {
 
     expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
     expect(getPendingVtuKey('{"amount":100}')).not.toBe(first);
+  });
+
+  it('drops TTL-expired reference-less entries on recall', () => {
+    // Without a reference the stale check cannot flag them, so
+    // recalling would replay an already-completed transaction as a
+    // new purchase.
+    rememberPendingVtuPurchase('{"ttl":"drop"}', 'key-ttl');
+    const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
+    expect(recallPendingVtuKey('{"ttl":"drop"}', expired)).toBeUndefined();
+    // Deletion sticks: a live recall also misses.
+    expect(recallPendingVtuKey('{"ttl":"drop"}')).toBeUndefined();
+  });
+
+  it('keeps recalling referenced entries past the TTL', () => {
+    // The stale check arbitrates their success replays; expiring them
+    // could mint a fresh key for a still-processing transaction and
+    // debit twice.
+    rememberPendingVtuPurchase('{"ttl":"keep"}', 'key-ttl-ref');
+    notePendingVtuReference('{"ttl":"keep"}', 'REF-TTL');
+    const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
+    expect(recallPendingVtuKey('{"ttl":"keep"}', expired)).toBe('key-ttl-ref');
   });
 
   it('evicts the oldest entry past the cap instead of growing unbounded', () => {

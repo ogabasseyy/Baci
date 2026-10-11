@@ -5,10 +5,7 @@ import { normalizeRefundMoneyField } from '@/lib/orders/normalize-refund-money-f
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
-import {
-  DeferredError,
-  DeliveryUncertainError,
-} from '@/lib/orders/run-order-cancellation-side-effect';
+import { DeferredError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
 // Worst-case sizing for one leg's provider preflight: a verify plus a
@@ -19,6 +16,10 @@ import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gatewa
 // the same starvation — so admit per leg and defer when short.
 const PREFLIGHT_PROVIDER_CALL_WORST_MS = 30_000;
 const PREFLIGHT_FINISH_WRITE_RESERVE_MS = 8_000;
+// One initiation leg worst case, mirroring the initiation admission
+// (provider call plus its audit reserve): preflight leaves room for
+// every outstanding leg before verifying the first.
+const REFUND_INITIATION_LEG_WORST_MS = 38_000;
 
 interface CancellationRefundLedgerRow {
   amount: number;
@@ -83,17 +84,23 @@ export async function preflightCancellationRefundInitiation({
   // Currency is an initiation-time property like the kobo cap below:
   // legacy rows pad or re-case ISO codes, so compare normalized values
   // while still rejecting missing or genuinely different currencies.
-  if (
-    outstandingTransactions.some(
-      (transaction) =>
-        !normalizeRefundMoneyField(transaction.currency) ||
-        normalizeRefundMoneyField(transaction.currency) !==
-          normalizeRefundMoneyField(order.currency)
-    )
-  ) {
-    throw new DeliveryUncertainError(
-      'Payment currency requires review before refund'
-    );
+  // A direct throw would terminalize the step without evidence, so
+  // file the reconciliation review first like the other terminal
+  // preflight paths.
+  const mismatchedCurrencyLegs = outstandingTransactions.filter(
+    (transaction) =>
+      !normalizeRefundMoneyField(transaction.currency) ||
+      normalizeRefundMoneyField(transaction.currency) !==
+        normalizeRefundMoneyField(order.currency)
+  );
+  if (mismatchedCurrencyLegs.length > 0) {
+    await quarantineRefund({
+      order,
+      preflight: true,
+      reason: 'Payment currency requires review before refund',
+      supabase,
+      transactions: mismatchedCurrencyLegs,
+    });
   }
   // Captures may legitimately exceed the recorded amount paid when
   // superseded legs exist (their completed refunds already cover them),
@@ -121,20 +128,30 @@ export async function preflightCancellationRefundInitiation({
   // Pre-initiation provider guard: an existing Paystack refund the ledger
   // cannot account for must quarantine for review (delivery_uncertain)
   // instead of initiating a duplicate provider refund.
-  for (const transaction of outstandingTransactions) {
-    if (
-      normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' ||
-      !transaction.gateway_reference
-    )
-      continue;
+  const paystackLegs = outstandingTransactions.filter(
+    (
+      transaction
+    ): transaction is GatewayPaymentTransaction & {
+      gateway_reference: string;
+    } =>
+      normalizePaymentGateway(transaction.gateway) === 'PAYSTACK' &&
+      transaction.gateway_reference !== null &&
+      transaction.gateway_reference !== ''
+  );
+  for (const [index, transaction] of paystackLegs.entries()) {
+    // Reserve the full remaining worst case before starting another
+    // provider verification — this and later verifications plus the
+    // initiation legs that follow — or a slow-but-successful check
+    // consumes the window and initiation deadline-exceeds without
+    // sending a refund, burning an attempt on work never started.
     const remainingMs =
       deadlineMs === undefined
         ? undefined
         : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
-    if (
-      remainingMs !== undefined &&
-      remainingMs < PREFLIGHT_PROVIDER_CALL_WORST_MS
-    ) {
+    const requiredMs =
+      (paystackLegs.length - index) * PREFLIGHT_PROVIDER_CALL_WORST_MS +
+      outstandingTransactions.length * REFUND_INITIATION_LEG_WORST_MS;
+    if (remainingMs !== undefined && remainingMs < requiredMs) {
       // Starvation is not failure: reset the budget the claim
       // consumed so the resume retries fresh instead of mistaking
       // a short window for exhaustion.

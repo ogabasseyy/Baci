@@ -120,6 +120,13 @@ describe('preflightCancellationRefundInitiation', () => {
         })
       )
     ).rejects.toThrow('Payment currency requires review before refund');
+    expect(client.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        reason: 'Payment currency requires review before refund',
+      })
+    );
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
   });
 
   it('accepts legacy casing but rejects missing leg currencies', async () => {
@@ -192,6 +199,27 @@ describe('preflightCancellationRefundInitiation', () => {
     const error = await preflightCancellationRefundInitiation(
       input({
         deadlineMs: Date.now() + 10_000,
+        supabase: { from } as never,
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_preflight_deferred_for_budget'
+    );
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+  });
+  it('defers when the window fits verification but not initiation', async () => {
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnThis(),
+    });
+    const from = vi.fn().mockReturnValue({ update });
+    // 60s covers the 30s verification alone, but initiation needs its
+    // own 38s leg after it: starting verification would burn the
+    // attempt when initiation deadline-exceeds with no refund sent.
+    const error = await preflightCancellationRefundInitiation(
+      input({
+        deadlineMs: Date.now() + 60_000,
         supabase: { from } as never,
       })
     ).catch((reason: unknown) => reason);

@@ -143,6 +143,10 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000024', v_merchant_id, 'REFUND-024',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000025', v_merchant_id, 'REFUND-025',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000026', v_merchant_id, 'REFUND-026',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000027', v_merchant_id, 'REFUND-027',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -173,7 +177,9 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000022',
       '9ef11000-0000-4000-8000-000000000023',
       '9ef11000-0000-4000-8000-000000000024',
-      '9ef11000-0000-4000-8000-000000000025');
+      '9ef11000-0000-4000-8000-000000000025',
+      '9ef11000-0000-4000-8000-000000000026',
+      '9ef11000-0000-4000-8000-000000000027');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -344,7 +350,21 @@ BEGIN
       'completed', 'paystack', 'pp-25',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000040',
-        'provider_refund_status', 'processed'));
+        'provider_refund_status', 'processed')),
+    -- A cross-gateway row linked to the leg: the claim rejects the
+    -- mismatch, so status must hold it in pending, not count it.
+    ('9ef12000-0000-4000-8000-000000000042', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000026', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-26', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000043', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000026', 'refund', 100, 'NGN',
+      'completed', 'korapay', 'kora-26',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000042')),
+    -- A direct-Paystack manual record lands here via the RPC below.
+    ('9ef12000-0000-4000-8000-000000000044', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000027', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-27', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -985,6 +1005,40 @@ BEGIN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
   END;
 
+  -- A linked row from another gateway is not coverage: the claim
+  -- rejects the mismatch, so it waits in pending with the label
+  -- held and manual recording blocked until review.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000026'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'cross-gateway row misattributed, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'manual allowed beside cross-gateway evidence';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000026';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'cross-gateway row flipped payment label to %', v_label;
+  END IF;
+
+  -- A full manual declared as a direct Paystack refund records (the
+  -- manager counts merchant-attested rows) but must not satisfy the
+  -- claim's completion gate without provider confirmation; the
+  -- claim test below asserts it defers to the worker instead.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000027', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'paystack', 'direct-paystack-1', NULL, true
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'direct-paystack manual did not record, got %',
+      v_result->>'status';
+  END IF;
+
   -- Missing and foreign orders are indistinguishable to callers.
   v_rejected := false;
   BEGIN
@@ -1250,6 +1304,16 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000020');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'mixed cash balance finalized early, got %', v_status;
+  END IF;
+  -- A full manual declared as Paystack is a merchant claim about
+  -- provider money, not coverage: the claim defers to the
+  -- executor's API-verified provider check instead of finalizing.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000027', 'refund',
+    '9ef13000-0000-4000-8000-000000000027');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'unverified paystack manual finalized, got %', v_status;
   END IF;
   -- The worker defers on the outstanding cash manual; mirror the
   -- deferral so the merchant's completion below re-arms the row.

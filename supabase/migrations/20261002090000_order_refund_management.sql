@@ -113,14 +113,16 @@ BEGIN
   -- Unverified rows are in-flight money that blocks manual
   -- recording (like refund_pending legs) — never invisible money
   -- the merchant could double-record beside the provider refund.
-  -- Unlinked rows attribute only to a sole completed external leg
-  -- with a matching gateway, mirroring the claim gate and the
-  -- executor matcher (manual rows never sole-attribute — the sole
-  -- leg is external by construction): counting one across several
-  -- legs, or against the wrong gateway, would zero the balance and
-  -- flip the label while finalization defers and the worker
-  -- quarantines, with the unallocated gate then blocking every
-  -- manual recovery. Unattributable rows wait in pending instead.
+  -- Refunds attribute to their linked leg under the claim's
+  -- normalized-gateway rules, with the explicit manual-row exception
+  -- (a merchant transfer covers any leg it is allocated to):
+  -- counting a cross-gateway row would zero the balance and flip
+  -- the label while the claim rejects the evidence and the worker
+  -- quarantines, with recovery gates then blocking every manual
+  -- retry. Unlinked rows attribute only to a sole completed
+  -- external leg with a matching gateway (manual rows never
+  -- sole-attribute — the sole leg is external by construction).
+  -- Unattributable rows wait in pending instead.
   SELECT count(*)=1,
     max(public.normalized_gateway_name_v1(sole.gateway))
     INTO v_sole_external_leg,v_sole_leg_gateway FROM public.transactions sole
@@ -131,17 +133,31 @@ BEGIN
   SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')
       AND (public.normalized_gateway_name_v1(gateway)<>'PAYSTACK'
         OR metadata->>'provider_refund_status'='processed')
-      AND (metadata->>'payment_transaction_id' IS NOT NULL
-        OR (v_sole_external_leg
+      AND (EXISTS (SELECT 1 FROM public.transactions leg
+          WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
+            AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
+            AND leg.transaction_type='payment'
+            AND (public.normalized_gateway_name_v1(transactions.gateway)='MANUAL'
+              OR public.normalized_gateway_name_v1(transactions.gateway)
+                =public.normalized_gateway_name_v1(leg.gateway)))
+        OR (transactions.metadata->>'payment_transaction_id' IS NULL
+          AND v_sole_external_leg
           AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway))),0),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
       OR (status IN ('completed','refunded')
         AND public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
         AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')
       OR (status IN ('completed','refunded')
-        AND metadata->>'payment_transaction_id' IS NULL
-        AND NOT COALESCE((v_sole_external_leg
-          AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway),false))),0)
+        AND NOT COALESCE((EXISTS (SELECT 1 FROM public.transactions leg
+            WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
+              AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
+              AND leg.transaction_type='payment'
+              AND (public.normalized_gateway_name_v1(transactions.gateway)='MANUAL'
+                OR public.normalized_gateway_name_v1(transactions.gateway)
+                  =public.normalized_gateway_name_v1(leg.gateway)))
+          OR (transactions.metadata->>'payment_transaction_id' IS NULL
+            AND v_sole_external_leg
+            AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway)),false))),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
     AND upper(btrim(currency))=upper(btrim(v_order.currency))
@@ -475,7 +491,10 @@ BEGIN
               OR EXISTS (SELECT 1 FROM public.transactions leg
                 WHERE leg.id::text = t.metadata->>'payment_transaction_id'
                   AND leg.order_id=o.id AND leg.merchant_id=o.merchant_id
-                  AND leg.transaction_type='payment')))
+                  AND leg.transaction_type='payment'
+                  AND (public.normalized_gateway_name_v1(t.gateway)='MANUAL'
+                    OR public.normalized_gateway_name_v1(t.gateway)
+                      =public.normalized_gateway_name_v1(leg.gateway)))))
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
           WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
             AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0

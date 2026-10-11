@@ -169,10 +169,21 @@ BEGIN
               -- Merchant-attested manual rows link explicitly and count as
               -- coverage in matching money, mirroring the executor
               -- matcher; they never sole-attribute, so an unlinked manual
-              -- row stays out of coverage for review.
+              -- row stays out of coverage for review. A manual row
+              -- declared as Paystack is only a merchant claim about
+              -- provider money: it must carry provider confirmation
+              -- before it can satisfy this completion gate, or a
+              -- mistyped direct refund would reverse settlement and
+              -- notify without matching any processed Paystack refund.
+              -- No reconciler stamps manual rows today, so such rows
+              -- defer to the executor's API-verified provider check.
               OR (
                 public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
                 AND refund.metadata->>'payment_transaction_id' = payment.id::text
+                AND NOT (
+                  refund.metadata->>'method' = 'paystack'
+                  AND refund.metadata->>'provider_refund_status' IS DISTINCT FROM 'processed'
+                )
               )
             )
             )

@@ -87,7 +87,9 @@ it('maps a definitive BVN rejection to correctable guidance', async () => {
   expect(
     screen.getByText('That BVN was rejected. Check the number and try again.')
   ).toBeOnTheScreen();
-  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
+  // A definitively rejected number is dropped: keeping a known-wrong BVN
+  // serves no retry and only widens the sensitive value's lifetime.
+  expect(screen.getByLabelText('BVN').props.value).toBe('');
 });
 
 it('clears the BVN only after the setup is confirmed', async () => {

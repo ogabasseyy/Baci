@@ -66,6 +66,13 @@ export async function onboardPiggyvestPrimaryWallet(
     third_party_identifier: `baci:${scope.integrationId}:${scope.customerId}`,
     enable_interest_accrual: false,
   };
+  // Idempotency commitment: HMAC-SHA256 keyed by a server secret is
+  // already one-way — hashing the BVN before this step would be
+  // cryptographically equivalent while preserving the same determinism
+  // (identical scope+request must yield an identical fingerprint, or
+  // dedup cannot work). Only the 64-hex digest is persisted or compared
+  // (see the never-raw-BVN test); the raw value travels solely to the
+  // provider request, and nothing on this path logs the HMAC input.
   const requestFingerprint = createHmac('sha256', config.data.fingerprintKey)
     .update(JSON.stringify({ scope, request: providerRequest }))
     .digest('hex');

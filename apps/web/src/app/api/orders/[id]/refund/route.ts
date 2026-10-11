@@ -74,10 +74,17 @@ function maskRefundWorkerText(data: {
   }>;
 }) {
   const error = typeof data.error === 'string' ? data.error : null;
+  // Substring, not token membership, is intended here: unlike error
+  // codes (where a token inside a larger word means something else),
+  // any mention of paystack — even inside an identifier like
+  // paystack_reference — means the review concerns Paystack. No
+  // unrelated word contains the provider name.
+  const needsPaystackCheck =
+    error?.toLowerCase().includes('paystack') ?? false;
   return {
     ...data,
     error: error ? describeRefundWorkerError(error) : error,
-    needsPaystackCheck: error?.toLowerCase().includes('paystack') ?? false,
+    needsPaystackCheck,
     events: data.events?.map((event) => ({
       ...event,
       details: {

@@ -119,6 +119,20 @@ describe('order refund route', () => {
       ],
     });
   });
+  it('flags the Paystack check for provider mentions inside identifiers', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: 'requires_review',
+        error: 'mismatch on paystack_reference leg-1',
+      },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ needsPaystackCheck: true })
+    );
+  });
   it('queues retries without invoking a payment provider', async () => {
     expect((await POST(request({ action: 'retry' }), context)).status).toBe(
       200

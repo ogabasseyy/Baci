@@ -140,7 +140,9 @@ export function WalletFundPanel({
       {fundingAccount ? (
         <>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {BANK_TRANSFER_SUBTITLE}
+            {fundingAccount.provider === 'piggyvest'
+              ? 'Transfer to your account number below. Your wallet updates after PiggyVest confirms receipt.'
+              : BANK_TRANSFER_SUBTITLE}
           </Text>
           <View
             style={[

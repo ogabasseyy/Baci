@@ -5,7 +5,27 @@ describe('walletKeys', () => {
   it('builds merchant-scoped wallet data query keys', () => {
     expect(
       walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
-    ).toEqual(['wallet', 'data', 'v3', 'customer-1', 'merchant-1']);
+    ).toEqual(['wallet', 'data', 'v4', 'customer-1', 'merchant-1']);
+  });
+
+  it('pins the key to the auth user when one is known', () => {
+    expect(
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      })
+    ).toEqual(['wallet', 'data', 'v4', 'customer-1', 'merchant-1', 'user-1']);
+  });
+
+  it('keeps the key short for prefix invalidators without a user', () => {
+    expect(
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: undefined,
+      })
+    ).toEqual(['wallet', 'data', 'v4', 'customer-1', 'merchant-1']);
   });
 
   it('rejects missing merchant ids', () => {

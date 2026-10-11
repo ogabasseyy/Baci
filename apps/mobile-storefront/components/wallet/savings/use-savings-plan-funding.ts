@@ -3,6 +3,8 @@ import {
   fetchExistingSavingsPlanFunding,
   fetchSavingsPlanFunding,
 } from '@/lib/customer-savings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import type { SavingsPlanFundingAccount } from '@/schemas/customer-savings';
 import { getErrorMessage } from './start-savings-controller.utils';
 
@@ -37,6 +39,14 @@ export function useSavingsPlanFunding({
   const [accounts, setAccounts] = useState<SavingsPlanFundingAccount[]>([]);
   const [statusCode, setStatusCode] = useState<string | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
+  const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
+  // Hide the BVN field only after the server explicitly confirms primary:
+  // while the capability probe is still pending (null), collect BVN for the
+  // legacy path. Primary provisioning ignores client BVN (it resolves
+  // identity from auth plus goal ownership), so an early primary
+  // confirmation never misuses the collected value.
+  const planFundingRequiresBvn =
+    !isPiggyvestPrimaryMerchant(activeMerchantId) || primaryCapability !== true;
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,
@@ -78,6 +88,7 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
+    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({
@@ -108,7 +119,7 @@ export function useSavingsPlanFunding({
       setPhase('error');
       return;
     }
-    if (!isBvn(trimmedBvn)) {
+    if (planFundingRequiresBvn && !isBvn(trimmedBvn)) {
       setFundingError('Enter the 11-digit BVN linked to this plan.');
       setPhase('error');
       return;
@@ -116,6 +127,7 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
+    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchSavingsPlanFunding({
@@ -159,5 +171,6 @@ export function useSavingsPlanFunding({
     planFundingAccounts: accounts,
     planFundingPhase: phase,
     planFundingStatusCode: statusCode,
+    planFundingRequiresBvn,
   };
 }

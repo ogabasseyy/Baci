@@ -16,6 +16,28 @@ describe('typed rich TSQ and independent ownership', () => {
     );
   });
 
+  it('separates the terminal failed twin from the successful rich shape', () => {
+    const failed = {
+      ...fixture.transaction,
+      data: { ...fixture.transaction.data, status: 'failed' },
+    };
+    expect(schemas.richFailed.parse(failed).data).toMatchObject({
+      status: 'failed',
+      amount: 10000,
+      fee: 0,
+    });
+    expect(schemas.rich.safeParse(failed).success).toBe(false);
+    expect(schemas.richFailed.safeParse(fixture.transaction).success).toBe(
+      false
+    );
+    expect(
+      schemas.richFailed.safeParse({
+        ...failed,
+        data: { ...failed.data, status: 'pending' },
+      }).success
+    ).toBe(false);
+  });
+
   it.each([
     'id',
     'internal_reference',

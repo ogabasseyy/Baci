@@ -9,15 +9,12 @@ import {
   SavingsGoalActionResponseSchema,
   SavingsGoalSummarySchema,
 } from '@/schemas/customer-savings';
+import { customerSavingsPlanFunding } from './customer-savings-plan-funding';
 
 export type {
   CustomerPaymentMethod,
   SavingsGoal,
 } from '@/schemas/customer-savings';
-export {
-  fetchExistingSavingsPlanFunding,
-  fetchSavingsPlanFunding,
-} from './customer-savings-plan-funding';
 export { resolveSavingsGoalVariant } from './customer-savings-variant-resolution';
 
 /** Default savings card authorization amount in kobo, NGN minor units. */
@@ -127,6 +124,10 @@ export async function createSavingsGoal(input: {
   });
   return SavingsGoalSummarySchema.parse(data);
 }
+
+export const fetchSavingsPlanFunding = customerSavingsPlanFunding.provision;
+export const fetchExistingSavingsPlanFunding =
+  customerSavingsPlanFunding.recover;
 
 export async function addSavingsContribution(input: {
   amount: number;

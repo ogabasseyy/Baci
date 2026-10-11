@@ -41,10 +41,14 @@ jest.mock('@/services/cart-reprice', () => ({
   },
   pickChangedConditionById: (result: {
     changes: { id: string }[];
+    conditionChanges?: { id: string }[];
     conditionById: Record<string, string>;
   }) => {
     const out: Record<string, string> = {};
-    for (const change of result.changes) {
+    for (const change of [
+      ...result.changes,
+      ...(result.conditionChanges ?? []),
+    ]) {
       const live = result.conditionById[change.id];
       if (typeof live === 'string') out[change.id] = live;
     }
@@ -109,6 +113,7 @@ describe('useCartReprice', () => {
       priceById: { 'cart-1': 1250000 },
       conditionById: {},
       changes,
+      conditionChanges: [],
     });
 
     const { result } = renderHook(() => useCartReprice());
@@ -134,6 +139,7 @@ describe('useCartReprice', () => {
     mockRepriceCartItems.mockResolvedValue({
       priceById: {},
       changes: [],
+      conditionChanges: [],
     });
 
     renderHook(() => useCartReprice());
@@ -153,6 +159,7 @@ describe('useCartReprice', () => {
     mockRepriceCartItems.mockResolvedValue({
       priceById: {},
       changes: [],
+      conditionChanges: [],
     });
 
     renderHook(() => useCartReprice());
@@ -180,6 +187,7 @@ describe('useCartReprice', () => {
     mockRepriceCartItems.mockResolvedValue({
       priceById: {},
       changes: [],
+      conditionChanges: [],
     });
 
     const { rerender } = renderHook(() => useCartReprice());
@@ -202,6 +210,7 @@ describe('useCartReprice', () => {
     mockRepriceCartItems.mockResolvedValue({
       priceById: {},
       changes: [],
+      conditionChanges: [],
     });
 
     const { rerender } = renderHook(() => useCartReprice());
@@ -263,6 +272,40 @@ describe('useCartReprice', () => {
 
     expect(mockRepriceItems).not.toHaveBeenCalled();
     expect(result.current.priceChanges).toEqual([]);
+  });
+
+  it('surfaces condition-only refreshes without a price change', async () => {
+    const conditionChanges = [
+      {
+        id: 'cart-1',
+        name: 'iPhone 15 Pro',
+        oldCondition: 'used',
+        newCondition: 'refurbished',
+      },
+    ];
+    mockRepriceCartItems.mockResolvedValue({
+      priceById: { 'cart-1': 1200000 },
+      conditionById: { 'cart-1': 'refurbished' },
+      changes: [],
+      conditionChanges,
+    });
+
+    const { result } = renderHook(() => useCartReprice());
+
+    await waitFor(() => {
+      expect(mockRepriceItems).toHaveBeenCalledWith(
+        {},
+        { 'cart-1': 'refurbished' }
+      );
+      expect(result.current.priceChanges).toEqual([]);
+      expect(result.current.conditionChanges).toEqual(conditionChanges);
+    });
+
+    act(() => {
+      result.current.dismissPriceChanges();
+    });
+
+    expect(result.current.conditionChanges).toEqual([]);
   });
 
   it('fails open without mutating cart state when repricing rejects', async () => {

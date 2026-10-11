@@ -13,6 +13,40 @@ export type LiveOfferRepriceRow = {
 
 export type LiveOfferRepriceMap = Map<string, LiveOfferRepriceRow>;
 
+export interface CartPriceChange {
+  id: string;
+  name: string;
+  oldPrice: number;
+  newPrice: number;
+}
+
+export interface CartConditionChange {
+  id: string;
+  name: string;
+  oldCondition: string;
+  newCondition: string;
+}
+
+/**
+ * Live prices for ONLY the lines that drifted beyond tolerance (`changes`).
+ * `priceById` includes every resolved line, so applying it wholesale could
+ * clear negotiations on tolerated/unchanged lines — callers that react to a
+ * drift should apply just these.
+ */
+export function pickChangedPriceById(result: {
+  changes: { id: string }[];
+  priceById: Record<string, number>;
+}): Record<string, number> {
+  const changed: Record<string, number> = {};
+  for (const change of result.changes) {
+    const livePrice = result.priceById[change.id];
+    if (typeof livePrice === 'number') {
+      changed[change.id] = livePrice;
+    }
+  }
+  return changed;
+}
+
 /**
  * Distinct product ids behind exact (non-variant) offer lines, for one
  * batched live-offer fetch.
@@ -118,10 +152,16 @@ export function getDriftedOfferCondition(
 
 export function pickChangedConditionById(result: {
   changes: { id: string }[];
+  conditionChanges?: { id: string }[];
   conditionById: Record<string, string>;
 }): Record<string, string> {
   const changed: Record<string, string> = {};
-  for (const change of result.changes) {
+  // Condition-only refreshes reconcile too: they no longer ride along on
+  // price changes, so union both change lists.
+  for (const change of [
+    ...result.changes,
+    ...(result.conditionChanges ?? []),
+  ]) {
     const liveCondition = result.conditionById[change.id];
     if (typeof liveCondition === 'string' && liveCondition !== '') {
       changed[change.id] = liveCondition;

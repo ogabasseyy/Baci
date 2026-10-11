@@ -207,6 +207,24 @@ it('uses the refreshed base condition instead of stale saved or re-filtered cond
   expect(href).not.toContain('condition=new');
 });
 
+it('falls back to the saved match condition while the refresh is pending', () => {
+  // Tray product absent (pending refresh): the link must still carry
+  // the compared condition, not just match_base=1 — otherwise the PDP
+  // opens the parent/default condition instead of the compared one.
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one' },
+    { id: '2', name: 'Two', slug: 'two', matchCondition: 'open_box' },
+  ];
+  mocks.facts.mockReturnValue({ products: [], pending: true, error: false });
+  render(<SearchComparisonTray products={[]} pathPrefix="" merchantId="m1" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  const href = screen
+    .getAllByRole('link', { name: 'View details and options' })[1]
+    .getAttribute('href');
+  expect(href).toContain('condition=open_box');
+  expect(href).toContain('match_base=1');
+});
+
 it('keeps a saved base match from adopting re-filtered live option ids', () => {
   // The live search was re-filtered onto a variant; the saved base match
   // stays authoritative and must not adopt the live option identity.

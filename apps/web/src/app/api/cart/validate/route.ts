@@ -41,7 +41,7 @@ function toPriceNumber(value: number | string | null | undefined) {
 /**
  * POST /api/cart/validate
  *
- * Body: { productIds?: string[], cartItems?: { id, price, variantId?, offerId? }[] }
+ * Body: { productIds?: string[], cartItems?: { id, price, quantity?, variantId?, offerId?, condition? }[] }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -227,6 +227,7 @@ export async function POST(request: NextRequest) {
         variantId: item.variantId,
         offerId: item.offerId,
         submittedCondition: item.condition,
+        quantity: item.quantity,
         offer,
         parentEligible: isOfferParentEligible(
           product,

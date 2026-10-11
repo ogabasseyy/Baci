@@ -42,7 +42,8 @@ export type OfferLineResolutionInput = {
   variantId?: string;
   offerId?: string;
   submittedCondition?: string;
-  offer?: { condition: string | null };
+  quantity?: number;
+  offer?: { condition: string | null; stock_quantity?: number | string | null };
   parentEligible: boolean;
 };
 
@@ -50,15 +51,17 @@ export type OfferLineResolutionInput = {
  * Resolves the offer-line checks for one cart validation item: a missing
  * live row (the RPC returns active rows only), a stale row on a
  * variant-bearing or flag-disabled parent, a condition the merchant
- * changed after the line landed in the cart, or a contradictory
- * variant+offer combo. Returns the invalid-line key, or null when the
- * line passes every offer check (non-offer lines always pass).
+ * changed after the line landed in the cart, a line quantity above the
+ * live offer allocation, or a contradictory variant+offer combo.
+ * Returns the invalid-line key, or null when the line passes every
+ * offer check (non-offer lines always pass).
  */
 export function getInvalidOfferLineKey({
   strId,
   variantId,
   offerId,
   submittedCondition,
+  quantity,
   offer,
   parentEligible,
 }: OfferLineResolutionInput): string | null {
@@ -93,6 +96,24 @@ export function getInvalidOfferLineKey({
       normalizeCanonicalProductCondition(offer.condition ?? '')
   ) {
     return getCartValidationKey(strId, undefined, offerId);
+  }
+
+  // Another order (or a merchant edit) can deplete the live offer
+  // allocation below the quantity already sitting in this cart while the
+  // offer row itself stays active. Order creation rejects that line
+  // with insufficient_offer_stock, so validation must invalidate it
+  // early instead of reporting the line valid. Lines without a
+  // submitted quantity and rows without a finite scalar skip the
+  // check — there is nothing to compare.
+  if (!variantId && offerId && offer) {
+    const scalar = Number(offer.stock_quantity ?? Number.NaN);
+    if (
+      typeof quantity === 'number' &&
+      Number.isFinite(scalar) &&
+      quantity > scalar
+    ) {
+      return getCartValidationKey(strId, undefined, offerId);
+    }
   }
 
   // A line naming both a variant and a condition offer is contradictory:

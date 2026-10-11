@@ -36,6 +36,8 @@ export interface StickyAddToCartProps {
   selectedPrice?: number;
   /** Selected stock for the current condition / variant */
   selectedStock?: number;
+  /** Externally forced unavailable state (e.g. a dead exact-offer link) */
+  purchaseDisabled?: boolean;
   /** Minimum distance from top before showing (default: 400px) */
   showAfterScroll?: number;
   /** Custom class name */
@@ -63,6 +65,7 @@ export function StickyAddToCart({
   selectedCondition,
   selectedPrice,
   selectedStock,
+  purchaseDisabled,
   showAfterScroll = 400,
   className,
 }: StickyAddToCartProps) {
@@ -257,10 +260,10 @@ export function StickyAddToCart({
                   size="sm"
                   className="gap-1.5 px-4"
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
+                  disabled={isOutOfStock || purchaseDisabled}
                 >
                   <ShoppingCart className="size-4" />
-                  {isOutOfStock ? 'Unavailable' : 'Add'}
+                  {isOutOfStock || purchaseDisabled ? 'Unavailable' : 'Add'}
                 </ThemedButton>
               </div>
             )}

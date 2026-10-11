@@ -10,6 +10,7 @@ import type { ProductConditionOffer } from '../../types';
 export interface ProductDetailsRouteSelection {
   routeCondition: ReturnType<typeof normalizeCanonicalProductCondition>;
   routeOfferId: string | null;
+  routeOfferMissing: boolean;
   routeSelectionAttributes: Record<string, string>;
   routeSelectionAttributesKey: string;
   routeVariantId: string | undefined;
@@ -52,6 +53,14 @@ export function resolveProductDetailsRouteSelection<
     offers?.some((offer) => String(offer.id) === rawOfferIdParam)
       ? rawOfferIdParam
       : null;
+  // Exact-match contract (mirrors the generic PDP and native route data):
+  // a nonempty link offer id absent from the hydrated offers means the
+  // offer was removed, deactivated, or sold — surface it as missing
+  // instead of silently falling back to the parent/default price.
+  const routeOfferMissing =
+    Boolean(rawOfferIdParam) &&
+    Array.isArray(offers) &&
+    !offers.some((offer) => String(offer.id) === rawOfferIdParam);
   const routeConditionSource =
     routeSelectionInput.condition ??
     (!usesVariantRouteSelection
@@ -68,6 +77,7 @@ export function resolveProductDetailsRouteSelection<
   return {
     routeCondition,
     routeOfferId,
+    routeOfferMissing,
     routeSelectionAttributes,
     routeSelectionAttributesKey,
     routeVariantId,

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CHECKOUT_MERCHANT_ID } from '@/components/checkout/checkout-screen.constants';
 import { useMerchant } from '@/hooks/use-merchant';
 import {
+  type CartConditionChange,
   type CartPriceChange,
   pickChangedConditionById,
   pickChangedPriceById,
@@ -34,6 +35,9 @@ export function useCartReprice() {
   const rawItems = useCartStore((state) => state.items);
   const repriceItems = useCartStore((state) => state.repriceItems);
   const [priceChanges, setPriceChanges] = useState<CartPriceChange[]>([]);
+  const [conditionChanges, setConditionChanges] = useState<
+    CartConditionChange[]
+  >([]);
   const lastRepriceKeyRef = useRef<string | null>(null);
 
   // Mirror CartScreen's malformed-store recovery: if hydration produced a bad
@@ -70,7 +74,7 @@ export function useCartReprice() {
         if (cancelled) {
           return;
         }
-        if (result.changes.length > 0) {
+        if (result.changes.length > 0 || result.conditionChanges.length > 0) {
           // Apply only the reported drifts (pickChangedPriceById) so a ≤₦1
           // tolerance line in priceById can't silently clear a negotiation.
           // Drifted offer conditions refresh alongside the price so the
@@ -80,6 +84,7 @@ export function useCartReprice() {
             pickChangedConditionById(result)
           );
           setPriceChanges(result.changes);
+          setConditionChanges(result.conditionChanges);
         }
       })
       .catch(() => {
@@ -93,6 +98,10 @@ export function useCartReprice() {
 
   return {
     priceChanges,
-    dismissPriceChanges: () => setPriceChanges([]),
+    conditionChanges,
+    dismissPriceChanges: () => {
+      setPriceChanges([]);
+      setConditionChanges([]);
+    },
   };
 }

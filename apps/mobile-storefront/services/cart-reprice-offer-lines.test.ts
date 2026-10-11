@@ -161,4 +161,14 @@ describe('pickChangedConditionById', () => {
       })
     ).toEqual({ a: 'refurbished' });
   });
+
+  it('unions condition-only refreshes with price changes', () => {
+    expect(
+      pickChangedConditionById({
+        changes: [{ id: 'a' }],
+        conditionChanges: [{ id: 'b' }],
+        conditionById: { a: 'refurbished', b: 'open_box', c: 'used' },
+      })
+    ).toEqual({ a: 'refurbished', b: 'open_box' });
+  });
 });

@@ -20,7 +20,9 @@ export async function abortIfCartPricesStale(
     return false;
   }
   const reprice = await repriceCartItems(itemsSnapshot, merchantId);
-  if (reprice.changes.length === 0) {
+  const priceMoved = reprice.changes.length > 0;
+  const conditionMoved = reprice.conditionChanges.length > 0;
+  if (!priceMoved && !conditionMoved) {
     return false;
   }
   useCartStore
@@ -29,9 +31,14 @@ export async function abortIfCartPricesStale(
       pickChangedPriceById(reprice),
       pickChangedConditionById(reprice)
     );
+  // A condition-only refresh still aborts so the reconciled line is what
+  // checkout submits — but the message must describe the actual change,
+  // not a price move that never happened.
   Alert.alert(
-    'Prices updated',
-    'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',
+    priceMoved ? 'Prices updated' : 'Items updated',
+    priceMoved
+      ? 'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.'
+      : 'The merchant updated some item details since you added these items. Your cart has been updated — please review and tap checkout again.',
     [{ text: 'OK' }]
   );
   return true;

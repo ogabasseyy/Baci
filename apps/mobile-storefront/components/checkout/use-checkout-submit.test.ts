@@ -251,6 +251,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
       orderId: 'order-rv',
@@ -393,6 +394,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     const params = createParams({ selectedPayment: 'credit_direct' });
 
@@ -435,6 +437,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     const params = createParams({ selectedPayment: 'pay_on_delivery' });
 
@@ -462,6 +465,7 @@ describe('useCheckoutSubmit', () => {
       changes,
       priceById: { 'line-1': 1250000 },
       conditionById: {},
+      conditionChanges: [],
     });
     const setIsProcessing = jest.fn();
     const params = createParams({ setIsProcessing });
@@ -528,6 +532,7 @@ describe('useCheckoutSubmit', () => {
         changes: [],
         priceById: { 'line-1': 1200000 },
         conditionById: {},
+        conditionChanges: [],
       });
       await firstSubmit;
     });
@@ -540,6 +545,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 1201500,
@@ -576,6 +582,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     // A 100% discount zeroes the gateway amount while the order stays
     // unpaid; the server still generates and emails the proforma — but
@@ -612,6 +619,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 0,
@@ -647,6 +655,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     let resolvePersistedRead: (value: null) => void = () => undefined;
     mockReadPersistedRedvaultOrder.mockImplementationOnce(
@@ -696,6 +705,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     const setIsProcessing = jest.fn();
     const params = createParams({ setIsProcessing });
@@ -729,6 +739,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
     const params = createParams();
 
@@ -752,6 +763,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
       conditionById: {},
+      conditionChanges: [],
     });
 
     const { result } = renderHook(() => useCheckoutSubmit(createParams()));
@@ -792,6 +804,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     const params = createParams({ selectedPayment: 'payforme' });
 
@@ -815,6 +828,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     const initError = new Error('klump init failed');
     mockSubmitBnplCheckout.mockImplementation((params) => {
@@ -847,6 +861,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     const initError = new Error('provider init threw');
     const { finalizeCheckoutPayment } = jest.requireMock(
@@ -885,6 +900,7 @@ describe('useCheckoutSubmit', () => {
       changes: [],
       priceById: {},
       conditionById: {},
+      conditionChanges: [],
     });
     // Unique order identity: the durable purchase claim persists across
     // tests in this file, so reusing the default order would read as an

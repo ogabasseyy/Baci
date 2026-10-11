@@ -101,6 +101,42 @@ describe('useProductOfferSelection', () => {
     expect(result.current.selectedOffer).toBeNull();
     expect(result.current.currentPrice).toBe(100);
   });
+
+  it('flags a missing exact offer instead of silently discarding it', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=nope'));
+    const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    expect(result.current.routeOfferMissing).toBe(true);
+  });
+
+  it('clears the missing flag for live offers, absent links, and unhydrated offers', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=o1'));
+    const { result: live } = renderHook(() =>
+      useProductOfferSelection(baseProduct)
+    );
+    expect(live.current.routeOfferMissing).toBe(false);
+
+    mockUseSearchParams.mockReturnValue(new URLSearchParams());
+    const { result: noLink } = renderHook(() =>
+      useProductOfferSelection(baseProduct)
+    );
+    expect(noLink.current.routeOfferMissing).toBe(false);
+
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=nope'));
+    const { result: unhydrated } = renderHook(() =>
+      useProductOfferSelection({ ...baseProduct, offers: undefined })
+    );
+    expect(unhydrated.current.routeOfferMissing).toBe(false);
+  });
+
+  it('clears the missing flag once the shopper picks a condition', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=nope'));
+    const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    expect(result.current.routeOfferMissing).toBe(true);
+    act(() => {
+      result.current.handleConditionChange('used');
+    });
+    expect(result.current.routeOfferMissing).toBe(false);
+  });
   it('preserves an explicit condition constraint that conflicts with the offer', () => {
     mockUseSearchParams.mockReturnValue(
       new URLSearchParams('condition=new&offer_id=o1')

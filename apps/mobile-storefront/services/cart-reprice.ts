@@ -20,27 +20,24 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
 import {
+  type CartConditionChange,
+  type CartPriceChange,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
   getDriftedOfferCondition,
   pickChangedConditionById,
+  pickChangedPriceById,
   resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
 
-export { pickChangedConditionById };
+export type { CartConditionChange, CartPriceChange };
+export { pickChangedConditionById, pickChangedPriceById };
 
 const log = createLogger('CartReprice');
 
 // Mirror the RPC's ±1 NGN parity tolerance so display rounding is not treated
 // as a price change.
 const PRICE_TOLERANCE = 1;
-
-export interface CartPriceChange {
-  id: string;
-  name: string;
-  oldPrice: number;
-  newPrice: number;
-}
 
 export interface RepriceResult {
   /** Live unit price keyed by cart line id (only lines we could resolve). */
@@ -53,6 +50,12 @@ export interface RepriceResult {
   conditionById: Record<string, string>;
   /** Lines whose unit price drifted beyond tolerance. */
   changes: CartPriceChange[];
+  /**
+   * Lines whose offer condition drifted without a price move. Tracked
+   * separately from price changes so a condition-only refresh does not
+   * render as a bogus "X to X" price move.
+   */
+  conditionChanges: CartConditionChange[];
 }
 
 type VariantOverrideRow = {
@@ -65,6 +68,7 @@ const EMPTY_RESULT: RepriceResult = {
   priceById: {},
   conditionById: {},
   changes: [],
+  conditionChanges: [],
 };
 
 export async function repriceCartItems(
@@ -164,6 +168,7 @@ export async function repriceCartItems(
       priceById: {},
       conditionById: {},
       changes: [],
+      conditionChanges: [],
     };
     for (const item of items) {
       // Voucher reward lines (quiz awards, price 0) are validated by the
@@ -201,15 +206,24 @@ export async function repriceCartItems(
             if (driftedCondition) {
               result.conditionById[item.id] = driftedCondition;
             }
-            if (
-              Math.abs(live.price - item.price) > PRICE_TOLERANCE ||
-              driftedCondition
-            ) {
+            if (Math.abs(live.price - item.price) > PRICE_TOLERANCE) {
               result.changes.push({
                 id: item.id,
                 name: item.name,
                 oldPrice: item.price,
                 newPrice: live.price,
+              });
+            }
+            // A condition-only refresh still reconciles (conditionById
+            // above) but must not masquerade as a price move: identical
+            // old/new prices would render "X to X" and abort checkout
+            // with a misleading "prices changed" message.
+            if (driftedCondition && item.condition) {
+              result.conditionChanges.push({
+                id: item.id,
+                name: item.name,
+                oldCondition: item.condition,
+                newCondition: driftedCondition,
               });
             }
           }
@@ -268,23 +282,4 @@ export async function repriceCartItems(
     });
     return EMPTY_RESULT;
   }
-}
-
-/**
- * Live prices for ONLY the lines that drifted beyond tolerance (`changes`).
- * `priceById` includes every resolved line, so applying it wholesale could
- * clear negotiations on tolerated/unchanged lines — callers that react to a
- * drift should apply just these.
- */
-export function pickChangedPriceById(
-  result: RepriceResult
-): Record<string, number> {
-  const changed: Record<string, number> = {};
-  for (const change of result.changes) {
-    const livePrice = result.priceById[change.id];
-    if (typeof livePrice === 'number') {
-      changed[change.id] = livePrice;
-    }
-  }
-  return changed;
 }

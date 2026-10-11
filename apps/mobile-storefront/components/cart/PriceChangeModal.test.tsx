@@ -53,6 +53,31 @@ describe('PriceChangeModal', () => {
     expect(screen.queryByText('Samsung Galaxy S25')).toBeNull();
   });
 
+  it('renders condition-only refreshes without a price row', () => {
+    render(
+      <PriceChangeModal
+        visible
+        changes={[]}
+        conditionChanges={[
+          {
+            id: 'cart-1',
+            name: 'iPhone 15 Pro',
+            oldCondition: 'used',
+            newCondition: 'refurbished',
+          },
+        ]}
+        onClose={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    expect(screen.getByText('Items updated')).toBeTruthy();
+    expect(screen.getByText('iPhone 15 Pro')).toBeTruthy();
+    expect(screen.getByText('used')).toBeTruthy();
+    expect(screen.getByText('refurbished')).toBeTruthy();
+    expect(screen.queryByText('Prices updated')).toBeNull();
+  });
+
   it('renders the header but no line rows when there are no changes', () => {
     render(
       <PriceChangeModal

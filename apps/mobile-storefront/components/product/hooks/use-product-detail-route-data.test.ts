@@ -207,6 +207,51 @@ it('treats a bare match_base flag as keep-base-price', () => {
   expect(result.current.suppressConditionOfferMatch).toBe(false);
 });
 
+it('fails closed when an exact variant id names no live variant', () => {
+  mockParams = { slug: 'phone', variant_id: 'gone' };
+  const variantProduct = {
+    ...product,
+    has_variants: true,
+    variants: [{ id: 'v1', attributes: {} }],
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: variantProduct,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  // The advertised variant was deleted while siblings remain: surface
+  // the unavailable path instead of redirecting to the bare URL, where
+  // the PDP would silently select a different price/specification.
+  expect(result.current.routeVariantMissing).toBe(true);
+  expect(result.current.error).toMatch(/no longer available/);
+  expect(mockReplace).not.toHaveBeenCalled();
+});
+
+it('keeps live exact variants out of the missing path', () => {
+  mockParams = { slug: 'phone', variant_id: 'v1' };
+  const variantProduct = {
+    ...product,
+    has_variants: true,
+    variants: [{ id: 'v1', attributes: {} }],
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: variantProduct,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeVariantMissing).toBe(false);
+  expect(result.current.error).toBeNull();
+  expect(mockReplace).not.toHaveBeenCalled();
+});
+
 it('preserves the saved selection when canonicalizing a legacy slug', () => {
   setup({
     slug: 'legacy-phone',

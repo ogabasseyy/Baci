@@ -162,8 +162,10 @@ export default function CartScreen() {
   } = useCartNegotiation({ items, grandTotal });
 
   // Reconcile cart prices against the live catalog when the cart opens.
-  const { priceChanges, dismissPriceChanges } = useCartReprice();
-  const isPriceChangeVisible = priceChanges.length > 0;
+  const { priceChanges, conditionChanges, dismissPriceChanges } =
+    useCartReprice();
+  const isPriceChangeVisible =
+    priceChanges.length > 0 || conditionChanges.length > 0;
 
   useEffect(() => {
     if (isPriceChangeVisible) setPriceChangeDismissed(false);
@@ -275,6 +277,7 @@ export default function CartScreen() {
       <PriceChangeModal
         visible={isPriceChangeVisible}
         changes={priceChanges}
+        conditionChanges={conditionChanges}
         onClose={dismissPriceChanges}
         onDismissed={() => setPriceChangeDismissed(true)}
         colors={colors}

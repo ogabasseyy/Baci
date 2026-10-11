@@ -14,6 +14,10 @@ import { conditionLabels } from './product-selection-condition-labels';
 import { createProductSelectionHandlers } from './product-selection-handlers';
 import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
 import { resolveSelectionPricing } from './product-selection-pricing';
+import {
+  isRouteOfferMissing,
+  matchRouteOfferId,
+} from './resolve-route-offer-match';
 import { useProductRouteSelection } from './use-product-route-selection';
 
 /**
@@ -65,12 +69,16 @@ export function useProductOfferSelection(product: Product) {
   // Explicit shopper pick from a condition button, keyed by identity so a
   // click on a later same-condition offer keeps its own price/stock.
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
-  const routeOfferId =
-    offerIdParam &&
-    offerIdParam !== ignoredRouteOfferId &&
-    product.offers?.some((o: { id: string }) => String(o.id) === offerIdParam)
-      ? offerIdParam
-      : null;
+  const routeOfferId = matchRouteOfferId(
+    offerIdParam,
+    ignoredRouteOfferId,
+    product.offers
+  );
+  const routeOfferMissing = isRouteOfferMissing(
+    offerIdParam,
+    ignoredRouteOfferId,
+    product.offers
+  );
   // A base-row entry keeps the advertised base price until the shopper
   // picks a condition on the PDP (mirrors native suppressConditionOfferMatch):
   // ids-bearing links never suppress, and any explicit pick re-enables
@@ -281,6 +289,7 @@ export function useProductOfferSelection(product: Product) {
     handleConditionChange,
     isOutOfStock,
     isStockManaged,
+    routeOfferMissing,
     selectedCondition,
     selectedImage,
     selectedOffer,

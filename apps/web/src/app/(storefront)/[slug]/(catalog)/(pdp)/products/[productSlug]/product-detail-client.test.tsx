@@ -205,6 +205,32 @@ describe('ProductDetailClient', () => {
     );
   });
 
+  it('blocks purchase with an unavailable notice when the linked offer is gone', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('offer_id=offer-gone')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      has_condition_offers: true,
+      offers: [
+        { id: 'offer-new', condition: 'new', price: 400000, stock_quantity: 2 },
+        {
+          id: 'offer-used',
+          condition: 'used',
+          price: 300000,
+          stock_quantity: 1,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no longer available/);
+    expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
+    expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ purchaseDisabled: true })
+    );
+  });
+
   it('falls back to the default priced variant when route params cannot be resolved', async () => {
     mockUseSearchParams.mockReturnValue(
       new URLSearchParams('condition=unknown&storage=999GB&utm_source=google')

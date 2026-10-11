@@ -65,6 +65,7 @@ export function useProductDetailsState(serverProduct: Product) {
     setSelectedCondition,
     setSelectedImage,
     routeOfferId,
+    routeOfferMissing,
     variantSelectionAttributes,
   } = useProductDetailsSelectionState(serverProduct, searchParams);
 
@@ -273,6 +274,7 @@ export function useProductDetailsState(serverProduct: Product) {
     productData,
     quantityInCart,
     relatedProductsProduct,
+    routeOfferMissing,
     secondaryColor,
     selectedAttributes,
     selectedColor,

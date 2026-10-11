@@ -16,6 +16,8 @@ import { ProductDetailsBannerSection } from './product-details-page/product-deta
 import { ProductDetailsPageOverlays } from './product-details-page/product-details-page-overlays';
 import { useIsDesktopViewport } from './product-details-page/use-is-desktop-viewport';
 import { useProductDetailsAttributeHandlers } from './product-details-page/use-product-details-attribute-handlers';
+import { RouteOfferMissingNotice } from './product-details-page/route-offer-missing-notice';
+import { useRouteOfferMissing } from './product-details-page/use-route-offer-missing';
 
 interface ProductDetailsPageProps {
   mode?: 'full' | 'commerce' | 'belowFold';
@@ -23,11 +25,8 @@ interface ProductDetailsPageProps {
   semanticSections?: ReactNode;
 }
 
-export function ProductDetailsPage({
-  mode = 'full',
-  product,
-  semanticSections = null,
-}: ProductDetailsPageProps) {
+export function ProductDetailsPage(props: ProductDetailsPageProps) {
+  const { mode = 'full', product, semanticSections = null } = props;
   const {
     activeTab,
     availableConditions,
@@ -67,6 +66,7 @@ export function ProductDetailsPage({
     productData,
     quantityInCart,
     relatedProductsProduct,
+    routeOfferMissing,
     secondaryColor,
     selectedAttributes,
     selectedColor,
@@ -86,6 +86,8 @@ export function ProductDetailsPage({
   } = useProductDetailsState(product);
 
   const isDesktop = useIsDesktopViewport();
+  const { effectiveCanPurchase, handleSetCondition, routeOfferMissingActive } =
+    useRouteOfferMissing(routeOfferMissing, canPurchase, setSelectedCondition);
   const {
     handleAttributeSelection,
     handleModalAttributeSelection,
@@ -139,6 +141,7 @@ export function ProductDetailsPage({
             productData={productData}
           />
         )}
+        {routeOfferMissingActive && <RouteOfferMissingNotice />}
 
         <div
           className={
@@ -159,7 +162,7 @@ export function ProductDetailsPage({
           {isCommerceMode ? (
             <ProductInteractionPanel
               availableConditions={availableConditions}
-              canPurchase={canPurchase}
+              canPurchase={effectiveCanPurchase}
               cartHref={cartHref}
               currentOfferPrice={currentOffer.price}
               deliveryEstimate={deliveryEstimate}
@@ -179,7 +182,7 @@ export function ProductDetailsPage({
               onInputKeyDown={handleKeyDown}
               onSelectColor={handleColorSelection}
               onSelectSecondaryColor={handleColorDoubleClick}
-              onSetCondition={setSelectedCondition}
+              onSetCondition={handleSetCondition}
               onShare={handleShare}
               onToggleSaved={handleToggleSaved}
               productData={productData}
@@ -193,7 +196,7 @@ export function ProductDetailsPage({
           ) : (
             <ProductPurchasePanel
               availableConditions={availableConditions}
-              canPurchase={canPurchase}
+              canPurchase={effectiveCanPurchase}
               cartHref={cartHref}
               currentOfferPrice={currentOffer.price}
               deliveryEstimate={deliveryEstimate}
@@ -213,7 +216,7 @@ export function ProductDetailsPage({
               onInputKeyDown={handleKeyDown}
               onSelectColor={handleColorSelection}
               onSelectSecondaryColor={handleColorDoubleClick}
-              onSetCondition={setSelectedCondition}
+              onSetCondition={handleSetCondition}
               onShare={handleShare}
               onToggleSaved={handleToggleSaved}
               productData={productData}
@@ -254,7 +257,7 @@ export function ProductDetailsPage({
 
       <ProductMobileActionBar
         cartHref={cartHref}
-        canPurchase={canPurchase}
+        canPurchase={effectiveCanPurchase}
         onDecrement={handleDecrement}
         onIncrement={handleIncrement}
         onMobileAddToCart={handleMobileAddToCart}

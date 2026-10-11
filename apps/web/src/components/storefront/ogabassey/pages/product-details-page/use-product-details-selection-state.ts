@@ -87,6 +87,7 @@ export function useProductDetailsSelectionState(
   const {
     routeCondition,
     routeOfferId,
+    routeOfferMissing,
     routeSelectionAttributes,
     routeSelectionAttributesKey,
     routeVariantId,
@@ -289,6 +290,7 @@ export function useProductDetailsSelectionState(
     setSelectedColor,
     setSelectedCondition,
     routeOfferId,
+    routeOfferMissing,
     routeResolvedVariantSelection,
     setSelectedImage,
     variantSelectionAttributes,

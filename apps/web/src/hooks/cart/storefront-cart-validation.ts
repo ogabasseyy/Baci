@@ -61,6 +61,7 @@ export const validateStorefrontCart = async (
     condition: item.condition,
     id: item.id,
     price: item.price,
+    quantity: item.quantity,
     variantAttributes: item.variantAttributes,
     variantId: item.variantId,
     offerId: item.offerId,

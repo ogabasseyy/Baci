@@ -128,6 +128,56 @@ describe('getInvalidOfferLineKey', () => {
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
 
+  it('invalidates a line quantity above the live offer allocation', () => {
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        quantity: 3,
+        offer: { condition: 'used', stock_quantity: 2 },
+        parentEligible: true,
+      })
+    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        quantity: 1,
+        offer: { condition: 'used', stock_quantity: 0 },
+        parentEligible: true,
+      })
+    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+  });
+
+  it('passes quantities within the allocation and skips unknown scalars', () => {
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        quantity: 2,
+        offer: { condition: 'used', stock_quantity: 2 },
+        parentEligible: true,
+      })
+    ).toBeNull();
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        quantity: 5,
+        offer: { condition: 'used', stock_quantity: null },
+        parentEligible: true,
+      })
+    ).toBeNull();
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        offer: { condition: 'used', stock_quantity: 0 },
+        parentEligible: true,
+      })
+    ).toBeNull();
+  });
+
   it('invalidates a contradictory variant+offer combo', () => {
     expect(
       getInvalidOfferLineKey({

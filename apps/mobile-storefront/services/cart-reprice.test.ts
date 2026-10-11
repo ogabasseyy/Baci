@@ -103,7 +103,12 @@ describe('repriceCartItems', () => {
   it('skips catalog reads when the merchant scope is missing', async () => {
     const result = await repriceCartItems([createCartItem()], '');
 
-    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
+    expect(result).toEqual({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+    });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -111,7 +116,12 @@ describe('repriceCartItems', () => {
   it('skips catalog reads when the cart is empty even with a valid merchant', async () => {
     const result = await repriceCartItems([], 'merchant-1');
 
-    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
+    expect(result).toEqual({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+    });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -200,7 +210,12 @@ describe('repriceCartItems', () => {
 
     const result = await repriceCartItems([createCartItem()], 'merchant-1');
 
-    expect(result).toEqual({ priceById: {}, conditionById: {}, changes: [] });
+    expect(result).toEqual({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+    });
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockWarn).toHaveBeenCalledWith(
       'Reprice products lookup failed; keeping cart prices',
@@ -386,16 +401,18 @@ describe('repriceCartItems', () => {
     const result = await repriceCartItems([offerLine], 'merchant-1');
 
     // Same price, but the condition moved: checkout would reject the
-    // stale condition, so the line must surface as changed with the
-    // live condition ready to apply.
+    // stale condition, so the line must surface as a condition change
+    // with the live condition ready to apply — never as a bogus
+    // same-price "X to X" price move.
     expect(result.priceById).toEqual({ 'offer-line': 280000 });
     expect(result.conditionById).toEqual({ 'offer-line': 'refurbished' });
-    expect(result.changes).toEqual([
+    expect(result.changes).toEqual([]);
+    expect(result.conditionChanges).toEqual([
       {
         id: 'offer-line',
         name: 'iPhone 13',
-        oldPrice: 280000,
-        newPrice: 280000,
+        oldCondition: 'used',
+        newCondition: 'refurbished',
       },
     ]);
   });

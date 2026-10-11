@@ -106,6 +106,7 @@ describe('storefront-cart-validation', () => {
           cartItems: Array.from({ length: 50 }, (_, index) => ({
             id: `cart-item-${index + 1}`,
             price: index + 1,
+            quantity: 1,
             variantId: index === 0 ? 'variant-1' : undefined,
           })),
         }),
@@ -148,6 +149,7 @@ describe('storefront-cart-validation', () => {
               condition: 'open_box',
               id: 'iphone-15',
               price: 829000,
+              quantity: 1,
               variantAttributes: {
                 color: 'Black',
                 sim_type: 'eSIM Only',
@@ -375,6 +377,7 @@ describe('storefront-cart-validation', () => {
               condition: 'used',
               id: 'product-1',
               price: 400,
+              quantity: 1,
               offerId: 'offer-a',
             },
           ],

@@ -2,6 +2,7 @@ export type CartOfferRow = {
   offer_id: string;
   price: number | string | null;
   condition: string | null;
+  stock_quantity?: number | string | null;
 };
 
 export type OfferValidationItem = {

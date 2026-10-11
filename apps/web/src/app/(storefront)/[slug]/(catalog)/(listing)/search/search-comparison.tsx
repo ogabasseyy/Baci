@@ -129,10 +129,17 @@ export function SearchComparisonTray({
             const offerId = snapshot.matchOfferId ?? legacyLiveMatch?.offerId;
             // Exact IDs resolve the live option; a saved condition can change
             // independently and must not invalidate that identity on the PDP.
+            // The persisted match condition backs up the refreshed facts:
+            // while the refresh is pending (or after it fails) the tray
+            // product is absent, and dropping the condition would link
+            // only match_base=1 — opening the parent/default condition
+            // instead of the compared one.
             const condition =
               variantId || offerId
                 ? undefined
-                : normalizeCanonicalProductCondition(product?.condition);
+                : normalizeCanonicalProductCondition(product?.condition) ||
+                  normalizeCanonicalProductCondition(snapshot.matchCondition) ||
+                  undefined;
             if (variantId) matchParams.set('variant_id', variantId);
             if (condition) matchParams.set('condition', condition);
             if (offerId) matchParams.set('offer_id', offerId);

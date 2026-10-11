@@ -49,6 +49,20 @@ describe('resolveProductDetailsRouteSelection', () => {
     expect(selection.routeOfferId).toBeNull();
   });
 
+  it('flags a missing exact offer instead of silently discarding it', () => {
+    expect(resolve('offer_id=offer-gone').routeOfferMissing).toBe(true);
+    expect(resolve('offer_id=offer-used-1').routeOfferMissing).toBe(false);
+    expect(resolve('').routeOfferMissing).toBe(false);
+    expect(
+      resolveProductDetailsRouteSelection({
+        offers: undefined,
+        resolutionProduct: { variants: [] } as never,
+        searchParams: new URLSearchParams('offer_id=offer-gone'),
+        usesVariantRouteSelection: false,
+      }).routeOfferMissing
+    ).toBe(false);
+  });
+
   it('returns empty route inputs when the url carries no selection', () => {
     const selection = resolve('');
 

@@ -66,6 +66,16 @@ export function useProductDetailRouteData({
         : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
+  // Exact-match contract for variants (mirrors the offer handling): the
+  // resolution only exists when variants hydrated with siblings, so an
+  // invalid id means the advertised variant was deleted — surface it as
+  // missing instead of redirecting to the bare URL, where the PDP would
+  // silently select a different price/specification.
+  const routeVariantMissing =
+    routeSelectionResolution?.type === 'invalid_variant_id';
+  const routeVariantMissingError = routeVariantMissing
+    ? 'This variant is no longer available. It may have been removed or sold.'
+    : null;
   // Search/compare entry points forward the advertised matched offer id.
   // Accept it only when it names one of this product's own offers; the
   // condition-compatibility check happens at selection time so a later
@@ -202,9 +212,11 @@ export function useProductDetailRouteData({
     }
     if (
       !hasInvalidSelectionRedirectedRef.current &&
+      // invalid_variant_id is intentionally absent: a deleted exact
+      // variant fails closed with routeVariantMissingError instead of
+      // stripping the id and silently reselecting a sibling.
       (routeSelectionResolution.type === 'attribute_only' ||
         routeSelectionResolution.type === 'ambiguous' ||
-        routeSelectionResolution.type === 'invalid_variant_id' ||
         routeSelectionResolution.type === 'zero_match')
     ) {
       hasInvalidSelectionRedirectedRef.current = true;
@@ -225,7 +237,7 @@ export function useProductDetailRouteData({
 
   return {
     displayProduct,
-    error: error ?? routeOfferHydrationError,
+    error: error ?? routeOfferHydrationError ?? routeVariantMissingError,
     isLoading,
     isOnline,
     isValidSlug,
@@ -239,6 +251,7 @@ export function useProductDetailRouteData({
     routeOfferHydrationFailed,
     routeOfferId,
     routeParams,
+    routeVariantMissing,
     slug,
     suppressConditionOfferMatch,
     ...selection,

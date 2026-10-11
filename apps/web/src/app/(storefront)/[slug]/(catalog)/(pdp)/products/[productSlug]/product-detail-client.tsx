@@ -155,6 +155,7 @@ export default function ProductDetailClient({
     handleConditionChange,
     isOutOfStock,
     isStockManaged,
+    routeOfferMissing,
     selectedCondition,
     selectedImage,
     selectedOffer,
@@ -480,6 +481,19 @@ export default function ProductDetailClient({
                 </p>
               ) : null}
 
+              {/* Exact-offer links whose offer is gone must not silently
+                  sell the parent/default selection instead. */}
+              {routeOfferMissing && (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                >
+                  <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  This offer is no longer available. It may have been removed or
+                  sold — choose a condition to continue.
+                </p>
+              )}
+
               {/* Variant Selection */}
               {product.has_variants && attributeOptions.length > 0 && (
                 <div className="space-y-4">
@@ -705,6 +719,7 @@ export default function ProductDetailClient({
                       className="w-full"
                       disabled={
                         isOutOfStock ||
+                        routeOfferMissing ||
                         (product.has_variants && !currentVariantSelection)
                       }
                       onClick={handleAddToCart}
@@ -759,6 +774,7 @@ export default function ProductDetailClient({
         selectedPrice={currentPrice}
         selectedStock={currentStock}
         selectedVariant={currentVariantSelection?.variant ?? effectiveVariant}
+        purchaseDisabled={routeOfferMissing}
       />
     </>
   );

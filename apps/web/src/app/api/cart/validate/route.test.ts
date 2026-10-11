@@ -526,6 +526,45 @@ describe('POST /api/cart/validate', () => {
     });
   });
 
+  it('rejects an offer line whose quantity exceeds the live allocation', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [
+      {
+        offer_id: OFFER_ID,
+        condition: 'used',
+        price: 400_000,
+        stock_quantity: 1,
+      },
+    ];
+
+    const response = await postCartValidate({
+      cartItems: [
+        { id: PRODUCT_ID, price: 400_000, quantity: 2, offerId: OFFER_ID },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+  });
+
   it('rejects lines naming both a variant and a condition offer', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

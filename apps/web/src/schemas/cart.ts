@@ -14,6 +14,7 @@ const cartItemSchema = z
     id: z.string(),
     offerId: offerIdSchema.optional(),
     price: z.number(),
+    quantity: z.number().int().positive().optional(),
     variant_attributes: z.record(z.string(), z.string()).optional(),
     variant_id: variantIdSchema.optional(),
     variantAttributes: z.record(z.string(), z.string()).optional(),

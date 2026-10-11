@@ -414,6 +414,8 @@ jobs:
         run: bash .github/scripts/check-migration-versions.sh
       - name: Verify GIGL Enforcement Migration Names
         run: bash .github/scripts/check-gigl-enforcement-migration-names.sh
+      - name: Test Sentry Storefront Release Provenance
+        run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors

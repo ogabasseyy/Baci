@@ -177,3 +177,14 @@ test('does not rewrite a shipped version or another revision', async () => {
     assert.equal(requests, 1);
   }
 });
+
+test('the CI quality gate runs the provenance regressions', () => {
+  const workflow = readFileSync(
+    new URL('../workflows/ci.yml', import.meta.url),
+    'utf8'
+  );
+  assert.match(
+    workflow,
+    /run: node --test \.github\/scripts\/sentry-storefront-provenance\.test\.mjs/
+  );
+});

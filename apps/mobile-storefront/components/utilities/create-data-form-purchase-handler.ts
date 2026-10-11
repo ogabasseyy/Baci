@@ -108,7 +108,9 @@ export function createDataFormPurchaseHandler({
       // Descriptor-keyed recall: a remount (Back to Home, reopen) after
       // a 202 processing or a timeout retries with the SAME key, so the
       // route dedupes instead of debiting a second transaction.
-      const descriptor = buildVtuPurchaseDescriptor(request);
+      const descriptor = payment.scopePendingVtuDescriptor(
+        buildVtuPurchaseDescriptor(request)
+      );
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       try {
         const result = await chargeWalletForVtu({

@@ -180,14 +180,19 @@ describe('useUtilityPayment', () => {
     mockAuthState.customer = null;
     mockAuthState.user = { id: 'user-a' };
     const beforeHydration = renderHook(() => useUtilityPayment());
+    const scopedBefore =
+      beforeHydration.result.current.scopePendingVtuDescriptor('hydration-key');
     const key =
-      beforeHydration.result.current.getWalletIdempotencyKey('hydration-key');
+      beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
     beforeHydration.unmount();
 
     mockAuthState.customer = { id: 'customer-a' };
     const afterHydration = renderHook(() => useUtilityPayment());
+    const scopedAfter =
+      afterHydration.result.current.scopePendingVtuDescriptor('hydration-key');
+    expect(scopedAfter).toBe(scopedBefore);
     expect(
-      afterHydration.result.current.getWalletIdempotencyKey('hydration-key')
+      afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
     ).toBe(key);
   });
 
@@ -196,23 +201,50 @@ describe('useUtilityPayment', () => {
     // unreachable once customer B signs in, or the route rejects B’s
     // first purchase as belonging to another customer.
     const firstOwner = renderHook(() => useUtilityPayment());
-    const keyA = firstOwner.result.current.getWalletIdempotencyKey(
+    const scopedA = firstOwner.result.current.scopePendingVtuDescriptor(
       'owner-scoped-descriptor'
     );
+    const keyA = firstOwner.result.current.getWalletIdempotencyKey(scopedA);
     firstOwner.unmount();
 
     mockAuthState.customer = { id: 'customer-b' };
     mockAuthState.user = { id: 'user-b' };
     const secondOwner = renderHook(() => useUtilityPayment());
-    const keyB = secondOwner.result.current.getWalletIdempotencyKey(
+    const scopedB = secondOwner.result.current.scopePendingVtuDescriptor(
       'owner-scoped-descriptor'
     );
+    expect(scopedB).not.toBe(scopedA);
+    const keyB = secondOwner.result.current.getWalletIdempotencyKey(scopedB);
 
     expect(keyB).not.toBe(keyA);
+    expect(secondOwner.result.current.getWalletIdempotencyKey(scopedB)).toBe(
+      keyB
+    );
+  });
+
+  it('captures the submitting owner so a mid-flight switch cannot redirect completion', () => {
+    // The scoped descriptor is computed once per submission from the
+    // submitting account: even if the auth store switches to customer
+    // B before A’s request settles, A’s already-scoped key still
+    // addresses A’s entry (completion mutates the captured scope).
+    const scopedA = renderHook(() =>
+      useUtilityPayment()
+    ).result.current.scopePendingVtuDescriptor('mid-flight-key');
+    const keyA = renderHook(() =>
+      useUtilityPayment()
+    ).result.current.getWalletIdempotencyKey(scopedA);
+
+    mockAuthState.customer = { id: 'customer-b' };
+    mockAuthState.user = { id: 'user-b' };
+
+    const afterSwitch = renderHook(() => useUtilityPayment());
+    // A’s captured scope still recalls A’s key after the switch…
+    expect(afterSwitch.result.current.getWalletIdempotencyKey(scopedA)).toBe(
+      keyA
+    );
+    // …while B’s own scoping addresses a different entry.
     expect(
-      secondOwner.result.current.getWalletIdempotencyKey(
-        'owner-scoped-descriptor'
-      )
-    ).toBe(keyB);
+      afterSwitch.result.current.scopePendingVtuDescriptor('mid-flight-key')
+    ).not.toBe(scopedA);
   });
 });

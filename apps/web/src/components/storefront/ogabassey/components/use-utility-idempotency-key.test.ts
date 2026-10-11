@@ -2,14 +2,14 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
-  setPendingVtuOwnerScope,
+  hasNotedPendingVtuReference,
+  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import { useUtilityIdempotencyKey } from './use-utility-idempotency-key';
 
 describe('useUtilityIdempotencyKey', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
-    setPendingVtuOwnerScope(undefined, undefined);
   });
 
   it('returns a stable key until the attempt is forgotten', () => {
@@ -122,6 +122,38 @@ describe('useUtilityIdempotencyKey', () => {
     });
     expect(result.current.isAttemptReplay('REF-1')).toBe(true);
     expect(result.current.isAttemptReplay('REF-OTHER')).toBe(false);
+  });
+
+  it('binds completion to the submitting owner across a mid-flight switch', () => {
+    // The scope is captured when the key is issued: even if the hook
+    // re-renders as customer B before A’s request settles, noting the
+    // reference still lands on A’s entry — never B’s.
+    const { result, rerender } = renderHook(
+      (props: { customerId?: string; userId?: string }) =>
+        useUtilityIdempotencyKey(props),
+      { initialProps: { customerId: 'customer-a' } }
+    );
+    act(() => {
+      result.current.getWalletIdempotencyKey('SIG');
+    });
+
+    rerender({ customerId: 'customer-b' });
+    act(() => {
+      result.current.noteAttemptReference('REF-1');
+    });
+
+    expect(
+      hasNotedPendingVtuReference(
+        scopePendingVtuSignature('customer-a', undefined, 'SIG'),
+        'REF-1'
+      )
+    ).toBe(true);
+    expect(
+      hasNotedPendingVtuReference(
+        scopePendingVtuSignature('customer-b', undefined, 'SIG'),
+        'REF-1'
+      )
+    ).toBe(false);
   });
 
   it('reports a success stale only when the noted reference is past the window', () => {

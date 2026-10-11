@@ -59,6 +59,7 @@ describe('airtime stale success replay', () => {
           walletError: null,
           walletIsLoading: false,
           getWalletIdempotencyKey: jest.fn(() => 'stale-airtime-key'),
+          scopePendingVtuDescriptor: (d: string) => d,
           resetWalletIdempotencyKey:
             overrides.resetWalletIdempotencyKey ?? jest.fn(),
         } as PaymentState,

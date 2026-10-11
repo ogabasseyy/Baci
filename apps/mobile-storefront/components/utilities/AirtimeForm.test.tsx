@@ -121,6 +121,7 @@ describe('AirtimeForm', () => {
       walletError: null,
       walletIsLoading: false,
       getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+      scopePendingVtuDescriptor: (d: string) => d,
       resetWalletIdempotencyKey: jest.fn(),
     });
     mockChargeWalletForVtu.mockResolvedValue({

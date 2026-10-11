@@ -48,6 +48,7 @@ function createPaymentState(
     walletError: null,
     walletIsLoading: false,
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+    scopePendingVtuDescriptor: (d: string) => d,
     resetWalletIdempotencyKey: jest.fn(),
     ...overrides,
   };
@@ -114,6 +115,7 @@ describe('createBillFormPurchaseHandler', () => {
       payment: createPaymentState({
         walletBalance: 1500,
         getWalletIdempotencyKey: jest.fn(() => 'idem-key-1'),
+        scopePendingVtuDescriptor: (d: string) => d,
         resetWalletIdempotencyKey,
       }),
     });
@@ -348,6 +350,7 @@ describe('createBillFormPurchaseHandler', () => {
         payment: createPaymentState({
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-2'),
+          scopePendingVtuDescriptor: (d: string) => d,
           resetWalletIdempotencyKey,
         }),
       });
@@ -378,6 +381,7 @@ describe('createBillFormPurchaseHandler', () => {
         payment: createPaymentState({
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-proc'),
+          scopePendingVtuDescriptor: (d: string) => d,
           resetWalletIdempotencyKey,
         }),
       });
@@ -407,6 +411,7 @@ describe('createBillFormPurchaseHandler', () => {
         payment: createPaymentState({
           walletBalance: 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-3'),
+          scopePendingVtuDescriptor: (d: string) => d,
           resetWalletIdempotencyKey,
         }),
       });

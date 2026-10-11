@@ -7,7 +7,7 @@ import {
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
-  setPendingVtuOwnerScope,
+  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 
 interface UseUtilityIdempotencyKeyInput {
@@ -41,44 +41,51 @@ export function useUtilityIdempotencyKey({
   // scope mid-session would orphan the pending key and double-debit the
   // retry. Merchant is the immutable ID, never the slug: the route
   // resolves a renamed slug through aliases to the same merchant, so a
-  // slug-scoped retry would miss the stored key and debit twice.
-  setPendingVtuOwnerScope(userId ?? customerId, merchantId);
-  const lastPayloadSignatureRef = useRef<string | null>(null);
+  // slug-scoped retry would miss the stored key and debit twice. The
+  // scope is captured ONCE per submission (not a module global), so an
+  // account switch mid-flight cannot redirect this submission's
+  // completion onto another customer's entry.
+  const lastScopedSignatureRef = useRef<string | null>(null);
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
-    lastPayloadSignatureRef.current = payloadSignature;
-    return getPendingVtuKey(payloadSignature);
+    const scoped = scopePendingVtuSignature(
+      userId ?? customerId,
+      merchantId,
+      payloadSignature
+    );
+    lastScopedSignatureRef.current = scoped;
+    return getPendingVtuKey(scoped);
   };
 
   const forgetAttemptKey = () => {
-    if (lastPayloadSignatureRef.current) {
-      forgetPendingVtuPurchase(lastPayloadSignatureRef.current);
-      lastPayloadSignatureRef.current = null;
+    if (lastScopedSignatureRef.current) {
+      forgetPendingVtuPurchase(lastScopedSignatureRef.current);
+      lastScopedSignatureRef.current = null;
     }
   };
 
   const noteAttemptReference = (reference: string) => {
-    if (lastPayloadSignatureRef.current) {
-      notePendingVtuReference(lastPayloadSignatureRef.current, reference);
+    if (lastScopedSignatureRef.current) {
+      notePendingVtuReference(lastScopedSignatureRef.current, reference);
     }
   };
 
   const isAttemptStale = (reference: string) => {
-    if (!lastPayloadSignatureRef.current) {
+    if (!lastScopedSignatureRef.current) {
       return false;
     }
     return isStalePendingVtuSuccess(
-      lastPayloadSignatureRef.current,
+      lastScopedSignatureRef.current,
       reference
     );
   };
 
   const isAttemptReplay = (reference: string) => {
-    if (!lastPayloadSignatureRef.current) {
+    if (!lastScopedSignatureRef.current) {
       return false;
     }
     return hasNotedPendingVtuReference(
-      lastPayloadSignatureRef.current,
+      lastScopedSignatureRef.current,
       reference
     );
   };

@@ -57,6 +57,7 @@ describe('data stale success replay', () => {
         walletError: null,
         walletIsLoading: false,
         getWalletIdempotencyKey: jest.fn(() => 'stale-data-key'),
+        scopePendingVtuDescriptor: (d: string) => d,
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
       } as PaymentState,

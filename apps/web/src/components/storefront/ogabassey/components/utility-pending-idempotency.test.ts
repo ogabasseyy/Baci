@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   buildVtuWalletPayloadSignature,
-  setPendingVtuOwnerScope,
+  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import {
   clearPendingVtuKeys,
@@ -18,7 +18,6 @@ import {
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
-    setPendingVtuOwnerScope(undefined, undefined);
   });
 
   it('mints a key on first submit and recalls it for the same purchase', () => {
@@ -121,19 +120,39 @@ describe('utility-pending-idempotency', () => {
     ).not.toBe(buildVtuWalletPayloadSignature(base));
   });
 
-  it('isolates remembered keys by owner and merchant scope', () => {
-    setPendingVtuOwnerScope('customer-a', 'merchant-1');
-    const key = getPendingVtuKey('{"scoped":true}');
+  it('binds the scoped key to owner and merchant', () => {
+    const scopedA = scopePendingVtuSignature(
+      'customer-a',
+      'merchant-1',
+      '{"scoped":true}'
+    );
 
-    setPendingVtuOwnerScope('customer-b', 'merchant-1');
-    expect(recallPendingVtuKey('{"scoped":true}')).toBeUndefined();
-    setPendingVtuOwnerScope('customer-a', 'merchant-2');
-    expect(recallPendingVtuKey('{"scoped":true}')).toBeUndefined();
+    expect(
+      scopePendingVtuSignature('customer-b', 'merchant-1', '{"scoped":true}')
+    ).not.toBe(scopedA);
+    expect(
+      scopePendingVtuSignature('customer-a', 'merchant-2', '{"scoped":true}')
+    ).not.toBe(scopedA);
+    expect(
+      scopePendingVtuSignature('customer-a', 'merchant-1', '{"scoped":true}')
+    ).toBe(scopedA);
+  });
 
-    setPendingVtuOwnerScope('customer-a', 'merchant-1');
-    expect(recallPendingVtuKey('{"scoped":true}')).toBe(key);
+  it('isolates remembered keys by scoped owner', () => {
+    const scopedA = scopePendingVtuSignature(
+      'customer-a',
+      'merchant-1',
+      '{"scoped":true}'
+    );
+    const scopedB = scopePendingVtuSignature(
+      'customer-b',
+      'merchant-1',
+      '{"scoped":true}'
+    );
+    const key = getPendingVtuKey(scopedA);
 
-    setPendingVtuOwnerScope(undefined, undefined);
+    expect(recallPendingVtuKey(scopedB)).toBeUndefined();
+    expect(recallPendingVtuKey(scopedA)).toBe(key);
   });
 
   it('detects a stale success replay only past the recall window', () => {

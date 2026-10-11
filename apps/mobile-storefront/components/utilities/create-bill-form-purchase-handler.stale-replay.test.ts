@@ -62,6 +62,7 @@ describe('bill stale success replay', () => {
         walletError: null,
         walletIsLoading: false,
         getWalletIdempotencyKey: jest.fn(() => 'stale-bill-key'),
+        scopePendingVtuDescriptor: (d: string) => d,
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
       } as PaymentState,

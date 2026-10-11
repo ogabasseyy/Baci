@@ -6,7 +6,7 @@ import {
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
-  setPendingVtuOwnerScope,
+  scopePendingVtuKey,
 } from './pending-vtu-idempotency';
 
 describe('pending-vtu-idempotency', () => {
@@ -122,39 +122,41 @@ describe('pending-vtu-idempotency', () => {
     );
   });
 
-  it('isolates remembered keys by owner scope', () => {
+  it('binds the scoped key to owner and merchant', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 7,
       phoneNumber: 'scope-me',
     });
-    setPendingVtuOwnerScope('customer-a', 'merchant-1');
-    rememberPendingVtuPurchase(descriptor, 'key-a');
+    const keyA = scopePendingVtuKey('customer-a', 'merchant-1', descriptor);
 
-    // A second customer with the same purchase must not recall it…
-    setPendingVtuOwnerScope('customer-b', 'merchant-1');
-    expect(recallPendingVtuKey(descriptor)).toBeNull();
-    // …and forgetting under the wrong scope must not drop it.
-    forgetPendingVtuPurchase(descriptor);
-    setPendingVtuOwnerScope('customer-a', 'merchant-1');
-    expect(recallPendingVtuKey(descriptor)).toBe('key-a');
-
-    // Hygiene: other tests run under the default scope.
-    setPendingVtuOwnerScope(undefined, undefined);
+    // Same purchase, different owner or merchant: different entry.
+    expect(scopePendingVtuKey('customer-b', 'merchant-1', descriptor)).not.toBe(
+      keyA
+    );
+    expect(scopePendingVtuKey('customer-a', 'merchant-2', descriptor)).not.toBe(
+      keyA
+    );
+    // Same triple: stable.
+    expect(scopePendingVtuKey('customer-a', 'merchant-1', descriptor)).toBe(
+      keyA
+    );
   });
 
-  it('isolates remembered keys by merchant scope', () => {
+  it('isolates remembered keys by scoped owner', () => {
     const descriptor = buildVtuPurchaseDescriptor({
-      type: 'data',
-      amount: 8,
-      phoneNumber: 'scope-merchant',
+      type: 'airtime',
+      amount: 7,
+      phoneNumber: 'scope-recall',
     });
-    setPendingVtuOwnerScope('customer-a', 'merchant-1');
-    rememberPendingVtuPurchase(descriptor, 'key-m1');
+    const keyA = scopePendingVtuKey('customer-a', 'merchant-1', descriptor);
+    const keyB = scopePendingVtuKey('customer-b', 'merchant-1', descriptor);
+    rememberPendingVtuPurchase(keyA, 'key-a');
 
-    setPendingVtuOwnerScope('customer-a', 'merchant-2');
-    expect(recallPendingVtuKey(descriptor)).toBeNull();
-
-    setPendingVtuOwnerScope(undefined, undefined);
+    // A second customer with the same purchase must not recall it…
+    expect(recallPendingVtuKey(keyB)).toBeNull();
+    // …and forgetting under the wrong scope must not drop it.
+    forgetPendingVtuPurchase(keyB);
+    expect(recallPendingVtuKey(keyA)).toBe('key-a');
   });
 });

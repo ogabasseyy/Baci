@@ -4,7 +4,7 @@ import {
   forgetPendingVtuPurchase,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
-  setPendingVtuOwnerScope,
+  scopePendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
@@ -18,17 +18,20 @@ import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
  */
 export function useUtilityPayment() {
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  // Scope pending-key recall to the current owner + merchant: a key
-  // remembered for one customer must never be recalled for another
-  // after sign-out / account switch — the route would reject it as
-  // belonging to the first customer. Owner is the stable Supabase user
-  // ID first (NOT customer-first like the wallet reads): customers.id
+  // Owner + merchant captured ONCE per submission (NOT a module-global
+  // scope): a key remembered for one customer must never be recalled
+  // for another after sign-out / account switch — the route would
+  // reject it as belonging to the first customer — and a global would
+  // let a mid-flight switch redirect one customer's completion onto
+  // another customer's entry. Owner is the stable Supabase user ID
+  // first (NOT customer-first like the wallet reads): customers.id
   // lands later via hydration, and flipping scope mid-session would
   // orphan the pending key and double-debit the retry. Merchant uses
   // the same CONFIG fallback as the wallet reads for the same reason.
   const ownerId = useAuthStore((state) => state.user?.id ?? state.customer?.id);
   const merchantId = useAuthStore((state) => state.merchantId);
-  setPendingVtuOwnerScope(ownerId, merchantId || CONFIG.MERCHANT_ID);
+  const scopePendingVtuDescriptor = (descriptor: string): string =>
+    scopePendingVtuKey(ownerId, merchantId || CONFIG.MERCHANT_ID, descriptor);
   // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
   // registry by purchase descriptor — a ref alone loses the key when
   // the form remounts (Back to Home, reopen Utilities), and the retry
@@ -53,6 +56,13 @@ export function useUtilityPayment() {
     refetchWallet: () => {
       void wallet.refetch();
     },
+    /**
+     * Binds a purchase descriptor to the submitting owner + merchant.
+     * Handlers MUST scope once per submission and pass the scoped key
+     * to every registry call, so a mid-flight account switch cannot
+     * redirect this submission's completion onto another entry.
+     */
+    scopePendingVtuDescriptor,
     walletBalance,
     walletError,
     walletIsLoading: wallet.isLoading,

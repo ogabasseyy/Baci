@@ -20,7 +20,7 @@ export function UtilitySuccessView({
   return (
     <div className="text-center py-8">
       {processing ? (
-        <div className="size-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="size-16 bg-store-primary/10 text-store-primary rounded-full flex items-center justify-center mx-auto mb-4">
           <Clock size={32} />
         </div>
       ) : (

@@ -67,24 +67,22 @@ interface PendingVtuPurchase {
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
-// Owner scope for every registry entry. The descriptor deliberately
-// omits identity (mirroring the server fingerprint), so without this a
-// sign-out + second customer could recall the first customer's key for
-// the same recipient/amount — and the route rejects it as belonging to
-// another customer. `useUtilityPayment` sets the scope from the auth
-// store on every render; a single session has a single identity, so
-// last-write is always the current owner.
-let ownerScope = '::';
-
-export function setPendingVtuOwnerScope(
+/**
+ * Binds a purchase descriptor to the submitting owner + merchant. The
+ * descriptor deliberately omits identity (mirroring the server
+ * fingerprint), so without this a sign-out + second customer could
+ * recall the first customer's key for the same recipient/amount — and
+ * the route rejects it as belonging to another customer. Callers MUST
+ * scope ONCE per submission and pass the scoped key to every registry
+ * call: a module-global scope would let an account switch mid-flight
+ * redirect one customer's completion onto another customer's entry.
+ */
+export function scopePendingVtuKey(
   ownerId: string | null | undefined,
-  merchantId: string | null | undefined
-): void {
-  ownerScope = `${merchantId ?? ''}:${ownerId ?? ''}:`;
-}
-
-function scopedDescriptor(descriptor: string): string {
-  return `${ownerScope}${descriptor}`;
+  merchantId: string | null | undefined,
+  descriptor: string
+): string {
+  return `${merchantId ?? ''}:${ownerId ?? ''}:${descriptor}`;
 }
 
 /**
@@ -105,7 +103,7 @@ export function buildVtuPurchaseDescriptor(
 
 /** Key previously used for this exact purchase, if it is still pending. */
 export function recallPendingVtuKey(descriptor: string): string | null {
-  return pendingPurchases.get(scopedDescriptor(descriptor))?.key ?? null;
+  return pendingPurchases.get(descriptor)?.key ?? null;
 }
 
 /**
@@ -118,9 +116,8 @@ export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string
 ): void {
-  const scoped = scopedDescriptor(descriptor);
-  pendingPurchases.delete(scoped);
-  pendingPurchases.set(scoped, {
+  pendingPurchases.delete(descriptor);
+  pendingPurchases.set(descriptor, {
     key,
     reference: null,
     rememberedAt: Date.now(),
@@ -137,7 +134,7 @@ export function notePendingVtuReference(
   descriptor: string,
   reference: string
 ): void {
-  const pending = pendingPurchases.get(scopedDescriptor(descriptor));
+  const pending = pendingPurchases.get(descriptor);
   if (pending) pending.reference = reference;
 }
 
@@ -155,7 +152,7 @@ export function isStalePendingVtuSuccess(
   reference: string,
   now: number = Date.now()
 ): boolean {
-  const pending = pendingPurchases.get(scopedDescriptor(descriptor));
+  const pending = pendingPurchases.get(descriptor);
   return (
     pending?.reference === reference &&
     now - pending.rememberedAt > PENDING_VTU_STALE_AFTER_MS
@@ -164,5 +161,5 @@ export function isStalePendingVtuSuccess(
 
 /** Drops the recall entry once its purchase reaches a terminal outcome. */
 export function forgetPendingVtuPurchase(descriptor: string): void {
-  pendingPurchases.delete(scopedDescriptor(descriptor));
+  pendingPurchases.delete(descriptor);
 }

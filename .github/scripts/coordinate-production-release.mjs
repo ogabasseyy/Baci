@@ -1,6 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// Step inside deploy-production that promotes to Vercel (deploy.yml).
+// Pinned by contract test against the workflow file: a rename must
+// update this constant or post-promotion failures go undetected.
+export const DEPLOY_PROMOTE_STEP_NAME = 'Deploy to Vercel (with retry)';
+
 export function releaseLockPath(root, commonDirectory) {
   return resolve(root, commonDirectory, 'baci-production-release.lock');
 }
@@ -164,6 +169,24 @@ export async function coordinateRelease(operations, coordinationId) {
     throw new Error('production publication did not succeed; inspect the workflow');
   }
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
+    // A deploy-production job that fails AFTER promoting already
+    // changed production: postdeploy migrations, coherence checks, and
+    // smokes all run after the Vercel promotion step. Hold the lock so
+    // the next release cannot start before the live alias and failed
+    // post-publication work are reconciled. Only skipped jobs (which
+    // never execute steps) definitively did not publish; unreadable
+    // steps otherwise fail closed since promotion cannot be ruled out.
+    for (const job of jobs) {
+      if (job.name !== 'deploy-production' || job.conclusion === 'success') continue;
+      const promoted = Array.isArray(job.steps)
+        ? job.steps.some(step => step && step.name === DEPLOY_PROMOTE_STEP_NAME && step.conclusion === 'success')
+        : job.conclusion !== 'skipped';
+      if (promoted) {
+        const error = new Error('production publication may have succeeded; reconcile the live alias and failed post-promotion work before retrying');
+        error.indeterminateDispatch = true;
+        throw error;
+      }
+    }
     throw new Error('production publication did not succeed; inspect the workflow');
   }
   // verifyLive runs after a confirmed publication: any failure —

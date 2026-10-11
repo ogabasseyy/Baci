@@ -197,6 +197,8 @@ deploy_scripts:
   - '.github/scripts/deploy-vps-readiness-checkout.test.mjs'
   - '.github/scripts/coordinate-production-release.mjs'
   - '.github/scripts/coordinate-production-release.test.mjs'
+  - '.github/scripts/coordinate-production-release.test-fixtures.mjs'
+  - '.github/scripts/coordinate-publication.test.mjs'
   - '.github/scripts/release-production.mjs'
   - '.github/scripts/release-production.test.mjs'
   - '.github/scripts/verify-coordinated-release.sh'

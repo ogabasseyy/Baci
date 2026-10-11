@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { acquireReleaseLock, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { commit, coordinationId, fixture } from './coordinate-production-release.test-fixtures.mjs';
 
-const commit = 'b'.repeat(40);
-const coordinationId = 'test-coordination';
-
+// Publication, jobs-assessment, and live-verification cases live in
+// coordinate-publication.test.mjs so both suites stay under 300 lines.
 test('dispatch correlation ignores unrelated or previously observed operator runs', () => {
   const expected = { databaseId: 3, event: 'workflow_dispatch', title: 'Coordinated release unique' };
   const prior = { ...expected, databaseId: 1 };
@@ -56,35 +56,6 @@ test('release lock resolves relative and absolute shared Git directories', () =>
   assert.equal(releaseLockPath('/worktree', '/repo/.git'), '/repo/.git/baci-production-release.lock');
   assert.equal(releaseLockPath('/repo/linked', '../.git'), '/repo/.git/baci-production-release.lock');
 });
-
-function fixture(overrides = {}) {
-  const calls = [];
-  const operations = {
-    verifyCheckout: async () => commit,
-    readMain: async () => commit,
-    updateWorkers: async () => {},
-    verifyWorkers: async () => {},
-    listRuns: async () => [],
-    dispatch: async () => {},
-    findRun: async () => ({ databaseId: 42, headSha: commit }),
-    listCoordinatedRuns: async () => [],
-    watchRun: async () => {},
-    cancelRun: async () => {},
-    readJobs: async () => [{ name: 'deploy-production', conclusion: 'success' }],
-    verifyLive: async () => {},
-    ...overrides,
-  };
-  return {
-    calls,
-    operations: Object.fromEntries(Object.entries(operations).map(([name, operation]) => [
-      name,
-      async (...args) => {
-        calls.push(name);
-        return operation(...args);
-      },
-    ])),
-  };
-}
 
 test('updates and verifies workers before dispatching the matching release', async () => {
   const setup = fixture();
@@ -224,93 +195,3 @@ test('a malformed dispatch identity is indeterminate', async () => {
   assert.equal(error.indeterminateDispatch, true);
 });
 
-test('a green workflow with skipped publication is not a release', async () => {
-  const setup = fixture({ readJobs: async () => [{ name: 'deploy-production', conclusion: 'skipped' }] });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /publication did not succeed/);
-});
-
-test('an indeterminate dispatch is not retried', async () => {
-  const setup = fixture({ dispatch: async () => { throw new Error('response lost'); } });
-  await assert.rejects(coordinateRelease(setup.operations, coordinationId), /response lost/);
-  assert.equal(setup.calls.filter(name => name === 'dispatch').length, 1);
-});
-
-test('malformed job listings refuse publication instead of throwing TypeError', async () => {
-  for (const readJobs of [
-    async () => null,
-    async () => ({ message: 'error' }),
-    async () => [null],
-    async () => [{ name: 'deploy-production' }],
-    async () => [{ name: 'deploy-production', conclusion: 'success' }, null],
-  ]) {
-    const setup = fixture({ readJobs });
-    await assert.rejects(
-      coordinateRelease(setup.operations, coordinationId),
-      /production publication did not succeed/
-    );
-  }
-});
-
-test('tags dispatch-window failures as indeterminate dispatches', async () => {
-  const cases = [
-    fixture({ dispatch: async () => { throw new Error('response lost'); } }),
-    fixture({ findRun: async () => { throw new Error('dispatch outcome unknown'); } }),
-    fixture({ findRun: async () => null }),
-    fixture({ listCoordinatedRuns: async () => { throw new Error('api flake'); } }),
-    fixture({ watchRun: async () => { throw new Error('watch flake'); } }),
-    fixture({ readJobs: async () => { throw new Error('jobs flake'); } }),
-  ];
-  for (const setup of cases) {
-    const error = await coordinateRelease(setup.operations, coordinationId).then(
-      () => { throw new Error('expected rejection'); },
-      rejection => rejection
-    );
-    assert.equal(error.indeterminateDispatch, true);
-  }
-  const abortSetup = fixture({
-    listCoordinatedRuns: async () => [{
-      databaseId: 43, event: 'workflow_dispatch', headSha: commit,
-      status: 'in_progress', title: 'Coordinated release other-id',
-    }],
-    cancelRun: async () => { throw new Error('cancel flake'); },
-  });
-  const abortError = await coordinateRelease(abortSetup.operations, coordinationId).then(
-    () => { throw new Error('expected rejection'); },
-    rejection => rejection
-  );
-  assert.match(abortError.message, /concurrent coordination detected; our-run cancellation failed/);
-  assert.equal(abortError.indeterminateDispatch, true);
-  // verifyLive failures tag indeterminate too — covered with the flag
-  // assertion in 'refuses a successful workflow whose live alias
-  // remains stale' below.
-});
-
-test('refuses a successful workflow whose live alias remains stale', async () => {
-  const setup = fixture({ verifyLive: async () => { throw new Error('stale live alias'); } });
-  const error = await coordinateRelease(setup.operations, coordinationId).then(
-    () => { throw new Error('expected rejection'); },
-    rejection => rejection
-  );
-  assert.match(error.message, /stale live alias/);
-  assert.equal(error.indeterminateDispatch, true);
-});
-
-test('live verification requires matching project, production target, state and SHA', () => {
-  const deployment = { projectId: 'baci', meta: { githubCommitSha: commit }, readyState: 'READY', target: 'production' };
-  assert.doesNotThrow(() => assertLiveDeployment(deployment, commit, 'baci'));
-  // CLI prebuilt deployments carry gitCommitSha instead of
-  // githubCommitSha (verified live on production): accept it.
-  assert.doesNotThrow(() => assertLiveDeployment({ ...deployment, meta: { gitCommitSha: commit } }, commit, 'baci'));
-  assert.doesNotThrow(() => assertLiveDeployment({ ...deployment, meta: { githubCommitSha: commit, gitCommitSha: commit } }, commit, 'baci'));
-  for (const change of [
-    { projectId: 'other' }, { meta: { githubCommitSha: 'c'.repeat(40) } },
-    { meta: { gitCommitSha: 'c'.repeat(40) } }, { meta: {} },
-    { meta: { githubCommitSha: commit, gitCommitSha: 'c'.repeat(40) } },
-    { readyState: 'ERROR' }, { target: 'preview' },
-  ]) {
-    assert.throws(() => assertLiveDeployment({ ...deployment, ...change }, commit, 'baci'), /does not match/);
-  }
-  for (const malformed of [null, undefined, [], 'READY', 42, { message: 'not found' }]) {
-    assert.throws(() => assertLiveDeployment(malformed, commit, 'baci'), /does not match/);
-  }
-});

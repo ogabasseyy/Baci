@@ -22,10 +22,16 @@ jest.mock('@/hooks/use-product-search', () => ({
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({ data: null, refetch: jest.fn(), isRefetching: false }),
 }));
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (select: (state: { merchantId: string }) => unknown) =>
-    select({ merchantId: mockMerchant }),
-}));
+jest.mock('@/stores/auth-store', () => {
+  // Primary provisioning pins the expected user via getState; this
+  // harness runs signed-out (null user) so the pin stays undefined.
+  const useAuthStore = (select: (state: { merchantId: string }) => unknown) =>
+    select({ merchantId: mockMerchant });
+  (useAuthStore as unknown as { getState: () => unknown }).getState = () => ({
+    user: null,
+  });
+  return { useAuthStore };
+});
 jest.mock('@/lib/config', () => ({
   CONFIG: {
     get MERCHANT_ID() {

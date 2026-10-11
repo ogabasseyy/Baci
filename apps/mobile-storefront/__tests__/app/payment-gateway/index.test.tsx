@@ -67,6 +67,9 @@ jest.mock(
         },
       },
       paymentKind: 'primary_wallet_card',
+      // Mount bind: 1000 naira stringifies to the 100000 kobo the
+      // mocked peekStatus confirms, so ownership verifies.
+      amountRaw: '1000',
       status: mockStatus,
       errorMessage: null,
       handleRetry: mockRetry,

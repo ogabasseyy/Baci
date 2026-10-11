@@ -20,8 +20,19 @@ const mockCalculateCommerce =
 const mockRpc = jest.fn<(name: string, params?: unknown) => Promise<unknown>>();
 const mockFrom = jest.fn<(table: string) => unknown>();
 const mockTrackEvent = jest.fn();
+const mockReadPrimary = jest.fn<() => Promise<unknown>>();
 type RealtimeHandler = () => void;
 const mockRealtimeHandlers: Record<string, RealtimeHandler[]> = {};
+
+jest.mock('./resolve-wallet-funding-account', () => {
+  const actual = jest.requireActual(
+    './resolve-wallet-funding-account'
+  ) as typeof import('./resolve-wallet-funding-account');
+  return {
+    ...actual,
+    readPrimaryFundingAccount: () => mockReadPrimary(),
+  };
+});
 
 jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: (type: string, payload: unknown) =>
@@ -167,6 +178,7 @@ function setupHook() {
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockReadPrimary.mockResolvedValue({ status: 'unavailable' });
   for (const table of Object.keys(mockRealtimeHandlers)) {
     delete mockRealtimeHandlers[table];
   }
@@ -400,6 +412,9 @@ describe('useWallet', () => {
   });
 
   it('adds savings balance and funding account data to the wallet payload', async () => {
+    // Legacy merchant: primary authoritatively absent, so the stored
+    // DVA projects.
+    mockReadPrimary.mockResolvedValue({ status: 'not_ready' });
     // Earnings come from the savings-interest RPC wiring, not the spendable
     // balance: stub a credited value that differs from the wallet balance.
     const interestSpy = jest.spyOn(

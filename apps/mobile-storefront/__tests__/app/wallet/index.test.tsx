@@ -29,6 +29,19 @@ jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
       mockReadObservedCapability(...args),
   };
 });
+// Controllable recovery lookup (never a live endpoint: the savings
+// recovery hook always drains durable state, so these legacy-merchant
+// tests answer a durable null and proceed to legacy submissions).
+jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-savings-recovery'
+  ) as typeof import('@/lib/piggyvest-primary-savings-recovery');
+  return {
+    ...actual,
+    recoverPiggyvestPrimarySavings: (...args: unknown[]) =>
+      mockRecoverPrimarySavings(...args),
+  };
+});
 jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
   fundPrimaryWalletCard: (...args: unknown[]) =>
     mockFundPrimaryWalletCard(...args),
@@ -156,6 +169,8 @@ const mockUsePrimaryCapability = jest.fn<(...args: unknown[]) => unknown>();
 const mockGetPrimaryCapability =
   jest.fn<(...args: unknown[]) => Promise<boolean>>();
 const mockReadObservedCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockRecoverPrimarySavings =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockFundPrimaryWalletCard =
   jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockInitializeWalletTopUp =
@@ -341,6 +356,7 @@ describe('WalletScreen', () => {
     mockUsePrimaryCapability.mockReturnValue(false);
     mockGetPrimaryCapability.mockResolvedValue(false);
     mockReadObservedCapability.mockReturnValue(false);
+    mockRecoverPrimarySavings.mockResolvedValue(null);
     mockFundPrimaryWalletCard.mockResolvedValue(undefined);
     mockRefetch.mockResolvedValue(undefined);
     mockRedirect.mockImplementation(({ href }) => (
@@ -1133,6 +1149,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
       );
@@ -1195,6 +1214,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
@@ -1269,6 +1291,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })

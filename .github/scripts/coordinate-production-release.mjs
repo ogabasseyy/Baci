@@ -15,7 +15,7 @@ export function acquireReleaseLock(lockPath) {
     mkdirSync(lockPath);
   } catch (error) {
     if (error?.code === 'EEXIST') {
-      throw new Error(`release lock held: ${lockPath}; confirm no release is running, then remove it`);
+      throw new Error(`release lock held: ${lockPath}; confirm no release is running on this machine (the lock is local-only and says nothing about other machines), then remove it`);
     }
     throw error;
   }

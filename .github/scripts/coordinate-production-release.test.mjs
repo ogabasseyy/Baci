@@ -40,7 +40,7 @@ test('a stale lock reports the lock path instead of a raw error', () => {
     const lockPath = join(directory, 'baci-production-release.lock');
     acquireReleaseLock(lockPath);
     assert.throws(() => acquireReleaseLock(lockPath), {
-      message: `release lock held: ${lockPath}; confirm no release is running, then remove it`,
+      message: `release lock held: ${lockPath}; confirm no release is running on this machine (the lock is local-only and says nothing about other machines), then remove it`,
     });
     assert.throws(
       () => acquireReleaseLock(join(directory, 'missing-parent', 'baci-production-release.lock')),

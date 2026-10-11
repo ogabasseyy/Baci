@@ -42,7 +42,10 @@ anyone with workflow_dispatch permission and the right SHA passes
 the gate, so keep dispatch permission tightly scoped. Do not
 double-run the entry point for an already-released commit: republication
 is content-identical and passes verification, at the cost of a wasted
-deploy cycle — reconcile instead.
+deploy cycle — reconcile instead. Never run two coordinators concurrently
+(even on different machines): the lock is local-only and the sibling
+abort is best-effort, so concurrent runs are procedurally forbidden,
+not just detected.
 Provision restricted runner authentication and trusted VPS access
 without copying personal SSH keys or introducing a broad permanent token.
 

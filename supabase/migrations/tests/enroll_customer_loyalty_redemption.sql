@@ -183,3 +183,58 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'sold-out reward stayed redeemable'
 );
+
+-- 19. Non-positive costs fail closed instead of minting: a negative cost
+-- would credit the balance on redeem, so redemption rejects and status
+-- hides them (mirrored points_cost > 0 predicates).
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, enabled
+) VALUES
+  ('01aa0000-0000-4000-8000-000000000001', 'Buggy perk', -50,
+   'discount', true),
+  ('01aa0000-0000-4000-8000-000000000001', 'Free perk', 0,
+   'discount', true);
+
+SELECT points_balance AS redeem19_before
+FROM public.customer_loyalty
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000018' \gset
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000108');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Buggy perk')
+   ) AS result)
+  AND (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000018',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Free perk')
+   ) AS result),
+  'non-positive-cost reward stayed redeemable'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT points_balance = :'redeem19_before'
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000018')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000018'
+    ) AS status(result),
+    LATERAL jsonb_array_elements(status.result -> 'rewards') AS reward
+    WHERE reward.value ->> 'name' IN ('Buggy perk', 'Free perk')
+  ),
+  'rejected non-positive redemption mutated state or stayed visible'
+);

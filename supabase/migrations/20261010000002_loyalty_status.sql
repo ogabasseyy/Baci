@@ -154,6 +154,9 @@ BEGIN
       AND (start_date IS NULL OR start_date <= pg_catalog.now())
       AND (end_date IS NULL OR end_date >= pg_catalog.now())
       AND (stock_quantity IS NULL OR stock_quantity > 0)
+      -- Hide non-positive costs (same predicate as the redemption RPC;
+      -- keep the two in sync): redeeming one would mint, not spend.
+      AND points_cost > 0
       -- Hide rewards this caller already exhausted: without this the
       -- post-redemption refetch re-advertises a capped reward (and the
       -- status card counts it redeemable) although every further redeem

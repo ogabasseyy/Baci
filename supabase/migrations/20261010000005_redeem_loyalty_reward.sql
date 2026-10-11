@@ -147,6 +147,8 @@ BEGIN
     AND (start_date IS NULL OR start_date <= pg_catalog.now())
     AND (end_date IS NULL OR end_date >= pg_catalog.now())
     AND (stock_quantity IS NULL OR stock_quantity > 0)
+    -- Non-positive costs would mint points: fail closed (mirrored in status).
+    AND points_cost > 0
     -- Reject unsupported reward types before any mutation (same
     -- allowlist as the status RPC; keep the two in sync): the merchant
     -- PATCH endpoint stores reward_type without an allowlist, and this

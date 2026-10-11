@@ -15,6 +15,10 @@ INSERT INTO public.loyalty_rewards (
   true, 10, 1
 );
 
+-- Bind the caller explicitly: JWT state is ambient across \ir parts, so
+-- inherit nothing from the redemption file's trailing case.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
    FROM public.redeem_loyalty_reward(

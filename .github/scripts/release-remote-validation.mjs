@@ -71,8 +71,11 @@ export function originRepoSlug(remoteUrl) {
 }
 
 export function assertCanonicalOriginPushUrls(pushUrls, canonical = CANONICAL_REPOSITORY) {
-  const urls = String(pushUrls ?? '').split('\n').map(line => line.trim()).filter(Boolean);
-  if (urls.length === 0 || !urls.every(url => originRepoSlug(url) === canonical.toLowerCase())) {
+  // Reject surrounding whitespace instead of trimming it: git uses
+  // the raw push URL, so validating a normalized copy passes
+  // preflight for a remote every later git operation refuses.
+  const urls = String(pushUrls ?? '').split('\n').filter(line => line !== '');
+  if (urls.length === 0 || urls.some(line => line.trim() !== line) || !urls.every(url => originRepoSlug(url) === canonical.toLowerCase())) {
     throw new Error('release checkout must use the canonical repository');
   }
 }

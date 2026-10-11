@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -131,6 +131,24 @@ test('treats approval-held runs as in flight', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Refusing worker promotion/);
   assert.match(result.stderr, /184400112/);
+});
+
+test('the in-flight query preserves approval-parked runs', () => {
+  const lib = readFileSync(libPath, 'utf8');
+  assert.match(
+    lib,
+    /select\(\.status != "completed" or \.conclusion == "action_required"\)/
+  );
+});
+
+test('refuses promotion while an approval-parked run is listed', () => {
+  const { result } = runCheck({
+    ghBody: `${RECORD_ARGS}\nprintf '184400115\\tcompleted\\tabc54321\\tworkflow_dispatch\\thttps://github.com/example/repo/actions/runs/184400115\\n'`,
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing worker promotion/);
+  assert.match(result.stderr, /184400115/);
 });
 
 test('fails closed when the run list cannot be fetched', () => {

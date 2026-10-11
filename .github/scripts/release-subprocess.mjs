@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 // reconcile-before-removal.
 export const API_COMMAND_TIMEOUT_MS = 60000;
 
-function run(binary, args, cwd, capture, timeoutMs) {
+function run(binary, args, cwd, capture, timeoutMs, trim = true) {
   const result = spawnSync(binary, args, {
     cwd,
     encoding: 'utf8',
@@ -35,7 +35,7 @@ function run(binary, args, cwd, capture, timeoutMs) {
     }
     throw error;
   }
-  return capture ? result.stdout.trim() : '';
+  return capture ? (trim ? result.stdout.trim() : result.stdout) : '';
 }
 
 // deploy.sh exits 42 only when the live worker tree may be changed
@@ -63,7 +63,7 @@ export function runWorkerDeploy(invoke) {
 // entry point passes the repo root so git children resolve).
 export function createRunner(cwd) {
   const command = (binary, args, capture = true, options = {}) =>
-    run(binary, args, cwd, capture, options.timeoutMs);
+    run(binary, args, cwd, capture, options.timeoutMs, options.trim ?? true);
   const gh = args =>
     // Every gh call is a bounded API read or dispatch: a hung child
     // must not wedge the polling loops or the multi-hour release.

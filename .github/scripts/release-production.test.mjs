@@ -187,13 +187,13 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 
 test('requires every push URL to be the canonical repository', () => {
   assert.doesNotThrow(() => assertCanonicalOriginPushUrls('https://github.com/ogabasseyy/Baci.git'));
-  assert.doesNotThrow(() =>
-    assertCanonicalOriginPushUrls('https://github.com/ogabasseyy/Baci.git\ngit@github.com:ogabasseyy/Baci.git\n')
-  );
+  assert.doesNotThrow(() => assertCanonicalOriginPushUrls('https://github.com/ogabasseyy/Baci.git\ngit@github.com:ogabasseyy/Baci.git\n'));
   for (const pushUrls of [
     '',
     'git@github.com:fork/other.git',
     'https://github.com/ogabasseyy/Baci.git\ngit@github.com:fork/other.git',
+    ' https://github.com/ogabasseyy/Baci.git',
+    'https://github.com/ogabasseyy/Baci.git ',
   ]) {
     assert.throws(() => assertCanonicalOriginPushUrls(pushUrls), /canonical repository/);
   }

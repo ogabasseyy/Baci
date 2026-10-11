@@ -22,10 +22,9 @@ function readServingDeploymentId() {
       vercelApi(`/v4/aliases/ogabassey.com?${vercelScope}`)
     );
   } catch (error) {
-    // A transient non-JSON error page or empty response is a
-    // retryable transport failure, not an auth failure: keep the
-    // original message so preflight does not misdirect the operator
-    // to upgrade/re-authenticate.
+    // A transient non-JSON error page or empty response is a retryable
+    // transport failure, not auth: keep the original message so
+    // preflight does not misdirect the operator to re-authenticate.
     const unreadable = new Error(`serving alias response unreadable; retry the read (${error.message})`);
     unreadable.keepOriginalMessage = true;
     throw unreadable;
@@ -62,8 +61,10 @@ export async function waitForRunCompletion(runId, readStatus, options = {}) {
   const { pollMs = 10000, timeoutMs = RUN_WATCH_TIMEOUT_MS, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
   const started = Date.now();
   for (;;) {
-    const status = await readStatus();
-    if (status === 'completed') return;
+    const reading = await readStatus();
+    const status = reading?.status ?? reading;
+    // Approval gating parks a run at completed/action_required: not done.
+    if (status === 'completed' && reading?.conclusion !== 'action_required') return;
     if (Date.now() - started >= timeoutMs) {
       const error = new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
       error.indeterminateDispatch = true;
@@ -91,10 +92,9 @@ export function parseGhJqString(output, label) {
 }
 
 export function readWorkflowRunStatus(ghInvoke, runId) {
-  return parseGhJqString(
-    ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.status // empty']),
-    `workflow run ${runId} status`
-  );
+  const [status, conclusion = ''] = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status // empty, .conclusion // empty] | @tsv']) ?? '').split('\t');
+  if (!status?.trim() || status.trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
+  return { status: status.trim(), conclusion: conclusion.trim() };
 }
 
 export function shouldHoldReleaseLock(error) {
@@ -235,8 +235,8 @@ async function main() {
       ),
       // Poll the run endpoint, not `gh run watch`: watch requires
       // checks:read and cannot authenticate with fine-grained PATs,
-      // while the Actions API reads work. Conclusion is asserted by
-      // the readJobs check that follows.
+      // while the Actions API reads work. Status and conclusion ride
+      // one call so the waiter sees approval-parked runs as waiting.
       watchRun: async runId => waitForRunCompletion(
         runId,
         async () => readWorkflowRunStatus(gh, runId),

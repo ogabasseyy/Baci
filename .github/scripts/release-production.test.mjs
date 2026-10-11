@@ -56,16 +56,18 @@ test('reads raw gh --jq scalars without JSON parsing', () => {
     assert.throws(() => parseGhJqString(output, 'test status'), /test status unreadable/);
   }
   const calls = [];
-  const status = readWorkflowRunStatus(
+  const reading = readWorkflowRunStatus(
     args => {
       calls.push(args);
-      return 'queued\n';
+      return 'queued\t\n';
     },
     42
   );
-  assert.equal(status, 'queued');
-  assert.ok(calls[0].join(' ').includes('.status // empty'));
+  assert.deepEqual(reading, { status: 'queued', conclusion: '' });
+  assert.deepEqual(readWorkflowRunStatus(() => 'completed\taction_required\n', 42), { status: 'completed', conclusion: 'action_required' });
+  assert.ok(calls[0].join(' ').includes('.conclusion // empty'));
   assert.throws(() => readWorkflowRunStatus(() => '', 42), /workflow run 42 status unreadable/);
+  assert.throws(() => readWorkflowRunStatus(() => 'null\t\n', 42), /workflow run 42 status unreadable/);
 });
 
 test('requires authenticated Vercel access to the production project', () => {
@@ -89,6 +91,14 @@ test('waits for run completion by polling the run endpoint', async () => {
   });
   assert.deepEqual(sleeps, [10, 10]);
   assert.deepEqual(waits.map(([status]) => status), ['queued', 'in_progress']);
+  const parked = [{ status: 'completed', conclusion: 'action_required' }, { status: 'completed', conclusion: 'success' }];
+  const parkedSleeps = [];
+  await waitForRunCompletion(42, async () => parked.shift() ?? { status: 'completed', conclusion: 'success' }, {
+    pollMs: 10,
+    timeoutMs: 60000,
+    sleep: async ms => { parkedSleeps.push(ms); },
+  });
+  assert.deepEqual(parkedSleeps, [10]);
   const timeout = await waitForRunCompletion(42, async () => 'in_progress', {
     timeoutMs: 0,
     sleep: async () => {},

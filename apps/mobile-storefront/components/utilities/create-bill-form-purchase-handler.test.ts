@@ -50,6 +50,7 @@ function createPaymentState(
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
     scopePendingVtuDescriptor: (d: string) => d,
     captureSubmittingOwner: () => 'test-owner',
+    invalidateWallets: jest.fn(),
     isSubmittingOwnerCurrent: () => true,
     resetWalletIdempotencyKey: jest.fn(),
     ...overrides,

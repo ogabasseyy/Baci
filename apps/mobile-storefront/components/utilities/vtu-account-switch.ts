@@ -9,7 +9,10 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
  * to someone else, so the result must not drive their success screen
  * or balance display. Returns true when the caller must drop the
  * result; alerts once so the switch is visible, mirroring web's
- * `latestIdentityRef` guard in `use-utility-purchase`.
+ * `latestIdentityRef` guard in `use-utility-purchase`. Also invalidates
+ * cached wallets: the debit may have landed, and without this,
+ * switching back within the stale window would serve the cached
+ * pre-debit balance.
  */
 export function shouldDiscardVtuResultForAccountSwitch(
   payment: PaymentState,
@@ -18,6 +21,7 @@ export function shouldDiscardVtuResultForAccountSwitch(
   if (payment.isSubmittingOwnerCurrent(submittingOwner)) {
     return false;
   }
+  payment.invalidateWallets();
   Alert.alert(
     'Account Changed',
     'The signed-in account changed while the purchase was processing. The result was discarded.'

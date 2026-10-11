@@ -36,7 +36,7 @@ export function UtilityPaymentMethodSelector({
         <button
           type="button"
           role="radio"
-          aria-checked={true}
+          aria-checked={canUseWallet}
           disabled={!canUseWallet || isLoading}
           onClick={onSelectWallet}
           className={cn(

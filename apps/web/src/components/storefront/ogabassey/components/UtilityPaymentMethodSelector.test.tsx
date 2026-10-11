@@ -98,6 +98,9 @@ describe('UtilityPaymentMethodSelector', () => {
       screen.getByRole('radio', { name: /pay with wallet/i })
     ).toBeDisabled();
     expect(
+      screen.getByRole('radio', { name: /pay with wallet/i })
+    ).toHaveAttribute('aria-checked', 'false');
+    expect(
       screen.getByText(/fund your wallet to pay without card fees/i)
     ).toBeInTheDocument();
   });

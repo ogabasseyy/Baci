@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useRef } from 'react';
 import { CONFIG } from '@/lib/config';
@@ -10,6 +11,7 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { useMerchantPaymentSettings } from './useMerchantPaymentSettings';
+import { walletKeys } from './wallet-query';
 
 /**
  * Wallet-only utility payment state. Utilities are always charged to wallet
@@ -46,6 +48,7 @@ export function useUtilityPayment() {
   // Rotated only after a definitive HTTP response (success or 4xx).
   const paymentSettings = useMerchantPaymentSettings();
   const wallet = useWallet();
+  const queryClient = useQueryClient();
   // The bank-transfer funding nudge deep-links into DVA territory, so offer
   // it to any signed-in customer of a merchant with wallet DVAs enabled. No
   // phone/funding_account precondition: the wallet funding flow now collects
@@ -73,6 +76,16 @@ export function useUtilityPayment() {
      */
     isSubmittingOwnerCurrent: (submittingOwner: string | undefined) =>
       latestOwnerRef.current === submittingOwner,
+    /**
+     * Marks every cached wallet query stale (all owners + merchants —
+     * the query keys are owner-scoped and the submitter's identity is
+     * no longer signed in). Called when an account switch discards a
+     * settled result: without this, switching back within the stale
+     * window would serve the cached pre-debit balance.
+     */
+    invalidateWallets: () => {
+      void queryClient.invalidateQueries({ queryKey: walletKeys.all });
+    },
     refetchWallet: () => {
       void wallet.refetch();
     },

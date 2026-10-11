@@ -62,6 +62,7 @@ describe('airtime stale success replay', () => {
           getWalletIdempotencyKey: jest.fn(() => 'stale-airtime-key'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
+          invalidateWallets: jest.fn(),
           isSubmittingOwnerCurrent:
             overrides.isSubmittingOwnerCurrent ?? (() => true),
           resetWalletIdempotencyKey:

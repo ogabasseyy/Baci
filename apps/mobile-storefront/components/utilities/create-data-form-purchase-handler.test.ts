@@ -49,6 +49,7 @@ describe('data form purchase cashback', () => {
         getWalletIdempotencyKey: jest.fn(() => 'data-key'),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
+        invalidateWallets: jest.fn(),
         isSubmittingOwnerCurrent: () => true,
         resetWalletIdempotencyKey: jest.fn(),
       } as PaymentState,

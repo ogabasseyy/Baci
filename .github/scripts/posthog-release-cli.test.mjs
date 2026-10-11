@@ -43,6 +43,7 @@ test('authentication failures fail immediately', () => {
   const result = run({ mode: 'auth' });
   assert.equal(result.status, 7);
   assert.equal(result.calls.length, 1);
+  assert.match(result.stderr, /non-transport output; not retrying/);
 });
 test('Hermes clone failures are never swallowed or retried', () => {
   const result = run({ mode: 'network', args: ['hermes', 'clone'] });

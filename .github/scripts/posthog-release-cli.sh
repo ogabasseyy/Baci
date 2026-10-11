@@ -22,6 +22,9 @@ for attempt in 1 2 3; do
   # intentionally fatal, not an oversight, because the CLI surfaces no
   # reliable transient-vs-fatal distinction for status errors.
   if [[ "$attempt" == 3 ]] || ! grep -Eiq 'error sending request|connection (reset|refused|closed)|timed out|network request failed|temporary failure in name resolution' "$output_file"; then
+    if [[ "$attempt" != 3 ]]; then
+      echo "error: PostHog Hermes upload failed with non-transport output; not retrying (see output above)." >&2
+    fi
     cat "$output_file"
     exit "$status"
   fi

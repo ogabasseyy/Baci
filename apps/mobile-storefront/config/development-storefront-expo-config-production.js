@@ -2,6 +2,11 @@
 // plain-CJS file directly (see app.config.ts) because Android releases
 // disable Node type stripping. The sibling .ts file is a type-only shim —
 // make behavior edits here, and keep the two exports aligned.
+// Single-eval assumption: env is read at require time and cached by the
+// module loader, so a second evalConfig in the same process with different
+// env would silently reuse the first load's values. Release usage evaluates
+// once per process; tests needing fresh env must reset the require cache
+// (jest.resetModules) before re-requiring, as the app-config suites do.
 const {
   buildStorefrontAndroidIntentFilters,
 } = require('./android-intent-filters.js');

@@ -366,7 +366,8 @@ describe('POST /api/cart/validate', () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body.error).toContain('variant query failed');
+    expect(body.error).toBe('Failed to validate cart.');
+    expect(body.error).not.toContain('variant query failed');
   });
 
   it('keeps offer lines priced at the live offer instead of the parent', async () => {
@@ -483,7 +484,8 @@ describe('POST /api/cart/validate', () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body.error).toContain('offer query failed');
+    expect(body.error).toBe('Failed to validate cart.');
+    expect(body.error).not.toContain('offer query failed');
     expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
       p_product_id: PRODUCT_ID,
     });

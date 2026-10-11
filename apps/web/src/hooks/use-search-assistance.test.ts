@@ -9,13 +9,15 @@ vi.mock('@baci/shared/lib', async (original) => ({
   ...(await original<typeof import('@baci/shared/lib')>()),
   readAssistanceStream: readMock,
 }));
+vi.mock('@/lib/api-client', () => ({
+  fetchWithCsrf: fetchMock,
+}));
 
 import { useSearchAssistance } from './use-search-assistance';
 
 beforeEach(() => {
   fetchMock.mockReset().mockResolvedValue({ ok: true });
   readMock.mockReset().mockResolvedValue(undefined);
-  vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => vi.unstubAllGlobals());
 it('does not request while typing and sends only an explicitly submitted query', async () => {

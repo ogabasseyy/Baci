@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (productsResult.error) {
       console.error('Cart validation query error:', productsResult.error);
       return NextResponse.json(
-        { error: `Failed to validate cart: ${productsResult.error.message}` },
+        { error: 'Failed to validate cart.' },
         { status: 500 }
       );
     }
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         variantsResult.error
       );
       return NextResponse.json(
-        { error: `Failed to validate cart: ${variantsResult.error.message}` },
+        { error: 'Failed to validate cart.' },
         { status: 500 }
       );
     }
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
     if (offerMap instanceof Error) {
       console.error('Cart validation offer query error:', offerMap);
       return NextResponse.json(
-        { error: `Failed to validate cart: ${offerMap.message}` },
+        { error: 'Failed to validate cart.' },
         { status: 500 }
       );
     }

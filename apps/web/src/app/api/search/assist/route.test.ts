@@ -1,4 +1,6 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkCsrfProtection } from '@/lib/csrf';
 
 const mocks = vi.hoisted(() => ({
   tenant: vi.fn(),
@@ -14,13 +16,20 @@ vi.mock('@/lib/tenant-rate-limit', () => ({
 vi.mock('@/ai/generate-text-with-chain', () => ({
   generateTextWithChain: mocks.generate,
 }));
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: vi.fn().mockResolvedValue({ valid: true }),
+}));
 
 import { POST } from './route';
 
-function request(body: unknown, host = 'ogabassey.com') {
-  return new Request('http://localhost/api/search/assist', {
+function request(
+  body: unknown,
+  host = 'ogabassey.com',
+  headers: Record<string, string> = {}
+) {
+  return new NextRequest('http://localhost/api/search/assist', {
     method: 'POST',
-    headers: { host, 'Content-Type': 'application/json' },
+    headers: { host, 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -30,6 +39,9 @@ const input = {
 };
 beforeEach(() => {
   vi.stubEnv('STOREFRONT_SEARCH_ASSIST_ENABLED', 'true');
+  vi.mocked(checkCsrfProtection).mockReset().mockResolvedValue({
+    valid: true,
+  });
   mocks.tenant.mockReset().mockResolvedValue({
     merchantId: 'm1',
     merchantSlug: 'ogabassey',
@@ -56,6 +68,21 @@ describe('assisted search', () => {
     expect(response.status).toBe(400);
     expect(mocks.tenant).not.toHaveBeenCalled();
     expect(mocks.limit).not.toHaveBeenCalled();
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
+  it('skips the CSRF gate for cookie-less callers', async () => {
+    const response = await POST(request(input));
+    expect(response.status).toBe(200);
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
+  });
+  it('rejects cookie-carrying requests without a valid CSRF token', async () => {
+    vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: false });
+    const response = await POST(
+      request(input, 'ogabassey.com', { cookie: 'session=abc' })
+    );
+    expect(response.status).toBe(403);
+    expect(checkCsrfProtection).toHaveBeenCalled();
+    expect(mocks.tenant).not.toHaveBeenCalled();
     expect(mocks.generate).not.toHaveBeenCalled();
   });
   it('streams a bounded proposal without commerce actions', async () => {

@@ -4,6 +4,7 @@ import {
   type SearchAssistanceProposal,
 } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
+import { fetchWithCsrf } from '@/lib/api-client';
 
 export function useSearchAssistance(query: string, enabled: boolean) {
   const controller = useRef<AbortController | null>(null);
@@ -31,7 +32,7 @@ export function useSearchAssistance(query: string, enabled: boolean) {
     try {
       if (!enabled) throw new Error('Unavailable');
       const requestId = crypto.randomUUID();
-      const response = await fetch('/api/search/assist', {
+      const response = await fetchWithCsrf('/api/search/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, requestId }),

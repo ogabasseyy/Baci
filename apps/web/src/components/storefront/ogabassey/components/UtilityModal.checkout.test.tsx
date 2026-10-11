@@ -217,6 +217,17 @@ describe('UtilityModal checkout routing', () => {
     harness.checkoutFetch.mockResolvedValue(
       harness.createJsonResponse({ error: 'Insufficient funds' }, { ok: false, status: 400 })
     );
+    // A failed vend may have restored the debit: the next balance check
+    // must refetch instead of trusting the possibly-stale cache.
+    const refreshWallet = vi.fn();
+    harness.useWallet.mockReturnValue({
+      payWithWallet: true,
+      refreshWallet,
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      walletLoading: false,
+    });
 
     submitAirtimePurchase();
 
@@ -227,6 +238,7 @@ describe('UtilityModal checkout routing', () => {
         variant: 'destructive',
       });
     });
+    expect(refreshWallet).toHaveBeenCalled();
   });
 
   it('shows the pending screen while a checkout is processing', async () => {

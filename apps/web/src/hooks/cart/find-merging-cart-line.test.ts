@@ -156,4 +156,16 @@ describe('findMergingCartLineIndex', () => {
       0
     );
   });
+
+  it('does not merge a legacy line whose condition differs', () => {
+    const product = makeProduct();
+    const cart = [makeLegacyCartItem({ id: 'p1', condition: 'new' })];
+
+    expect(findMergingCartLineIndex(cart, product, { condition: 'used' })).toBe(
+      -1
+    );
+    expect(findMergingCartLineIndex(cart, product, { condition: 'new' })).toBe(
+      0
+    );
+  });
 });

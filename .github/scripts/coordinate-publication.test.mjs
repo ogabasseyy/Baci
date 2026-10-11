@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { assertLiveDeployment, coordinateRelease, DEPLOY_PROMOTE_STEP_NAME } from './coordinate-production-release.mjs';
 import { commit, coordinationId, fixture } from './coordinate-production-release.test-fixtures.mjs';
+import { runWorkerDeploy, WORKER_UNRECONCILED_EXIT } from './release-subprocess.mjs';
 
 // Split from coordinate-production-release.test.mjs: publication,
 // jobs-assessment, and live-verification cases live here so both
@@ -212,4 +213,32 @@ test('live verification requires matching project, production target, state and 
   for (const malformed of [null, undefined, [], 'READY', 42, { message: 'not found' }]) {
     assert.throws(() => assertLiveDeployment(malformed, commit, 'baci'), /does not match/);
   }
+});
+
+test('a rollback-failed worker deploy holds the lock instead of releasing it', async () => {
+  const rollbackFailed = Object.assign(
+    new Error('bash vps-workers/deploy.sh failed with status 42; inspect preceding diagnostics'),
+    { status: WORKER_UNRECONCILED_EXIT },
+  );
+  try {
+    runWorkerDeploy(() => { throw rollbackFailed; });
+    assert.fail('worker deploy must throw');
+  } catch (error) {
+    assert.equal(error.indeterminateDispatch, true);
+  }
+  const cleanFailure = Object.assign(
+    new Error('bash vps-workers/deploy.sh failed with status 1; inspect preceding diagnostics'),
+    { status: 1 },
+  );
+  try {
+    runWorkerDeploy(() => { throw cleanFailure; });
+    assert.fail('worker deploy must throw');
+  } catch (error) {
+    assert.equal(error.indeterminateDispatch, undefined);
+  }
+  const setup = fixture({ updateWorkers: () => runWorkerDeploy(() => { throw rollbackFailed; }) });
+  await coordinateRelease(setup.operations, coordinationId).then(
+    () => assert.fail('coordinator must throw'),
+    error => assert.equal(error.indeterminateDispatch, true),
+  );
 });

@@ -20,6 +20,13 @@ VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
 APP_SHA=$(git rev-parse HEAD)
 CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
+# Exit protocol for the release coordinator: 42 means the live worker
+# tree may be changed but unrecorded (rollback failed, or the rollback
+# landed with unrecorded readers and a stuck barrier), so the
+# coordinator must HOLD the release lock for reconciliation instead of
+# auto-releasing it for a clean retry. Every other failure (including
+# a clean rollback that just needs a rerun) exits 1.
+WORKER_UNRECONCILED_EXIT=42
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Refusing worker deployment from a dirty tracked checkout." >&2
@@ -78,9 +85,11 @@ record_deploy_workflow_promote "$APP_SHA" || {
       echo "Restore-window record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
     else
       echo "RESTORE-WINDOW RECORD FAILED: the rollback landed but its readers are unrecorded and this deploy's promote barrier is stuck (blocking all publishes). Manually confirm no production deploy published off the rolled-back candidate reads, clear the stale barrier per the cutover runbook, then rerun deploy.sh." >&2
+      exit "$WORKER_UNRECONCILED_EXIT"
     fi
   else
     echo "ROLLBACK FAILED: the live tree may be mixed and the promote is unrecorded. Follow the emergency rollback runbook NOW, then confirm no production deploy published off stale reads." >&2
+    exit "$WORKER_UNRECONCILED_EXIT"
   fi
   exit 1
 }

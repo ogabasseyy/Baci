@@ -24,6 +24,7 @@ function run(binary, args, cwd, capture, timeoutMs) {
     const cause = result.error ? ` (${result.error.message})` : '';
     const signal = result.signal ? ` signal ${result.signal}` : '';
     const error = new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${signal}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
+    error.status = result.status;
     // A timeout means unknown remote state: the API call may have
     // landed. Always hold the lock for reconcile-before-removal,
     // even pre-dispatch (where dispatch provably never ran, so the
@@ -34,6 +35,24 @@ function run(binary, args, cwd, capture, timeoutMs) {
     throw error;
   }
   return capture ? result.stdout.trim() : '';
+}
+
+// deploy.sh exits 42 only when the live worker tree may be changed
+// but unrecorded (rollback failed, or the rollback landed with
+// unrecorded readers and a stuck barrier): the coordinator must hold
+// the release lock for reconciliation instead of auto-releasing it
+// for a clean retry.
+export const WORKER_UNRECONCILED_EXIT = 42;
+
+export function runWorkerDeploy(invoke) {
+  try {
+    return invoke();
+  } catch (error) {
+    if (error && typeof error === 'object' && error.status === WORKER_UNRECONCILED_EXIT) {
+      error.indeterminateDispatch = true;
+    }
+    throw error;
+  }
 }
 
 // Bind the subprocess helpers to a working directory (the release

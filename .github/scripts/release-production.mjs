@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 import { assertCanonicalOriginPushUrls, assertCleanWorkerDeployEnv, CANONICAL_REPOSITORY, originRepoSlug } from './release-remote-validation.mjs';
-import { createRunner } from './release-subprocess.mjs';
+import { createRunner, runWorkerDeploy } from './release-subprocess.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const repository = CANONICAL_REPOSITORY;
@@ -221,7 +221,7 @@ async function main() {
       // Generous explicit bounds so a hung deploy or SSH session
       // fails loudly instead of wedging the operator session forever
       // with the lock held; healthy runs take single-digit minutes.
-      updateWorkers: async () => command('bash', ['vps-workers/deploy.sh'], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
+      updateWorkers: async () => runWorkerDeploy(() => command('bash', ['vps-workers/deploy.sh'], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS })),
       verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
         `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',

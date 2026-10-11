@@ -66,7 +66,7 @@ export function selectSiblingCoordinatedRuns(runs, baseline, coordinationId) {
     run.event === 'workflow_dispatch' &&
     typeof run.title === 'string' && run.title.startsWith('Coordinated release ') &&
     run.title !== `Coordinated release ${coordinationId}` &&
-    IN_FLIGHT_RUN_STATUSES.has(run.status) || run.conclusion === 'action_required');
+    (IN_FLIGHT_RUN_STATUSES.has(run.status) || run.conclusion === 'action_required'));
 }
 
 export async function coordinateRelease(operations, coordinationId) {

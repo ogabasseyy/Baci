@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { acquireReleaseLock, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { acquireReleaseLock, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun, selectSiblingCoordinatedRuns } from './coordinate-production-release.mjs';
 import { commit, coordinationId, fixture } from './coordinate-production-release.test-fixtures.mjs';
 
 // Publication, jobs-assessment, and live-verification cases live in
@@ -92,6 +92,13 @@ test('an approval-gated sibling aborts the release like any in-flight run', asyn
   });
   await assert.rejects(coordinateRelease(setup.operations, coordinationId), /concurrent coordination detected/);
   assert.equal(setup.calls.at(-1), 'cancelRun');
+});
+
+test('an approval-gated conclusion alone does not make a run a sibling', () => {
+  const gated = { event: 'workflow_dispatch', status: 'completed', conclusion: 'action_required', title: 'Coordinated release other-id' };
+  assert.deepEqual(selectSiblingCoordinatedRuns([{ ...gated, databaseId: 7 }], [{ databaseId: 7 }], 'new-id'), []);
+  assert.deepEqual(selectSiblingCoordinatedRuns([{ ...gated, databaseId: 8, event: 'push', title: 'other' }], [], 'new-id'), []);
+  assert.deepEqual(selectSiblingCoordinatedRuns([{ ...gated, databaseId: 9 }], [], 'new-id').map(run => run.databaseId), [9]);
 });
 
 test('an in-flight sibling on a different SHA aborts the release', async () => {

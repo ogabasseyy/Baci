@@ -8,6 +8,14 @@ jest.mock('./storefront-customer-api-client', () => ({
   createStorefrontCustomerApiClient: (...args: unknown[]) =>
     mockCreateClient(...args),
 }));
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
 const { checkPiggyvestPrimarySavingsStatus } =
   require('./piggyvest-primary-savings-status') as typeof import('./piggyvest-primary-savings-status');
 const input = {
@@ -36,6 +44,19 @@ it('uses a status-only PATCH with CSRF and checks the echoed operation', async (
   await expect(checkPiggyvestPrimarySavingsStatus(input)).rejects.toThrow(
     'could not be confirmed'
   );
+});
+it('pins the status poll to the initiating user', async () => {
+  jest.clearAllMocks();
+  mockAuthUserId = 'user-A';
+  mockFetchJson.mockResolvedValue({
+    operationId: input.operationId,
+    status: 'pending',
+  });
+  await checkPiggyvestPrimarySavingsStatus(input);
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: 'user-A' })
+  );
+  mockAuthUserId = null;
 });
 it('constructs a fresh API client for every status check', async () => {
   jest.clearAllMocks();

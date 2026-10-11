@@ -13,7 +13,7 @@ const summary = {
   remaining: 27574.83,
   pending: 0,
   status: 'failed',
-  error: 'Insufficient balance to process refund',
+  error: 'The refund ran into a problem. Support has the details.',
   attempts: 5,
   retryRequests: 0,
   canRetry: true,
@@ -43,16 +43,13 @@ describe('OrderRefundPanel', () => {
     });
     render(<OrderRefundPanel orderId="order-1" />);
     const button = await screen.findByRole('button', { name: 'Retry refund' });
-    // Worker errors render a fixed label; the raw string stays out
-    // of the DOM entirely, like the route's error masking.
+    // The API pre-maps worker errors to fixed labels; the panel
+    // renders the payload label directly with no raw-text tooltip.
     const label = screen.getByText(
       'The refund ran into a problem. Support has the details.'
     );
     expect(label).toBeInTheDocument();
     expect(label).not.toHaveAttribute('title');
-    expect(
-      screen.queryByText('Insufficient balance to process refund')
-    ).not.toBeInTheDocument();
     fireEvent.click(button);
     await waitFor(() =>
       expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
@@ -165,7 +162,7 @@ describe('OrderRefundPanel', () => {
     rerender(<OrderRefundPanel orderId="order-2" onRefunded={second} />);
     await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
   });
-  it('masks raw worker text in the refund activity list', async () => {
+  it('renders the pre-mapped activity labels without tooltips', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -179,7 +176,10 @@ describe('OrderRefundPanel', () => {
               action: 'retry_requested',
               date: '2026-10-01T12:00:00Z',
               actor: null,
-              details: { error: 'Paystack/insufficient-balance (acquirer 51)' },
+              details: {
+                error:
+                  'The refund ran into a problem. Support has the details.',
+              },
             },
           ],
         }),
@@ -190,9 +190,6 @@ describe('OrderRefundPanel', () => {
       'The refund ran into a problem. Support has the details.'
     );
     expect(label).not.toHaveAttribute('title');
-    expect(
-      screen.queryByText('Paystack/insufficient-balance (acquirer 51)')
-    ).not.toBeInTheDocument();
   });
   it('stops polling once the refund reaches a terminal state', async () => {
     vi.useFakeTimers();

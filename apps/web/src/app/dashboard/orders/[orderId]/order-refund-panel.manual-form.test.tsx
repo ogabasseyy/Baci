@@ -13,7 +13,7 @@ const summary = {
   remaining: 27574.83,
   pending: 0,
   status: 'failed',
-  error: 'Insufficient balance to process refund',
+  error: 'The refund ran into a problem. Support has the details.',
   attempts: 5,
   retryRequests: 0,
   canRetry: true,

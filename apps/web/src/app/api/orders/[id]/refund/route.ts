@@ -2,15 +2,14 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
 import { orderRefundSchema } from '@/schemas/order-refund';
 
 // Fixed user-facing messages for known refund identifiers. Raw database
 // exception text must never reach the client (CWE-209): unknown
-// identifiers fall back to the generic message. This masking covers
-// the error path only; success payloads still carry the RPC's worker
-// strings (summary.error, event details) because they describe the
-// merchant's own refunds to authenticated staff, and the panel maps
-// them to fixed labels at render via describeRefundWorkerError.
+// identifiers fall back to the generic message. Success payloads get
+// the same treatment via maskRefundWorkerText below, so worker and
+// provider strings never reach API consumers on either path.
 const KNOWN_REFUND_ERRORS: Record<string, string> = {
   not_authenticated: 'Authentication required',
   refund_forbidden: 'You do not have permission to manage this refund',
@@ -57,6 +56,43 @@ const KNOWN_REFUND_STATUS: Record<string, number> = {
   invalid_refund_action: 400,
   refund_confirmation_required: 400,
 };
+
+// Success payloads carry the RPC's raw worker strings (summary.error,
+// event details); map them to fixed labels here so provider internals
+// never reach API consumers, and expose the Paystack signal the
+// panel's requires-review guidance needs as structured data.
+function maskRefundWorkerText(data: {
+  error?: unknown;
+  events?: Array<{
+    details?: {
+      error?: unknown;
+      previousError?: unknown;
+    };
+  }>;
+}) {
+  const error = typeof data.error === 'string' ? data.error : null;
+  return {
+    ...data,
+    error: error ? describeRefundWorkerError(error) : error,
+    needsPaystackCheck: error?.toLowerCase().includes('paystack') ?? false,
+    events: data.events?.map((event) => ({
+      ...event,
+      details: {
+        ...event.details,
+        ...(typeof event.details?.error === 'string'
+          ? { error: describeRefundWorkerError(event.details.error) }
+          : null),
+        ...(typeof event.details?.previousError === 'string'
+          ? {
+              previousError: describeRefundWorkerError(
+                event.details.previousError
+              ),
+            }
+          : null),
+      },
+    })),
+  };
+}
 
 async function handle(
   request: NextRequest,
@@ -150,7 +186,9 @@ async function handle(
       { status }
     );
   }
-  return NextResponse.json(data);
+  return NextResponse.json(
+    data && typeof data === 'object' ? maskRefundWorkerText(data) : data
+  );
 }
 
 export function GET(

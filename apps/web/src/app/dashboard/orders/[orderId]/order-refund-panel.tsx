@@ -10,7 +10,6 @@ import {
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
-import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { toLagosRefundInstant } from '@/lib/orders/to-lagos-refund-instant';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
@@ -168,9 +167,7 @@ export function OrderRefundPanel({
               )}
             </dl>
             {summary.error && (
-              <p className="text-sm text-destructive">
-                {describeRefundWorkerError(summary.error)}
-              </p>
+              <p className="text-sm text-destructive">{summary.error}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Attempts in current cycle: {summary.attempts}. Retries requested:{' '}
@@ -178,7 +175,7 @@ export function OrderRefundPanel({
             </p>
             {summary.status === 'requires_review' && (
               <p className="text-sm">
-                {summary.error?.toLowerCase().includes('paystack')
+                {summary.needsPaystackCheck
                   ? 'Verify the existing refund in Paystack before taking further action.'
                   : 'Review the flagged refund details before taking further action.'}
               </p>
@@ -239,9 +236,9 @@ export function OrderRefundPanel({
                 <summary>Refund activity</summary>
                 <ul className="space-y-2 text-sm" aria-label="Refund activity">
                   {summary.events.map((event) => {
-                    // Worker strings never render verbatim here either:
-                    // Fixed labels only: raw worker/provider text stays
-                    // out of the DOM like the route's error masking.
+                    // Event errors arrive pre-mapped at the API boundary,
+                    // so the panel renders them directly, never verbatim
+                    // worker text.
                     const eventError =
                       event.details.error || event.details.previousError;
                     return (
@@ -251,9 +248,7 @@ export function OrderRefundPanel({
                             'Refund activity'}{' '}
                           · {new Date(event.date).toLocaleString()}
                         </p>
-                        {eventError && (
-                          <p>{describeRefundWorkerError(eventError)}</p>
-                        )}
+                        {eventError && <p>{eventError}</p>}
                       </li>
                     );
                   })}

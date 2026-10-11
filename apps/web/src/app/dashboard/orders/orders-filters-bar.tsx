@@ -49,6 +49,7 @@ const SHIPPING_STATUS_ICONS: Record<ShippingStatus, ElementType> = {
   Shipped: Truck,
   Delivered: CheckCircle,
   Canceled: X,
+  Cancelled: X,
   Returned: RotateCcw,
 };
 

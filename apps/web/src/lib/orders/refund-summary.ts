@@ -12,7 +12,13 @@ export interface RefundSummary {
     | 'queued'
     | 'failed'
     | 'not_started';
+  // Fixed display label mapped at the API boundary, never raw
+  // worker/provider text: the route maps the RPC's strings before
+  // responding so provider internals stay server-side.
   error: string | null;
+  // The requires-review guidance branches on this instead of sniffing
+  // the (now mapped) error text for a provider mention.
+  needsPaystackCheck: boolean;
   attempts: number;
   retryRequests: number;
   canRetry: boolean;

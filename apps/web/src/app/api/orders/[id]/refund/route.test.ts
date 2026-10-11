@@ -77,6 +77,48 @@ describe('order refund route', () => {
       p_action: 'status',
     });
   });
+  it('maps worker strings to fixed labels on success payloads', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: 'requires_review',
+        error: 'Paystack/insufficient-balance (acquirer 51)',
+        events: [
+          {
+            id: 'event-1',
+            action: 'retry_requested',
+            date: '2026-10-01T12:00:00Z',
+            actor: null,
+            details: {
+              error: 'cancellation_refund_awaiting_paystack',
+              previousError: 'boom',
+            },
+          },
+        ],
+      },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'requires_review',
+      error: 'The refund ran into a problem. Support has the details.',
+      needsPaystackCheck: true,
+      events: [
+        {
+          id: 'event-1',
+          action: 'retry_requested',
+          date: '2026-10-01T12:00:00Z',
+          actor: null,
+          details: {
+            error:
+              'Refund in progress — waiting for the remaining money to arrive.',
+            previousError:
+              'The refund ran into a problem. Support has the details.',
+          },
+        },
+      ],
+    });
+  });
   it('queues retries without invoking a payment provider', async () => {
     expect((await POST(request({ action: 'retry' }), context)).status).toBe(
       200

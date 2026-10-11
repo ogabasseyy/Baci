@@ -60,7 +60,8 @@ describe('OrderRefundPanel status display', () => {
     loadWith({
       ...summary,
       status: 'requires_review',
-      error: 'Paystack/insufficient-balance (acquirer 51)',
+      error: 'The refund ran into a problem. Support has the details.',
+      needsPaystackCheck: true,
     });
     expect(
       await screen.findByText(
@@ -72,7 +73,8 @@ describe('OrderRefundPanel status display', () => {
     loadWith({
       ...summary,
       status: 'requires_review',
-      error: 'payment_currency_requires_review: leg currency mismatch',
+      error: 'This refund needs review before it can continue.',
+      needsPaystackCheck: false,
     });
     expect(
       await screen.findByText(

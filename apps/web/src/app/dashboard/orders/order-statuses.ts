@@ -15,6 +15,9 @@ export const SHIPPING_STATUSES = [
   'Shipped',
   'Delivered',
   'Canceled',
+  // Both DB spellings occur; formatStatus title-cases each, so the
+  // display union must carry both like the refund gate checks.
+  'Cancelled',
   'Returned',
 ] as const;
 

@@ -75,9 +75,9 @@ it('propagates refreshed session cookies without serializing tokens in the respo
     'sb-127-auth-token='
   );
   expect(response.headers.getSetCookie().join(';')).toContain('HttpOnly');
-  expect(response.headers.getSetCookie().join(';')).toContain(
-    'SameSite=strict'
-  );
+  // Case-insensitive: the spec treats the value case-insensitively and
+  // serializers vary ('Strict' vs 'strict'); lock the posture, not the casing.
+  expect(response.headers.getSetCookie().join(';')).toMatch(/samesite=strict/i);
   expect(await response.text()).toBe('{"status":"ok"}');
 });
 

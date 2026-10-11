@@ -139,6 +139,32 @@ test('a cancelled run that promoted holds the lock like a failed one', async () 
   assert.equal(error.indeterminateDispatch, true);
 });
 
+test('a non-green run with multiple attempts holds the lock', async () => {
+  // Attempt 1 may have promoted before attempt 2 failed
+  // pre-promotion; the latest jobs alone cannot rule that out.
+  const jobs = [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: 'Set up job', conclusion: 'failure' }] }];
+  for (const readAttemptCount of [async () => 2, async () => null, async () => { throw new Error('api flake'); }]) {
+    const setup = fixture({ readJobs: async () => jobs, readAttemptCount });
+    const error = await coordinateRelease(setup.operations, coordinationId).then(
+      () => { throw new Error('expected rejection'); },
+      rejection => rejection
+    );
+    assert.match(error.message, /earlier attempt|api flake/);
+    assert.equal(error.indeterminateDispatch, true);
+  }
+});
+
+test('a single-attempt pre-promotion failure still releases cleanly', async () => {
+  const jobs = [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: 'Set up job', conclusion: 'failure' }] }];
+  const setup = fixture({ readJobs: async () => jobs, readAttemptCount: async () => 1 });
+  const error = await coordinateRelease(setup.operations, coordinationId).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
+  );
+  assert.match(error.message, /publication did not succeed/);
+  assert.equal(error.indeterminateDispatch, undefined);
+});
+
 test('unreadable steps on a non-skipped job fail closed', async () => {
   for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
     const setup = fixture({ readJobs: async () => [{ name: 'deploy-production', conclusion }] });

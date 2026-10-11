@@ -1,56 +1,16 @@
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 import { assertCanonicalOriginPushUrls, assertCleanWorkerDeployEnv, CANONICAL_REPOSITORY, originRepoSlug } from './release-remote-validation.mjs';
+import { createRunner } from './release-subprocess.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const repository = CANONICAL_REPOSITORY;
 const workerHost = 'bassey@82.29.190.219';
 const coordinationId = randomUUID();
-
-export const API_COMMAND_TIMEOUT_MS = 60000;
-
-export function command(binary, args, capture = true, options = {}) {
-  const result = spawnSync(binary, args, {
-    cwd: root,
-    encoding: 'utf8',
-    stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
-    timeout: options.timeoutMs,
-    killSignal: 'SIGTERM',
-  });
-  if (result.error || result.status !== 0) {
-    // Keep reconciliation context: which call failed, how (including
-    // the kill signal — stderr stays inherited for live diagnostics,
-    // so the signal is the post-mortem channel), and the first bytes
-    // of whatever it printed before dying.
-    const output = typeof result.stdout === 'string' ? result.stdout.trim().slice(0, 500) : '';
-    const cause = result.error ? ` (${result.error.message})` : '';
-    const signal = result.signal ? ` signal ${result.signal}` : '';
-    const error = new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${signal}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
-    // A timeout means unknown remote state: the API call may have
-    // landed. Always hold the lock for reconcile-before-removal,
-    // even pre-dispatch (where dispatch provably never ran, so the
-    // operator just confirms and removes).
-    if (result.error && /time.?out/i.test(result.error.message)) {
-      error.indeterminateDispatch = true;
-    }
-    throw error;
-  }
-  return capture ? result.stdout.trim() : '';
-}
-
-function gh(args) {
-  // Every gh call is a bounded API read or dispatch: a hung child
-  // must not wedge the polling loops or the multi-hour release.
-  return command('gh', args, true, { timeoutMs: API_COMMAND_TIMEOUT_MS });
-}
-
-function vercelApi(path) {
-  return command('vercel', ['api', path, '--method', 'GET'], true, { timeoutMs: API_COMMAND_TIMEOUT_MS });
-}
+const { command, gh, vercelApi } = createRunner(root);
 
 const vercelProjectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
 const vercelScope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${vercelProjectId}`;
@@ -190,6 +150,11 @@ export async function findProductionDispatchRun(readPage, readAll, baseline, coo
   throw exhausted;
 }
 
+export function parseRunAttempt(text) {
+  const count = Number.parseInt(String(text ?? '').trim(), 10);
+  return Number.isFinite(count) ? count : null;
+}
+
 export function readRuns(filter, paginate = false) {
   const runs = [];
   const lastPage = paginate ? RUNS_MAX_PAGES : 1;
@@ -272,6 +237,16 @@ async function main() {
       ),
       cancelRun: async runId => gh(['run', 'cancel', String(runId), '--repo', repository]),
       readJobs: async runId => parseJobsPayload(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs']), runId),
+      readAttemptCount: async runId => {
+        // Null (API error or unparseable) fails closed in the
+        // coordinator: an unreadable attempt count cannot rule out a
+        // superseded promoting attempt.
+        try {
+          return parseRunAttempt(gh(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.run_attempt // empty']));
+        } catch {
+          return null;
+        }
+      },
       verifyLive: async commit => {
         const deploymentId = readServingDeploymentId();
         const deployment = JSON.parse(vercelApi(`/v13/deployments/${deploymentId}?${vercelScope}`));

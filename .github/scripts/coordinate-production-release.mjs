@@ -162,13 +162,27 @@ export async function coordinateRelease(operations, coordinationId) {
   }
   // gh run view reports the latest attempt's jobs for the single
   // non-matrixed deploy-production job, so exactly one success is the
-  // green shape; re-runs supersede earlier attempts rather than
-  // appending entries. Malformed listings refuse publication with the
-  // same error instead of throwing a TypeError.
+  // green shape. Malformed listings refuse publication with the same
+  // error instead of throwing a TypeError.
   if (!Array.isArray(jobs) || !jobs.every(job => job && typeof job.name === 'string' && typeof job.conclusion === 'string')) {
     throw new Error('production publication did not succeed; inspect the workflow');
   }
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
+    // Attempt supersession is invisible in the jobs listing: if
+    // attempt 1 promoted then failed and attempt 2 failed before
+    // promotion, the latest jobs look never-published while attempt 1
+    // already changed production. Any non-green run with multiple (or
+    // unreadable) attempts holds the lock for attempt-by-attempt
+    // reconciliation instead of trusting the latest jobs alone.
+    let attempts = null;
+    try {
+      attempts = await operations.readAttemptCount(run.databaseId);
+    } catch (error) {
+      tagIndeterminate(error);
+    }
+    if (attempts === null || attempts > 1) {
+      tagIndeterminate(new Error('production publication may have succeeded on an earlier attempt; inspect every attempt for promotion before retrying'));
+    }
     // A deploy-production job whose promotion step ran may already have
     // changed production even when the step failed: deploy-with-retry
     // documents ambiguous promote failures (server-side effect with a

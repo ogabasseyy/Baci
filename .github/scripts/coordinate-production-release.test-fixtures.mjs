@@ -18,6 +18,7 @@ export function fixture(overrides = {}) {
     watchRun: async () => {},
     cancelRun: async () => {},
     readJobs: async () => [{ name: 'deploy-production', conclusion: 'success' }],
+    readAttemptCount: async () => 1,
     verifyLive: async () => {},
     ...overrides,
   };

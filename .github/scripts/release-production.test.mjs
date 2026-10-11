@@ -9,20 +9,23 @@ import {
   assertCleanWorkerDeployEnv,
   originRepoSlug,
 } from './release-remote-validation.mjs';
+import { createRunner } from './release-subprocess.mjs';
 import {
   assertRemovableLockPath,
   assertServingDeploymentStable,
   assertVercelAccess,
-  command,
   parseGhJqString,
   parseJobsPayload,
   readRuns,
   readWorkflowRunStatus,
   RUN_WATCH_TIMEOUT_MS,
   RUNS_MAX_PAGES,
+  parseRunAttempt,
   shouldHoldReleaseLock,
   waitForRunCompletion,
 } from './release-production.mjs';
+
+const { command } = createRunner(process.cwd());
 
 test('accepts every canonical GitHub remote spelling', () => {
   for (const remote of [
@@ -259,6 +262,14 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://github.com:8443/ogabasseyy/Baci.git',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
+  }
+});
+
+test('parses run attempt counts, failing closed on garbage', () => {
+  assert.equal(parseRunAttempt('1\n'), 1);
+  assert.equal(parseRunAttempt('3'), 3);
+  for (const text of ['', '   ', 'null', 'x', null, undefined]) {
+    assert.equal(parseRunAttempt(text), null);
   }
 });
 

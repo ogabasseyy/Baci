@@ -24,6 +24,7 @@ const baseRequest = {
   merchantSlug: 'ogabassey',
   customerName: 'Test Customer',
   customerPhone: '08012345678',
+  expectedUserId: 'user-1',
   getWalletIdempotencyKey: () => 'idem-key',
 };
 
@@ -47,6 +48,7 @@ describe('submitUtilityCheckout', () => {
     );
     expect(JSON.parse(String(mockFetchWithCsrf.mock.calls[0]?.[1]?.body))).toMatchObject({
       amount: 100,
+      expectedUserId: 'user-1',
       merchantSlug: 'ogabassey',
       type: 'airtime',
       walletAmount: 100,
@@ -174,6 +176,18 @@ describe('submitUtilityCheckout', () => {
       amount: 100,
       processing: false,
     });
+  });
+
+  it('omits expectedUserId from the body when no user was captured', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({ amount: 100, reference: 'REF1', status: 'successful' })
+    );
+
+    await submitUtilityCheckout({ ...baseRequest, expectedUserId: null });
+
+    expect(
+      JSON.parse(String(mockFetchWithCsrf.mock.calls[0]?.[1]?.body))
+    ).not.toHaveProperty('expectedUserId');
   });
 
   it('fails closed on a schema-invalid success response', async () => {

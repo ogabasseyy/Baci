@@ -119,6 +119,10 @@ export function useUtilityIdempotencyKey({
   userId,
 }: UseUtilityIdempotencyKeyInput): UseUtilityIdempotencyKeyResult {
   const captureAttemptKey = (payloadSignature: string) => {
+    // merchantId is guaranteed defined here: the purchase readiness
+    // gate blocks submit until the merchant hydrates, so no attempt
+    // is ever scoped under '' (a post-hydration retry would miss it
+    // and double-debit).
     const scoped = scopePendingVtuSignature(
       userId ?? customerId,
       merchantId,

@@ -13,6 +13,8 @@ export interface UtilityCheckoutRequest {
   merchantSlug: string;
   customerName: string;
   customerPhone: string | null | undefined;
+  /** Auth user id captured before dispatch; the route rejects a mismatch. */
+  expectedUserId: string | null | undefined;
   getWalletIdempotencyKey: (payloadSignature: string) => string;
 }
 
@@ -44,6 +46,7 @@ export const submitUtilityCheckout = async ({
   merchantSlug,
   customerName,
   customerPhone,
+  expectedUserId,
   getWalletIdempotencyKey,
 }: UtilityCheckoutRequest): Promise<UtilityCheckoutResult> => {
   try {
@@ -51,6 +54,7 @@ export const submitUtilityCheckout = async ({
       merchantSlug,
       customerName,
       ...(customerPhone ? { customerPhone } : {}),
+      ...(expectedUserId ? { expectedUserId } : {}),
       ...payload,
       walletAmount: payload.amount,
     };

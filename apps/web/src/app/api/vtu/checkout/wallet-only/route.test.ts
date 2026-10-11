@@ -263,6 +263,53 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
   });
 
+  it('rejects a session mismatch before any database operation (409)', async () => {
+    // Web client captured user-A but the ambient cookie is now
+    // someone else: fail closed before the idempotency lookup, let
+    // alone the debit — otherwise the POST debits the new account
+    // for the old payload.
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status, body } = await callRoute(
+      makeRequest({
+        idempotencyKey: VALID_KEY,
+        body: {
+          ...VALID_BODY,
+          expectedUserId: '22222222-2222-4222-8222-222222222222',
+        },
+      })
+    );
+
+    expect(status).toBe(409);
+    expect(body).toMatchObject({
+      error: 'Account changed during checkout. Please try again.',
+    });
+    expect(state.insertCalls).toBe(0);
+    expect(
+      (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+    expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when the captured user matches the session', async () => {
+    const SUBMITTER = '33333333-3333-4333-8333-333333333333';
+    mockAuthenticate.mockResolvedValue({
+      user: { id: SUBMITTER, email: 'c@example.com' },
+      error: null,
+    });
+
+    const { status } = await callRoute(
+      makeRequest({
+        idempotencyKey: VALID_KEY,
+        body: { ...VALID_BODY, expectedUserId: SUBMITTER },
+      })
+    );
+
+    expect(status).toBe(200);
+    expect(mockPrepare).toHaveBeenCalled();
+  });
+
   it('happy path: prepares the row, fulfills, returns success — no transactions table write', async () => {
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     supabaseMockRef.current = buildSupabase(state);

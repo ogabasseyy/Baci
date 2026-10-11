@@ -93,6 +93,42 @@ describe('useUtilityPurchase', () => {
     );
   });
 
+  it('binds the submit to the captured auth user id', async () => {
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-BIND',
+      amount: 1000,
+      processing: false,
+    });
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUserId: 'user-1' })
+    );
+  });
+
+  it('waits (does not submit) while the merchant ID is hydrating', async () => {
+    // Scoping under '' would split from the post-hydration retry and
+    // double-debit; the readiness gate makes the wait explicit.
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ merchantId: undefined }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Store unavailable' })
+    );
+    expect(result.current.step).toBe('details');
+  });
+
   it('completes a wallet purchase: clears the draft, debits the balance, shows success', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'wallet-success',

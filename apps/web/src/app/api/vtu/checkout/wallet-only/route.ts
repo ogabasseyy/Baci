@@ -141,6 +141,17 @@ export async function POST(request: NextRequest) {
     }
     const { idempotencyKey, input } = parsedRequest;
 
+    // Bind the checkout to the submitting account before ANY database
+    // operation: a sign-in between the client's capture and this POST
+    // swaps the ambient cookie, so a mismatched session must fail
+    // closed instead of debiting the new account for the old payload.
+    if (input.expectedUserId && input.expectedUserId !== auth.user.id) {
+      return createErrorResponse(
+        'Account changed during checkout. Please try again.',
+        409
+      );
+    }
+
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     const supabase = createAdminClient();

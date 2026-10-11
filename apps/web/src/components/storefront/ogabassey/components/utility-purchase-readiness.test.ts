@@ -14,6 +14,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     canFundByBankTransfer: true,
     isAuthLoading: false,
     isAuthenticated: true,
+    merchantId: 'merchant-1',
     refreshWallet: vi.fn(),
     user,
     walletBalance: 5000,
@@ -50,6 +51,17 @@ describe('checkUtilityPurchaseReadiness', () => {
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Sign in required' })
+    );
+  });
+
+  it('blocks while the merchant ID is hydrating (scope would split)', () => {
+    // A submit scoped under '' followed by a post-hydration retry
+    // would miss recall, mint fresh, and debit twice.
+    expect(
+      checkUtilityPurchaseReadiness(baseInput({ merchantId: undefined }))
+    ).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Store unavailable' })
     );
   });
 

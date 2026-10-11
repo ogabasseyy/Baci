@@ -6,6 +6,7 @@ interface CheckUtilityPurchaseReadinessInput {
   canFundByBankTransfer: boolean;
   isAuthLoading: boolean;
   isAuthenticated: boolean;
+  merchantId: string | undefined;
   onInsufficientWalletBalance?: () => void;
   refreshWallet: () => void;
   user: CustomerUser | null;
@@ -26,6 +27,7 @@ export function checkUtilityPurchaseReadiness({
   canFundByBankTransfer,
   isAuthLoading,
   isAuthenticated,
+  merchantId,
   onInsufficientWalletBalance,
   refreshWallet,
   user,
@@ -46,6 +48,19 @@ export function checkUtilityPurchaseReadiness({
       title: 'Sign in required',
       description: 'Please sign in to use utility checkout.',
       variant: 'destructive',
+    });
+    return false;
+  }
+
+  // The idempotency scope is keyed by merchant ID: submitting before it
+  // hydrates would scope the key under '' and a post-hydration retry
+  // would miss recall, mint fresh, and debit twice. (The wallet gates
+  // below would usually block first, but this makes the invariant
+  // explicit instead of incidental.)
+  if (!merchantId) {
+    toast({
+      title: 'Store unavailable',
+      description: 'Please wait while the store finishes loading.',
     });
     return false;
   }

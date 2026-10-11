@@ -299,6 +299,12 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     walletAmount: z
       .number()
       .positive('walletAmount is required for wallet-only checkout'),
+    // Auth user id the client captured before dispatch. The route
+    // rejects a mismatch before any DB operation: a mid-flight sign-in
+    // swaps the ambient cookie, and without this the POST would debit
+    // the new account for the old payload. Optional (mobile binds its
+    // bearer token client-side instead); never part of the fingerprint.
+    expectedUserId: z.uuid().optional(),
   })
   .superRefine(applyPurchaseRequirements);
 

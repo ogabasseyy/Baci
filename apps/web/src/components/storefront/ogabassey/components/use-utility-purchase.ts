@@ -129,6 +129,7 @@ export function useUtilityPurchase({
         canFundByBankTransfer,
         isAuthLoading,
         isAuthenticated,
+        merchantId,
         onInsufficientWalletBalance,
         refreshWallet,
         user,
@@ -142,6 +143,9 @@ export function useUtilityPurchase({
 
     setLoading(true);
     const submittingIdentity = customer?.id ?? user?.id ?? null;
+    // Raw auth user id for route-side binding (NOT the customer
+    // fallback): the route rejects when the ambient session differs.
+    const submittingUserId = user?.id ?? null;
     const customerName =
       [customer?.first_name, customer?.last_name]
         .filter(Boolean)
@@ -157,6 +161,7 @@ export function useUtilityPurchase({
       merchantSlug: merchantSlug || 'ogabassey',
       customerName,
       customerPhone: customer?.phone,
+      expectedUserId: submittingUserId,
       getWalletIdempotencyKey: (payloadSignature: string) => {
         captured.attempt = captureAttemptKey(payloadSignature);
         return captured.attempt.key;

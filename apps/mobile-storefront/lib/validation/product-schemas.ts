@@ -133,6 +133,7 @@ export const ProductRowSchema = z.object({
   has_condition_offers: z.boolean().nullable().optional(),
   offers: z.array(ProductConditionOfferSchema).nullable().optional(),
   offers_hydration_failed: z.boolean().nullable().optional(),
+  variants_hydration_failed: z.boolean().nullable().optional(),
   categories: z
     .union([
       z.array(

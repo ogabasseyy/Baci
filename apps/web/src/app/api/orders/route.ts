@@ -24,7 +24,6 @@ import type { createTransactionDiscountProof } from '@/lib/checkout/create-trans
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
-import { hasExistingStorefrontOrderForKey } from '@/lib/checkout/has-existing-storefront-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
@@ -33,13 +32,12 @@ import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assu
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { resolveOrderOfferEconomics } from '@/lib/checkout/resolve-order-offer-economics';
+import { resolveIdempotentOfferReplay } from '@/lib/checkout/resolve-idempotent-offer-replay';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
@@ -981,56 +979,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // F1 (offer economics): an idempotent retry must replay the ORIGINAL
-    // order before it can be re-judged against the merchant's CURRENT
-    // offers. The offer was live when the first attempt validated; if the
-    // merchant has since deleted, deactivated, or sold it out, running
-    // live verification here would 400 a retry whose completed order the
-    // RPC would otherwise replay. Probe for the keyed order first (same
-    // lookup the RPC replays on) and skip mutable offer verification on a
-    // hit — downstream preflights fall back to parent prices, the
-    // discount/rate recomputes below are bypassed the same way, and the
-    // RPC's request-hash check remains the authority for conflicts.
-    const isIdempotentOfferOrderReplay =
-      requestIdempotencyKey && orderItemsPayload.some((item) => item.offer_id)
-        ? await hasExistingStorefrontOrderForKey({
-            merchantId: merchant_id,
-            requestIdempotencyKey,
-            supabase,
-          })
-        : false;
-    let liveOfferPrices = new Map<string, number>();
-    let liveOfferConditions = new Map<string, string>();
-    if (!isIdempotentOfferOrderReplay) {
-      // Exact condition offers must name a live offer of their own product:
-      // two offers can share one condition, so the stored id is the only
-      // thing distinguishing them at fulfillment time.
-      const offerEconomics = await resolveOrderOfferEconomics(
-        (productId) =>
-          supabase.rpc('get_product_offers', {
-            p_product_id: productId,
-          }) as unknown as Promise<OrderOfferQueryResult>,
-        orderItemsPayload
-      );
-      if (!offerEconomics.ok) {
-        if (offerEconomics.reason === 'verification_failed') {
-          console.error(
-            'Order offer verification failed:',
-            offerEconomics.error
-          );
-          return NextResponse.json(
-            { error: 'Failed to verify order offers' },
-            { status: 500 }
-          );
-        }
+    // F1 (offer economics): an idempotent retry replays the ORIGINAL order
+    // before it can be re-judged against the merchant's CURRENT offers
+    // (see resolve-idempotent-offer-replay). On a replay hit the stored
+    // tax_amount is reused below instead of recomputing VAT from parent
+    // prices, which would drift the request hash into a conflict.
+    const offerReplay = await resolveIdempotentOfferReplay({
+      adminSupabase: createAdminClient(),
+      merchantId: merchant_id,
+      orderItemsPayload,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (!offerReplay.ok) {
+      if (offerReplay.reason === 'verification_failed') {
+        console.error('Order offer verification failed:', offerReplay.error);
         return NextResponse.json(
-          { error: 'Invalid condition offer for order item' },
-          { status: 400 }
+          { error: 'Failed to verify order offers' },
+          { status: 500 }
         );
       }
-      liveOfferPrices = offerEconomics.liveOfferPrices;
-      liveOfferConditions = offerEconomics.liveOfferConditions;
+      return NextResponse.json(
+        { error: 'Invalid condition offer for order item' },
+        { status: 400 }
+      );
     }
+    const {
+      isIdempotentOfferOrderReplay,
+      liveOfferConditions,
+      liveOfferPrices,
+      storedReplayTaxAmount,
+    } = offerReplay.value;
 
     // Offer assurance fees recompute below, after the negotiation preflight
     // validates (and possibly prices) the client basis: the fee follows the
@@ -1199,52 +1178,60 @@ export async function POST(request: NextRequest) {
     // boundary lives in the database, not the Next.js layer
     // (CodeRabbit High on PR #1622 round 7).
     let serverComputedTaxAmount: number;
-    try {
-      serverComputedTaxAmount = await computeAgenticOrderTax({
-        items: items.map((item) => ({
-          product_id: item.product_id || item.productId || item.id,
-          quantity: item.quantity,
-          variant_id: item.variantId || item.variant_id,
-          offer_id: item.offerId || item.offer_id,
-        })),
-        merchantId: merchant_id,
-        offerPrices: liveOfferPrices,
-        supabase,
-      });
-    } catch (taxError) {
-      // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
-      // validates as `string`) cascade into Postgres's UUID parser
-      // as code 22P02. Pre-route-side-recompute, the RPC's own
-      // 22P02 path got mapped via `clientErrorCodes` to a 400. We
-      // must preserve that semantic so bad client payloads don't
-      // look like server outages.
-      if (isTaxComputeUuidError(taxError)) {
-        logger.warn({
+    if (storedReplayTaxAmount != null) {
+      // F1 replay: the stored order's VAT was computed from the offer
+      // price live at first validation. Recomputing now would fall back
+      // to parent prices (empty liveOfferPrices), drift tax_amount, and
+      // turn the retry into an idempotency conflict instead of replay.
+      serverComputedTaxAmount = storedReplayTaxAmount;
+    } else {
+      try {
+        serverComputedTaxAmount = await computeAgenticOrderTax({
+          items: items.map((item) => ({
+            product_id: item.product_id || item.productId || item.id,
+            quantity: item.quantity,
+            variant_id: item.variantId || item.variant_id,
+            offer_id: item.offerId || item.offer_id,
+          })),
+          merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
+          supabase,
+        });
+      } catch (taxError) {
+        // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
+        // validates as `string`) cascade into Postgres's UUID parser
+        // as code 22P02. Pre-route-side-recompute, the RPC's own
+        // 22P02 path got mapped via `clientErrorCodes` to a 400. We
+        // must preserve that semantic so bad client payloads don't
+        // look like server outages.
+        if (isTaxComputeUuidError(taxError)) {
+          logger.warn({
+            error: taxError,
+            merchantId: merchant_id,
+            message: 'Storefront order received malformed item identifier',
+          });
+          // Match the RPC error mapping below (`{ error: 'Failed to
+          // create order', details: <stable code> }`) AND share the
+          // `invalid_items` identifier with the agentic dispatch's
+          // 22P02 path — review findings on PR #1622 round 7.
+          return NextResponse.json(
+            {
+              error: 'Failed to create order',
+              details: 'invalid_items',
+            },
+            { status: 400 }
+          );
+        }
+        logger.error({
           error: taxError,
           merchantId: merchant_id,
-          message: 'Storefront order received malformed item identifier',
+          message: 'Storefront order VAT recompute failed',
         });
-        // Match the RPC error mapping below (`{ error: 'Failed to
-        // create order', details: <stable code> }`) AND share the
-        // `invalid_items` identifier with the agentic dispatch's
-        // 22P02 path — review findings on PR #1622 round 7.
         return NextResponse.json(
-          {
-            error: 'Failed to create order',
-            details: 'invalid_items',
-          },
-          { status: 400 }
+          { code: 'TAX_COMPUTE_FAILED', error: 'Unable to compute order tax' },
+          { status: 500 }
         );
       }
-      logger.error({
-        error: taxError,
-        merchantId: merchant_id,
-        message: 'Storefront order VAT recompute failed',
-      });
-      return NextResponse.json(
-        { code: 'TAX_COMPUTE_FAILED', error: 'Unable to compute order tax' },
-        { status: 500 }
-      );
     }
     // Record the REAL recomputed VAT on every order, including quiz-voucher
     // prizes. For a VAT-registered merchant the voucher RPC delegates to

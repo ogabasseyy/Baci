@@ -14,6 +14,7 @@ export interface HydratableProductRow extends Record<string, unknown> {
   offers_hydration_failed?: unknown;
   variant_model?: unknown;
   variants?: unknown;
+  variants_hydration_failed?: unknown;
 }
 
 export function needsVariantHydration(row: HydratableProductRow): boolean {

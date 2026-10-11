@@ -5316,6 +5316,72 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     expect(response.headers.get('x-idempotency-replayed')).toBe('true');
   });
 
+  it('reuses the stored VAT on an idempotent retry past a deleted offer', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    // The stored order's VAT was computed from the offer price live at
+    // first validation. Recomputing from parent prices would drift
+    // tax_amount, change the request hash, and conflict instead of replay.
+    const STORED_TAX_AMOUNT = 12345;
+    const createSpy = vi.fn().mockResolvedValue({
+      data: [{ ...baseOrderRow, idempotency_replayed: true }],
+      error: null,
+    });
+    mockCreateAdminClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { currency: 'NGN', tax_amount: STORED_TAX_AMOUNT },
+          error: null,
+        }),
+      })),
+      rpc: vi.fn(async () => ({ data: null, error: null })),
+    } as never);
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      const originalRpc = sb.rpc.bind(sb);
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        if (name === 'create_storefront_order') {
+          return createSpy(args);
+        }
+        return originalRpc(name);
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'checkout-key-retry-tax' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'refurbished',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ p_tax_amount: STORED_TAX_AMOUNT })
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('persists the live offer condition when the caller spelling canonically matches', async () => {
     const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
     const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';

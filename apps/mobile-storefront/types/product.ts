@@ -140,6 +140,10 @@ export interface Product {
   // must fail closed (retry/unavailable) instead of silently dropping
   // the requested identity.
   offers_hydration_failed?: boolean;
+  // Explicit marker: the variant fetch failed, so an absent `variants`
+  // list means "unknown", not "variantless". Exact variant links must
+  // fail closed (retry) instead of rendering a normal PDP.
+  variants_hydration_failed?: boolean;
 }
 
 export interface ProductVariant {

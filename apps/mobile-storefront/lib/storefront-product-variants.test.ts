@@ -134,7 +134,7 @@ describe('storefront-product-variants', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns rows unchanged when the rpc errors', async () => {
+  it('marks the original rows when the rpc errors', async () => {
     mockRange.mockResolvedValue({
       count: null,
       data: null,
@@ -143,9 +143,18 @@ describe('storefront-product-variants', () => {
 
     const rows = [{ id: 'product-1', variants: [{ id: 'embedded-variant' }] }];
 
+    // Mirrors offers_hydration_failed: an exact variant link must tell
+    // "lookup failed" from "no variants" and surface retry instead of a
+    // normal PDP.
     await expect(
       hydrateProductRowsWithStorefrontVariants(rows)
-    ).resolves.toEqual(rows);
+    ).resolves.toEqual([
+      {
+        id: 'product-1',
+        variants: [{ id: 'embedded-variant' }],
+        variants_hydration_failed: true,
+      },
+    ]);
   });
 
   it('clears stale embedded variants when a successful rpc returns no visible variants', async () => {

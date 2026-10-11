@@ -131,6 +131,52 @@ it('ignores the hydration marker without an exact offer link', () => {
   expect(result.current.error).toBeNull();
 });
 
+it('fails closed when an exact variant link meets a hydration failure', () => {
+  mockParams = { slug: 'phone', variant_id: 'v1' };
+  const marked = {
+    ...product,
+    has_variants: true,
+    variants: undefined,
+    variants_hydration_failed: true,
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: marked,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  // Without variants the selection resolution is null, so the missing
+  // predicate stays silent — the hydration marker must surface retry
+  // instead of rendering a normal PDP.
+  expect(result.current.routeVariantHydrationFailed).toBe(true);
+  expect(result.current.routeVariantMissing).toBe(false);
+  expect(result.current.error).toMatch(/could not be loaded/);
+});
+
+it('ignores the variant hydration marker without an exact variant link', () => {
+  mockParams = { slug: 'phone' };
+  const marked = {
+    ...product,
+    has_variants: true,
+    variants: undefined,
+    variants_hydration_failed: true,
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: marked,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeVariantHydrationFailed).toBe(false);
+  expect(result.current.error).toBeNull();
+});
+
 it('honors an ID-only offer through the synced selection on product load', () => {
   mockParams = { slug: 'phone', offer_id: 'o1' };
   const { result, rerender } = renderHook(

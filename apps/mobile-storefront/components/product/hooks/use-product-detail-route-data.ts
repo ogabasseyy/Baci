@@ -76,6 +76,21 @@ export function useProductDetailRouteData({
   const routeVariantMissingError = routeVariantMissing
     ? 'This variant is no longer available. It may have been removed or sold.'
     : null;
+  // An exact variant link whose variant fetch failed must not render as a
+  // variantless product (mirrors the offer hydration contract below):
+  // usesVariantRouteSelection is false without variants, so the missing
+  // predicate stays silent and the shopper gets a normal PDP with no
+  // retry/error state. Surface the existing error path instead.
+  const routeVariantIdParam =
+    getFirstRouteParamValue(routeParams.variant_id) ??
+    getFirstRouteParamValue(routeParams.variantId);
+  const routeVariantHydrationFailed =
+    routeVariantIdParam != null &&
+    routeVariantIdParam.length > 0 &&
+    product?.variants_hydration_failed === true;
+  const routeVariantHydrationError = routeVariantHydrationFailed
+    ? 'This option could not be loaded. Check your connection and try again.'
+    : null;
   // Search/compare entry points forward the advertised matched offer id.
   // Accept it only when it names one of this product's own offers; the
   // condition-compatibility check happens at selection time so a later
@@ -237,7 +252,11 @@ export function useProductDetailRouteData({
 
   return {
     displayProduct,
-    error: error ?? routeOfferHydrationError ?? routeVariantMissingError,
+    error:
+      error ??
+      routeOfferHydrationError ??
+      routeVariantHydrationError ??
+      routeVariantMissingError,
     isLoading,
     isOnline,
     isValidSlug,
@@ -251,6 +270,7 @@ export function useProductDetailRouteData({
     routeOfferHydrationFailed,
     routeOfferId,
     routeParams,
+    routeVariantHydrationFailed,
     routeVariantMissing,
     slug,
     suppressConditionOfferMatch,

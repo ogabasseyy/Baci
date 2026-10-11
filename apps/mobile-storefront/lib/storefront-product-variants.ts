@@ -145,7 +145,10 @@ export async function hydrateProductRowsWithStorefrontVariants<
   );
 
   if (variantsByProductId === null) {
-    return rows;
+    // Explicit failure marker (mirrors offers_hydration_failed): without
+    // it an exact variant link cannot tell "lookup failed" from "no
+    // variants" and renders a normal PDP with no retry/error state.
+    return rows.map((row) => ({ ...row, variants_hydration_failed: true }));
   }
 
   return rows.map((row) => {

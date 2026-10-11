@@ -87,6 +87,17 @@ describe('product-transform', () => {
     );
   });
 
+  it('carries the variant-hydration failure marker onto the product', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      variants: undefined,
+      variants_hydration_failed: true,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({ variants_hydration_failed: true })
+    );
+  });
+
   it('carries hydrated base policy and units onto simple products', () => {
     const product = transformProduct({
       ...variantProductRow,

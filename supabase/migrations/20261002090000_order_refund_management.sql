@@ -97,9 +97,20 @@ BEGIN
               OR refund.metadata->>'provider_refund_status' = 'processed')
          AND (
            (refund.metadata->>'payment_transaction_id' = leg.id::text
-            AND (public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
-                 OR public.normalized_gateway_name_v1(refund.gateway)
-                   = public.normalized_gateway_name_v1(leg.gateway)))
+            AND (
+              (
+                public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
+                -- Manual rows never cover wallet/savings legs: those
+                -- reverse through their own ledgers, mirroring the
+                -- claim gate and the executor matcher. Counting one
+                -- here would zero the remainder and flip the label
+                -- while the reversal never runs.
+                AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
+                  NOT IN ('WALLET', 'SAVINGS')
+              )
+              OR public.normalized_gateway_name_v1(refund.gateway)
+                = public.normalized_gateway_name_v1(leg.gateway)
+            ))
            OR (refund.metadata->>'payment_transaction_id' IS NULL
                AND v_sole_id IS NOT NULL
                AND leg.id = v_sole_id

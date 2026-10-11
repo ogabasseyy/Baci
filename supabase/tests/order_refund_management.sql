@@ -151,6 +151,8 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000028', v_merchant_id, 'REFUND-028',
       200, 200, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000029', v_merchant_id, 'REFUND-029',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000030', v_merchant_id, 'REFUND-030',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -185,7 +187,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000026',
       '9ef11000-0000-4000-8000-000000000027',
       '9ef11000-0000-4000-8000-000000000028',
-      '9ef11000-0000-4000-8000-000000000029');
+      '9ef11000-0000-4000-8000-000000000029',
+      '9ef11000-0000-4000-8000-000000000030');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -396,7 +399,20 @@ BEGIN
       'completed', 'manual', 'man-29-ps',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000048',
-        'method', 'paystack'));
+        'method', 'paystack')),
+    -- A wallet leg with a linked manual row: wallet legs reverse
+    -- through their own ledger, so the row is not refund coverage.
+    ('9ef12000-0000-4000-8000-000000000050', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000030', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'w-30', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000051', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000030', 'refund', 100, 'NGN',
+      'completed', 'manual', 'man-30',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000050',
+        'method', 'bank_transfer',
+        'reference', 'man-30',
+        'refunded_at', '2026-09-28T12:00:00Z'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -1073,6 +1089,23 @@ BEGIN
   WHERE id = '9ef11000-0000-4000-8000-000000000028';
   IF v_label <> 'paid' THEN
     RAISE EXCEPTION 'overfunded leg flipped payment label to %', v_label;
+  END IF;
+
+  -- A manual row linked to a wallet leg is not refund coverage: the
+  -- leg reverses through its own ledger, so the remainder holds and
+  -- the label with it.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000030'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'wallet-leg manual counted as coverage, got %/%',
+      v_result->>'refunded', v_result->>'remaining';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000030';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'wallet-leg manual flipped payment label to %', v_label;
   END IF;
 
   -- A full manual declared as a direct Paystack refund records (the

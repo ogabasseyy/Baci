@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { parseFundAmountKobo } from '@/components/wallet/fund-primary-wallet-card-amount';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 
 export type PrimaryWalletCardOwnership =
@@ -17,16 +18,15 @@ export type PrimaryWalletCardOwnership =
 // WebView stays unmounted until both proofs pass (or the launch is
 // blocked).
 // Strict decimal → integer kobo: the mount bind compares exact minor
-// units against the server figure, so binary floats must never sit in
-// between (0.29 * 100 is not 29 in float64, and >2-decimal inputs have
-// no defined rounding). Anything unparseable fails the bind.
+// units against the server figure, so parsing is single-sourced from
+// the shared fund parser (digits with at most two decimals, scaled by
+// string splitting — never a float multiply — and safe-integer gated).
+// The bind stays stricter than the fund form in one way: deep-link
+// params must not smuggle thousands separators past the shape check,
+// so a comma fails the bind instead of being normalized away.
 function parseAmountKobo(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
-  if (!match) return null;
-  const kobo =
-    Number(match[1]) * 100 + Number((match[2] ?? '0').padEnd(2, '0'));
-  return Number.isSafeInteger(kobo) ? kobo : null;
+  if (value === undefined || value.includes(',')) return null;
+  return parseFundAmountKobo(value);
 }
 
 export function usePrimaryWalletCardOwnership({

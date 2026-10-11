@@ -96,6 +96,13 @@ it('mismatches when the params amount is unparseable', async () => {
   await waitFor(() => expect(result.current.ownership).toBe('mismatch'));
 });
 
+it('mismatches when the params amount smuggles thousands separators', async () => {
+  const { result } = renderHook(() =>
+    usePrimaryWalletCardOwnership(input({ amountRaw: '1,000' }))
+  );
+  await waitFor(() => expect(result.current.ownership).toBe('mismatch'));
+});
+
 it('mismatches when the server bind throws', async () => {
   mockPeekStatus.mockRejectedValue(new Error('offline'));
   const { result } = renderHook(() => usePrimaryWalletCardOwnership(input()));

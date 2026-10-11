@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
+import React, { useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { useRefundStatusPolling } from './use-refund-status-polling';

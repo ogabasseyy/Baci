@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu';
+import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu-wallet-only';
 
 /**
  * Canonical fingerprint of the wallet-only request payload. Used by

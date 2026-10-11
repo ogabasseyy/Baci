@@ -102,6 +102,14 @@ interface PendingVtuPurchase {
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
+/**
+ * Scopes deliberately deleted since the last persist. The cross-tab
+ * sync must skip them, or it would resurrect just-forgotten,
+ * TTL-dropped, or evicted entries from the not-yet-rewritten snapshot.
+ * Cleared on every persist (the snapshot then matches the map).
+ */
+const forgottenScopedKeys = new Set<string>();
+
 /** Serializes live entries for localStorage (prunes TTL-expired). */
 export function serializePendingVtuPurchases(now: number = Date.now()): string {
   return serializePendingVtuEntries(pendingPurchases, now);
@@ -123,8 +131,28 @@ export function hydratePendingVtuPurchases(
   }
 }
 
+/**
+ * Merges entries another tab persisted since this tab loaded (live
+ * entries win: this tab's own writes are fresher than the snapshot).
+ * Without this, a retry in a second already-open tab would miss the
+ * first tab's key, mint fresh, and double-debit. Simultaneous
+ * cross-tab mints remain a known residual (sync recall cannot take an
+ * async lock) — same class as double-device submits.
+ */
+function syncPendingVtuPurchasesFromSnapshot(): void {
+  for (const [scoped, entry] of parsePendingVtuSnapshot(
+    loadPendingVtuSnapshot()
+  )) {
+    if (!forgottenScopedKeys.has(scoped) && !pendingPurchases.has(scoped)) {
+      pendingPurchases.set(scoped, entry);
+    }
+  }
+}
+
 function persistPendingVtuPurchases(): void {
+  syncPendingVtuPurchasesFromSnapshot();
   savePendingVtuSnapshot(serializePendingVtuPurchases());
+  forgottenScopedKeys.clear();
 }
 
 // Reload recovery: rehydrate before any submit runs in this browser.
@@ -162,10 +190,12 @@ export function recallPendingVtuKey(
   payloadSignature: string,
   now: number = Date.now()
 ): string | undefined {
+  syncPendingVtuPurchasesFromSnapshot();
   const pending = pendingPurchases.get(payloadSignature);
   if (!pending) return undefined;
   if (now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
     pendingPurchases.delete(payloadSignature);
+    forgottenScopedKeys.add(payloadSignature);
     persistPendingVtuPurchases();
     return undefined;
   }
@@ -185,12 +215,14 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
     if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
       pendingPurchases.delete(scoped);
+      forgottenScopedKeys.add(scoped);
       return;
     }
   }
   const oldest = pendingPurchases.keys().next();
   if (!oldest.done) {
     pendingPurchases.delete(oldest.value);
+    forgottenScopedKeys.add(oldest.value);
   }
 }
 
@@ -210,6 +242,7 @@ export function rememberPendingVtuPurchase(
     reference: null,
     rememberedAt: Date.now(),
   });
+  forgottenScopedKeys.delete(payloadSignature);
   persistPendingVtuPurchases();
 }
 
@@ -267,6 +300,7 @@ export function isStalePendingVtuSuccess(
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {
   pendingPurchases.delete(payloadSignature);
+  forgottenScopedKeys.add(payloadSignature);
   persistPendingVtuPurchases();
 }
 
@@ -288,5 +322,6 @@ export function getPendingVtuKey(payloadSignature: string): string {
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();
+  forgottenScopedKeys.clear();
   clearPendingVtuSnapshot();
 }

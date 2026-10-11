@@ -30,8 +30,11 @@ export function useUtilityPayment() {
   // another customer's entry. Owner is the stable Supabase user ID
   // first (NOT customer-first like the wallet reads): customers.id
   // lands later via hydration, and flipping scope mid-session would
-  // orphan the pending key and double-debit the retry. Merchant uses
-  // the same CONFIG fallback as the wallet reads for the same reason.
+  // orphan the pending key and double-debit the retry. Merchant is the
+  // build CONFIG id unconditionally (NOT merchantId || CONFIG like the
+  // reads): the hydrated id can land after a first submit, and any
+  // value but the hydrated one splits attempt from retry. The scope is
+  // a client-side namespace only — stability is all it needs.
   const ownerId = useAuthStore((state) =>
     resolveIdempotencyScopeOwnerId(state.user?.id, state.customer?.id)
   );
@@ -39,7 +42,6 @@ export function useUtilityPayment() {
   // back to the customer row, but the checkout token belongs to the
   // auth user, so the binding capture must not use the fallback.
   const submittingUserId = useAuthStore((state) => state.user?.id);
-  const merchantId = useAuthStore((state) => state.merchantId);
   // Latest signed-in owner, refreshed every render. Compared against
   // the submitter when a checkout settles so an account switch (or
   // sign-out) mid-flight discards the stale result instead of writing
@@ -47,7 +49,7 @@ export function useUtilityPayment() {
   const latestOwnerRef = useRef<string | undefined>(undefined);
   latestOwnerRef.current = ownerId;
   const scopePendingVtuDescriptor = (descriptor: string): string =>
-    scopePendingVtuKey(ownerId, merchantId || CONFIG.MERCHANT_ID, descriptor);
+    scopePendingVtuKey(ownerId, CONFIG.MERCHANT_ID, descriptor);
   // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
   // registry by purchase descriptor — a ref alone loses the key when
   // the form remounts (Back to Home, reopen Utilities), and the retry

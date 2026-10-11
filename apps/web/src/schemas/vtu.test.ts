@@ -7,8 +7,8 @@ import {
   verifySchema,
   vtuCheckoutInitializeSchema,
   vtuSavedCardChargeSchema,
-  vtuWalletOnlyChargeSchema,
 } from './vtu';
+import { vtuWalletOnlyChargeSchema } from './vtu-wallet-only';
 
 describe('billTypeEnum', () => {
   it('parses valid bill type values', () => {
@@ -872,5 +872,27 @@ describe('vtuWalletOnlyChargeSchema', () => {
   it('rejects missing walletAmount (the field is required here)', () => {
     const result = vtuWalletOnlyChargeSchema.safeParse({ ...baseAirtime });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts an optional expectedUserId UUID for route-side binding', () => {
+    const withId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      expectedUserId: '11111111-2222-4333-8444-555555555555',
+    });
+    expect(withId.success).toBe(true);
+
+    const withoutId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+    });
+    expect(withoutId.success).toBe(true);
+
+    const invalidId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      expectedUserId: 'not-a-uuid',
+    });
+    expect(invalidId.success).toBe(false);
   });
 });

@@ -80,6 +80,8 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
     expect(countQuery.eq).toHaveBeenCalledWith('status', 'processing');
     expect(countQuery.in).toHaveBeenCalledWith('type', [
+      'airtime',
+      'data',
       'electricity',
       'cable_tv',
       'betting',

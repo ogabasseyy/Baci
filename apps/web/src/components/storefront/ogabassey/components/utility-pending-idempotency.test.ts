@@ -14,7 +14,10 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-idempotency-store';
+import {
+  PERSISTED_VTU_KEY_TTL_MS,
+  savePendingVtuSnapshot,
+} from './utility-pending-idempotency-store';
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
@@ -287,6 +290,22 @@ describe('utility-pending-idempotency', () => {
     expect(
       fresh.hasNotedPendingVtuReference('{"reload":true}', 'REF-RELOAD')
     ).toBe(true);
+  });
+
+  it('recalls a key another tab persisted after this tab loaded', () => {
+    // Cross-tab sequential retry: tab B opened (empty map) before tab
+    // A submitted. B's recall must merge the snapshot first, or B
+    // mints a second key the route debits as a second transaction.
+    savePendingVtuSnapshot(
+      JSON.stringify([
+        [
+          'SIG-XTAB',
+          { key: 'key-tab-a', reference: null, rememberedAt: Date.now() },
+        ],
+      ])
+    );
+
+    expect(recallPendingVtuKey('SIG-XTAB')).toBe('key-tab-a');
   });
 
   it('never flags reference-less entries as stale', () => {

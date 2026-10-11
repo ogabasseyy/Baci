@@ -19,19 +19,28 @@ function createErrorResponse(error: string, status = 400) {
 
 function isUserFacingCheckoutError(message: string) {
   const userFacingErrors = new Set([
+    'Biller name or provider key is required for bill payment',
     'Customer account not found for this storefront',
-    'Merchant not found',
-    'VTU is not enabled for this merchant',
-    'Invalid phone number',
-    'Invalid customer phone number',
     'Failed to initiate purchase',
+    'Invalid customer phone number',
+    'Invalid phone number',
+    'Merchant not found',
+    'Monnify validation reference is required but missing',
+    'VTU is not enabled for this merchant',
   ]);
 
   return (
     userFacingErrors.has(message) ||
     /purchases are not enabled$/.test(message) ||
+    /^Amount for .+ must be exactly /.test(message) ||
     /^Data bundle (?:amount changed|not found)/.test(message) ||
     /^Invalid network provider/.test(message) ||
+    /^Maximum amount for .+ is /.test(message) ||
+    /^Minimum amount for .+ is /.test(message) ||
+    /^Monnify airtime biller not found for /.test(message) ||
+    /^Monnify airtime product not found for /.test(message) ||
+    /^Monnify product not found for /.test(message) ||
+    /^Monnify validation failed: /.test(message) ||
     /^Multiple data bundles match/.test(message)
   );
 }
@@ -145,10 +154,13 @@ export async function POST(request: NextRequest) {
     // operation: a sign-in between the client's capture and this POST
     // swaps the ambient cookie, so a mismatched session must fail
     // closed instead of debiting the new account for the old payload.
+    // 403 (not 409): nothing was recorded, so clients must KEEP the
+    // key — 409 would rotate it and a retry-after-switch-back would
+    // mint fresh and debit twice. Fingerprint-collision 409s stay.
     if (input.expectedUserId && input.expectedUserId !== auth.user.id) {
       return createErrorResponse(
         'Account changed during checkout. Please try again.',
-        409
+        403
       );
     }
 

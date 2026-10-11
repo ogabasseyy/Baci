@@ -43,6 +43,10 @@ export function checkUtilityPurchaseReadiness({
     return false;
   }
 
+  // Invariant (customer-auth-context: isAuthenticated = !!user &&
+  // !!customer): an authenticated session always carries a user row,
+  // so the `!user` disjunct is unreachable defense-in-depth, not a
+  // customer-only-session rejection — the route would 401 those anyway.
   if (!isAuthenticated || !user) {
     toast({
       title: 'Sign in required',

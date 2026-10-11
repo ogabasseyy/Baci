@@ -8,8 +8,9 @@
  * recall the same key — tab-scoped storage would mint fresh and the
  * route would debit a second transaction. Entries stay owner+merchant
  * scoped with the same 24h TTL, so another account still cannot recall
- * them; concurrent-tab writes are last-wins (documented residual —
- * same as any localStorage design).
+ * them. The registry merges the snapshot on recall/persist, so only
+ * simultaneous cross-tab mints can still diverge (documented residual
+ * — sync recall cannot take an async lock).
  */
 
 /**

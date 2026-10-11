@@ -9,7 +9,7 @@ export const billTypeEnum = z.enum([
 ]);
 export type BillType = z.infer<typeof billTypeEnum>;
 
-const purchaseSchemaBase = z.object({
+export const purchaseSchemaBase = z.object({
   merchantSlug: z.string().min(1),
   amount: z.number().min(50).max(500000),
   type: billTypeEnum,
@@ -47,9 +47,9 @@ const purchaseSchemaBase = z.object({
   requireValidationRef: z.boolean().optional(),
 });
 
-type PurchaseRequirementValues = z.infer<typeof purchaseSchemaBase>;
+export type PurchaseRequirementValues = z.infer<typeof purchaseSchemaBase>;
 
-function applyPurchaseRequirements(
+export function applyPurchaseRequirements(
   data: PurchaseRequirementValues,
   ctx: z.RefinementCtx
 ) {
@@ -291,26 +291,6 @@ export const vtuSavedCardChargeSchema = purchaseSchemaBase
     savedPaymentMethodId: z.uuid('Saved payment method id is invalid'),
   })
   .superRefine(applyPurchaseRequirements);
-
-// Wallet-only VTU checkout. Requires walletAmount > 0; the route
-// additionally enforces walletAmount === amount (full coverage).
-export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
-  .extend({
-    walletAmount: z
-      .number()
-      .positive('walletAmount is required for wallet-only checkout'),
-    // Auth user id the client captured before dispatch. The route
-    // rejects a mismatch before any DB operation: a mid-flight sign-in
-    // swaps the ambient cookie, and without this the POST would debit
-    // the new account for the old payload. Optional (mobile binds its
-    // bearer token client-side instead); never part of the fingerprint.
-    expectedUserId: z.uuid().optional(),
-  })
-  .superRefine(applyPurchaseRequirements);
-
-export type VtuWalletOnlyChargeInput = z.infer<
-  typeof vtuWalletOnlyChargeSchema
->;
 
 /** Maps our bill type enum to commission calculation categories */
 export const COMMISSION_CATEGORY_MAP: Record<BillType, string> = {

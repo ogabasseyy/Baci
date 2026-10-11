@@ -1,7 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 
-const RECONCILABLE_VTU_TYPES = ['electricity', 'cable_tv', 'betting'] as const;
+// Every type the wallet-only route can leave 'processing' (202): a
+// customer who closes the pending screen without retrying must still
+// have their transaction resolved (success or failed+refund) by the
+// cron. Fulfill is the same generic resume the replay path uses, and
+// the wallet RPC's source_id idempotency makes re-driving safe.
+const RECONCILABLE_VTU_TYPES = [
+  'airtime',
+  'data',
+  'electricity',
+  'cable_tv',
+  'betting',
+] as const;
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

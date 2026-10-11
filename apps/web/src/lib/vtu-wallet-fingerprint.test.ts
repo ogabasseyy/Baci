@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu';
+import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu-wallet-only';
 import { computeVtuWalletRequestFingerprint } from './vtu-wallet-fingerprint';
 
 const BASE_AIRTIME: VtuWalletOnlyChargeInput = {

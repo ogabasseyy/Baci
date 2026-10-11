@@ -212,6 +212,33 @@ describe('useUtilityPayment', () => {
     ).toBe(key);
   });
 
+  it('keeps the scope stable when merchantId hydrates mid-session', () => {
+    // The scope uses the build CONFIG merchant id unconditionally: a
+    // merchantId || CONFIG fallback would split a pre-hydration
+    // attempt from its post-hydration retry whenever the hydrated id
+    // differs, missing recall and double-debiting with a fresh key.
+    mockAuthState.merchantId = null;
+    const beforeHydration = renderHook(() => useUtilityPayment());
+    const scopedBefore =
+      beforeHydration.result.current.scopePendingVtuDescriptor(
+        'merchant-hydration-key'
+      );
+    const key =
+      beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
+    beforeHydration.unmount();
+
+    mockAuthState.merchantId = 'merchant-1';
+    const afterHydration = renderHook(() => useUtilityPayment());
+    const scopedAfter =
+      afterHydration.result.current.scopePendingVtuDescriptor(
+        'merchant-hydration-key'
+      );
+    expect(scopedAfter).toBe(scopedBefore);
+    expect(
+      afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
+    ).toBe(key);
+  });
+
   it('does not recall another owner’s pending key for the same purchase', () => {
     // Sign-out regression: customer A’s remembered key must be
     // unreachable once customer B signs in, or the route rejects B’s

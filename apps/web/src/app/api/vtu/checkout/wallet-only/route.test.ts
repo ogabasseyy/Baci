@@ -263,7 +263,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
   });
 
-  it('rejects a session mismatch before any database operation (409)', async () => {
+  it('rejects a session mismatch before any database operation (403, key kept)', async () => {
     // Web client captured user-A but the ambient cookie is now
     // someone else: fail closed before the idempotency lookup, let
     // alone the debit — otherwise the POST debits the new account
@@ -281,7 +281,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       })
     );
 
-    expect(status).toBe(409);
+    expect(status).toBe(403);
     expect(body).toMatchObject({
       error: 'Account changed during checkout. Please try again.',
     });
@@ -368,6 +368,30 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(body).toMatchObject({
       error:
         'Data bundle not found for MTN at ₦3,500. Please refresh data bundles and select a package.',
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('returns deterministic Monnify amount failures as actionable 400s without error logging', async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockPrepare.mockRejectedValueOnce(
+      new Error('Amount for DSTV Compact must be exactly 12500')
+    );
+
+    const { status, body } = await callRoute(
+      makeRequest({
+        body: { ...VALID_BODY, amount: 1000, walletAmount: 1000 },
+        idempotencyKey: VALID_KEY,
+      })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: 'Amount for DSTV Compact must be exactly 12500',
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     expect(consoleErrorSpy).not.toHaveBeenCalled();

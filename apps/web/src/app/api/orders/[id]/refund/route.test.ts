@@ -51,9 +51,15 @@ describe('order refund route', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('rejects invalid bodies and identifiers', async () => {
-    expect(
-      (await POST(request({ action: 'manual', amount: 999 }), context)).status
-    ).toBe(400);
+    const invalidBody = await POST(
+      request({ action: 'manual', amount: 999 }),
+      context
+    );
+    expect(invalidBody.status).toBe(400);
+    expect(await invalidBody.json()).toEqual({
+      error: 'Invalid refund request',
+      code: 'invalid_refund_request',
+    });
     const invalidId = await GET(request(), {
       params: Promise.resolve({ id: 'invalid' }),
     });

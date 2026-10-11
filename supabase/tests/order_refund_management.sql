@@ -133,6 +133,10 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000019', v_merchant_id, 'REFUND-019',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000020', v_merchant_id, 'REFUND-020',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000021', v_merchant_id, 'REFUND-021',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000022', v_merchant_id, 'REFUND-022',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -158,7 +162,9 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000017',
       '9ef11000-0000-4000-8000-000000000018',
       '9ef11000-0000-4000-8000-000000000019',
-      '9ef11000-0000-4000-8000-000000000020');
+      '9ef11000-0000-4000-8000-000000000020',
+      '9ef11000-0000-4000-8000-000000000021',
+      '9ef11000-0000-4000-8000-000000000022');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -281,7 +287,24 @@ BEGIN
         'provider_refund_status', 'processed')),
     ('9ef12000-0000-4000-8000-000000000031', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000020', 'payment', 40, 'NGN',
-      'completed', 'cash', 'cash-20', '{}'::jsonb);
+      'completed', 'cash', 'cash-20', '{}'::jsonb),
+    -- An overfunded ledger: the payment leg exceeds the recorded
+    -- amount paid, so no manual remainder can cover it.
+    ('9ef12000-0000-4000-8000-000000000032', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000021', 'payment', 120, 'NGN',
+      'completed', 'paystack', 'cap-21', '{}'::jsonb),
+    -- Several legs plus one unlinked refund: unattributable until
+    -- operations links it, never whole-order coverage.
+    ('9ef12000-0000-4000-8000-000000000033', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000022', 'payment', 60, 'NGN',
+      'completed', 'paystack', 'cap-22a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000034', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000022', 'payment', 40, 'NGN',
+      'completed', 'paystack', 'cap-22b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000035', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000022', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'unlinked-22',
+      jsonb_build_object('provider_refund_status', 'processed'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -581,6 +604,17 @@ BEGIN
     IF SQLERRM <> 'unallocated_refund_requires_review' THEN RAISE; END IF;
   END;
 
+  -- A sole-leg unlinked refund still attributes like the claim gate.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000005'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 10
+    OR (v_result->>'pending')::numeric <> 0
+    OR (v_result->>'remaining')::numeric <> 90 THEN
+    RAISE EXCEPTION 'sole unlinked row misattributed, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+
   -- Manual money skips already-reversed wallet legs: only the Paystack
   -- leg is allocatable, so one row covers the outstanding 60.
   SELECT public.manage_order_refund(
@@ -822,6 +856,55 @@ BEGIN
     RAISE EXCEPTION 'mixed cash balance wrong, got %/%',
       v_result->>'refunded', v_result->>'remaining';
   END IF;
+
+  -- An overfunded ledger routes manuals to review: the leg exceeds
+  -- the recorded balance, so the remainder could never cover it and
+  -- recording would strand finalization with a zero balance.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000021'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'overfunded remaining wrong, got %',
+      v_result->>'remaining';
+  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000021', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'overfunded-1',NULL,true);
+    RAISE EXCEPTION 'manual accepted on an overfunded ledger';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- An unlinked refund across several legs waits in pending: it is
+  -- neither whole-order coverage nor a flipped label, and manuals
+  -- stay blocked until operations links it.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000022'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'multi-leg unlinked row miscounted, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+  IF v_result->>'status' <> 'processing' THEN
+    RAISE EXCEPTION 'multi-leg unlinked row did not hold processing status';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000022';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'multi-leg unlinked row flipped payment label to %',
+      v_label;
+  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000022', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'multileg-1',NULL,true);
+    RAISE EXCEPTION 'manual accepted beside multi-leg unlinked money';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
 
   -- Missing and foreign orders are indistinguishable to callers.
   v_rejected := false;

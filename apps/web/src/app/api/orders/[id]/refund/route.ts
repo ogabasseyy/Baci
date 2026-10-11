@@ -60,7 +60,7 @@ async function handle(
     );
     if (!parsed.success)
       return NextResponse.json(
-        { error: 'Invalid refund request' },
+        { error: 'Invalid refund request', code: 'invalid_refund_request' },
         { status: 400 }
       );
     const body = parsed.data;

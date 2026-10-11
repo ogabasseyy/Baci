@@ -39,6 +39,18 @@ test('a cache miss fails closed instead of silently re-seeding the tip', () => {
   assert.match(workflow, /refusing to silently re-seed/);
 });
 
+test('the cached tip is shape-checked before it reaches git fetch', () => {
+  assert.match(workflow, /tr -cd '0-9a-f'/);
+  assert.match(workflow, /is not a 40-char hex SHA; refusing to fetch it/);
+  assert.match(workflow, /git fetch origin -- "\$previous"/);
+  // The guard must precede the fetch that consumes the cached value:
+  // quoting alone does not stop git option parsing.
+  assert.ok(
+    workflow.indexOf("tr -cd '0-9a-f'") < workflow.indexOf('git fetch origin -- "$previous"'),
+    'shape guard must precede the cached-tip fetch',
+  );
+});
+
 test('a missing branch fails closed instead of exiting green', () => {
   assert.match(workflow, /is missing; failing closed without validation/);
   assert.doesNotMatch(workflow, /nothing to validate/);

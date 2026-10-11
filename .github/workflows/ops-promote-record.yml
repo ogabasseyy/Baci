@@ -89,11 +89,25 @@ jobs:
           if [ -f .ops-promote-last-tip ]; then
             previous="$(cat .ops-promote-last-tip)"
           fi
+          # Validate the cached tip BEFORE it reaches git fetch: quoting
+          # does not stop option parsing, so a dash-led cache value would
+          # parse as fetch options (--upload-pack= executes a command).
+          # The cache is written by this same workflow, so a malformed
+          # value means cache corruption or tampering — fail closed either
+          # way. All-zeros passes the shape check and skips the fetch
+          # below; the validator re-checks both identities afterwards.
+          stripped="$(printf '%s' "$previous" | tr -cd '0-9a-f')"
+          if [ "${#previous}" -ne 40 ] || [ "$stripped" != "$previous" ]; then
+            echo '::error::cached tip is not a 40-char hex SHA; refusing to fetch it.' >&2
+            exit 1
+          fi
           # Best effort: after a rewrite the previous tip's objects may
           # already be unreachable from every fetched ref. Missing
-          # objects still fail closed inside the validator.
+          # objects still fail closed inside the validator. The '--'
+          # terminates option parsing as a second layer behind the shape
+          # check above.
           if [ "$previous" != '0000000000000000000000000000000000000000' ]; then
-            git fetch origin "$previous" 2>/dev/null || true
+            git fetch origin -- "$previous" 2>/dev/null || true
           fi
           node ci_scripts/validate-promote-record.mjs "$tip" "$previous"
           echo "$tip" > .ops-promote-last-tip

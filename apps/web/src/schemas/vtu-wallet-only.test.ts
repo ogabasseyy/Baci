@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import { vtuWalletOnlyChargeSchema } from './vtu-wallet-only';
+
+// vtuWalletOnlyChargeSchema is the validation surface for the
+// /api/vtu/checkout/wallet-only route. It tightens the base schema by
+// REQUIRING walletAmount > 0 (unlike the optional walletAmount on the
+// other derived schemas) — a wallet-only request without a positive
+// walletAmount is structurally a card-only request that took the
+// wrong path. The route additionally enforces walletAmount === amount
+// (full-coverage); the schema accepts any positive walletAmount <=
+// amount and lets the route reject partial coverage with a clear
+// "use the regular initialize endpoint" 4xx.
+describe('vtuWalletOnlyChargeSchema', () => {
+  // The wallet-only ROUTE injects `source: 'checkout'` into the body
+  // before parsing. Mirror that here so these tests reflect what the
+  // schema actually sees in production.
+  const baseAirtime = {
+    merchantSlug: 'ogabassey',
+    amount: 1000,
+    type: 'airtime' as const,
+    phoneNumber: '08012345678',
+    networkProvider: 'MTN',
+    source: 'checkout' as const,
+  };
+
+  it('accepts walletAmount === amount (the full-coverage happy path)', () => {
+    const result = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects walletAmount === 0 (the route requires a positive amount)', () => {
+    const result = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects walletAmount > amount via the cross-field rule', () => {
+    const result = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1500,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing walletAmount (the field is required here)', () => {
+    const result = vtuWalletOnlyChargeSchema.safeParse({ ...baseAirtime });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an optional expectedUserId UUID for route-side binding', () => {
+    const withId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      expectedUserId: '11111111-2222-4333-8444-555555555555',
+    });
+    expect(withId.success).toBe(true);
+
+    const withoutId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+    });
+    expect(withoutId.success).toBe(true);
+
+    const invalidId = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      expectedUserId: 'not-a-uuid',
+    });
+    expect(invalidId.success).toBe(false);
+  });
+});

@@ -6,7 +6,7 @@ import {
   type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
 } from './utility-checkout';
-import { buildVtuWalletPayloadSignature } from './utility-pending-idempotency';
+import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
 
 export interface UtilityCheckoutRequest {
   payload: UtilityCheckoutPayload;

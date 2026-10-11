@@ -31,15 +31,13 @@ import {
  *
  * Durability: entries persist in sessionStorage (tab-scoped) so a page
  * reload between a timed-out submit and its retry still replays the
- * same key instead of minting a fresh one and debiting twice.
- * Persisted entries expire after 24h, and live recall enforces the
- * same TTL for reference-less entries (a timed-out submit that reached
- * the server completed long ago; replaying its key would present the
- * old success as a new purchase). Referenced entries keep recalling
- * however old — the stale check arbitrates their success replays, and
- * expiring them could mint a fresh key for a still-processing
- * transaction (double debit). The 5-minute stale window for
- * already-completed detection still applies to `rememberedAt`.
+ * same key instead of minting a fresh one and debiting twice. All
+ * entries expire after a uniform 24h horizon (persisted and live
+ * recall alike, regardless of reference state): 24h dwarfs any
+ * plausible processing duration, while infinite retention would
+ * accumulate unboundedly. Within the TTL the 5-minute stale window
+ * arbitrates success replays of noted references against
+ * `rememberedAt`.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
@@ -243,16 +241,17 @@ export function hasNotedPendingVtuReference(
 
 /**
  * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: the original submit is
- * older than the recall window, so this submit is a NEW intent, not a
- * retry. Callers MUST forget the signature and prompt a fresh submit
- * instead of presenting the earlier vend as the new purchase.
- * Reference-less entries (lost/timeout responses keep reference null
- * while the TTL retains them) are stale past the window too: their
- * first success past the window is the PRIOR transaction's, and
- * presenting it as the new purchase skips the new debit and vend.
- * Past the TTL recall already dropped them, so this predicate never
- * sees them.
+ * instead of resolving the current submit: same NOTED reference, but
+ * the original submit is older than the recall window, so this submit
+ * is a NEW intent, not a retry. Callers MUST forget the signature
+ * and prompt a fresh submit instead of presenting the earlier vend as
+ * the new purchase. Reference-less entries are NEVER stale: the user
+ * saw failure (any success/processing response would have finalized
+ * the entry), so a re-tap is definitionally a retry. Reusing the key
+ * lets the authoritative server dedupe; forcing a fresh key would
+ * assert non-existence the client cannot know and double-debit a slow
+ * retry of an already-committed attempt. Past the TTL recall already
+ * dropped them, so this predicate never sees them.
  */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,
@@ -263,7 +262,7 @@ export function isStalePendingVtuSuccess(
   if (!pending || now - pending.rememberedAt <= PENDING_VTU_STALE_AFTER_MS) {
     return false;
   }
-  return pending.reference === null || pending.reference === reference;
+  return pending.reference !== null && pending.reference === reference;
 }
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {

@@ -289,21 +289,21 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
-  it('flags reference-less entries as stale only past the window', () => {
-    // Within the window the first success IS the resolution (retry of
-    // a lost response). Past it the submit is a NEW intent, and the
-    // replay would present the prior transaction as the new purchase
-    // without a new debit or vend.
+  it('never flags reference-less entries as stale', () => {
+    // The user saw failure (any response would have finalized the
+    // entry), so a re-tap is definitionally a retry at any age:
+    // reusing the key lets the server dedupe, while forcing stale
+    // would mint a fresh key and double-debit a slow retry of an
+    // already-committed attempt.
     const signature = '{"noref":true}';
     getPendingVtuKey(signature);
 
-    expect(isStalePendingVtuSuccess(signature, 'REF-FIRST')).toBe(false);
     expect(
       isStalePendingVtuSuccess(
         signature,
         'REF-FIRST',
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 });

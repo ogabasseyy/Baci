@@ -91,11 +91,12 @@ describe('pending-vtu-idempotency', () => {
     ).toBe(false);
   });
 
-  it('flags a reference-less entry as stale only past the recall window', () => {
-    // Within the window the first success IS the resolution (retry of
-    // a lost response). Past it the submit is a NEW intent, and the
-    // replay would present the prior transaction as the new purchase
-    // without a new debit or vend.
+  it('never flags a reference-less entry as stale', () => {
+    // The user saw failure (any response would have finalized the
+    // entry), so a re-tap is definitionally a retry at any age:
+    // reusing the key lets the server dedupe, while forcing stale
+    // would mint a fresh key and double-debit a slow retry of an
+    // already-committed attempt.
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'data',
       amount: 3,
@@ -103,19 +104,18 @@ describe('pending-vtu-idempotency', () => {
     });
     const rememberedAt = Date.now();
     rememberPendingVtuPurchase(descriptor, 'key-noref');
-    expect(isStalePendingVtuSuccess(descriptor, 'REF-FIRST')).toBe(false);
     expect(
       isStalePendingVtuSuccess(
         descriptor,
         'REF-FIRST',
         rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('drops TTL-expired reference-less entries on recall', () => {
-    // The TTL is the outer retention horizon; within-TTL old entries
-    // are arbitrated by the stale check instead.
+    // Reference-less entries are never stale by policy (a re-tap
+    // after failure is a retry), so the TTL is their only horizon.
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 9,

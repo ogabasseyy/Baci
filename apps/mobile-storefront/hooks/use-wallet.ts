@@ -62,11 +62,18 @@ export function useWallet(options: UseWalletOptions = {}) {
   > | null>(null);
   const walletOwnerId = customer?.id ?? user?.id ?? '';
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
+  // Both identities present but disagreeing (customer row linked to a
+  // different auth user) means a switch is mid-flight: hold the query
+  // — including the primary probe — until they agree, so the load can
+  // never mix one identity's wallet with another's funding account.
+  const identityAgreed =
+    !customer?.id || !user?.id || (customer.user_id ?? user.id) === user.id;
   const walletQueryKey =
     walletOwnerId && activeMerchantId
       ? walletKeys.data({
           merchantId: activeMerchantId,
           ownerId: walletOwnerId,
+          userId: user?.id ?? undefined,
         })
       : (['wallet', 'disabled'] as const);
 
@@ -84,7 +91,7 @@ export function useWallet(options: UseWalletOptions = {}) {
     queryKey: walletQueryKey,
     queryFn: () =>
       fetchWalletData(customer?.id ?? null, activeMerchantId, user?.id ?? null),
-    enabled: !!walletOwnerId && !!activeMerchantId,
+    enabled: !!walletOwnerId && !!activeMerchantId && identityAgreed,
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,
   });
@@ -92,7 +99,7 @@ export function useWallet(options: UseWalletOptions = {}) {
   // Real-time sync
   // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount
   useEffect(() => {
-    if (!customer?.id) return;
+    if (!customer?.id && !user?.id) return;
 
     // Cleanup any existing channel first (prevent duplicates)
     if (channelRef.current) {
@@ -101,10 +108,11 @@ export function useWallet(options: UseWalletOptions = {}) {
     }
 
     let isMounted = true;
-    const channelName = `wallet-hook-${customer.id}-${Date.now()}`;
+    const channelName = `wallet-hook-${customer?.id ?? user?.id}-${Date.now()}`;
     const activeWalletQueryKey = walletKeys.data({
       merchantId: activeMerchantId,
-      ownerId: customer.id,
+      ownerId: walletOwnerId,
+      userId: user?.id ?? undefined,
     });
     const invalidateWalletData = () => {
       if (isMounted) {
@@ -126,58 +134,78 @@ export function useWallet(options: UseWalletOptions = {}) {
       }, SAVINGS_INVALIDATION_DEBOUNCE_MS);
     };
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
+    const customerId = customer?.id;
+    let channel = supabase.channel(channelName);
+    if (customerId) {
+      channel = channel
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'customer_wallets',
+            filter: `customer_id=eq.${customerId}`,
+          },
+          () => {
+            // Only invalidate if still mounted
+            invalidateWalletData();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'customers',
+            filter: `id=eq.${customerId}`,
+          },
+          () => {
+            invalidateWalletData();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'customer_savings_goals',
+            filter: `customer_id=eq.${customerId}`,
+          },
+          () => {
+            debouncedSavingsInvalidation();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'customer_savings_contributions',
+            filter: `customer_id=eq.${customerId}`,
+          },
+          () => {
+            debouncedSavingsInvalidation();
+          }
+        );
+    }
+    // User-only sessions have no customer rows to watch, but the
+    // customer row may be created/linked at any moment: watch the
+    // customers table by auth user so the wallet refreshes then.
+    if (user?.id) {
+      channel = channel.on(
         'postgres_changes',
         {
           event: '*',
-          schema: 'public',
-          table: 'customer_wallets',
-          filter: `customer_id=eq.${customer.id}`,
-        },
-        () => {
-          // Only invalidate if still mounted
-          invalidateWalletData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
           schema: 'public',
           table: 'customers',
-          filter: `id=eq.${customer.id}`,
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
           invalidateWalletData();
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'customer_savings_goals',
-          filter: `customer_id=eq.${customer.id}`,
-        },
-        () => {
-          debouncedSavingsInvalidation();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'customer_savings_contributions',
-          filter: `customer_id=eq.${customer.id}`,
-        },
-        () => {
-          debouncedSavingsInvalidation();
-        }
-      )
-      .subscribe();
+      );
+    }
+    channel.subscribe();
 
     channelRef.current = channel;
 
@@ -193,7 +221,7 @@ export function useWallet(options: UseWalletOptions = {}) {
         channelRef.current = null;
       }
     };
-  }, [activeMerchantId, customer?.id, queryClient]);
+  }, [activeMerchantId, customer?.id, user?.id, queryClient, walletOwnerId]);
 
   return {
     data,
@@ -234,6 +262,7 @@ export function useCreateWalletFundingAccount() {
         queryKey: walletKeys.data({
           merchantId: activeMerchantId,
           ownerId: walletOwnerId,
+          userId: user?.id ?? undefined,
         }),
       });
     },

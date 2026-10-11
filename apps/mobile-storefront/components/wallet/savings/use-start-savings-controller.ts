@@ -6,13 +6,10 @@ import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
 import {
-  calculateMaturityDate,
+  deriveStartSavingsAmounts,
   formatDateInput,
-  getEffectiveInitialContribution,
-  getRequiredTopUp,
   getTodayIsoDate,
   normalizeAmountInput,
-  parseAmount,
   type SavingsFrequency,
   type SavingsFundingOption,
 } from './start-savings.helpers';
@@ -22,6 +19,7 @@ import type {
 } from './start-savings.types';
 import { readParam } from './start-savings-controller.utils';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
+import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
 import { useStartSavingsProductSearch } from './use-start-savings-product-search';
@@ -36,8 +34,11 @@ export function useStartSavingsController() {
     null
   );
   const params = useLocalSearchParams<SavingsSearchParams>();
-  const { merchantId } = useAuthStore(
-    useShallow((state) => ({ merchantId: state.merchantId }))
+  const { merchantId, userId } = useAuthStore(
+    useShallow((state) => ({
+      merchantId: state.merchantId,
+      userId: state.user?.id,
+    }))
   );
   const { data: walletData, isRefetching, refetch } = useWallet();
   const [searchValue, setSearchValue] = useState('');
@@ -109,29 +110,33 @@ export function useStartSavingsController() {
       selectedProduct,
       selectProduct,
     });
-  const contributionValue = parseAmount(contributionAmount);
-  const targetValue =
-    selectedProduct && !selectedProduct.requiresVariantSelection
-      ? selectedProduct.price
-      : 0;
-  const targetAmount = targetValue > 0 ? String(targetValue) : '';
-  const initialContributionValue = parseAmount(initialContributionAmount);
-  const maturityDate =
-    calculateMaturityDate({
-      contributionAmount: contributionValue,
-      frequency,
-      startDate,
-      targetAmount: targetValue,
-    }) ?? '';
-  const effectiveInitialContribution = getEffectiveInitialContribution({
-    contributionAmount: contributionValue,
-    fundingOption: selectedFundingOption,
-    initialContributionAmount: initialContributionValue,
+  const {
+    contributionValue,
+    targetValue,
+    targetAmount,
+    initialContributionValue,
+    maturityDate,
+    effectiveInitialContribution,
+    requiredTopUpAmount,
+  } = deriveStartSavingsAmounts({
+    contributionAmount,
+    frequency,
+    initialContributionAmount,
     initialContributionEnabled,
+    safeWalletBalance,
+    selectedFundingOption,
+    selectedProduct,
+    startDate,
   });
-  const requiredTopUpAmount = getRequiredTopUp({
-    availableBalance: safeWalletBalance,
-    requiredContribution: effectiveInitialContribution,
+  useStartSavingsAccountReset(userId, {
+    setCreatedGoalId,
+    setGoalIdempotencyKey,
+    setInitialContributionIdempotencyKey,
+    setFormError,
+    setShowFundingModal,
+    setShowPreviewModal,
+    setShowSuccessModal,
+    setShowTransferModal,
   });
   const {
     fetchExistingPlanFunding,
@@ -140,10 +145,12 @@ export function useStartSavingsController() {
     planFundingAccounts,
     planFundingPhase,
     planFundingStatusCode,
+    planFundingRequiresBvn,
   } = useSavingsPlanFunding({
     activeMerchantId: activeMerchantId ?? undefined,
     activeMerchantSlug,
     goalId: createdGoalId,
+    identityKey: userId,
   });
   const {
     goToWallet,
@@ -245,6 +252,7 @@ export function useStartSavingsController() {
     planFundingError,
     planFundingPhase,
     planFundingStatusCode,
+    planFundingRequiresBvn,
     preferredDebitTime,
     products,
     refetch,

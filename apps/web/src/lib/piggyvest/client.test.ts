@@ -83,6 +83,48 @@ describe('piggyvestRequest', () => {
     vi.unstubAllGlobals();
   });
 
+  it('marks an explicit decline envelope declined, and nothing else', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ status: false, message: 'Insufficient funds' }, 200)
+        )
+    );
+    const declined: unknown = await piggyvestRequest(
+      { token: 'synthetic-token' },
+      dataSchema,
+      '/x'
+    ).catch((cause: unknown) => cause);
+    expect(declined).toMatchObject({
+      code: 'PIGGYVEST_REQUEST_ERROR',
+      declined: true,
+    });
+    vi.unstubAllGlobals();
+
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ status: true, message: 'ok', data: { nope: 1 } })
+        )
+    );
+    // Success-shaped responses that fail local parsing likely committed
+    // provider-side: never mark them declined.
+    const mismatch: unknown = await piggyvestRequest(
+      { token: 'synthetic-token' },
+      dataSchema,
+      '/x'
+    ).catch((cause: unknown) => cause);
+    expect(mismatch).toMatchObject({
+      code: 'PIGGYVEST_REQUEST_ERROR',
+      declined: false,
+    });
+    vi.unstubAllGlobals();
+  });
+
   it('rejects unexpected data shapes without leaking the body', async () => {
     vi.stubGlobal(
       'fetch',

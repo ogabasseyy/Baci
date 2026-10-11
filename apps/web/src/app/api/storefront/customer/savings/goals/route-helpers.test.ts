@@ -61,6 +61,12 @@ describe('savings goals route helpers', () => {
       404
     );
     expect(mapSavingsRpcErrorStatus('insufficient_wallet_balance')).toBe(409);
+    expect(
+      mapSavingsRpcErrorStatus(
+        'savings_goal_not_swappable_pending_transfer',
+        'P0001'
+      )
+    ).toBe(409);
     expect(mapSavingsRpcErrorStatus('database unavailable')).toBe(500);
   });
 

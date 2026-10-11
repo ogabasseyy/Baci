@@ -70,11 +70,17 @@ const WALLET_QUERY_ROOT = Object.freeze(['wallet'] as const);
 interface WalletDataKeyInput {
   merchantId: string;
   ownerId: string;
+  // Identity pin: the auth user behind the owner. Producers that know
+  // the user pass it so a user rotation (same customer row, new user
+  // id) cannot reuse the previous user's cached wallet — including a
+  // stale primary funding snapshot. Omitted by prefix invalidators,
+  // which still match every user variant of the key.
+  userId?: string | null;
 }
 
 function walletDataKey(
   owner: WalletDataKeyInput
-): readonly ['wallet', 'data', 'v3', string, string] {
+): readonly ['wallet', 'data', 'v4', string, string, ...string[]] {
   if (!owner.merchantId) {
     throw new Error('wallet data query keys require a merchantId');
   }
@@ -85,9 +91,10 @@ function walletDataKey(
   return Object.freeze([
     ...WALLET_QUERY_ROOT,
     'data',
-    'v3',
+    'v4',
     owner.ownerId,
     owner.merchantId,
+    ...(owner.userId ? [owner.userId] : []),
   ] as const);
 }
 

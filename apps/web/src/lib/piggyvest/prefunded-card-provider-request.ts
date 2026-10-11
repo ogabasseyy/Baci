@@ -86,8 +86,28 @@ export async function requestPrefundedCardProviderJson({
       !response.ok ||
       response.redirected ||
       response.type === 'opaqueredirect'
-    )
-      throw new Error('PROVIDER_HTTP_ERROR');
+    ) {
+      // Paystack reports definitive request rejections (notably HTTP 400
+      // "Duplicate Transaction Reference") as an error status with a
+      // JSON body. Attach the bounded body so callers can distinguish a
+      // permanent rejection from transport uncertainty; the message stays
+      // PROVIDER_HTTP_ERROR so existing failure handling is unchanged.
+      const httpError = new Error('PROVIDER_HTTP_ERROR') as Error & {
+        httpStatus?: number;
+        responseBody?: unknown;
+      };
+      httpError.httpStatus = response.status;
+      try {
+        httpError.responseBody = await readBoundedJson(
+          response,
+          maxResponseBytes,
+          deadline
+        );
+      } catch {
+        httpError.responseBody = undefined;
+      }
+      throw httpError;
+    }
     return await readBoundedJson(response, maxResponseBytes, deadline);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('PROVIDER_'))

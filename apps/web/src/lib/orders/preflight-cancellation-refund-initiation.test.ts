@@ -202,11 +202,31 @@ describe('preflightCancellationRefundInitiation', () => {
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
-  it('passes the absolute deadline to the provider guard', async () => {
-    const deadlineMs = Date.now() + 120_000;
-    await preflightCancellationRefundInitiation(input({ deadlineMs }));
-    expect(checkCancellationRefundProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ deadlineMs })
+  it('caps the provider guard listing by the preflight worst case', async () => {
+    const before = Date.now();
+    await preflightCancellationRefundInitiation(
+      input({ deadlineMs: before + 120_000 })
     );
+    const forwarded = vi.mocked(checkCancellationRefundProvider).mock
+      .calls[0][0].deadlineMs as number;
+    expect(forwarded).toBeGreaterThan(before + 29_000);
+    expect(forwarded).toBeLessThanOrEqual(Date.now() + 30_000);
+  });
+  it('resets attempts when the provider guard defers on budget', async () => {
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnThis(),
+    });
+    const from = vi.fn().mockReturnValue({ update });
+    vi.mocked(checkCancellationRefundProvider).mockRejectedValueOnce(
+      new DeferredError('cancellation_refund_provider_verification_deferred')
+    );
+    const error = await preflightCancellationRefundInitiation(
+      input({
+        deadlineMs: Date.now() + 120_000,
+        supabase: { from } as never,
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
 });

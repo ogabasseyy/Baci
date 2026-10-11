@@ -14,8 +14,15 @@ export function OrderRefundSection({
   // Paid scope: unpaid (or pending-payment) cancellations have no
   // refundable balance, so skip the card and its status polling rather
   // than rendering a noisy zero-balance Not started panel.
+  // Bnpl Approved is funded (Credit Direct flips payment_status to
+  // bnpl_approved alongside paid), so its cancellations need the same
+  // recovery actions when a refund fails or needs manual recording.
   if (!['Canceled', 'Cancelled'].includes(order.shippingStatus)) return null;
-  if (!['Paid', 'Partially Paid', 'Refunded'].includes(order.paymentStatus))
+  if (
+    !['Paid', 'Partially Paid', 'Refunded', 'Bnpl Approved'].includes(
+      order.paymentStatus
+    )
+  )
     return null;
   return (
     <OrderRefundPanel

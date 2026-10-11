@@ -20,6 +20,7 @@ import {
   DeferredError,
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import { soleCompletedCancellationLeg } from '@/lib/orders/sole-completed-cancellation-leg';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
@@ -67,8 +68,10 @@ export async function executeOrderCancellationSideEffect({
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
   }
-  const transactions = (transactionRows as GatewayPaymentTransaction[]).filter(
-    (transaction) => isExternalPaymentGateway(transaction.gateway)
+  const allLegs = transactionRows as GatewayPaymentTransaction[];
+  // Link validity spans every funded leg (manuals allocate to cash legs).
+  const transactions = allLegs.filter((t) =>
+    isExternalPaymentGateway(t.gateway)
   );
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
@@ -93,17 +96,8 @@ export async function executeOrderCancellationSideEffect({
     invalidLinkReason,
     linkedPaymentId,
     unlinkedRefunds,
-  } = classifyCancellationRefundLinks(refundRows ?? [], transactions);
-  // Mirror the claim gate's sole-completed-leg attribution: an unlinked
-  // legacy refund covering the only completed leg must not terminalize
-  // the step while another leg's provider refund is still outstanding —
-  // the completion gate attributes it and finalizes once that leg lands.
-  const soleCompletedLegs = transactions.filter(
-    (transaction) =>
-      transaction.status === 'completed' && Number(transaction.amount) > 0
-  );
-  const soleCompletedLeg =
-    soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
+  } = classifyCancellationRefundLinks(refundRows ?? [], allLegs);
+  const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
   const {
     manualLinkedLegIds,
     manualPendingLegIds,
@@ -116,7 +110,7 @@ export async function executeOrderCancellationSideEffect({
     linkedPaymentId,
     refundRows,
     soleCompletedLegId: soleCompletedLeg?.id ?? null,
-    transactions,
+    transactions: allLegs,
   });
   const soleLegCovered =
     soleCompletedLeg !== undefined &&

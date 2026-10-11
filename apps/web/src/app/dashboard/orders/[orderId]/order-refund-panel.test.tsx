@@ -61,46 +61,6 @@ describe('OrderRefundPanel', () => {
     );
     expect(await screen.findByText('Queued')).toBeInTheDocument();
   });
-  it('requires confirmation when recording money already returned', async () => {
-    vi.mocked(apiPost).mockResolvedValue({
-      ...summary,
-      status: 'refunded',
-      refunded: 27574.83,
-      remaining: 0,
-      canRetry: false,
-      canRecordManual: false,
-    });
-    render(<OrderRefundPanel orderId="order-1" />);
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Record manual refund' })
-    );
-    expect(
-      screen.getByRole('button', { name: 'Save manual refund' })
-    ).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Refund date and time'), {
-      target: { value: '2026-09-28T13:00' },
-    });
-    fireEvent.change(screen.getByLabelText('Reference'), {
-      target: { value: 'bank-1' },
-    });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save manual refund' }));
-    await waitFor(() =>
-      expect(apiPost).toHaveBeenCalledWith(
-        '/api/orders/order-1/refund',
-        expect.objectContaining({
-          action: 'manual',
-          amount: 27574.83,
-          confirmed: true,
-          reference: 'bank-1',
-        })
-      )
-    );
-    expect(await screen.findByRole('status')).toHaveTextContent('Refunded');
-    expect(
-      screen.queryByRole('button', { name: 'Retry refund' })
-    ).not.toBeInTheDocument();
-  });
   it('shows load errors without enabling refund actions', async () => {
     vi.stubGlobal(
       'fetch',

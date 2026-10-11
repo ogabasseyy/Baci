@@ -66,6 +66,18 @@ describe('OrderRefundSection', () => {
     expect(screen.queryByText('Refund')).not.toBeInTheDocument();
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+  it('shows the refund panel for BNPL-approved cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Bnpl Approved' as Order['paymentStatus'],
+        })}
+        setOrder={setOrder}
+      />
+    );
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
   it('marks the order refunded when the panel reports completion', async () => {
     vi.stubGlobal(
       'fetch',

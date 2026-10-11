@@ -147,17 +147,37 @@ export async function preflightCancellationRefundInitiation({
         'cancellation_refund_preflight_deferred_for_budget'
       );
     }
-    // Pass the absolute deadline, not a frozen timeout: the lister
-    // recomputes the remaining cap before every page so a
-    // multi-page list cannot spend the budget once per page.
-    await checkCancellationRefundProvider({
-      currency: transaction.currency || order.currency || 'NGN',
-      deadlineMs,
-      knownRefunds: (refundRows ?? []).filter(
-        (row) => linkedPaymentId(row) === transaction.id
-      ),
-      reference: transaction.gateway_reference,
-    });
+    // Bound the listing by the preflight worst case, not the raw drain
+    // deadline: a deep history (verify plus several pages) must not
+    // consume the window initiation needs. Budget exhaustion surfaces
+    // as a deferral from the check, so reset the attempts the claim
+    // consumed and let the resume retry with a fresh window.
+    const listingDeadlineMs =
+      deadlineMs === undefined
+        ? undefined
+        : Math.min(deadlineMs, Date.now() + PREFLIGHT_PROVIDER_CALL_WORST_MS);
+    try {
+      await checkCancellationRefundProvider({
+        currency: transaction.currency || order.currency || 'NGN',
+        deadlineMs: listingDeadlineMs,
+        knownRefunds: (refundRows ?? []).filter(
+          (row) => linkedPaymentId(row) === transaction.id
+        ),
+        order,
+        reference: transaction.gateway_reference,
+        supabase,
+        transaction,
+      });
+    } catch (error) {
+      if (error instanceof DeferredError) {
+        await tryResetCancellationSideEffectAttempts(
+          supabase,
+          order.id,
+          'refund'
+        );
+      }
+      throw error;
+    }
   }
   return { auditBlockedTransactions, initiationTransactions };
 }

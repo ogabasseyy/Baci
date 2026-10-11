@@ -985,7 +985,6 @@ export async function POST(request: NextRequest) {
     // tax_amount is reused below instead of recomputing VAT from parent
     // prices, which would drift the request hash into a conflict.
     const offerReplay = await resolveIdempotentOfferReplay({
-      adminSupabase: createAdminClient(),
       merchantId: merchant_id,
       orderItemsPayload,
       requestIdempotencyKey,

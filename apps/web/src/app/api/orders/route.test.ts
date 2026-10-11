@@ -303,6 +303,7 @@ interface RpcOverrides {
     error: unknown;
   };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
+  get_storefront_order_replay_tax?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
   get_product_offers?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
@@ -507,6 +508,7 @@ function buildMockSupabase(
       finalize_store_credit_order_payment: { data: null, error: null },
       finalize_quiz_voucher_order_payment: { data: true, error: null },
       has_storefront_order_idempotency_key: { data: false, error: null },
+      get_storefront_order_replay_tax: { data: null, error: null },
       // B3.5 round 7 (CodeRabbit High): the helper's variant lookup
       // now routes through this SECURITY DEFINER RPC.
       get_order_variant_overrides: { data: [], error: null },
@@ -5327,17 +5329,6 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
       data: [{ ...baseOrderRow, idempotency_replayed: true }],
       error: null,
     });
-    mockCreateAdminClient.mockReturnValue({
-      from: vi.fn(() => ({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        maybeSingle: vi.fn().mockResolvedValue({
-          data: { currency: 'NGN', tax_amount: STORED_TAX_AMOUNT },
-          error: null,
-        }),
-      })),
-      rpc: vi.fn(async () => ({ data: null, error: null })),
-    } as never);
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation((() => {
       const sb = buildMockSupabase();
@@ -5345,6 +5336,9 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
       sb.rpc = ((name: string, args: Record<string, unknown>) => {
         if (name === 'has_storefront_order_idempotency_key') {
           return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_storefront_order_replay_tax') {
+          return Promise.resolve({ data: STORED_TAX_AMOUNT, error: null });
         }
         if (name === 'get_product_offers') {
           return Promise.resolve({ data: [], error: null });

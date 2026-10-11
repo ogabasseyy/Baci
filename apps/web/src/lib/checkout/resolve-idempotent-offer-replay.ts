@@ -27,21 +27,25 @@ export type ResolveIdempotentOfferReplayResult =
   | { ok: false; reason: 'verification_failed'; error: unknown };
 
 async function readStoredReplayTaxAmount({
-  adminSupabase,
   merchantId,
   requestIdempotencyKey,
+  supabase,
 }: {
-  adminSupabase: SupabaseClient;
   merchantId: string;
   requestIdempotencyKey: string;
+  supabase: SupabaseClient;
 }): Promise<number | null> {
+  // Narrowly scoped SECURITY DEFINER RPC on the caller's normal client:
+  // user-facing routes must never use the service-role client, so the
+  // stored tax crosses the boundary as a single numeric projection.
   try {
-    const { data, error } = await adminSupabase
-      .from('orders')
-      .select('tax_amount')
-      .eq('merchant_id', merchantId)
-      .eq('checkout_idempotency_key', requestIdempotencyKey)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc(
+      'get_storefront_order_replay_tax',
+      {
+        p_checkout_idempotency_key: requestIdempotencyKey,
+        p_merchant_id: merchantId,
+      }
+    );
     if (error) {
       logger.warn({
         message:
@@ -51,10 +55,14 @@ async function readStoredReplayTaxAmount({
       });
       return null;
     }
-    const stored = (data as { tax_amount?: unknown } | null)?.tax_amount;
-    return typeof stored === 'number' && Number.isFinite(stored)
-      ? stored
-      : null;
+    // PostgREST may decode numeric as a string; blank/null stays fail-open.
+    const stored =
+      typeof data === 'number'
+        ? data
+        : typeof data === 'string' && data.trim() !== ''
+          ? Number(data)
+          : Number.NaN;
+    return Number.isFinite(stored) ? stored : null;
   } catch (readError) {
     logger.warn({
       message:
@@ -79,13 +87,11 @@ async function readStoredReplayTaxAmount({
  * for conflicts.
  */
 export async function resolveIdempotentOfferReplay({
-  adminSupabase,
   merchantId,
   orderItemsPayload,
   requestIdempotencyKey,
   supabase,
 }: {
-  adminSupabase: SupabaseClient;
   merchantId: string;
   orderItemsPayload: ResolvableOrderOfferLine[];
   requestIdempotencyKey: string | null;
@@ -126,9 +132,9 @@ export async function resolveIdempotentOfferReplay({
 
   const storedReplayTaxAmount = requestIdempotencyKey
     ? await readStoredReplayTaxAmount({
-        adminSupabase,
         merchantId,
         requestIdempotencyKey,
+        supabase,
       })
     : null;
   return {

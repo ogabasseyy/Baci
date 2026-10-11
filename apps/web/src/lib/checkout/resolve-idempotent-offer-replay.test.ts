@@ -27,23 +27,15 @@ function clients({
     if (name === 'has_storefront_order_idempotency_key') {
       return { data: probeHit, error: null };
     }
+    if (name === 'get_storefront_order_replay_tax') {
+      return { data: storedTax, error: storedTaxError };
+    }
     return { data: offers, error: null };
   });
-  const maybeSingle = vi.fn().mockResolvedValue({
-    data: storedTax,
-    error: storedTaxError,
-  });
-  const chain = { eq: vi.fn().mockReturnThis(), maybeSingle };
-  const from = vi.fn(() => ({
-    select: vi.fn(() => chain),
-  }));
 
   return {
     rpc,
-    maybeSingle,
-    from,
     supabase: { rpc } as unknown as SupabaseClient,
-    adminSupabase: { from } as unknown as SupabaseClient,
   };
 }
 
@@ -60,7 +52,6 @@ describe('resolveIdempotentOfferReplay', () => {
     const c = clients({ probeHit: false, offers: liveOffers, storedTax: null });
 
     const result = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [offerLine],
       requestIdempotencyKey: 'checkout-1',
@@ -74,18 +65,20 @@ describe('resolveIdempotentOfferReplay', () => {
       400000
     );
     expect(result.value.storedReplayTaxAmount).toBeNull();
-    expect(c.from).not.toHaveBeenCalled();
+    expect(c.rpc).not.toHaveBeenCalledWith(
+      'get_storefront_order_replay_tax',
+      expect.anything()
+    );
   });
 
   it('skips live verification and reuses stored tax on a replay hit', async () => {
     const c = clients({
       probeHit: true,
       offers: [],
-      storedTax: { tax_amount: 30000 },
+      storedTax: 30000,
     });
 
     const result = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [offerLine],
       requestIdempotencyKey: 'checkout-1',
@@ -101,7 +94,29 @@ describe('resolveIdempotentOfferReplay', () => {
       'get_product_offers',
       expect.anything()
     );
-    expect(c.from).toHaveBeenCalledWith('orders');
+    expect(c.rpc).toHaveBeenCalledWith(
+      'get_storefront_order_replay_tax',
+      expect.objectContaining({ p_checkout_idempotency_key: 'checkout-1' })
+    );
+  });
+
+  it('accepts a string-decoded stored tax from PostgREST numerics', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: '30000.00',
+    });
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: [offerLine],
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.storedReplayTaxAmount).toBe(30000);
   });
 
   it('fails open to a VAT recompute when the stored-tax read fails', async () => {
@@ -113,7 +128,6 @@ describe('resolveIdempotentOfferReplay', () => {
     });
 
     const result = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [offerLine],
       requestIdempotencyKey: 'checkout-1',
@@ -130,7 +144,6 @@ describe('resolveIdempotentOfferReplay', () => {
     const c = clients({ probeHit: false, offers: [], storedTax: null });
 
     const result = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [offerLine],
       requestIdempotencyKey: 'checkout-1',
@@ -144,14 +157,12 @@ describe('resolveIdempotentOfferReplay', () => {
     const c = clients({ probeHit: false, offers: [], storedTax: null });
 
     const noKey = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [offerLine],
       requestIdempotencyKey: null,
       supabase: c.supabase,
     });
     const noOffers = await resolveIdempotentOfferReplay({
-      adminSupabase: c.adminSupabase,
       merchantId: MERCHANT_ID,
       orderItemsPayload: [{ product_id: PRODUCT_ID }],
       requestIdempotencyKey: 'checkout-1',

@@ -62,7 +62,7 @@ export const eventPipelineFrozenRoutes = {
   // retries now bypass live offer economics via a keyed-order probe so the
   // RPC replays the stored order; fresh-order validation is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'b8f2d5c1def38c351b90fe1941176ca7db26b37a8042203a213c64b848491ffa',
+    '3d5ca2607a923131552999d50715006ff564039e1c2c070c989ef95aa6e4ef8a',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

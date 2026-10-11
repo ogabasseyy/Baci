@@ -91,7 +91,7 @@ test('updates and verifies workers before dispatching the matching release', asy
   assert.deepEqual(await coordinateRelease(setup.operations, coordinationId), { commit, runId: 42 });
   assert.deepEqual(setup.calls, [
     'verifyCheckout', 'readMain', 'listRuns', 'updateWorkers', 'verifyWorkers',
-    'readMain', 'listRuns', 'dispatch', 'findRun', 'listCoordinatedRuns', 'watchRun', 'readJobs', 'verifyLive',
+    'readMain', 'listRuns', 'readMain', 'dispatch', 'findRun', 'listCoordinatedRuns', 'watchRun', 'readJobs', 'verifyLive',
   ]);
 });
 

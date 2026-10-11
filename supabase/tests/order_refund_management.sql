@@ -1200,10 +1200,17 @@ BEGIN
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000040',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-040',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000041',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-041',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
   WHERE id = '9ef11000-0000-4000-8000-000000000040';
+  -- Legacy missing-timestamp order: cancelled and paid, but the
+  -- aggregate finalizer rejects a NULL cancelled_at.
+  UPDATE public.orders SET cancelled_at = NULL
+  WHERE id = '9ef11000-0000-4000-8000-000000000041';
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
     status, gateway, gateway_reference, metadata
@@ -1237,7 +1244,11 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000053',
       '9ef10100-0000-4000-8000-000000000001',
       '9ef11000-0000-4000-8000-000000000040', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'pp-40', '{}'::jsonb);
+      'completed', 'paystack', 'pp-40', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000054',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000041', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-41', '{}'::jsonb);
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1252,7 +1263,11 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000039',
       '9ef10100-0000-4000-8000-000000000001', 'refund',
       'delivery_uncertain', '9ef13000-0000-4000-8000-000000000039', 5,
-      'An existing Paystack refund requires reconciliation before retry');
+      'An existing Paystack refund requires reconciliation before retry'),
+    ('9ef11000-0000-4000-8000-000000000041',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000041', 5,
+      'Insufficient balance');
   -- A null-currency order's self-terminal NGN leg flips the label:
   -- without the NGN default the currency comparison is NULL and
   -- the leg never counts.
@@ -1329,6 +1344,25 @@ BEGIN
     RAISE EXCEPTION 'quarantined covered order reports %, want requires_review',
       v_result->>'status';
   END IF;
+  -- A cancelled order without a cancellation timestamp rejects both
+  -- actions: the aggregate finalizer requires cancelled_at, so
+  -- rearming would move provider money and then strand settlement
+  -- reversal and notifications.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000041', 'retry');
+    RAISE EXCEPTION 'retry accepted without a cancellation timestamp';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000041', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'no-ts-41', NULL, true);
+    RAISE EXCEPTION 'manual accepted without a cancellation timestamp';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
+  END;
 END;
 $refund_round33_status$;
 

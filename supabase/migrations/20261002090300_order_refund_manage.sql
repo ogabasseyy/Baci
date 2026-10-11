@@ -212,6 +212,14 @@ BEGIN
     IF v_manual_partial THEN
       RAISE EXCEPTION 'manual_completion_required' USING ERRCODE='P0001';
     END IF;
+    -- The worker can only finish what the aggregate finalizer
+    -- accepts: finalize_refunded_cancellation_order_v1 rejects a
+    -- NULL cancelled_at, so rearming without it would move provider
+    -- money and then strand settlement reversal and notifications.
+    -- Mirror the manual path's rejection for the same legacy rows.
+    IF v_order.cancelled_at IS NULL THEN
+      RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
+    END IF;
     IF v_step_status IS DISTINCT FROM 'failed' OR v_step_error IS NULL THEN
       RAISE EXCEPTION 'failed_refund_required' USING ERRCODE='P0001';
     END IF;

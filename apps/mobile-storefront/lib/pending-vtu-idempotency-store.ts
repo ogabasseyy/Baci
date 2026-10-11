@@ -102,6 +102,7 @@ export function parsePendingVtuSnapshot(
 
 interface PendingVtuKeyStore {
   getString: (key: string) => string | null | undefined;
+  remove: (key: string) => void;
   set: (key: string, value: string) => void;
 }
 
@@ -144,5 +145,14 @@ export function savePendingVtuSnapshot(serialized: string): void {
   } catch {
     // Persistence is best effort; the in-memory registry still dedupes
     // this session.
+  }
+}
+
+/** Best-effort delete; used by the registry's test-only clear. */
+export function clearPendingVtuSnapshot(): void {
+  try {
+    getPendingVtuStorage()?.remove(VTU_PENDING_KEYS_STORAGE_KEY);
+  } catch {
+    // Persistence is best effort.
   }
 }

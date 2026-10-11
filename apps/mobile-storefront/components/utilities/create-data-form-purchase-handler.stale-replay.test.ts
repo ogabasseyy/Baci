@@ -139,17 +139,24 @@ describe('data stale success replay', () => {
 
   it('discards the result when the account switched mid-flight', async () => {
     const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'successful',
       amount: 1000,
       reference: 'WAL-SWITCHED-DATA',
     });
-    await runPurchase({ onSuccess, isSubmittingOwnerCurrent: () => false });
+    await runPurchase({
+      onSuccess,
+      resetWalletIdempotencyKey,
+      isSubmittingOwnerCurrent: () => false,
+    });
 
     expect(onSuccess).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
     );
+    // Terminal success finalizes the submitter's entry: repeat mints fresh.
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
   });
 });

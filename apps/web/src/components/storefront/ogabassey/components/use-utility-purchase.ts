@@ -9,7 +9,11 @@ import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
-import { useUtilityIdempotencyKey } from './use-utility-idempotency-key';
+import {
+  finalizeSwitchedAttempt,
+  useUtilityIdempotencyKey,
+  type UtilityIdempotencyAttempt,
+} from './use-utility-idempotency-key';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import type { UtilityTabId } from './UtilityTabs';
 
@@ -106,12 +110,11 @@ export function useUtilityPurchase({
   const latestIdentityRef = useRef<string | null>(null);
   latestIdentityRef.current = customer?.id ?? user?.id ?? null;
   const {
-    forgetAttemptKey,
-    getWalletIdempotencyKey,
-    isAttemptReplay,
-    isAttemptStale,
-    noteAttemptReference,
-    wasAttemptKeyRecalled,
+    captureAttemptKey,
+    forgetScopedKey,
+    isScopedReplay,
+    isScopedStale,
+    noteScopedReference,
   } = useUtilityIdempotencyKey({
     customerId: customer?.id,
     merchantId,
@@ -143,19 +146,26 @@ export function useUtilityPurchase({
         .filter(Boolean)
         .join(' ')
         .trim() || customer?.email || user?.email || 'Customer';
+    // Per-execution capture (a container, not a shared ref): concurrent
+    // submits can never redirect this attempt's completion.
+    const captured: { attempt: UtilityIdempotencyAttempt | null } = {
+      attempt: null,
+    };
     const result = await submitUtilityCheckout({
       payload,
       merchantSlug: merchantSlug || 'ogabassey',
       customerName,
       customerPhone: customer?.phone,
-      getWalletIdempotencyKey,
+      getWalletIdempotencyKey: (payloadSignature: string) => {
+        captured.attempt = captureAttemptKey(payloadSignature);
+        return captured.attempt.key;
+      },
     });
 
     if (latestIdentityRef.current !== submittingIdentity) {
-      // Shared browser switched (or signed out) while the request was
-      // in flight: the wallet + screen now belong to someone else, so
-      // drop this result instead of debiting their display or showing
-      // them the previous customer's reference.
+      // Shared browser switched mid-flight: finalize the SUBMITTER's
+      // entry, then drop the result instead of debiting the new display.
+      finalizeSwitchedAttempt(captured.attempt, result);
       toast({
         title: 'Account changed',
         description:
@@ -173,24 +183,17 @@ export function useUtilityPurchase({
       // is never replayed, so refresh instead of decrementing: a stale
       // HIGH balance would let the underfunded pre-check pass a purchase
       // the server will reject.
-      // Capture replay-ness BEFORE forgetting: forget drops the attempt
-      // signature the check reads.
+      const scoped = captured.attempt?.scoped;
       const replayResolvesProcessing =
-        !result.processing && isAttemptReplay(result.reference);
-      // A recalled key means an identical submit already went out, so a
-      // non-processing success is ambiguous even with no noted reference
-      // (lost response + reload: the refetch already reflects the debit).
-      // Refresh for server truth instead of decrementing. When the first
-      // POST never reached the server, this submit performed the debit —
-      // refresh observes that too, just asynchronously.
-      const recalledKeySuccess =
-        !result.processing && wasAttemptKeyRecalled();
+        !result.processing &&
+        scoped !== undefined &&
+        isScopedReplay(scoped, result.reference);
       if (!result.processing) {
-        if (isAttemptStale(result.reference)) {
+        if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
           // The remembered purchase completed long ago: this replay
           // answers a NEW intent with the old vend. Forget so the next
           // tap mints fresh, and say so instead of presenting it.
-          forgetAttemptKey();
+          forgetScopedKey(scoped);
           toast({
             title: 'Purchase Already Completed',
             description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
@@ -199,15 +202,22 @@ export function useUtilityPurchase({
           setLoading(false);
           return;
         }
-        forgetAttemptKey();
+        if (scoped !== undefined) {
+          forgetScopedKey(scoped);
+        }
       } else {
-        noteAttemptReference(result.reference);
+        if (scoped !== undefined) {
+          noteScopedReference(scoped, result.reference);
+        }
         refreshWallet();
       }
       clearIntent();
       applyUtilityPurchaseBalanceEffect({
         appliedReferences: appliedBalanceRefs.current,
-        isAmbiguousReplay: replayResolvesProcessing || recalledKeySuccess,
+        // Recalled key ⇒ identical submit already went out: ambiguous.
+        isAmbiguousReplay:
+          replayResolvesProcessing ||
+          (!result.processing && captured.attempt?.recalled === true),
         refreshWallet,
         result,
         setWalletBalance,
@@ -233,11 +243,12 @@ export function useUtilityPurchase({
       // 5xx failures stay ambiguous — keep the key so the retry dedupes.
       // Mirrors mobile's shouldRotateWalletIdempotencyKeyForError.
       if (
+        captured.attempt &&
         typeof result.status === 'number' &&
         result.status >= 400 &&
         result.status < 500
       ) {
-        forgetAttemptKey();
+        forgetScopedKey(captured.attempt.scoped);
       }
       toast({
         title: 'Transaction Failed',

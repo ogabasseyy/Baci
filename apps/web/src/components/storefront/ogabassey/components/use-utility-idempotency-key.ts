@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
   forgetPendingVtuPurchase,
   getPendingVtuKey,
@@ -17,96 +17,100 @@ interface UseUtilityIdempotencyKeyInput {
   userId?: string;
 }
 
+/**
+ * One submission's key material, captured when the key is issued. Callers
+ * hold this across the async submit and pass `scoped` back explicitly, so
+ * a concurrent second submit (or a mid-flight account switch) can never
+ * redirect this attempt's completion onto another entry.
+ */
+export interface UtilityIdempotencyAttempt {
+  key: string;
+  scoped: string;
+  /** True when the key reuses a previously-submitted identical purchase. */
+  recalled: boolean;
+}
+
 interface UseUtilityIdempotencyKeyResult {
-  forgetAttemptKey: () => void;
-  getWalletIdempotencyKey: (payloadSignature: string) => string;
-  isAttemptReplay: (reference: string) => boolean;
-  isAttemptStale: (reference: string) => boolean;
-  noteAttemptReference: (reference: string) => void;
-  wasAttemptKeyRecalled: () => boolean;
+  captureAttemptKey: (
+    payloadSignature: string
+  ) => UtilityIdempotencyAttempt;
+  forgetScopedKey: (scoped: string) => void;
+  isScopedReplay: (scoped: string, reference: string) => boolean;
+  isScopedStale: (scoped: string, reference: string) => boolean;
+  noteScopedReference: (scoped: string, reference: string) => void;
+}
+
+/**
+ * Finalizes a settled attempt whose owner switched mid-flight, before
+ * the caller suppresses the result UI. Terminal success forgets the
+ * submitter's key (their repeat mints fresh instead of replaying the
+ * old vend as a new success); processing notes the reference (replays
+ * recognized). Errors keep the key so the retry dedupes.
+ */
+export function finalizeSwitchedAttempt(
+  attempt: UtilityIdempotencyAttempt | null,
+  result: UtilityCheckoutResult
+): void {
+  if (!attempt || result.kind !== 'wallet-success') {
+    return;
+  }
+  if (result.processing) {
+    notePendingVtuReference(attempt.scoped, result.reference);
+  } else {
+    forgetPendingVtuPurchase(attempt.scoped);
+  }
 }
 
 /**
  * Wallet-only idempotency-key lifecycle for utility checkout, extracted
  * from `useUtilityPurchase` to keep that hook under the 300-line
  * modularity budget. Keys live in the module registry (survives modal
- * remounts); this hook only tracks which signature the in-flight
- * attempt used and scopes recall to the authenticated owner.
+ * remounts); this hook only scopes signatures to the authenticated
+ * owner.
+ *
+ * Owner is the stable session user ID first (NOT customer-first like
+ * the wallet reads): the customer record hydrates later, and flipping
+ * scope mid-session would orphan the pending key and double-debit the
+ * retry. Merchant is the immutable ID, never the slug: the route
+ * resolves a renamed slug through aliases to the same merchant, so a
+ * slug-scoped retry would miss the stored key and debit twice.
  */
 export function useUtilityIdempotencyKey({
   customerId,
   merchantId,
   userId,
 }: UseUtilityIdempotencyKeyInput): UseUtilityIdempotencyKeyResult {
-  // Owner is the stable session user ID first (NOT customer-first like
-  // the wallet reads): the customer record hydrates later, and flipping
-  // scope mid-session would orphan the pending key and double-debit the
-  // retry. Merchant is the immutable ID, never the slug: the route
-  // resolves a renamed slug through aliases to the same merchant, so a
-  // slug-scoped retry would miss the stored key and debit twice. The
-  // scope is captured ONCE per submission (not a module global), so an
-  // account switch mid-flight cannot redirect this submission's
-  // completion onto another customer's entry.
-  const lastScopedSignatureRef = useRef<string | null>(null);
-  // True when the in-flight attempt reused a previously-submitted key.
-  // A recalled key's success is definitionally ambiguous (the debit may
-  // already be reflected in the displayed balance), so callers refresh
-  // for server truth instead of decrementing locally.
-  const lastAttemptRecalledRef = useRef(false);
-
-  const getWalletIdempotencyKey = (payloadSignature: string) => {
+  const captureAttemptKey = (payloadSignature: string) => {
     const scoped = scopePendingVtuSignature(
       userId ?? customerId,
       merchantId,
       payloadSignature
     );
-    lastScopedSignatureRef.current = scoped;
-    lastAttemptRecalledRef.current =
-      recallPendingVtuKey(scoped) !== undefined;
-    return getPendingVtuKey(scoped);
+    const recalled = recallPendingVtuKey(scoped) !== undefined;
+    return { key: getPendingVtuKey(scoped), scoped, recalled };
   };
 
-  const forgetAttemptKey = () => {
-    if (lastScopedSignatureRef.current) {
-      forgetPendingVtuPurchase(lastScopedSignatureRef.current);
-      lastScopedSignatureRef.current = null;
-    }
+  const forgetScopedKey = (scoped: string) => {
+    forgetPendingVtuPurchase(scoped);
   };
 
-  const noteAttemptReference = (reference: string) => {
-    if (lastScopedSignatureRef.current) {
-      notePendingVtuReference(lastScopedSignatureRef.current, reference);
-    }
+  const noteScopedReference = (scoped: string, reference: string) => {
+    notePendingVtuReference(scoped, reference);
   };
 
-  const isAttemptStale = (reference: string) => {
-    if (!lastScopedSignatureRef.current) {
-      return false;
-    }
-    return isStalePendingVtuSuccess(
-      lastScopedSignatureRef.current,
-      reference
-    );
+  const isScopedStale = (scoped: string, reference: string) => {
+    return isStalePendingVtuSuccess(scoped, reference);
   };
 
-  const isAttemptReplay = (reference: string) => {
-    if (!lastScopedSignatureRef.current) {
-      return false;
-    }
-    return hasNotedPendingVtuReference(
-      lastScopedSignatureRef.current,
-      reference
-    );
+  const isScopedReplay = (scoped: string, reference: string) => {
+    return hasNotedPendingVtuReference(scoped, reference);
   };
-
-  const wasAttemptKeyRecalled = () => lastAttemptRecalledRef.current;
 
   return {
-    forgetAttemptKey,
-    getWalletIdempotencyKey,
-    isAttemptReplay,
-    isAttemptStale,
-    noteAttemptReference,
-    wasAttemptKeyRecalled,
+    captureAttemptKey,
+    forgetScopedKey,
+    isScopedReplay,
+    isScopedStale,
+    noteScopedReference,
   };
 }

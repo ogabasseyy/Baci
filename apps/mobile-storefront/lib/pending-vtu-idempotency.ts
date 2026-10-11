@@ -34,6 +34,7 @@
  */
 
 import {
+  clearPendingVtuSnapshot,
   loadPendingVtuSnapshot,
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
@@ -175,21 +176,56 @@ export function recallPendingVtuKey(
  * dedupe row is unaffected), and 32 outstanding pendings is unreachable
  * through sequential taps.
  */
+/**
+ * Frees one registry slot, preferring victims whose eviction cannot
+ * cause a double debit: recall-dead entries first (live recall would
+ * drop them on access anyway), then stale-completed entries (provably
+ * terminal — evicting one only skips the "already completed" warning;
+ * the repeat purchase correctly mints a fresh transaction either way).
+ * Only when every entry is potentially unresolved does the oldest go;
+ * that needs 33 concurrently-unresolved distinct purchases to matter.
+ */
+function enforcePendingVtuCap(now: number = Date.now()): void {
+  for (const [scoped, entry] of pendingPurchases) {
+    if (
+      !entry.reference &&
+      now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS
+    ) {
+      pendingPurchases.delete(scoped);
+      return;
+    }
+  }
+  for (const [scoped, entry] of pendingPurchases) {
+    if (
+      entry.reference &&
+      now - entry.rememberedAt > PENDING_VTU_STALE_AFTER_MS
+    ) {
+      pendingPurchases.delete(scoped);
+      return;
+    }
+  }
+  const oldest = pendingPurchases.keys().next();
+  if (!oldest.done) {
+    pendingPurchases.delete(oldest.value);
+  }
+}
+
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string
 ): void {
+  if (
+    !pendingPurchases.has(descriptor) &&
+    pendingPurchases.size >= MAX_PENDING_PURCHASES
+  ) {
+    enforcePendingVtuCap();
+  }
   pendingPurchases.delete(descriptor);
   pendingPurchases.set(descriptor, {
     key,
     reference: null,
     rememberedAt: Date.now(),
   });
-  while (pendingPurchases.size > MAX_PENDING_PURCHASES) {
-    const oldest = pendingPurchases.keys().next();
-    if (oldest.done) break;
-    pendingPurchases.delete(oldest.value);
-  }
   persistPendingVtuPurchases();
 }
 
@@ -231,4 +267,10 @@ export function isStalePendingVtuSuccess(
 export function forgetPendingVtuPurchase(descriptor: string): void {
   pendingPurchases.delete(descriptor);
   persistPendingVtuPurchases();
+}
+
+/** Test-only escape hatch: module state survives across test cases. */
+export function clearPendingVtuKeys(): void {
+  pendingPurchases.clear();
+  clearPendingVtuSnapshot();
 }

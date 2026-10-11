@@ -4,7 +4,9 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
   buildVtuPurchaseDescriptor,
+  isStalePendingVtuSuccess,
   notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
 import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';
@@ -143,6 +145,7 @@ describe('airtime stale success replay', () => {
 
   it('discards the result when the account switched mid-flight', async () => {
     const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'successful',
       amount: 500,
@@ -150,6 +153,7 @@ describe('airtime stale success replay', () => {
     });
     const { result } = renderHandler({
       onSuccess,
+      resetWalletIdempotencyKey,
       isSubmittingOwnerCurrent: () => false,
     });
     await result.current.handlePurchase();
@@ -159,5 +163,34 @@ describe('airtime stale success replay', () => {
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
     );
+    // Terminal success finalizes the submitter's entry: repeat mints fresh.
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('notes the processing reference when the account switched mid-flight', async () => {
+    const onSuccess = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'processing',
+      amount: 500,
+      reference: 'WAL-SWITCH-PROC',
+    });
+    const { result } = renderHandler({
+      onSuccess,
+      isSubmittingOwnerCurrent: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(
+      isStalePendingVtuSuccess(
+        buildVtuPurchaseDescriptor(submitted),
+        'WAL-SWITCH-PROC',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 });

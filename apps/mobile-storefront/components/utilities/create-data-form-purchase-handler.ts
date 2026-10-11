@@ -121,6 +121,14 @@ export function createDataFormPurchaseHandler({
           idempotencyKey,
         });
         if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+          // Finalize the SUBMITTER's entry (descriptor captured at
+          // submit) before suppressing the UI: terminal success forgets
+          // (repeat mints fresh); processing notes the reference.
+          if (result.status === 'processing') {
+            notePendingVtuReference(descriptor, result.reference);
+          } else {
+            payment.resetWalletIdempotencyKey(descriptor);
+          }
           return;
         }
         // Only rotate on terminal success. 'processing' means the

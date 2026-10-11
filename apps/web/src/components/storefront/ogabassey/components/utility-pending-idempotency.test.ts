@@ -77,6 +77,61 @@ describe('utility-pending-idempotency', () => {
     expect(recallPendingVtuKey(signatures[32])).toBe(keys[32]);
   });
 
+  it('evicts stale-completed entries before unresolved ones at the cap', () => {
+    // The youngest entry completed long ago (provably terminal); the
+    // rest are fresh and potentially unresolved. Evicting the stale
+    // entry is outcome-safe (the repeat correctly mints a fresh
+    // transaction), while evicting an unresolved one could double-debit.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      for (let index = 0; index < 32; index++) {
+        rememberPendingVtuPurchase(`{"cap":${index}}`, `key-${index}`);
+      }
+      notePendingVtuReference('{"cap":31}', 'REF-OLD');
+      vi.setSystemTime(
+        new Date('2026-01-01T00:00:00Z').getTime() +
+          PENDING_VTU_STALE_AFTER_MS +
+          1000
+      );
+      rememberPendingVtuPurchase('{"cap":"new"}', 'key-new');
+      // Youngest-but-stale victim evicted…
+      expect(recallPendingVtuKey('{"cap":31}')).toBeUndefined();
+      // …oldest-but-unresolved survivors kept.
+      expect(recallPendingVtuKey('{"cap":0}')).toBe('key-0');
+      expect(recallPendingVtuKey('{"cap":"new"}')).toBe('key-new');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('evicts recall-dead entries before anything else at the cap', () => {
+    // sig-31 never got a response and aged past the TTL (live recall
+    // would drop it on access anyway); sig-0..30 are stale-completed.
+    // The recall-dead entry must go first even though it is youngest.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      for (let index = 0; index < 32; index++) {
+        rememberPendingVtuPurchase(`{"dead":${index}}`, `key-${index}`);
+        if (index < 31) {
+          notePendingVtuReference(`{"dead":${index}}`, `REF-${index}`);
+        }
+      }
+      vi.setSystemTime(
+        new Date('2026-01-01T00:00:00Z').getTime() +
+          PERSISTED_VTU_KEY_TTL_MS +
+          1000
+      );
+      rememberPendingVtuPurchase('{"dead":"new"}', 'key-new');
+      // Oldest-stale survivor kept (referenced ⇒ recallable iff present)…
+      expect(recallPendingVtuKey('{"dead":0}')).toBe('key-0');
+      expect(recallPendingVtuKey('{"dead":"new"}')).toBe('key-new');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('remembering an existing signature does not evict or rotate it', () => {
     const key = getPendingVtuKey('{"amount":100}');
     rememberPendingVtuPurchase('{"amount":100}', key);

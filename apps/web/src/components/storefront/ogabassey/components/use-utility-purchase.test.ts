@@ -658,4 +658,68 @@ describe('useUtilityPurchase', () => {
     expect(result.current.transactionRef).toBe('');
     expect(result.current.loading).toBe(false);
   });
+
+  it('forgets the submitter key on switch-discard so the returnee mints fresh', async () => {
+    // P2: A's success settles after the switch to B. The entry must be
+    // finalized (terminal ⇒ forget) before the UI is suppressed — or A's
+    // repeat within the TTL would replay the old vend as a new success.
+    type SubmitResult =
+      | {
+          kind: 'wallet-success';
+          reference: string;
+          amount: number;
+          processing: boolean;
+        }
+      | { kind: 'error'; message: string };
+    const seenKeys: string[] = [];
+    let resolveSubmit!: (value: SubmitResult) => void;
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        if (seenKeys.length === 1) {
+          return new Promise<SubmitResult>((resolve) => {
+            resolveSubmit = resolve;
+          });
+        }
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-A2',
+          amount: 1000,
+          processing: false,
+        };
+      }
+    );
+    const customerB = { ...customer, id: 'customer-2' };
+    const { result, rerender } = renderHook(
+      (props: { customer: Customer }) =>
+        useUtilityPurchase(baseParams({ customer: props.customer })),
+      { initialProps: { customer } }
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    rerender({ customer: customerB });
+    await act(async () => {
+      resolveSubmit({
+        kind: 'wallet-success',
+        reference: 'REF-A',
+        amount: 1000,
+        processing: false,
+      });
+    });
+
+    // A switches back and repeats the same purchase: fresh key, new vend.
+    rerender({ customer });
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[1]).not.toBe(seenKeys[0]);
+    expect(result.current.step).toBe('success');
+    expect(result.current.transactionRef).toBe('REF-A2');
+  });
 });

@@ -5,7 +5,10 @@ import {
   hasNotedPendingVtuReference,
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
-import { useUtilityIdempotencyKey } from './use-utility-idempotency-key';
+import {
+  finalizeSwitchedAttempt,
+  useUtilityIdempotencyKey,
+} from './use-utility-idempotency-key';
 
 describe('useUtilityIdempotencyKey', () => {
   beforeEach(() => {
@@ -19,18 +22,21 @@ describe('useUtilityIdempotencyKey', () => {
 
     let first = '';
     let second = '';
+    let scoped = '';
     act(() => {
-      first = result.current.getWalletIdempotencyKey('SIG');
-      second = result.current.getWalletIdempotencyKey('SIG');
+      const attempt = result.current.captureAttemptKey('SIG');
+      first = attempt.key;
+      scoped = attempt.scoped;
+      second = result.current.captureAttemptKey('SIG').key;
     });
     expect(first).toBe(second);
 
     act(() => {
-      result.current.forgetAttemptKey();
+      result.current.forgetScopedKey(scoped);
     });
     let third = '';
     act(() => {
-      third = result.current.getWalletIdempotencyKey('SIG');
+      third = result.current.captureAttemptKey('SIG').key;
     });
     expect(third).not.toBe(first);
   });
@@ -41,7 +47,7 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let keyA = '';
     act(() => {
-      keyA = firstOwner.result.current.getWalletIdempotencyKey('SIG');
+      keyA = firstOwner.result.current.captureAttemptKey('SIG').key;
     });
     firstOwner.unmount();
 
@@ -50,7 +56,7 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let keyB = '';
     act(() => {
-      keyB = secondOwner.result.current.getWalletIdempotencyKey('SIG');
+      keyB = secondOwner.result.current.captureAttemptKey('SIG').key;
     });
 
     expect(keyB).not.toBe(keyA);
@@ -62,7 +68,9 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let key = '';
     act(() => {
-      key = firstMount.result.current.getWalletIdempotencyKey('SIG');
+      const attempt = firstMount.result.current.captureAttemptKey('SIG');
+      key = attempt.key;
+      expect(attempt.recalled).toBe(false);
     });
     firstMount.unmount();
 
@@ -71,7 +79,9 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let recalled = '';
     act(() => {
-      recalled = secondMount.result.current.getWalletIdempotencyKey('SIG');
+      const attempt = secondMount.result.current.captureAttemptKey('SIG');
+      recalled = attempt.key;
+      expect(attempt.recalled).toBe(true);
     });
 
     expect(recalled).toBe(key);
@@ -88,7 +98,7 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let key = '';
     act(() => {
-      key = result.current.getWalletIdempotencyKey('SIG');
+      key = result.current.captureAttemptKey('SIG').key;
     });
     unmount();
 
@@ -101,7 +111,7 @@ describe('useUtilityIdempotencyKey', () => {
     );
     let recalled = '';
     act(() => {
-      recalled = lateHydration.result.current.getWalletIdempotencyKey('SIG');
+      recalled = lateHydration.result.current.captureAttemptKey('SIG').key;
     });
 
     expect(recalled).toBe(key);
@@ -112,16 +122,17 @@ describe('useUtilityIdempotencyKey', () => {
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
 
+    let scoped = '';
     act(() => {
-      result.current.getWalletIdempotencyKey('SIG');
+      scoped = result.current.captureAttemptKey('SIG').scoped;
     });
-    expect(result.current.isAttemptReplay('REF-1')).toBe(false);
+    expect(result.current.isScopedReplay(scoped, 'REF-1')).toBe(false);
 
     act(() => {
-      result.current.noteAttemptReference('REF-1');
+      result.current.noteScopedReference(scoped, 'REF-1');
     });
-    expect(result.current.isAttemptReplay('REF-1')).toBe(true);
-    expect(result.current.isAttemptReplay('REF-OTHER')).toBe(false);
+    expect(result.current.isScopedReplay(scoped, 'REF-1')).toBe(true);
+    expect(result.current.isScopedReplay(scoped, 'REF-OTHER')).toBe(false);
   });
 
   it('binds completion to the submitting owner across a mid-flight switch', () => {
@@ -133,13 +144,14 @@ describe('useUtilityIdempotencyKey', () => {
         useUtilityIdempotencyKey(props),
       { initialProps: { customerId: 'customer-a' } }
     );
+    let scoped = '';
     act(() => {
-      result.current.getWalletIdempotencyKey('SIG');
+      scoped = result.current.captureAttemptKey('SIG').scoped;
     });
 
     rerender({ customerId: 'customer-b' });
     act(() => {
-      result.current.noteAttemptReference('REF-1');
+      result.current.noteScopedReference(scoped, 'REF-1');
     });
 
     expect(
@@ -156,25 +168,130 @@ describe('useUtilityIdempotencyKey', () => {
     ).toBe(false);
   });
 
+  it('keeps concurrent attempts independent via per-execution captures', () => {
+    // Two overlapping submits must not share mutable hook state: each
+    // capture finalizes exactly its own entry.
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+
+    let attemptA = { key: '', scoped: '', recalled: false };
+    let attemptB = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attemptA = result.current.captureAttemptKey('SIG-A');
+      attemptB = result.current.captureAttemptKey('SIG-B');
+    });
+    act(() => {
+      result.current.forgetScopedKey(attemptA.scoped);
+    });
+
+    let recallA = '';
+    let recallB = '';
+    act(() => {
+      recallA = result.current.captureAttemptKey('SIG-A').key;
+      recallB = result.current.captureAttemptKey('SIG-B').key;
+    });
+    expect(recallA).not.toBe(attemptA.key);
+    expect(recallB).toBe(attemptB.key);
+  });
+
   it('reports a success stale only when the noted reference is past the window', () => {
     vi.useFakeTimers();
     try {
       const { result } = renderHook(() =>
         useUtilityIdempotencyKey({ customerId: 'customer-a' })
       );
+      let scoped = '';
       act(() => {
-        result.current.getWalletIdempotencyKey('SIG');
-        result.current.noteAttemptReference('REF-1');
+        scoped = result.current.captureAttemptKey('SIG').scoped;
+        result.current.noteScopedReference(scoped, 'REF-1');
       });
-      expect(result.current.isAttemptStale('REF-1')).toBe(false);
+      expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
 
       act(() => {
         vi.advanceTimersByTime(6 * 60 * 1000);
       });
-      expect(result.current.isAttemptStale('REF-1')).toBe(true);
-      expect(result.current.isAttemptStale('REF-OTHER')).toBe(false);
+      expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(true);
+      expect(result.current.isScopedStale(scoped, 'REF-OTHER')).toBe(false);
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('finalizeSwitchedAttempt', () => {
+  beforeEach(() => {
+    clearPendingVtuKeys();
+  });
+
+  it('forgets a terminal success so the returnee mints fresh', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    finalizeSwitchedAttempt(attempt, {
+      kind: 'wallet-success',
+      reference: 'REF-1',
+      amount: 1000,
+      processing: false,
+    });
+
+    let repeat = '';
+    act(() => {
+      repeat = result.current.captureAttemptKey('SIG').key;
+    });
+    expect(repeat).not.toBe(attempt.key);
+  });
+
+  it('notes the reference when the switched result is processing', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    finalizeSwitchedAttempt(attempt, {
+      kind: 'wallet-success',
+      reference: 'REF-PROC',
+      amount: 1000,
+      processing: true,
+    });
+
+    expect(result.current.isScopedReplay(attempt.scoped, 'REF-PROC')).toBe(
+      true
+    );
+  });
+
+  it('keeps the key for errors and null attempts', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    finalizeSwitchedAttempt(attempt, {
+      kind: 'error',
+      message: 'timeout',
+    });
+    finalizeSwitchedAttempt(null, {
+      kind: 'wallet-success',
+      reference: 'REF-1',
+      amount: 1000,
+      processing: false,
+    });
+
+    let repeat = '';
+    act(() => {
+      repeat = result.current.captureAttemptKey('SIG').key;
+    });
+    expect(repeat).toBe(attempt.key);
   });
 });

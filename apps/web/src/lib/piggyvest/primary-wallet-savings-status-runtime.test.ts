@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { PiggyvestApiError } from './client';
 import { checkPrimaryWalletSavingsStatus } from './primary-wallet-savings-status-runtime';
 
 const mocks = vi.hoisted(() => ({
@@ -174,6 +175,45 @@ it('leaves a fresh dispatched operation to its live holder', async () => {
   expect(mocks.lookupTransfer).not.toHaveBeenCalled();
   expect(mocks.transfer).not.toHaveBeenCalled();
   expect(mocks.reconcile).toHaveBeenCalledTimes(1);
+});
+it('reports cancelled when the reclaim releases after a definitive rejection', async () => {
+  // The reclaimed dispatch proves absent, the retry is definitively
+  // rejected, and the hold releases: the balance is restored, so the
+  // first status answer must be cancelled — not pending from a
+  // reconciliation that only reads dispatched rows.
+  mocks.readStatus.mockResolvedValue('dispatched');
+  mocks.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation: {
+      operationId,
+      goalId: '33333333-3333-4333-8333-333333333333',
+      amountKobo: 25000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'destination-wallet',
+      reference: 'pvb-save-rejected',
+      businessId: 'business',
+      providerCustomerId: 'provider-customer',
+    },
+  });
+  mocks.lookupTransfer.mockResolvedValue('absent');
+  mocks.retrieveWallet.mockImplementation(
+    async (_provider: unknown, walletId: string) => ({
+      id: walletId,
+      api_customer_id: 'provider-customer',
+      business_id: 'business',
+      currency: 'NGN',
+      status: 'active',
+      balance: 50000,
+    })
+  );
+  mocks.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'rejected', 401)
+  );
+  mocks.releaseAfterRejection.mockResolvedValue(true);
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'cancelled',
+  });
+  expect(mocks.reconcile).not.toHaveBeenCalled();
 });
 it('does not resubmit when the provider already holds the transfer', async () => {
   mocks.readStatus.mockResolvedValue('dispatched');

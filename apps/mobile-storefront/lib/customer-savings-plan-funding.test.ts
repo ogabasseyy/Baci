@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
+import {
+  mockFetchWithTimeout,
+  mockGetSession,
+} from '@/lib/wallet-top-up.test-utils';
 
 const mockProbePlanFunding =
   jest.fn<(merchantId: string) => Promise<boolean>>();
@@ -14,8 +17,18 @@ jest.mock('@/lib/piggyvest-primary-capability', () => {
   };
 });
 
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
+
 beforeEach(() => {
   mockProbePlanFunding.mockResolvedValue(false);
+  mockAuthUserId = null;
 });
 
 const { fetchExistingSavingsPlanFunding, fetchSavingsPlanFunding } =
@@ -176,5 +189,37 @@ describe('fetchSavingsPlanFunding', () => {
     await expect(
       fetchSavingsPlanFunding({ bvn: '00000000000', goalId: 'goal-1' })
     ).rejects.toThrow();
+  });
+
+  it('refuses primary provisioning after an account switch mid-flight', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockProbePlanFunding.mockResolvedValue(true);
+    // The call starts as user-1, then user-2 signs in before the
+    // request executes: the user pin must reject locally instead of
+    // sending user-1's goal under user-2's token (the route would
+    // scope it to user-2 and fail with GOAL_NOT_FOUND).
+    mockAuthUserId = 'user-1';
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-2', user: { id: 'user-2' } },
+      },
+      error: null,
+    });
+
+    await expect(
+      fetchSavingsPlanFunding({
+        bvn: '00000000000',
+        goalId: '22222222-2222-4222-8222-222222222222',
+        merchantId: '77777777-7777-4777-8777-777777777777',
+        enableInterestAccrual: true,
+      })
+    ).rejects.toThrow('signed-in account changed');
+    expect(
+      mockFetchWithTimeout.mock.calls.some(([url]) =>
+        String(url).includes(
+          '/api/storefront/customer/savings/primary-provisioning'
+        )
+      )
+    ).toBe(false);
   });
 });

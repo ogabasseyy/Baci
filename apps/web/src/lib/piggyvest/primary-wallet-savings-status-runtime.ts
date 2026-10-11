@@ -67,7 +67,7 @@ export async function checkPrimaryWalletSavingsStatus(input: {
   // for a live holder's fresh dispatch (untouched), and only a
   // proven-absent reference resubmits. Any failure falls through to
   // reconciliation, which settles submitted transfers as before.
-  await driveStaleDispatchReclaim({
+  const reclaim = await driveStaleDispatchReclaim({
     scope,
     operationId,
     provider: {
@@ -77,6 +77,10 @@ export async function checkPrimaryWalletSavingsStatus(input: {
     adoptPending: (id) => store.adoptPending(id),
     releaseAfterRejection: (id) => store.releaseAfterRejection(id),
   }).catch(() => undefined);
+  // Mirror the submit path: a reclaim that released the hold reports
+  // cancelled now — reconciliation only reads dispatched rows and
+  // would otherwise answer pending for a restored balance.
+  if (reclaim === 'released') return { status: 'cancelled' as const };
   return await runPrimaryWalletSavingsReconciliation({
     configuration: evidence,
     operationId,
@@ -95,15 +99,15 @@ async function driveStaleDispatchReclaim(input: {
     | { status: 'existing' }
   >;
   releaseAfterRejection: (operationId: string) => Promise<boolean>;
-}) {
+}): Promise<'submitted' | 'released' | 'pending' | undefined> {
   const adoption = await input.adoptPending(input.operationId);
-  if (adoption.status !== 'reclaimed') return;
+  if (adoption.status !== 'reclaimed') return undefined;
   const reservation = piggyvestPrimarySavingsTransferSchemas.reserved.parse(
     adoption.reservation
   );
   if (reservation.businessId !== input.scope.businessId)
     throw new Error('Savings ownership unavailable');
-  await resubmitReclaimedSavingsDispatch(reservation, {
+  return await resubmitReclaimedSavingsDispatch(reservation, {
     lookupTransfer: async (candidate) =>
       await lookupSavingsTransferReference({
         reference: candidate.reference,

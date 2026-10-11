@@ -1,5 +1,6 @@
 import { SavingsPlanFundingResponseSchema } from '@/schemas/customer-savings';
 import { PrimarySavingsPlanFundingSchemas as schemas } from '@/schemas/primary-savings-plan-funding';
+import { useAuthStore } from '@/stores/auth-store';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import {
   getPiggyvestPrimaryCapability,
@@ -22,12 +23,17 @@ async function primaryFunding(input: Selection, interestAccepted?: boolean) {
   // Per-operation client, like the other primary wallet clients: the
   // module singleton caches the first user's access token until expiry,
   // so an account switch would provision under the former customer.
+  // The expected-user pin rejects locally when the session changed
+  // mid-flight instead of sending A's goal under B's token (the route
+  // would scope it to B and fail a legitimate request).
+  const expectedUserId = useAuthStore.getState().user?.id;
   const response = schemas.response.parse(
     await createStorefrontCustomerApiClient().fetchJson({
       path: '/api/storefront/customer/savings/primary-provisioning',
       method: interestAccepted === undefined ? 'PATCH' : 'POST',
       includeCsrf: true,
       signal: input.signal,
+      expectedUserId: expectedUserId ?? undefined,
       body:
         interestAccepted === undefined
           ? selection

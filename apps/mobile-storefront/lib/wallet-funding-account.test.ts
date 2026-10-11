@@ -363,6 +363,54 @@ describe('wallet funding account api client', () => {
       )
     ).toBe(false);
   });
+  it('refuses the legacy GET fallback after an account switch mid-flight', async () => {
+    mockFetchWithTimeout.mockClear();
+    // Only the primary read response is queued: the legacy GET must
+    // throw before any second fetch happens (an unconsumed queue entry
+    // would leak into the next test).
+    mockFetchWithTimeout.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      json: async () => ({
+        error: 'Wallet access is temporarily unavailable.',
+        code: 'PIGGYVEST_NOT_READY',
+      }),
+    });
+    // The read starts as user-1, then user-2 signs in before the
+    // legacy GET: the fallback must throw before any bytes leave the
+    // device instead of returning user-2's funding account to
+    // user-1's in-flight operation.
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: {
+          session: { access_token: 'token-1', user: { id: 'user-1' } },
+        },
+        error: null,
+      })
+      .mockResolvedValue({
+        data: {
+          session: { access_token: 'token-2', user: { id: 'user-2' } },
+        },
+        error: null,
+      });
+    await expect(
+      getWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        userId: 'user-1',
+      })
+    ).rejects.toThrow('signed-in account changed');
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([url, options]) =>
+          typeof url === 'string' &&
+          url.includes('/api/storefront/customer/wallet/funding-account') &&
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'GET'
+      )
+    ).toBe(false);
+  });
   it('refuses to mint a legacy DVA when the probe fails ambiguously', async () => {
     mockFetchWithTimeout.mockClear();
     mockFetchWithTimeout.mockRejectedValueOnce(new Error('timeout'));

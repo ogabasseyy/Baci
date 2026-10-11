@@ -71,6 +71,7 @@ export async function getWalletFundingAccount({
   const data = await walletFundingApiClient.fetchJson({
     path: '/api/storefront/customer/wallet/funding-account',
     query: { merchantId, merchantSlug },
+    expectedUserId: expectedUserId ?? undefined,
   });
   return parseWalletFundingAccountResponse({ data, operation: 'get' });
 }

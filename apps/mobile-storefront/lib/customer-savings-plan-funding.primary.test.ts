@@ -19,12 +19,21 @@ jest.mock('./piggyvest-primary-capability', () => {
     getPiggyvestPrimaryCapability: (...args: unknown[]) => mockProbe(...args),
   };
 });
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const GOAL = '33333333-3333-4333-8333-333333333333';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAuthUserId = null;
   clearObservedPiggyvestPrimaryCapability();
   mockFetchJson.mockResolvedValue({
     status: 'ready',
@@ -129,6 +138,57 @@ it('rejects without legacy fallback when the probe is ambiguous', async () => {
     })
   ).rejects.toThrow('network down');
   expect(mockFetchJson).not.toHaveBeenCalled();
+});
+it('captures the provisioning user before the rail probe', async () => {
+  mockAuthUserId = 'user-A';
+  // Account switch lands while the capability probe is in flight.
+  mockProbe.mockImplementation(async () => {
+    mockAuthUserId = 'user-B';
+    return true;
+  });
+  await customerSavingsPlanFunding.provision({
+    goalId: GOAL,
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    bvn: '00000000000',
+  });
+  // Entry capture: the request carries A's id, so the real client
+  // fails locally instead of submitting A's goal under B's session.
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: 'user-A' })
+  );
+});
+it('captures the recovery user before the rail probe', async () => {
+  mockAuthUserId = 'user-A';
+  mockProbe.mockImplementation(async () => {
+    mockAuthUserId = 'user-B';
+    return true;
+  });
+  await customerSavingsPlanFunding.recover({
+    goalId: GOAL,
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  });
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: 'user-A' })
+  );
+});
+it('pins the legacy fallback to the initiating user', async () => {
+  mockAuthUserId = 'user-A';
+  mockProbe.mockResolvedValue(false);
+  await customerSavingsPlanFunding.provision({
+    goalId: GOAL,
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    bvn: '00000000000',
+  });
+  await customerSavingsPlanFunding.recover({
+    goalId: GOAL,
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  });
+  expect(mockFetchJson).toHaveBeenCalledTimes(2);
+  for (const call of mockFetchJson.mock.calls)
+    expect(call[0]).toMatchObject({
+      path: '/api/storefront/customer/savings/funding',
+      expectedUserId: 'user-A',
+    });
 });
 it('keeps the not-ready rollback after a positive probe', async () => {
   mockProbe.mockResolvedValue(true);

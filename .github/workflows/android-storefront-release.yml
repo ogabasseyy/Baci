@@ -49,7 +49,7 @@ env:
   BACI_MOBILE_BUILD_PLATFORM: android
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
-  ANDROID_NODE_OPTIONS: "--no-experimental-strip-types --max-old-space-size=2048"
+  ANDROID_NODE_OPTIONS: "--no-experimental-strip-types --import tsx --max-old-space-size=2048"
   ANDROID_GRADLE_OPTS: '-Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" -Dkotlin.daemon.jvm.options=-Xmx1024m'
   PNPM_STORE_DIR: ${{ github.workspace }}/.pnpm-store
   WORKING_DIR: apps/mobile-storefront

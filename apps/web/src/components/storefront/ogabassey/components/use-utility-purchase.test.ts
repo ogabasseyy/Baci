@@ -4,6 +4,7 @@ import type {
   Customer,
   CustomerUser,
 } from '@/contexts/customer-auth-context';
+import { clearPendingVtuKeys } from './utility-pending-idempotency';
 import { useUtilityPurchase } from './use-utility-purchase';
 
 const mockSubmit = vi.hoisted(() => vi.fn());
@@ -57,6 +58,7 @@ describe('useUtilityPurchase', () => {
   beforeEach(() => {
     mockSubmit.mockReset();
     mockToast.mockReset();
+    clearPendingVtuKeys();
   });
 
   it('blocks checkout and prompts sign-in when the customer is not authenticated', async () => {
@@ -191,7 +193,10 @@ describe('useUtilityPurchase', () => {
         };
       }
     );
-    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+    const refreshWallet = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet }))
+    );
 
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
@@ -202,6 +207,63 @@ describe('useUtilityPurchase', () => {
 
     expect(seenKeys).toHaveLength(2);
     expect(seenKeys[0]).toBe(seenKeys[1]);
+    // The deferred debit reconciles via refresh even if never replayed.
+    expect(refreshWallet).toHaveBeenCalled();
+  });
+
+  it('shows the pending step (not success) while a purchase is processing', async () => {
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-PROC',
+      amount: 1000,
+      processing: true,
+    });
+    const setWalletBalance = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ setWalletBalance }))
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    await waitFor(() => expect(result.current.step).toBe('processing'));
+    expect(result.current.transactionRef).toBe('REF-PROC');
+    // Non-terminal: no balance effect until the success replay lands.
+    expect(setWalletBalance).not.toHaveBeenCalled();
+  });
+
+  it('reuses the pending key across modal remounts for the same purchase', async () => {
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-PROC',
+          amount: 1000,
+          processing: true,
+        };
+      }
+    );
+    const first = renderHook(() => useUtilityPurchase(baseParams()));
+    await act(async () => {
+      first.result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await waitFor(() => expect(first.result.current.step).toBe('processing'));
+    // Done unmounts the modal; reopening mounts a fresh hook instance.
+    first.unmount();
+
+    const second = renderHook(() => useUtilityPurchase(baseParams()));
+    await act(async () => {
+      second.result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await waitFor(() => expect(second.result.current.step).toBe('processing'));
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[1]).toBe(seenKeys[0]);
   });
 
   it('rotates the idempotency key after a terminal success so buy-again is a fresh purchase', async () => {

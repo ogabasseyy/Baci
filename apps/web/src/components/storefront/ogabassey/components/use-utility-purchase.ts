@@ -7,7 +7,10 @@ import type {
 } from '@/contexts/customer-auth-context';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
-import { createWalletIdempotencyKey } from './utility-checkout';
+import {
+  forgetPendingVtuPurchase,
+  getPendingVtuKey,
+} from './utility-pending-idempotency';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import type { UtilityTabId } from './UtilityTabs';
 
@@ -49,12 +52,14 @@ interface BillSubmit {
   validationReference?: string;
 }
 
+type UtilityPurchaseStep = 'details' | 'processing' | 'success';
+
 interface UseUtilityPurchaseReturn {
   handleAirtimeDataSubmit: (data: AirtimeDataSubmit) => void;
   handleBillSubmit: (data: BillSubmit) => void;
   loading: boolean;
-  setStep: Dispatch<SetStateAction<'details' | 'success'>>;
-  step: 'details' | 'success';
+  setStep: Dispatch<SetStateAction<UtilityPurchaseStep>>;
+  step: UtilityPurchaseStep;
   successAmount: number;
   transactionRef: string;
 }
@@ -86,28 +91,27 @@ export function useUtilityPurchase({
   walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'details' | 'success'>('details');
+  const [step, setStep] = useState<UtilityPurchaseStep>('details');
   const [transactionRef, setTransactionRef] = useState('');
   const [successAmount, setSuccessAmount] = useState(0);
-  const walletIdempotencyAttemptRef = useRef<{
-    key: string;
-    payloadSignature: string;
-  } | null>(null);
+  // Keys live in the module registry; this ref tracks the in-flight
+  // signature so rotation forgets exactly that entry.
+  const lastPayloadSignatureRef = useRef<string | null>(null);
   // References whose debit is already reflected in the displayed balance. A
   // retained key replays the SAME transaction on resubmit, so without this
   // guard every processing replay would decrement the balance again.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
 
   const getWalletIdempotencyKey = (payloadSignature: string) => {
-    if (
-      walletIdempotencyAttemptRef.current?.payloadSignature !== payloadSignature
-    ) {
-      walletIdempotencyAttemptRef.current = {
-        key: createWalletIdempotencyKey(),
-        payloadSignature,
-      };
+    lastPayloadSignatureRef.current = payloadSignature;
+    return getPendingVtuKey(payloadSignature);
+  };
+
+  const forgetAttemptKey = () => {
+    if (lastPayloadSignatureRef.current) {
+      forgetPendingVtuPurchase(lastPayloadSignatureRef.current);
+      lastPayloadSignatureRef.current = null;
     }
-    return walletIdempotencyAttemptRef.current.key;
   };
 
   const handlePurchase = async (payload: UtilityCheckoutPayload) => {
@@ -191,13 +195,17 @@ export function useUtilityPurchase({
     });
 
     if (result.kind === 'wallet-success') {
-      // Terminal success rotates the key so a buy-again gets a fresh dedupe
-      // slot. 'processing' is non-terminal — the vend is still in flight, so
-      // the key MUST stay: the modal tabs reset to details, and a resubmit
-      // with a fresh key would bypass the route's dedupe row and create a
-      // second debit. Same key + same payload replays the same transaction.
+      // Terminal success forgets the key for a fresh buy-again slot.
+      // 'processing' keeps it: Done unmounts the modal, and a resubmit with
+      // a fresh key would bypass the dedupe row and debit twice. The
+      // deferred debit still needs reconciling even if this transaction
+      // is never replayed, so refresh instead of decrementing: a stale
+      // HIGH balance would let the underfunded pre-check pass a purchase
+      // the server will reject.
       if (!result.processing) {
-        walletIdempotencyAttemptRef.current = null;
+        forgetAttemptKey();
+      } else {
+        refreshWallet();
       }
       clearIntent();
       // A replayed reference is the same debit — only apply the balance
@@ -224,7 +232,9 @@ export function useUtilityPurchase({
       }
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);
-      setStep('success');
+      // A 202 processing vend can still fail or be refunded — show the
+      // pending screen, never the success screen.
+      setStep(result.processing ? 'processing' : 'success');
       toast({
         title: result.processing
           ? 'Purchase Processing'
@@ -244,7 +254,7 @@ export function useUtilityPurchase({
         result.status >= 400 &&
         result.status < 500
       ) {
-        walletIdempotencyAttemptRef.current = null;
+        forgetAttemptKey();
       }
       toast({
         title: 'Transaction Failed',

@@ -229,6 +229,31 @@ describe('UtilityModal checkout routing', () => {
     });
   });
 
+  it('shows the pending screen while a checkout is processing', async () => {
+    harness.useWallet.mockReturnValue({
+      payWithWallet: true,
+      refreshWallet: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      walletLoading: false,
+    });
+    harness.checkoutFetch.mockResolvedValue(
+      harness.createJsonResponse({
+        amount: 100,
+        reference: 'REF-PROC-1',
+        status: 'processing',
+      })
+    );
+
+    submitAirtimePurchase();
+
+    await waitFor(() => {
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Success!')).not.toBeInTheDocument();
+  });
+
   it('rejects failed non-JSON checkout responses', async () => {
     harness.checkoutFetch.mockResolvedValue({
       ok: false,

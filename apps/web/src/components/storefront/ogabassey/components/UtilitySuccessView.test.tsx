@@ -28,4 +28,22 @@ describe('UtilitySuccessView', () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('renders the pending state while a purchase is processing', () => {
+    render(
+      <UtilitySuccessView
+        activeTab="airtime"
+        amount={1500}
+        onClose={vi.fn()}
+        processing={true}
+        reference="VTU-123"
+      />
+    );
+
+    expect(screen.getByText('Processing…')).toBeInTheDocument();
+    expect(
+      screen.getByText(/still fail or be refunded/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Success!')).not.toBeInTheDocument();
+  });
 });

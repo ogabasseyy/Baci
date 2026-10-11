@@ -207,14 +207,7 @@ export const UtilityModal = ({
         />
 
         <div className="p-6">
-          {step === 'success' ? (
-            <UtilitySuccessView
-              activeTab={activeTab}
-              amount={successAmount}
-              onClose={handleClose}
-              reference={transactionRef}
-            />
-          ) : (
+          {step === 'details' ? (
             <>
               <UtilityPaymentMethodSelector
                 canUseWallet={canUseWallet}
@@ -283,6 +276,14 @@ export const UtilityModal = ({
                 />
               )}
             </>
+          ) : (
+            <UtilitySuccessView
+              activeTab={activeTab}
+              amount={successAmount}
+              onClose={handleClose}
+              processing={step === 'processing'}
+              reference={transactionRef}
+            />
           )}
         </div>
       </div>

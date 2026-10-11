@@ -1,4 +1,5 @@
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { isManualAllocatableRefundLeg } from './is-manual-allocatable-refund-leg';
 import { isUnverifiedManualPaystackRefund } from './is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 
@@ -27,7 +28,12 @@ interface CancellationRefundRow {
  * legs carrying them never initiate (double-refund protection) and
  * never mismatch for the manual rows themselves; a partial manual
  * record reports its leg pending so the caller defers (never
- * quarantines, never completes) until the merchant finishes.
+ * quarantines, never completes) until the merchant finishes. A
+ * cash-like leg with no manual row yet reports pending the same way:
+ * the claim routes mixed orders to the worker instead of finalizing,
+ * and completing before the merchant records would strand settlement
+ * reversal, notifications, and review closure on a completed row the
+ * drain never reselects.
  */
 export function matchCancellationRefundCoverage({
   linkedPaymentId,
@@ -158,6 +164,12 @@ export function matchCancellationRefundCoverage({
       // merchant: the caller excludes it from initiation without
       // quarantining, and defers the step so the drain reclaims the
       // row instead of completing it before the merchant finishes.
+      manualPendingLegIds.add(leg.id);
+    } else if (isManualAllocatableRefundLeg(leg.gateway)) {
+      // A cash-like leg with no manual row yet waits the same way:
+      // only the merchant can cover it (the caller never initiates
+      // provider refunds for internal legs), so falling through
+      // would complete the step with money still owed.
       manualPendingLegIds.add(leg.id);
     }
   }

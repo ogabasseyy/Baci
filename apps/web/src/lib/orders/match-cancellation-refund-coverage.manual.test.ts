@@ -134,4 +134,53 @@ describe('matchCancellationRefundCoverage manual rows', () => {
     expect(coverage.manualPendingLegIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
   });
+
+  it('waits on a cash-like leg with no manual row yet', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [],
+      transactions: [leg({ gateway: 'cash', id: 'cash-1' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.manualPendingLegIds).toEqual(new Set(['cash-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
+
+  it('waits on the bare cash leg of a mixed covered order', () => {
+    const mixedLink = (candidate: { metadata: unknown }) =>
+      (candidate.metadata as { payment_transaction_id?: unknown })
+        ?.payment_transaction_id === 'payment-1'
+        ? 'payment-1'
+        : null;
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: mixedLink,
+      refundRows: [
+        row({
+          amount: 100,
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions: [leg({}), leg({ gateway: 'cash', id: 'cash-1' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.manualPendingLegIds).toEqual(new Set(['cash-1']));
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
+
+  it('leaves bare wallet legs to their own ledgers', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [],
+      transactions: [leg({ gateway: 'wallet', id: 'wallet-1' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.manualPendingLegIds).toEqual(new Set());
+    expect(coverage.mismatchedTransactions).toEqual([]);
+  });
 });

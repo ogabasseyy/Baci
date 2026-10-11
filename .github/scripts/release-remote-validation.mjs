@@ -45,6 +45,12 @@ export function originRepoSlug(remoteUrl) {
   if (rawPath !== parsed.pathname) {
     return '';
   }
+  // Duplicate slashes survive URL parsing untouched, so they pass the
+  // equality check above while the worker guard (which splits the raw
+  // path) cannot resolve them. Refuse them here as well.
+  if (rawPath.includes('//')) {
+    return '';
+  }
   const path = parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '');
   return path ? path.toLowerCase() : '';
 }

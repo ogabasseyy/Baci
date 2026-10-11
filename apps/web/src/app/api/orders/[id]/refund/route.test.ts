@@ -242,6 +242,21 @@ describe('order refund route', () => {
       code: 'manual_completion_required',
     });
   });
+  it('matches a known failure even when a wrapper uppercases it', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'MANUAL_COMPLETION_REQUIRED: FINISH THE BALANCE FIRST',
+      },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Finish the remaining balance as a manual refund before retrying',
+      code: 'manual_completion_required',
+    });
+  });
   it('does not match a known token embedded in a larger word', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

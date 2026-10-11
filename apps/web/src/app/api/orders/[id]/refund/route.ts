@@ -6,7 +6,11 @@ import { orderRefundSchema } from '@/schemas/order-refund';
 
 // Fixed user-facing messages for known refund identifiers. Raw database
 // exception text must never reach the client (CWE-209): unknown
-// identifiers fall back to the generic message.
+// identifiers fall back to the generic message. This masking covers
+// the error path only; success payloads still carry the RPC's worker
+// strings (summary.error, event details) because they describe the
+// merchant's own refunds to authenticated staff, and the panel maps
+// them to fixed labels at render via describeRefundWorkerError.
 const KNOWN_REFUND_ERRORS: Record<string, string> = {
   not_authenticated: 'Authentication required',
   refund_forbidden: 'You do not have permission to manage this refund',
@@ -111,7 +115,12 @@ async function handle(
     // match an unrelated word that merely contains a known token
     // (e.g. a constraint name). Token membership keeps wrapped known
     // failures coded while unknown text falls back to internal_error.
-    const messageTokens = (error.message ?? '').split(/[^a-z0-9_]+/);
+    // Lowercase first: without it, uppercase letters act as
+    // delimiters and a wrapper that uppercases the RAISE text would
+    // miss every match.
+    const messageTokens = (error.message ?? '')
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/);
     const matchedError = Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
       messageTokens.includes(known)
     );

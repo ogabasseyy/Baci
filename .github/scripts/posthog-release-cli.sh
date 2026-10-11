@@ -16,8 +16,11 @@ for attempt in 1 2 3; do
   else
     status=$?
   fi
-  # Retry only transport failures. Authentication, malformed maps, and missing
-  # configuration require a fix and must still fail the archive immediately.
+  # Retry only transport failures. Authentication, malformed maps, missing
+  # configuration, and HTTP 5xx API responses require a fix (or a healthy
+  # backend) and must still fail the archive immediately: 5xx is
+  # intentionally fatal, not an oversight, because the CLI surfaces no
+  # reliable transient-vs-fatal distinction for status errors.
   if [[ "$attempt" == 3 ]] || ! grep -Eiq 'error sending request|connection (reset|refused|closed)|timed out|network request failed|temporary failure in name resolution' "$output_file"; then
     cat "$output_file"
     exit "$status"

@@ -35,7 +35,9 @@ function evaluatePageSpeedResult(
   const runtimeCode = readSafeApiToken(
     payload.lighthouseResult?.runtimeError?.code
   );
-  if (runtimeCode) {
+  // Lighthouse reports runtimeError.code NO_ERROR on success; only any
+  // other code is a genuine runtime failure.
+  if (runtimeCode && runtimeCode !== 'NO_ERROR') {
     failures.push({
       metric: 'request',
       actual: null,
@@ -52,27 +54,30 @@ function evaluatePageSpeedResult(
     const actual = scores[metric];
     const threshold = CATEGORY_THRESHOLDS[metric];
     if (actual === null || actual < threshold) {
-      const failedAudits = payload.lighthouseResult?.categories?.[
-        metric
-      ]?.auditRefs
-        ?.filter(
+      const failingRefs =
+        payload.lighthouseResult?.categories?.[metric]?.auditRefs?.filter(
           (ref) =>
             ref.weight > 0 &&
             typeof payload.lighthouseResult?.audits?.[ref.id]?.score ===
               'number' &&
             (payload.lighthouseResult?.audits?.[ref.id]?.score ?? 1) < 1
-        )
+        ) ?? [];
+      const failedAudits = failingRefs
         .map((ref) => readSafeApiToken(ref.id))
-        .filter(Boolean);
+        .filter((token): token is string => token !== null);
       failures.push({
         metric,
         actual,
         threshold,
-        ...(failedAudits?.length
+        ...(failedAudits.length
           ? {
               message: `Failing Lighthouse audits: ${[...new Set(failedAudits)].join(', ')}`,
             }
-          : {}),
+          : failingRefs.length
+            ? {
+                message: `Failing Lighthouse audits: ${failingRefs.length} omitted (unexpected ID format)`,
+              }
+            : {}),
       });
     }
   }

@@ -11,24 +11,45 @@ const repository = CANONICAL_REPOSITORY;
 const workerHost = 'bassey@82.29.190.219';
 const coordinationId = randomUUID();
 
-function command(binary, args, capture = true) {
+export const API_COMMAND_TIMEOUT_MS = 60000;
+
+export function command(binary, args, capture = true, options = {}) {
   const result = spawnSync(binary, args, {
     cwd: root,
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
+    timeout: options.timeoutMs,
+    killSignal: 'SIGTERM',
   });
   if (result.error || result.status !== 0) {
-    // Keep reconciliation context: which call failed, how, and the
-    // first bytes of whatever it printed before dying.
+    // Keep reconciliation context: which call failed, how (including
+    // the kill signal — stderr stays inherited for live diagnostics,
+    // so the signal is the post-mortem channel), and the first bytes
+    // of whatever it printed before dying.
     const output = typeof result.stdout === 'string' ? result.stdout.trim().slice(0, 500) : '';
     const cause = result.error ? ` (${result.error.message})` : '';
-    throw new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
+    const signal = result.signal ? ` signal ${result.signal}` : '';
+    const error = new Error(`${binary} ${args.join(' ')} failed with status ${result.status}${signal}${cause}${output ? `: ${output}` : ''}; inspect preceding diagnostics`);
+    // A timeout means unknown remote state: the API call may have
+    // landed. Always hold the lock for reconcile-before-removal,
+    // even pre-dispatch (where dispatch provably never ran, so the
+    // operator just confirms and removes).
+    if (result.error && /time.?out/i.test(result.error.message)) {
+      error.indeterminateDispatch = true;
+    }
+    throw error;
   }
   return capture ? result.stdout.trim() : '';
 }
 
 function gh(args) {
-  return command('gh', args);
+  // Every gh call is a bounded API read or dispatch: a hung child
+  // must not wedge the polling loops or the multi-hour release.
+  return command('gh', args, true, { timeoutMs: API_COMMAND_TIMEOUT_MS });
+}
+
+function vercelApi(path) {
+  return command('vercel', ['api', path, '--method', 'GET'], true, { timeoutMs: API_COMMAND_TIMEOUT_MS });
 }
 
 const vercelProjectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
@@ -36,7 +57,7 @@ const vercelScope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${vercelProj
 
 function readServingDeploymentId() {
   const alias = JSON.parse(
-    command('vercel', ['api', `/v4/aliases/ogabassey.com?${vercelScope}`, '--method', 'GET'])
+    vercelApi(`/v4/aliases/ogabassey.com?${vercelScope}`)
   );
   if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) throw new Error('cannot identify the serving deployment');
   return alias.deploymentId;
@@ -145,7 +166,12 @@ export async function findProductionDispatchRun(readPage, readAll, baseline, coo
     }
     await sleep(DISPATCH_DISCOVERY_POLL_MS);
   }
-  throw new Error('dispatch outcome unknown; inspect GitHub before retrying');
+  // Tag at the source: any direct caller checking
+  // shouldHoldReleaseLock must hold on unknown outcome, not just the
+  // coordinateRelease wrapper that re-tags today.
+  const exhausted = new Error('dispatch outcome unknown; inspect GitHub before retrying');
+  exhausted.indeterminateDispatch = true;
+  throw exhausted;
 }
 
 export function readRuns(filter, paginate = false) {
@@ -232,7 +258,7 @@ async function main() {
       readJobs: async runId => parseJobsPayload(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs']), runId),
       verifyLive: async commit => {
         const deploymentId = readServingDeploymentId();
-        const deployment = JSON.parse(command('vercel', ['api', `/v13/deployments/${deploymentId}?${vercelScope}`, '--method', 'GET']));
+        const deployment = JSON.parse(vercelApi(`/v13/deployments/${deploymentId}?${vercelScope}`));
         assertLiveDeployment(deployment, commit, vercelProjectId);
         // Close the alias-to-deployment TOCTOU window: the alias may
         // have flipped to another deployment between the two reads.

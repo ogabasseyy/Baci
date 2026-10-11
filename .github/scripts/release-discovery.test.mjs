@@ -31,10 +31,12 @@ test('dispatch discovery polls page one, then confirms with one full scan', asyn
 test('dispatch discovery gives up unknown after the full attempt budget', async () => {
   let pages = 0;
   let fulls = 0;
-  await assert.rejects(
-    findProductionDispatchRun(() => { pages++; return []; }, () => { fulls++; return []; }, [], 'id', 'b'.repeat(40), async () => {}),
-    /dispatch outcome unknown/
+  const error = await findProductionDispatchRun(() => { pages++; return []; }, () => { fulls++; return []; }, [], 'id', 'b'.repeat(40), async () => {}).then(
+    () => { throw new Error('expected rejection'); },
+    rejection => rejection
   );
+  assert.match(error.message, /dispatch outcome unknown/);
+  assert.equal(error.indeterminateDispatch, true);
   assert.equal(pages, DISPATCH_DISCOVERY_ATTEMPTS);
   assert.equal(fulls, 0);
 });

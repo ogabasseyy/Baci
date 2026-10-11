@@ -13,6 +13,7 @@ import {
   assertRemovableLockPath,
   assertServingDeploymentStable,
   assertVercelAccess,
+  command,
   parseGhJqString,
   parseJobsPayload,
   readRuns,
@@ -254,5 +255,28 @@ test('rejects non-GitHub and non-repository remotes', () => {
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }
+});
+
+test('a timed-out child holds the lock and names the signal', () => {
+  let error;
+  try {
+    command('sleep', ['30'], true, { timeoutMs: 50 });
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert.match(error.message, /ETIMEDOUT/);
+  assert.match(error.message, /SIGTERM/);
+  assert.equal(error.indeterminateDispatch, true);
+});
+
+test('a signal-killed child names the signal without the timeout tag', () => {
+  let error;
+  try {
+    command('sh', ['-c', 'kill -TERM $$'], true);
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert.match(error.message, /signal SIGTERM/);
+  assert.equal(error.indeterminateDispatch, undefined);
 });
 

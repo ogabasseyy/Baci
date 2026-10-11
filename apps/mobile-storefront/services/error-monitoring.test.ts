@@ -42,13 +42,41 @@ describe('initializeErrorMonitoring', () => {
         enableTombstone: true,
         environment: 'production',
         sendDefaultPii: false,
-        tracesSampleRate: 0,
+        enableAutoPerformanceTracing: true,
+        tracesSampleRate: 0.05,
       })
     );
     expect(mockInstallMemoryWarningDiagnostics).toHaveBeenCalledTimes(1);
     expect(mockInit.mock.calls[0]?.[0]).not.toHaveProperty(
       'autoInitializeNativeSdk'
     );
+  });
+
+  it('attaches the validated build revision to initial native and JS scope', () => {
+    const { initializeErrorMonitoring } =
+      jest.requireActual<typeof import('./error-monitoring')>(
+        './error-monitoring'
+      );
+    const sha = 'a'.repeat(40);
+    initializeErrorMonitoring({
+      EXPO_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1',
+      EXPO_PUBLIC_BUILD_SHA: sha,
+    });
+    expect(mockInit).toHaveBeenCalledWith(
+      expect.objectContaining({ initialScope: { tags: { build_sha: sha } } })
+    );
+  });
+
+  it('does not forward an invalid build revision', () => {
+    const { initializeErrorMonitoring } =
+      jest.requireActual<typeof import('./error-monitoring')>(
+        './error-monitoring'
+      );
+    initializeErrorMonitoring({
+      EXPO_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1',
+      EXPO_PUBLIC_BUILD_SHA: 'token=private',
+    });
+    expect(mockInit.mock.calls[0]?.[0]).not.toHaveProperty('initialScope');
   });
 
   it('stays disabled when the public DSN is missing', () => {

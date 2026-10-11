@@ -73,6 +73,9 @@ test('requires authenticated Vercel access to the production project', () => {
   }), {
     message: 'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry',
   });
+  const transport = new Error('serving alias response unreadable; retry the read (oops)');
+  transport.keepOriginalMessage = true;
+  assert.throws(() => assertVercelAccess(() => { throw transport; }), { message: transport.message });
 });
 
 test('waits for run completion by polling the run endpoint', async () => {

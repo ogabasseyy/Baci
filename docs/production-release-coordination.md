@@ -45,7 +45,9 @@ is content-identical and passes verification, at the cost of a wasted
 deploy cycle — reconcile instead. Never run two coordinators concurrently
 (even on different machines): the lock is local-only and the sibling
 abort is best-effort, so concurrent runs are procedurally forbidden,
-not just detected.
+not just detected. Freeze main pushes for the duration of a coordinated
+release: push deploys bypass the sibling check and can only be caught
+after the fact by live-alias verification.
 Provision restricted runner authentication and trusted VPS access
 without copying personal SSH keys or introducing a broad permanent token.
 

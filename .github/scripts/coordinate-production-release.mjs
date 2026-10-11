@@ -169,19 +169,21 @@ export async function coordinateRelease(operations, coordinationId) {
     throw new Error('production publication did not succeed; inspect the workflow');
   }
   if (jobs.filter(job => job.name === 'deploy-production' && job.conclusion === 'success').length !== 1) {
-    // A deploy-production job that fails AFTER promoting already
-    // changed production: postdeploy migrations, coherence checks, and
-    // smokes all run after the Vercel promotion step. Hold the lock so
-    // the next release cannot start before the live alias and failed
-    // post-publication work are reconciled. Only skipped jobs (which
-    // never execute steps) definitively did not publish; unreadable
-    // steps otherwise fail closed since promotion cannot be ruled out.
+    // A deploy-production job whose promotion step ran may already have
+    // changed production even when the step failed: deploy-with-retry
+    // documents ambiguous promote failures (server-side effect with a
+    // client-side error, e.g. unreachable alias lookup or failed
+    // overlap recovery), and postdeploy migrations, coherence checks,
+    // and smokes all run after the promotion step. Hold the lock so the
+    // next release cannot start before the live alias and failed work
+    // are reconciled. Only a promote step that never ran (absent or
+    // skipped) or a wholly skipped job definitively did not publish.
     for (const job of jobs) {
       if (job.name !== 'deploy-production' || job.conclusion === 'success') continue;
-      const promoted = Array.isArray(job.steps)
-        ? job.steps.some(step => step && step.name === DEPLOY_PROMOTE_STEP_NAME && step.conclusion === 'success')
-        : job.conclusion !== 'skipped';
-      if (promoted) {
+      const promoteRan = !Array.isArray(job.steps)
+        ? job.conclusion !== 'skipped'
+        : job.steps.some(step => step && step.name === DEPLOY_PROMOTE_STEP_NAME && step.conclusion !== 'skipped');
+      if (promoteRan) {
         const error = new Error('production publication may have succeeded; reconcile the live alias and failed post-promotion work before retrying');
         error.indeterminateDispatch = true;
         throw error;

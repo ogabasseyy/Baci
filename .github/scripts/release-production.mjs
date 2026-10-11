@@ -56,17 +56,33 @@ const vercelProjectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
 const vercelScope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${vercelProjectId}`;
 
 function readServingDeploymentId() {
-  const alias = JSON.parse(
-    vercelApi(`/v4/aliases/ogabassey.com?${vercelScope}`)
-  );
-  if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) throw new Error('cannot identify the serving deployment');
+  let alias;
+  try {
+    alias = JSON.parse(
+      vercelApi(`/v4/aliases/ogabassey.com?${vercelScope}`)
+    );
+  } catch (error) {
+    // A transient non-JSON error page or empty response is a
+    // retryable transport failure, not an auth failure: keep the
+    // original message so preflight does not misdirect the operator
+    // to upgrade/re-authenticate.
+    const unreadable = new Error(`serving alias response unreadable; retry the read (${error.message})`);
+    unreadable.keepOriginalMessage = true;
+    throw unreadable;
+  }
+  if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) {
+    const unidentified = new Error('cannot identify the serving deployment from the alias response');
+    unidentified.keepOriginalMessage = true;
+    throw unidentified;
+  }
   return alias.deploymentId;
 }
 
 export function assertVercelAccess(readAlias = readServingDeploymentId) {
   try {
     readAlias();
-  } catch {
+  } catch (error) {
+    if (error && error.keepOriginalMessage) throw error;
     throw new Error(
       'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry'
     );

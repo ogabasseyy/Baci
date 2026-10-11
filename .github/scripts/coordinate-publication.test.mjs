@@ -87,9 +87,9 @@ test('a post-promotion job failure holds the lock for reconciliation', async () 
   assert.equal(error.indeterminateDispatch, true);
 });
 
-test('a pre-promotion job failure releases the lock for a clean retry', async () => {
+test('a job that never reached promotion releases the lock for a clean retry', async () => {
   for (const jobs of [
-    [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: DEPLOY_PROMOTE_STEP_NAME, conclusion: 'failure' }] }],
+    [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: DEPLOY_PROMOTE_STEP_NAME, conclusion: 'skipped' }] }],
     [{ name: 'deploy-production', conclusion: 'failure', steps: [{ name: 'Set up job', conclusion: 'success' }] }],
     [{ name: 'deploy-production', conclusion: 'cancelled', steps: [{ name: 'Set up job', conclusion: 'cancelled' }] }],
     [{ name: 'deploy-production', conclusion: 'skipped' }],
@@ -101,6 +101,26 @@ test('a pre-promotion job failure releases the lock for a clean retry', async ()
     );
     assert.match(error.message, /publication did not succeed/);
     assert.equal(error.indeterminateDispatch, undefined);
+  }
+});
+
+test('an ambiguously failed promotion holds the lock', async () => {
+  // deploy-with-retry documents ambiguous promote failures: a failed
+  // step may still have changed production (unreachable alias lookup,
+  // failed overlap recovery), so the lock must hold.
+  for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+    const jobs = [{
+      name: 'deploy-production',
+      conclusion: 'failure',
+      steps: [{ name: DEPLOY_PROMOTE_STEP_NAME, conclusion }],
+    }];
+    const setup = fixture({ readJobs: async () => jobs });
+    const error = await coordinateRelease(setup.operations, coordinationId).then(
+      () => { throw new Error('expected rejection'); },
+      rejection => rejection
+    );
+    assert.match(error.message, /may have succeeded/);
+    assert.equal(error.indeterminateDispatch, true);
   }
 });
 

@@ -42,10 +42,31 @@ _set_inflight_repo() {
   # case-insensitively (URL normalizes Https:, the SSH regex has /i):
   # lowercase scheme:// so SSH:// and Https:// reach the right arm.
   # scp-like remotes contain no '://' and pass through untouched.
+  # Authority userinfo is stripped here for EVERY scheme (not just
+  # https): refused http:// and ssh:// remotes reach the error message
+  # below, and credentials must never reach it — including bare-token
+  # usernames (https://<token>@github.com/ is a real PAT pattern).
+  # Only the literal ssh user git@ is kept, since the final matcher
+  # requires it and it carries no secret.
   case "$inflight_remote" in
     *://*)
-      _remote_scheme_part="${inflight_remote%%://*}"
-      inflight_remote="$(printf '%s' "$_remote_scheme_part" | tr '[:upper:]' '[:lower:]')://${inflight_remote#*://}"
+      _remote_scheme_part="$(printf '%s' "${inflight_remote%%://*}" | tr '[:upper:]' '[:lower:]')"
+      _remote_after_scheme="${inflight_remote#*://}"
+      _remote_authority="${_remote_after_scheme%%/*}"
+      case "$_remote_authority" in
+        *@*)
+          _remote_userinfo="$(printf '%s' "${_remote_authority%%@*}" | tr '[:upper:]' '[:lower:]')"
+          if [ "$_remote_userinfo" != 'git' ]; then
+            _remote_authority="${_remote_authority##*@}"
+          fi
+          ;;
+      esac
+      if [ "$_remote_after_scheme" = "$_remote_authority" ]; then
+        _remote_path_suffix=""
+      else
+        _remote_path_suffix="/${_remote_after_scheme#*/}"
+      fi
+      inflight_remote="${_remote_scheme_part}://${_remote_authority}${_remote_path_suffix}"
       ;;
   esac
   # Normalize credential-bearing and trailing-slash HTTPS spellings to

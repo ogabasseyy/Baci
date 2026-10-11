@@ -121,6 +121,24 @@ test('refuses plaintext and non-default-port remotes like the coordinator', () =
   }
 });
 
+test('refused remotes never leak credentials from any scheme', () => {
+  for (const [remote, secret] of [
+    ['http://operator:s3krit-http@github.com/example-owner/example-repo.git', 's3krit-http'],
+    ['http://s3krit-bare@github.com/example-owner/example-repo.git', 's3krit-bare'],
+    ['ssh://operator:s3krit-ssh@github.com/example-owner/example-repo.git', 's3krit-ssh'],
+    ['https://operator:s3krit-port@github.com:8443/example-owner/example-repo.git', 's3krit-port'],
+  ]) {
+    const { result } = runCheck({
+      ghBody: RECORD_ARGS,
+      gitBody: `if [ "$1 $2 $3" = "remote get-url origin" ]; then echo '${remote}'; else exit 1; fi`,
+    });
+
+    assert.equal(result.status, 1, remote);
+    assert.ok(!result.stderr.includes(secret), `${remote} leaked into stderr`);
+    assert.ok(!result.stdout.includes(secret), `${remote} leaked into stdout`);
+  }
+});
+
 test('resolves trailing-slash remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

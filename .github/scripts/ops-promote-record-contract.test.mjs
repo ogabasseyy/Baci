@@ -33,8 +33,9 @@ test('a cache miss fails closed instead of silently re-seeding the tip', () => {
   assert.match(workflow, /refusing to silently re-seed/);
 });
 
-test('a deleted branch fails closed once a tip was validated', () => {
-  assert.match(workflow, /was deleted after successful validation; failing closed/);
+test('a missing branch fails closed instead of exiting green', () => {
+  assert.match(workflow, /is missing; failing closed without validation/);
+  assert.doesNotMatch(workflow, /nothing to validate/);
 });
 
 test('touching the backstop workflow or its suite triggers the deployment script suite', () => {

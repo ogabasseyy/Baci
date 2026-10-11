@@ -291,7 +291,8 @@ API, in both directions:
   `.gigl-promote-record`, created automatically on first promote;
   plain commits with no `[skip ci]`; the Ops Promote Record workflow
   re-validates the branch from the last validated tip on a 15-minute
-  schedule, so detection lags up to the interval) — TWICE:
+  schedule (intended cadence; GitHub can delay or drop scheduled runs,
+  so the interval does not bound detection delay)) — TWICE:
   immediately before the
   flip as a
   fail-closed gate (a broken record path refuses the promote before

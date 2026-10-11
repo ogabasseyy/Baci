@@ -12,8 +12,10 @@ name: Ops Promote Record
 # enforces fast-forward, so a force-push rewrite fails the check even
 # when every rewritten tree is shape-valid. A red check means the
 # branch holds an invalid or non-fast-forward record — reconcile the
-# branch, do not push more on top of it. Detection latency is bounded
-# by the schedule interval. A cache miss (first run or eviction)
+# branch, do not push more on top of it. Intended validation cadence
+# is the schedule interval; GitHub can delay or drop scheduled runs,
+# so the interval does not bound detection delay. A cache miss (first
+# run or eviction)
 # fails closed WITHOUT re-seeding: silently re-seeding would launder
 # a rewritten history as the new fast-forward base. Recover by
 # verifying the branch history out-of-band, then running a manual
@@ -63,15 +65,14 @@ jobs:
             exit 1
           fi
           if [ -z "$ref_info" ]; then
-            # A missing ref is a no-op only before the first validation:
-            # with a cached tip it means the branch was deleted, which
-            # the pre-push hook forbids — fail closed, do not re-seed.
-            if [ -f .ops-promote-last-tip ]; then
-              echo '::error::ops/gigl-promote-record was deleted after successful validation; failing closed.' >&2
-              exit 1
-            fi
-            echo 'ops/gigl-promote-record does not exist yet; nothing to validate.'
-            exit 0
+            # A missing ref always fails closed: with a cached tip it
+            # means the branch was deleted, and without one an evicted
+            # cache is indistinguishable from a branch that never
+            # existed — either way there is no validated history to
+            # trust. If no promote has ever run, create the branch via
+            # a promote; otherwise investigate the deletion.
+            echo '::error::ops/gigl-promote-record is missing; failing closed without validation.' >&2
+            exit 1
           fi
           if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
             echo 'ops/gigl-promote-record exists but cannot be fetched; failing closed.' >&2

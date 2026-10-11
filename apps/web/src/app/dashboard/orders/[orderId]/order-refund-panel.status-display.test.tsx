@@ -69,6 +69,10 @@ describe('OrderRefundPanel status display', () => {
       )
     ).toBeInTheDocument();
   });
+  it('falls back to the raw status when no label exists', async () => {
+    loadWith({ ...summary, status: 'awaiting_settlement' });
+    expect(await screen.findByText('awaiting_settlement')).toBeInTheDocument();
+  });
   it('generalizes the guidance for non-Paystack reviews', async () => {
     loadWith({
       ...summary,

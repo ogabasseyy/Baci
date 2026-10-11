@@ -144,7 +144,7 @@ export function OrderRefundPanel({
         ) : (
           <>
             <p role="status" className="font-semibold">
-              {orderRefundStatusLabels[summary.status]}
+              {orderRefundStatusLabels[summary.status] ?? summary.status}
             </p>
             <dl className="text-sm space-y-1">
               <div className="flex justify-between">

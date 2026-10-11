@@ -61,6 +61,9 @@ const KNOWN_REFUND_STATUS: Record<string, number> = {
 // event details); map them to fixed labels here so provider internals
 // never reach API consumers, and expose the Paystack signal the
 // panel's requires-review guidance needs as structured data.
+// Contract: these are the only worker-text carriers today (history
+// and detail data fields carry merchant data, not worker text); if
+// the RPC gains another worker-text field, map it here.
 function maskRefundWorkerText(data: {
   error?: unknown;
   events?: Array<{

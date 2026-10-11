@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { walletKeys } from '@/hooks/wallet-query';
 
 const mockUseMerchantPaymentSettings = jest.fn();
 let mockWalletQuery: {
@@ -19,6 +20,11 @@ jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
 
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => mockWalletQuery,
+}));
+
+const mockInvalidateQueries = jest.fn();
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
 }));
 
 const mockAuthState: {
@@ -135,6 +141,16 @@ describe('useUtilityPayment', () => {
     expect(result.current).not.toHaveProperty('selectedSavedCardId');
     expect(result.current).not.toHaveProperty('cards');
     expect(result.current).not.toHaveProperty('supportedGateways');
+  });
+
+  it('invalidates every cached wallet query when invalidateWallets is called', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    result.current.invalidateWallets();
+
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: walletKeys.all,
+    });
   });
 
   it('returns a stable wallet idempotency key until it is reset', () => {

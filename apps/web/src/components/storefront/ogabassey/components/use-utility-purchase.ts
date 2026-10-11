@@ -8,6 +8,7 @@ import type {
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
+import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
 import { useUtilityIdempotencyKey } from './use-utility-idempotency-key';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import type { UtilityTabId } from './UtilityTabs';
@@ -204,33 +205,14 @@ export function useUtilityPurchase({
         refreshWallet();
       }
       clearIntent();
-      // A replayed reference is the same debit — only apply the balance
-      // effect the first time it is seen. Buy-again purchases mint new
-      // references, so genuine repeat buys still decrement. Non-terminal
-      // `processing` defers the effect entirely (without recording the
-      // reference): the vend may still fail and refund, and a stale-low
-      // balance would wrongly block the next submit as underfunded.
-      // A success that resolves a NOTED processing response is a replay
-      // whose debit the earlier refresh already picked up (remounts
-      // refetch too) — refresh for server truth instead of decrementing
-      // a second time.
-      if (replayResolvesProcessing || recalledKeySuccess) {
-        appliedBalanceRefs.current.add(result.reference);
-        refreshWallet();
-      } else if (
-        !result.processing &&
-        !appliedBalanceRefs.current.has(result.reference)
-      ) {
-        appliedBalanceRefs.current.add(result.reference);
-        // Prefer the server's post-transaction balance when cashback was
-        // credited — the local decrement would otherwise display too low a
-        // balance and block a valid follow-up purchase as underfunded.
-        if (typeof result.cashback?.newBalance === 'number') {
-          setWalletBalance(result.cashback.newBalance);
-        } else {
-          setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
-        }
-      }
+      applyUtilityPurchaseBalanceEffect({
+        appliedReferences: appliedBalanceRefs.current,
+        isAmbiguousReplay: replayResolvesProcessing || recalledKeySuccess,
+        refreshWallet,
+        result,
+        setWalletBalance,
+        submitAmount: payload.amount,
+      });
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);
       // A 202 processing vend can still fail or be refunded — show the

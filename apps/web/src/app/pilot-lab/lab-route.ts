@@ -169,10 +169,17 @@ async function statFingerprint(path: string): Promise<string> {
   return `${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }
 
-export function getLabConfig(): PilotLabConfig {
+export async function getLabConfig(): Promise<PilotLabConfig> {
   if (!isPilotLabEnabled())
     throw new Error('merchant image pilot: refusing to load outside lab mode');
-  return getFrozenLabRuntime();
+  const config = getFrozenLabRuntime();
+  // The config is frozen, but the staged bytes it points at live on disk
+  // where Next serves them: a post-start deletion or swap would otherwise
+  // keep rendering URLs for 404s or wrong images until restart. Re-verify
+  // on the request path — the stat fingerprint fast-path makes repeat
+  // GETs cheap, and any drift fails closed with the operator fix.
+  await verifyStagedBytes(config.stagedPaths);
+  return config;
 }
 
 export async function initializeLabRuntime(): Promise<void> {

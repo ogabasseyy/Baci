@@ -8,7 +8,7 @@ import test from 'node:test';
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
 test('appendInventoryRecord rejects route-rejected duplicates', async () => {
-  const { appendInventoryRecord } = await import('./inventory-store.mjs');
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
   const { writeFile } = await import('node:fs/promises');
   const dir = await mkdtemp(join(tmpdir(), 'pilot-append-'));
   const path = join(dir, 'inventory.json');
@@ -138,9 +138,8 @@ test('appendInventoryRecord waits for a live owner instead of stealing by age', 
     readFile: read,
     writeFile: write,
   } = await import('node:fs/promises');
-  const { appendInventoryRecord, releaseInventoryLock } = await import(
-    './inventory-store.mjs'
-  );
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
+  const { releaseInventoryLock } = await import('./inventory-store.mjs');
   const dir = await mkdtemp(join(tmpdir(), 'pilot-append-live-'));
   const path = join(dir, 'inventory.json');
   await writeFile(path, JSON.stringify([]));
@@ -178,7 +177,7 @@ test('appendInventoryRecord waits for a live owner instead of stealing by age', 
 
 test('appendInventoryRecord recovers a crashed ownerless lock', async () => {
   const { mkdir, utimes } = await import('node:fs/promises');
-  const { appendInventoryRecord } = await import('./inventory-store.mjs');
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
   const dir = await mkdtemp(join(tmpdir(), 'pilot-append-lock-'));
   const path = join(dir, 'inventory.json');
   await writeFile(path, JSON.stringify([]));
@@ -201,7 +200,7 @@ test('appendInventoryRecord recovers a crashed ownerless lock', async () => {
 });
 
 test('serializes concurrent inventory appends without loss', async () => {
-  const { appendInventoryRecord } = await import('./inventory-store.mjs');
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
   const dir = await mkdtemp(join(tmpdir(), 'pilot-append-race-'));
   const path = join(dir, 'inventory.json');
   const sha = createHash('sha256').update('x').digest('hex');
@@ -228,7 +227,7 @@ test('serializes concurrent inventory appends without loss', async () => {
 
 test('appendInventoryRecord atomically steals a stale owned lock', async () => {
   const { mkdir, readdir, writeFile: write } = await import('node:fs/promises');
-  const { appendInventoryRecord } = await import('./inventory-store.mjs');
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
   const dir = await mkdtemp(join(tmpdir(), 'pilot-steal-'));
   const path = join(dir, 'inventory.json');
   await writeFile(path, JSON.stringify([]));
@@ -322,4 +321,126 @@ test('acquireInventoryLock revalidates its claim after the owner write', async (
   assert.equal(live.token, token);
   assert.notEqual(token, 'intruder');
   await releaseInventoryLock(lockDir, token);
+});
+
+test('acquireInventoryLock restores a rival replacement caught by the steal rename', async () => {
+  const {
+    mkdir,
+    readdir,
+    rename,
+    rm,
+    writeFile: write,
+  } = await import('node:fs/promises');
+  const { acquireInventoryLock, releaseInventoryLock } = await import(
+    './inventory-store.mjs'
+  );
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-steal-race-'));
+  const lockDir = join(dir, 'inventory.json.lock');
+  // Crashed holder both contenders judge stale.
+  await mkdir(lockDir);
+  await write(
+    join(lockDir, 'owner.json'),
+    JSON.stringify({
+      pid: 999_999_999,
+      startedAt: new Date(Date.now() - 300_000).toISOString(),
+      token: 'dead-holder',
+    })
+  );
+  // Between our stale verdict and our rename, the rival steals the dead
+  // lock and publishes a live replacement. Our rename then moves the
+  // rival's live directory instead of the stale one inspected.
+  let fired = false;
+  let rivalSawLiveReplacement = false;
+  const acquire = acquireInventoryLock(lockDir, {
+    beforeStaleRename: async () => {
+      if (fired) {
+        return;
+      }
+      fired = true;
+      await rename(lockDir, `${lockDir}.rival-claimed`);
+      await rm(`${lockDir}.rival-claimed`, { force: true, recursive: true });
+      await mkdir(lockDir);
+      await write(
+        join(lockDir, 'owner.json'),
+        JSON.stringify({
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+          token: 'rival-live',
+        })
+      );
+      // The rival holds briefly, then verifies its replacement survived
+      // our steal before releasing.
+      setTimeout(async () => {
+        const live = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
+          () => null
+        );
+        rivalSawLiveReplacement =
+          live !== null && JSON.parse(live).token === 'rival-live';
+        await releaseInventoryLock(lockDir, 'rival-live');
+      }, 100);
+    },
+  });
+  const token = await acquire;
+  assert.equal(rivalSawLiveReplacement, true);
+  assert.notEqual(token, 'rival-live');
+  await releaseInventoryLock(lockDir, token);
+  // Neither the restored replacement nor steal debris remains.
+  assert.deepEqual(await readdir(dir), []);
+});
+
+test('withInventoryLock throws evicted when the lock is replaced mid-section', async () => {
+  const { mkdir, rename, rm } = await import('node:fs/promises');
+  const { withInventoryLock } = await import('./inventory-append.mjs');
+  const { PilotInventoryEvictedError } = await import('./inventory-store.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-evict-'));
+  const lockDir = join(dir, 'inventory.json.lock');
+  await assert.rejects(
+    () =>
+      withInventoryLock(lockDir, async () => {
+        // A steal-race loser renames our live lock away and a newcomer
+        // publishes a replacement: the section ran concurrently, so it
+        // must fail loudly instead of trusting its outcome.
+        await rename(lockDir, `${lockDir}.stolen`);
+        await rm(`${lockDir}.stolen`, { force: true, recursive: true });
+        await mkdir(lockDir);
+        await writeFile(
+          join(lockDir, 'owner.json'),
+          JSON.stringify({
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+            token: 'newcomer',
+          })
+        );
+        return 'section-result';
+      }),
+    (error) => {
+      assert.ok(error instanceof PilotInventoryEvictedError);
+      assert.match(error.message, /changed owner during the critical section/);
+      return true;
+    }
+  );
+  // The evicted section's release must not delete the newcomer's lock.
+  const live = JSON.parse(await readFile(join(lockDir, 'owner.json'), 'utf8'));
+  assert.equal(live.token, 'newcomer');
+});
+
+test('assertInventoryLockHeld passes while held and throws after release', async () => {
+  const {
+    acquireInventoryLock,
+    assertInventoryLockHeld,
+    releaseInventoryLock,
+  } = await import('./inventory-store.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-held-'));
+  const lockDir = join(dir, 'inventory.json.lock');
+  const token = await acquireInventoryLock(lockDir);
+  await assertInventoryLockHeld(lockDir, token);
+  await assert.rejects(
+    () => assertInventoryLockHeld(lockDir, 'someone-else'),
+    /changed owner during the critical section/
+  );
+  await releaseInventoryLock(lockDir, token);
+  await assert.rejects(
+    () => assertInventoryLockHeld(lockDir, token),
+    /changed owner during the critical section/
+  );
 });

@@ -68,7 +68,7 @@ import {
 } from './merchant-image-pilot-preflight-args.mjs';
 import {
   DEFAULT_LAB_STORES,
-  readLabStores,
+  loadLabStoresForInventory,
 } from './merchant-image-pilot-preflight-lab-stores.mjs';
 import {
   invalidateMounts,
@@ -184,7 +184,10 @@ export async function runPreflight(options) {
   }
   let labStores;
   try {
-    labStores = await readLabStores(options.labStores ?? DEFAULT_LAB_STORES);
+    labStores = await loadLabStoresForInventory(
+      options.labStores ?? DEFAULT_LAB_STORES,
+      merchants
+    );
   } catch (error) {
     const note = await invalidate('served gate failed');
     return {
@@ -217,7 +220,7 @@ export async function runPreflight(options) {
       ),
       path: `/pilot-lab/store/${storeMap[merchantId]}`,
       surface: 'store',
-      uncovered: labStores.get(merchantId)?.uncoveredSlots ?? [],
+      uncovered: labStores.get(merchantId).uncoveredSlots,
     })),
   ];
   const served = await fetchServedAgreement(options.origin, {

@@ -134,6 +134,19 @@ describe('writeStagedBytesIfChanged', () => {
     await expect(ensureStageDir(dir, '__pilot')).rejects.toThrow(/escapes/);
   });
 
+  it('replaces a giant destination without loading it fully', async () => {
+    // A corrupted previously staged destination (huge regular file)
+    // must reject on size metadata and be replaced — never buffered
+    // whole into the staging process for comparison.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-giant-'));
+    const stageRoot = await ensureStageDir(dir, '__pilot');
+    const bytes = Buffer.from('verified-tier-bytes');
+    const dest = join(stageRoot, 'staged.avif');
+    await writeFile(dest, Buffer.alloc(32 * 1024 * 1024, 7));
+    await writeStagedBytesIfChanged(stageRoot, dest, bytes);
+    expect(await readFile(dest)).toEqual(bytes);
+  });
+
   it('refuses destinations outside the stage root', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-out-'));
     const stageRoot = await ensureStageDir(dir, '__pilot');

@@ -35,7 +35,7 @@ async function withServer(handler, run) {
 
 const stubProbe = async () => ({ format: 'png', height: 1, width: 1 });
 
-async function makeInputRoot() {
+function makeInputRoot() {
   return mkdtemp(join(tmpdir(), 'pilot-acquire-'));
 }
 
@@ -487,9 +487,7 @@ test('rejects an oversized stored snapshot without loading it', async () => {
 
 test('removes a newly written snapshot when the probe rejects it', async () => {
   const inputRoot = await makeInputRoot();
-  const failingProbe = async () => {
-    throw new Error('probe boom');
-  };
+  const failingProbe = () => Promise.reject(new Error('probe boom'));
   await withServer(
     (_request, response) => {
       response.writeHead(200, { 'content-type': 'image/png' });
@@ -522,9 +520,7 @@ test('keeps a pre-existing snapshot when the probe rejects it', async () => {
   const inputRoot = await makeInputRoot();
   const target = join(inputRoot, `${MERCHANT}-logo-1.png`);
   await writeFile(target, PNG_BYTES);
-  const failingProbe = async () => {
-    throw new Error('probe boom');
-  };
+  const failingProbe = () => Promise.reject(new Error('probe boom'));
   await withServer(
     (_request, response) => {
       response.writeHead(200, { 'content-type': 'image/png' });
@@ -652,6 +648,44 @@ test('rejects content-type and decoded-format mismatches', async () => {
   );
 });
 
+test('publish fails loudly when the snapshot vanished before the append', async () => {
+  const inputRoot = await makeInputRoot();
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  await writeFile(inventoryPath, JSON.stringify([]));
+  // The probe deletes the snapshot this call just wrote, simulating a
+  // rival rollback that won the inventory lock first: the append must
+  // revalidate under the same lock and fail instead of publishing a
+  // record that points at a missing source.
+  const racingProbe = async (target) => {
+    await rm(target, { force: true });
+    return { format: 'png', height: 1, width: 1 };
+  };
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'logo-1',
+            inputRoot,
+            inventoryPath,
+            merchantId: MERCHANT,
+            probe: racingProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /vanished before publish/
+      );
+    }
+  );
+  assert.equal(JSON.parse(await readFile(inventoryPath, 'utf8')).length, 0);
+});
+
 test('a rejected inventory append rolls back only its own snapshot', async () => {
   const inputRoot = await makeInputRoot();
   const inventoryPath = join(inputRoot, 'inventory.json');
@@ -761,4 +795,3 @@ test('a losing append never deletes a published snapshot', async () => {
   // them, so the published record still resolves.
   assert.deepEqual(await readFile(target), PNG_BYTES);
 });
-

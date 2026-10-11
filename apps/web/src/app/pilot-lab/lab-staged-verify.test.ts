@@ -2,8 +2,34 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { verifyStagedBytes } from './lab-staged-verify';
+
+// Paths whose staged read the suite reports as grown past the statted
+// bound, deterministically reproducing a file that grows between the
+// budget stat and the read.
+const { grownPaths } = vi.hoisted(() => ({
+  grownPaths: new Set<string>(),
+}));
+
+vi.mock(
+  '@/lib/merchant-image-variant-pilot/lab-config-stage-io',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/lib/merchant-image-variant-pilot/lab-config-stage-io')
+      >();
+    return {
+      ...actual,
+      readUpToBytes: async (path: string, maxBytes: number) => {
+        if (grownPaths.has(path)) {
+          return { bytes: Buffer.alloc(0), truncated: true };
+        }
+        return actual.readUpToBytes(path, maxBytes);
+      },
+    };
+  }
+);
 
 describe('verifyStagedBytes', () => {
   it('passes when every staged file matches its verified hash', async () => {
@@ -104,6 +130,24 @@ describe('verifyStagedBytes', () => {
     // files never match the stored snapshot).
     await rm(file);
     await expect(verifyStagedBytes([entry])).rejects.toThrow(/missing/);
+  });
+
+  it('fails on size when a staged file grows between stat and read', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-grown-'));
+    const file = join(dir, 'grown.avif');
+    await writeFile(file, Buffer.alloc(4096, 7));
+    grownPaths.add(file);
+    try {
+      // The read finds more than the statted bound: the file grew in
+      // the stat-to-read window (or a giant was swapped in). The verify
+      // must report size drift — an unbounded read would have buffered
+      // the runaway bytes and reported hash drift instead.
+      await expect(
+        verifyStagedBytes([{ path: file, sha256: '0'.repeat(64) }])
+      ).rejects.toThrow(/size drift/);
+    } finally {
+      grownPaths.delete(file);
+    }
   });
 
   it('refuses staged sets beyond the per-request verification budget', async () => {

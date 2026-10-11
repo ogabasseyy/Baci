@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
+import { readUpToBytes } from '@/lib/merchant-image-variant-pilot/lab-config-stage-io';
 
 // Per-request verification budget: the staged set is frozen at stage
 // time and lab-small (tiers + originals per accepted binding), so an
@@ -84,13 +85,24 @@ export async function verifyStagedBytes(
   const bad = (
     await Promise.all(
       unique.map(async (entry, index) => {
-        if (sizes[index] === null) {
+        const stated = sizes[index];
+        if (stated === null) {
           return { detail: 'missing', path: entry.path };
         }
-        const bytes = await readFile(entry.path).catch(() => null);
-        if (bytes === null) {
+        // Read bounded by the statted size: a file that grew between
+        // the stat and the read (or a swapped-in giant) must fail on
+        // size instead of buffering fully past the byte budget. A grown
+        // file's hash cannot match anyway, so truncation is drift.
+        const bounded = await readUpToBytes(entry.path, stated.size).catch(
+          () => null
+        );
+        if (bounded === null) {
           return { detail: 'missing', path: entry.path };
         }
+        if (bounded.truncated) {
+          return { detail: 'size drift', path: entry.path };
+        }
+        const bytes = bounded.bytes;
         if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
           return { detail: 'hash drift', path: entry.path };
         }

@@ -33,5 +33,33 @@ export async function readLabStores(path) {
       `lab stores mirror ${path} must be an array of {merchantId, uncoveredSlots:[{slotId}]}`
     );
   }
+  const seen = new Set();
+  for (const entry of parsed) {
+    // A duplicate merchant entry would silently keep only the last
+    // declaration, dropping uncovered markers the served gate must
+    // require — fail closed instead of guessing which one wins.
+    if (seen.has(entry.merchantId)) {
+      throw new Error(
+        `lab stores mirror ${path} has duplicate entries for merchant ${entry.merchantId}`
+      );
+    }
+    seen.add(entry.merchantId);
+  }
   return new Map(parsed.map((entry) => [entry.merchantId, entry]));
+}
+
+// Load the mirror and require exactly one entry per inventory merchant:
+// a custom --lab-stores file that omits a merchant must fail, not
+// silently assign that store zero uncovered consumers — the served gate
+// would then report green without requiring the omitted route-matrix
+// markers.
+export async function loadLabStoresForInventory(path, merchants) {
+  const stores = await readLabStores(path);
+  const undeclared = merchants.filter((merchantId) => !stores.has(merchantId));
+  if (undeclared.length > 0) {
+    throw new Error(
+      `lab stores mirror ${path} has no entry for merchants: ${undeclared.join(', ')}`
+    );
+  }
+  return stores;
 }

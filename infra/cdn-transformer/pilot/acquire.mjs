@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { unlink, writeFile } from 'node:fs/promises';
+import { stat, unlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { parseCliArgs } from './cli-args.mjs';
 import {
   EXTENSION_FOR_CONTENT_TYPE,
   fetchBoundedBytes,
 } from './acquire-fetch.mjs';
+import { parseCliArgs } from './cli-args.mjs';
 import {
   MAX_INPUT_BYTES,
   OP_TIMEOUT_MS,
@@ -21,8 +21,12 @@ import {
 } from './input-store.mjs';
 import {
   appendInventoryRecord,
-  PilotAcquireError,
   readInventoryRecords,
+  withInventoryLock,
+} from './inventory-append.mjs';
+import {
+  PilotAcquireError,
+  PilotInventoryEvictedError,
 } from './inventory-store.mjs';
 import { parsePilotJob } from './job-schema.mjs';
 
@@ -126,24 +130,42 @@ export async function acquireSnapshot(options) {
   // Overlap guard: two acquisitions for the same asset can interleave so
   // that this call wrote the snapshot but lost the inventory-append race
   // — the winner's published record references these exact bytes.
-  // Rollback unlinks only when no published record references the target;
-  // records are append-only, so a reference present at check time cannot
-  // vanish before the unlink. An unreadable inventory keeps the file
-  // (orphan bytes a retry reuses or flags as differing, never a record
-  // pointing at a missing source).
+  // Rollback unlinks only when no published record references the target,
+  // and the check-plus-unlink runs under the inventory lock: otherwise a
+  // paused acquirer could publish between the check and the unlink,
+  // leaving a record that points at a missing source. An unreadable
+  // inventory keeps the file (orphan bytes a retry reuses or flags as
+  // differing, never a record pointing at a missing source).
   async function rollbackOwnSnapshot() {
-    if (inventoryPath !== undefined) {
-      const records = await readInventoryRecords(inventoryPath).catch(
-        () => null
-      );
-      if (
-        records === null ||
-        records.some((entry) => entry?.sourcePath === fileName)
-      ) {
-        return;
-      }
+    if (inventoryPath === undefined) {
+      await unlink(target).catch(() => undefined);
+      return;
     }
-    await unlink(target).catch(() => undefined);
+    try {
+      await withInventoryLock(`${inventoryPath}.lock`, async () => {
+        const records = await readInventoryRecords(inventoryPath).catch(
+          () => null
+        );
+        if (
+          records === null ||
+          records.some((entry) => entry?.sourcePath === fileName)
+        ) {
+          return;
+        }
+        await unlink(target).catch(() => undefined);
+      });
+    } catch (error) {
+      if (error instanceof PilotInventoryEvictedError) {
+        // The check-then-unlink may have raced a concurrent publish:
+        // the unlinked snapshot may now be referenced. That dangles a
+        // record, so it stays loud (masking the append failure it
+        // followed) instead of failing silently.
+        throw error;
+      }
+      // A lock timeout under contention keeps the file: orphan bytes a
+      // retry reuses or flags as differing — and the original append
+      // failure below is the actionable error, not the rollback.
+    }
   }
   const probeFile = probe ?? (await defaultProbe());
   let geometry;
@@ -215,7 +237,22 @@ export async function acquireSnapshot(options) {
   // changes would then be rejected by the stale bytes. Only this call's
   // own file is removed, never a pre-existing snapshot.
   try {
-    const inventoryCount = await appendInventoryRecord(inventoryPath, record);
+    // The snapshot must still exist when the append commits: a rival
+    // rollback that won the lock first unlinked it, so revalidating
+    // under the same lock fails loudly instead of publishing a record
+    // that points at a missing source.
+    const inventoryCount = await appendInventoryRecord(inventoryPath, record, {
+      beforeAppend: async () => {
+        const present = await stat(target)
+          .then(() => true)
+          .catch(() => false);
+        if (!present) {
+          throw new PilotAcquireError(
+            `acquire: snapshot for "${assetId}" vanished before publish`
+          );
+        }
+      },
+    });
     return { ...record, inventoryCount };
   } catch (error) {
     if (wroteSnapshot) {

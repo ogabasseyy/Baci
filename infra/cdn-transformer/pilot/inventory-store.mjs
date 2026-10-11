@@ -7,27 +7,25 @@
 // ownership-checked: a slow append whose lock was stolen must not delete
 // the replacement and admit a third appender alongside it.
 import { randomUUID } from 'node:crypto';
-import {
-  mkdir,
-  open,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { MAX_INVENTORY_BYTES } from './constants.mjs';
-import { readUpToBytes } from './disk-guards.mjs';
-import {
-  validateInventory,
-  validateInventoryUniqueness,
-} from './job-schema.mjs';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export class PilotAcquireError extends Error {
   constructor(message) {
     super(message);
     this.name = 'PilotAcquireError';
+  }
+}
+
+// Thrown when the lock a critical section holds is replaced under it
+// (a steal-race loser renamed the live directory away). Distinct from a
+// timeout: the section's read-then-publish may have interleaved with
+// another holder, so callers must stay loud, never swallow this as a
+// retryable contention signal.
+export class PilotInventoryEvictedError extends PilotAcquireError {
+  constructor(message) {
+    super(message);
+    this.name = 'PilotInventoryEvictedError';
   }
 }
 
@@ -49,12 +47,13 @@ async function isBeyondOwnerGrace(lockDir) {
   return Date.now() - info.mtimeMs > INVENTORY_LOCK_OWNER_GRACE_MS;
 }
 
-export async function isStaleInventoryLock(lockDir) {
-  const owner = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
-    () => null
-  );
+function readOwnerText(lockDir) {
+  return readFile(join(lockDir, 'owner.json'), 'utf8').catch(() => null);
+}
+
+async function isStaleOwnerText(lockDir, owner) {
   if (owner === null) {
-    return isBeyondOwnerGrace(lockDir);
+    return await isBeyondOwnerGrace(lockDir);
   }
   let parsed;
   try {
@@ -65,7 +64,7 @@ export async function isStaleInventoryLock(lockDir) {
     // observe a partial owner.json from a live holder. Unparsable owners
     // get the same creation grace as missing ones — only a lock that has
     // been unparsable past the grace is a crashed holder's.
-    return isBeyondOwnerGrace(lockDir);
+    return await isBeyondOwnerGrace(lockDir);
   }
   if (!Number.isInteger(parsed.pid)) {
     // No identity to probe; our writer always records an integer pid, so
@@ -83,6 +82,10 @@ export async function isStaleInventoryLock(lockDir) {
     return error?.code === 'ESRCH';
   }
   return false;
+}
+
+export async function isStaleInventoryLock(lockDir) {
+  return isStaleOwnerText(lockDir, await readOwnerText(lockDir));
 }
 
 export async function acquireInventoryLock(lockDir, hooks = {}) {
@@ -149,18 +152,36 @@ export async function acquireInventoryLock(lockDir, hooks = {}) {
       }
     }
     // Steal a crashed holder's lock instead of wedging every future append.
-    // The steal is atomic-by-rename: two processes can both judge the same
-    // lock stale, but only one wins the rename — the loser sees ENOENT and
-    // retries instead of deleting the winner's replacement (an unchecked
-    // rm here would admit two concurrent holders). Each stealer removes
-    // only the directory IT renamed, never the live lock path.
-    if (await isStaleInventoryLock(lockDir)) {
+    // The observed owner bytes are captured BEFORE the staleness verdict:
+    // a rival replacement published between a stale verdict and the
+    // rename must be detected, not deleted.
+    const observed = await readOwnerText(lockDir);
+    if (await isStaleOwnerText(lockDir, observed)) {
       const claimed = `${lockDir}.stale.${process.pid}.${randomUUID()}`;
+      await hooks.beforeStaleRename?.();
       try {
         await rename(lockDir, claimed);
       } catch (error) {
         if (error?.code !== 'ENOENT') {
           throw error;
+        }
+        continue;
+      }
+      // Verify the moved directory is the stale lock inspected: two
+      // contenders can both judge the same crashed lock stale, and the
+      // loser may rename away the winner's live replacement instead.
+      // Deleting it would admit two concurrent holders overwriting each
+      // other's inventory updates — restore it and retry. Residual: a
+      // third contender can mkdir into the microsecond rename-restore
+      // window (no flock available), in which case the restore fails and
+      // the evicted holder's end-of-section ownership check throws
+      // loudly instead of publishing silently alongside the newcomer.
+      const moved = await readOwnerText(claimed);
+      if (moved !== observed) {
+        try {
+          await rename(claimed, lockDir);
+        } catch {
+          await rm(claimed, { force: true, recursive: true });
         }
         continue;
       }
@@ -173,6 +194,30 @@ export async function acquireInventoryLock(lockDir, hooks = {}) {
       );
     }
     await sleep(25);
+  }
+}
+
+// End-of-section ownership check: a steal-race loser can rename this
+// section's live lock away mid-section (see the restore race above), in
+// which case the section ran concurrently with another holder and any
+// record it published may have interleaved — fail loudly so the
+// operator reconciles instead of trusting a silently torn inventory.
+// Live holders are never ESRCH-stolen, so a mismatch here is always a
+// real eviction, never a false positive.
+export async function assertInventoryLockHeld(lockDir, token) {
+  const owner = await readOwnerText(lockDir);
+  let liveToken = null;
+  if (owner !== null) {
+    try {
+      liveToken = JSON.parse(owner).token ?? null;
+    } catch {
+      liveToken = null;
+    }
+  }
+  if (liveToken !== token) {
+    throw new PilotInventoryEvictedError(
+      `acquire: inventory lock ${lockDir} changed owner during the critical section; records may be inconsistent — verify the inventory and retry`
+    );
   }
 }
 
@@ -193,86 +238,4 @@ export async function releaseInventoryLock(lockDir, token) {
     return;
   }
   await rm(lockDir, { force: true, recursive: true });
-}
-
-// Bounded inventory read shared by the serialized appender and the
-// acquisition rollback guard: a corrupt or swapped-in giant file
-// rejects on size before parsing, never exhausts the caller.
-export async function readInventoryRecords(inventoryPath) {
-  const { bytes, truncated } = await readUpToBytes(
-    inventoryPath,
-    MAX_INVENTORY_BYTES
-  );
-  if (truncated) {
-    throw new PilotAcquireError(
-      `acquire: inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
-    );
-  }
-  let records;
-  try {
-    records = JSON.parse(bytes.toString('utf8'));
-  } catch {
-    throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
-  }
-  if (!Array.isArray(records)) {
-    throw new PilotAcquireError(`acquire: inventory is not an array`);
-  }
-  return records;
-}
-
-export async function appendInventoryRecord(inventoryPath, record) {
-  // Serialized: two concurrent appends must never read the same array and
-  // overwrite each other, silently dropping an asset.
-  const lockDir = `${inventoryPath}.lock`;
-  const token = await acquireInventoryLock(lockDir);
-  try {
-    let records;
-    try {
-      records = await readInventoryRecords(inventoryPath);
-    } catch (error) {
-      if (error?.code === 'ENOENT') {
-        records = [];
-      } else {
-        throw error;
-      }
-    }
-    records.push(record);
-    const jobs = records.map((entry) => ({
-      assetId: entry.assetId,
-      expectedSha256: entry.sha256,
-      merchantId: entry.merchantId,
-      role: entry.role,
-      schemaVersion: entry.schemaVersion,
-      sourcePath: entry.sourcePath,
-    }));
-    const validated = validateInventory(jobs);
-    if (!validated.ok) {
-      throw new PilotAcquireError(
-        `acquire: inventory invalid (${validated.errors.join('; ')})`
-      );
-    }
-    const unique = validateInventoryUniqueness(records);
-    if (!unique.ok) {
-      throw new PilotAcquireError(
-        `acquire: inventory invalid (${unique.errors.join('; ')})`
-      );
-    }
-    // Publish via temp + fsync + atomic rename so an interruption leaves the
-    // old inventory or the new one, never half-written JSON.
-    const tmp = join(
-      dirname(inventoryPath),
-      `.inventory-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
-    );
-    const handle = await open(tmp, 'w');
-    try {
-      await handle.writeFile(`${JSON.stringify(records, null, 2)}\n`);
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    await rename(tmp, inventoryPath);
-    return records.length;
-  } finally {
-    await releaseInventoryLock(lockDir, token);
-  }
 }

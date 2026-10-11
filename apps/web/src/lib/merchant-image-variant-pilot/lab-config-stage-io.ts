@@ -1,13 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import {
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  unlink,
-} from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
 
@@ -249,13 +242,24 @@ async function destMatches(destPath: string, bytes: Buffer): Promise<boolean> {
   // A symlink never "matches": skipping the write would leave the link
   // in place and serve whatever it points at.
   const info = await lstat(destPath).catch(() => null);
-  if (!info || info.isSymbolicLink()) {
+  if (!info || info.isSymbolicLink() || !info.isFile()) {
     return false;
   }
-  const existing = await readFile(destPath).catch(() => null);
+  // Reject size mismatches on metadata first: a corrupted or swapped-in
+  // giant destination must not load fully just to compare unequal.
+  if (info.size !== bytes.length) {
+    return false;
+  }
+  // Equal-sized files still read bounded: the destination can grow
+  // between the stat and the read, and an unchecked readFile would
+  // buffer the runaway bytes into the staging process.
+  const existing = await readUpToBytes(destPath, bytes.length).catch(
+    () => null
+  );
   return (
     existing !== null &&
-    existing.length === bytes.length &&
-    existing.equals(bytes)
+    !existing.truncated &&
+    existing.bytes.length === bytes.length &&
+    existing.bytes.equals(bytes)
   );
 }

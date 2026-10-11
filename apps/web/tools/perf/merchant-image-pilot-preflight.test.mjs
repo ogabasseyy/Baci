@@ -366,6 +366,27 @@ describe('preflight entry orchestration', () => {
     await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
   });
 
+  it('fails closed when the lab-stores override omits a merchant', async () => {
+    // A custom --lab-stores file without the inventory merchant must
+    // fail: silently defaulting to zero uncovered consumers would let
+    // the served gate report green without requiring the omitted
+    // route-matrix markers.
+    const fixture = await setupOffline();
+    const override = join(fixture.publicDir, 'lab-stores.json');
+    await writeFile(override, `${JSON.stringify([])}\n`);
+    const report = await runPreflight({
+      ...offlineOptions(fixture),
+      labStores: override,
+      origin: 'http://127.0.0.1:1',
+      storeMap: `${MERCHANT}=labstore`,
+    });
+    expect(report.ok).toBe(false);
+    expect(report.served).toBeNull();
+    expect(report.failures.join('\n')).toMatch(
+      /served:lab-stores: .*has no entry for merchants/
+    );
+  });
+
   it('fails closed when a merchant has no store slug', async () => {
     const fixture = await setupOffline();
     const report = await runPreflight({

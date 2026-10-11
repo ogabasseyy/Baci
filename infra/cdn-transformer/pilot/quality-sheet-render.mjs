@@ -59,15 +59,32 @@ export function tierCells(tier, files, cssWidth, crop, boxWidth) {
 // branding the real mount cuts off. The slot geometry may carry the
 // mount box — { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' }
 // — and both original and derivatives then render inside that real CSS
-// box at the row's size-matched width. Absent mount keeps the legacy
-// intrinsic render. Malformed mounts fail closed: a silently misrendered
-// mount is worse than no sheet.
+// box at the row's size-matched width. Malformed mounts fail closed: a
+// silently misrendered mount is worse than no sheet.
 const MOUNT_FITS = new Set(['cover', 'contain']);
 const MOUNT_POSITION_PATTERN =
   /^(center|left|right|top|bottom|\d{1,3}%)( (center|left|right|top|bottom|\d{1,3}%))?$/;
 
+// Canonical mounts for fixed-geometry cropped slots, mirroring the lab
+// consumers (keep in sync with the cited components): the product card
+// paints aspect-video object-cover, the header logo a 40x40 rounded-full
+// object-cover box (1/1 cover is its crop equivalent). Slots without an
+// entry keep the legacy intrinsic render when --slots omits the mount —
+// mobile-hero-slide-0 is deliberately absent (its fit is data-driven,
+// contain or cover per projection, so no single canonical mount fits).
+// An explicit --slots mount always wins over the canonical default.
+const CANONICAL_SLOT_MOUNTS = {
+  // apps/web/src/lib/merchant-image-variant-pilot/lab-product-card-image.tsx
+  'product-card': { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' },
+  // apps/web/src/lib/merchant-image-variant-pilot/lab-header-logo.tsx
+  'header-logo': { aspectRatio: '1 / 1', fit: 'cover', position: '50% 50%' },
+};
+
 export function parseMountCrop(geometry, slot) {
-  const mount = geometry?.mount;
+  let mount = geometry?.mount;
+  if (mount === undefined) {
+    mount = CANONICAL_SLOT_MOUNTS[slot];
+  }
   if (mount === undefined) {
     return null;
   }

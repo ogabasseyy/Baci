@@ -1,6 +1,7 @@
 // Pure readiness verdicts: geometry equality, staged-URL identity, and the
 // selected-image decode verdict. Browser collection lives in
 // merchant-image-pilot-readiness.mjs; these stay unit-testable here.
+import { unexpectedMountProblems } from './merchant-image-pilot-readiness-coverage.mjs';
 import { noAvifSurfaceProblems } from './merchant-image-pilot-readiness-noavif.mjs';
 import { resolutionProblems } from './merchant-image-pilot-readiness-resolution.mjs';
 
@@ -284,23 +285,6 @@ export function surfaceProblems(
       })
     );
   }
-  // A stale --mounts artifact must not narrow coverage by omission: any
-  // rendered mount (a bound section with no status marker) outside the
-  // expected set fails instead of escaping the gate silently. Reporting
-  // rows (status set) are preflight's verdict, not unexpected mounts.
-  const expectedBindings = new Set(
-    expectedMounts.map((mount) => mount.binding)
-  );
-  for (const slot of g.slots ?? []) {
-    if (
-      slot.binding != null &&
-      slot.status == null &&
-      !expectedBindings.has(slot.binding)
-    ) {
-      problems.push(
-        `slot "${slot.slotId}" renders mount for unexpected binding "${slot.binding}" (stale --mounts?)`
-      );
-    }
-  }
+  problems.push(...unexpectedMountProblems(g.slots, expectedMounts));
   return problems;
 }

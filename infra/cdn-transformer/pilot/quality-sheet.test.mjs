@@ -15,13 +15,15 @@ import { fileURLToPath } from 'node:url';
 import { runPilotGeneration } from './generate.mjs';
 import { currentRecipeId } from './generation-identity.mjs';
 import { buildQualitySheet, readSlotsGeometry } from './quality-sheet.mjs';
+import { parseMountCrop } from './quality-sheet-render.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
 async function setupPilot(
-  source = { fixture: 'tiny-48x48.png', height: 48, width: 48 }
+  source = { fixture: 'tiny-48x48.png', height: 48, width: 48 },
+  slot = 'header-logo'
 ) {
   const base = join(
     tmpdir(),
@@ -42,7 +44,7 @@ async function setupPilot(
     schemaVersion: 1,
     sha256: createHash('sha256').update(bytes).digest('hex'),
     size: bytes.length,
-    slot: 'header-logo',
+    slot,
     sourcePath: 'tiny-a.png',
     url: `https://example.com/tiny-a.png`,
     width: source.width,
@@ -113,16 +115,21 @@ test('renders the original at the same capped width as the derivatives', async (
   // Full-size tiers (2000px source): the logo ladder tops at 384w, and a
   // 40px slot caps the comparison at 120px (DPR-3 review) — the 384-tier
   // row must not compare a 384px original against 120px derivatives.
-  const full = await setupPilot({
-    fixture: 'wide-2000x500.png',
-    height: 500,
-    width: 2000,
-  });
+  // The hero slot has no canonical mount, so these rows exercise the
+  // legacy intrinsic render this test's capped-width assertions target.
+  const full = await setupPilot(
+    {
+      fixture: 'wide-2000x500.png',
+      height: 500,
+      width: 2000,
+    },
+    'mobile-hero-slide-0'
+  );
   const capped = await buildQualitySheet({
     inputRoot: full.inputRoot,
     inventoryPath: full.inventoryPath,
     outputRoot: full.outputRoot,
-    slots: { 'header-logo': { cssWidth: 40 } },
+    slots: { 'mobile-hero-slide-0': { cssWidth: 40 } },
   });
   assert.doesNotMatch(
     capped,
@@ -139,17 +146,17 @@ test('renders the original at the same capped width as the derivatives', async (
     inputRoot: full.inputRoot,
     inventoryPath: full.inventoryPath,
     outputRoot: full.outputRoot,
-    slots: { 'header-logo': { cssWidth: 500 } },
+    slots: { 'mobile-hero-slide-0': { cssWidth: 500 } },
   });
   assert.match(wide, /<img src="data:image\/png[^>]*style="width:96px"/);
   // Narrow sources encode below their request (48px source, 96w rung), so
   // the original follows the encoded width — not the request — there too.
-  const narrow = await setupPilot();
+  const narrow = await setupPilot(undefined, 'mobile-hero-slide-0');
   const narrowSheet = await buildQualitySheet({
     inputRoot: narrow.inputRoot,
     inventoryPath: narrow.inventoryPath,
     outputRoot: narrow.outputRoot,
-    slots: { 'header-logo': { cssWidth: 500 } },
+    slots: { 'mobile-hero-slide-0': { cssWidth: 500 } },
   });
   assert.match(narrowSheet, /<img src="data:image\/png[^>]*style="width:48px"/);
   assert.match(narrowSheet, /compared at 48px \(encoded-pixel ceiling\)/);
@@ -385,12 +392,17 @@ test('escapes inventory dimension metadata in captions', async () => {
 });
 
 test('keeps tier aspect ratio under the DPR-3 cap and warns on over-source', async () => {
-  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  // The hero slot has no canonical mount: this row exercises the legacy
+  // intrinsic render whose height:auto style this test asserts.
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot(
+    undefined,
+    'mobile-hero-slide-0'
+  );
   const html = await buildQualitySheet({
     inputRoot,
     inventoryPath,
     outputRoot,
-    slots: { 'header-logo': { cssWidth: 40 } },
+    slots: { 'mobile-hero-slide-0': { cssWidth: 40 } },
   });
   // The tiny-48x48 ladder encodes over-source on every tier (incompatible
   // codec, bytes above source): the sheet must say so, per tier and up
@@ -422,15 +434,21 @@ test('renders cropped mounts in the real CSS box on both sides', async () => {
     /<img src="data:image\/avif[^>]*style="width:48px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/
   );
   assert.match(html, /mount 16 \/ 9 cover 50% 50%/);
-  // No mount: legacy intrinsic render, no mount note.
-  const plain = await buildQualitySheet({
+  // No mount on a fixed-geometry cropped slot: the canonical header-logo
+  // mount (1/1 cover) renders instead of the legacy intrinsic box, and
+  // the sheet records it — a reviewer can no longer accept branding the
+  // real circular mount clips away.
+  const canonical = await buildQualitySheet({
     inputRoot,
     inventoryPath,
     outputRoot,
     slots: { 'header-logo': { cssWidth: 40 } },
   });
-  assert.doesNotMatch(plain, /aspect-ratio:/);
-  assert.doesNotMatch(plain, /mount 16/);
+  assert.match(
+    canonical,
+    /<img src="data:image\/png[^>]*style="width:48px;aspect-ratio:1 \/ 1;object-fit:cover;object-position:50% 50%"/
+  );
+  assert.match(canonical, /mount 1 \/ 1 cover 50% 50%/);
 });
 
 test('rejects malformed mount boxes instead of misrendering the clip', async () => {
@@ -485,4 +503,40 @@ test('the sheet refuses to embed past the aggregate byte budget', async () => {
     slots,
   });
   assert.match(html, /tiny-a/);
+});
+
+test('parseMountCrop derives canonical mounts, explicit wins, hero stays intrinsic', () => {
+  // Fixed-geometry cropped slots fall back to the canonical mount the
+  // lab consumers paint; an explicit --slots mount always wins.
+  assert.deepEqual(parseMountCrop({ cssWidth: 40 }, 'header-logo'), {
+    aspectRatio: '1 / 1',
+    fit: 'cover',
+    position: '50% 50%',
+  });
+  assert.deepEqual(parseMountCrop({ cssWidth: 384 }, 'product-card'), {
+    aspectRatio: '16 / 9',
+    fit: 'cover',
+    position: '50% 50%',
+  });
+  assert.deepEqual(
+    parseMountCrop(
+      {
+        cssWidth: 40,
+        mount: { aspectRatio: '4 / 3', fit: 'contain', position: 'center' },
+      },
+      'header-logo'
+    ),
+    { aspectRatio: '4 / 3', fit: 'contain', position: 'center' }
+  );
+  // mobile-hero-slide-0 has no canonical mount (its fit is data-driven,
+  // contain or cover per projection): absent mount keeps the legacy
+  // intrinsic render instead of a misrendered guess.
+  assert.equal(parseMountCrop({ cssWidth: 390 }, 'mobile-hero-slide-0'), null);
+  assert.equal(parseMountCrop({ cssWidth: 40 }, 'slot-unknown'), null);
+  // An explicit null mount still fails closed rather than silently
+  // gaining a canonical render the operator did not ask for.
+  assert.throws(
+    () => parseMountCrop({ cssWidth: 40, mount: null }, 'header-logo'),
+    /mount must be an object/
+  );
 });

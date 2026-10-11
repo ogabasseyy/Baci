@@ -9,7 +9,11 @@ import { join, relative, sep } from 'node:path';
 // dirs and originals this run did not write. Everything removed resolves
 // under pilotStage first — a planted symlink inside the tree redirects
 // the removal nowhere. Returns removed paths relative to pilotStage.
-// Unknown entries are left alone: only managed shapes are reconciled.
+// Unknown top-level entries are left alone: only managed shapes are
+// reconciled. Staging writes flat files only, so any directory nested
+// inside a current generation or originals is stale or planted and goes
+// with its served descendants — skipping it would report completion
+// while obsolete merchant bytes stay reachable under /__pilot.
 const HEX64_PATTERN = /^[0-9a-f]{64}$/;
 
 export async function reconcileStagedTree(input: {
@@ -28,6 +32,47 @@ export async function reconcileStagedTree(input: {
     }
     return real;
   };
+  // Same-generation staleness, shared by current generation dirs and
+  // originals: a re-encode drops old tier files, and any nested
+  // directory — stale leftover or planted tree — goes with its served
+  // descendants. Directories always go, even at a currently staged
+  // path: staging writes files only, so a directory there squats a
+  // file path and must not survive. Symlinks are unlinked directly
+  // (unlink never follows the link), so a planted link cannot redirect
+  // the removal outside the tree.
+  const reconcileChild = async (childPath: string): Promise<void> => {
+    const info = await lstat(childPath).catch(() => null);
+    if (!info) {
+      return;
+    }
+    if (info.isDirectory()) {
+      const real = await confined(childPath);
+      if (real) {
+        await rm(real, { force: true, recursive: true });
+        removed.push(relative(input.pilotStage, childPath));
+      }
+      return;
+    }
+    if (!info.isFile() && !info.isSymbolicLink()) {
+      return;
+    }
+    if (!currentFiles.has(childPath)) {
+      if (info.isSymbolicLink()) {
+        try {
+          await unlink(childPath);
+          removed.push(relative(input.pilotStage, childPath));
+        } catch {
+          // Gone or locked: leave it rather than misreport.
+        }
+      } else {
+        const real = await confined(childPath);
+        if (real) {
+          await rm(real, { force: true });
+          removed.push(relative(input.pilotStage, childPath));
+        }
+      }
+    }
+  };
   const entries = await readdir(input.pilotStage, { withFileTypes: true });
   for (const entry of entries) {
     const entryPath = join(input.pilotStage, entry.name);
@@ -40,59 +85,16 @@ export async function reconcileStagedTree(input: {
         }
         continue;
       }
-      // Same-generation staleness: a re-encode drops old tier files.
-      // Symlinks are unlinked directly (unlink never follows the link),
-      // so a planted link cannot redirect the removal outside the tree.
       const tierFiles = await readdir(entryPath).catch(() => []);
       for (const file of tierFiles) {
-        const tierPath = join(entryPath, file);
-        const info = await lstat(tierPath).catch(() => null);
-        if (!info || (!info.isFile() && !info.isSymbolicLink())) {
-          continue;
-        }
-        if (!currentFiles.has(tierPath)) {
-          if (info.isSymbolicLink()) {
-            try {
-              await unlink(tierPath);
-              removed.push(relative(input.pilotStage, tierPath));
-            } catch {
-              // Gone or locked: leave it rather than misreport.
-            }
-          } else {
-            const real = await confined(tierPath);
-            if (real) {
-              await rm(real, { force: true });
-              removed.push(relative(input.pilotStage, tierPath));
-            }
-          }
-        }
+        await reconcileChild(join(entryPath, file));
       }
       continue;
     }
     if (entry.isDirectory() && entry.name === 'originals') {
       const originals = await readdir(entryPath).catch(() => []);
       for (const file of originals) {
-        const originalPath = join(entryPath, file);
-        const info = await lstat(originalPath).catch(() => null);
-        if (!info || (!info.isFile() && !info.isSymbolicLink())) {
-          continue;
-        }
-        if (!currentFiles.has(originalPath)) {
-          if (info.isSymbolicLink()) {
-            try {
-              await unlink(originalPath);
-              removed.push(relative(input.pilotStage, originalPath));
-            } catch {
-              // Gone or locked: leave it rather than misreport.
-            }
-          } else {
-            const real = await confined(originalPath);
-            if (real) {
-              await rm(real, { force: true });
-              removed.push(relative(input.pilotStage, originalPath));
-            }
-          }
-        }
+        await reconcileChild(join(entryPath, file));
       }
     }
   }

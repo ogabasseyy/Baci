@@ -192,6 +192,26 @@ describe('preflight served agreement', () => {
     expect(assertServedAgreement(foreign, { arm: 'pilot' })).toEqual([]);
   });
 
+  it('rejects a lab-marked preload with no binding identity', () => {
+    // data-pilot-lab-preload without data-pilot-lab-binding: the link
+    // pairs with nothing and must fail instead of skipping silently.
+    const html = labHtml({
+      arm: 'pilot',
+      generationId: 'e'.repeat(64),
+      tiers: unitTiers,
+    });
+    const unbound = `<link rel="preload" as="image" href="/__pilot/stray.avif" imageSrcSet="/__pilot/stray.avif 48w" imageSizes="40px" media="(max-width: 768px)" fetchPriority="high" type="image/avif" data-pilot-lab-preload="pilot"/>`;
+    const contaminated = String(html).replace('</main>', `${unbound}</main>`);
+    expect(
+      assertServedAgreement(contaminated, { arm: 'pilot' }).join('\n')
+    ).toMatch(/lab preload link has no binding identity/);
+    // Unmarked links (no data-pilot-lab-preload at all) stay out of
+    // scope: fonts and third-party hints never enter the verdict.
+    const unmarked = `<link rel="preload" as="font" href="/fonts/a.woff2"/>`;
+    const withFont = String(html).replace('</main>', `${unmarked}</main>`);
+    expect(assertServedAgreement(withFont, { arm: 'pilot' })).toEqual([]);
+  });
+
   it('rejects a marked preload laundered through a non-hero binding', () => {
     // The logo section is bound but mounts no hero picture: an extra
     // marked preload using its valid binding ID must still fail as an

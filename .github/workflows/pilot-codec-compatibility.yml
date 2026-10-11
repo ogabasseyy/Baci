@@ -76,7 +76,11 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           base="origin/${{ github.base_ref }}"
-          if git diff --name-only "$base...HEAD" -- 'infra/cdn-transformer/**' | grep -q .; then
+          # Fail closed: a detection failure (missing base ref, shallow or
+          # fork fetch issue) must run the suite, never skip it silently.
+          if ! names=$(git diff --name-only "$base...HEAD" -- 'infra/cdn-transformer/**' 2>/dev/null); then
+            echo 'transformer=true' >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$names" | grep -q .; then
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
           else
             echo 'transformer=false' >> "$GITHUB_OUTPUT"
@@ -87,12 +91,16 @@ jobs:
   # encoder/acceptance tests run nowhere in CI.
   transformer-tests:
     needs: changes
+    # Fail closed: always() keeps this gate evaluating even when change
+    # detection itself errors, so a non-success detection result runs the
+    # suite instead of comparing an empty output to 'true' and skipping.
     if: >-
       always() &&
       (github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
       (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')) ||
-      needs.changes.outputs.transformer == 'true')
+      needs.changes.outputs.transformer == 'true' ||
+      needs.changes.result != 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

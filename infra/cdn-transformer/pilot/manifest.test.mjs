@@ -228,7 +228,7 @@ test('outputFileName binds the content hash and format', () => {
 test('buildEncoderIdentity reports the pinned toolchain', () => {
   const identity = buildEncoderIdentity();
   assert.equal(identity.name, 'sharp');
-  assert.equal(identity.sharpVersion, '0.35.4');
+  assert.equal(identity.sharpVersion, '0.35.5');
   assert.ok(identity.libvipsVersion.length > 0);
 });
 

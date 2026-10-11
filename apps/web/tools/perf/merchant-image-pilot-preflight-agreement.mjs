@@ -48,14 +48,23 @@ export function assertServedAgreement(html, { arm }) {
   // are out of scope: only lab-marked links carry the pairing identity.
   // A binding counts as consumed only when its section actually mounts
   // the paired hero picture — a bare binding claim from a card or logo
-  // section must not launder an extra preload for that binding.
+  // section must not launder an extra preload for that binding. A marked
+  // link with no binding at all fails outright: it pairs with nothing.
   const consumedBindings = new Set(
     [...heroPicturesBySection]
       .filter(([, pictures]) => pictures.length > 0)
       .map(([section]) => section.binding)
   );
   for (const link of docLinks) {
-    if (link.binding == null || consumedBindings.has(link.binding)) {
+    // Every link here carries data-pilot-lab-preload (that is the
+    // extractor's filter): a marked link without a binding identity
+    // pairs with nothing and would pass byte verification unexamined,
+    // so it fails instead of skipping silently.
+    if (link.binding == null) {
+      failures.push(`${name}: lab preload link has no binding identity`);
+      continue;
+    }
+    if (consumedBindings.has(link.binding)) {
       continue;
     }
     failures.push(

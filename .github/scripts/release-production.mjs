@@ -64,7 +64,7 @@ export async function waitForRunCompletion(runId, readStatus, options = {}) {
     const reading = await readStatus();
     const status = reading?.status ?? reading;
     // Approval gating parks a run at completed/action_required: not done.
-    if (status === 'completed' && reading?.conclusion !== 'action_required') return;
+    if (status === 'completed' && reading?.conclusion !== 'action_required' && (typeof reading === 'string' || reading?.conclusion)) return;
     if (Date.now() - started >= timeoutMs) {
       const error = new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
       error.indeterminateDispatch = true;
@@ -92,9 +92,9 @@ export function parseGhJqString(output, label) {
 }
 
 export function readWorkflowRunStatus(ghInvoke, runId) {
-  const [status, conclusion = ''] = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status // empty, .conclusion // empty] | @tsv']) ?? '').split('\t');
-  if (!status?.trim() || status.trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
-  return { status: status.trim(), conclusion: conclusion.trim() };
+  const fields = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status, .conclusion] | @tsv']) ?? '').split('\t');
+  if (fields.length !== 2 || !fields[0].trim() || fields[0].trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
+  return { status: fields[0].trim(), conclusion: fields[1].trim() };
 }
 
 export function shouldHoldReleaseLock(error) {

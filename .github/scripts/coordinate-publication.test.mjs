@@ -184,6 +184,11 @@ test('unreadable steps on a non-skipped job fail closed', async () => {
 test('the promote-step pin matches the deploy workflow', () => {
   const deploy = readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8');
   assert.ok(deploy.includes(`- name: ${DEPLOY_PROMOTE_STEP_NAME}`), 'deploy.yml must keep the pinned promote step name');
+  // The exactly-one-success check assumes a non-matrixed job: a
+  // matrixed deploy-production would publish yet read as "did not
+  // succeed", so pin the job shape, not just the step name.
+  const block = deploy.slice(deploy.indexOf('\n  deploy-production:')).split(/\n  [\w-]+:/)[0];
+  assert.doesNotMatch(block, /^ {4}(strategy|matrix):/m, 'deploy-production must stay non-matrixed');
 });
 
 test('refuses a successful workflow whose live alias remains stale', async () => {

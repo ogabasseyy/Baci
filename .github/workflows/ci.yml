@@ -481,6 +481,7 @@ jobs:
           .github/scripts/coordinate-production-release.test.mjs
           .github/scripts/coordinate-publication.test.mjs
           .github/scripts/release-production.test.mjs
+          .github/scripts/release-subprocess.test.mjs
           .github/scripts/verify-coordinated-release.test.mjs
           ci_scripts/validate-promote-record.test.mjs
           .github/scripts/ops-promote-record-contract.test.mjs

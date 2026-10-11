@@ -62,9 +62,10 @@ test('reads raw gh --jq scalars without JSON parsing', () => {
   );
   assert.deepEqual(reading, { status: 'queued', conclusion: '' });
   assert.deepEqual(readWorkflowRunStatus(() => 'completed\taction_required\n', 42), { status: 'completed', conclusion: 'action_required' });
-  assert.ok(calls[0].join(' ').includes('.conclusion // empty'));
-  assert.throws(() => readWorkflowRunStatus(() => '', 42), /workflow run 42 status unreadable/);
-  assert.throws(() => readWorkflowRunStatus(() => 'null\t\n', 42), /workflow run 42 status unreadable/);
+  assert.ok(calls[0].join(' ').includes('[.status, .conclusion] | @tsv'));
+  for (const output of ['', 'null\t\n', 'success\n', '\tsuccess\n', 'a\tb\tc\n']) {
+    assert.throws(() => readWorkflowRunStatus(() => output, 42), /workflow run 42 status unreadable/);
+  }
 });
 
 test('requires authenticated Vercel access to the production project', () => {
@@ -96,6 +97,14 @@ test('waits for run completion by polling the run endpoint', async () => {
     sleep: async ms => { parkedSleeps.push(ms); },
   });
   assert.deepEqual(parkedSleeps, [10]);
+  const halfPopulated = [{ status: 'completed', conclusion: '' }, { status: 'completed', conclusion: 'success' }];
+  const halfSleeps = [];
+  await waitForRunCompletion(42, async () => halfPopulated.shift() ?? { status: 'completed', conclusion: 'success' }, {
+    pollMs: 10,
+    timeoutMs: 60000,
+    sleep: async ms => { halfSleeps.push(ms); },
+  });
+  assert.deepEqual(halfSleeps, [10]);
   const timeout = await waitForRunCompletion(42, async () => 'in_progress', {
     timeoutMs: 0,
     sleep: async () => {},

@@ -50,4 +50,10 @@ describe('quarantineInternalOnlyManualPaystack', () => {
       })
     );
   });
+  it('returns quietly when no unverified manual Paystack claim exists', async () => {
+    await expect(
+      quarantineInternalOnlyManualPaystack(input)
+    ).resolves.toBeUndefined();
+    expect(vi.mocked(quarantineRefund)).not.toHaveBeenCalled();
+  });
 });

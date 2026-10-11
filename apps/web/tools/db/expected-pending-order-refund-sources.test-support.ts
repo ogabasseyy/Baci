@@ -37,6 +37,6 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010190000_guard_refund_finalizer_internal_coverage.sql',
-    sha256: '71e7a272e72c987fbc8f78d5117399e6bea161cefca149e41dea550acd94db71',
+    sha256: 'cefcabd27c368498abf5fcfdb0f5cdc59fa0b51c657742e3e1cfef14463b9730',
   },
 ];

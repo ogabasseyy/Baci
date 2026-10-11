@@ -60,8 +60,11 @@ BEGIN
   ) THEN
     RETURN;
   END IF;
+  -- bnpl_approved is funded (Credit Direct flips it alongside paid):
+  -- without it the claim path reverses settlements and notifies while
+  -- the order stays persisted as BNPL-approved.
   UPDATE public.orders SET payment_status = 'refunded', updated_at = now()
-    WHERE id = p_order_id AND payment_status IN ('paid', 'partially_paid', 'pending');
+    WHERE id = p_order_id AND payment_status IN ('paid', 'partially_paid', 'pending', 'bnpl_approved');
   -- Reverse the order's settlements atomically with the refund
   -- transition. This runs only once every funded external leg has
   -- terminal refund evidence, so every gateway leg is refunded —

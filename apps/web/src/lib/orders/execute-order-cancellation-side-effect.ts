@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertExternalCancellationRefundableAmount } from '@/lib/orders/assert-external-cancellation-refundable-amount';
 import { classifyCancellationRefundLinks } from '@/lib/orders/classify-cancellation-refund-links';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
@@ -173,26 +174,12 @@ export async function executeOrderCancellationSideEffect({
     });
   }
   // A legacy/corrupt non-finite or non-positive leg amount must
-  // never reach the provider (the reduction below would treat NaN as
-  // zero while the predicate accepts it): quarantine it for review
-  // first. The predicate below stays as a fail-closed backstop for
-  // callers that skip this preflight.
+  // never reach the provider (the reduction would treat NaN as zero
+  // while the predicate accepts it): quarantine it for review first.
+  // The extracted backstop stays fail-closed for callers that skip
+  // this preflight, and returns quietly for internal-only orders.
   await quarantineInvalidRefundAmountLegs({ order, supabase, transactions });
-  const gatewayRefundAmount = transactions.reduce(
-    (total, transaction) => total + (Number(transaction.amount) || 0),
-    0
-  );
-  if (
-    gatewayRefundAmount <= 0 ||
-    !Number.isSafeInteger(Math.round(gatewayRefundAmount * 100)) ||
-    transactions.some(
-      (transaction) =>
-        !Number.isFinite(Number(transaction.amount)) ||
-        Number(transaction.amount) <= 0
-    )
-  ) {
-    throw new Error('Completed payment transaction has no refundable amount');
-  }
+  assertExternalCancellationRefundableAmount(transactions);
   // Legs with a provider-accepted audit row are still in flight: the
   // reconciler completes them and the drain resumes the remaining legs.
   // Only legs without provider evidence (failed or ambiguous rows) need a

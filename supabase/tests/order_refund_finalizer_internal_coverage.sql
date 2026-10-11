@@ -39,10 +39,14 @@ BEGIN
     payment_status, shipping_status
   ) VALUES
     ('9ef31000-0000-4000-8000-000000000033', v_merchant_id, 'FINAL-033',
-      200, 200, 'paid', 'cancelled');
+      200, 200, 'paid', 'cancelled'),
+    ('9ef31000-0000-4000-8000-000000000035', v_merchant_id, 'FINAL-035',
+      100, 100, 'bnpl_approved', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
-  WHERE id = '9ef31000-0000-4000-8000-000000000033';
+  WHERE id IN (
+    '9ef31000-0000-4000-8000-000000000033',
+    '9ef31000-0000-4000-8000-000000000035');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -62,7 +66,18 @@ BEGIN
         'provider_refund_status', 'processed')),
     ('9ef32000-0000-4000-8000-000000000058', v_merchant_id,
       '9ef31000-0000-4000-8000-000000000033', 'payment', 100, 'NGN',
-      'completed', 'cash', 'cash-33', '{}'::jsonb);
+      'completed', 'cash', 'cash-33', '{}'::jsonb),
+    -- A BNPL-approved order with terminal refund evidence: funded
+    -- like paid, so finalization must flip the label too.
+    ('9ef32000-0000-4000-8000-000000000060', v_merchant_id,
+      '9ef31000-0000-4000-8000-000000000035', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-35', '{}'::jsonb),
+    ('9ef32000-0000-4000-8000-000000000061', v_merchant_id,
+      '9ef31000-0000-4000-8000-000000000035', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'pp-35-ok',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef32000-0000-4000-8000-000000000060',
+        'provider_refund_status', 'processed'));
 END;
 $finalizer_fixtures$;
 
@@ -109,6 +124,20 @@ BEGIN
   WHERE order_id = '9ef31000-0000-4000-8000-000000000033';
   IF v_label <> 'refunded' OR v_notifications <> 2 THEN
     RAISE EXCEPTION 'finalizer skipped covered mixed order: %/%',
+      v_label, v_notifications;
+  END IF;
+  -- A BNPL-approved order finalizes like a paid one: the label flips
+  -- alongside settlement reversal and notifications.
+  PERFORM public.finalize_refunded_cancellation_order_v1(
+    '9ef31000-0000-4000-8000-000000000035',
+    '9ef30100-0000-4000-8000-000000000001');
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef31000-0000-4000-8000-000000000035';
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = '9ef31000-0000-4000-8000-000000000035';
+  IF v_label <> 'refunded' OR v_notifications <> 2 THEN
+    RAISE EXCEPTION 'finalizer left bnpl_approved order: %/%',
       v_label, v_notifications;
   END IF;
 END;

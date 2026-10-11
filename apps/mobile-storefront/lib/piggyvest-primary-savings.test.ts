@@ -16,6 +16,14 @@ jest.mock('./customer-savings', () => ({
 jest.mock('./piggyvest-primary-savings-recovery', () => ({
   recoverPiggyvestPrimarySavings: (...args: unknown[]) => mockRecover(...args),
 }));
+let mockAuthUserId: string | null = null;
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({
+      user: mockAuthUserId ? { id: mockAuthUserId } : null,
+    }),
+  },
+}));
 const { addPiggyvestPrimarySavingsContribution } =
   require('./piggyvest-primary-savings') as typeof import('./piggyvest-primary-savings');
 const input = {
@@ -47,6 +55,18 @@ it('posts integer kobo and the existing operation key with CSRF', async () => {
       amountKobo: 2000,
     },
   });
+});
+it('pins the submission to the initiating user', async () => {
+  mockAuthUserId = 'user-A';
+  mockFetchJson.mockResolvedValue({
+    status: 'pending',
+    operationId: input.idempotencyKey,
+  });
+  await addPiggyvestPrimarySavingsContribution(input);
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedUserId: 'user-A' })
+  );
+  mockAuthUserId = null;
 });
 it('does not accept a response for another operation', async () => {
   mockFetchJson.mockResolvedValue({

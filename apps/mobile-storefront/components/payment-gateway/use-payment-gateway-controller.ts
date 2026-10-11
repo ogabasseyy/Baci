@@ -23,11 +23,9 @@ import type {
 import { requiresServerCheckoutConfirmation } from './requires-server-checkout-confirmation';
 import { resolvePendingOrdersRoute } from './resolve-pending-orders-route';
 import { usePaymentGatewayCompletionHandlers } from './use-payment-gateway-completion-handlers';
-import {
-  usePaymentGatewayEventHandlers,
-  usePaymentGatewayMessageHandler,
-  usePaymentGatewayTimers,
-} from './use-payment-gateway-handler-hooks';
+import { usePaymentGatewayEventHandlers } from './use-payment-gateway-event-handlers';
+import { usePaymentGatewayMessageHandler } from './use-payment-gateway-message-handler';
+import { usePaymentGatewayTimers } from './use-payment-gateway-timers';
 export function usePaymentGatewayController() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<Record<string, string>>();

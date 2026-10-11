@@ -1,4 +1,5 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
+import { useAuthStore } from '@/stores/auth-store';
 import { addSavingsContribution } from './customer-savings';
 import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
 import { recoverPiggyvestPrimarySavings } from './piggyvest-primary-savings-recovery';
@@ -27,12 +28,19 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   // closure, so a module-level singleton would keep serving the previous
   // user's Bearer [REDACTED] after an account switch.
   const client = createStorefrontCustomerApiClient();
+  // Pin the submission to the initiating user: without this, an
+  // account switch mid-flight sends the new user's Bearer [REDACTED] with
+  // the old goal and operation ids, turning a legitimate contribution
+  // into a failure. The pin fails locally before any bytes are sent
+  // under the wrong identity.
+  const expectedUserId = useAuthStore.getState().user?.id;
   try {
     const response = schemas.response.safeParse(
       await client.fetchJson({
         path: '/api/storefront/customer/savings/primary-transfer',
         method: 'POST',
         includeCsrf: true,
+        expectedUserId: expectedUserId ?? undefined,
         body,
       })
     );

@@ -201,9 +201,7 @@ test('requires every push URL to be the canonical repository', () => {
 
 test('refuses inherited worker-deploy safety overrides', () => {
   assert.doesNotThrow(() => assertCleanWorkerDeployEnv({}));
-  assert.doesNotThrow(() =>
-    assertCleanWorkerDeployEnv({ BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '0', BACI_DEPLOY_WORKFLOW_REPO: '' })
-  );
+  assert.doesNotThrow(() => assertCleanWorkerDeployEnv({ BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '0', BACI_DEPLOY_WORKFLOW_REPO: '' }));
   assert.throws(
     () => assertCleanWorkerDeployEnv({ BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '1' }),
     /BACI_DEPLOY_SKIP_INFLIGHT_CHECK/
@@ -262,6 +260,7 @@ test('rejects non-GitHub and non-repository remotes', () => {
     'https://github.com//ogabasseyy/Baci.git',
     'https://github.com:0443/ogabasseyy/Baci.git',
     'GIT@github.com:ogabasseyy/Baci.git',
+    ' https://github.com/ogabasseyy/Baci.git',
   ]) {
     assert.notEqual(originRepoSlug(remote), 'ogabasseyy/baci');
   }

@@ -5,6 +5,10 @@ export const CANONICAL_REPOSITORY = 'ogabasseyy/Baci';
 
 export function originRepoSlug(remoteUrl) {
   const raw = String(remoteUrl ?? '');
+  // Reject surrounding whitespace instead of trimming it: URL
+  // parsing strips it, but git uses the raw remote, so validating a
+  // normalized copy passes preflight for a checkout git refuses.
+  if (raw !== raw.trim()) return '';
   // scp-like and ssh:// forms carry no userinfo ambiguity: the user
   // is part of the match, so handle them before URL parsing (which
   // would reject the scp-like form outright).

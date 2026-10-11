@@ -208,7 +208,7 @@ async function main() {
         // forked fetch URL would make the worker in-flight guard query
         // the fork and miss active canonical runs. Without an explicit
         // pushurl the push query falls back to the fetch URL.
-        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'])) !== repository.toLowerCase()) {
+        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'], true, { trim: false }).replace(/\n$/, '')) !== repository.toLowerCase()) {
           throw new Error('release checkout must use the canonical repository');
         }
         assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin'], true, { trim: false }));

@@ -14,12 +14,8 @@ import { conditionLabels } from './product-selection-condition-labels';
 import { createProductSelectionHandlers } from './product-selection-handlers';
 import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
 import { resolveSelectionPricing } from './product-selection-pricing';
-import {
-  isRouteOfferMissing,
-  matchRouteOfferId,
-} from './resolve-route-offer-match';
-import { isRouteVariantMissing } from './resolve-route-variant-match';
 import { useProductRouteSelection } from './use-product-route-selection';
+import { useRouteSelectionMissing } from './use-route-selection-missing';
 
 /**
  * Route-driven offer, variant, condition, and image selection for the PDP,
@@ -53,6 +49,22 @@ export function useProductOfferSelection(product: Product) {
     usesVariantConditions,
     usesVariantRouteSelection,
   } = useProductRouteSelection(product);
+  // Seed the selection state from the route-driven inputs inline during
+  // render with a prev-key comparison (react.dev: "Adjusting some state when
+  // a prop changes"). The previous useEffect version committed a stale frame
+  // before re-rendering with the seeded selection.
+  const routeSeedKey = [
+    product.id,
+    usesVariantRouteSelection ? 'variants' : 'simple',
+    routeCondition,
+    routeVariantId ?? '',
+    offerIdParam ?? '',
+    routeBaseMatch ? 'base' : '',
+    Object.entries(routeSelectionAttributes)
+      .map(([key, value]) => `${key}=${value}`)
+      .sort()
+      .join('&'),
+  ].join('|');
   const [selectedCondition, setSelectedCondition] = useState<ProductCondition>(
     (routeCondition as ProductCondition | undefined) ||
       (defaultVariantSelection?.condition as ProductCondition | undefined) ||
@@ -60,37 +72,23 @@ export function useProductOfferSelection(product: Product) {
       'new'
   );
 
-  // Search/compare entry points forward the advertised matched offer id.
-  // Honor it only when it names one of this product's own offers and matches
-  // the selected condition, so the PDP charges the price the card displayed.
-  const [ignoredRouteOfferId, setIgnoredRouteOfferId] = useState<string | null>(
-    null
-  );
-  const [ignoredRouteBaseMatch, setIgnoredRouteBaseMatch] = useState(false);
   // Explicit shopper pick from a condition button, keyed by identity so a
   // click on a later same-condition offer keeps its own price/stock.
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
-  // Dead exact-variant deep links (listing/search cards link the advertised
-  // option id) surface as missing instead of silently rendering the
-  // default variant; any explicit attribute/condition pick moves past it.
-  const [ignoredRouteVariantId, setIgnoredRouteVariantId] = useState<
-    string | null
-  >(null);
-  const routeVariantMissing = isRouteVariantMissing(
+  const {
+    ignoredRouteBaseMatch,
+    routeOfferId,
+    routeOfferMissing,
+    routeVariantMissing,
+    setIgnoredRouteBaseMatch,
+    setIgnoredRouteOfferId,
+    setIgnoredRouteVariantId,
+  } = useRouteSelectionMissing({
+    offerIdParam,
+    product,
+    routeSeedKey,
     routeVariantId,
-    ignoredRouteVariantId,
-    product.variants
-  );
-  const routeOfferId = matchRouteOfferId(
-    offerIdParam,
-    ignoredRouteOfferId,
-    product.offers
-  );
-  const routeOfferMissing = isRouteOfferMissing(
-    offerIdParam,
-    ignoredRouteOfferId,
-    product.offers
-  );
+  });
   // A base-row entry keeps the advertised base price until the shopper
   // picks a condition on the PDP (mirrors native suppressConditionOfferMatch):
   // ids-bearing links never suppress, and any explicit pick re-enables
@@ -135,28 +133,9 @@ export function useProductOfferSelection(product: Product) {
         : null) ||
       null;
 
-  // Seed the selection state from the route-driven inputs inline during
-  // render with a prev-key comparison (react.dev: "Adjusting some state when
-  // a prop changes"). The previous useEffect version committed a stale frame
-  // before re-rendering with the seeded selection.
-  const routeSeedKey = [
-    product.id,
-    usesVariantRouteSelection ? 'variants' : 'simple',
-    routeCondition,
-    routeVariantId ?? '',
-    offerIdParam ?? '',
-    routeBaseMatch ? 'base' : '',
-    Object.entries(routeSelectionAttributes)
-      .map(([key, value]) => `${key}=${value}`)
-      .sort()
-      .join('&'),
-  ].join('|');
   const [prevRouteSeedKey, setPrevRouteSeedKey] = useState<string | null>(null);
   if (routeSeedKey !== prevRouteSeedKey) {
     setPrevRouteSeedKey(routeSeedKey);
-    setIgnoredRouteOfferId(null);
-    setIgnoredRouteBaseMatch(false);
-    setIgnoredRouteVariantId(null);
     setSelectedOfferId(null);
 
     if (!usesVariantRouteSelection) {

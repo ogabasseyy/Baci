@@ -1,5 +1,4 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import * as Clipboard from 'expo-clipboard';
 import { Pressable, Text, View } from 'react-native';
 import { styles } from '@/components/transactions/transactions.styles';
 import type { ThemeColors } from '@/constants/theme';
@@ -9,6 +8,13 @@ import type {
 } from '@/hooks/useTransactionReview';
 import { formatProductCondition } from '@/lib/product-condition';
 import { formatTransactionDisplayText } from './transaction-display-format';
+
+// Dynamic import: expo-clipboard pulls native modules that test runners
+// without the Expo runtime cannot load; copy is press-time only.
+async function copyOfferRef(offerId: string) {
+  const clipboard = await import('expo-clipboard');
+  await clipboard.setStringAsync(offerId);
+}
 
 interface TransactionOrderCardItemProps {
   colors: ThemeColors;
@@ -94,8 +100,18 @@ export function TransactionOrderCardItem({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Copy full offer reference ${String(item.offerId)}`}
-            onPress={() => void Clipboard.setStringAsync(String(item.offerId))}
-            style={styles.offerRefRow}
+            onPress={(event) => {
+              // Web targets bubble presses to the row editor; native does
+              // not, so the optional call is a no-op there.
+              event?.stopPropagation?.();
+              void copyOfferRef(String(item.offerId));
+            }}
+            style={{
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: 4,
+              marginTop: 4,
+            }}
           >
             <Text style={[styles.itemDetailText, { color: colors.textMuted }]}>
               Offer {String(item.offerId).slice(0, 8)}

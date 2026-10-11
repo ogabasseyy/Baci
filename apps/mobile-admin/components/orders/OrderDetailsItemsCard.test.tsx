@@ -44,11 +44,11 @@ vi.mock('react-native', async () => {
       onPress,
     }: {
       children?: React.ReactNode;
-      onPress?: () => void;
+      onPress?: (event?: { stopPropagation?: () => void }) => void;
     }) =>
       React.createElement(
         'button',
-        { onClick: () => onPress?.(), type: 'button' },
+        { onClick: (event) => onPress?.(event), type: 'button' },
         children
       ),
     StyleSheet: {
@@ -207,7 +207,7 @@ describe('OrderDetailsItemsCard', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('copies the full offer id when the truncated ref is pressed', () => {
+  it('copies the full offer id when the truncated ref is pressed', async () => {
     const onSelectItem = vi.fn();
     render(
       <OrderDetailsItemsCard
@@ -225,9 +225,13 @@ describe('OrderDetailsItemsCard', () => {
 
     fireEvent.click(screen.getByText('ref 55555555'));
 
-    expect(mocks.setStringAsync).toHaveBeenCalledWith(
-      '55555555-5555-4555-8555-555555555555'
-    );
+    await vi.waitFor(() => {
+      expect(mocks.setStringAsync).toHaveBeenCalledWith(
+        '55555555-5555-4555-8555-555555555555'
+      );
+    });
+    // The copy press must not bubble to the row select on web targets.
+    expect(onSelectItem).not.toHaveBeenCalled();
   });
 
   it('renders snapshot labels without a ref when the offer was deleted', () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -224,7 +224,13 @@ describe('ProductDetailClient', () => {
     };
     render(<ProductDetailClient product={product} />);
 
+    // Dark-mode-remapped amber trio (amber-300 borders escape the remap).
     expect(screen.getByRole('alert')).toHaveTextContent(/no longer available/);
+    expect(screen.getByRole('alert')).toHaveClass(
+      'border-amber-200',
+      'bg-amber-50',
+      'text-amber-800'
+    );
     expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
     expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
       expect.objectContaining({ purchaseDisabled: true })
@@ -254,6 +260,11 @@ describe('ProductDetailClient', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       /This option is no longer available/
+    );
+    expect(screen.getByRole('alert')).toHaveClass(
+      'border-amber-200',
+      'bg-amber-50',
+      'text-amber-800'
     );
     expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
     expect(mockStickyAddToCart).toHaveBeenLastCalledWith(

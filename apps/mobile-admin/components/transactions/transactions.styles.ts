@@ -85,12 +85,6 @@ export const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.size.xs,
     marginTop: SPACING.xs,
   },
-  offerRefRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 4,
-    marginTop: SPACING.xs,
-  },
   itemMeta: {
     alignItems: 'flex-end',
     paddingHorizontal: SPACING.sm,

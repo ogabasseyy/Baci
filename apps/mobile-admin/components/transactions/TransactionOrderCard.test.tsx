@@ -25,7 +25,7 @@ vi.mock('react-native', async () => {
       accessibilityState?: { expanded?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
-      onPress?: () => void;
+      onPress?: (event?: { stopPropagation?: () => void }) => void;
     }) =>
       React.createElement(
         'button',
@@ -34,7 +34,7 @@ vi.mock('react-native', async () => {
           'aria-expanded': accessibilityState?.expanded,
           disabled,
           role: accessibilityRole,
-          onClick: () => onPress?.(),
+          onClick: (event) => onPress?.(event),
         },
         children
       ),
@@ -347,17 +347,18 @@ describe('TransactionOrderCard', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('copies the full offer id when the truncated transaction ref is pressed', () => {
+  it('copies the full offer id when the truncated transaction ref is pressed', async () => {
     const offerItem = {
       ...editableItem,
       offerId: '55555555-5555-4555-8555-555555555555',
     };
 
+    const onOpenEditor = vi.fn();
     render(
       <TransactionOrderCard
         colors={LIGHT_COLORS}
         formatCurrency={(amount) => `NGN ${amount}`}
-        onOpenEditor={vi.fn()}
+        onOpenEditor={onOpenEditor}
         order={{
           createdAt: '2026-04-11T09:00:00.000Z',
           customerEmail: null,
@@ -382,9 +383,13 @@ describe('TransactionOrderCard', () => {
       screen.getByRole('button', { name: /copy full offer reference/i })
     );
 
-    expect(clipboardMocks.setStringAsync).toHaveBeenCalledWith(
-      '55555555-5555-4555-8555-555555555555'
-    );
+    await vi.waitFor(() => {
+      expect(clipboardMocks.setStringAsync).toHaveBeenCalledWith(
+        '55555555-5555-4555-8555-555555555555'
+      );
+    });
+    // The copy press must not bubble to the row editor on web targets.
+    expect(onOpenEditor).not.toHaveBeenCalled();
   });
 
   it('omits the condition row when a line has neither condition nor offer', () => {

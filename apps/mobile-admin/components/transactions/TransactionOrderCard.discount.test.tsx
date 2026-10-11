@@ -25,7 +25,7 @@ vi.mock('react-native', async () => {
       accessibilityState?: { expanded?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
-      onPress?: () => void;
+      onPress?: (event?: { stopPropagation?: () => void }) => void;
     }) =>
       React.createElement(
         'button',
@@ -34,7 +34,7 @@ vi.mock('react-native', async () => {
           'aria-expanded': accessibilityState?.expanded,
           disabled,
           role: accessibilityRole,
-          onClick: () => onPress?.(),
+          onClick: (event) => onPress?.(event),
         },
         children
       ),

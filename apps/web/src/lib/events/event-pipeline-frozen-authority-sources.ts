@@ -58,9 +58,11 @@ export const eventPipelineFrozenRoutes = {
   // authority unchanged. Re-pinned an eighth time: the savings fallback
   // idempotency fingerprint includes the line offer id so two savings
   // orders for different offers of one product mint distinct redemption
-  // keys; notification and payment authority are unchanged.
+  // keys; notification and payment authority are unchanged. Idempotent
+  // retries now bypass live offer economics via a keyed-order probe so the
+  // RPC replays the stored order; fresh-order validation is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'bb2583bfe08162cd76c81e8a221334e2c0a1d45393c068330dad2f59ab108065',
+    '459e566ef53721c4219645ab3a77e74d8617ebbe362a1107cfebfeda841ec1de',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

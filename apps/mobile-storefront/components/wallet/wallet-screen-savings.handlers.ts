@@ -123,6 +123,37 @@ export async function addSavingsContributionToGoal({
       merchantSlug: activeMerchantSlug,
     });
     if (
+      typeof contributionResult === 'object' &&
+      contributionResult !== null &&
+      'status' in contributionResult &&
+      contributionResult.status === 'pending'
+    ) {
+      await refetchWallet().catch(() => undefined);
+      Alert.alert(
+        'Contribution pending',
+        'Your savings will update after PiggyVest confirms the transfer. Check its status before starting another contribution.'
+      );
+      return;
+    }
+    if (
+      typeof contributionResult === 'object' &&
+      contributionResult !== null &&
+      'status' in contributionResult &&
+      contributionResult.status === 'cancelled'
+    ) {
+      // Terminal provider rejection: the hold was released server-side,
+      // so clear the operation for a safe retry without announcing
+      // success or leaving the contribution looking pending. The
+      // entered amount stays for the retry.
+      clearIdempotencyKey?.();
+      await refetchWallet().catch(() => undefined);
+      Alert.alert(
+        'Contribution cancelled',
+        'The transfer was cancelled before submission and your reserved wallet funds were released.'
+      );
+      return;
+    }
+    if (
       amount >= remainingAmount ||
       isCompletedSavingsContributionResult(contributionResult)
     ) {

@@ -1,6 +1,51 @@
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
+// Controllable verdict (never a live probe: the real probe's network
+// timeouts hang this suite): DVA/legacy tests run with a resolved
+// legacy verdict so creation gating reflects only the axis under
+// test, while dedicated tests flip the verdict to cover the primary
+// fund rail. Cold-start probe-wait behavior is covered in the
+// funding-account controller tests.
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return {
+    ...actual,
+    usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockUsePrimaryCapability(...args),
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockGetPrimaryCapability(...args),
+  };
+});
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability-cache'
+  ) as typeof import('@/lib/piggyvest-primary-capability-cache');
+  return {
+    ...actual,
+    readObservedPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockReadObservedCapability(...args),
+  };
+});
+// Controllable recovery lookup (never a live endpoint: the savings
+// recovery hook always drains durable state, so these legacy-merchant
+// tests answer a durable null and proceed to legacy submissions).
+jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-savings-recovery'
+  ) as typeof import('@/lib/piggyvest-primary-savings-recovery');
+  return {
+    ...actual,
+    recoverPiggyvestPrimarySavings: (...args: unknown[]) =>
+      mockRecoverPrimarySavings(...args),
+  };
+});
+jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
+  fundPrimaryWalletCard: (...args: unknown[]) =>
+    mockFundPrimaryWalletCard(...args),
+}));
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
@@ -120,6 +165,14 @@ const mockUseMerchantPaymentSettings = jest.fn();
 const mockUseStorefrontInsets = jest.fn();
 let mockMerchantId = 'configured-merchant';
 let mockMerchantSlug = 'ogabassey';
+const mockUsePrimaryCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockGetPrimaryCapability =
+  jest.fn<(...args: unknown[]) => Promise<boolean>>();
+const mockReadObservedCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockRecoverPrimarySavings =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockFundPrimaryWalletCard =
+  jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockInitializeWalletTopUp =
   jest.fn<
     (input: unknown) => Promise<{
@@ -300,6 +353,11 @@ describe('WalletScreen', () => {
     mockSearchParams = {};
     mockMerchantId = 'configured-merchant';
     mockMerchantSlug = 'ogabassey';
+    mockUsePrimaryCapability.mockReturnValue(false);
+    mockGetPrimaryCapability.mockResolvedValue(false);
+    mockReadObservedCapability.mockReturnValue(false);
+    mockRecoverPrimarySavings.mockResolvedValue(null);
+    mockFundPrimaryWalletCard.mockResolvedValue(undefined);
     mockRefetch.mockResolvedValue(undefined);
     mockRedirect.mockImplementation(({ href }) => (
       <View testID="wallet-redirect" accessibilityLabel={href} />
@@ -665,10 +723,10 @@ describe('WalletScreen', () => {
     await waitFor(() => {
       expect(mockCreateFundingAccountMutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Account Ready',
-      'Titan Paystack - 1234567890'
-    );
+    // No success dialog: the mutation invalidates the wallet query and the
+    // funding-account card shows the new number instead (asserted in
+    // use-wallet.test.ts > useCreateWalletFundingAccount).
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
   it('does not announce account details when the provider returns no account summary', async () => {
@@ -956,6 +1014,60 @@ describe('WalletScreen', () => {
     );
   });
 
+  it('routes a wallet top-up through the primary card rail when capable', async () => {
+    mockUsePrimaryCapability.mockReturnValue(true);
+    mockGetPrimaryCapability.mockResolvedValue(true);
+    mockReadObservedCapability.mockReturnValue(true);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(mockFundPrimaryWalletCard).toHaveBeenCalledWith(
+        expect.objectContaining({ fundAmount: '2500' })
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+  });
+
+  it('retries funding from the wallet screen after a transient probe failure', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    mockReadObservedCapability.mockReturnValue(null);
+    mockGetPrimaryCapability
+      .mockRejectedValueOnce(new Error('transport down'))
+      .mockResolvedValueOnce(false);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Unable to fund wallet',
+        'We could not confirm your wallet rail. Please try again.',
+        expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    const buttons = alertSpy.mock.calls[0][2] ?? [];
+    const retry = buttons.find((button) => button?.text === 'Try again');
+    expect(retry?.onPress).toEqual(expect.any(Function));
+
+    await act(async () => {
+      retry?.onPress?.();
+    });
+    await waitFor(() => {
+      expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 2500 })
+      );
+    });
+  });
+
   it('routes to start savings and manage cards screens', () => {
     render(<WalletScreen />);
 
@@ -1037,6 +1149,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
       );
@@ -1099,6 +1214,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
@@ -1173,6 +1291,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
@@ -1671,7 +1792,7 @@ describe('WalletScreen', () => {
     expect(screen.getByText('show-redeem-panel:true')).toBeOnTheScreen();
   });
 
-  it('blocks invalid wallet top-up amounts before calling the API', () => {
+  it('blocks invalid wallet top-up amounts before calling the API', async () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation(() => undefined);
@@ -1682,9 +1803,11 @@ describe('WalletScreen', () => {
     fireEvent.press(screen.getByText('Set Invalid Fund Amount'));
     fireEvent.press(screen.getByText('Confirm Fund'));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Invalid Amount',
-      'Wallet top-up amount must be between ₦100 and ₦500,000.'
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Invalid Amount',
+        'Wallet top-up amount must be between ₦100 and ₦500,000.'
+      )
     );
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
   });

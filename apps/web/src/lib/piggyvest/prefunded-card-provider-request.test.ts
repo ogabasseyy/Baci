@@ -38,7 +38,32 @@ it('aborts a provider request at the configured timeout', async () => {
   ).rejects.toThrow('PROVIDER_TIMEOUT');
 });
 
-it('rejects a redirected response without parsing its body', async () => {
+it('attaches the bounded HTTP error body for definitive-rejection detection', async () => {
+  await expect(
+    requestPrefundedCardProviderJson({
+      url: 'https://api.paystack.co/transaction/initialize',
+      token: 'sk_test_example',
+      timeoutMs: 100,
+      maxResponseBytes: 1024,
+      fetchImplementation: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: false,
+            message: 'Duplicate Transaction Reference',
+          }),
+          { status: 400 }
+        )
+      ),
+      init: { method: 'POST' },
+    })
+  ).rejects.toMatchObject({
+    message: 'PROVIDER_HTTP_ERROR',
+    httpStatus: 400,
+    responseBody: { status: false, message: 'Duplicate Transaction Reference' },
+  });
+});
+
+it('rejects a redirected response', async () => {
   const response = new Response(JSON.stringify({ status: true }), {
     status: 200,
   });

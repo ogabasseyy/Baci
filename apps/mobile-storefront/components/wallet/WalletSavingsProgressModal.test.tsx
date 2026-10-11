@@ -44,6 +44,34 @@ const goal = {
 };
 
 describe('WalletSavingsProgressModal', () => {
+  it('checks a pending contribution even when the reserved funds leave a zero wallet balance', () => {
+    const onAddSavings = jest.fn();
+    const onFundWallet = jest.fn();
+    render(
+      <WalletSavingsProgressModal
+        addAmount="500"
+        colors={Colors.dark}
+        goal={goal}
+        isAdding={false}
+        hasPendingContribution
+        onAddAmountChange={jest.fn()}
+        onAddSavings={onAddSavings}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={onFundWallet}
+        visible
+        walletBalance={0}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check contribution status' })
+    );
+    expect(onAddSavings).toHaveBeenCalledTimes(1);
+    expect(onFundWallet).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Continue to payment' })
+    ).toBeNull();
+  });
   it('allows an unresolved auto-debit goal to choose its exact device', () => {
     const onChangeDevice = jest.fn();
     render(

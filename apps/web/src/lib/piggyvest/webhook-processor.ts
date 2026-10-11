@@ -13,6 +13,10 @@ import {
   PlanWalletRestrictionError,
 } from './plan-wallet-restrictions';
 import {
+  reconcileSavingsOutflowReferences,
+  type SavingsOutflowProcessorDeps,
+} from './primary-wallet-savings-outflow-processor';
+import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
 } from './transfer-outbox';
@@ -69,10 +73,14 @@ function isHandledEvent(event: PiggyvestWebhookEvent): event is HandledEvent {
   );
 }
 
+export interface ProcessPiggyvestEventDeps extends SavingsOutflowProcessorDeps {
+  piggyvestConfig?: PiggyvestClientConfig | null;
+}
+
 async function applyEvent(
   supabase: SupabaseClient,
   event: HandledEvent,
-  config: PiggyvestClientConfig | null
+  deps: ProcessPiggyvestEventDeps
 ): Promise<void> {
   if (event.eventType === 'interest-payout.success') {
     await recordInterestPayout(supabase, event);
@@ -110,7 +118,7 @@ async function applyEvent(
     }
     const liftedOutcome = await applyRestrictionLifted(
       supabase,
-      config,
+      deps.piggyvestConfig ?? null,
       walletId
     );
     if (liftedOutcome === 'unknown-wallet') {
@@ -137,6 +145,7 @@ async function applyEvent(
         ? 'failed'
         : 'succeeded',
   });
+  await reconcileSavingsOutflowReferences(references, deps);
 }
 
 function poisonReason(error: unknown): string | null {
@@ -178,7 +187,7 @@ function failureReason(eventType: HandledEvent['eventType']): string {
 export async function processPiggyvestEvent(
   supabase: PiggyvestIntakeServiceClient,
   event: PiggyvestWebhookEvent,
-  deps: { piggyvestConfig?: PiggyvestClientConfig | null } = {}
+  deps: ProcessPiggyvestEventDeps = {}
 ): Promise<ProcessPiggyvestEventOutcome> {
   if (!isHandledEvent(event)) {
     return 'deferred';
@@ -196,7 +205,7 @@ export async function processPiggyvestEvent(
   }
 
   try {
-    await applyEvent(supabase, event, deps.piggyvestConfig ?? null);
+    await applyEvent(supabase, event, deps);
   } catch (error) {
     const poison = poisonReason(error);
     if (poison) {

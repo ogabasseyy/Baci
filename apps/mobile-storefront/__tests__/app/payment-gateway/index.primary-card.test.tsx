@@ -329,6 +329,48 @@ it('blocks a launch that pairs the owned reference with a tampered amount', asyn
   ).not.toBeOnTheScreen();
 });
 
+it('binds a decimal amount exactly without float rounding', async () => {
+  // The bind parses decimal → integer kobo directly: no binary float
+  // sits between the params string and the server figure.
+  mockParamsAmount = '1000.50';
+  mockStorage.clear();
+  // The server answers 100050 from the start so adoption seeds the
+  // record consistently; the bind then compares exact kobo.
+  mockFetchJson.mockResolvedValue({ ...response, amountKobo: 100050 });
+  await createPrimaryWalletCardFundingClient().start({
+    merchantId,
+    userId: mockUserId,
+    amountKobo: 100050,
+    consent: {
+      version: 'primary-wallet-card-v1',
+      oneTimeCharge: true,
+      saveCard: false,
+    },
+    returnTo: mockReturnTo,
+  });
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Synthetic checkout callback' })
+    ).toBeOnTheScreen()
+  );
+});
+
+it('fails closed on a sub-kobo amount with no defined rounding', async () => {
+  mockParamsAmount = '1000.005';
+  render(<PaymentGatewayScreen />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'We could not confirm this checkout for your pending funding. Check your connection and try again, or return to your wallet to check its status — do not start another charge if you already paid.'
+      )
+    ).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).not.toBeOnTheScreen();
+});
+
 it('blocks a stale checkout URL once the server advanced past ready', async () => {
   // No URL comes back for a custody-pending operation, so the params
   // URL (fresh or replayed) can never bind: the WebView must not mount

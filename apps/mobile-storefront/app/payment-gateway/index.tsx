@@ -40,7 +40,7 @@ export default function PaymentGatewayScreen() {
     merchantId: paramsData?.merchantId,
     reference: paramsData?.reference,
     authorizationUrl: paramsData?.authorizationUrl,
-    amount: paramsData?.amount,
+    amountRaw: controller.amountRaw,
   });
 
   // A pending/held REDVAULT capture may still be reconciled server-side, so

@@ -15,6 +15,19 @@ export type PrimaryWalletCardOwnership =
 // and requires the exact server-issued checkout URL and amount. The
 // WebView stays unmounted until both proofs pass (or the launch is
 // blocked).
+// Strict decimal → integer kobo: the mount bind compares exact minor
+// units against the server figure, so binary floats must never sit in
+// between (0.29 * 100 is not 29 in float64, and >2-decimal inputs have
+// no defined rounding). Anything unparseable fails the bind.
+function parseAmountKobo(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const kobo =
+    Number(match[1]) * 100 + Number((match[2] ?? '0').padEnd(2, '0'));
+  return Number.isSafeInteger(kobo) ? kobo : null;
+}
+
 export function usePrimaryWalletCardOwnership({
   enabled,
   authReady,
@@ -22,7 +35,7 @@ export function usePrimaryWalletCardOwnership({
   merchantId,
   reference,
   authorizationUrl,
-  amount,
+  amountRaw,
 }: {
   enabled: boolean;
   authReady: boolean;
@@ -30,7 +43,7 @@ export function usePrimaryWalletCardOwnership({
   merchantId: string | undefined;
   reference: string | undefined;
   authorizationUrl: string | undefined;
-  amount: number | undefined;
+  amountRaw: string | undefined;
 }): {
   ownership: PrimaryWalletCardOwnership;
   retryBind: () => void;
@@ -86,10 +99,11 @@ export function usePrimaryWalletCardOwnership({
           userId: record.userId,
           reference,
         });
+        const paramsKobo = parseAmountKobo(amountRaw);
         const bound =
           status.authorizationUrl === authorizationUrl &&
-          typeof amount === 'number' &&
-          Math.round(amount * 100) === status.amountKobo;
+          paramsKobo !== null &&
+          paramsKobo === status.amountKobo;
         if (!cancelled) setOwnership(bound ? 'verified' : 'mismatch');
       } catch {
         if (!cancelled) setOwnership('mismatch');
@@ -105,7 +119,7 @@ export function usePrimaryWalletCardOwnership({
     merchantId,
     reference,
     authorizationUrl,
-    amount,
+    amountRaw,
     userId,
   ]);
   return { ownership, retryBind: () => setBindRetry((count) => count + 1) };

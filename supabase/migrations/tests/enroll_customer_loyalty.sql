@@ -15,6 +15,7 @@
 -- all running in this single transaction (rolled back at the end).
 
 \ir enroll_customer_loyalty_setup.sql
+\ir enroll_customer_loyalty_overflow_users.sql
 \ir enroll_customer_loyalty_enrollment.sql
 \ir enroll_customer_loyalty_award.sql
 \ir enroll_customer_loyalty_referrals.sql

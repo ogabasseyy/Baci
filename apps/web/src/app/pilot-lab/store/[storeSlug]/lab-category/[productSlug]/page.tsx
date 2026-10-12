@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { isPilotLabEnabled } from '@/lib/merchant-image-variant-pilot/lab-config';
 import {
+  pilotLabFixtureProductSlugs,
   pilotLabStoreBasePath,
   pilotLabStoreBySlug,
 } from '@/lib/merchant-image-variant-pilot/lab-store-page';
@@ -14,8 +15,9 @@ import {
 // never measured, only a valid prefetch/render target.
 //
 // Same guard + rendering contract as the store route: 404 without
-// BACI_IMAGE_PILOT_LAB=1, 404 for unknown stores, route-scoped
-// `instant = false` (request-time params under cacheComponents).
+// BACI_IMAGE_PILOT_LAB=1, 404 for unknown stores, 404 for slugs outside
+// the finite fixture set, route-scoped `instant = false` (request-time
+// params under cacheComponents).
 export const instant = false;
 
 export default async function PilotLabFixtureProductRoute({
@@ -31,6 +33,11 @@ export default async function PilotLabFixtureProductRoute({
   const { productSlug, storeSlug } = await params;
   const store = pilotLabStoreBySlug(storeSlug);
   if (!store) {
+    notFound();
+  }
+  // Finite fixture set only: an unknown slug is a mistyped prefetch, not
+  // a product — 404 rather than reflecting arbitrary path input with 200.
+  if (!pilotLabFixtureProductSlugs(store).has(productSlug)) {
     notFound();
   }
   // Preserve the arm on the way back: without it the store renders the

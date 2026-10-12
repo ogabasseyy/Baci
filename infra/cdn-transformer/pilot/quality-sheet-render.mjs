@@ -45,28 +45,32 @@ export function originalContentType(sourceFormat, assetId) {
   return escapeHtml(contentType);
 }
 
-// Bind the manifest's source-format claim to the verified snapshot
-// bytes: the generation id covers the source hash but not its format,
-// so a schema-valid stored manifest mislabeling PNG bytes as JPEG
-// would otherwise embed a broken or browser-sniffed baseline while
-// its derivatives render normally. Header-level metadata suffices —
-// container magic identifies the format without a pixel decode.
-export async function assertSnapshotFormat(
-  snapshotBytes,
-  sourceFormat,
-  assetId
-) {
-  let decoded;
+// Bind the schema-blind source claims to the verified snapshot bytes:
+// the generation id covers the source hash but not its format or byte
+// count, so a schema-valid stored manifest mislabeling either would
+// otherwise embed a broken baseline or misjudge never-larger while its
+// derivatives render normally. (Dimensions need no decode check: the
+// ladder width and aspect bindings determine them — any dims lie fails
+// schema validation first.) Header-level metadata suffices — container
+// magic identifies the format without a pixel decode.
+export async function assertSnapshotSource(snapshotBytes, source, assetId) {
+  let meta;
   try {
-    decoded = normalizeFormat(await sharp(snapshotBytes).metadata());
+    meta = await sharp(snapshotBytes).metadata();
   } catch {
     throw new PilotSheetError(
       `snapshot for asset "${assetId}" does not decode`
     );
   }
-  if (decoded !== sourceFormat) {
+  const decoded = normalizeFormat(meta);
+  if (decoded !== source.format) {
     throw new PilotSheetError(
-      `snapshot for asset "${assetId}" decodes as ${decoded ?? 'unknown'} but the manifest claims ${sourceFormat}`
+      `snapshot for asset "${assetId}" decodes as ${decoded ?? 'unknown'} but the manifest claims ${source.format}`
+    );
+  }
+  if (snapshotBytes.length !== source.bytes) {
+    throw new PilotSheetError(
+      `snapshot for asset "${assetId}" is ${snapshotBytes.length} bytes but the manifest claims ${source.bytes}`
     );
   }
 }

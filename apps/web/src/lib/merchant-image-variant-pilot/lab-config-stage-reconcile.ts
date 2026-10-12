@@ -85,14 +85,17 @@ export async function reconcileStagedTree(input: {
         }
         continue;
       }
-      const tierFiles = await readdir(entryPath).catch(() => []);
+      // Fail closed: an unreadable generation or originals directory
+      // aborts the stage. Treating it as empty would report completion
+      // while stale bytes stay reachable under /__pilot.
+      const tierFiles = await readdir(entryPath);
       for (const file of tierFiles) {
         await reconcileChild(join(entryPath, file));
       }
       continue;
     }
     if (entry.isDirectory() && entry.name === 'originals') {
-      const originals = await readdir(entryPath).catch(() => []);
+      const originals = await readdir(entryPath);
       for (const file of originals) {
         await reconcileChild(join(entryPath, file));
       }

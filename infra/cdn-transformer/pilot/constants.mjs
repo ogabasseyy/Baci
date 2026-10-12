@@ -41,6 +41,12 @@ export const MAX_STAGING_BYTES = 100 * 1024 ** 2;
 // truncation before parsing.
 export const MAX_MANIFEST_BYTES = 64 * 1024;
 
+// Durability-sidecar ceiling: the honest file is one short JSON object
+// (~30 bytes), so 4 KiB bounds a swollen/replaced durability.json while
+// staying orders of magnitude above any real sidecar. The reuse path
+// degrades a truncated sidecar to 'unknown' instead of allocating it.
+export const MAX_DURABILITY_BYTES = 4 * 1024;
+
 // Quality-sheet aggregate ceiling: per-file bounds (10 MiB snapshots,
 // schema-capped tiers) still admit ~5 GiB across a 20-record sheet,
 // base64-inflated into one HTML string. The accumulator in

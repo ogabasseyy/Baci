@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import {
-  slotMountProblems,
-  surfaceProblems,
-} from './merchant-image-pilot-readiness-checks.mjs';
+import { surfaceProblems } from './merchant-image-pilot-readiness-checks.mjs';
 import {
   goodSlot,
   mount,
   pilotImg,
 } from './merchant-image-pilot-readiness-checks-fixtures.mjs';
+import { slotMountProblems } from './merchant-image-pilot-readiness-mounts.mjs';
 
 describe('merchant-image-pilot-readiness surfaces', () => {
   it('validates every expected mount on the surface', () => {

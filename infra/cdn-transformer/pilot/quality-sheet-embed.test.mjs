@@ -161,7 +161,7 @@ test('derives the original MIME from verified bytes, not the inventory label', a
   }
 });
 
-test('rejects a stored manifest mislabeling the snapshot format', async () => {
+test('rejects a stored manifest mislabeling the snapshot source', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const { readdir } = await import('node:fs/promises');
   const [generationId] = await readdir(join(outputRoot, 'generations'));
@@ -172,21 +172,39 @@ test('rejects a stored manifest mislabeling the snapshot format', async () => {
     'manifest.json'
   );
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  // Schema-valid flip: the generation id covers the source hash but
-  // not its format, so only a snapshot decode catches the lie before
-  // the baseline embeds under the wrong MIME.
-  manifest.source.format = 'jpeg';
-  await writeFile(manifestPath, JSON.stringify(manifest));
-  await assert.rejects(
-    () =>
-      buildQualitySheet({
-        inputRoot,
-        inventoryPath,
-        outputRoot,
-        slots: { 'header-logo': { cssWidth: 40 } },
-      }),
-    /decodes as png but the manifest claims jpeg/
-  );
+  // Schema-valid flips: the generation id covers the source hash but
+  // not its format or byte count, so only a snapshot decode catches
+  // the lie. Each flip stays parse-clean (bytes flip down under the
+  // over-source tiers) so the decode check — not the schema — fires.
+  // (Dims need no case: ladder width/aspect bindings reject any dims
+  // lie at parse time, proven while writing this test.)
+  for (const [label, patch, pattern] of [
+    [
+      'format',
+      { format: 'jpeg' },
+      /decodes as png but the manifest claims jpeg/,
+    ],
+    ['bytes', { bytes: 84 }, /is 85 bytes but the manifest claims 84/],
+  ]) {
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        source: { ...manifest.source, ...patch },
+      })
+    );
+    await assert.rejects(
+      () =>
+        buildQualitySheet({
+          inputRoot,
+          inventoryPath,
+          outputRoot,
+          slots: { 'header-logo': { cssWidth: 40 } },
+        }),
+      pattern,
+      label
+    );
+  }
 });
 
 test('escapes inventory dimension metadata in captions', async () => {
@@ -206,4 +224,3 @@ test('escapes inventory dimension metadata in captions', async () => {
   assert.doesNotMatch(html, /48<x/);
   assert.match(html, /48&lt;x/);
 });
-

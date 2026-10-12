@@ -4,6 +4,7 @@ import { StorefrontProductCard } from '@/components/storefront/product-card';
 import type { Product } from '@/lib/products';
 import type { PilotLabArm } from './lab-arm';
 import { LabStorefrontProductCard, labProductFixture } from './lab-card-clone';
+import type { LabGridFiller } from './lab-fixtures';
 import type { ProjectedPilotImage } from './next-image-adapter';
 
 // Lab-only client grid shell for the per-store pages (split from
@@ -30,12 +31,6 @@ function noopProduct(_product: Product): void {
 }
 function noopQuantity(_productId: string, _quantity: number): void {
   // Lab grid is a measurement surface: commerce actions are inert by design.
-}
-
-export interface LabGridFiller {
-  imageHint: string;
-  name: string;
-  price: number;
 }
 
 export function LabStoreGrid({

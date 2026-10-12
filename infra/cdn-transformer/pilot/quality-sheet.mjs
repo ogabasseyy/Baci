@@ -5,7 +5,6 @@ import {
   MAX_QUALITY_SHEET_EMBEDDED_BYTES,
 } from './constants.mjs';
 import { readUpToBytes } from './disk-guards.mjs';
-import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import {
   buildEncoderIdentity,
   currentRecipeId,
@@ -18,8 +17,9 @@ import {
 } from './job-schema.mjs';
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { loadGeneration } from './manifest-store.mjs';
+import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import {
-  assertSnapshotFormat,
+  assertSnapshotSource,
   escapeHtml,
   originalContentType,
   PilotSheetError,
@@ -165,11 +165,7 @@ export async function buildQualitySheet({
     if (!parsed.ok) {
       throw new PilotSheetError('stored manifest is invalid');
     }
-    await assertSnapshotFormat(
-      snapshot.bytes,
-      manifest.source.format,
-      record.assetId
-    );
+    await assertSnapshotSource(snapshot.bytes, manifest.source, record.assetId);
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
@@ -180,8 +176,9 @@ export async function buildQualitySheet({
     const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
     const rungRows = new Set(manifest.tiers.map((tier) => tier.requestedWidth))
       .size;
-    const originalPrefix = `data:${originalContentType(manifest.source.format, record.assetId)};base64,`
-      .length;
+    const originalPrefix =
+      `data:${originalContentType(manifest.source.format, record.assetId)};base64,`
+        .length;
     let recordBytes =
       (originalPrefix + base64Length(snapshot.bytes.length)) * rungRows;
     for (const tier of manifest.tiers) {

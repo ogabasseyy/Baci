@@ -142,6 +142,18 @@ describe('pilot lab fixture product route', () => {
     expect(direct).not.toContain('?arm=');
   });
 
+  it('404s slugs no fixture links to', async () => {
+    await setupRoots();
+    await expect(
+      PilotLabFixtureProductRoute({
+        params: Promise.resolve({
+          productSlug: 'no-such-fixture',
+          storeSlug: 'omnimart',
+        }),
+      })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
   it('404s unknown stores and a disabled flag', async () => {
     await setupRoots();
     await expect(

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { slotMountProblems } from './merchant-image-pilot-readiness-checks.mjs';
 import {
   goodSlot,
   mount,
   pilotImg,
 } from './merchant-image-pilot-readiness-checks-fixtures.mjs';
+import { slotMountProblems } from './merchant-image-pilot-readiness-mounts.mjs';
 
 describe('merchant-image-pilot-readiness slot mounts', () => {
   it('accepts a visible decoded arm-correct mount', () => {

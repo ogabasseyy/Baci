@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  boxesMatch,
-  pilotImageUrlsOk,
-  selectedImageProblems,
-  surfaceProblems,
-} from './merchant-image-pilot-readiness-checks.mjs';
+import { boxesMatch } from './merchant-image-pilot-readiness-checks.mjs';
+import { selectedImageProblems } from './merchant-image-pilot-readiness-mounts.mjs';
+import { pilotImageUrlsOk } from './merchant-image-pilot-readiness-purity.mjs';
 
 describe('merchant-image-pilot-readiness helpers', () => {
   it('matches identical rounded boxes only', () => {
@@ -14,10 +11,12 @@ describe('merchant-image-pilot-readiness helpers', () => {
   });
 
   it('rejects pilot requests for staged originals', () => {
-    expect(pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'])).toBe(true);
-    expect(pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'])).toBe(
-      false
+    expect(pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'], ['abc'])).toBe(
+      true
     );
+    expect(
+      pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'], ['abc'])
+    ).toBe(false);
   });
 
   it('requires the selected image to decode from its approved identity', () => {
@@ -254,106 +253,5 @@ describe('merchant-image-pilot-readiness helpers', () => {
     ).toEqual([
       'selected image under-resolved: 384x375px (resource 384w) serves a 384x375px box at DPR 2 (needs 768x750px for cover)',
     ]);
-  });
-});
-
-describe('surfaceProblems coverage binding', () => {
-  const cardMount = {
-    binding: 'merchant/card-a',
-    generationId: 'abc',
-    merchantId: 'merchant',
-    slotId: 'product-card',
-    stagedOriginal: '/__pilot/originals/card.png',
-  };
-  const logoMount = {
-    binding: 'merchant/logo-a',
-    generationId: 'abc',
-    merchantId: 'merchant',
-    slotId: 'header-logo',
-    stagedOriginal: '/__pilot/originals/logo.png',
-  };
-  const imgFor = (currentSrc) => ({
-    box: { height: 300, width: 180, x: 8, y: 8 },
-    complete: true,
-    currentSrc,
-    naturalHeight: 384,
-    naturalWidth: 384,
-    objectFit: 'cover',
-  });
-  const slotFor = (mount, currentSrc) => ({
-    binding: mount.binding,
-    img: imgFor(currentSrc),
-    rect: { height: 300, width: 180, x: 8, y: 8 },
-    slotId: mount.slotId,
-    status: null,
-  });
-  const collectedFor = (slots) => ({
-    consoleErrors: [],
-    failedRequests: [],
-    geometry: {
-      devicePixelRatio: 1,
-      gridDisplay: 'grid',
-      heading: { height: 1, width: 1 },
-      imgObjectFit: 'cover',
-      selected: { height: 100, width: 100, x: 0, y: 0 },
-      selectedImg: imgFor('https://lab/__pilot/abc/card.avif'),
-      slots,
-      stylesheetBytes: 10,
-      stylesheetCount: 1,
-      viewportHeight: 600,
-      viewportWidth: 800,
-    },
-    imageUrls: ['https://lab/__pilot/abc/card.avif'],
-  });
-  const base = {
-    arm: 'pilot',
-    expectHiddenMounts: false,
-    expectNoAvif: false,
-    expectedFit: 'cover',
-    surface: 'grid',
-  };
-  const rendered = [
-    slotFor(cardMount, 'https://lab/__pilot/abc/card.avif'),
-    slotFor(logoMount, 'https://lab/__pilot/abc/logo.avif'),
-  ];
-
-  it('fails a rendered mount outside the expected set', () => {
-    // A stale --mounts artifact omitting header-logo must not produce a
-    // green report while the route renders an unchecked logo.
-    const problems = surfaceProblems(collectedFor(rendered), {
-      ...base,
-      expectedMounts: [cardMount],
-    });
-    expect(problems.join('\n')).toMatch(
-      /unexpected binding "merchant\/logo-a"/
-    );
-  });
-
-  it('passes when every rendered mount is expected', () => {
-    const problems = surfaceProblems(collectedFor(rendered), {
-      ...base,
-      expectedMounts: [cardMount, logoMount],
-    });
-    expect(problems).toEqual([]);
-  });
-
-  it('ignores reporting rows outside the expected set', () => {
-    // A not-optimized row for an unaccepted binding is preflight's
-    // verdict, not an unexpected mount.
-    const rows = [
-      ...rendered,
-      {
-        binding: 'merchant/unaccepted',
-        img: null,
-        rect: { height: 10, width: 10, x: 0, y: 0 },
-        slotId: 'product-card',
-        status: 'not-optimized',
-      },
-    ];
-    const problems = surfaceProblems(collectedFor(rows), {
-      ...base,
-      expectedMounts: [cardMount, logoMount],
-    });
-    expect(problems).toEqual([]);
   });
 });

@@ -2,30 +2,19 @@ import type { PilotLabArm } from './lab-arm';
 import { PilotLabCardPreload } from './lab-card-preload';
 import type { PilotLabConfig } from './lab-config';
 import {
+  LAB_GRID_FILLERS,
   labCardSlot,
   labProductFixture,
   pilotLabFillerImageUrl,
 } from './lab-fixtures';
 import type { PilotBindingStatus } from './lab-index';
 import { PilotLabNotOptimized } from './lab-not-optimized';
-import { type LabGridFiller, LabStoreGrid } from './lab-store-grid';
+import { LabStoreGrid } from './lab-store-grid';
 import type { PilotLabStore } from './lab-store-registry';
 import { resolveBinding } from './lab-store-resolve';
 import { projectPilotNextImage } from './next-image-adapter';
 
-export const LAB_GRID_FILLERS: readonly LabGridFiller[] = [
-  { imageHint: 'lab filler product two', name: 'Lab Filler Two', price: 1800 },
-  {
-    imageHint: 'lab filler product three',
-    name: 'Lab Filler Three',
-    price: 3200,
-  },
-  {
-    imageHint: 'lab filler product four',
-    name: 'Lab Filler Four',
-    price: 4100,
-  },
-];
+export { LAB_GRID_FILLERS };
 
 export function LabStoreGridSection({
   arm,

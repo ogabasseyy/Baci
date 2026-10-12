@@ -2,8 +2,9 @@
 // generation is returned only after full validation AND a complete
 // identity comparison with the requested generation — never overwritten.
 // Split from manifest-store.mjs under the repo line ceiling.
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_DURABILITY_BYTES } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 import { PilotManifestError } from './manifest.mjs';
 import { loadGeneration } from './manifest-store-load.mjs';
 
@@ -87,9 +88,14 @@ export async function tryReuseGeneration({
 
 async function readPersistedDurability(dir) {
   try {
-    const parsed = JSON.parse(
-      await readFile(join(dir, 'durability.json'), 'utf8')
+    const read = await readUpToBytes(
+      join(dir, 'durability.json'),
+      MAX_DURABILITY_BYTES
     );
+    if (read.truncated) {
+      return 'unknown';
+    }
+    const parsed = JSON.parse(read.bytes.toString('utf8'));
     if (
       parsed?.durability === 'synced' ||
       parsed?.durability === 'sync-unsupported'
@@ -97,10 +103,11 @@ async function readPersistedDurability(dir) {
       return parsed.durability;
     }
   } catch {
-    // Missing or corrupt provenance (pre-sidecar generations, operator
-    // deletion, torn write) fails honest: durability is unknown, not
-    // 'synced'. This is advisory reporting only — reuse validation still
-    // runs through loadGeneration plus the identity comparison above.
+    // Missing, corrupt, or oversized provenance (pre-sidecar
+    // generations, operator deletion, torn write, swollen file) fails
+    // honest: durability is unknown, not 'synced'. This is advisory
+    // reporting only — reuse validation still runs through
+    // loadGeneration plus the identity comparison above.
   }
   return 'unknown';
 }

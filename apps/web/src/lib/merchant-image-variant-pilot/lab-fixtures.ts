@@ -45,6 +45,30 @@ export function pilotLabFillerImageUrl(origin: string, index: number): string {
   return new URL(path, origin).href;
 }
 
+export interface LabGridFiller {
+  imageHint: string;
+  name: string;
+  price: number;
+}
+
+// Grid sibling fillers: fixed commerce fields so the three sibling cards
+// are distinct products in both arms. Lives here (not the grid section)
+// so the fixture-product route derives the same finite slug set from the
+// same data — one source of truth for what the lab links to.
+export const LAB_GRID_FILLERS: readonly LabGridFiller[] = [
+  { imageHint: 'lab filler product two', name: 'Lab Filler Two', price: 1800 },
+  {
+    imageHint: 'lab filler product three',
+    name: 'Lab Filler Three',
+    price: 3200,
+  },
+  {
+    imageHint: 'lab filler product four',
+    name: 'Lab Filler Four',
+    price: 4100,
+  },
+];
+
 export const LAB_CARD_GEOMETRY = {
   height: 400,
   sizes:

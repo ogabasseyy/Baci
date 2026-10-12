@@ -218,8 +218,9 @@ tools/**/.work/
 /infra/cdn-transformer/.pilot-output/
 /apps/web/public/__pilot/*
 # ...except the frozen lab filler bytes (synthetic, hash-pinned in tests).
-# Contents (`*`), not the directory itself: git cannot re-include paths under
-# an excluded directory.
+# The parent itself stays unexcluded (only its children match `/*`), so
+# re-including the fillers directory keeps new files under it trackable
+# too: `*` never crosses `/`, so the contents were never excluded.
 !/apps/web/public/__pilot/fillers/
 
 # Generated Python bytecode (never commit; produced by local test runs).

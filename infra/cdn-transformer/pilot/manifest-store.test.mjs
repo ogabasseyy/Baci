@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
+import { MAX_DURABILITY_BYTES } from './constants.mjs';
 import {
   buildEncoderIdentity,
   generationIdFor,
@@ -163,6 +164,24 @@ test('commitGeneration reuses validated generations and never overwrites', async
   assert.equal(unknown.reused, true);
   assert.equal(unknown.durability, 'unknown');
 
+  // An oversized sidecar degrades to 'unknown' without allocating it:
+  // advisory reporting must not OOM the reuse path on a swollen file.
+  await writeFile(
+    join(first.root, 'generations', generationId, 'durability.json'),
+    `{"durability":"synced","pad":"${'x'.repeat(MAX_DURABILITY_BYTES)}"}`
+  );
+  const fourth = await realLadderStaging();
+  const swollen = await commitGeneration({
+    files: filesFor(fourth.ladder),
+    generationId,
+    job: boundJob,
+    manifest: manifestFor(fourth.ladder),
+    outputRoot: first.root,
+    stagingDir: fourth.stagingDir,
+  });
+  assert.equal(swollen.reused, true);
+  assert.equal(swollen.durability, 'unknown');
+
   // Tampered output invalidates the generation instead of serving bad bytes.
   const victim = manifestFor(first.ladder).tiers[0].path;
   const victimBytes = await readFile(
@@ -177,4 +196,3 @@ test('commitGeneration reuses validated generations and never overwrites', async
     /hash mismatch/
   );
 });
-

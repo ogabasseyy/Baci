@@ -1,4 +1,11 @@
-import { lstat, mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -84,4 +91,31 @@ describe('reconcileStagedTree', () => {
     await expect(lstat(link)).rejects.toThrow(/ENOENT/);
     await expect(lstat(target)).resolves.toBeDefined();
   });
+
+  // Root bypasses permission bits, so the unreadable-directory case is
+  // untestable there; every other runner exercises the real EACCES path.
+  it.skipIf(typeof process.geteuid === 'function' && process.geteuid() === 0)(
+    'fails closed when a managed directory cannot be listed',
+    async () => {
+      const pilotStage = await stageTree();
+      const originals = join(pilotStage, 'originals');
+      const stale = join(originals, 'stale.png');
+      await writeFile(stale, 'stale');
+      await chmod(originals, 0o000);
+      try {
+        // An unreadable originals dir aborts the stage: treating it as
+        // empty would report completion while stale bytes stay reachable.
+        await expect(
+          reconcileStagedTree({
+            generationIds: [GEN],
+            pilotStage,
+            stagedFiles: [],
+          })
+        ).rejects.toThrow(/EACCES/);
+      } finally {
+        await chmod(originals, 0o755);
+      }
+      await expect(lstat(stale)).resolves.toBeDefined();
+    }
+  );
 });

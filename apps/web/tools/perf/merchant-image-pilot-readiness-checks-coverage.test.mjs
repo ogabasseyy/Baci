@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   crossArmProblems,
-  slotMountProblems,
   surfaceProblems,
 } from './merchant-image-pilot-readiness-checks.mjs';
 import {
   goodSlot,
   mount,
 } from './merchant-image-pilot-readiness-checks-fixtures.mjs';
+import { slotMountProblems } from './merchant-image-pilot-readiness-mounts.mjs';
 
 describe('merchant-image-pilot-readiness coverage and cross-arm', () => {
   it('keeps route coverage but skips decode when mounts hide', () => {
     const hero = {
       binding: 'merchant/hero-s0',
+      generationId: 'abc',
       merchantId: 'merchant',
       slotId: 'mobile-hero-slide-0',
     };

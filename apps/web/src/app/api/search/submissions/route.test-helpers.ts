@@ -4,8 +4,9 @@ import { vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   merchant: vi.fn(),
   rpc: vi.fn(),
-  insert: vi.fn(),
-  from: vi.fn(),
+  cookieInsert: vi.fn(),
+  cookieFrom: vi.fn(),
+  recordSubmission: vi.fn(),
 }));
 // Hoisted bindings cannot be exported; alias for test assertions.
 export const submissionMocks = mocks;
@@ -14,15 +15,29 @@ vi.mock('@/lib/cached-data', () => ({
 }));
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({ rpc: mocks.rpc, from: mocks.from }),
+  createClient: () => ({ rpc: mocks.rpc, from: mocks.cookieFrom }),
+}));
+vi.mock('@/lib/search/server-analytics-client', () => ({
+  recordSearchSubmission: mocks.recordSubmission,
+  // Same class object the route's instanceof checks: mirror the real
+  // module's brand (message + name) without importing server-only code.
+  SearchSubmissionValidationError: class SearchSubmissionValidationError extends Error {
+    constructor() {
+      super('Invalid search submission row');
+      this.name = 'SearchSubmissionValidationError';
+    }
+  },
 }));
 vi.mock('@/lib/logger', () => ({
-  logger: { warn: vi.fn() },
+  logger: { warn: vi.fn(), error: vi.fn() },
 }));
 
 // Import the handler AFTER mocks so the route binds the mocked modules.
 export const { POST } = await import('./route');
 export const { logger } = await import('@/lib/logger');
+export const { SearchSubmissionValidationError } = await import(
+  '@/lib/search/server-analytics-client'
+);
 
 export const merchantId = '123e4567-e89b-12d3-a456-426614174000';
 
@@ -49,6 +64,7 @@ export function setupSubmissionMocks() {
     data: [{ product_id: 'phone-1', total_count: 27 }],
     error: null,
   });
-  mocks.insert.mockResolvedValue({ error: null });
-  mocks.from.mockReturnValue({ insert: mocks.insert });
+  mocks.cookieInsert.mockResolvedValue({ error: null });
+  mocks.cookieFrom.mockReturnValue({ insert: mocks.cookieInsert });
+  mocks.recordSubmission.mockResolvedValue({ error: null });
 }

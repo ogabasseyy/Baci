@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { primaryCardCustodyFixture as fixture } from './primary-wallet-card-custody.test-fixture';
 import { primaryCardCustodyInboxFixture as inbox } from './primary-wallet-card-custody-inbox.test-fixture';
 
@@ -17,7 +17,12 @@ const policy = {
   exhaustiveAliasContractApproved: true,
 };
 const policyBytes = JSON.stringify(policy);
-const policyIssuerKey = 'mock-approved-transfer-policy-key-00000';
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
+const policyIssuerKey = createHash('sha256')
+  .update('mock-approved-transfer-policy-key')
+  .digest('hex');
 const {
   custody: _custody,
   webhookSecret: _webhookSecret,

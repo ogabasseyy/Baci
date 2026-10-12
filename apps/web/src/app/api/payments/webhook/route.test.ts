@@ -7132,7 +7132,10 @@ describe('POST /api/payments/webhook', () => {
     expect(await response.json()).toEqual({ message: 'Event ignored' });
   });
 
-  prefundedCardWebhookCases(POST);
+  // Suite's shared synthetic Paystack secret (test-only stub, also returned by
+  // the @/env mock above): passed explicitly so the signing key provably
+  // matches the value the route verifies against.
+  prefundedCardWebhookCases(POST, 'test-paystack-secret');
 
   describe('primary card checkout webhook reconcile', () => {
     const primaryBody = {

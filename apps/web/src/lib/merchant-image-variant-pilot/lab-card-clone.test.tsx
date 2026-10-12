@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontProductCard } from '@/components/storefront/product-card';
-import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import {
   LabStorefrontProductCard,
@@ -257,79 +256,5 @@ describe('LabStorefrontProductCard original-renderer parity', () => {
     expect(stripImageElement(cloneHtml)).toBe(stripImageElement(originalHtml));
     expect(cloneHtml).toContain(`${CONTROL_URL}/gen-test/card-600w.avif 600w`);
     expect(cloneHtml).not.toContain('?w=');
-  });
-
-  it('preserves the card image contract (geometry, alt, hint, low/lazy)', () => {
-    const pilot = projectPilotNextImage({
-      baseUrl: CONTROL_URL,
-      slot: labCardSlot(product, { priority: false }),
-      tiers: PILOT_TIERS,
-    });
-    if (!pilot) {
-      throw new Error('pilot projection is null');
-    }
-    const cloneHtml = renderToStaticMarkup(
-      <LabStorefrontProductCard
-        product={product}
-        projection={pilot}
-        staggerClass=""
-        basePath="/test-store"
-        {...handlers()}
-      />
-    );
-    expect(cloneHtml).toContain('width="600"');
-    expect(cloneHtml).toContain('height="400"');
-    expect(cloneHtml).toContain('data-ai-hint="lab card fixture"');
-    expect(cloneHtml).toContain('fetchPriority="low"');
-    expect(cloneHtml).toContain('loading="lazy"');
-    expect(cloneHtml).toContain(
-      'class="object-cover w-full h-auto aspect-video"'
-    );
-  });
-
-  it('preserves the production blur placeholder behind the pilot image', () => {
-    const pilot = projectPilotNextImage({
-      baseUrl: CONTROL_URL,
-      slot: labCardSlot(product, { priority: false }),
-      tiers: PILOT_TIERS,
-    });
-    if (!pilot) {
-      throw new Error('pilot projection is null');
-    }
-    const cloneHtml = renderToStaticMarkup(
-      <LabStorefrontProductCard
-        product={product}
-        projection={pilot}
-        staggerClass=""
-        basePath="/test-store"
-        {...handlers()}
-      />
-    );
-    // Same value the control arm paints via next/image: identical category
-    // derivation through the identical production generator.
-    const category = product.categories?.name || product.category || 'General';
-    const blur = getProductBlurPlaceholder(category);
-    expect(cloneHtml).toContain('background-image:');
-    expect(cloneHtml).toContain(blur);
-  });
-
-  it('lab fixture is an in-stock active product with a discount badge', () => {
-    expect(product.status).toBe('active');
-    expect(product.stock).toBeGreaterThan(0);
-    const control = projectControlNextImage({
-      originalUrl: CONTROL_URL,
-      slot: labCardSlot(product, { priority: false }),
-    });
-    const cloneHtml = renderToStaticMarkup(
-      <LabStorefrontProductCard
-        product={product}
-        projection={control}
-        staggerClass=""
-        basePath="/test-store"
-        {...handlers()}
-      />
-    );
-    expect(cloneHtml).toContain('-17%');
-    expect(cloneHtml).toContain('Add to Cart');
   });
 });

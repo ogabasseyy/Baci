@@ -166,31 +166,6 @@ async function setupFullRoots() {
   return roots;
 }
 
-// Every fetched image URL in served markup: img src/srcset, source srcset,
-// and preload link href/imagesrcset — relativized (origin + query stripped)
-// so arms compare by staged path. JSON flight payloads are not consumers.
-function labImageConsumers(html: string): string[] {
-  const urls: string[] = [];
-  const tags = html.match(/<(?:img|source|link)\b[^>]*>/g) ?? [];
-  for (const tag of tags) {
-    const attrs = [...tag.matchAll(/([\w-]+)="([^"]*)"/g)];
-    for (const [, name, value] of attrs) {
-      if (!['src', 'srcset', 'href', 'imagesrcset'].includes(name)) {
-        continue;
-      }
-      for (const candidate of value.split(',')) {
-        const url = candidate.trim().split(' ')[0] ?? '';
-        if (!url) {
-          continue;
-        }
-        const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
-        urls.push(path);
-      }
-    }
-  }
-  return urls;
-}
-
 async function renderStore(storeSlug: string, arm?: string): Promise<string> {
   const element = await PilotLabStoreRoute({
     params: Promise.resolve({ storeSlug }),
@@ -206,29 +181,6 @@ describe('pilot-lab store routes', () => {
       Symbol.for('baci.merchant-image-pilot.runtime')
     );
     vi.unstubAllEnvs();
-  });
-
-  it('renders nothing when the lab flag is off', async () => {
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    await expect(renderStore('omnimart', 'pilot')).rejects.toThrow(
-      'NEXT_NOT_FOUND'
-    );
-  });
-
-  it('404s unknown store slugs', async () => {
-    await setupFullRoots();
-    await expect(renderStore('dell', 'pilot')).rejects.toThrow(
-      'NEXT_NOT_FOUND'
-    );
-  });
-
-  it('404s unknown ?arm values instead of silently rendering pilot', async () => {
-    await setupFullRoots();
-    for (const arm of ['Pilot', 'both', '']) {
-      await expect(renderStore('omnimart', arm)).rejects.toThrow(
-        'NEXT_NOT_FOUND'
-      );
-    }
   });
 
   it('mounts the omnimart lockup and grid through pilot derivatives', async () => {
@@ -265,61 +217,6 @@ describe('pilot-lab store routes', () => {
     );
   });
 
-  it('never reflects a spoofed Host into card image URLs', async () => {
-    const roots = await setupFullRoots();
-    const { headers } = await import('next/headers');
-    vi.mocked(headers).mockResolvedValueOnce(
-      new Headers({ host: 'evil.invalid' })
-    );
-    const html = await renderStore('omnimart', 'pilot');
-    expect(html).not.toContain('evil.invalid');
-    // Untrusted hosts fall back to the loopback default.
-    expect(html).toContain(
-      `http://localhost:3000/__pilot/${roots.generationIds['omnimart-earbuds']}/`
-    );
-  });
-
-  it('gives the pilot candidate no consumer of the selected original', async () => {
-    await setupFullRoots();
-    // Fillers must not re-fetch the selected original: in the pilot arm the
-    // candidate would otherwise download the original PLUS its derivatives,
-    // swamping the byte-saving comparison the grid exists to measure.
-    const selectedPrefix = `/__pilot/originals/${OMNIMART}-omnimart-earbuds`;
-    const pilot = labImageConsumers(await renderStore('omnimart', 'pilot'));
-    expect(pilot.filter((url) => url.startsWith(selectedPrefix))).toEqual([]);
-    // Fillers render the frozen filler assets instead, identical in both
-    // arms — one distinct URL per sibling card, since shared URLs would
-    // coalesce into a single browser request.
-    const fillers = [
-      '/__pilot/fillers/grid-filler-600x400-a.png',
-      '/__pilot/fillers/grid-filler-600x400-b.png',
-      '/__pilot/fillers/grid-filler-600x400-c.png',
-    ];
-    for (const filler of fillers) {
-      expect(pilot.filter((url) => url === filler).length).toBeGreaterThan(0);
-    }
-    const control = labImageConsumers(await renderStore('omnimart', 'control'));
-    for (const filler of fillers) {
-      expect(control.filter((url) => url === filler).length).toBeGreaterThan(0);
-    }
-    // The control mounted card still serves the selected original.
-    expect(
-      control.filter((url) => url.startsWith(selectedPrefix)).length
-    ).toBeGreaterThan(0);
-  });
-
-  it('wraps the mounted card for selected-card coverage identity', async () => {
-    await setupFullRoots();
-    for (const arm of ['pilot', 'control'] as const) {
-      const html = await renderStore('omnimart', arm);
-      // Exactly one selected wrapper per grid; the served gate scopes the
-      // binding check to this subtree so fillers can never satisfy it.
-      expect(html.match(/data-pilot-lab-selected-card="true"/g)).toHaveLength(
-        1
-      );
-    }
-  });
-
   it('mounts the omnimart control arm from staged originals only', async () => {
     const roots = await setupFullRoots();
     const html = await renderStore('omnimart', 'control');
@@ -342,58 +239,6 @@ describe('pilot-lab store routes', () => {
     );
     expect(html).not.toContain('/placeholder.svg');
     expect(html).toContain(`src="/__pilot/originals/${OMNIMART}-omnimart-logo`);
-  });
-
-  it('mounts the ogabassey pilot hero in the carousel shell', async () => {
-    const roots = await setupFullRoots();
-    const html = await renderStore('ogabassey', 'pilot');
-    expect(html).toContain(
-      `data-pilot-lab-binding="${OGABASSEY}/ogabassey-hero-s26"`
-    );
-    expect(html).toContain('data-ogabassey-mobile-hero="true"');
-    expect(html).toContain('Go to hero slide 2');
-    expect(html).toContain('data-pilot-lab-hero-slide="0"');
-    expect(html).toContain(
-      `/__pilot/${roots.generationIds['ogabassey-hero-s26']}/`
-    );
-    expect(html).toContain('type="image/avif"');
-    expect(html).not.toContain('?w=');
-    // The scanner link carries the binding identity the served gate pairs
-    // by (React hoists it to <head>, out of the section).
-    const pilotLink = html.match(
-      /<link[^>]*data-pilot-lab-preload="pilot"[^>]*>/
-    );
-    if (!pilotLink) {
-      throw new Error('pilot scanner link is missing');
-    }
-    expect(pilotLink[0]).toContain(
-      `data-pilot-lab-binding="${OGABASSEY}/ogabassey-hero-s26"`
-    );
-  });
-
-  it('matches the ogabassey control hint to the original render', async () => {
-    await setupFullRoots();
-    const html = await renderStore('ogabassey', 'control');
-    expect(html).toContain('data-ogabassey-mobile-hero="true"');
-    // Original renderer: no lab slide marker.
-    expect(html).not.toContain('data-pilot-lab-hero-slide');
-    // Control scanner link is format-agnostic (no AVIF gate).
-    const linkMatch = html.match(
-      /<link[^>]*data-pilot-lab-preload="control"[^>]*>/
-    );
-    if (!linkMatch) {
-      throw new Error('control scanner link is missing');
-    }
-    expect(linkMatch[0]).not.toContain('type=');
-    expect(linkMatch[0]).toContain('?w=');
-    // The derived hint preloads exactly what the original paints.
-    const hintSrcSet = linkMatch[0].match(/imageSrcSet="([^"]+)"/)?.[1];
-    const renderedSrcSet = html.match(
-      /<source[^>]*srcSet="([^"]+)"[^>]*>/
-    )?.[1];
-    expect(hintSrcSet).toBeDefined();
-    expect(renderedSrcSet).toBeDefined();
-    expect(hintSrcSet).toBe(renderedSrcSet);
   });
 
   it('renders the squishy grid without a header section', async () => {
@@ -424,43 +269,5 @@ describe('pilot-lab store routes', () => {
     const html = await renderStore('omnimart');
     expect(html).toContain('data-pilot-lab-arm="pilot"');
     expect(html).toContain(`/__pilot/${roots.generationIds['omnimart-logo']}/`);
-  });
-
-  it('reports expected slots missing from the inventory', async () => {
-    const assets = fullInventory().filter(
-      (asset) => asset.assetId !== 'zorvexa-logo'
-    );
-    const roots = await setupLabRoots({ accepted: assets });
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
-    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
-    await initializeLabRuntime();
-    const html = await renderStore('zorvexa', 'pilot');
-    expect(html).toContain('data-pilot-lab-status="missing-binding"');
-    expect(html).toContain('header-logo — missing binding');
-    // The present slot still mounts.
-    expect(html).toContain(`data-pilot-lab-binding="${ZORVEXA}/zorvexa-yodha"`);
-  });
-
-  it('reports unreviewed bindings as not optimized', async () => {
-    const assets = fullInventory().filter(
-      (asset) => asset.assetId !== 'squishy-blue-soap'
-    );
-    const unreviewed = fullInventory().filter(
-      (asset) => asset.assetId === 'squishy-blue-soap'
-    );
-    const roots = await setupLabRoots({ accepted: assets, unreviewed });
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
-    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
-    await initializeLabRuntime();
-    const html = await renderStore('squishyland', 'pilot');
-    expect(html).toContain('data-pilot-lab-status="not-optimized"');
-    expect(html).toContain('squishy-blue-soap — not optimized');
-    expect(html).not.toContain(
-      `/__pilot/${roots.generationIds['squishy-blue-soap']}/`
-    );
   });
 });

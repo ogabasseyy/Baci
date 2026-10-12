@@ -97,6 +97,16 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
     const expected = FILLERS[file];
     const path = join(fillersDir, file);
     const stat = lstatSync(path);
+    // Fillers are hash-pinned at boot, but a hardlink lets an outside
+    // writer mutate the served bytes after the check: same nlink>1
+    // multi-link rejection as the generation/original guard above.
+    if (stat.nlink > 1) {
+      throw new Error(
+        labEnabled
+          ? 'lab public pilot tree contains a hardlinked filler'
+          : 'non-lab public pilot tree contains a hardlinked filler'
+      );
+    }
     if (
       !expected ||
       !stat.isFile() ||

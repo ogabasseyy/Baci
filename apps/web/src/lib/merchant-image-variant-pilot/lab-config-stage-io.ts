@@ -44,27 +44,55 @@ export function originalFileName(
   return `${binding.merchantId}-${binding.assetId}${extension}`;
 }
 
-// Creates a staging directory confined under the public dir: recursive
-// mkdir follows symlinks, so a planted __pilot symlink would otherwise
-// redirect every staged write outside the lab tree. Returns the
-// canonical directory for the per-file confinement below.
+// Creates a staging directory confined under the public dir, lstat-validating
+// each level (never following links) so a planted symlink rejects with no
+// out-of-tree changes. Returns the canonical dir for per-file confinement.
 export async function ensureStageDir(
   publicDir: string,
   ...segments: string[]
 ): Promise<string> {
-  // Create first, confine after: the public dir itself may not exist
-  // yet on a fresh stage, and recursive mkdir builds the chain.
-  await mkdir(join(publicDir, ...segments), { recursive: true }).catch(() => {
-    throw new Error(
-      'merchant image pilot: staged public dir is not accessible'
-    );
+  const escapes = () =>
+    new Error('merchant image pilot: staging directory escapes the public dir');
+  const inaccessible = () =>
+    new Error('merchant image pilot: staged public dir is not accessible');
+  for (const segment of segments) {
+    if (
+      segment === '' ||
+      segment === '.' ||
+      segment === '..' ||
+      segment.includes('/') ||
+      segment.includes(sep)
+    ) {
+      throw escapes();
+    }
+  }
+  // Anchor first: traverses only at-or-above the public dir.
+  await mkdir(publicDir, { recursive: true }).catch(() => {
+    throw inaccessible();
   });
+  const levels = [publicDir];
+  for (const segment of segments) {
+    levels.push(join(levels[levels.length - 1] as string, segment));
+  }
+  for (const level of levels) {
+    const existing = await lstat(level).catch(() => null);
+    if (!existing) {
+      await mkdir(level).catch(() => {
+        throw inaccessible();
+      });
+    }
+    const stat = existing ?? (await lstat(level).catch(() => null));
+    if (!stat || stat.isSymbolicLink()) {
+      throw escapes();
+    }
+    if (!stat.isDirectory()) {
+      throw inaccessible();
+    }
+  }
   const realPublic = await realpath(publicDir);
   const real = await realpath(join(publicDir, ...segments));
   if (real !== realPublic && !real.startsWith(realPublic + sep)) {
-    throw new Error(
-      'merchant image pilot: staging directory escapes the public dir'
-    );
+    throw escapes();
   }
   return real;
 }

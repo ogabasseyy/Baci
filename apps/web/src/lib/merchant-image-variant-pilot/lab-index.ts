@@ -147,6 +147,23 @@ export async function buildLabIndex(input: {
     );
   });
 
+  // Orphan acceptances: a review record for a binding the inventory no
+  // longer carries means the sample changed without re-review — deleting
+  // the inventory row must not silently narrow the staged sample. Mirrors
+  // the offline preflight acceptance-orphans rejection; the config loader
+  // fails the load on any diagnostic.
+  const bindingKeys = new Set(
+    input.bindings.map((binding) => `${binding.merchantId}/${binding.assetId}`)
+  );
+  const orphans = [...acceptanceByAsset.keys()]
+    .filter((key) => !bindingKeys.has(key))
+    .sort();
+  if (orphans.length > 0) {
+    diagnostics.push(
+      `acceptances without inventory records: ${orphans.join(', ')}`
+    );
+  }
+
   for (const binding of input.bindings) {
     const key = `${binding.merchantId}/${binding.assetId}`;
     if (conflictingKeys.has(key)) {

@@ -14,6 +14,7 @@ on:
       - 'apps/web/src/lib/merchant-image-variant-pilot/**'
       - 'apps/web/src/app/pilot-lab/**'
       - 'infra/cdn-transformer/pilot/**'
+      - '.github/fixtures/pilot-codec/**'
       - '.github/workflows/pilot-codec-compatibility.yml'
 
 permissions:
@@ -109,11 +110,13 @@ jobs:
     # Fail closed: always() keeps this gate evaluating even when change
     # detection itself errors, so a non-success detection result runs the
     # suite instead of comparing an empty output to 'true' and skipping.
+    # The label check reads the PR's COMPLETE label set like the native
+    # job above: gating on the added label alone would let an unrelated
+    # label skip the suite while the opt-in label is still present.
     if: >-
       always() &&
       (github.event_name == 'workflow_dispatch' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')) ||
+      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
       needs.changes.outputs.transformer == 'true' ||
       needs.changes.result != 'success')
     runs-on: ubuntu-latest

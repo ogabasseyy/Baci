@@ -241,19 +241,43 @@ export async function assertInventoryLockHeld(lockDir, token) {
   }
 }
 
-export async function releaseInventoryLock(lockDir, token) {
-  const owner = await readOwnerText(lockDir);
-  if (owner === null) {
-    return;
-  }
-  let parsed;
+export async function releaseInventoryLock(lockDir, token, hooks = {}) {
+  // Atomic release, mirroring the encoder lock: move the pathname aside,
+  // then verify the MOVED directory is our claim before deleting.
+  // Read-then-rm would delete a successor's lock published between the
+  // read and the removal. A foreign moved-aside lock is restored; when
+  // a successor already claimed the path the restore fails closed and
+  // the moved directory stays aside (never deleted), so the live
+  // occupant is intact and the displaced holder fails loudly on its
+  // next ownership check.
+  const releasing = `${lockDir}.releasing.${process.pid}.${randomUUID()}`;
   try {
-    parsed = JSON.parse(owner);
-  } catch {
+    await rename(lockDir, releasing);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
     return;
   }
-  if (parsed.token !== token) {
+  await hooks.afterReleaseRename?.();
+  const owner = await readOwnerText(releasing);
+  let parsed = null;
+  if (owner !== null) {
+    try {
+      parsed = JSON.parse(owner);
+    } catch {
+      parsed = null;
+    }
+  }
+  if (parsed?.token !== token) {
+    try {
+      await rename(releasing, lockDir);
+    } catch {
+      // A successor claimed the live path in the rename-restore window:
+      // leave the moved directory aside rather than deleting a foreign
+      // lock. Same residual shape as the steal path above.
+    }
     return;
   }
-  await rm(lockDir, { force: true, recursive: true });
+  await rm(releasing, { force: true, recursive: true });
 }

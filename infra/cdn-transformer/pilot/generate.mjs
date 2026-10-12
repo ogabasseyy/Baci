@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile, lstat, realpath } from 'node:fs/promises';
+import { readFile, mkdir, lstat, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -11,6 +11,7 @@ import {
 } from './constants.mjs';
 import { createRunToken } from './claims.mjs';
 import { parseCliArgs } from './cli-args.mjs';
+import { writeConfinedFile } from './disk-guards.mjs';
 import { acquireEncoderLock } from './encoder-lock.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { PilotGenerateError, runJob } from './generate-job.mjs';
@@ -41,12 +42,10 @@ async function findPnpmPin() {
 
 // A confined output child is a real directory whose canonical path is
 // exactly the joined path: any symlink in the chain (or a non-directory
-// squat) resolves elsewhere and refuses. Checked at setup AND
-// immediately before the report write — a run-long window sits between
-// them, and a mid-run swap would otherwise redirect the final write
-// outside the output root. Residual TOCTOU between the recheck and the
-// write is inherent to pathname writes; the window is microseconds, not
-// the whole generation.
+// squat) resolves elsewhere and refuses. Checked at setup; the report
+// publish binds the reports directory through a held descriptor instead
+// of re-checking the pathname, so a mid-run swap refuses at publication
+// rather than redirecting bytes outside the output root.
 export async function assertConfinedChild(outputRoot, child) {
   const path = join(outputRoot, child);
   const info = await lstat(path);
@@ -63,6 +62,7 @@ export async function assertConfinedChild(outputRoot, child) {
 }
 
 export async function runPilotGeneration({
+  hooks = {},
   inputRoot,
   inventoryPath,
   locksDir,
@@ -130,11 +130,17 @@ export async function runPilotGeneration({
     },
   };
   const reportName = `${report.createdAt.replace(/[:.]/g, '-')}-${createRunToken()}.json`;
-  // Re-confine immediately before publication: the setup check ran a
-  // whole generation ago, and a swapped-in symlink would otherwise
-  // redirect this write outside the output root.
-  await assertConfinedChild(outputRoot, 'reports');
-  await writeFile(join(outputRoot, 'reports', reportName), `${JSON.stringify(report, null, 2)}\n`);
+  // Confined publication through a held descriptor: the setup check
+  // ran a whole generation ago, and a pathname write would let a
+  // swapped-in symlink redirect the bytes outside the output root. The
+  // hook lets tests win that race deterministically — the write still
+  // refuses, because the binding happens inside the write itself.
+  await hooks.beforeReportWrite?.();
+  await writeConfinedFile(
+    join(outputRoot, 'reports'),
+    reportName,
+    `${JSON.stringify(report, null, 2)}\n`
+  );
   return { failed, ok, reused, total: results.length };
 }
 

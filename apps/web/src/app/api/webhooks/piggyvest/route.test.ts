@@ -27,8 +27,9 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 
 import { GET, POST } from './route';
 
-// Deterministic key derived from a stable label: reproducible across runs
-// (no random test data) with no committed secret material.
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
 const SECRET = createHash('sha256')
   .update('synthetic-staging-secret')
   .digest('hex');

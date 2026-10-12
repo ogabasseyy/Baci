@@ -25,8 +25,9 @@ const bytes = Buffer.from(
     ],
   })
 );
-// Deterministic key derived from a stable label: reproducible across runs
-// (no random test data) with no committed secret material.
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
 const issuerKey = createHash('sha256')
   .update('mock-reviewed-internal-issuer')
   .digest('hex');

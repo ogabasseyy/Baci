@@ -10,8 +10,9 @@ vi.mock('./primary-wallet-inflow-receipt', () => ({
     return { eventId: 'test-event', providerWalletId: 'test-wallet' };
   }),
 }));
-// Deterministic key derived from a stable label: reproducible across runs
-// (no random test data) with no committed secret material.
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
 const secret = createHash('sha256')
   .update('test-only-webhook-secret')
   .digest('hex');

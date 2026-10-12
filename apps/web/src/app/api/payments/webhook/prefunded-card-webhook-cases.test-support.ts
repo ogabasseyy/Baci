@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import { createServiceClient } from '@/lib/supabase/service';
 
+// Shared first-card cases. paystackSecret must equal the importing suite's
+// stubbed PAYSTACK_SECRET_KEY so signatures verify.
 export function prefundedCardWebhookCases(
   post: (request: NextRequest) => Promise<Response>,
   paystackSecret: string

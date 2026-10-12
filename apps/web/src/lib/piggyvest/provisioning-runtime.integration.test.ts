@@ -78,6 +78,8 @@ describe.skipIf(process.env.PIGGYVEST_RUN_LOCAL_POSTGRES !== '1')(
         port: database.port,
         database: database.database,
         user: 'harness_admin',
+        // Suppression mirrored here in case the Pro rule reports this line.
+        // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
         password: database.password,
         ssl: false,
         options: '-c search_path=pg_catalog -c statement_timeout=2500',

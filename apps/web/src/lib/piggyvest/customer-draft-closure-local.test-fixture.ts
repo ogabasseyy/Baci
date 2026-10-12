@@ -26,14 +26,18 @@ function database() {
 }
 async function admin() {
   const config = database();
-  // Local-test Postgres harness: empty password over an owned local socket
-  // (socket path allow-listed above); no credential material involved.
+  // Local-test Postgres harness over an owned local socket (path allow-listed
+  // above). This client authenticates with an empty password; the
+  // 'synthetic-local-only' config value is the harness-wide synthetic
+  // placeholder, never a real credential.
   // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
   const client = new Client({
     host: config.socketDirectory,
     port: config.port,
     database: config.database,
     user: 'harness_admin',
+    // Suppression mirrored here in case the Pro rule reports this line.
+    // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
     password: '',
     ssl: false,
   });

@@ -178,13 +178,13 @@ class CapabilityContextTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         if ancestor.returncode != 0:
-            self.skipTest(f"binding unverifiable: source_revision {data['source_revision']} is not an ancestor of HEAD (history rewritten or revision superseded); re-review required")
+            self.fail(f"source_revision {data['source_revision']} is not an ancestor of HEAD (history rewritten or revision superseded); re-review and rebind the register")
         proc = subprocess.run(
             ["git", "-C", str(repo), "diff", "--name-only", f"{data['source_revision']}..HEAD"],
             capture_output=True, text=True,
         )
         if proc.returncode != 0:
-            self.skipTest(f"binding unverifiable: source_revision {data['source_revision']} cannot be resolved in this checkout; re-review required")
+            self.fail(f"source_revision {data['source_revision']} cannot be resolved in this checkout; re-review and rebind the register: {proc.stderr.strip()}")
         changed = set(proc.stdout.split())
         drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
         self.assertEqual(drift, [], f"cited paths changed since source_revision: {drift}")

@@ -42,6 +42,163 @@ test('fails closed when the repo cannot be resolved from origin', () => {
   assert.equal(ghArgs, '');
 });
 
+test('resolves credential-bearing remotes without leaking the credential', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://operator:s3krit-value@github.com/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+  assert.ok(!result.stderr.includes('s3krit-value'));
+  assert.ok(!result.stdout.includes('s3krit-value'));
+});
+
+test('resolves mixed-case github.com hosts like the coordinator', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://GitHub.com/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('resolves mixed-case schemes and hosts like the coordinator', () => {
+  for (const remote of [
+    'git@GitHub.com:example-owner/example-repo.git',
+    'ssh://git@GitHub.com/example-owner/example-repo.git',
+    'SSH://git@GitHub.com/example-owner/example-repo.git',
+    'HTTPS://GitHub.com/example-owner/example-repo.git',
+  ]) {
+    const { result, ghArgs } = runCheck({
+      ghBody: RECORD_ARGS,
+      gitBody: `if [ "$1 $2 $3" = "remote get-url origin" ]; then echo '${remote}'; else exit 1; fi`,
+    });
+
+    assert.equal(result.status, 0, `${remote}: ${result.stderr}`);
+    assert.match(
+      ghArgs,
+      /repos\/example-owner\/example-repo\/actions\/workflows/
+    );
+  }
+});
+
+test('resolves the default HTTPS port like the coordinator', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com:443/example-owner/example-repo.git\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('refuses plaintext and non-default-port remotes like the coordinator', () => {
+  for (const remote of [
+    'http://github.com/example-owner/example-repo.git',
+    'https://github.com:8443/example-owner/example-repo.git',
+  ]) {
+    const { result, ghArgs } = runCheck({
+      ghBody: RECORD_ARGS,
+      gitBody: `if [ "$1 $2 $3" = "remote get-url origin" ]; then echo '${remote}'; else exit 1; fi`,
+    });
+
+    assert.equal(result.status, 1, remote);
+    assert.equal(ghArgs, '', remote);
+  }
+});
+
+test('refused remotes never leak credentials from any scheme', () => {
+  for (const [remote, secret] of [
+    [
+      'http://operator:s3krit-http@github.com/example-owner/example-repo.git',
+      's3krit-http',
+    ],
+    [
+      'http://s3krit-bare@github.com/example-owner/example-repo.git',
+      's3krit-bare',
+    ],
+    [
+      'ssh://operator:s3krit-ssh@github.com/example-owner/example-repo.git',
+      's3krit-ssh',
+    ],
+    [
+      'https://operator:s3krit-port@github.com:8443/example-owner/example-repo.git',
+      's3krit-port',
+    ],
+  ]) {
+    const { result } = runCheck({
+      ghBody: RECORD_ARGS,
+      gitBody: `if [ "$1 $2 $3" = "remote get-url origin" ]; then echo '${remote}'; else exit 1; fi`,
+    });
+
+    assert.equal(result.status, 1, remote);
+    assert.ok(!result.stderr.includes(secret), `${remote} leaked into stderr`);
+    assert.ok(!result.stdout.includes(secret), `${remote} leaked into stdout`);
+  }
+});
+
+test('resolves trailing-slash remotes', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo///\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
+});
+
+test('refuses fragment-embedded remotes that forge a github.com host', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example#@github.com/example-owner/example-repo\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must not contain a fragment/);
+  assert.equal(ghArgs, '');
+});
+
+test('refuses query-bearing remotes that forge a github.com host', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example?x=@github.com/example-owner/example-repo\'; else exit 1; fi',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must not contain a fragment or query/);
+  assert.equal(ghArgs, '');
+});
+
+test('no-path credential remotes never leak the secret into errors', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody:
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://ghp_LEAKPROBE@github.com\'; else exit 1; fi',
+  });
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.stderr, /ghp_LEAKPROBE/);
+  assert.equal(ghArgs, '');
+});
 test('honors the explicit repo override for exotic remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,

@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { type Href, Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type PagerView from 'react-native-pager-view';
 import { useEvent, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,6 +50,30 @@ const INDEX_TO_UTILITY_TYPE: readonly ValidUtilityType[] = [
   'power',
   'gaming',
 ];
+
+// Module scope (no useCallback — the React Compiler owns memoization).
+// Deliberately omits userId: explicit exact:false prefix matching, so
+// this {merchantId, ownerId} prefix clears stored keys both with and
+// without the optional userId segment (sessions with a customer row but
+// no auth user store the shorter key). Passing userId here would miss
+// those sessions and leave stale balances cached.
+function invalidateWalletBalanceQueries({
+  merchantId,
+  ownerId,
+  queryClient,
+}: {
+  merchantId: string;
+  ownerId: string | null;
+  queryClient: QueryClient;
+}): void {
+  if (!ownerId) {
+    return;
+  }
+  void queryClient.invalidateQueries({
+    queryKey: walletKeys.data({ merchantId, ownerId }),
+    exact: false,
+  });
+}
 
 export default function UtilityPurchaseScreen() {
   const rawParams =
@@ -151,24 +175,6 @@ export default function UtilityPurchaseScreen() {
     }
   }, [routeType]);
 
-  // Deliberately omit userId: explicit exact:false prefix matching, so
-  // this {merchantId, ownerId} prefix clears stored keys both with and
-  // without the optional userId segment (sessions with a customer row but
-  // no auth user store the shorter key). Passing userId here would miss
-  // those sessions and leave stale balances cached.
-  const invalidateWalletBalance = useCallback(() => {
-    if (!walletOwnerId) {
-      return;
-    }
-    void queryClient.invalidateQueries({
-      queryKey: walletKeys.data({
-        merchantId: activeMerchantId,
-        ownerId: walletOwnerId,
-      }),
-      exact: false,
-    });
-  }, [activeMerchantId, queryClient, walletOwnerId]);
-
   useEffect(() => {
     // Every wallet purchase debits the wallet, with or without cashback,
     // so invalidate on any success/processing reference — otherwise the
@@ -177,8 +183,18 @@ export default function UtilityPurchaseScreen() {
     if (!currentType || !successReference) {
       return;
     }
-    invalidateWalletBalance();
-  }, [currentType, invalidateWalletBalance, successReference]);
+    invalidateWalletBalanceQueries({
+      merchantId: activeMerchantId,
+      ownerId: walletOwnerId,
+      queryClient,
+    });
+  }, [
+    activeMerchantId,
+    currentType,
+    queryClient,
+    successReference,
+    walletOwnerId,
+  ]);
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -223,7 +239,13 @@ export default function UtilityPurchaseScreen() {
           data={resolvedSuccessData}
           headerOffset={headerOffset}
           isAuthenticated={isAuthenticated}
-          onBackfillSettled={invalidateWalletBalance}
+          onBackfillSettled={() =>
+            invalidateWalletBalanceQueries({
+              merchantId: activeMerchantId,
+              ownerId: walletOwnerId,
+              queryClient,
+            })
+          }
           onCreateAccount={() => router.push('/auth/login')}
           type={currentType}
         />

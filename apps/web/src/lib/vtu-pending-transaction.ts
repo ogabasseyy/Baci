@@ -529,13 +529,18 @@ export async function preparePendingVtuTransaction({
   // Alias-aware: VTU purchase flows POST the merchant slug in the body (the proxy
   // can't rewrite bodies), so a stale tab on a just-renamed store resolves via the
   // alias table instead of a spurious "Merchant not found". A live slug wins.
+  // Strict: an alias-DB failure throws (500, key kept) instead of a
+  // spurious "Merchant not found" terminal.
   const { data: merchant, error: merchantError } =
-    await withMerchantSlugAliasFallback(input.merchantSlug, (s) =>
-      supabase
-        .from('merchants')
-        .select('id, slug, business_name, paystack_subaccount_code')
-        .eq('slug', s)
-        .maybeSingle()
+    await withMerchantSlugAliasFallback(
+      input.merchantSlug,
+      (s) =>
+        supabase
+          .from('merchants')
+          .select('id, slug, business_name, paystack_subaccount_code')
+          .eq('slug', s)
+          .maybeSingle(),
+      { strict: true }
     );
 
   // Strict: a transient lookup error must 500 (key kept), never

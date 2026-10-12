@@ -3,6 +3,7 @@
 import { Check, Clock, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import {
+  isTokenBackfillTab,
   isUtilityBackfillTab,
   useUtilityVoucherBackfill,
 } from './use-utility-voucher-backfill';
@@ -31,9 +32,13 @@ export function UtilitySuccessView({
   // A 202 processing view polls history for the late voucher / terminal
   // outcome: without this the customer has no web path to a token the
   // reconciler persists after this screen renders (a replay would be
-  // suppressed by the stale guard, and push/email can fail).
+  // suppressed by the stale guard, and push/email can fail). A
+  // successful pin-less view on a token tab polls too: an electricity
+  // vend can succeed before its token exists, and the server schedules
+  // the token backfill after this screen renders.
   const backfill = useUtilityVoucherBackfill({
-    enabled: processing && !voucherPin,
+    enabled:
+      (processing || isTokenBackfillTab(activeTab)) && !voucherPin,
     merchantSlug,
     reference,
     utilityTab: activeTab,
@@ -59,11 +64,12 @@ export function UtilitySuccessView({
   // Tell the purchase owner the shown 202 settled, exactly once, so it
   // forgets the retained key (buy-again mints fresh instead of
   // replaying this vend as a new success) and refetches the wallet.
-  // Immediate outcomes already finalized inline — only backfilled
-  // terminality fires this.
+  // Immediate outcomes already finalized inline — only a processing
+  // view observing backfilled terminality fires this (a success view
+  // hunting a late token has nothing left to settle).
   const settledFiredRef = useRef(false);
   useEffect(() => {
-    if (!onSettled || settledFiredRef.current) {
+    if (!onSettled || settledFiredRef.current || !processing) {
       return;
     }
     const backfilledTerminal =
@@ -74,7 +80,7 @@ export function UtilitySuccessView({
       settledFiredRef.current = true;
       onSettled();
     }
-  }, [backfill, onSettled]);
+  }, [backfill, onSettled, processing]);
 
   if (failedTerminal || failedPending) {
     const refundCopy =

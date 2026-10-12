@@ -43,7 +43,15 @@ const UTILITY_TYPE_TO_API_TYPE: Partial<
 interface BackfillObservation {
   pin: string | null;
   status: string | null;
+  refundPending: boolean | null;
 }
+
+/** History types whose success may still gain a late token. */
+const TOKEN_BACKFILL_API_TYPES: ReadonlySet<BackfillApiType> = new Set([
+  'electricity',
+  'cable_tv',
+  'betting',
+]);
 
 export type VtuBackfillTerminalStatus = 'successful' | 'failed';
 
@@ -54,9 +62,20 @@ export interface VtuVoucherPinBackfill {
 }
 
 function toTerminalStatus(
-  status: string | null
+  observed: BackfillObservation | null | undefined
 ): VtuBackfillTerminalStatus | null {
-  return status === 'successful' || status === 'failed' ? status : null;
+  if (!observed) {
+    return null;
+  }
+  if (observed.status === 'successful') {
+    return 'successful';
+  }
+  // Fail-closed (explicit false only): an unconfirmed failure keeps
+  // the purchase non-terminal until the refund lands, like web.
+  if (observed.status === 'failed' && observed.refundPending === false) {
+    return 'failed';
+  }
+  return null;
 }
 
 interface UseVtuVoucherPinBackfillInput {
@@ -88,8 +107,15 @@ async function fetchVoucherPin({
     params.set('type', apiType);
   }
 
+  // A blank observation consumes the attempt but keeps polling: only
+  // permanent failures (non-429 4xx, broken contract) throw into the
+  // error state and halt the loop.
+  const BLANK: BackfillObservation = {
+    pin: null,
+    status: null,
+    refundPending: null,
+  };
   let response: Response;
-  let body: unknown;
   try {
     response = await fetchWithTimeout(
       `${EXPO_PUBLIC_API_URL}/api/vtu/history?${params.toString()}`,
@@ -102,24 +128,31 @@ async function fetchVoucherPin({
         },
       }
     );
-    if (!response.ok) {
-      // Throw so React Query sets status='error', halting refetchInterval
-      // immediately instead of wasting attempts on a non-retriable error.
+  } catch {
+    // Network/timeout: transient, retry within budget.
+    return BLANK;
+  }
+  if (!response.ok) {
+    // 5xx/429 are transient: consume the attempt and retry. Other 4xx
+    // (auth, bad request) won't heal by retrying — throw so React
+    // Query sets status='error' and halts refetchInterval.
+    if (response.status !== 429 && response.status < 500) {
       throw new Error(`VTU history fetch failed: ${response.status}`);
     }
+    return BLANK;
+  }
+  let body: unknown;
+  try {
     body = await response.json();
-  } catch (error) {
-    // Re-throw HTTP errors; wrap network/timeout/parse failures so the
-    // error state is set and polling stops.
-    throw error instanceof Error
-      ? error
-      : new Error('VTU history fetch failed');
+  } catch {
+    // Unparseable body: transient, retry within budget.
+    return BLANK;
   }
 
   const parsed = VtuHistoryResponseSchema.safeParse(body);
   if (!parsed.success) {
     // Broken contract — throw so polling halts instead of burning remaining
-    // attempts returning null that React Query treats as successful empty data.
+    // attempts returning blanks that React Query treats as successful data.
     throw new Error('VTU history response schema mismatch');
   }
 
@@ -129,14 +162,22 @@ async function fetchVoucherPin({
   const pin =
     typeof match?.voucher_pin === 'string' ? match.voucher_pin.trim() : '';
   const status = typeof match?.status === 'string' ? match.status : null;
+  const refundPending =
+    typeof match?.refund_pending === 'boolean' ? match.refund_pending : null;
   // Terminality learned from history settles the retained registry
-  // entry (success marks completion, failure forgets): the response
-  // path never saw it, so without this the stale guard could never
-  // fire for this purchase.
-  if (reference && (status === 'successful' || status === 'failed')) {
-    settlePendingVtuByReference(reference, status);
+  // entry (success marks completion; failure forgets, but only once
+  // the refund is confirmed — settling on an unconfirmed failure
+  // would refresh the wallet against the still-debited balance with
+  // no later refresh when the refund lands). The response path never
+  // saw it, so without this the stale guard could never fire.
+  const failedTerminal = status === 'failed' && refundPending === false;
+  if (reference && (status === 'successful' || failedTerminal)) {
+    settlePendingVtuByReference(
+      reference,
+      status === 'successful' ? 'successful' : 'failed'
+    );
   }
-  return { pin: pin || null, status };
+  return { pin: pin || null, status, refundPending };
 }
 
 export function useVtuVoucherPinBackfill({
@@ -159,9 +200,19 @@ export function useVtuVoucherPinBackfill({
     retry: 0,
     refetchInterval: (q) => {
       const observed = q.state.data;
+      const terminal = toTerminalStatus(observed);
+      // A pin always stops the hunt. A successful row keeps polling
+      // while a token may still arrive (the server schedules late
+      // token backfills for pin-less successes of these types);
+      // tokenless successes and confirmed failures settle.
+      const tokenHunt =
+        terminal === 'successful' &&
+        !observed?.pin &&
+        apiType !== null &&
+        TOKEN_BACKFILL_API_TYPES.has(apiType);
       if (
         observed?.pin ||
-        toTerminalStatus(observed?.status ?? null) !== null ||
+        (terminal !== null && !tokenHunt) ||
         q.state.status === 'error'
       ) {
         return false;
@@ -185,6 +236,6 @@ export function useVtuVoucherPinBackfill({
 
   return {
     pin: data?.pin ?? null,
-    status: toTerminalStatus(data?.status ?? null),
+    status: toTerminalStatus(data),
   };
 }

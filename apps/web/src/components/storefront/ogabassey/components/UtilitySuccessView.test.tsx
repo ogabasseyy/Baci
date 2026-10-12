@@ -358,4 +358,104 @@ describe('UtilitySuccessView', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('polls for a late token on a successful pin-less bill purchase', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        transactions: [
+          {
+            request_reference: 'VTU-TOK',
+            status: 'successful',
+            voucher_pin: 'LATE-TOKEN',
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={false}
+          reference="VTU-TOK"
+        />
+      );
+
+      // The poll starts even though the purchase already succeeded,
+      // and the late token surfaces on the success card.
+      expect(await screen.findByText('LATE-TOKEN')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not poll on a successful pin-less telco purchase', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ transactions: [] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="airtime"
+          amount={500}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={false}
+          reference="VTU-TEL"
+        />
+      );
+
+      expect(screen.getByText('Success!')).toBeInTheDocument();
+      // Let any would-be poll fire: none should.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('never notifies the owner from a success-view token hunt', async () => {
+    const onSettled = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-TOK2',
+              status: 'successful',
+              voucher_pin: 'LATE-TOKEN-2',
+            },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          onSettled={onSettled}
+          processing={false}
+          reference="VTU-TOK2"
+        />
+      );
+
+      expect(await screen.findByText('LATE-TOKEN-2')).toBeInTheDocument();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(onSettled).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

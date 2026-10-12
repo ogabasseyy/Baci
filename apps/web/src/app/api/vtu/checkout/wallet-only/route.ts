@@ -37,11 +37,14 @@ async function resolveRequestingOwnership(
   user: NonNullable<Awaited<ReturnType<typeof authenticateApiRequest>>['user']>,
   merchantSlug: string
 ): Promise<{ customerId: string | null; merchantId: string | null }> {
-  // Alias-aware: the slug arrives in the POST body, which the proxy can't rewrite,
-  // so a stale tab on a just-renamed store resolves via the alias table.
+  // Alias-aware + strict: stale tabs resolve via the alias table; alias
+  // failures 500 (key kept) instead of 400 ownership mismatch (rotated).
   const { data: merchant, error: merchantError } =
-    await withMerchantSlugAliasFallback(merchantSlug, (s) =>
-      supabase.from('merchants').select('id').eq('slug', s).maybeSingle()
+    await withMerchantSlugAliasFallback(
+      merchantSlug,
+      (s) =>
+        supabase.from('merchants').select('id').eq('slug', s).maybeSingle(),
+      { strict: true }
     );
   if (merchantError) {
     throw new Error(

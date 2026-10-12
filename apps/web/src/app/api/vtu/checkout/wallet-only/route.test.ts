@@ -8,12 +8,19 @@ const {
   mockPrepare,
   mockFulfill,
   mockResolveVtuCustomer,
+  mockGetCurrentSlugForAliasStrict,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
   mockCheckCsrf: vi.fn(),
   mockPrepare: vi.fn(),
   mockFulfill: vi.fn(),
   mockResolveVtuCustomer: vi.fn(),
+  mockGetCurrentSlugForAliasStrict: vi.fn(),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: vi.fn().mockResolvedValue(null),
+  getCurrentSlugForAliasStrict: mockGetCurrentSlugForAliasStrict,
 }));
 
 vi.mock('@/lib/api-auth', () => ({
@@ -207,6 +214,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       id: 'customer-1',
       email: 'c@example.com',
     });
+    mockGetCurrentSlugForAliasStrict.mockReset();
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
     supabaseMockRef.current = buildSupabase({ row: null, insertCalls: 0 });
   });
 
@@ -783,6 +792,58 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
     expect(mockFulfill).not.toHaveBeenCalled();
     expect(mockResolveVtuCustomer).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('replay: alias-lookup failure 500s (key kept), never 400', async () => {
+    // A lenient alias miss (null with no error) would collapse into the
+    // 400 ownership-mismatch and rotate the client's key; after the
+    // alias lookup recovers, the retry would mint fresh and debit a
+    // second time. Strict resolution 500s so the key is kept.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    const base = buildSupabase(state);
+    const baseFrom = base.from as unknown as (table: string) => unknown;
+    supabaseMockRef.current = {
+      ...base,
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+        return baseFrom(table);
+      }),
+    };
+    mockGetCurrentSlugForAliasStrict.mockRejectedValue(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: ogabassey')
+    );
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
+    expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
 

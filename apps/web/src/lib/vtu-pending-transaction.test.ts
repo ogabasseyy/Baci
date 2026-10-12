@@ -15,6 +15,7 @@ const {
   mockVerifyMonnifyBillCustomer,
   mockLoggerWarn,
   mockCalculateCommerce,
+  mockGetCurrentSlugForAliasStrict,
 } = vi.hoisted(() => ({
   mockFormatPhoneNumber: vi.fn((value: string) => value),
   mockIsValidPhoneNumber: vi.fn(() => true),
@@ -30,6 +31,12 @@ const {
       platformEarning: 5,
     })
   ),
+  mockGetCurrentSlugForAliasStrict: vi.fn(),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: vi.fn().mockResolvedValue(null),
+  getCurrentSlugForAliasStrict: mockGetCurrentSlugForAliasStrict,
 }));
 
 vi.mock('@/lib/kuda', () => ({
@@ -1677,12 +1684,16 @@ describe('preparePendingVtuTransaction strictLookups', () => {
   function supabaseWithLookupErrors({
     customerError = null,
     merchantError = null,
+    merchantMiss = false,
     settingsError = null,
   }: {
     customerError?: { message: string } | null;
     merchantError?: { message: string } | null;
+    merchantMiss?: boolean;
     settingsError?: { message: string } | null;
   }) {
+    const merchantRow =
+      merchantError || merchantMiss ? null : { id: 'merchant-1' };
     return {
       from: vi.fn((table: string) => {
         if (table === 'merchants') {
@@ -1690,11 +1701,11 @@ describe('preparePendingVtuTransaction strictLookups', () => {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
                 maybeSingle: vi.fn().mockResolvedValue({
-                  data: merchantError ? null : { id: 'merchant-1' },
+                  data: merchantRow,
                   error: merchantError,
                 }),
                 single: vi.fn().mockResolvedValue({
-                  data: merchantError ? null : { id: 'merchant-1' },
+                  data: merchantRow,
                   error: merchantError,
                 }),
               }),
@@ -1781,6 +1792,20 @@ describe('preparePendingVtuTransaction strictLookups', () => {
 
     await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
       /Failed to look up VTU customer/
+    );
+  });
+
+  it('throws (never Merchant-not-found) when strict alias resolution fails', async () => {
+    // An alias-DB failure must not masquerade as "Merchant not found":
+    // the merchant exists; the lookup is indeterminate and the caller
+    // must 500 (key kept) instead of terminally rejecting.
+    mockGetCurrentSlugForAliasStrict.mockRejectedValueOnce(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: ogabassey')
+    );
+    const supabase = supabaseWithLookupErrors({ merchantMiss: true });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /alias lookup failed/
     );
   });
 

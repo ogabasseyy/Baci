@@ -9,6 +9,7 @@ import {
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import {
+  isTokenBackfillTab,
   isUtilityBackfillTab,
   parseUtilityVoucherBackfill,
   useUtilityVoucherBackfill,
@@ -160,6 +161,17 @@ describe('isUtilityBackfillTab', () => {
   });
 });
 
+describe('isTokenBackfillTab', () => {
+  it('covers only the bill tabs whose success may gain a late token', () => {
+    expect(isTokenBackfillTab('power')).toBe(true);
+    expect(isTokenBackfillTab('tv')).toBe(true);
+    expect(isTokenBackfillTab('betting')).toBe(true);
+    expect(isTokenBackfillTab('airtime')).toBe(false);
+    expect(isTokenBackfillTab('data')).toBe(false);
+    expect(isTokenBackfillTab('nope')).toBe(false);
+  });
+});
+
 describe('useUtilityVoucherBackfill', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -243,7 +255,11 @@ describe('useUtilityVoucherBackfill', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    // Tokenless tab: no token can arrive, so success settles the loop
+    // (bill tabs keep hunting — see the token-hunt test below).
+    const { result } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
@@ -408,6 +424,7 @@ describe('useUtilityVoucherBackfill', () => {
             {
               request_reference: 'VTU-1',
               status: 'successful',
+              voucher_pin: 'TOKEN-1',
               refund_pending: false,
             },
           ],
@@ -529,10 +546,11 @@ describe('useUtilityVoucherBackfill', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    renderHook(() => useUtilityVoucherBackfill(input));
+    // Airtime: no token can arrive, so success settles the loop.
+    renderHook(() => useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
-        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
       );
     });
 
@@ -547,6 +565,68 @@ describe('useUtilityVoucherBackfill', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('keeps hunting a token for pin-less bill successes', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-token":true}', 'key-hook-token');
+    notePendingVtuReference('{"hook-token":true}', 'VTU-1');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Power: success settles the registry immediately, but the loop
+    // keeps polling while a late token may still arrive.
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(
+      isStalePendingVtuSuccess(
+        '{"hook-token":true}',
+        'VTU-1',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops the token hunt once the pin lands', async () => {
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          voucher_pin: 'TOKEN-1',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    expect(result.current.pin).toBe('TOKEN-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('forgets the retained entry on refund-confirmed failure', async () => {

@@ -26,8 +26,22 @@ const TAB_TO_HISTORY_TYPE: Record<string, string> = {
   betting: 'betting',
 };
 
+/** History types whose success may still gain a late token. */
+const TOKEN_BACKFILL_HISTORY_TYPES: ReadonlySet<string> = new Set([
+  'electricity',
+  'cable_tv',
+  'betting',
+]);
+
 export function isUtilityBackfillTab(tab: string): boolean {
   return TAB_TO_HISTORY_TYPE[tab] !== undefined;
+}
+
+export function isTokenBackfillTab(tab: string): boolean {
+  const historyType = TAB_TO_HISTORY_TYPE[tab];
+  return (
+    historyType !== undefined && TOKEN_BACKFILL_HISTORY_TYPES.has(historyType)
+  );
 }
 
 export interface UtilityVoucherBackfill {
@@ -98,13 +112,23 @@ export function parseUtilityVoucherBackfill(
   };
 }
 
-/** Terminal backfill: show it and stop polling. */
-function isTerminalBackfill(backfill: UtilityVoucherBackfill): boolean {
-  return (
-    backfill.pin !== null ||
-    backfill.successful ||
-    (backfill.failed && backfill.refundConfirmed)
-  );
+/**
+ * Terminal backfill: show it and stop polling. A pin always stops the
+ * hunt. A successful row keeps polling while a token may still arrive
+ * (the server schedules late token backfills for pin-less successes
+ * of these types); tokenless successes and confirmed failures settle.
+ */
+function isTerminalBackfill(
+  backfill: UtilityVoucherBackfill,
+  tokenExpected: boolean
+): boolean {
+  if (backfill.pin !== null) {
+    return true;
+  }
+  if (backfill.successful) {
+    return !tokenExpected;
+  }
+  return backfill.failed && backfill.refundConfirmed;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -147,6 +171,7 @@ export function useUtilityVoucherBackfill({
     if (!enabled || !reference || !merchantSlug || !historyType) {
       return;
     }
+    const tokenExpected = TOKEN_BACKFILL_HISTORY_TYPES.has(historyType);
     let cancelled = false;
     const controller = new AbortController();
     const params = new URLSearchParams({
@@ -195,15 +220,21 @@ export function useUtilityVoucherBackfill({
         }
         if (parsed) {
           // Surface every observation (e.g. failed with a pending
-          // refund) while polling continues; terminal ones settle
-          // the retained registry entry (success marks completion,
-          // failure forgets) and stop.
+          // refund) while polling continues. Settlement is decoupled
+          // from the pin hunt: success marks completion (and
+          // confirmed failure forgets) on first observation, while
+          // the loop may keep hunting a late token.
           setBackfill(parsed);
-          if (isTerminalBackfill(parsed)) {
+          if (
+            parsed.successful ||
+            (parsed.failed && parsed.refundConfirmed)
+          ) {
             settlePendingVtuByReference(
               reference,
               parsed.failed ? 'failed' : 'successful'
             );
+          }
+          if (isTerminalBackfill(parsed, tokenExpected)) {
             return;
           }
         }

@@ -33,6 +33,13 @@ describe('llms markdown platform builders', () => {
     expect(result).not.toContain('https://usebaci.com//');
   });
 
+  it('does not present unverified API or wholesale access as included', () => {
+    const result = buildPlatformPricingMarkdown('https://usebaci.com');
+
+    expect(result).not.toContain('API access');
+    expect(result).not.toContain('wholesale features');
+  });
+
   it('handles trailing slashes in the platform pricing mirror', () => {
     const result = buildPlatformPricingMarkdown('https://usebaci.com/');
 

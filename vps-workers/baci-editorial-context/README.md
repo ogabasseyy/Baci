@@ -27,3 +27,10 @@ The register is manually reviewed, not automatically promoted by an indexer. Its
 claims must carry dated rollout/workflow evidence. Review updates against the
 source revision and invalidate stale evidence rather than refreshing the date
 without inspection.
+
+Owner operations: re-review the register at least every 14 days — a stale
+register makes the lane fail closed to the "Register unavailable" prompt text,
+so watch for that fallback in writer output. At first apply, record the writer
+checkout revision this patch was verified against here (`Verified writer
+revision: <sha>`), and re-verify the `platform_marketing` task value on the
+VPS before every re-apply.

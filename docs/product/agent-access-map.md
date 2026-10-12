@@ -39,7 +39,7 @@ does not prove a complete supported workflow.
 
 | Surface | Evidence | Current boundary |
 | --- | --- | --- |
-| Shopping MCP | `apps/web/mcp-server/server.ts`, `agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. Not a multi-tenant Baci admin connector. |
+| Shopping MCP | `apps/web/mcp-server/server.ts`, `apps/web/mcp-server/agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. Not a multi-tenant Baci admin connector. |
 | Merchant storefront protocols | `apps/web/src/app/.well-known/acp.json/route.ts`, `.well-known/ucp/route.ts`, `src/lib/agentic/` | Merchant-scoped ACP/UCP discovery, catalog, carts, checkout and orders; enabled capabilities/auth/payment readiness apply. A REST interface is not automatically an MCP tool. |
 | Browser tools | `apps/web/src/components/storefront/webmcp-storefront-tools-builder.ts` | Browser-bound storefront tools. Inspect current registrations and browser session authority. |
 | Merchant connector gateway | `apps/web/src/lib/connector/manifest.ts`, `apps/web/tools/connector-gateway/` | Four read-only R1 tools: `orders.list`, `orders.get`, `inventory.levels`, `analytics.summary`. Scoped owner grants, branch selection, tool-time permission checks and revocation. REST/OpenAPI, not a ChatGPT MCP server. |

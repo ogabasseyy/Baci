@@ -2,6 +2,7 @@
 """Offline validation for the Meta stable-channel pin updater."""
 
 import importlib.util
+import os
 import tempfile
 import unittest
 from unittest import mock
@@ -50,6 +51,23 @@ class MusePinUpdateTests(unittest.TestCase):
                 'MUSE_VERSION="1.5.0-R6100.2"',
                 "installer version",
             )
+
+    def test_main_supports_local_run_without_github_output(self):
+        channel = {
+            "state": "public", "version": "1.5.0-R6100.2",
+            "manifest_url": "https://lookaside.facebook.com/muse/manifest.json",
+        }
+        manifest = {
+            "version": "1.5.0-R6100.2", "checksum_algorithm": "sha256",
+            "artifacts": {
+                "x86_linux": {"checksum": "a" * 64},
+                "aarch64_linux": {"checksum": "b" * 64},
+            },
+        }
+        with mock.patch.object(updater, "fetch_json", side_effect=[channel, manifest]), \
+                mock.patch.object(updater, "update_files"), \
+                mock.patch.dict(os.environ, {}, clear=True):
+            updater.main()
 
     def test_updates_installer_and_auditor_together(self):
         with tempfile.TemporaryDirectory() as directory:

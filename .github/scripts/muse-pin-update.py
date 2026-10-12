@@ -2,6 +2,7 @@
 """Update the Muse CLI and SARIF auditor pins from Meta's public stable channel."""
 
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -85,9 +86,10 @@ def main():
     root = Path(__file__).resolve().parents[2]
     pins = resolve_pins(fetch_json(CHANNEL_URL, "api.meta.ai"))
     update_files(root, pins)
-    output = Path(__import__("os").environ["GITHUB_OUTPUT"])
-    with output.open("a") as stream:
-        stream.write("version=" + pins["version"] + "\n")
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if output_path:
+        with Path(output_path).open("a") as stream:
+            stream.write("version=" + pins["version"] + "\n")
     print("Resolved public Muse stable pin " + pins["version"])
 
 

@@ -226,6 +226,9 @@ describe('reconcileProcessingVtuTransactions', () => {
 
     const result = await reconcileProcessingVtuTransactions({
       deadlineMs: Date.now() + 3_600_000,
+      // Window 0: rotation start 0, so the once-mocks pair with the
+      // fetched order deterministically.
+      now: new Date(0),
       supabase: supabase as never,
     });
 
@@ -341,6 +344,86 @@ describe('reconcileProcessingVtuTransactions', () => {
         'VTU reconciliation stopping early: route deadline approaching:',
         expect.objectContaining({ checked: 2, deferred: 1 })
       );
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('rotates the intra-page start by the window number', async () => {
+    // Window 2 of 3 rows: start index 2, visiting c3, c1, c2.
+    const countQuery = createProcessingQuery({ count: 3 });
+    const dataQuery = createProcessingQuery({
+      data: [{ id: 'tx-c1' }, { id: 'tx-c2' }, { id: 'tx-c3' }],
+    });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockResolvedValue({
+      status: 'processing',
+    });
+
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      now: new Date(2 * 5 * 60 * 1000),
+      supabase: supabase as never,
+    });
+
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(1, {
+      supabase,
+      transactionId: 'tx-c3',
+    });
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(2, {
+      supabase,
+      transactionId: 'tx-c1',
+    });
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(3, {
+      supabase,
+      transactionId: 'tx-c2',
+    });
+  });
+
+  it('defers a different tail when the deadline breaks consecutive windows', async () => {
+    // One row per pass (100s each, 219s budget minus the 120s
+    // reserve): window 3 starts at c1, window 4 at c2, so a slow head
+    // row cannot starve the same tail on every visit.
+    vi.useFakeTimers();
+    fulfillPendingVtuTransactionMock.mockImplementation(async () => {
+      await vi.advanceTimersByTimeAsync(100_000);
+      return { status: 'processing' };
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const buildSupabase = () =>
+      createSupabase({
+        countQuery: createProcessingQuery({ count: 3 }),
+        dataQuery: createProcessingQuery({
+          data: [{ id: 'tx-c1' }, { id: 'tx-c2' }, { id: 'tx-c3' }],
+        }),
+      });
+
+    try {
+      const first = buildSupabase();
+      const firstResult = await reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() + 219_000,
+        now: new Date(3 * 5 * 60 * 1000),
+        supabase: first as never,
+      });
+      expect(firstResult).toMatchObject({ checked: 1 });
+      expect(fulfillPendingVtuTransactionMock).toHaveBeenLastCalledWith({
+        supabase: first,
+        transactionId: 'tx-c1',
+      });
+
+      fulfillPendingVtuTransactionMock.mockClear();
+      const second = buildSupabase();
+      const secondResult = await reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() + 219_000,
+        now: new Date(4 * 5 * 60 * 1000),
+        supabase: second as never,
+      });
+      expect(secondResult).toMatchObject({ checked: 1 });
+      expect(fulfillPendingVtuTransactionMock).toHaveBeenLastCalledWith({
+        supabase: second,
+        transactionId: 'tx-c2',
+      });
     } finally {
       warnSpy.mockRestore();
       vi.useRealTimers();

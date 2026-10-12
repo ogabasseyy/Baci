@@ -29,6 +29,7 @@ import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import {
+  isFlaggedReferenceLessVtuRow,
   isStrandedPreVendVtuRow,
   restoreInterruptedPreVendVtuRow,
 } from '@/lib/vtu-pre-vend-recovery';
@@ -2452,6 +2453,16 @@ export async function fulfillPendingVtuTransaction({
           row,
           supabase,
         });
+      } else if (isFlaggedReferenceLessVtuRow(row)) {
+        // Post-vend twin of the strand above (mutually exclusive by
+        // the flag): the debit provably landed but the result persist
+        // exhausted, so the claim declines and pre-vend recovery
+        // refuses to re-vend. Settle from provider truth instead —
+        // reconcileProcessingVtuTransaction requeries by the
+        // persisted reference and never vends. No claim: its markers
+        // are diagnostic-only, and settlement is status-CAS plus
+        // ledger-idempotent under concurrent passes.
+        return reconcileProcessingVtuTransaction({ row, supabase });
       }
       return resolveCurrentVtuTransactionState({ row, supabase });
     }

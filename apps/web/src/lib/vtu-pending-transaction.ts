@@ -483,6 +483,15 @@ export async function resolveVtuCustomer({
       .eq('id', byEmail.id);
   }
 
+  // Tenant isolation: an email-matched row linked to a DIFFERENT auth
+  // user must never be returned — every caller would otherwise transact
+  // as that customer (all callers fail closed on null). The email claim
+  // alone cannot distinguish the owner from an account squatting on an
+  // unverified address.
+  if (byEmail?.user_id && byEmail.user_id !== user.id) {
+    return null;
+  }
+
   return (byEmail as CustomerRecord | null) ?? null;
 }
 

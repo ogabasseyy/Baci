@@ -2855,6 +2855,124 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('settles a stale flagged row from Kuda provider truth without re-vending', async () => {
+    // The claim declines (no transaction_id or message) and pre-vend
+    // recovery refuses (flag proves the debit landed), but Kuda TSQ
+    // resolves by BillRequestRef — settle from that, never re-vend.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: { walletDebited: true },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+  });
+
+  it('fails and refunds a stale flagged row when Kuda definitively rejects it', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful. (biller status: k11)',
+      status: 'failed',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: { walletDebited: true },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({
+        p_amount: 1000,
+        p_customer_id: 'customer-1',
+        p_vtu_transaction_id: 'vtu-1',
+      })
+    );
+    expect(result).toMatchObject({
+      amount: 1000,
+      error: 'Request successful. (biller status: k11)',
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        error_message: 'Request successful. (biller status: k11)',
+        status: 'failed',
+      })
+    );
+  });
+
   it('does not refund when processing reconciliation loses the terminal status claim', async () => {
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Request successful. (biller status: k11)',
@@ -4624,11 +4742,17 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  it('never flips a flagged row: the vend may have landed', async () => {
+  it('never re-vends a flagged row; inconclusive requery stays processing', async () => {
     // Post-vend persistence failure (vend returned, result write
     // exhausted): same reference-less processing shape, but the
-    // persisted walletDebited flag proves the provider was called.
-    // Re-vending would double-credit, so no flip — report current.
+    // persisted walletDebited flag proves the debit landed, so the
+    // row settles from provider truth instead of stranding forever —
+    // and never re-vends (double-credit). Ambiguous provider evidence
+    // settles nothing: no writes, still processing, retried next pass.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Bill not found',
+      status: 'unknown',
+    });
     const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const single = vi
       .fn()
@@ -4689,6 +4813,13 @@ describe('fulfillPendingVtuTransaction', () => {
       transactionId: 'vtu-1',
     });
 
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-POSTVEND'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(mockMonnifyPurchaseBill).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       reference: 'VTU-POSTVEND',

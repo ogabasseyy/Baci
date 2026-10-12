@@ -72,6 +72,10 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function getReconciliationWindowNumber(now: Date) {
+  return Math.floor(now.getTime() / RECONCILIATION_PAGE_WINDOW_MS);
+}
+
 function getReconciliationPageOffset({
   now,
   pageSize,
@@ -86,8 +90,7 @@ function getReconciliationPageOffset({
   }
 
   const pageCount = Math.ceil(totalCandidates / pageSize);
-  const pageIndex =
-    Math.floor(now.getTime() / RECONCILIATION_PAGE_WINDOW_MS) % pageCount;
+  const pageIndex = getReconciliationWindowNumber(now) % pageCount;
   return pageIndex * pageSize;
 }
 
@@ -147,7 +150,21 @@ export async function reconcileProcessingVtuTransactions({
     );
   }
 
-  const candidates = (data ?? []) as ProcessingVtuCandidate[];
+  const fetched = (data ?? []) as ProcessingVtuCandidate[];
+  // Rotate the intra-page start by the window number: under a fixed
+  // order, slow head rows burn the deadline budget on every visit to
+  // the page and the same tail is deferred forever. Rotation moves the
+  // deferred set each window, so every row gets head-start turns.
+  // Stateless by design — no cursor table, and no per-attempt writes
+  // (any update bumps updated_at, invalidating in-flight CAS tokens).
+  const startIndex =
+    fetched.length === 0
+      ? 0
+      : getReconciliationWindowNumber(now) % fetched.length;
+  const candidates = [
+    ...fetched.slice(startIndex),
+    ...fetched.slice(0, startIndex),
+  ];
   const summary: VtuProcessingReconciliationSummary = {
     checked: 0,
     errored: 0,

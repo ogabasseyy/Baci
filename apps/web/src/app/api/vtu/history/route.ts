@@ -104,7 +104,14 @@ export async function GET(request: NextRequest) {
         .eq('email', auth.user.email)
         .maybeSingle();
 
-      if (customerByEmail) {
+      // Tenant isolation: the email claim alone proves nothing (a guest
+      // row pre-created with this email may belong to someone else, and
+      // an attacker can register an unverified account on it), so only
+      // a row already linked to THIS auth user is accepted. Unlinked
+      // (null) and mismatched rows fall through to the empty list —
+      // never link here: first-claimer-wins on a GET would let an
+      // attacker permanently claim a victim's guest history.
+      if (customerByEmail?.user_id === auth.user.id) {
         customer = customerByEmail;
       }
     }

@@ -283,7 +283,12 @@ describe('GET /api/vtu/history', () => {
   it('returns transactions for the resolved customer and applies the type filter', async () => {
     const { GET } = await import('./route');
     customerByUserIdData = null;
-    customerByEmailData = { id: 'customer-1', user_id: null };
+    // Email fallback accepts ONLY a row already linked to this auth
+    // user (user-1). An unlinked or mismatched match previously
+    // disclosed the row's history + voucher PINs to whoever held an
+    // account with that email (tenant isolation); those now fall
+    // through to the empty list (see the two tests below).
+    customerByEmailData = { id: 'customer-1', user_id: 'user-1' };
     mockCustomerUpdateEq.mockImplementation(() => {
       throw new Error('GET /vtu/history must not relink customers');
     });
@@ -310,6 +315,38 @@ describe('GET /api/vtu/history', () => {
     expect(transactionEqCalls).toContainEqual(['merchant_id', 'merchant-1']);
     expect(transactionEqCalls).toContainEqual(['customer_id', 'customer-1']);
     expect(transactionEqCalls).toContainEqual(['type', 'electricity']);
+  });
+
+  it('returns no history when the email-matched customer belongs to a different user', async () => {
+    // Tenant isolation: the email claim alone must not disclose
+    // another customer's transactions or voucher PINs.
+    const { GET } = await import('./route');
+    customerByUserIdData = null;
+    customerByEmailData = { id: 'customer-1', user_id: 'user-2' };
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
+  });
+
+  it('returns no history when the email-matched customer is unlinked', async () => {
+    // Same guard for guest (user_id null) rows: accepting them would
+    // disclose a stranger's history to whoever registers the email,
+    // and linking-on-read would let them claim it permanently. GET
+    // stays read-only; checkout links on the next purchase.
+    const { GET } = await import('./route');
+    customerByUserIdData = null;
+    customerByEmailData = { id: 'customer-1', user_id: null };
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
   });
 
   it('scopes by exact reference when the backfill passes one', async () => {

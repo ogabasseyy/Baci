@@ -1544,6 +1544,30 @@ describe('resolveVtuCustomer', () => {
     expect(customerUpdate).not.toHaveBeenCalled();
   });
 
+  it('returns null when the email-matched customer belongs to a different user', async () => {
+    // Tenant isolation: returning the row would let every caller
+    // transact as another customer on an email claim alone. All
+    // callers fail closed on null.
+    const { customerUpdate, supabase } = createResolveCustomerSupabase({
+      byEmail: {
+        ...linkedCustomer,
+        user_id: 'user-2',
+      },
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        id: 'user-1',
+      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer).toBeNull();
+    expect(customerUpdate).not.toHaveBeenCalled();
+  });
+
   it('returns null when no user_id or email customer exists', async () => {
     const { customerUpdate, supabase } = createResolveCustomerSupabase({});
 

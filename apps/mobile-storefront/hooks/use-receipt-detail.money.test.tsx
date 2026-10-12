@@ -48,6 +48,7 @@ const mockRpc = jest.fn(
     error: null,
   })
 );
+let mockTxRows: unknown[] = [];
 const mockUseAuthStore = Object.assign(
   jest.fn((selector: (state: MockAuthState) => unknown) =>
     selector(mockAuthState)
@@ -92,6 +93,12 @@ describe('receipt detail string money', () => {
     mockOrder.mockImplementationOnce(() => mockQueryBuilder as never);
     mockSingle.mockResolvedValue({ data: null, error: null });
     mockLimit.mockResolvedValue({ data: [], error: null });
+    mockTxRows = [];
+    mockRpc.mockReset();
+    mockRpc.mockImplementation(async (fn: string) => ({
+      data: fn === 'get_customer_order_transactions' ? mockTxRows : [],
+      error: null,
+    }));
   });
 
   // biome-ignore format: compact fixtures preserve the 300-line gate.
@@ -115,8 +122,6 @@ describe('receipt detail string money', () => {
       }),
       error: null,
     });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
 
     const detail = (await (
       receiptDetailQueryOptions('order-9') as QueryOptions
@@ -152,8 +157,6 @@ describe('receipt detail string money', () => {
       }),
       error: null,
     });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
 
     const detail = await (
       receiptDetailQueryOptions('order-9') as QueryOptions
@@ -184,23 +187,19 @@ describe('receipt detail string money', () => {
       }),
       error: null,
     });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    mockRpc.mockResolvedValueOnce({
-      data: [
-        {
-          amount: '50.00',
-          created_at: '2026-05-24T10:00:00.000Z',
-          description: null,
-          dva_account_number: null,
-          gateway: null,
-          order_id: 'order-9',
-          payment_method: null,
-          status: 'completed',
-          transaction_type: 'payment',
-        },
-      ],
-      error: null,
-    });
+    mockTxRows = [
+      {
+        amount: '50.00',
+        created_at: '2026-05-24T10:00:00.000Z',
+        description: null,
+        dva_account_number: null,
+        gateway: null,
+        order_id: 'order-9',
+        payment_method: null,
+        status: 'completed',
+        transaction_type: 'payment',
+      },
+    ];
 
     const detail = (await (
       receiptDetailQueryOptions('order-9') as QueryOptions
@@ -236,8 +235,6 @@ describe('receipt detail string money', () => {
         data: partialManualOrder(overrides),
         error: null,
       });
-      mockRpc.mockResolvedValueOnce({ data: [], error: null });
-      mockRpc.mockResolvedValueOnce({ data: [], error: null });
 
       const detail = await (
         receiptDetailQueryOptions('order-9') as QueryOptions

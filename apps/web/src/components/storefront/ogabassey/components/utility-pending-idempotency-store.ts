@@ -7,7 +7,7 @@
  * sessionStorage): a timeout followed by a retry in a new tab must
  * recall the same key — tab-scoped storage would mint fresh and the
  * route would debit a second transaction. Entries stay owner+merchant
- * scoped with the same 24h TTL, so another account still cannot recall
+ * scoped with the same 7-day TTL, so another account still cannot recall
  * them. The registry merges the snapshot on recall/persist, so only
  * simultaneous cross-tab mints can still diverge (documented residual
  * — sync recall cannot take an async lock).
@@ -16,7 +16,7 @@
  * phone / meter identifiers) in plaintext, like the existing
  * sessionStorage utility draft. Recall is owner+merchant scoped (a
  * foreign account can never USE these keys) and entries expire after
- * 24h, but anyone with same-profile devtools access can read the
+ * 7 days, but anyone with same-profile devtools access can read the
  * identifiers until then. True confidentiality is impossible here —
  * reload recovery requires the mapping to be readable after restart,
  * and any on-disk salt/key is equally readable — so hashing would
@@ -25,7 +25,7 @@
  * class (orders, drafts, and this snapshot alike); tracked separately.
  * Deliberately NOT cleared on sign-out/switch: the signer's entries
  * must survive their absence so a switch-back retry replays instead
- * of minting fresh and double-debiting. The 24h TTL is the clearing
+ * of minting fresh and double-debiting. The 7-day TTL is the clearing
  * mechanism (bounded retention without breaking recovery).
  */
 
@@ -36,7 +36,7 @@
  * however old, and the stale check still correctly flags it as
  * already-completed when the remembered reference matches.
  */
-export const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
 
@@ -100,7 +100,7 @@ function isPersistedTombstone(
 /**
  * Serializes live entries + deletion tombstones for storage (prunes
  * TTL-expired entries of any reference state — mirrors live recall,
- * so a single uniform 24h horizon governs retention everywhere;
+ * so a single uniform 7-day horizon governs retention everywhere;
  * tombstones past the horizon are dropped too since the entries they
  * guard have expired regardless).
  */

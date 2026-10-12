@@ -27,10 +27,10 @@ describe('pending-vtu-idempotency-store', () => {
   });
 
   it('drops TTL-expired entries on serialize and parse', () => {
-    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
 
     expect(
-      serializePendingVtuEntries([['a', entry()]], Date.now() + dayMs + 1)
+      serializePendingVtuEntries([['a', entry()]], Date.now() + weekMs + 1)
     ).toBe('[]');
 
     expect(
@@ -41,15 +41,15 @@ describe('pending-vtu-idempotency-store', () => {
   });
 
   it('drops TTL-expired entries of any reference state on serialize and parse', () => {
-    // Uniform 24h horizon: no client-side signal proves terminality, so
+    // Uniform 7-day horizon: no client-side signal proves terminality, so
     // referenced entries expire exactly like reference-less ones —
     // mirrors live recall.
-    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
     const expired = entry({ reference: 'REF-A' });
 
     expect(
       parsePendingVtuSnapshot(
-        serializePendingVtuEntries([['a', expired]], Date.now() + dayMs + 1)
+        serializePendingVtuEntries([['a', expired]], Date.now() + weekMs + 1)
       )
     ).toEqual([]);
 

@@ -23,8 +23,8 @@
  * Durability: entries persist in MMKV (device-scoped) so an app
  * restart between a timed-out submit and its retry still replays the
  * same key instead of minting a fresh one and debiting twice. All
- * entries expire after a uniform 24h horizon (persisted and live
- * recall alike, regardless of reference state): 24h dwarfs any
+ * entries expire after a uniform 7-day horizon (persisted and live
+ * recall alike, regardless of reference state): 7 days dwarf any
  * plausible processing duration, while infinite retention would
  * accumulate unboundedly. Within the TTL the 5-minute stale window
  * arbitrates success replays of noted references against
@@ -39,28 +39,7 @@ import {
   savePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-store';
-
-// Lockstep with the server fingerprint fields: any field the server
-// hashes that is missing here could attach one key to two payloads
-// the server considers different (409 loop); any extra field here
-// could miss a legitimate retry (fresh key, double charge).
-const DESCRIPTOR_FIELDS = [
-  'amount',
-  'billItemIdentifier',
-  'billerCode',
-  'billerName',
-  'customerIdentifier',
-  'dataPlanCode',
-  'networkProvider',
-  'phoneNumber',
-  'productCode',
-  'provider',
-  'requireValidationRef',
-  'type',
-  // NOTE: validationReference excluded (ephemeral per-verification
-  // artifact — see the server fingerprint note). Lockstep applies.
-  'walletAmount',
-] as const;
+import { canonicalizeVtuRetryIdentity } from '@baci/shared';
 
 /** Sequential mobile UX never has more than a couple of pendings in flight. */
 const MAX_PENDING_PURCHASES = 32;
@@ -130,28 +109,26 @@ export function scopePendingVtuKey(
 }
 
 /**
- * Canonical descriptor for a wallet-only VTU payload. Field order is
- * fixed and absent values normalize to null (mirroring the server's
- * `?? null`), so two identical payloads always describe identically
- * regardless of key insertion order.
+ * Canonical descriptor for a wallet-only VTU payload, derived from
+ * the shared retry-identity module (same field list the server
+ * hashes — see its doc for the lockstep rationale). Field order is
+ * fixed and absent values normalize to null, so two identical
+ * payloads always describe identically regardless of key insertion
+ * order.
  */
 export function buildVtuPurchaseDescriptor(
   payload: Record<string, unknown>
 ): string {
-  const canonical: Record<string, unknown> = {};
-  for (const field of DESCRIPTOR_FIELDS) {
-    canonical[field] = payload[field] ?? null;
-  }
-  return JSON.stringify(canonical);
+  return JSON.stringify(canonicalizeVtuRetryIdentity(payload));
 }
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
- * Entries past the 24h TTL are dropped instead of recalled — including
+ * Entries past the 7-day TTL are dropped instead of recalled — including
  * referenced ones. No client-side signal proves terminality (noted
  * references mark non-terminal processing responses, and the server
  * leaves unconfirmed rows processing indefinitely), so retention is
- * horizon-based: 24h dwarfs any plausible processing duration, while
+ * horizon-based: 7 days dwarf any plausible processing duration, while
  * infinite retention would accumulate unboundedly and wedge the cap.
  * The 5min stale check still arbitrates success replays within the TTL.
  */
@@ -175,7 +152,7 @@ export function recallPendingVtuKey(
  * When every entry is still live the registry OVERFLOWS past the cap
  * instead of evicting: no client-side signal proves terminality, so
  * deleting a live attempt would lose deduplication and its retry
- * would mint fresh and double-debit. Entries are tiny and the 24h
+ * would mint fresh and double-debit. Entries are tiny and the 7-day
  * TTL bounds retention, so overflow is cheap and self-healing.
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {

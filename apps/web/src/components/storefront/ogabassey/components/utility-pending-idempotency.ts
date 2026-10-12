@@ -22,7 +22,7 @@ import {
  * outcomes MUST forget, or a later repeat buy reattaches to a dead key.
  *
  * Durability: localStorage (cross-tab) so reloads and new-tab
- * retries replay the same key. Uniform 24h TTL everywhere
+ * retries replay the same key. Uniform 7-day TTL everywhere
  * (persisted + live, any reference state); within it the 5-minute
  * stale window arbitrates success replays of noted references.
  */
@@ -149,11 +149,11 @@ export function scopePendingVtuSignature(
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
- * Entries past the 24h TTL are dropped instead of recalled — including
+ * Entries past the 7-day TTL are dropped instead of recalled — including
  * referenced ones. No client-side signal proves terminality (noted
  * references mark non-terminal processing responses, and the server
  * leaves unconfirmed rows processing indefinitely), so retention is
- * horizon-based: 24h dwarfs any plausible processing duration, while
+ * horizon-based: 7 days dwarf any plausible processing duration, while
  * infinite retention would accumulate unboundedly and wedge the cap.
  * The 5min stale check still arbitrates success replays within the TTL.
  */
@@ -179,7 +179,7 @@ export function recallPendingVtuKey(
  * When every entry is still live the registry OVERFLOWS past the cap
  * instead of evicting: no client-side signal proves terminality, so
  * deleting a live attempt would lose deduplication and its retry
- * would mint fresh and double-debit. Entries are tiny and the 24h
+ * would mint fresh and double-debit. Entries are tiny and the 7-day
  * TTL bounds retention, so overflow is cheap and self-healing.
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {

@@ -150,7 +150,7 @@ describe('pending-vtu-idempotency', () => {
 
   it('drops TTL-expired referenced entries on recall', () => {
     // No client-side signal proves terminality (noted references mark
-    // non-terminal processing responses), so the 24h TTL applies
+    // non-terminal processing responses), so the 7-day TTL applies
     // uniformly — including to referenced entries.
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
@@ -169,7 +169,7 @@ describe('pending-vtu-idempotency', () => {
     // Evicting a live (unconfirmed) entry would lose deduplication:
     // retrying it would mint fresh and double-debit. Only past-TTL
     // entries are eviction victims; live overflow is cheap and the
-    // 24h TTL bounds retention.
+    // 7-day TTL bounds retention.
     const descriptors = Array.from(
       { length: 40 },
       (_, index) =>

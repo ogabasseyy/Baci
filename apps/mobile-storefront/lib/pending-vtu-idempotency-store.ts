@@ -21,7 +21,7 @@ interface PersistedPendingVtuPurchase {
  * its ORIGINAL key however old, and the stale check still correctly
  * flags it as already-completed when the remembered reference matches.
  */
-export const PERSISTED_VTU_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
 
@@ -43,7 +43,7 @@ function isPersistedEntry(
 
 /**
  * Serializes live entries, pruning TTL-expired ones of any reference
- * state — mirrors live recall, so a single uniform 24h horizon governs
+ * state — mirrors live recall, so a single uniform 7-day horizon governs
  * retention everywhere.
  */
 export function serializePendingVtuEntries(

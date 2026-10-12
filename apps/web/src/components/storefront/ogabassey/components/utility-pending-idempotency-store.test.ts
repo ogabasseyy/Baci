@@ -37,13 +37,13 @@ describe('utility-pending-idempotency-store', () => {
   });
 
   it('drops TTL-expired entries on serialize and parse', () => {
-    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
 
     expect(
       serializePendingVtuEntries(
         [['a', entry()]],
         [],
-        Date.now() + dayMs + 1
+        Date.now() + weekMs + 1
       )
     ).toBe('{"entries":[],"forgotten":[]}');
 
@@ -55,10 +55,10 @@ describe('utility-pending-idempotency-store', () => {
   });
 
   it('drops TTL-expired entries of any reference state on serialize and parse', () => {
-    // Uniform 24h horizon: no client-side signal proves terminality, so
+    // Uniform 7-day horizon: no client-side signal proves terminality, so
     // referenced entries expire exactly like reference-less ones —
     // mirrors live recall.
-    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
     const expired = entry({ reference: 'REF-A' });
 
     expect(
@@ -66,7 +66,7 @@ describe('utility-pending-idempotency-store', () => {
         serializePendingVtuEntries(
           [['a', expired]],
           [],
-          Date.now() + dayMs + 1
+          Date.now() + weekMs + 1
         )
       )
     ).toEqual({ entries: [], forgotten: [] });
@@ -118,7 +118,7 @@ describe('utility-pending-idempotency-store', () => {
   });
 
   it('drops TTL-expired tombstones on serialize and parse', () => {
-    const dayMs = 24 * 60 * 60 * 1000;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
 
     expect(
@@ -126,9 +126,9 @@ describe('utility-pending-idempotency-store', () => {
         serializePendingVtuEntries(
           [],
           [{ scoped: 'old', forgottenAt: now }],
-          now + dayMs + 1
+          now + weekMs + 1
         ),
-        now + dayMs + 1
+        now + weekMs + 1
       )
     ).toEqual({ entries: [], forgotten: [] });
 

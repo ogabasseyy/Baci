@@ -6,16 +6,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-try:
-    from codex_content_agent.prompt_builder import build_prompt
-except ImportError as exc:  # Skip only when the writer package itself is absent.
-    if exc.name and exc.name.split(".")[0] != "codex_content_agent":
-        raise
+import importlib.util
+
+if importlib.util.find_spec("codex_content_agent") is None:
+    # In-repo checkout without the VPS writer package: skip, do not fail.
     build_prompt = None
     capability_context = None
 else:
-    # The writer package exists, so a missing/broken capability helper must
-    # fail this suite rather than silently skip the integration checks.
+    # The writer package exists, so any broken import inside it (including a
+    # missing platform_capabilities helper) must fail this suite loudly.
+    from codex_content_agent.prompt_builder import build_prompt
     from codex_content_agent.platform_capabilities import capability_context
 
 

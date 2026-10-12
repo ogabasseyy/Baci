@@ -1,6 +1,6 @@
 --- a/codex_content_agent/prompt_builder.py
 +++ b/codex_content_agent/prompt_builder.py
-@@ -51,3 +51,11 @@
+@@ -51,3 +51,12 @@
          else ""
      )
 +    if task_type == "platform_marketing":

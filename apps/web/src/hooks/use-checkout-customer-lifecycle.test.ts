@@ -144,6 +144,24 @@ describe('useCheckoutCustomerLifecycle', () => {
     consoleError.mockRestore();
   });
 
+  it('clears the loading gate when identity lookup rejects', async () => {
+    getUser.mockRejectedValue(new Error('session unavailable'));
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const { result } = setupLifecycle();
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+
+    expect(result.current.step).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to load checkout identity:',
+      expect.any(Error)
+    );
+    consoleError.mockRestore();
+  });
+
   it('enters guest shipping without a session and accepts later auth success', async () => {
     const { result } = setupLifecycle();
     await waitFor(() => expect(result.current.pageLoading).toBe(false));

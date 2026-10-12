@@ -124,27 +124,33 @@ export function useCheckoutCustomerLifecycle(
     const supabase = createClient();
 
     async function loadIdentity() {
-      const { data } = await supabase.auth.getUser();
-      if (!active) return;
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!active) return;
 
-      if (data.user) {
-        setUser(data.user);
-        if (merchantSlug) {
-          try {
-            const response = await fetch(
-              `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-            );
-            const sessionData = await response.json();
-            if (active && sessionData.authenticated && sessionData.customer) {
-              setCustomerData(sessionData.customer);
+        if (data.user) {
+          setUser(data.user);
+          if (merchantSlug) {
+            try {
+              const response = await fetch(
+                `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
+              );
+              const sessionData = await response.json();
+              if (active && sessionData.authenticated && sessionData.customer) {
+                setCustomerData(sessionData.customer);
+              }
+            } catch (error) {
+              console.error('Failed to fetch customer data:', error);
             }
-          } catch (error) {
-            console.error('Failed to fetch customer data:', error);
           }
+          if (active) setStep(1);
         }
-        if (active) setStep(1);
+      } catch (error) {
+        console.error('Failed to load checkout identity:', error);
+      } finally {
+        // A getUser() rejection must not strand checkout on the loading gate.
+        if (active) setPageLoading(false);
       }
-      if (active) setPageLoading(false);
     }
 
     void loadIdentity();

@@ -57,6 +57,9 @@ describe('RedemptionSuccessDialog', () => {
     expect(
       screen.queryByRole('button', { name: 'Copy redemption code' })
     ).not.toBeInTheDocument();
+    // The credited balance has no expiry mechanism: showing the
+    // redemption expiry would wrongly suggest the balance lapses.
+    expect(screen.queryByText(/Expires:/)).not.toBeInTheDocument();
   });
 
   it('copies the code and toasts on copy click', () => {

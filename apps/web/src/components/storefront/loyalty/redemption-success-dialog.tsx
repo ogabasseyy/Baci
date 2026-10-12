@@ -87,7 +87,10 @@ export function RedemptionSuccessDialog({
               {result.instructions}
             </p>
 
-            {result.expiresAt && (
+            {/* Store credit lands in the balance immediately (no expiry
+                mechanism), so the redemption expiry must not suggest the
+                credited balance lapses. */}
+            {result.expiresAt && !isStoreCredit && (
               <p className="text-xs text-muted-foreground">
                 Expires:{' '}
                 {new Date(result.expiresAt).toLocaleDateString('en-NG', {

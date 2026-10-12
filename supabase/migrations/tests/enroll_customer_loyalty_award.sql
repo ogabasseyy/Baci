@@ -109,3 +109,26 @@ SELECT pg_temp.assert_true(
   ) LIKE '%v_attempt >= 5%',
   'award_purchase_points does not retry referral-code collisions'
 );
+
+-- 10c. The manual adjustment writer shares the same advisory creation
+-- lock as enrollment and purchase awards (same hashtext key), so the
+-- three writers serialize instead of double-inserting; it also takes
+-- the member-row lock before its read-modify-write. (See case 10 for
+-- why two live sessions cannot run inside this harness; the interleaved
+-- proof lives in enroll_customer_loyalty_concurrency.sql, in-gate.)
+SELECT pg_temp.assert_true(
+  position(
+    'pg_catalog.hashtext(p_merchant_id::text || '':'' || p_customer_id::text)'
+    IN pg_catalog.pg_get_functiondef(
+      'public.adjust_loyalty_points(uuid,uuid,integer,text,text)'::pg_catalog.regprocedure
+    )
+  ) > 0,
+  'manual adjustments lost the shared creation lock'
+);
+
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.adjust_loyalty_points(uuid,uuid,integer,text,text)'::pg_catalog.regprocedure
+  ) LIKE '%FOR UPDATE%',
+  'manual adjustments lost the member-row lock'
+);

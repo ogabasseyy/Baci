@@ -68,7 +68,7 @@
       "id": "marketing", "title": "Growth and tracking integrations", "status": "code_evidenced",
       "claim": "Baci implements analytics/advertising setup and product-feed integration surfaces across web and mobile-admin.",
       "limitations": "Provider IDs, consent, OAuth, configuration and entitlements apply. Social profile links are not ad-account integrations. Configuration does not prove events delivered or improved conversions.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/analytics-config.tsx", "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx", "apps/web/src/lib/feature-flags.ts"]
+      "source_refs": ["apps/mobile-admin/app/(admin)/analytics-config.tsx", "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx", "apps/web/src/app/feeds/google-merchant.xml/route.ts", "apps/web/src/app/feeds/openai.jsonl/route.ts", "apps/web/src/app/feeds/facebook.xml/route.ts"]
     },
     {
       "id": "ai", "title": "AI-assisted commerce workflows", "status": "code_evidenced",

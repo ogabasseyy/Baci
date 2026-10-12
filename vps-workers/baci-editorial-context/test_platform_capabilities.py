@@ -86,7 +86,8 @@ class CapabilityContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
             now = dt.datetime.now(dt.timezone.utc).isoformat()
-            path.write_text('{"schema_version": 1, "schema_version": 1, "reviewed_at": "%s", "source_revision": "%s", "capabilities": []}' % (now, "a" * 40))
+            row = '{"id": "domains", "title": "Domains", "claim": "one", "claim": "two", "limitations": "none", "status": "code_evidenced", "source_refs": ["x"]}'
+            path.write_text('{"schema_version": 1, "reviewed_at": "%s", "source_revision": "%s", "capabilities": [%s]}' % (now, "a" * 40, row))
             with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
                 result = capability_context()
             self.assertIn("Register unavailable, invalid or stale", result)
@@ -111,6 +112,12 @@ class CapabilityContextTests(unittest.TestCase):
                 result = capability_context()
             self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_non_integer_schema_version_fails_closed(self):
+        for bad in (True, 1.0):
+            with self.subTest(schema_version=bad):
+                result = self.render(_register([_row()], schema_version=bad))
+                self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_duplicate_capability_ids_fail_closed(self):
         result = self.render(_register([_row(), _row(claim="Contradictory second claim")]))
         self.assertIn("Register unavailable, invalid or stale", result)
@@ -129,13 +136,17 @@ class CapabilityContextTests(unittest.TestCase):
         refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
         for ref in refs:
             self.assertTrue((repo / ref).exists(), f"cited source missing: {ref}")
-        if (repo / ".git" / "shallow").exists():
-            self.skipTest("shallow checkout cannot verify the revision binding")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
         age = dt.datetime.now(dt.timezone.utc) - reviewed
         self.assertGreaterEqual(age, dt.timedelta(0), "register reviewed_at is future-dated; runtime would reject it")
         if age > dt.timedelta(days=14):
             self.skipTest("register outside its 14-day evidence window; owner re-review required (runtime already fails closed)")
+        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path)}):
+            rendered = capability_context()
+        self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
+        self.assertNotIn("Register unavailable", rendered)
+        if (repo / ".git" / "shallow").exists():
+            self.skipTest("shallow checkout cannot verify the revision binding")
         ancestor = subprocess.run(
             ["git", "-C", str(repo), "merge-base", "--is-ancestor", data["source_revision"], "HEAD"],
             capture_output=True, text=True,

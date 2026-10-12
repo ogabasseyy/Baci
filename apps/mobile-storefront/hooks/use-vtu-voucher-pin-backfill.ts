@@ -119,6 +119,11 @@ async function fetchVoucherPin({
   if (apiType) {
     params.set('type', apiType);
   }
+  // Reference scope: the target row is returned even when 20+ newer
+  // rows of the type would otherwise push it out (Codex R33 gtRR).
+  if (reference) {
+    params.set('reference', reference);
+  }
 
   // A blank observation consumes the attempt but keeps polling: only
   // permanent failures (non-429 4xx, broken contract) throw into the

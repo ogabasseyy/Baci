@@ -136,7 +136,11 @@ function buildSupabase(
         };
       }
       return {
-        select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            single: vi.fn().mockResolvedValue({ data: null, error: null }),
+          })),
+        })),
       };
     }),
     rpc: vi.fn((fn: string, args: Record<string, unknown>) => {

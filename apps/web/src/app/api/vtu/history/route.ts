@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       merchantSlug: searchParams.get('merchantSlug'),
       type: searchParams.get('type') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
+      reference: searchParams.get('reference') ?? undefined,
     });
 
     if (!parsed.success) {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const { merchantSlug, type, limit } = parsed.data;
+    const { merchantSlug, type, limit, reference } = parsed.data;
 
     // Alias-aware (mirrors checkout): a processing tab open across a
     // store rename polls with the stale slug; without the fallback the
@@ -121,6 +122,13 @@ export async function GET(request: NextRequest) {
 
     if (type) {
       query = query.eq('type', type);
+    }
+
+    // Reference scope (backfills): exact match so the target row is
+    // returned no matter how many newer rows of the type exist. The
+    // customer_id filter above keeps this to the caller's own rows.
+    if (reference) {
+      query = query.eq('request_reference', reference);
     }
 
     const { data: transactions, error: transactionsError } = await query

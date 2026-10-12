@@ -178,6 +178,9 @@ export function useUtilityVoucherBackfill({
       merchantSlug,
       limit: '20',
       type: historyType,
+      // Reference scope: the target row is returned even when 20+
+      // newer rows of the type would otherwise push it out (gtRR).
+      reference,
     });
     (async () => {
       for (

@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fulfillPendingVtuTransactionMock } = vi.hoisted(() => ({
-  fulfillPendingVtuTransactionMock: vi.fn(),
-}));
+const { fulfillPendingVtuTransactionMock, overlayReplayAttributesMock } =
+  vi.hoisted(() => ({
+    fulfillPendingVtuTransactionMock: vi.fn(),
+    overlayReplayAttributesMock: vi.fn(),
+  }));
 
 vi.mock('@/lib/vtu-fulfillment', () => ({
   fulfillPendingVtuTransaction: fulfillPendingVtuTransactionMock,
+}));
+
+vi.mock('@/lib/vtu-replay-attribute-overlay', () => ({
+  overlayReplayAttributes: overlayReplayAttributesMock,
 }));
 
 import { reconcileProcessingVtuTransactions } from '@/lib/vtu-processing-reconciliation';
@@ -54,6 +60,10 @@ function createSupabase({
 describe('reconcileProcessingVtuTransactions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    overlayReplayAttributesMock.mockResolvedValue({
+      updated: false,
+      refreshed: false,
+    });
   });
 
   it('reconciles recent processing bill transactions and summarizes outcomes', async () => {
@@ -116,6 +126,20 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(2, {
       supabase,
       transactionId: 'tx-processing',
+    });
+    // No client values on this path: the overlay runs in refresh-only
+    // mode so a server-minted reference is fresh before each re-drive.
+    expect(overlayReplayAttributesMock).toHaveBeenNthCalledWith(1, {
+      supabase,
+      transactionId: 'tx-success',
+      customerPhone: undefined,
+      validationReference: undefined,
+    });
+    expect(overlayReplayAttributesMock).toHaveBeenNthCalledWith(2, {
+      supabase,
+      transactionId: 'tx-processing',
+      customerPhone: undefined,
+      validationReference: undefined,
     });
     expect(result).toEqual({
       checked: 2,

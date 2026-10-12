@@ -265,6 +265,9 @@ export const historyQuerySchema = z.object({
   merchantSlug: z.string().min(1, 'Merchant slug is required'),
   type: billTypeEnum.optional(),
   limit: z.coerce.number().int().min(1).max(50).prefault(20),
+  // Exact request_reference scope for voucher backfills: without it a
+  // customer with 20+ newer rows of the type never sees the target.
+  reference: z.string().min(1).optional(),
 });
 
 const vtuCheckoutGatewayEnum = z.enum(['paystack', 'korapay', 'bank_transfer']);

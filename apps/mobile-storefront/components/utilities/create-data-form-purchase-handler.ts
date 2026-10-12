@@ -191,6 +191,10 @@ export function createDataFormPurchaseHandler({
         // table protects retries. Rotate only on definitive route 4xx.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
+          // The rejection may prove a stale balance (e.g. 400
+          // insufficient funds after another spend): refetch now so the
+          // next tap's readiness check sees the real balance.
+          payment.refetchWallet();
         }
         throw error;
       }

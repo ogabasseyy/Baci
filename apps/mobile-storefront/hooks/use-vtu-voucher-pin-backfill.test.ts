@@ -121,6 +121,11 @@ describe('useVtuVoucherPinBackfill', () => {
 
     await waitFor(() => expect(result.current.pin).toBe('1234-5678'));
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    // Reference scope: the target row is returned even when 20+
+    // newer rows of the type would otherwise push it out.
+    expect(mockFetchWithTimeout.mock.calls[0][0]).toContain(
+      'reference=REF-001'
+    );
   });
 
   it('polls up to MAX_POLL_ATTEMPTS then stops', async () => {

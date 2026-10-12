@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 
 // Every type the wallet-only route can leave 'processing' (202): a
 // customer who closes the pending screen without retrying must still
@@ -141,6 +142,15 @@ export async function reconcileProcessingVtuTransactions({
 
   for (const candidate of candidates) {
     try {
+      // No client values on this path: refresh a server-minted
+      // validation reference (airtime) so the re-drive below does
+      // not reuse an expired attempt-1 value (Codex R33 gtRN).
+      await overlayReplayAttributes({
+        supabase,
+        transactionId: candidate.id,
+        customerPhone: undefined,
+        validationReference: undefined,
+      });
       const result = await fulfillPendingVtuTransaction({
         supabase,
         transactionId: candidate.id,

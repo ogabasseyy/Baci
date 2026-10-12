@@ -312,6 +312,21 @@ describe('GET /api/vtu/history', () => {
     expect(transactionEqCalls).toContainEqual(['type', 'electricity']);
   });
 
+  it('scopes by exact reference when the backfill passes one', async () => {
+    const { GET } = await import('./route');
+
+    const response = await GET(
+      makeRequest(
+        '?merchantSlug=ogabassey&type=electricity&limit=20&reference=VTU-123'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionEqCalls).toContainEqual(['merchant_id', 'merchant-1']);
+    expect(transactionEqCalls).toContainEqual(['customer_id', 'customer-1']);
+    expect(transactionEqCalls).toContainEqual(['request_reference', 'VTU-123']);
+  });
+
   it('logs and falls back when a transaction amount is not finite', async () => {
     const { GET } = await import('./route');
     const consoleErrorSpy = vi

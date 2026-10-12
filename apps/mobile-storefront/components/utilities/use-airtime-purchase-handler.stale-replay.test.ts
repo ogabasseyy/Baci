@@ -53,6 +53,8 @@ describe('airtime stale success replay', () => {
     overrides: {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
+      refetchWallet?: jest.Mock;
+      invalidateWallets?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
     } = {}
   ) {
@@ -65,7 +67,7 @@ describe('airtime stale success replay', () => {
         payment: {
           canFundByBankTransfer: false,
           isAuthenticated: true,
-          refetchWallet: jest.fn(),
+          refetchWallet: overrides.refetchWallet ?? jest.fn(),
           walletBalance: 5000,
           walletError: null,
           walletIsLoading: false,
@@ -81,7 +83,7 @@ describe('airtime stale success replay', () => {
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
           captureSubmittingUserId: () => 'test-user',
-          invalidateWallets: jest.fn(),
+          invalidateWallets: overrides.invalidateWallets ?? jest.fn(),
           isSubmittingOwnerCurrent:
             overrides.isSubmittingOwnerCurrent ?? (() => true),
           resetWalletIdempotencyKey:
@@ -315,14 +317,21 @@ describe('airtime stale success replay', () => {
       new HttpError(400, 'Insufficient funds')
     );
     const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    const invalidateWallets = jest.fn();
     const { result } = renderHandler({
       resetWalletIdempotencyKey,
+      refetchWallet,
+      invalidateWallets,
       isSubmittingOwnerCurrent: () => false,
     });
 
     await result.current.handlePurchase();
 
     expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    // The switch helper invalidates all cached wallets for the retry.
+    expect(invalidateWallets).toHaveBeenCalledTimes(1);
+    expect(refetchWallet).not.toHaveBeenCalled();
   });
 
   it('keeps the idempotency key on a pre-route 429 when the account switched', async () => {
@@ -330,13 +339,37 @@ describe('airtime stale success replay', () => {
       new HttpError(429, 'Too many requests')
     );
     const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    const invalidateWallets = jest.fn();
     const { result } = renderHandler({
       resetWalletIdempotencyKey,
+      refetchWallet,
+      invalidateWallets,
       isSubmittingOwnerCurrent: () => false,
     });
 
     await result.current.handlePurchase();
 
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(refetchWallet).not.toHaveBeenCalled();
+    // The switch itself still invalidates (via the switch helper).
+    expect(invalidateWallets).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches the wallet when a terminal 4xx rejects the purchase', async () => {
+    // The rejection may prove a stale balance: refetch now so the
+    // next tap's readiness check sees the real balance instead of
+    // passing on the cached sufficient one and failing again.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const refetchWallet = jest.fn();
+    const invalidateWallets = jest.fn();
+    const { result } = renderHandler({ refetchWallet, invalidateWallets });
+
+    await result.current.handlePurchase();
+
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(invalidateWallets).not.toHaveBeenCalled();
   });
 });

@@ -431,6 +431,8 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(400, 'Bad Request')
       );
       const resetWalletIdempotencyKey = jest.fn();
+      const refetchWallet = jest.fn();
+      const invalidateWallets = jest.fn();
       const handlePurchase = createValidHandler({
         amount: '1000',
         numericAmount: 1000,
@@ -442,6 +444,8 @@ describe('createBillFormPurchaseHandler', () => {
           captureSubmittingUserId: () => 'test-user',
           isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
+          refetchWallet,
+          invalidateWallets,
         }),
       });
 
@@ -449,6 +453,10 @@ describe('createBillFormPurchaseHandler', () => {
 
       expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
       expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+      // The rejection may prove a stale balance: refetch so the next
+      // tap's readiness check sees the real balance.
+      expect(refetchWallet).toHaveBeenCalledTimes(1);
+      expect(invalidateWallets).not.toHaveBeenCalled();
     });
 
     it('keeps the idempotency key on a pre-route 429 (handler never ran)', async () => {
@@ -458,6 +466,7 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(429, 'Too many requests')
       );
       const resetWalletIdempotencyKey = jest.fn();
+      const refetchWallet = jest.fn();
       const handlePurchase = createValidHandler({
         amount: '1000',
         numericAmount: 1000,
@@ -465,12 +474,14 @@ describe('createBillFormPurchaseHandler', () => {
           walletBalance: 1000,
           isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
+          refetchWallet,
         }),
       });
 
       await handlePurchase();
 
       expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+      expect(refetchWallet).not.toHaveBeenCalled();
     });
 
     it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
@@ -481,6 +492,8 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(400, 'Insufficient funds')
       );
       const resetWalletIdempotencyKey = jest.fn();
+      const refetchWallet = jest.fn();
+      const invalidateWallets = jest.fn();
       const handlePurchase = createValidHandler({
         amount: '1000',
         numericAmount: 1000,
@@ -488,12 +501,17 @@ describe('createBillFormPurchaseHandler', () => {
           walletBalance: 1000,
           isSubmittingOwnerCurrent: () => false,
           resetWalletIdempotencyKey,
+          refetchWallet,
+          invalidateWallets,
         }),
       });
 
       await handlePurchase();
 
       expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+      // The switch helper invalidates all cached wallets for the retry.
+      expect(invalidateWallets).toHaveBeenCalledTimes(1);
+      expect(refetchWallet).not.toHaveBeenCalled();
     });
 
     it('keeps the idempotency key on a pre-route 429 when the account switched', async () => {

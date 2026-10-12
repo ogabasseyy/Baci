@@ -241,6 +241,29 @@ describe('useUtilityVoucherBackfill', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('scopes history polls by reference', async () => {
+    const seen: string[] = [];
+    const fetchMock = mockHistory((url: string) => {
+      seen.push(url);
+      return { transactions: [pendingRow] };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    // Every poll carries the exact reference: the target row is
+    // returned even when 20+ newer rows of the type exist.
+    expect(fetchMock).toHaveBeenCalled();
+    for (const url of seen) {
+      expect(url).toContain('reference=VTU-1');
+    }
+  });
+
   it('resolves pin-less success instead of polling forever', async () => {
     const fetchMock = mockHistory(() => ({
       transactions: [

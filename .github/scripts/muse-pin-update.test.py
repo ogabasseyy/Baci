@@ -106,9 +106,22 @@ class MusePinUpdateTests(unittest.TestCase):
             },
         }
         with mock.patch.object(updater, "fetch_json", side_effect=[channel, manifest]), \
+                mock.patch.object(updater, "current_pinned_version",
+                                  return_value="1.4.6-R6000.1"), \
                 mock.patch.object(updater, "update_files"), \
                 mock.patch.dict(os.environ, {}, clear=True):
             updater.main()
+
+    def test_rejects_non_object_channel_or_manifest(self):
+        with self.assertRaisesRegex(ValueError, "channel did not return a JSON object"):
+            updater.resolve_pins(["not", "an", "object"])
+        channel = {
+            "state": "public", "version": "1.5.0-R6100.2",
+            "manifest_url": "https://lookaside.facebook.com/muse/manifest.json",
+        }
+        with mock.patch.object(updater, "fetch_json", return_value=["not", "an", "object"]):
+            with self.assertRaisesRegex(ValueError, "manifest did not return a JSON object"):
+                updater.resolve_pins(channel)
 
     def test_updates_installer_and_auditor_together(self):
         with tempfile.TemporaryDirectory() as directory:

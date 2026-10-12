@@ -3,11 +3,11 @@ import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   isRetryableError,
-  parseError,
   RETRY_CONFIG,
   runZeptoMailTransport,
   sleep,
 } from '@/lib/zeptomail-retry';
+import { parseError } from '@/lib/zeptomail-send-error';
 import { zeptoMailRequest } from '@/lib/zeptomail-transport';
 
 const DEFAULT_FROM_DOMAIN = getZeptoMailFromDomain();

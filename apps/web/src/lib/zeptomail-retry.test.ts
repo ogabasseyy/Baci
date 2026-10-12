@@ -13,7 +13,6 @@ vi.mock('@/lib/zeptomail-dispatch-reset', () => ({
 
 import {
   isRetryableError,
-  parseError,
   runZeptoMailTransport,
   type ZeptoMailTransportRun,
 } from './zeptomail-retry';
@@ -47,18 +46,6 @@ describe('zeptomail-retry', () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     resetTransportDispatchForFallback.mockResolvedValue(true);
-  });
-
-  it('parses provider, Error, and unknown failures', () => {
-    expect(
-      parseError({
-        error: { code: 'TM_1001', message: 'bad', details: { a: 1 } },
-      })
-    ).toEqual({ message: 'bad', code: 'TM_1001', details: { a: 1 } });
-    const coded = new Error('nope') as Error & { code: string };
-    coded.code = 'E_CONN';
-    expect(parseError(coded)).toEqual({ message: 'nope', code: 'E_CONN' });
-    expect(parseError('flat')).toEqual({ message: 'flat' });
   });
 
   it('retries only server-side error codes', () => {

@@ -15,49 +15,11 @@ import {
   ZEPTOMAIL_MAX_RETRIES,
   ZEPTOMAIL_RETRY_BASE_DELAY_MS,
 } from '@/lib/zeptomail-send-budget';
+import { parseError, type SendFailure } from '@/lib/zeptomail-send-error';
 import {
   ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE,
   zeptoMailRequest,
 } from '@/lib/zeptomail-transport';
-
-export interface SendFailure {
-  message: string;
-  code?: string;
-  details?: unknown;
-}
-
-interface ZeptoMailError {
-  error?: {
-    code?: string;
-    message?: string;
-    details?: unknown;
-  };
-  message?: string;
-}
-
-/**
- * Parse ZeptoMail error response
- */
-export function parseError(error: unknown): SendFailure {
-  if (error instanceof Error) {
-    const code =
-      'code' in error && typeof error.code === 'string'
-        ? error.code
-        : undefined;
-    return { message: error.message, code };
-  }
-
-  const zeptoError = error as ZeptoMailError;
-  if (zeptoError?.error) {
-    return {
-      message: zeptoError.error.message || 'Unknown ZeptoMail error',
-      code: zeptoError.error.code,
-      details: zeptoError.error.details,
-    };
-  }
-
-  return { message: String(error) };
-}
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

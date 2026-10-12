@@ -44,19 +44,21 @@ describe('search analytics service-role boundary', () => {
     expect(constructors).toEqual(['lib/search/server-analytics-client.ts']);
   });
 
-  it('forbids variable-sentinel constructions everywhere', () => {
-    // A non-literal first argument (identifier, template interpolation,
-    // member access) would evade the literal-construction pin above, so
-    // no production file may construct the factory that way. The factory
+  it('forbids non-plain-literal sentinel spellings everywhere', () => {
+    // Any first argument that is not exactly a plain single/double-quoted
+    // literal (identifier, template, concatenation, `as` cast, member
+    // access) would evade the literal-construction pin above, so no
+    // production file may construct the factory that way. The factory
     // definition itself is excluded: its implementation signature is not
     // a call site.
-    const variableConstructionPattern = /createServiceClient\(\s*(?![)'"'])/;
+    const nonLiteralConstructionPattern =
+      /createServiceClient\(\s*(?!(?:\)|(["'])[\w-]+\1\s*[,)]))/;
     const offenders = productionTypeScriptFiles(sourceRoot)
       .filter(
         (path) =>
           relative(sourceRoot, path) !==
             join('lib', 'supabase', 'service.ts') &&
-          variableConstructionPattern.test(readFileSync(path, 'utf8'))
+          nonLiteralConstructionPattern.test(readFileSync(path, 'utf8'))
       )
       .map((path) => relative(sourceRoot, path));
 

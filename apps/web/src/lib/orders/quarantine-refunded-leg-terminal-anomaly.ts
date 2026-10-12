@@ -9,26 +9,30 @@ import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-ref
 import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
 
 /**
- * Quarantine terminal-evidence anomalies when every payment leg already
- * self-terminalized as refunded. The aggregate claim routes such orders
- * to the worker instead of finalizing (invalid links, foreign-currency
- * or cross-gateway rows, unverified manual claims, and non-order
- * currency legs all block it), but the executor's no-actionable-legs
- * path would otherwise reset and defer without ever loading the
- * evidence — spinning the drain forever while settlement, notifications,
- * and the dashboard stay stuck. Each quarantine below throws
- * delivery_uncertain; resolving means no terminal anomaly remains,
- * so the caller defers and the claim finalizes next pass (or an
- * in-flight provider refund still settles).
+ * Quarantine terminal-evidence anomalies on self-terminal refunded legs.
+ * The aggregate claim routes such orders to the worker instead of
+ * finalizing (invalid links, foreign-currency or cross-gateway rows,
+ * unverified manual claims, and non-order currency legs all block it),
+ * but the executor's actionable-scoped matcher never sees refunded legs
+ * — in all-refunded orders it would reset and defer without ever loading
+ * the evidence (spinning the drain forever), and in mixed orders it
+ * would initiate on siblings and complete past anomalies the SQL gate
+ * refuses to finalize. Each quarantine below throws delivery_uncertain.
+ * Sole-leg attribution mirrors the executor exactly so attributable
+ * rows never quarantine here; actionable-leg mismatches stay with the
+ * main flow so clean siblings initiate before the step quarantines.
  */
 export async function quarantineRefundedLegTerminalAnomaly({
   legs,
   order,
+  soleCompletedLegId,
   supabase,
 }: {
-  /** Every funded payment leg; the caller guarantees none is actionable. */
+  /** Every funded payment leg, refunded or still actionable. */
   legs: GatewayPaymentTransaction[];
   order: CancellationOrder;
+  /** The executor's sole completed leg, or null when none exists. */
+  soleCompletedLegId: string | null;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
 }): Promise<void> {
   const { data: refundRows, error: refundLookupError } = await supabase
@@ -64,16 +68,28 @@ export async function quarantineRefundedLegTerminalAnomaly({
       transactions: externalLegs,
     });
   }
-  // No sole-completed-leg attribution is possible here: every leg is
-  // refunded, so an unlinked row can never resolve by waiting.
-  const { mismatchedTransactions, unattributedUnlinkedCount } =
-    matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows,
-      soleCompletedLegId: null,
-      transactions: legs,
-    });
-  if (unattributedUnlinkedCount > 0 || unlinkedRefunds.length > 0) {
+  const {
+    mismatchedTransactions,
+    refundedPaymentIds,
+    unattributedUnlinkedCount,
+    unverifiedLinkedLegIds,
+  } = matchCancellationRefundCoverage({
+    linkedPaymentId,
+    refundRows,
+    soleCompletedLegId,
+    transactions: legs,
+  });
+  // Mirror the executor's sole-leg forgiveness: an unlinked row the
+  // main flow attributes to a covered sole leg is legitimate evidence,
+  // not a blocker. Without a sole leg nothing forgives, as before.
+  const soleLegCovered =
+    soleCompletedLegId !== null &&
+    (refundedPaymentIds.has(soleCompletedLegId) ||
+      unverifiedLinkedLegIds.has(soleCompletedLegId));
+  if (
+    unattributedUnlinkedCount > 0 ||
+    (unlinkedRefunds.length > 0 && !soleLegCovered)
+  ) {
     await quarantineRefund({
       metadata: { unlinked_refund_count: unlinkedRefunds.length },
       order,
@@ -102,9 +118,15 @@ export async function quarantineRefundedLegTerminalAnomaly({
       transactions: currencyMismatchedLegs,
     });
   }
+  // Only refunded-leg mismatches quarantine here: the main flow's
+  // matcher scopes to actionable legs and never sees them, while
+  // actionable-leg mismatches stay with the main flow so clean
+  // siblings initiate before the step quarantines.
   await quarantineWithheldCancellationRefundLegs({
     auditBlockedTransactions: [],
-    mismatchedTransactions,
+    mismatchedTransactions: mismatchedTransactions.filter(
+      (transaction) => transaction.status === 'refunded'
+    ),
     order,
     supabase,
   });

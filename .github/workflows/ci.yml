@@ -387,6 +387,26 @@ jobs:
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/tests/order_refund_management.sql
+          --sql-check supabase/tests/order_refund_management_tenancy.sql
+          --sql-check supabase/tests/order_refund_management_owner.sql
+          --sql-check supabase/tests/order_refund_management_split_records.sql
+          --sql-check supabase/tests/order_refund_management_reversal_records.sql
+          --sql-check supabase/tests/order_refund_management_wallet_cash.sql
+          --sql-check supabase/tests/order_refund_management_pending_review.sql
+          --sql-check supabase/tests/order_refund_management_unverified_funds.sql
+          --sql-check supabase/tests/order_refund_management_gateway_attribution.sql
+          --sql-check supabase/tests/order_refund_management_round33_obligation.sql
+          --sql-check supabase/tests/order_refund_management_round33_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_round33_foundation.sql
+          --sql-check supabase/tests/order_refund_management_round33_pins.sql
+          --sql-check supabase/tests/order_refund_management_round33_implicit_pins.sql
+          --sql-check supabase/tests/order_refund_management_round45_gates.sql
+          --sql-check supabase/tests/order_refund_management_claims.sql
+          --sql-check supabase/tests/order_refund_management_claim_routing.sql
+          --sql-check supabase/tests/order_refund_management_claim_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_mixed_flow.sql
+          --sql-check supabase/tests/order_refund_management_completed_flow.sql
+          --sql-check supabase/tests/order_refund_management_boundaries.sql
           --sql-check supabase/tests/order_refund_management_per_leg_coverage.sql
           --sql-check supabase/tests/order_refund_finalizer_internal_coverage.sql
           --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql

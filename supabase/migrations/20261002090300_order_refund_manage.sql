@@ -28,6 +28,7 @@ DECLARE
   v_payment_pending numeric;
   v_refunded numeric;
   v_pending numeric;
+  v_has_movement_evidence boolean;
   v_remaining numeric;
   v_reversed_internal numeric;
   v_can_manage boolean;
@@ -116,6 +117,13 @@ BEGIN
       'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
   v_refunded := v_refunded + v_payment_refunded;
   v_pending := v_pending + v_payment_pending;
+  -- Open movement reviews pin their legs exactly like pending
+  -- evidence: a reconciliation review is unresolved provider money,
+  -- and resolving it in the reconciliation queue (not by recording
+  -- beside it) is the only safe recovery.
+  v_has_movement_evidence :=
+    private.unresolved_order_movement_evidence_v1(
+      p_order_id, v_order.merchant_id);
   -- Internal redemptions return outside the refund ledger: wallet reversals
   -- credit customer_wallets and savings reversals restore the goal, so the
   -- outstanding balance excludes already-reversed internal amounts.
@@ -138,14 +146,11 @@ BEGIN
     private.uncovered_refund_obligation_v1(p_order_id,
       v_order.merchant_id, v_order.currency, v_reversed_internal,
       COALESCE(v_order.amount_paid,0)),0);
-  -- A partial manual record mismatches the worker's gateway matcher
-  -- (gateway 'manual' never covers a Paystack leg), so retrying now
-  -- would quarantine the step and hide further manual actions. Once a
-  -- merchant starts manual coverage, they finish the balance manually.
-  SELECT EXISTS(SELECT 1 FROM public.transactions
-    WHERE order_id=p_order_id AND transaction_type='refund'
-    AND status IN ('completed','refunded') AND gateway='manual')
-    AND v_remaining>0 INTO v_manual_partial;
+  -- Partial-manual state is per leg (extracted helper): a fully
+  -- manually covered leg never blocks retry, but a partially
+  -- covered leg still needs the merchant to finish first.
+  v_manual_partial := private.manual_refund_partial_v1(
+    p_order_id, v_remaining);
 
   IF p_action <> 'status' THEN
     IF v_order.shipping_status NOT IN ('cancelled','canceled') OR v_order.amount_paid <= 0 THEN
@@ -183,7 +188,8 @@ BEGIN
         p_action := 'status'; -- Idempotent retry of an already recorded transfer.
       END IF;
     END IF;
-    IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0) THEN
+    IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0
+      OR v_has_movement_evidence) THEN
       RAISE EXCEPTION 'refund_processing_or_requires_review' USING ERRCODE='P0001';
     END IF;
     -- A failed step under full coverage may still retry: the money
@@ -244,12 +250,11 @@ BEGIN
       v_remaining := v_remaining + p_amount;
       v_pending := v_pending + p_amount;
     END IF;
-    -- The flag above was computed before this insert: a first manual
-    -- record that leaves a balance behind is partial by definition
-    -- (the helper raises unless it allocated, and the replay path
-    -- implies a pre-existing row), so refresh it or this response
-    -- advertises a retry the next call rejects until the next poll.
-    v_manual_partial := v_remaining > 0;
+    -- The flag above was computed before this insert, so refresh
+    -- it against the new rows or this response advertises a retry
+    -- the next call rejects until the next poll.
+    v_manual_partial := private.manual_refund_partial_v1(
+      p_order_id, v_remaining);
   END IF;
   -- Internal-only reversals satisfy the refund without touching the
   -- refund ledger, so the transactions-scoped sync trigger never
@@ -271,7 +276,7 @@ BEGIN
     v_order.merchant_id,v_order.currency,v_order.amount_paid,
     v_refunded,v_remaining,v_pending,v_reversed_internal,
     v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,
-    v_can_manage,v_manual_partial);
+    v_can_manage,v_manual_partial,v_has_movement_evidence);
 END; $$;
 REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   FROM PUBLIC,anon,authenticated;

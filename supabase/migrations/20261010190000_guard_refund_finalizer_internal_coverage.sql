@@ -39,7 +39,10 @@ BEGIN
      WHERE internal_leg.order_id = p_order_id
        AND internal_leg.merchant_id = p_merchant_id
        AND internal_leg.transaction_type = 'payment'
-       AND internal_leg.status IN ('completed', 'refund_pending')
+       -- Refunded internal legs need their linked manual too: no
+       -- provider flips cash-like rows, so the status alone proves
+       -- nothing (mirrors the legs-covered completion gate).
+       AND internal_leg.status IN ('completed', 'refund_pending', 'refunded')
        AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
          'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
        AND (

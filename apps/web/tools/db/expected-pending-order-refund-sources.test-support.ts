@@ -17,17 +17,17 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090250_order_refund_response.sql',
-    sha256: '8e7ff9eda2fb2942514ecf57222cb880cac64e54e69dc0d4382c609e0f712cce',
+    sha256: 'e4f28ad10fe49abac872e50686bf3232f81657fec1035dc84dc922719b1b4092',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090275_order_refund_pending.sql',
-    sha256: 'c2ffac5b6a0814b06093c568d60bdc41654c750055efde3321a3c78e8b3fb495',
+    sha256: '2c45e72672ad5fe61c9ba41daa91160801bbcc90c7ab2e718bba678f0181ef00',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090300_order_refund_manage.sql',
-    sha256: '572b53df7150f17f16ee2f6754dbb2fede14153abc26ca2e33ada0da8e2fc858',
+    sha256: '9bd69bf406cc414c197c45a2e2dce289801a9067eab94e3bd36c3aa92b092a70',
   },
   {
     repositoryPath:
@@ -42,7 +42,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql',
-    sha256: '4217272a0bd000d7e8111271650fcdc0564dbe8c5e58895758bc3173d3178794',
+    sha256: 'ac96312b11cee5e941196e3a2f7812ca8cb97080e1dd5f7cb44dc637e98e0bb3',
   },
   {
     repositoryPath:
@@ -52,6 +52,6 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010190000_guard_refund_finalizer_internal_coverage.sql',
-    sha256: 'cefcabd27c368498abf5fcfdb0f5cdc59fa0b51c657742e3e1cfef14463b9730',
+    sha256: 'f749edff620239ff94ed0daeeb6aaa09cc7a175090b0c0e215b0ff3a1206ae19',
   },
 ];

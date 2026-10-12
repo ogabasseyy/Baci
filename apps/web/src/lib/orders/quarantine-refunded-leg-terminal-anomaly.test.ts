@@ -43,6 +43,7 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
       quarantineRefundedLegTerminalAnomaly({
         legs: [refundedLeg() as never],
         order: order as never,
+        soleCompletedLegId: null,
         supabase: { from } as never,
       })
     ).resolves.toBeUndefined();
@@ -66,6 +67,7 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
     const error = await quarantineRefundedLegTerminalAnomaly({
       legs: [refundedLeg() as never],
       order: order as never,
+      soleCompletedLegId: null,
       supabase: { from } as never,
     }).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(DeliveryUncertainError);
@@ -93,6 +95,7 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
     const error = await quarantineRefundedLegTerminalAnomaly({
       legs: [refundedLeg() as never],
       order: order as never,
+      soleCompletedLegId: null,
       supabase: { from } as never,
     }).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(DeliveryUncertainError);
@@ -112,6 +115,7 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
     const error = await quarantineRefundedLegTerminalAnomaly({
       legs: [refundedLeg({ currency: 'USD' }) as never],
       order: order as never,
+      soleCompletedLegId: null,
       supabase: { from } as never,
     }).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(DeliveryUncertainError);
@@ -139,6 +143,7 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
     const error = await quarantineRefundedLegTerminalAnomaly({
       legs: [refundedLeg() as never],
       order: order as never,
+      soleCompletedLegId: null,
       supabase: { from } as never,
     }).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(DeliveryUncertainError);
@@ -169,6 +174,119 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
       quarantineRefundedLegTerminalAnomaly({
         legs: [refundedLeg() as never],
         order: order as never,
+        soleCompletedLegId: null,
+        supabase: { from } as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(reviewInsert).not.toHaveBeenCalled();
+  });
+
+  it('quarantines a foreign-currency refunded leg beside an actionable sibling', async () => {
+    const legs = [
+      refundedLeg({ currency: 'USD' }),
+      refundedLeg({
+        gateway_reference: 'paystack-ref-2',
+        id: 'payment-2',
+        status: 'completed',
+      }),
+    ];
+    const { from, reviewInsert } = probeClient({ legs, refundRows: [] });
+    const error = await quarantineRefundedLegTerminalAnomaly({
+      legs: legs as never,
+      order: order as never,
+      soleCompletedLegId: 'payment-2',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'Payment currency requires review before refund',
+      })
+    );
+  });
+
+  it('resolves a clean refunded leg beside an actionable sibling', async () => {
+    const legs = [
+      refundedLeg(),
+      refundedLeg({
+        gateway_reference: 'paystack-ref-2',
+        id: 'payment-2',
+        status: 'completed',
+      }),
+    ];
+    const { from, reviewInsert } = probeClient({ legs, refundRows: [] });
+    await expect(
+      quarantineRefundedLegTerminalAnomaly({
+        legs: legs as never,
+        order: order as never,
+        soleCompletedLegId: 'payment-2',
+        supabase: { from } as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(reviewInsert).not.toHaveBeenCalled();
+  });
+
+  it('forgives an unlinked row the main flow attributes to a covered sole leg', async () => {
+    const legs = [
+      refundedLeg(),
+      refundedLeg({
+        gateway_reference: 'paystack-ref-2',
+        id: 'payment-2',
+        status: 'completed',
+      }),
+    ];
+    const { from, reviewInsert } = probeClient({
+      legs,
+      refundRows: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: '42',
+          id: 'refund-1',
+          metadata: { provider_refund_status: 'processed' },
+          status: 'completed',
+        },
+      ],
+    });
+    await expect(
+      quarantineRefundedLegTerminalAnomaly({
+        legs: legs as never,
+        order: order as never,
+        soleCompletedLegId: 'payment-2',
+        supabase: { from } as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(reviewInsert).not.toHaveBeenCalled();
+  });
+
+  it('leaves actionable-leg mismatches for the main flow', async () => {
+    const legs = [
+      refundedLeg(),
+      refundedLeg({
+        gateway_reference: 'paystack-ref-2',
+        id: 'payment-2',
+        status: 'completed',
+      }),
+    ];
+    const { from, reviewInsert } = probeClient({
+      legs,
+      refundRows: [
+        {
+          amount: 10,
+          currency: 'NGN',
+          gateway: 'korapay',
+          id: 'refund-1',
+          metadata: { payment_transaction_id: 'payment-2' },
+          status: 'completed',
+        },
+      ],
+    });
+    await expect(
+      quarantineRefundedLegTerminalAnomaly({
+        legs: legs as never,
+        order: order as never,
+        soleCompletedLegId: 'payment-2',
         supabase: { from } as never,
       })
     ).resolves.toBeUndefined();

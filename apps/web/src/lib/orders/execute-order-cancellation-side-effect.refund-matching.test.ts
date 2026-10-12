@@ -213,6 +213,9 @@ describe('cancellation refund leg matching', () => {
           payment('payment-2', 100, 'paystack-ref-2'),
         ])
       )
+      // The mixed-order probe loads the same refund rows first; the
+      // row linked to the refunded leg is legitimate evidence.
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
       .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
       .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: refundInsert });

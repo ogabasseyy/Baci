@@ -6,6 +6,7 @@
 -- Shapes the manager response: bounded refund history plus the
 -- bounded audit-event tail, the derived status label, and the
 -- capability flags. Pure read over the computed money/step state.
+DROP FUNCTION IF EXISTS private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean);
 CREATE OR REPLACE FUNCTION private.refund_status_response(
   p_order_id uuid,
   p_merchant_id uuid,
@@ -20,7 +21,8 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
   p_step_attempts integer,
   p_step_retry_requests integer,
   p_can_manage boolean,
-  p_manual_partial boolean
+  p_manual_partial boolean,
+  p_has_movement_evidence boolean
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_history jsonb;
@@ -77,16 +79,19 @@ BEGIN
     -- panel treats refunded as terminal and stops polling, which
     -- would hide a later async failure of settlement reversal or
     -- notifications. A deferred step is the same shape (the drain
-    -- reselects it for finalization), so it queues too. Only a
-    -- completed (or absent) step lets full coverage report
-    -- refunded.
+    -- reselects it for finalization), so it queues too. A claimed
+    -- step is still worker-owned: coverage that lands mid-claim
+    -- (a proof stamp or a concurrent reconciliation) must keep
+    -- polling as processing, never report refunded before finish
+    -- finalizes or fails. Only a completed (or absent) step lets
+    -- full coverage report refunded.
     'status',CASE WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
       WHEN p_pending>0 THEN 'processing'
       WHEN p_step_status='failed' AND p_step_error IS NOT NULL THEN 'failed'
       WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
       WHEN p_step_status='deferred' THEN 'queued'
-      WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
       WHEN p_step_status='claimed' THEN 'processing'
+      WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
       ELSE 'not_started' END,
     -- Raw worker/provider text never leaves the RPC: direct REST
     -- callers bypass the route masking, so map to the fixed labels
@@ -105,18 +110,22 @@ BEGIN
         ORDER BY created_at DESC LIMIT 50) x),'[]'::jsonb),
     -- A failed step under full coverage is retryable: rearming
     -- reruns trusted finalization (covered legs never re-initiate),
-    -- which is the only recovery when the claim rolled back.
+    -- which is the only recovery when the claim rolled back. Open
+    -- movement reviews veto both flags exactly like pending
+    -- evidence: the review queue (not a retry or a manual record
+    -- beside unresolved provider money) is the only safe recovery.
     'canRetry',p_step_status='failed' AND p_step_error IS NOT NULL
       AND (p_remaining>0 OR p_refunded>0) AND p_pending=0
-      AND NOT p_manual_partial,
-    'canRecordManual',p_remaining>0 AND p_pending=0,
+      AND NOT p_manual_partial AND NOT p_has_movement_evidence,
+    'canRecordManual',p_remaining>0 AND p_pending=0
+      AND NOT p_has_movement_evidence,
     'canManageRefunds',p_can_manage
       AND COALESCE(p_step_status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;
-REVOKE ALL ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean)
+REVOKE ALL ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean)
   FROM PUBLIC,anon,authenticated;
 -- Mirrors capped_refund_coverage_v1: service_role fires the manager,
 -- and authenticated EXECUTE keeps any hypothetical direct call on the
 -- clean schema-USAGE denial instead of the crashing function-ACL path.
-GRANT EXECUTE ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean)
+GRANT EXECUTE ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean)
   TO service_role, authenticated;

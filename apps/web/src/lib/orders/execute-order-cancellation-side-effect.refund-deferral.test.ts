@@ -180,6 +180,9 @@ describe('cancellation refund in-flight deferral', () => {
           payment('payment-1', 100, 'paystack-ref'),
         ])
       )
+      // The mixed-order probe loads the same refund rows first; the
+      // processed row covers its leg, so the probe resolves.
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
       .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
       .mockReturnValueOnce(auditReviewsQuery([]));
 

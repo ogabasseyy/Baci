@@ -73,31 +73,33 @@ export async function executeOrderCancellationSideEffect({
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
   }
-  // Link validity spans every funded leg, including self-terminal
-  // refunded ones: a terminal refund row linked to a refunded leg is
-  // legitimate evidence, not an outside-order link. Only initiation
-  // and outstanding-balance work scope to the actionable set.
+  // Link validity spans every funded leg: a terminal refund row linked
+  // to a refunded leg is legitimate evidence, not an outside-order link.
   const linkLegs = transactionRows as GatewayPaymentTransaction[];
   const actionableLegs = transactionRows.filter(
     (row) => row.status !== 'refunded'
   );
-  if (actionableLegs.length === 0) {
-    // Every leg self-terminalized: probe terminal-evidence anomalies
-    // first (the claim routes them here; deferring past them spins
-    // the drain), then defer for claim finalization.
-    await quarantineRefundedLegTerminalAnomaly({
-      legs: linkLegs,
-      order,
-      supabase,
-    });
-    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
-    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
-  }
   const allLegs = actionableLegs as GatewayPaymentTransaction[];
   // Only external legs initiate provider refunds or verify listings.
   const transactions = allLegs.filter((t) =>
     isExternalPaymentGateway(t.gateway)
   );
+  const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
+  // Probe refunded legs even in mixed orders: skipping it would
+  // complete past anomalies the SQL gate refuses to finalize.
+  if (actionableLegs.length < linkLegs.length) {
+    await quarantineRefundedLegTerminalAnomaly({
+      legs: linkLegs,
+      order,
+      soleCompletedLegId: soleCompletedLeg?.id ?? null,
+      supabase,
+    });
+  }
+  if (actionableLegs.length === 0) {
+    // Every leg self-terminalized and anomaly-free: defer for claim.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
+  }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
     .select(
@@ -129,7 +131,6 @@ export async function executeOrderCancellationSideEffect({
     linkedPaymentId,
     unlinkedRefunds,
   } = classifyCancellationRefundLinks(refundRows ?? [], linkLegs);
-  const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
   const {
     manualLinkedLegIds,
     manualPendingLegIds,

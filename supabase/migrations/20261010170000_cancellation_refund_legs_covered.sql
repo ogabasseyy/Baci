@@ -123,7 +123,13 @@ BEGIN
      WHERE internal_leg.order_id = p_order_id
        AND internal_leg.merchant_id = p_merchant_id
        AND internal_leg.transaction_type = 'payment'
-       AND internal_leg.status IN ('completed', 'refund_pending')
+       -- A refunded internal leg still needs its linked manual: no
+       -- provider flips cash-like rows (unlike external
+       -- self-terminal legs), so the status alone is untrusted
+       -- drift, and the manager likewise reports its balance
+       -- outstanding. Trusting it here would finalize an order
+       -- the dashboard still shows as owed.
+       AND internal_leg.status IN ('completed', 'refund_pending', 'refunded')
        AND internal_leg.amount > 0
        AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
          'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'

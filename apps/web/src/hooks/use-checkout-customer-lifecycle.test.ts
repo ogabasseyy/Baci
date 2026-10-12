@@ -1,50 +1,16 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { useForm } from 'react-hook-form';
+import { act, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  type CheckoutShippingValues,
-  useCheckoutCustomerLifecycle,
-} from './use-checkout-customer-lifecycle';
+  makeUser,
+  setupLifecycle,
+  signedInUser,
+} from './use-checkout-customer-lifecycle.test-support';
 
 const { getUser } = vi.hoisted(() => ({ getUser: vi.fn() }));
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({ auth: { getUser } }),
 }));
-
-const signedInUser = {
-  id: 'user-1',
-  email: 'buyer@example.com',
-  user_metadata: {},
-} as SupabaseUser;
-
-function makeUser(userMetadata: Record<string, unknown> = {}) {
-  return { ...signedInUser, user_metadata: userMetadata } as SupabaseUser;
-}
-
-const shippingDefaults: CheckoutShippingValues = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  address: '',
-  city: '',
-  state: '',
-};
-
-function setupLifecycle(merchantSlug: string | null = 'store') {
-  return renderHook(() => {
-    const form = useForm<CheckoutShippingValues>({
-      defaultValues: shippingDefaults,
-    });
-    const lifecycle = useCheckoutCustomerLifecycle(
-      merchantSlug,
-      form.setValue,
-      form.getValues
-    );
-    return { ...lifecycle, form };
-  });
-}
 
 describe('useCheckoutCustomerLifecycle', () => {
   beforeEach(() => {
@@ -155,8 +121,8 @@ describe('useCheckoutCustomerLifecycle', () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
-
     const { result } = setupLifecycle();
+
     await waitFor(() => expect(result.current.pageLoading).toBe(false));
 
     expect(result.current.step).toBe(0);
@@ -193,189 +159,22 @@ describe('useCheckoutCustomerLifecycle', () => {
     );
   });
 
-  it('clears the previous merchant customer when a slug change yields none', async () => {
-    getUser.mockResolvedValue({
-      data: { user: makeUser({ first_name: 'Meta' }) },
-    });
-    const customerA = {
-      first_name: 'Ada',
-      last_name: 'Lovelace',
-      email: 'buyer@example.com',
-      phone: '+2348012345678',
-      saved_addresses: [
-        {
-          first_name: 'Ada',
-          last_name: 'Lovelace',
-          phone: '+2348098765432',
-          address: '12 Broad Street',
-          city: 'Lagos',
-          state: 'Lagos',
-          is_default: true,
-        },
-      ],
-    };
-    vi.mocked(fetch).mockImplementation(
-      async (url) =>
-        ({
-          json: async () =>
-            String(url).includes('store-b')
-              ? { authenticated: false }
-              : { authenticated: true, customer: customerA },
-        }) as Response
-    );
-
-    const { result, rerender } = renderHook(
-      ({ slug }: { slug: string }) => {
-        const form = useForm<CheckoutShippingValues>({
-          defaultValues: shippingDefaults,
-        });
-        const lifecycle = useCheckoutCustomerLifecycle(
-          slug,
-          form.setValue,
-          form.getValues
-        );
-        return { ...lifecycle, form };
-      },
-      { initialProps: { slug: 'store-a' } }
-    );
-    await waitFor(() => expect(result.current.pageLoading).toBe(false));
-    expect(result.current.form.getValues('firstName')).toBe('Ada');
-    expect(result.current.form.getValues('address')).toBe('12 Broad Street');
-
-    // A shopper edit over prefill must survive the switch.
-    act(() => {
-      result.current.form.setValue('phone', '+9990001111', {
-        shouldDirty: true,
-      });
-    });
-
-    rerender({ slug: 'store-b' });
-
-    await waitFor(() =>
-      expect(result.current.form.getValues('firstName')).toBe('Meta')
-    );
-    // Merchant A's saved-address prefill must not leak into merchant B's
-    // form: metadata supplies only first_name, untouched prefill reverts
-    // to blank, and the shopper-edited phone is preserved.
-    expect(result.current.form.getValues()).toMatchObject({
-      firstName: 'Meta',
-      lastName: '',
-      phone: '+9990001111',
-      address: '',
-      city: '',
-      state: '',
-    });
-  });
-
-  it('returns to the auth gate when a slug change finds no session', async () => {
-    getUser
-      .mockResolvedValueOnce({ data: { user: signedInUser } })
-      .mockResolvedValue({ data: { user: null } });
-    const customerA = {
-      first_name: 'Ada',
-      last_name: 'Lovelace',
-      email: 'buyer@example.com',
-      phone: '+2348012345678',
-      saved_addresses: [
-        {
-          first_name: 'Ada',
-          last_name: 'Lovelace',
-          phone: '+2348098765432',
-          address: '12 Broad Street',
-          city: 'Lagos',
-          state: 'Lagos',
-          is_default: true,
-        },
-      ],
-    };
-    vi.mocked(fetch).mockResolvedValue({
-      json: async () => ({ authenticated: true, customer: customerA }),
-    } as Response);
-
-    const { result, rerender } = renderHook(
-      ({ slug }: { slug: string }) => {
-        const form = useForm<CheckoutShippingValues>({
-          defaultValues: shippingDefaults,
-        });
-        const lifecycle = useCheckoutCustomerLifecycle(
-          slug,
-          form.setValue,
-          form.getValues
-        );
-        return { ...lifecycle, form };
-      },
-      { initialProps: { slug: 'store-a' } }
-    );
-    await waitFor(() => expect(result.current.pageLoading).toBe(false));
-    expect(result.current.step).toBe(1);
-    expect(result.current.form.getValues('address')).toBe('12 Broad Street');
-
-    rerender({ slug: 'store-b' });
-
-    await waitFor(() => expect(result.current.step).toBe(0));
-    expect(result.current.form.getValues()).toMatchObject({
-      email: '',
-      firstName: '',
-      lastName: '',
-      phone: '',
-      address: '',
-      city: '',
-      state: '',
-    });
-  });
-
-  it('keeps an OTP auth success that lands during an identity reload', async () => {
-    getUser.mockResolvedValue({
-      data: { user: makeUser({ first_name: 'MetaB' }) },
-    });
-    let resolveSession!: (value: Response) => void;
-    vi.mocked(fetch).mockImplementationOnce(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveSession = resolve;
-        })
-    );
-
-    const { result } = setupLifecycle('store-b');
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-
-    const otpCustomer = {
-      first_name: 'Otp',
-      last_name: 'User',
-      email: 'otp@example.com',
-    };
-    act(() => result.current.handleAuthSuccess(signedInUser, otpCustomer));
-    expect(result.current.form.getValues('firstName')).toBe('Otp');
-
-    // The session endpoint has not observed the just-verified session yet.
-    resolveSession({
-      json: async () => ({ authenticated: false }),
-    } as Response);
-
-    await waitFor(() => expect(result.current.pageLoading).toBe(false));
-    expect(result.current.form.getValues('firstName')).toBe('Otp');
-    expect(result.current.form.getValues('lastName')).toBe('User');
-  });
-
-  it('drops the previous customer when auth succeeds without one', async () => {
+  it('splits the verify-code full_name customer shape into name parts', async () => {
     getUser.mockResolvedValue({ data: { user: null } });
     const { result } = setupLifecycle();
     await waitFor(() => expect(result.current.pageLoading).toBe(false));
 
-    const customerA = {
-      first_name: 'Ada',
-      last_name: 'Lovelace',
-      email: 'buyer@example.com',
-    };
-    act(() => result.current.handleAuthSuccess(signedInUser, customerA));
-    expect(result.current.form.getValues('firstName')).toBe('Ada');
-
+    // Mirrors the /api/storefront/auth/verify-code response customer.
     act(() =>
-      result.current.handleAuthSuccess(makeUser({ first_name: 'Meta' }))
+      result.current.handleAuthSuccess(makeUser({ first_name: 'Meta' }), {
+        id: 'cust-9',
+        email: 'otp@example.com',
+        full_name: 'Ada Lovelace',
+      })
     );
 
-    await waitFor(() =>
-      expect(result.current.form.getValues('firstName')).toBe('Meta')
-    );
+    expect(result.current.form.getValues('firstName')).toBe('Ada');
+    expect(result.current.form.getValues('lastName')).toBe('Lovelace');
+    expect(result.current.form.getValues('email')).toBe('buyer@example.com');
   });
 });

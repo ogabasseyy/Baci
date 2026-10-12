@@ -10,7 +10,12 @@ const { apiPost, lifecycle, replace } = vi.hoisted(() => ({
 }));
 
 const otpUser = { id: 'user-9', email: 'buyer@example.com' };
-const otpCustomer = { first_name: 'Ada', email: 'buyer@example.com' };
+// Mirrors the /api/storefront/auth/verify-code response customer shape.
+const otpCustomer = {
+  id: 'cust-9',
+  email: 'buyer@example.com',
+  full_name: 'Otp User',
+};
 
 vi.mock('@/hooks/use-checkout-customer-lifecycle', () => ({
   useCheckoutCustomerLifecycle: (...args: unknown[]) => lifecycle(...args),

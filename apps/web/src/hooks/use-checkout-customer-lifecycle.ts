@@ -4,8 +4,12 @@ import type { UseFormGetValues, UseFormSetValue } from 'react-hook-form';
 import { createClient } from '@/lib/supabase/client';
 
 export interface CheckoutCustomerData {
-  first_name: string;
-  last_name: string;
+  id?: string;
+  // Session records carry name parts; OTP verify-code records carry
+  // full_name instead. Prefill falls back per part (see below).
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
   email: string;
   phone?: string;
   saved_addresses?: Array<{
@@ -57,6 +61,19 @@ function applyCheckoutCustomerPrefill(
     }
     if (customerData.last_name) {
       setPrefillValue(setValue, 'lastName', customerData.last_name);
+    }
+    if (
+      (!customerData.first_name || !customerData.last_name) &&
+      typeof customerData.full_name === 'string' &&
+      customerData.full_name
+    ) {
+      const [first, ...rest] = customerData.full_name.split(' ');
+      if (!customerData.first_name && first) {
+        setPrefillValue(setValue, 'firstName', first);
+      }
+      if (!customerData.last_name && rest.length > 0) {
+        setPrefillValue(setValue, 'lastName', rest.join(' '));
+      }
     }
     if (customerData.phone) {
       setPrefillValue(setValue, 'phone', customerData.phone);
@@ -139,6 +156,10 @@ export function useCheckoutCustomerLifecycle(
     }
 
     async function loadIdentity() {
+      // Re-gate rendering on every (re)load so a merchant switch never
+      // leaves the previous merchant's step and prefill visible and
+      // submittable while the new identity resolves.
+      setPageLoading(true);
       const generation = identityGenerationRef.current;
       const isCurrent = () =>
         active && generation === identityGenerationRef.current;
@@ -235,6 +256,9 @@ export function useCheckoutCustomerLifecycle(
   };
 
   const handleGuestCheckout = () => {
+    // Supersede any in-flight identity reload like an auth success does:
+    // its late resolution must not bounce the guest back to step 0.
+    identityGenerationRef.current += 1;
     setIsGuestCheckout(true);
     setStep(1);
   };

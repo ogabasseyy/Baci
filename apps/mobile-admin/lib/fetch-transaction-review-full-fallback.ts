@@ -32,13 +32,17 @@ export async function fetchFullTransactionReviewRows(
   }: FullFallbackDependencies
 ) {
   const {
+    fetchAll,
     endDateFilter,
     endDateIso,
     merchantId,
+    orderIds,
     startDateFilter,
     startDateIso,
   } = query;
   const baseOptions = {
+    ...(fetchAll ? { fetchAll } : {}),
+    ...(orderIds ? { orderIds } : {}),
     endDateFilter,
     endDateIso,
     includeCancelledAt: true,
@@ -61,10 +65,11 @@ export async function fetchFullTransactionReviewRows(
   let projection = getFullFallbackProjection(flags);
   let data: TransactionReviewQueryResult['data'] = null;
   let error: TransactionReviewQueryResult['error'] = null;
+  let truncated: TransactionReviewQueryResult['truncated'] = false;
 
   while (!attemptedStages.has(projection.stage)) {
     attemptedStages.add(projection.stage);
-    ({ data, error } = await runQueryWithTaxFallback(
+    ({ data, error, truncated } = await runQueryWithTaxFallback(
       projection.stage,
       {
         ...baseOptions,
@@ -161,5 +166,5 @@ export async function fetchFullTransactionReviewRows(
     projection = getFullFallbackProjection(flags);
   }
 
-  return { data, error };
+  return { data, error, truncated };
 }

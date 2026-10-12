@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { createClient, type Session } from '@supabase/supabase-js';
+import type { FetchImplementation } from '@/types/fetch';
 import { createSupabaseAuthTimeoutFetch } from './supabase-auth-timeout-fetch';
 
 function accessToken(exp: number): string {
@@ -43,7 +44,7 @@ describe('Supabase Auth client checkout deadlines', () => {
       removeItem: jest.fn(async () => undefined),
       setItem: jest.fn(async () => undefined),
     };
-    const fetchImpl = jest.fn<typeof fetch>(
+    const fetchImpl = jest.fn<FetchImplementation>(
       (_input, init) =>
         new Promise((_resolve, reject) => {
           init?.signal?.addEventListener(
@@ -102,7 +103,7 @@ describe('Supabase Auth client checkout deadlines', () => {
         });
       }),
     };
-    const fetchImpl = jest.fn<typeof fetch>(async () =>
+    const fetchImpl = jest.fn<FetchImplementation>(async () =>
       Response.json({
         access_token: accessToken(Math.floor(Date.now() / 1000) + 3_600),
         expires_in: 3_600,
@@ -150,7 +151,7 @@ describe('Supabase Auth client checkout deadlines', () => {
       removeItem: jest.fn(async () => undefined),
       setItem: jest.fn(async () => undefined),
     };
-    const fetchImpl = jest.fn<typeof fetch>(async () => {
+    const fetchImpl = jest.fn<FetchImplementation>(async () => {
       providerCommitted = true;
       return Response.json({
         access_token: accessToken(Math.floor(Date.now() / 1000) + 3_600),
@@ -193,7 +194,7 @@ describe('Supabase Auth client checkout deadlines', () => {
       removeItem: jest.fn(async () => undefined),
       setItem: jest.fn(async () => undefined),
     };
-    const fetchImpl = jest.fn<typeof fetch>(
+    const fetchImpl = jest.fn<FetchImplementation>(
       () =>
         new Promise<Response>((resolve) => {
           setTimeout(

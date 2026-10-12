@@ -86,6 +86,34 @@ describe('run-pagespeed shared helpers', () => {
     ).toContain('request: timed out');
   });
 
+  it('keeps score and threshold visible for messaged category failures', () => {
+    // seo has no table column, so the diagnostic message must carry the
+    // numbers or the report hides them entirely.
+    expect(
+      pageSpeedShared.buildPageSpeedSummary([
+        {
+          label: 'home',
+          url: 'https://usebaci.com/',
+          strategy: 'mobile',
+          passed: false,
+          failures: [
+            {
+              metric: 'seo',
+              actual: 0.8,
+              threshold: 0.9,
+              message:
+                'Failing Lighthouse audits (score 0.8, threshold 0.9): is-crawlable',
+            },
+          ],
+          scores: {},
+          vitals: {},
+        },
+      ])
+    ).toContain(
+      'seo: Failing Lighthouse audits (score 0.8, threshold 0.9): is-crawlable'
+    );
+  });
+
   it('renders every measured vital for passing and failing targets', () => {
     const summary = pageSpeedShared.buildPageSpeedSummary([
       {

@@ -10,7 +10,9 @@ describe('proxy matcher', () => {
   it.each([
     '/_next/static/a.js',
     '/_next/image',
-    '/fonts/inter-naira.woff2',
+    // Hashed-asset example: the matcher is extension-based, so any *.woff2
+    // bypasses the proxy — this exact content hash is incidental.
+    '/fonts/inter-naira.61440e0f45d4.woff2',
   ])('excludes static request %s', (url) => {
     expect(matches(url)).toBe(false);
   });

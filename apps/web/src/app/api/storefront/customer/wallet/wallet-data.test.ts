@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { Database } from '@/types/supabase';
-import { fetchCustomerWallet } from './wallet-data';
+import { fetchCustomerWallet, getCustomerSavingsEarnings } from './wallet-data';
 
 /**
  * Builds a minimal supabase double whose `from(table)` returns a chainable
@@ -108,5 +108,17 @@ describe('fetchCustomerWallet', () => {
 
     expect(result).toEqual({ kind: 'error' });
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('getCustomerSavingsEarnings', () => {
+  it('marks earnings unavailable when the RPC request rejects', async () => {
+    const supabase = {
+      rpc: vi.fn().mockRejectedValue(new Error('network unavailable')),
+    } as unknown as SupabaseClient<Database>;
+
+    await expect(
+      getCustomerSavingsEarnings({ merchantId: 'merchant-1', supabase })
+    ).resolves.toEqual({ earningsAvailable: false, earningsBalance: null });
   });
 });

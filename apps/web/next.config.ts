@@ -4,6 +4,7 @@ import type { NextConfig } from 'next';
 import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-headers';
 import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
+import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
@@ -109,6 +110,7 @@ function getPostHogRewriteRules() {
 }
 
 const nextConfig: NextConfig = {
+  ...getHostedDraftStandaloneOutput(process.env),
   deploymentId: NEXT_DEPLOYMENT_ID,
   env: POSTHOG_PUBLIC_BUILD_ENV,
 

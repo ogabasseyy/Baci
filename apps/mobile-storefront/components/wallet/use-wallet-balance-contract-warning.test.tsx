@@ -36,11 +36,10 @@ describe('useWalletBalanceContractWarning', () => {
       'Wallet API balance contract warning; using safe display values.',
       expect.objectContaining({
         fallbackValues: {
-          earnings_balance: 5000,
           savings_balance: 0,
           total_balance: 5000,
         },
-        missingFields: ['earnings_balance', 'savings_balance', 'total_balance'],
+        missingFields: ['savings_balance', 'total_balance'],
       })
     );
   });
@@ -51,7 +50,7 @@ describe('useWalletBalanceContractWarning', () => {
         merchantId="merchant-b"
         ownerId="owner-b"
         walletData={{
-          earnings_balance: 5000,
+          balance: 5000,
           savings_balance: 2500,
           total_balance: 5000,
         }}

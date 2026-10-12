@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   useCrypto: vi.fn(),
   useCustomer: vi.fn(),
   useDva: vi.fn(),
+  useRedvault: vi.fn(),
   useSubmission: vi.fn(),
   useTransfer: vi.fn(),
 }));
@@ -38,6 +39,9 @@ vi.mock('./use-checkout-dva-session', () => ({
 vi.mock('./use-checkout-order-submission', () => ({
   useCheckoutOrderSubmission: mocks.useSubmission,
 }));
+vi.mock('./use-checkout-redvault-availability', () => ({
+  useCheckoutRedvaultAvailability: mocks.useRedvault,
+}));
 vi.mock('./use-storefront-customer-session', () => ({
   useStorefrontCustomerSession: mocks.useCustomer,
 }));
@@ -49,6 +53,7 @@ import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 import { useCheckoutPaymentExecution } from './use-checkout-payment-execution';
+import { useCheckoutRedvaultAvailability } from './use-checkout-redvault-availability';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 
@@ -61,6 +66,9 @@ beforeEach(() => {
   });
   mocks.useTransfer.mockReturnValue(walletTransfer);
   mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
+  mocks.useRedvault.mockReturnValue({
+    availability: { available: false, reason: 'unavailable' },
+  });
 });
 
 afterEach(() => {
@@ -208,5 +216,61 @@ describe('useCheckoutPaymentExecution', () => {
       options.attempt.handleSubmissionError
     );
     expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
+  });
+
+  it('derives REDVAULT availability from the sanitized checkout cart', () => {
+    const rawItem = {
+      id: 'line-1',
+      quantity: 1,
+      price: 100,
+      negotiatedPrice: 90,
+    };
+    const sanitizedItem = { id: 'line-1', quantity: 1, price: 100 };
+    const options = createOptions();
+    options.cart.cart = [rawItem] as never;
+    options.cart.checkoutCart = [sanitizedItem] as never;
+    mocks.useRedvault.mockReturnValue({
+      availability: { available: true, reason: 'private_live_pilot' },
+    });
+
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    const hook = vi.mocked(useCheckoutRedvaultAvailability);
+    const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cartItems: options.cart.checkoutCart,
+        merchantId: 'merchant-1',
+        merchantSlug: 'test-store',
+      })
+    );
+    expect(hook.mock.calls[0]?.[0].cartItems).not.toBe(options.cart.cart);
+    expect(hook.mock.calls[0]?.[0].cartItems).toEqual([sanitizedItem]);
+    expect(submission?.payment.redvaultAvailable).toBe(true);
+    expect(result.current.redvaultAvailable).toBe(true);
+  });
+
+  it('passes pilot fee blockers from assurance, shipping, and gift state', () => {
+    const options = createOptions();
+    options.cart.checkoutCart = [
+      { id: 'line-1', quantity: 1, hasAssurance: true },
+    ] as never;
+    options.delivery = {
+      session: { cost: 1500 },
+      giftWrappingCost: 500,
+    } as never;
+
+    renderHook(() => useCheckoutPaymentExecution(options));
+    const hook = vi.mocked(useCheckoutRedvaultAvailability);
+
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pilotFeeBlockers: {
+          hasAssurance: true,
+          shippingFee: 1500,
+          giftWrappingCost: 500,
+        },
+      })
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EditBlogPostPage,
   existingPost,
@@ -19,11 +19,13 @@ import {
 describe('EditBlogPostPage Discover image upload metadata', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     resetEditBlogPageTestSupport();
     window.open = mockWindowOpen;
     global.fetch = mockFetch;
     mockFetch.mockResolvedValue(jsonResponse(existingPost));
   });
+  afterEach(vi.unstubAllEnvs);
 
   it('remounts the editor after recovering and undoing an edit draft', async () => {
     mockAutoSave.hasSavedData.mockReturnValue(true);

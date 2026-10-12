@@ -2,6 +2,8 @@
 import z from 'zod';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
+import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
+import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
@@ -277,6 +279,7 @@ const serverSchema = z
     // Internal
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
+    PIGGYVEST_SECRET_KEY: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -409,12 +412,9 @@ const serverSchema = z
       Boolean(process.env.GITHUB_REPOSITORY);
     // These bounded VPS workers never sign agentic JWTs, so they should not
     // fail boot on unrelated signing material.
-    const isNonAgenticWorker = [
-      'ai-storefront-jobs',
-      'event-pipeline',
-      'petrock-reconciliation',
-      'quiz-finalization',
-    ].includes(process.env.BACI_WORKER_PROFILE ?? '');
+    const isNonAgenticWorker = isNonAgenticWorkerProfile(
+      process.env.BACI_WORKER_PROFILE
+    );
 
     if (
       value.NODE_ENV !== 'production' ||
@@ -586,8 +586,25 @@ const validateSanitizedModel = (
  * Throws an error in non-production environments if validation fails.
  * In production, it logs errors but might allow the app to crash downstream if critical keys are missing.
  */
-const getEnv = () => {
+const getEnv = (): Partial<z.infer<typeof serverSchema>> &
+  Pick<
+    z.infer<typeof serverSchema>,
+    | 'AI_CHAT_PROVIDER'
+    | 'AI_STOREFRONT_TRIGGER_TIMEOUT_MS'
+    | 'JUMIA_ENVIRONMENT'
+  > &
+  z.infer<typeof clientSchema> => {
   const isServer = typeof window === 'undefined';
+  const staging = isServer ? readHostedSavingsEnvironment(process.env) : null;
+  if (staging) {
+    return {
+      ...clientSchema.parse(staging),
+      NODE_ENV: staging.NODE_ENV,
+      AI_CHAT_PROVIDER: 'auto',
+      AI_STOREFRONT_TRIGGER_TIMEOUT_MS: 5000,
+      JUMIA_ENVIRONMENT: 'staging',
+    };
+  }
 
   // Explicitly map client variables to ensure they are available on the client
   // Next.js requires the full process.env.NEXT_PUBLIC_* string for bundling
@@ -703,6 +720,7 @@ const getEnv = () => {
         NODE_ENV: process.env.NODE_ENV,
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
+        PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,
@@ -1479,6 +1497,28 @@ export const getMyCoverWebhookSecret = (): string => {
       'MYCOVER_WEBHOOK_SECRET or MYCOVER_SECRET_KEY is not defined'
     );
   return webhookSecret;
+};
+
+export const getPiggyvestWebhookSecret = (): string | undefined => {
+  if (typeof window !== 'undefined')
+    throw new Error('PIGGYVEST_SECRET_KEY cannot be accessed on the client');
+  return (
+    env?.PIGGYVEST_SECRET_KEY?.trim() ||
+    process.env.PVB_SECRET_KEY?.trim() ||
+    undefined
+  );
+};
+
+export const getPiggyvestApiConfig = (): {
+  baseUrl?: string;
+  token: string;
+} | null => {
+  const token = getPiggyvestWebhookSecret();
+  if (!token) return null;
+  // Per the staging contract register, the secret key doubles as the Bearer
+  // token; only the base URL is separately overridable (sandbox/staging).
+  const baseUrl = process.env.PIGGYVEST_API_BASE_URL?.trim();
+  return baseUrl ? { baseUrl, token } : { token };
 };
 
 export const getMyCoverSecretKey = (): string | undefined => {

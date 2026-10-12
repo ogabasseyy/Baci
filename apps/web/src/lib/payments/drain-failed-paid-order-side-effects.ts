@@ -1,27 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import {
+  type DrainCandidateRow,
+  drainFailedPaidOrderSideEffectRow,
+} from '@/lib/payments/drain-failed-paid-order-side-effect-row';
+import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import {
   PAID_ORDER_SIDE_EFFECT_ATTEMPT_CAP,
   PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS,
 } from '@/lib/payments/paid-order-side-effect-retry-policy';
 import { recoverStrandedPaidOrderSideEffects } from '@/lib/payments/recover-stranded-paid-order-side-effects';
 import { REPLAYABLE_PAID_ORDER_SIDE_EFFECT_STEPS } from '@/lib/payments/replayable-paid-order-side-effect-steps';
-import { retireTerminalSideEffectDrain } from '@/lib/payments/retire-terminal-side-effect-drain';
-import {
-  buildJuicywayVerificationContext,
-  isHealableGateway,
-  isTerminalGatewayVerificationReason,
-  verifyGatewayCharge,
-} from '@/lib/payments/verify-gateway-charge';
+import type { retireWedgeWithReview } from '@/lib/payments/retire-wedge-with-review';
 
-// Second half of the reconcile cron: orders that ARE paid but whose outbox
-// side effects (receipt email, settlement, ad tracking) recorded a failure —
-// e.g. the paid-order fetch failed after the atomic flip, or the side-effect
-// runner itself crashed and persistPaidOrderSideEffectRetry filed markers.
-// The wedge sweep cannot see these (it scans NOT-paid orders only), so this
-// drain re-runs the finalizer, whose claim-gated outbox retries exactly the
-// failed steps. Stub/permanent errors are excluded to avoid retry loops.
+// Re-run the claim-gated finalizer for failed paid-order side effects.
+// Exclude permanent errors to avoid retry loops.
 
 const DEFAULT_LIMIT = 10;
 // Comfortably past the claim RPC's 60s takeover window.
@@ -37,31 +30,20 @@ export interface FailedSideEffectDrainSummary {
   stranded: Array<{ orderId: string; step: string; error: string | null }>;
 }
 
-type DrainCandidateRow = {
-  order_id: string;
-  transaction_id: string | null;
-  transactions: {
-    id: string;
-    created_at: string;
-    order_id: string | null;
-    merchant_id: string;
-    amount: number | string | null;
-    platform_fee: number | null;
-    gateway: string;
-    gateway_reference: string | null;
-    gateway_response: Record<string, unknown> | null;
-    metadata: Record<string, unknown> | null;
-  };
-};
-
 export async function drainFailedPaidOrderSideEffects({
   supabase,
   scheduleAfter,
+  finalizePayment,
+  fileWedgeReview,
   limit = DEFAULT_LIMIT,
+  deadlineMs,
 }: {
   supabase: SupabaseClient;
   scheduleAfter: (task: () => Promise<void>) => void;
+  finalizePayment: typeof finalizeOrderGatewayPayment;
+  fileWedgeReview: typeof retireWedgeWithReview;
   limit?: number;
+  deadlineMs?: number;
 }): Promise<FailedSideEffectDrainSummary> {
   const summary: FailedSideEffectDrainSummary = {
     drained: [],
@@ -153,107 +135,36 @@ export async function drainFailedPaidOrderSideEffects({
   }
 
   for (const [orderId, row] of byOrder) {
-    try {
-      const txn = row.transactions;
-      const gateway = txn.gateway;
-      if (!isHealableGateway(gateway)) {
-        summary.skipped.push({ orderId, reason: 'unhealable_gateway' });
-        continue;
-      }
-      if (!txn.gateway_reference) {
-        await retireTerminalSideEffectDrain({
-          orderId,
-          reason:
-            'Paid-order side-effect drain found a completed transaction with no gateway reference; manual reconciliation required',
-          resolution: 'missing_gateway_reference',
-          supabase,
-          transaction: {
-            gateway,
-            gateway_reference: null,
-            id: txn.id,
-            metadata: txn.metadata,
-            order_id: orderId,
-          },
-        });
-        summary.skipped.push({ orderId, reason: 'missing_gateway_reference' });
-        continue;
-      }
-
-      let gatewayResponse = txn.gateway_response;
-      if (!gatewayResponse) {
-        const verification =
-          gateway === 'juicyway'
-            ? await verifyGatewayCharge(
-                gateway,
-                txn.gateway_reference,
-                buildJuicywayVerificationContext(txn.metadata, txn.created_at)
-              )
-            : await verifyGatewayCharge(gateway, txn.gateway_reference);
-        if (!verification.ok) {
-          if (isTerminalGatewayVerificationReason(verification.reason)) {
-            await retireTerminalSideEffectDrain({
-              orderId,
-              reason: `Paid-order side-effect drain: ${gateway} could not safely confirm reference ${txn.gateway_reference} (${verification.reason}${verification.gatewayStatus ? `: ${verification.gatewayStatus}` : ''}); manual reconciliation required`,
-              resolution:
-                verification.reason === 'gateway_status_not_success'
-                  ? 'gateway_verification_negative'
-                  : verification.reason,
-              supabase,
-              transaction: {
-                gateway,
-                gateway_reference: txn.gateway_reference,
-                id: txn.id,
-                metadata: txn.metadata,
-                order_id: orderId,
-              },
-            });
-          }
-          summary.skipped.push({ orderId, reason: verification.reason });
-          continue;
-        }
-        gatewayResponse = verification.response;
-      }
-
-      const outcome = await finalizeOrderGatewayPayment({
-        actor: 'cron:reconcile-gateway-paid-orders:drain',
-        gateway,
-        gatewayResponse,
-        orderId,
-        reference: txn.gateway_reference,
-        scheduleAfter,
-        supabase,
-        transaction: {
-          amount: txn.amount,
-          gateway_reference: txn.gateway_reference,
-          id: txn.id,
-          merchant_id: txn.merchant_id,
-          order_id: txn.order_id,
-          platform_fee: txn.platform_fee,
-        },
-        wonTransactionFlip: false,
-      });
-
-      if (outcome.kind === 'completed') {
-        logger.warn({
-          message: 'Drained failed paid-order side effects via reconcile cron',
-          orderId,
-          transactionId: txn.id,
-        });
-        summary.drained.push({ orderId });
-      } else {
-        summary.failed.push({ orderId, reason: outcome.kind });
-      }
-    } catch (drainError) {
-      logger.error({
-        error: drainError,
-        message: 'Failed-side-effect drain errored for order',
+    // Stop starting orders at the pass deadline: serial side-effect
+    // execution can outlast the invocation budget, and unstarted rows
+    // stay failed for the next drain.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping paid side-effect drain at pass deadline',
         orderId,
       });
-      summary.failed.push({
-        orderId,
-        reason:
-          drainError instanceof Error ? drainError.message : 'unknown_error',
-      });
+      break;
+    }
+    const rowOutcome = await drainFailedPaidOrderSideEffectRow({
+      deadlineMs,
+      fileWedgeReview,
+      finalizePayment,
+      orderId,
+      row,
+      scheduleAfter,
+      supabase,
+    });
+    if (rowOutcome.action === 'stop') break;
+    if (rowOutcome.action === 'stop_failed') {
+      summary.failed.push({ orderId, reason: rowOutcome.reason });
+      break;
+    }
+    if (rowOutcome.action === 'drained') {
+      summary.drained.push({ orderId });
+    } else if (rowOutcome.action === 'failed') {
+      summary.failed.push({ orderId, reason: rowOutcome.reason });
+    } else {
+      summary.skipped.push({ orderId, reason: rowOutcome.reason });
     }
   }
 

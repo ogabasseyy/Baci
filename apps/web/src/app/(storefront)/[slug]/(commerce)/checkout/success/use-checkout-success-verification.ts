@@ -69,7 +69,6 @@ export function useCheckoutSuccessVerification({
     statusRef.current = status;
   }, [status]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler handles memoization
   useEffect(() => {
     // Track the failed-redirect timer so navigating away from this page
     // cancels it — without the cleanup, a user who leaves within the 4s

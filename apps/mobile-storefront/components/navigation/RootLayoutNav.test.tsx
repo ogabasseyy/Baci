@@ -53,6 +53,7 @@ jest.mock('expo-router', () => {
     router: { replace: jest.fn() },
     Stack,
     useGlobalSearchParams: () => ({}),
+    useSegments: () => [],
     usePathname: () => '/',
     useRootNavigationState: () => ({ key: 'root' }),
   };

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import type { Customer } from '@/stores/auth-store.types';
 import { deriveWalletFundingAccountAvailability } from './deriveWalletFundingAccountAvailability';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -45,17 +47,40 @@ export function useWalletFundingAccountController({
   setShowFundPanel,
   updateProfile,
 }: UseWalletFundingAccountControllerParams) {
+  const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
+  const primaryObserved = Boolean(
+    activeMerchantId && isPiggyvestPrimaryMerchant(activeMerchantId)
+  );
+  const primary = Boolean(primaryObserved && primaryCapability !== false);
+  // A never-observed non-pilot merchant must wait for the first capability
+  // verdict before creating a legacy DVA: creating now could orphan the
+  // account when the merchant turns out primary-enabled.
+  const primaryVerdictPending = Boolean(
+    activeMerchantId && !primaryObserved && primaryCapability === null
+  );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,
     isPaymentSettingsError,
     isPaymentSettingsPending,
     paymentSettings,
+    primaryVerdictPending,
+    primaryWalletSetup: primary,
   });
   const [phoneRequiredOverride, setPhoneRequiredOverride] = useState(false);
   const needsPhone = availability.needsPhone || phoneRequiredOverride;
 
-  const handleCreateFundingAccount = () =>
-    createWalletFundingAccount({
+  const handleCreateFundingAccount = () => {
+    if (primary) {
+      setShowFundPanel(true);
+      return Promise.resolve(false);
+    }
+    if (primaryVerdictPending) {
+      // Defense in depth: the create CTA is already disabled with a checking
+      // message while the verdict is pending; never mint a legacy DVA the
+      // probe might orphan.
+      return Promise.resolve(false);
+    }
+    return createWalletFundingAccount({
       activeMerchantId,
       activeMerchantSlug,
       createFundingAccount,
@@ -69,6 +94,7 @@ export function useWalletFundingAccountController({
       },
       walletDvaEnabled: availability.walletDvaEnabled,
     });
+  };
 
   const handleSubmitPhone = async (
     phone: string

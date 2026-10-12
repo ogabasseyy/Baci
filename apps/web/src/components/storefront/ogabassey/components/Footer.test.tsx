@@ -73,6 +73,24 @@ describe('Ogabassey Footer', () => {
     vi.clearAllMocks();
   });
 
+  it('uses the saved public support phone before the legacy phone', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({
+      socialLinks: {},
+      derivedLinks: {},
+    });
+    render(
+      <Footer
+        merchant={{ ...merchantFixture, support_phone: ' +2349169449282 ' }}
+      />
+    );
+    expect(
+      screen.getByRole('link', { name: '+2349169449282' })
+    ).toHaveAttribute('href', 'tel:+2349169449282');
+    expect(
+      screen.queryByRole('link', { name: merchantFixture.phone })
+    ).not.toBeInTheDocument();
+  });
+
   it('uses named footer contrast styles instead of generated arbitrary color utilities', () => {
     mockBuildMerchantTrustProfile.mockReturnValue({
       socialLinks: {},

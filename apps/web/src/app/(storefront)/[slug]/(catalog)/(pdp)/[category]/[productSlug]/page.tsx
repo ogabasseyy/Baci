@@ -3,7 +3,7 @@ import '@/app/(storefront)/storefront-pdp-description-critical.css';
 import '@/app/(storefront)/storefront-pdp-semantic.css';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { cache, type ReactNode, Suspense } from 'react';
+import { type ReactNode, Suspense } from 'react';
 import { StorefrontRouteNotFoundContent } from '@/app/(storefront)/[slug]/storefront-route-not-found-content';
 import { getStorefrontShellSnapshotBase } from '@/app/(storefront)/[slug]/storefront-shell-snapshot';
 import { OgabasseyPdpProductLcpSkeleton } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-lcp-skeleton';
@@ -30,8 +30,6 @@ import {
 import { OGABASSEY_DOMAIN } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
-  type CachedLegacyProductRedirectTarget,
-  type CachedMerchant,
   type CachedProductLcpHint,
   getCachedProductLcpHint,
   getRequestScopedMerchant,
@@ -56,18 +54,16 @@ import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
-import { evaluateCategoryProductCanonicalRoute } from './category-product-canonicalization';
-import {
-  type CategoryProductResult,
-  resolveCategoryProductForMerchant,
-} from './category-product-detail-resolution';
+import type { CategoryProductResult } from './category-product-detail-resolution';
 import {
   buildCriticalCommerceRouteProduct,
   getCachedProductRoutePrimaryImage,
-  type LcpRouteProduct,
-  mapCachedProductLcpHintToRouteProduct,
 } from './category-product-lcp-projection';
 import { buildCategoryProductMetadata } from './category-product-metadata';
+import {
+  type CategoryProductRouteControl,
+  getProductRouteControl,
+} from './category-product-route-control';
 import { buildCategoryProductStructuredData } from './category-product-structured-data';
 import {
   getInitialCriticalVariantSelection,
@@ -211,34 +207,10 @@ function redirectInvalidVariantSelectionParams(
   }
 }
 
-type CategoryProductRouteControlResult =
-  | {
-      product: LcpRouteProduct;
-      categoryMismatch: boolean;
-      merchant: CachedMerchant;
-      needsValuesRedirect: boolean;
-    }
-  | {
-      merchant: CachedMerchant;
-      legacyRedirectTarget: CachedLegacyProductRedirectTarget;
-    };
-
-interface CategoryProductRouteControl {
-  result: CategoryProductRouteControlResult;
-  loadProductResult: () => Promise<CategoryProductResult>;
-}
-
 interface StartedKnownOgaBasseyPdpProductPreload {
   isKnownOgaBasseyCustomDomain: boolean;
   knownOgaBasseyImageLcpHintPromise: Promise<CachedProductLcpHint | null> | null;
   productSlug: string;
-}
-
-function getMappedProductCategorySlug(product: LcpRouteProduct) {
-  return (
-    product.category_slug ||
-    (product.category ? generateSlug(product.category) : null)
-  );
 }
 
 function getDirectProductPreloadKey(src: string): string {
@@ -330,74 +302,6 @@ async function resolveKnownOgaBasseyPdpProductPreload(
 
   return null;
 }
-
-const getProductRouteControl = cache(
-  async (
-    storeSlug: string,
-    categorySlug: string,
-    productSlug: string
-  ): Promise<CategoryProductRouteControl | null> => {
-    // Over-long / repeatedly-encoded bot slugs can never match a product; bail
-    // before any `'use cache'`/Supabase lookup runs with an unbounded key.
-    if (!evaluateStorefrontSlugSafety(productSlug).safe) {
-      console.warn(
-        'Skipped product route lookups for unsafe product slug:',
-        sanitizeLookupLogValue(productSlug)
-      );
-      return null;
-    }
-
-    const merchant = await getRequestScopedMerchant(storeSlug);
-
-    if (!merchant) {
-      console.warn(
-        'Merchant not found for storefront product route:',
-        storeSlug
-      );
-      return null;
-    }
-
-    const cachedProduct = await getCachedProductLcpHint(
-      merchant.id,
-      productSlug,
-      {
-        includeVariants: true,
-      }
-    );
-    if (!cachedProduct) {
-      const result = await resolveCategoryProductForMerchant(
-        merchant,
-        categorySlug,
-        productSlug
-      );
-      return result
-        ? {
-            result,
-            loadProductResult: () => Promise.resolve(result),
-          }
-        : null;
-    }
-
-    const product = mapCachedProductLcpHintToRouteProduct(cachedProduct);
-    const canonicalRoute = evaluateCategoryProductCanonicalRoute({
-      requestedCategorySlug: categorySlug,
-      requestedProductSlug: productSlug,
-      resolvedCategorySlug: getMappedProductCategorySlug(product),
-      resolvedProductSlug: product.slug,
-    });
-    const loadProductResult = () =>
-      resolveCategoryProductForMerchant(merchant, categorySlug, productSlug);
-
-    return {
-      result: {
-        product,
-        merchant,
-        ...canonicalRoute,
-      },
-      loadProductResult,
-    };
-  }
-);
 
 export function generateStaticParams(): Promise<
   Array<{ slug: string; category: string; productSlug: string }>

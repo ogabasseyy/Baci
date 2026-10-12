@@ -28,6 +28,11 @@ const mockHandleNotificationResponse =
 let mockNotificationResponseCallback:
   | ((response: NotificationResponse) => void)
   | null = null;
+const mockAuthSnapshot = {
+  customer: { id: 'customer-1' },
+  merchantId: 'merchant-1',
+  user: { id: 'user-1' },
+};
 jest.mock('expo-router', () => ({ router: { push: mockRouterPush } }));
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({ debug: jest.fn(), info: jest.fn(), warn: jest.fn() }),
@@ -51,6 +56,9 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: jest.fn(),
   isPushOptedOut: jest.fn(),
   setPushOptOut: jest.fn(),
+  getRegisteredPushToken: jest.fn(async () => null),
+  setRegisteredPushToken: jest.fn(async () => {}),
+  clearRegisteredPushToken: jest.fn(async () => {}),
 }));
 jest.mock('@/services/push-notification-channels', () => ({
   ensureAndroidNotificationChannels: mockEnsureAndroidNotificationChannels,
@@ -66,17 +74,22 @@ jest.mock('@/services/push-notifications', () => ({
   removePushTokenFromServer: jest.fn(),
   savePushTokenToServer: jest.fn(),
 }));
-jest.mock('@/stores/auth-store', () => ({ useAuthStore: jest.fn() }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: Object.assign(jest.fn(), {
+    getState: () => mockAuthSnapshot,
+  }),
+}));
 const mockedUseAuthStore = (
   jest.requireMock('@/stores/auth-store') as {
     useAuthStore: jest.MockedFunction<
       (
         selector: (state: {
+          customer: { id: string } | null;
           merchantId: string;
           user: { id: string };
         }) => unknown
       ) => unknown
-    >;
+    > & { getState: () => typeof mockAuthSnapshot };
   }
 ).useAuthStore;
 const { usePushNotifications } =
@@ -101,7 +114,7 @@ describe('usePushNotifications response handling', () => {
     mockGetStoredPushToken.mockResolvedValue(null);
     mockEnsureAndroidNotificationChannels.mockResolvedValue(undefined);
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({ merchantId: 'merchant-1', user: { id: 'user-1' } })
+      selector(mockAuthSnapshot)
     );
   });
 
@@ -296,5 +309,53 @@ describe('usePushNotifications response handling', () => {
       pathname: '/wallet',
       params: { action: 'savings' },
     });
+  });
+
+  it('passes the active merchant to both warm and cold savings taps', async () => {
+    const coldResponse = createResponse(
+      'response-savings-cold-tenant',
+      {
+        goalId: '00000000-0000-4000-8000-000000000002',
+        merchantId: 'merchant-1',
+        notificationId: '00000000-0000-4000-8000-000000000001',
+        type: 'savings',
+      },
+      9000
+    );
+    const warmResponse = createResponse(
+      'response-savings-warm-tenant',
+      {
+        goalId: '00000000-0000-4000-8000-000000000002',
+        merchantId: 'merchant-1',
+        notificationId: '00000000-0000-4000-8000-000000000001',
+        type: 'savings',
+      },
+      9001
+    );
+    mockGetLastNotificationResponse.mockResolvedValue(coldResponse);
+    renderHook(() => usePushNotifications());
+    await waitForResponseListener();
+
+    act(() => mockNotificationResponseCallback?.(warmResponse));
+
+    await waitFor(() =>
+      expect(mockHandleNotificationResponse).toHaveBeenCalledTimes(2)
+    );
+    expect(mockHandleNotificationResponse).toHaveBeenNthCalledWith(
+      1,
+      coldResponse,
+      expect.any(Function),
+      undefined,
+      'merchant-1',
+      expect.any(Function)
+    );
+    expect(mockHandleNotificationResponse).toHaveBeenNthCalledWith(
+      2,
+      warmResponse,
+      expect.any(Function),
+      undefined,
+      'merchant-1',
+      expect.any(Function)
+    );
   });
 });

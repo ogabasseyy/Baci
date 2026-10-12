@@ -16,6 +16,7 @@ import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildFeedDescription } from './build-feed-description';
 import {
@@ -37,6 +38,8 @@ export type {
 } from './feed-types';
 
 const VALID_GMC_CONDITIONS = new Set(['new', 'used', 'refurbished'] as const);
+
+const { normalizeParentProductIdentifiers } = productManufacturerIdentifiers;
 
 function isValidForGmc(product: FeedProduct): boolean {
   if (
@@ -156,6 +159,9 @@ export function generateGoogleMerchantFeed(
         );
         return selection ? rows.get(selection.id) : '';
       }
+      // Simple-product rows carry parent identifiers only when they are
+      // usable non-blank strings; whitespace must not reach the feed.
+      const productIdentifiers = normalizeParentProductIdentifiers(product);
       const parentCondition =
         product.condition == null
           ? 'new'
@@ -183,11 +189,11 @@ export function generateGoogleMerchantFeed(
               currency,
               description,
               googleProductCategory: product.google_product_category,
-              gtin: product.gtin,
+              gtin: productIdentifiers.gtin,
               id: baseItemId,
               groupId: hasConditionOffers ? product.id : undefined,
               imageUrl: productLevelImages.primaryImageUrl,
-              mpn: product.mpn,
+              mpn: productIdentifiers.mpn,
               price: product.price,
               productDetailsXml,
               productType,
@@ -229,11 +235,13 @@ export function generateGoogleMerchantFeed(
             : `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,
           `        <g:brand>${escapeXml(effectiveBrand)}</g:brand>`,
           `        <g:condition>${toGmcCondition(offer.condition)}</g:condition>`,
-          product.gtin
-            ? `        <g:gtin>${escapeXml(product.gtin)}</g:gtin>`
+          productIdentifiers.gtin
+            ? `        <g:gtin>${escapeXml(productIdentifiers.gtin)}</g:gtin>`
             : '',
-          product.mpn ? `        <g:mpn>${escapeXml(product.mpn)}</g:mpn>` : '',
-          product.gtin || (product.mpn && effectiveBrand)
+          productIdentifiers.mpn
+            ? `        <g:mpn>${escapeXml(productIdentifiers.mpn)}</g:mpn>`
+            : '',
+          productIdentifiers.gtin || (productIdentifiers.mpn && effectiveBrand)
             ? '        <g:identifier_exists>yes</g:identifier_exists>'
             : '        <g:identifier_exists>no</g:identifier_exists>',
           colorXml,

@@ -30,8 +30,11 @@ fi
 
 tmp_bin="$(mktemp)"
 trap 'rm -f "${tmp_bin}"' EXIT
-# --proto '=https' forbids redirect downgrades; --retry rides out flakes.
-curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+# --disable first: curl reads $CURL_HOME/.curlrc or $HOME/.curlrc unless
+# disabled as the first parameter; --proto '=https' forbids redirect
+# downgrades; --retry rides out flakes. No -K/--config: a config file
+# imports arguments as if typed on the command line.
+curl --disable --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
   --connect-timeout 15 --max-time 600 -fsSL -o "${tmp_bin}" \
   "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${MUSE_VERSION}&file=${artifact}"
 

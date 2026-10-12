@@ -1,0 +1,313 @@
+{
+  "expected": {
+    "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+    "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>",
+    "database": "<OWNER-PROVED-DATABASE-NAME>",
+    "projectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+    "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+    "port": 5432,
+    "certificateAuthoritySha256": "<OWNER-PROVED-CA-SHA256-LOWERCASE-64-HEX>"
+  },
+  "origins": {
+    "piggyvestApi": "https://staging.piggyvest.business",
+    "paystackApi": "https://api.paystack.co",
+    "paystackCheckout": "https://checkout.paystack.com",
+    "public": "https://staging.ogabassey.com",
+    "auth": "https://staging-auth.ogabassey.com"
+  },
+  "background": {
+    "worker": {
+      "environment": "staging",
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+      "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+      "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+      "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>"
+    },
+    "provider": {
+      "paystackSecret": "<OWNER-SUPPLIED-PAYSTACK-TEST-SECRET>",
+      "piggyvest": {
+        "apiSecret": "<OWNER-SUPPLIED-PIGGYVEST-STAGING-SECRET>",
+        "expectedBusinessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>"
+      },
+      "scope": {
+        "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+        "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+        "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+        "sourceWalletId": "<OWNER-PROVED-TREASURY-SOURCE-WALLET-ID>"
+      }
+    },
+    "evidence": {
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+      "webhookSecret": "<OWNER-SUPPLIED-STAGING-WEBHOOK-SECRET>",
+      "piggyvest": {
+        "apiSecret": "<SAME-OWNER-SUPPLIED-PIGGYVEST-STAGING-SECRET>",
+        "expectedBusinessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>"
+      }
+    },
+    "database": {
+      "treasury": {
+        "environment": "staging",
+        "transport": "tls",
+        "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+        "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+        "port": 5432,
+        "login": "prefunded_treasury_operator",
+        "expectedLogin": "prefunded_treasury_operator",
+        "database": "<OWNER-PROVED-DATABASE-NAME>",
+        "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "certificateAuthority": "<OWNER-SUPPLIED-CA-PEM>",
+        "password": "<SAME-TREASURY-OPERATOR-PASSWORD>",
+        "storageApproved": true
+      },
+      "ingestion": {
+        "environment": "staging",
+        "transport": "tls",
+        "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+        "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+        "port": 5432,
+        "login": "prefunded_evidence",
+        "expectedLogin": "prefunded_evidence",
+        "database": "<OWNER-PROVED-DATABASE-NAME>",
+        "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+        "password": "<SAME-EVIDENCE-LOGIN-PASSWORD>",
+        "storageApproved": true
+      },
+      "authorizer": {
+        "environment": "staging",
+        "transport": "tls",
+        "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+        "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+        "port": 5432,
+        "login": "prefunded_authorizer",
+        "expectedLogin": "prefunded_authorizer",
+        "database": "<OWNER-PROVED-DATABASE-NAME>",
+        "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+        "password": "<SAME-AUTHORIZER-PASSWORD>",
+        "storageApproved": true
+      }
+    }
+  },
+  "publicCheckout": {
+    "deployment": "staging",
+    "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>",
+    "publicOrigin": "https://staging.ogabassey.com",
+    "authOrigin": "https://staging-auth.ogabassey.com",
+    "maximumAmountKobo": "<OWNER-APPROVED-POSITIVE-STAGING-LIMIT>",
+    "context": {
+      "environment": "staging",
+      "transport": "tls",
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "expectedBusinessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+      "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+      "allowlistedMerchantIds": ["<OWNER-PROVED-MERCHANT-UUID>"],
+      "allowlistedCustomerIds": ["<OWNER-PROVED-CUSTOMER-UUIDS>"],
+      "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>"
+    },
+    "checkout": {
+      "scope": {
+        "deployment": "staging",
+        "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+        "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+        "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+        "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+        "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>"
+      },
+      "customerDatabase": {
+        "environment": "staging",
+        "profile": "checkout_customer",
+        "transport": "tls",
+        "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+        "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+        "port": 5432,
+        "login": "prefunded_treasury_operator",
+        "expectedLogin": "prefunded_treasury_operator",
+        "database": "<OWNER-PROVED-DATABASE-NAME>",
+        "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+        "password": "<SAME-TREASURY-OPERATOR-PASSWORD>",
+        "storageApproved": true
+      },
+      "verifierDatabase": {
+        "environment": "staging",
+        "profile": "checkout_authorizer",
+        "transport": "tls",
+        "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+        "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+        "port": 5432,
+        "login": "prefunded_authorizer",
+        "expectedLogin": "prefunded_authorizer",
+        "database": "<OWNER-PROVED-DATABASE-NAME>",
+        "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+        "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+        "password": "<SAME-AUTHORIZER-PASSWORD>",
+        "storageApproved": true
+      },
+      "provider": {
+        "deployment": "staging",
+        "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+        "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+        "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+        "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+        "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>",
+        "paystackSecret": "<SAME-OWNER-SUPPLIED-PAYSTACK-TEST-SECRET>",
+        "callbackUrl": "https://staging.ogabassey.com/savings/card-return"
+      }
+    }
+  },
+  "savedCardPublicRuntime": {
+    "deployment": "staging",
+    "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>",
+    "publicOrigin": "https://staging.ogabassey.com",
+    "authOrigin": "https://staging-auth.ogabassey.com",
+    "context": {
+      "environment": "staging",
+      "transport": "tls",
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "expectedBusinessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+      "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+      "allowlistedMerchantIds": ["<OWNER-PROVED-MERCHANT-UUID>"],
+      "allowlistedCustomerIds": ["<OWNER-PROVED-CUSTOMER-UUIDS>"],
+      "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>"
+    },
+    "database": {
+      "environment": "staging",
+      "profile": "customer",
+      "transport": "tls",
+      "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+      "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+      "port": 5432,
+      "login": "prefunded_treasury_operator",
+      "expectedLogin": "prefunded_treasury_operator",
+      "database": "<OWNER-PROVED-DATABASE-NAME>",
+      "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+      "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+      "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+      "password": "<SAME-RESTRICTED-TREASURY-OPERATOR-PASSWORD>",
+      "storageApproved": true
+    }
+  },
+  "receiverReplayRuntime": {
+    "expectedAppSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+    "configuration": {
+      "scope": {
+        "environment": "staging",
+        "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+        "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+        "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+        "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+        "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>"
+      },
+      "evidence": {
+        "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+        "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+        "webhookSecret": "<SAME-OWNER-SUPPLIED-STAGING-WEBHOOK-SECRET>",
+        "piggyvest": {
+          "apiBaseUrl": "https://staging.piggyvest.business",
+          "apiSecret": "<SAME-OWNER-SUPPLIED-PIGGYVEST-STAGING-SECRET>",
+          "expectedBusinessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>"
+        }
+      },
+      "database": {
+        "treasury": {
+          "environment": "staging",
+          "transport": "tls",
+          "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+          "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+          "port": 5432,
+          "login": "prefunded_treasury_operator",
+          "expectedLogin": "prefunded_treasury_operator",
+          "database": "<OWNER-PROVED-DATABASE-NAME>",
+          "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+          "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+          "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+          "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+          "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+          "password": "<SAME-RESTRICTED-TREASURY-OPERATOR-PASSWORD>",
+          "storageApproved": true
+        },
+        "ingestion": {
+          "environment": "staging",
+          "transport": "tls",
+          "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+          "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+          "port": 5432,
+          "login": "prefunded_evidence",
+          "expectedLogin": "prefunded_evidence",
+          "database": "<OWNER-PROVED-DATABASE-NAME>",
+          "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+          "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+          "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+          "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+          "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+          "password": "<SAME-RESTRICTED-EVIDENCE-LOGIN-PASSWORD>",
+          "storageApproved": true
+        }
+      }
+    }
+  },
+  "recovery": {
+    "scope": {
+      "deployment": "staging",
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+      "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+      "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+      "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+      "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>"
+    },
+    "authorizerDatabase": {
+      "environment": "staging",
+      "profile": "checkout_authorizer",
+      "transport": "tls",
+      "host": "<OWNER-PROVED-TLS-DATABASE-HOST>",
+      "expectedHost": "<SAME-OWNER-PROVED-TLS-DATABASE-HOST>",
+      "port": 5432,
+      "login": "prefunded_authorizer",
+      "expectedLogin": "prefunded_authorizer",
+      "database": "<OWNER-PROVED-DATABASE-NAME>",
+      "expectedDatabase": "<SAME-OWNER-PROVED-DATABASE-NAME>",
+      "expectedSystemId": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+      "expectedProjectId": "<OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "actualProjectId": "<SAME-OWNER-PROVED-SUPABASE-PROJECT-ID>",
+      "certificateAuthority": "<SAME-OWNER-SUPPLIED-CA-PEM>",
+      "password": "<SAME-AUTHORIZER-PASSWORD>",
+      "storageApproved": true
+    },
+    "provider": {
+      "deployment": "staging",
+      "integrationId": "<OWNER-PROVED-INTEGRATION-UUID>",
+      "merchantId": "<OWNER-PROVED-MERCHANT-UUID>",
+      "treasuryBindingId": "<OWNER-PROVED-TREASURY-BINDING-UUID>",
+      "businessId": "<OWNER-PROVED-PIGGYVEST-BUSINESS-ID>",
+      "systemIdentifier": "<OWNER-PROVED-FIXED-STAGING-SYSTEM-ID>",
+      "expiresAt": "<FIXED-DEADLINE-2026-09-29T15:59:10Z>",
+      "paystackSecret": "<SAME-OWNER-SUPPLIED-PAYSTACK-TEST-SECRET>",
+      "callbackUrl": "https://staging.ogabassey.com/savings/card-return"
+    }
+  }
+}

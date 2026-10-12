@@ -100,6 +100,12 @@ export async function POST(
         p_reason: cancellationReason,
       });
     if (cancellationError) {
+      // PostgREST can wrap the raised sentinel with context, so match
+      // it as a substring: exact equality would silently demote a 409
+      // PAYMENT_RECONCILIATION_REQUIRED to a generic failure.
+      const paymentNeedsReconciliation =
+        cancellationError.code === 'P0001' &&
+        cancellationError.message.includes('payment_capture_in_flight');
       const status =
         cancellationError.code === 'P0002'
           ? 404
@@ -110,15 +116,20 @@ export async function POST(
               : 500;
       return NextResponse.json(
         {
-          error:
-            status === 409
+          error: paymentNeedsReconciliation
+            ? 'A payment attempt needs to be checked before this order can be cancelled. Please contact support.'
+            : status === 409
               ? 'This order can no longer be cancelled.'
               : status === 404
                 ? 'Order not found'
                 : status === 403
                   ? 'You do not have permission to cancel this order.'
                   : 'Failed to cancel order',
-          code: status === 409 ? 'ORDER_NOT_CANCELLABLE' : undefined,
+          code: paymentNeedsReconciliation
+            ? 'PAYMENT_RECONCILIATION_REQUIRED'
+            : status === 409
+              ? 'ORDER_NOT_CANCELLABLE'
+              : undefined,
         },
         { status }
       );

@@ -43,7 +43,7 @@ describe('POST /api/admin/push/test', () => {
     });
     mocks.createClient.mockResolvedValue({ from: vi.fn() });
     mocks.csrf.mockResolvedValue({ valid: true });
-    mocks.deliver.mockResolvedValue({ failed: 0, sent: 1 });
+    mocks.deliver.mockResolvedValue({ failed: 0, sent: 1, uncertain: 0 });
   });
 
   it('has no service-role or generic push-pipeline import edge', () => {
@@ -103,6 +103,7 @@ describe('POST /api/admin/push/test', () => {
       failed: 0,
       sent: 1,
       status: 'sent',
+      uncertain: 0,
     });
     expect(mocks.deliver).toHaveBeenCalledWith(
       { from: expect.any(Function) },
@@ -110,6 +111,20 @@ describe('POST /api/admin/push/test', () => {
       'Admin Push Test',
       'Check delivery'
     );
+  });
+
+  it('reports an uncertain test delivery distinctly from failure', async () => {
+    mocks.deliver.mockResolvedValue({ failed: 0, sent: 0, uncertain: 1 });
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      failed: 0,
+      sent: 0,
+      status: 'uncertain',
+      uncertain: 1,
+    });
   });
 
   it('returns a stable error without provider or database details', async () => {

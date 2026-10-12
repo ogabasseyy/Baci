@@ -157,12 +157,21 @@ function normalizedExecutePayload(payload) {
       operationText: expressionOperationText(payload),
       text: normalizeExecuteExpression(payload),
       hasUnknownArguments: hasUnresolvedExpressionComponents(payload),
+      hasUnknownPrivilegeTarget: hasUnresolvedExpressionComponents(payload),
     };
   }
   return {
     operationText: expressionOperationText(rendered.text),
     text: normalizeExecuteExpression(rendered.text),
     hasUnknownArguments: rendered.hasUnknownArguments,
+    hasUnknownPrivilegeTarget:
+      rendered.hasUnknownArguments &&
+      (rendered.hasUnknownRawArguments !== false ||
+        rendered.text.includes(';') ||
+        !/\bON\s+[\s\S]+?\s+(?:TO|FROM)\b/i.test(rendered.text) ||
+        /__DYNAMIC_FORMAT_ARGUMENT__/.test(
+          rendered.text.match(/\bON\s+([\s\S]+?)\s+(?:TO|FROM)\b/i)?.[1] ?? ''
+        )),
   };
 }
 
@@ -239,14 +248,14 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
       const renderedAssigned = normalizedExecutePayload(assigned);
       if (matchesPrivilege(renderedAssigned.text)) return true;
       if (
-        renderedAssigned.hasUnknownArguments &&
+        renderedAssigned.hasUnknownPrivilegeTarget &&
         dynamicPrivilegeOperationPattern.test(renderedAssigned.operationText)
       ) {
         return true;
       }
     }
     if (
-      normalized.hasUnknownArguments &&
+      normalized.hasUnknownPrivilegeTarget &&
       dynamicPrivilegeOperationPattern.test(normalized.operationText)
     ) {
       return true;

@@ -1,29 +1,39 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { BRAND } from '@/constants/Colors';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
+import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
+import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
+import { WalletHeroSavingsAccount } from './WalletHeroSavingsAccount';
 import { WalletQuickUtilities } from './WalletQuickUtilities';
 import { WALLET_COLORS } from './wallet.colors';
 import { styles } from './wallet.styles';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type WalletHeroSectionProps = {
-  canCreateFundingAccount: boolean;
+  activeSavingsGoal?: Pick<
+    WalletActiveSavingsGoal,
+    'id' | 'status' | 'source_mode'
+  > | null;
+  isRefetching?: boolean;
+  canCreateFundingAccount?: boolean;
   createFundingAccountUnavailableMessage?: string;
-  accentColor: string;
-  /** Omitted while the fund panel is open — it owns the single interactive
-   * credit-check affordance then, so the hero must not mount a duplicate. */
+  isCreatingFundingAccount?: boolean;
+  needsPhone?: boolean;
+  onCreateFundingAccount?: () => void;
+  utilityAccentColor?: string;
+  earningsAvailable?: boolean;
+  earningsBalance: number | null;
+  fundingAccount?: WalletDisplayFundingAccount | null;
   creditWatch?: WalletCreditWatch;
-  earningsBalance: number;
-  fundingAccount: WalletDisplayFundingAccount | null;
-  isCreatingFundingAccount: boolean;
   loyaltyPoints: number;
   loyaltyTier?: string | null;
-  needsPhone: boolean;
-  onCreateFundingAccount: () => void;
   onOpenFundPanel: () => void;
   onOpenRedeemPanel: () => void;
   savingsBalance: number;
@@ -31,93 +41,54 @@ type WalletHeroSectionProps = {
 };
 
 function formatTierLabel(tier: string | null | undefined) {
-  const normalizedTier = tier?.trim() || 'Bronze';
+  const normalizedTier = tier?.trim() || '';
+  if (!normalizedTier || normalizedTier.toLowerCase() === 'bronze') {
+    return null;
+  }
   return `${normalizedTier.charAt(0).toUpperCase()}${normalizedTier.slice(1)}`;
 }
 
-function getTierColor(tier: string) {
-  switch (tier.toLowerCase()) {
-    case 'gold':
-      return WALLET_COLORS.loyaltyTierGoldBackground;
-    case 'silver':
-      return WALLET_COLORS.loyaltyTierSilverBackground;
-    case 'platinum':
-      return WALLET_COLORS.loyaltyTierPlatinumBackground;
-    default:
-      return WALLET_COLORS.loyaltyTierBronzeBackground;
-  }
-}
-
 export function WalletHeroSection({
-  accentColor,
-  canCreateFundingAccount,
+  activeSavingsGoal,
+  isRefetching = false,
+  canCreateFundingAccount = false,
   createFundingAccountUnavailableMessage,
-  creditWatch,
+  isCreatingFundingAccount = false,
+  needsPhone = false,
+  onCreateFundingAccount = () => undefined,
+  utilityAccentColor = '#F8B84C',
+  earningsAvailable = false,
   earningsBalance,
   fundingAccount,
-  isCreatingFundingAccount,
+  creditWatch,
   loyaltyPoints,
   loyaltyTier,
-  needsPhone,
-  onCreateFundingAccount,
   onOpenFundPanel,
   onOpenRedeemPanel,
   savingsBalance,
   totalBalance,
 }: WalletHeroSectionProps) {
-  const { copyToClipboard, feedback: copyFeedback } = useCopyToClipboard();
-  // When the only blocker is a missing phone the button stays ENABLED and
-  // opens the fund panel, where the phone prompt collects the number.
-  const isCreateAccountDisabled =
-    isCreatingFundingAccount || (!canCreateFundingAccount && !needsPhone);
-  const handleCreateAccountPress = needsPhone
-    ? onOpenFundPanel
-    : onCreateFundingAccount;
-
-  const handleCopyFundingAccount = async () => {
-    if (!fundingAccount) {
-      return;
-    }
-    await copyToClipboard(fundingAccount.accountNumber);
-  };
-
+  const visibleTier = formatTierLabel(loyaltyTier);
+  const savingsGoalId =
+    !fundingAccount &&
+    isHostedStagingTestPaymentsEnabled() &&
+    activeSavingsGoal?.status === 'active' &&
+    activeSavingsGoal.source_mode === 'manual'
+      ? activeSavingsGoal.id
+      : null;
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.walletHero}>
       <View style={styles.walletHeroHeader}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={styles.walletHeroTitle}>Wallet</Text>
-          <View
-            style={[
-              styles.loyaltyTierBadgeCompact,
-              {
-                backgroundColor: getTierColor(formatTierLabel(loyaltyTier)),
-                marginTop: 0,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-                gap: 4,
-              },
-            ]}
-          >
-            <Ionicons
-              accessible={false}
-              importantForAccessibility="no"
-              name="star"
-              size={9}
-              color={WALLET_COLORS.loyaltyTierText}
-            />
-            <Text style={[styles.loyaltyTierTextCompact, { fontSize: 9 }]}>
-              {formatTierLabel(loyaltyTier)}
-            </Text>
-          </View>
-        </View>
+        <SavingsProviderPreview />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add money"
           accessibilityHint="Opens wallet funding options"
-          // Brand accent border on the Add Money button.
+          hitSlop={6}
+          // Keep the funding action as the single bright accent in the hero.
           style={[
             styles.addMoneyButton,
-            { borderColor: accentColor, borderWidth: 2 },
+            { borderColor: BRAND.primary, borderWidth: 2 },
           ]}
           onPress={onOpenFundPanel}
         >
@@ -125,85 +96,52 @@ export function WalletHeroSection({
             accessible={false}
             importantForAccessibility="no"
             name="add-circle-outline"
-            size={16}
-            color={accentColor}
+            size={14}
+            color={WALLET_COLORS.white}
           />
           <Text style={styles.addMoneyButtonText}>Add Money</Text>
         </Pressable>
       </View>
-      <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
-      <Text style={styles.balanceAmount}>
-        {formatNgnCurrency(totalBalance)}
-      </Text>
-
-      {fundingAccount ? (
-        <>
-          <View style={styles.fundingAccountPill}>
-            <View style={styles.fundingAccountTextWrap}>
-              <Text style={styles.fundingAccountText}>
-                {`${fundingAccount.bankName} | ${fundingAccount.accountNumber}`}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Copy funding account number"
-              accessibilityHint="Copies your account number"
-              style={styles.fundingAccountCopyButton}
-              onPress={handleCopyFundingAccount}
-            >
-              <Ionicons name="copy-outline" size={16} color={accentColor} />
-            </Pressable>
-          </View>
-          {copyFeedback ? (
-            <Text accessibilityRole="text" style={styles.copyFeedbackText}>
-              {copyFeedback}
-            </Text>
-          ) : null}
-          {creditWatch ? (
-            <WalletCreditCheckPanel
-              accentColor={accentColor}
-              textColor={WALLET_COLORS.white}
-              watch={creditWatch}
-            />
-          ) : null}
-        </>
-      ) : (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Create account number"
-            accessibilityHint="Creates your wallet bank transfer account"
-            accessibilityState={{ disabled: isCreateAccountDisabled }}
-            style={[
-              styles.createAccountButton,
-              isCreateAccountDisabled
-                ? styles.createAccountButtonDisabled
-                : null,
-            ]}
-            onPress={handleCreateAccountPress}
-            disabled={isCreateAccountDisabled}
+      <View style={styles.balanceAndAccountRow}>
+        <View style={styles.balanceBlock}>
+          <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
+          <Text
+            style={styles.balanceAmount}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.55}
           >
-            {isCreatingFundingAccount ? (
-              <ActivityIndicator size="small" color={accentColor} />
-            ) : (
-              <Text style={styles.createAccountButtonText}>
-                Create account number
-              </Text>
-            )}
-          </Pressable>
-          {createFundingAccountUnavailableMessage ? (
-            <Text
-              accessibilityRole="text"
-              style={styles.createAccountUnavailableText}
-            >
-              {createFundingAccountUnavailableMessage}
-            </Text>
-          ) : null}
-        </>
-      )}
+            {formatNgnCurrency(totalBalance)}
+          </Text>
+        </View>
+        {fundingAccount ? (
+          <WalletHeroFundingAccount account={fundingAccount} />
+        ) : savingsGoalId ? (
+          <WalletHeroSavingsAccount
+            goalId={savingsGoalId}
+            isRefetching={isRefetching}
+          />
+        ) : (
+          <WalletHeroCreateAccount
+            canCreate={canCreateFundingAccount}
+            isCreating={isCreatingFundingAccount}
+            needsPhone={needsPhone}
+            onCreate={onCreateFundingAccount}
+            onOpenFundPanel={onOpenFundPanel}
+          />
+        )}
+      </View>
+      {!fundingAccount &&
+      !savingsGoalId &&
+      createFundingAccountUnavailableMessage ? (
+        <Text style={styles.accountUnavailableMessage}>
+          {createFundingAccountUnavailableMessage}
+        </Text>
+      ) : null}
 
       <View style={styles.balanceSummaryRow}>
         <View style={styles.balanceSummaryCell}>
+          <Ionicons name="trending-up-outline" size={18} color="#50D6A3" />
           <Text style={styles.balanceSummaryLabel}>Earnings</Text>
           <Text
             style={styles.balanceSummaryValue}
@@ -211,11 +149,13 @@ export function WalletHeroSection({
             adjustsFontSizeToFit={true}
             minimumFontScale={0.5}
           >
-            {formatNgnCurrency(earningsBalance)}
+            {earningsAvailable && earningsBalance !== null
+              ? formatNgnCurrency(earningsBalance)
+              : '—'}
           </Text>
         </View>
-        <View style={styles.balanceSummaryDivider} />
         <View style={styles.balanceSummaryCell}>
+          <Ionicons name="wallet-outline" size={18} color="#7CA7FF" />
           <Text style={styles.balanceSummaryLabel}>Savings</Text>
           <Text
             style={styles.balanceSummaryValue}
@@ -226,15 +166,24 @@ export function WalletHeroSection({
             {formatNgnCurrency(savingsBalance)}
           </Text>
         </View>
-        <View style={styles.balanceSummaryDivider} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Redeem loyalty points"
-          accessibilityHint="Opens the loyalty redemption panel"
-          style={styles.balanceSummaryCell}
-          onPress={onOpenRedeemPanel}
-        >
-          <Text style={styles.balanceSummaryLabel}>Loyalty</Text>
+        <View style={styles.balanceSummaryCell}>
+          <View style={styles.loyaltyActionRow}>
+            <Ionicons name="star-outline" size={18} color="#F8B84C" />
+            {loyaltyPoints > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Redeem loyalty points"
+                accessibilityHint="Opens the loyalty redemption panel"
+                onPress={onOpenRedeemPanel}
+                style={styles.redeemPill}
+              >
+                <Text style={styles.redeemPillText}>Redeem</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Text style={styles.balanceSummaryLabel}>
+            {visibleTier ? `Loyalty · ${visibleTier}` : 'Loyalty'}
+          </Text>
           <Text
             style={styles.balanceSummaryValue}
             numberOfLines={1}
@@ -243,25 +192,16 @@ export function WalletHeroSection({
           >
             {loyaltyPoints.toLocaleString()} pts
           </Text>
-          <View
-            style={[
-              styles.loyaltyTierBadgeCompact,
-              { backgroundColor: accentColor },
-            ]}
-          >
-            <Ionicons
-              accessible={false}
-              importantForAccessibility="no"
-              name="gift-outline"
-              size={9}
-              color={WALLET_COLORS.loyaltyTierText}
-            />
-            <Text style={styles.loyaltyTierTextCompact}>REDEEM</Text>
-          </View>
-        </Pressable>
+        </View>
       </View>
-
-      <WalletQuickUtilities accentColor={accentColor} />
+      <WalletQuickUtilities accentColor={utilityAccentColor} />
+      {fundingAccount && creditWatch ? (
+        <WalletCreditCheckPanel
+          accentColor="#F8B84C"
+          textColor="#FFFFFF"
+          watch={creditWatch}
+        />
+      ) : null}
     </Animated.View>
   );
 }

@@ -529,6 +529,32 @@ const serverSchema = z
         path: ['LLM_SERVER_BEARER'],
       });
     }
+  })
+  .superRefine((value, ctx) => {
+    // A partial dedicated pair would fail closed at runtime after
+    // validation succeeded, so require both halves or neither.
+    if (
+      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL &&
+      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is set',
+        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN'],
+      });
+    }
+    if (
+      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN &&
+      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is set',
+        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_URL'],
+      });
+    }
   });
 
 const clientSchema = z.object({

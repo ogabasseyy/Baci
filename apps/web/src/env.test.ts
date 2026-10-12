@@ -83,6 +83,21 @@ describe('env validation', () => {
     );
   });
 
+  it.each([
+    ['https://redis.example.com', ''],
+    ['', 'counter-test-token'],
+    ['https://redis.example.com', '   '],
+  ])('rejects a partial autocomplete Redis pair %s/%s', async (url, token) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', url);
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', token);
+    await expect(loadEnvModule()).rejects.toThrow(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST'
+    );
+  });
+
   it('excludes autocomplete secrets from client environment exports', async () => {
     vi.stubGlobal('window', {});
     vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');

@@ -39,6 +39,8 @@ describe('Geoapify response schema', () => {
     { ...place, lat: Number.NaN },
     { ...place, lon: Number.POSITIVE_INFINITY },
     { ...place, rank: { confidence_building_level: 'high' } },
+    { ...place, rank: { confidence_building_level: 2 } },
+    { ...place, rank: { confidence_street_level: -0.5 } },
   ])('rejects malformed provider result %j', (result) => {
     expect(geoapifyAutocompleteResultSchema.safeParse(result).success).toBe(
       false

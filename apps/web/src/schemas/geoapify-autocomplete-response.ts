@@ -20,8 +20,8 @@ export const geoapifyAutocompleteResultSchema = z.object({
   lon: z.number().min(-180).max(180).optional(),
   rank: z
     .object({
-      confidence_street_level: z.number().optional(),
-      confidence_building_level: z.number().optional(),
+      confidence_street_level: z.number().min(0).max(1).optional(),
+      confidence_building_level: z.number().min(0).max(1).optional(),
     })
     .optional(),
 });

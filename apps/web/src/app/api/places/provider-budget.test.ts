@@ -49,6 +49,7 @@ describe('distributed address provider budgets', () => {
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://kv.test',
       token: 'kv-test-token',
+      signal: expect.any(Function),
     });
     expect(evalMock.mock.calls[0][1]).toEqual(evalMock.mock.calls[1][1]);
     expect(evalMock.mock.calls[0][2][0]).toBe(4400);
@@ -73,6 +74,7 @@ describe('distributed address provider budgets', () => {
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://address.test',
       token: 'address-token',
+      signal: expect.any(Function),
     });
   });
   it('trims a padded-but-valid pair instead of failing closed', async () => {
@@ -86,6 +88,7 @@ describe('distributed address provider budgets', () => {
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://address.test',
       token: 'address-token',
+      signal: expect.any(Function),
     });
   });
   it('falls through a whitespace-only preferred pair to the next database', async () => {
@@ -98,6 +101,7 @@ describe('distributed address provider budgets', () => {
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://kv.test',
       token: 'kv-token',
+      signal: expect.any(Function),
     });
   });
   it('fails closed without writing a malformed billing-month key', async () => {
@@ -124,6 +128,25 @@ describe('distributed address provider budgets', () => {
     expect(await budget.reserveGeoapifyRequest()).toBe(false);
     expect(redisConstructor).not.toHaveBeenCalled();
     expect(evalMock).not.toHaveBeenCalled();
+  });
+  it('bounds each reservation with a fresh abort deadline', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
+      vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
+      const budget = await import('./provider-budget');
+      expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(
+        true
+      );
+      const factory = redisConstructor.mock.calls[0][0].signal;
+      const first = factory();
+      const second = factory();
+      expect(first).not.toBe(second);
+      expect(timeoutSpy).toHaveBeenCalledTimes(2);
+      expect(timeoutSpy).toHaveBeenCalledWith(3000);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
   });
   it('shares provider account budgets across preview and production', async () => {
     vi.useFakeTimers();

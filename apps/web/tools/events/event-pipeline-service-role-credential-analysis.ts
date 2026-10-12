@@ -67,7 +67,7 @@ const defaultLedgers: CredentialReaderLedgers = {
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     // Refreshed after adding server-only Places/Redis config; credential readers are unchanged.
     'apps/web/src/env.ts':
-      '4f1c6ec6e40ae5b35240ac50954576730b2f7296511295798554b172d414c530',
+      '39c188ee4108d7fe66a2f057e828dbfca85dce66c22a78258cf15e8c9e9b183f',
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       '47bea3bc3ac77a939febb07b99c4ec4edf6f16f33f310dddd23ec2a4cbe2c0ad',
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':

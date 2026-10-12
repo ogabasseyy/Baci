@@ -11,6 +11,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTH_COUNTER_TTL_SECONDS = 40 * 24 * 60 * 60;
 const GEOAPIFY_MIN_REQUEST_INTERVAL_MS = 250;
 
+// A stalled budget store must fail closed promptly, not hold the
+// address field until the platform deadline. The SDK invokes a
+// function-valued signal per request and throws (no retry) when it
+// aborts, so each reservation gets a fresh deadline.
+const BUDGET_REDIS_TIMEOUT_MS = 3000;
+
 const GOOGLE_BUDGET_SCRIPT = `
 local count = tonumber(redis.call('GET', KEYS[1]) or '0')
 if count >= tonumber(ARGV[1]) then return 0 end
@@ -63,7 +69,11 @@ function getBudgetRedis(): Redis | null {
         Boolean(candidateUrl || candidateToken)
       ) ?? [];
   if (!url || !token) return null;
-  budgetRedis = new Redis({ url, token });
+  budgetRedis = new Redis({
+    url,
+    token,
+    signal: () => AbortSignal.timeout(BUDGET_REDIS_TIMEOUT_MS),
+  });
   return budgetRedis;
 }
 

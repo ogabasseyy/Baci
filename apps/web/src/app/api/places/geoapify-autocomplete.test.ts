@@ -73,6 +73,12 @@ describe('Geoapify address mapping', () => {
         ?.location
     ).toBeNull();
   });
+  it('drops results with out-of-contract confidence instead of trusting coordinates', async () => {
+    respond([{ ...result, rank: { confidence_building_level: 2 } }, result]);
+    const predictions = await fetchGeoapifyPredictions('Allen Avenue', 'ng');
+    expect(predictions).toHaveLength(1);
+    expect(predictions[0].details).toMatchObject({ city: 'Ikeja' });
+  });
   it('filters out results outside the selected country', async () => {
     respond([{ ...result, country_code: 'gb' }, result]);
     expect(await fetchGeoapifyPredictions('Allen Avenue', 'ng')).toHaveLength(

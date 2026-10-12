@@ -108,4 +108,29 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
       'Apply this code at checkout to receive your discount.'
     );
   });
+
+  it('directs free-shipping redemptions to manual fulfillment, not checkout', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createSuccessResult(),
+        reward_name: 'Free delivery',
+        reward_type: 'free_shipping',
+        reward_value: null,
+      },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.instructions).toContain('Present this code');
+    expect(body.data.instructions).not.toContain('checkout');
+  });
 });

@@ -1,24 +1,76 @@
-// Stable-per-reward idempotency keys for loyalty redemption.
+// Stable-per-intent idempotency keys for loyalty redemption.
 //
 // A timeout retry must reuse the key from the failed attempt (a fresh
 // key per call would mint a second redemption), so keys persist per
-// reward until that reward redeems successfully. Module-level on
-// purpose: two hook instances redeeming the same reward share one
-// intent, so they share one key.
-const keysByReward = new Map<string, string>();
+// merchant/customer/reward until that intent redeems successfully. The
+// module Map is a read-through cache; localStorage is the durable
+// layer so a reload between a lost response and its retry replays
+// instead of re-spending. Storage failures (SSR, private mode) degrade
+// to Map-only rather than breaking redemption.
+const STORAGE_PREFIX = 'loyalty-redeem-key:';
 
-function keyForReward(rewardId: string): string {
-  const existing = keysByReward.get(rewardId);
-  if (existing) {
-    return existing;
+const keysByIntent = new Map<string, string>();
+
+function storageKey(
+  merchantId: string,
+  customerId: string,
+  rewardId: string
+): string {
+  return `${STORAGE_PREFIX}${merchantId}:${customerId}:${rewardId}`;
+}
+
+function readStored(key: string): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  } catch {
+    // Durability is best-effort; the Map still dedupes this session.
+  }
+}
+
+function removeStored(key: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+  } catch {
+    // The cleared Map entry already ends this intent's retries.
+  }
+}
+
+function keyForReward(
+  merchantId: string,
+  customerId: string,
+  rewardId: string
+): string {
+  const intent = storageKey(merchantId, customerId, rewardId);
+  const cached = keysByIntent.get(intent);
+  if (cached) return cached;
+  const stored = readStored(intent);
+  if (stored) {
+    keysByIntent.set(intent, stored);
+    return stored;
   }
   const fresh = crypto.randomUUID();
-  keysByReward.set(rewardId, fresh);
+  keysByIntent.set(intent, fresh);
+  writeStored(intent, fresh);
   return fresh;
 }
 
-function clearKeyForReward(rewardId: string): void {
-  keysByReward.delete(rewardId);
+function clearKeyForReward(
+  merchantId: string,
+  customerId: string,
+  rewardId: string
+): void {
+  const intent = storageKey(merchantId, customerId, rewardId);
+  keysByIntent.delete(intent);
+  removeStored(intent);
 }
 
 export const redemptionIdempotencyKeys = {

@@ -10,8 +10,11 @@
 -- codes stay outside the online bridge: they have no discount amount
 -- to apply and are honored through manual/fulfillment channels.
 -- Minimums on code types ARE honored here against the DB subtotal.
+-- Expression index: the resolver compares upper(discount_code), so a
+-- plain (merchant_id, discount_code) index could serve only the merchant
+-- prefix and would scan that merchant's redemption rows per lookup.
 CREATE INDEX IF NOT EXISTS loyalty_redemption_checkout_code_idx
-  ON public.reward_redemptions(merchant_id, discount_code);
+  ON public.reward_redemptions(merchant_id, pg_catalog.upper(discount_code));
 
 -- Resolve a loyalty code for checkout. Read-only; the order wrapper
 -- re-locks and re-verifies, so this stays lock-free. Anon-granted: the
@@ -108,7 +111,7 @@ BEGIN
   -- Lock the redemption row up front. Held through commit so concurrent
   -- checkouts racing the same single-use code serialize on the claim.
   SELECT
-    rr.id, rr.reward_type, rr.reward_value, rr.discount_code,
+    rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
     rw.enabled AS reward_enabled, rw.minimum_order_amount
   INTO v_redemption
@@ -117,6 +120,19 @@ BEGIN
   WHERE rr.id = p_loyalty_redemption_id AND rr.merchant_id = p_merchant_id
   FOR UPDATE OF rr;
   IF NOT FOUND THEN RAISE EXCEPTION 'loyalty_redemption_not_found'; END IF;
+
+  -- Lock the reward policy row too and re-read it: FOR UPDATE OF rr
+  -- cannot cover the nullable side of the LEFT JOIN, so without this a
+  -- merchant disabling the reward (or raising its minimum) mid-checkout
+  -- would race the validation below. A reward deleted before this lock
+  -- reads back NULL, which the policy gate treats as inactive.
+  IF v_redemption.reward_id IS NOT NULL THEN
+    SELECT rw.enabled, rw.minimum_order_amount
+    INTO v_redemption.reward_enabled, v_redemption.minimum_order_amount
+    FROM public.loyalty_rewards rw
+    WHERE rw.id = v_redemption.reward_id
+    FOR UPDATE;
+  END IF;
 
   -- Create (or idempotently replay) the order via the unmodified trust-boundary RPC.
   SELECT
@@ -216,4 +232,4 @@ GRANT EXECUTE ON FUNCTION public.create_storefront_order_with_loyalty_code(
 COMMENT ON FUNCTION public.create_storefront_order_with_loyalty_code(
   uuid, text, text, jsonb, text, numeric, numeric, numeric, text, text, text, jsonb,
   text, text, jsonb, uuid, text, text, uuid, text, numeric, numeric, text, text, uuid) IS
-  'Atomically claims a single-use loyalty code while creating the order. Replay-first; for fresh orders enforces unused/unexpired/reward-live/applicable/minimum and a two-sided exact (±1) amount check against the DB subtotal, then marks the code used. Self-policing, so granted to anon.';
+  'Atomically claims a single-use loyalty code while creating the order. Locks the redemption and reward-policy rows; replay-first; for fresh orders enforces unused/unexpired/reward-live/applicable/minimum and a two-sided exact (±1) amount check against the DB subtotal, then marks the code used. Self-policing, so granted to anon.';

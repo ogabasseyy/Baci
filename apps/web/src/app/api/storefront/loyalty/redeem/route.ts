@@ -80,7 +80,10 @@ function getRedemptionInstructions(
         { maximumFractionDigits: 0 }
       )} off your order.`;
     case 'free_shipping':
-      return 'Apply this code at checkout to receive free shipping on your order.';
+      // Manual fulfillment like free_product: the checkout bridge only
+      // accepts discount codes, so promising an online checkout path
+      // would issue a code the wrapper must reject as not_applicable.
+      return 'Present this code to receive free shipping on your order. Contact the store for details.';
     case 'free_product':
       return 'Present this code to claim your free product. Contact the store for details.';
     case 'exclusive_access':

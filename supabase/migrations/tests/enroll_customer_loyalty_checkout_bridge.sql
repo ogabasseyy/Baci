@@ -230,3 +230,25 @@ SELECT pg_temp.assert_true(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)', 'EXECUTE'),
   'loyalty checkout bridge grants are incorrect'
 );
+
+-- The checkout lookup index normalizes case like the resolver: a plain
+-- (merchant_id, discount_code) index cannot serve the
+-- upper(discount_code) predicate and would scan the merchant's
+-- redemption rows per validation and checkout.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_indexdef(
+    'public.loyalty_redemption_checkout_code_idx'::pg_catalog.regclass
+  ) LIKE '%upper(%discount_code%)%',
+  'checkout code index does not normalize case'
+);
+
+-- The order wrapper locks the reward policy row and re-reads it: FOR
+-- UPDATE OF rr cannot cover the nullable side of the redemption join,
+-- so without this a merchant disabling the reward mid-checkout would
+-- race validation with stale enabled/minimum values.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%FROM public.loyalty_rewards rw%WHERE rw.id = v_redemption.reward_id%FOR UPDATE%',
+  'order wrapper does not lock the reward policy row'
+);

@@ -263,6 +263,21 @@ SELECT pg_temp.assert_true(
   'out-of-range minPoints matched or raised'
 );
 
+-- Nameless ladder entries are skipped, not assigned: a tier with a
+-- matching threshold but a missing, null, or blank name falls back to
+-- the prior tier instead of committing a NULL current_tier the API
+-- result schema would reject with a 500 on an enrolled customer.
+UPDATE public.loyalty_settings
+SET tiers = '[{"name": "Bronze", "minPoints": 0}, {"name": "  ", "minPoints": 200}, {"name": null, "minPoints": 500}, {"minPoints": 1000}]'::jsonb
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    1500, '01aa0000-0000-4000-8000-000000000001'
+  ) = 'Bronze',
+  'nameless tier entry assigned NULL instead of falling back'
+);
+
 UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';

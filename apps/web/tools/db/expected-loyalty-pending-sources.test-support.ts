@@ -6,7 +6,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   },
   {
     repositoryPath: 'supabase/migrations/20261010000002_loyalty_status.sql',
-    sha256: '5ec30dd3259969701e3d1be04b2f56124b386b6aef03a11ae9e6d22fc892e3b3',
+    sha256: '5565f503d70d9214eb0a01d8edfebc7119eb4a862b8181587b70b9cd18c48811',
   },
   {
     repositoryPath:
@@ -16,7 +16,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000004_calculate_loyalty_tier_order.sql',
-    sha256: 'b645f11f8030c377cc18f2463dd57b2f70ae7a70a5a7b876f4016a6c9581d229',
+    sha256: 'f0755e0f8ec0a4942fec128222476f73a82f69e58740f3ee3e3e199b6d19043a',
   },
   {
     repositoryPath:
@@ -36,11 +36,11 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000008_loyalty_redemption_idempotency.sql',
-    sha256: '452f2b133f09198357f657358a36e8670f63ebb5e84bbf6400eee8654cbd8239',
+    sha256: '655e18ffb9e0e9ead8931da4b02eafc03b02138b8bd41e84b3aef8de8182b585',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000009_loyalty_checkout_bridge.sql',
-    sha256: '08415666f323166dcb7213ca37c4f297c4306eba18d5c3a5ded71a6cf7850cbe',
+    sha256: '306fc12633c21830abcaca752f50d43debee0bd37e7f07c0dfd0753775b2e17d',
   },
 ] as const;

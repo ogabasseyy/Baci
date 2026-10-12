@@ -62,6 +62,31 @@ describe('RedemptionSuccessDialog', () => {
     expect(screen.queryByText(/Expires:/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    'free_product',
+    'exclusive_access',
+    'free_shipping',
+  ])('shows present-the-code copy without checkout direction for %s', (rewardType) => {
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={{
+          ...RESULT,
+          rewardType,
+          instructions: 'Present this code to claim your reward.',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText(/Present the code below as instructed\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/at checkout/)).not.toBeInTheDocument();
+    // The code itself is still shown: the customer presents it.
+    expect(screen.getByText('RDM-ABC123')).toBeInTheDocument();
+  });
+
   it('copies the code and toasts on copy click', () => {
     mockToast.mockClear();
     const writeText = vi.fn();

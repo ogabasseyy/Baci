@@ -44,6 +44,16 @@ AS $$
     FROM public.points_transactions
     WHERE points_transactions.merchant_id = p_merchant_id
       AND points_transactions.customer_id = p_customer_id
+      -- The ledger is shared: VTU airtime credits and wallet
+      -- redemptions update customers.loyalty_points, not
+      -- customer_loyalty.points_balance. Their rows must not shift
+      -- FIFO lot positions or inflate consumption (a 100-point wallet
+      -- redemption would otherwise make an expired 100-point purchase
+      -- lot look fully spent). Every other source mutates
+      -- customer_loyalty.
+      AND points_transactions.source NOT IN (
+        'vtu_airtime_purchase', 'wallet_redemption'
+      )
   ),
   total_consumed AS (
     -- Every balance-reducing row consumes the oldest lots first. Prior

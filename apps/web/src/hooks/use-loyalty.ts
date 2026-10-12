@@ -102,7 +102,11 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     // attempt's key so the RPC replays instead of re-spending. The key
     // clears only on success (a 4xx validation failure keeps it: fixing
     // the cause and retrying replays nothing since failures never store).
-    const idempotencyKey = redemptionIdempotencyKeys.forReward(rewardId);
+    const idempotencyKey = redemptionIdempotencyKeys.forReward(
+      merchantId,
+      customerId,
+      rewardId
+    );
 
     try {
       const response = await fetch('/api/storefront/loyalty/redeem', {
@@ -124,7 +128,11 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         return { success: false, error: result.error };
       }
 
-      redemptionIdempotencyKeys.clearForReward(rewardId);
+      redemptionIdempotencyKeys.clearForReward(
+        merchantId,
+        customerId,
+        rewardId
+      );
 
       // Refresh loyalty data after redemption
       await fetchLoyaltyData();

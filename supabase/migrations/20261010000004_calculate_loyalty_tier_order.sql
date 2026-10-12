@@ -10,7 +10,9 @@
 -- match, as before. Non-numeric minPoints (merchant JSON is arbitrary)
 -- is treated the same as NULL instead of raising mid-transaction.
 -- Thresholds compare as NUMERIC so digit strings past the integer range
--- simply never match instead of raising integer out of range.
+-- simply never match instead of raising integer out of range. Entries
+-- without a usable name are skipped (falling back to the prior tier)
+-- instead of assigning NULL, which the API result schema would reject.
 CREATE OR REPLACE FUNCTION "public"."calculate_loyalty_tier"("p_lifetime_points" integer, "p_merchant_id" "uuid") RETURNS character varying
     LANGUAGE "plpgsql"
     SET "search_path" TO ''
@@ -39,8 +41,12 @@ BEGIN
             END ASC NULLS LAST,
             t.ord
     LOOP
+        -- Skip nameless entries: assigning NULL would commit a loyalty
+        -- row the API result schema rejects (500 on an enrolled
+        -- customer), so fall through to the prior tier instead.
         IF (v_tier->>'minPoints') ~ '^-?[0-9]+$'
-           AND p_lifetime_points >= (v_tier->>'minPoints')::NUMERIC THEN
+           AND p_lifetime_points >= (v_tier->>'minPoints')::NUMERIC
+           AND pg_catalog.btrim(COALESCE(v_tier->>'name', '')) <> '' THEN
             v_result := v_tier->>'name';
         END IF;
     END LOOP;

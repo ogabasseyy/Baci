@@ -180,3 +180,47 @@ SELECT pg_temp.assert_true(
      )),
   'post-top-up retry did not store and replay'
 );
+
+-- 23e. The idempotency receipt survives its reward row: deleting the
+-- reward SET NULLs the receipt instead of cascading it, so a
+-- lost-response retry still replays the original success (the stored
+-- new_balance 400) instead of failing reward_unavailable after the
+-- points were already consumed. No later case uses 'Idempotent perk'.
+SELECT id AS doomed_reward_id
+FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Idempotent perk' \gset
+
+DELETE FROM public.loyalty_rewards WHERE id = :'doomed_reward_id';
+
+SELECT pg_temp.assert_true(
+  (SELECT reward_id IS NULL
+   FROM public.loyalty_redemption_idempotency_keys
+   WHERE key = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  'reward delete cascaded the idempotency receipt'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'new_balance')::integer = 400
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000024',
+     :'doomed_reward_id',
+     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+   ) AS result),
+  'post-delete retry did not replay the stored success'
+);
+
+-- Every idempotency-table foreign key has a covering index: without a
+-- merchant- or reward-leading index, merchant/reward deletes scan the
+-- growing table to enforce their cascades.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_indexdef(
+    'public.loyalty_redemption_idempotency_keys_merchant_idx'::pg_catalog.regclass
+  ) LIKE '%(merchant_id)%'
+  AND pg_catalog.pg_get_indexdef(
+    'public.loyalty_redemption_idempotency_keys_reward_idx'::pg_catalog.regclass
+  ) LIKE '%(reward_id)%',
+  'idempotency foreign keys lack covering indexes'
+);

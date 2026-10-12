@@ -199,3 +199,41 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'unvalued valued-reward stayed advertised or plain discount hid'
 );
+
+-- 28e. FIFO ignores the foreign ledger: member 011 still holds case
+-- 27's 200-point expired purchase lot (materialized 300, spendable
+-- 100). VTU airtime credits and wallet redemptions share the table but
+-- update customers.loyalty_points, so adding 100 of each must not move
+-- the projection: the wallet negative must not masquerade as
+-- consumption of the storefront lot.
+INSERT INTO public.points_transactions (
+  customer_id, merchant_id, type, points, balance_after,
+  source, description, created_at
+) VALUES
+  ('01aa0000-0000-4000-8000-000000000011',
+   '01aa0000-0000-4000-8000-000000000001',
+   'earn', 100, 0, 'vtu_airtime_purchase', 'VTU airtime earn',
+   now() - interval '1 day'),
+  ('01aa0000-0000-4000-8000-000000000011',
+   '01aa0000-0000-4000-8000-000000000001',
+   'redeem', -100, 0, 'wallet_redemption', 'Wallet redemption',
+   now() - interval '1 hour');
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  public.calculate_unspent_expired_points(
+    '01aa0000-0000-4000-8000-000000000001',
+    '01aa0000-0000-4000-8000-000000000011'
+  ) = 200,
+  'foreign ledger rows leaked into FIFO expiry accounting'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'points_balance')::integer = 100
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'foreign ledger rows moved the spendable projection'
+);

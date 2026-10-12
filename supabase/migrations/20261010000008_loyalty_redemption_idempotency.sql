@@ -23,14 +23,21 @@ CREATE TABLE IF NOT EXISTS public.loyalty_redemption_idempotency_keys (
     REFERENCES public.merchants(id) ON DELETE CASCADE,
   customer_id uuid NOT NULL
     REFERENCES public.customers(id) ON DELETE CASCADE,
-  reward_id uuid NOT NULL
-    REFERENCES public.loyalty_rewards(id) ON DELETE CASCADE,
+  -- SET NULL, not CASCADE: the receipt must survive its mutable reward
+  -- row (mirroring reward_redemptions), so a lost-response retry after
+  -- a reward delete still replays instead of re-spending or failing.
+  reward_id uuid
+    REFERENCES public.loyalty_rewards(id) ON DELETE SET NULL,
   response jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT pg_catalog.now()
 );
 
 CREATE INDEX IF NOT EXISTS loyalty_redemption_idempotency_keys_customer_idx
   ON public.loyalty_redemption_idempotency_keys(customer_id, merchant_id);
+CREATE INDEX IF NOT EXISTS loyalty_redemption_idempotency_keys_merchant_idx
+  ON public.loyalty_redemption_idempotency_keys(merchant_id);
+CREATE INDEX IF NOT EXISTS loyalty_redemption_idempotency_keys_reward_idx
+  ON public.loyalty_redemption_idempotency_keys(reward_id);
 
 ALTER TABLE public.loyalty_redemption_idempotency_keys ENABLE ROW LEVEL SECURITY;
 
@@ -71,7 +78,11 @@ BEGIN
       'success', false, 'error', 'idempotency_key_mismatch'
     );
   END IF;
-  IF v_row.reward_id IS DISTINCT FROM p_reward_id THEN
+  -- A NULL stored reward means the reward row was deleted after the
+  -- success was recorded (SET NULL above): the receipt is still this
+  -- key's immutable proof, so replay it rather than 409ing.
+  IF v_row.reward_id IS NOT NULL
+     AND v_row.reward_id IS DISTINCT FROM p_reward_id THEN
     RETURN jsonb_build_object(
       'success', false, 'error', 'idempotency_key_reused'
     );

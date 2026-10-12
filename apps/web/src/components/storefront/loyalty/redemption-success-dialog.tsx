@@ -34,6 +34,13 @@ export function RedemptionSuccessDialog({
   // Store credit lands directly in the customer balance (no checkout
   // code is issued), so it gets credit-specific text and no code block.
   const isStoreCredit = result?.rewardType === 'store_credit';
+  // Manual-fulfillment types issue a presentable code but no online
+  // checkout path: directing these customers to checkout is a dead end,
+  // so they get present-the-code copy instead.
+  const isManualFulfillment =
+    result?.rewardType === 'free_product' ||
+    result?.rewardType === 'exclusive_access' ||
+    result?.rewardType === 'free_shipping';
 
   const copyCode = () => {
     if (result?.code) {
@@ -59,7 +66,9 @@ export function RedemptionSuccessDialog({
           <DialogDescription>
             {isStoreCredit
               ? 'Your reward has been successfully redeemed. The credit is now on your store balance.'
-              : 'Your reward has been successfully redeemed. Use the code below at checkout.'}
+              : isManualFulfillment
+                ? 'Your reward has been successfully redeemed. Present the code below as instructed.'
+                : 'Your reward has been successfully redeemed. Use the code below at checkout.'}
           </DialogDescription>
         </DialogHeader>
 

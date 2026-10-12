@@ -1,0 +1,106 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { describe, expect, it, vi } from 'vitest';
+import { resolveLoyaltyCheckoutCode } from './resolve-loyalty-checkout-code';
+
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+}));
+
+const ROW = {
+  redemption_id: '22222222-2222-4222-8222-222222222222',
+  reward_type: 'discount_fixed',
+  reward_value: 100,
+  minimum_order_amount: null,
+  reward_enabled: true,
+  expires_at: null,
+  used: false,
+  reward_name: 'Probe reward',
+};
+
+function clientWith(rpcImpl: () => unknown): SupabaseClient {
+  return { rpc: vi.fn(async () => rpcImpl()) } as unknown as SupabaseClient;
+}
+
+describe('resolveLoyaltyCheckoutCode', () => {
+  it('resolves a bridgeable code to fixed economics', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({ data: [ROW], error: null })),
+      merchantId: 'm',
+      code: 'RDM-ABCDEF12',
+    });
+
+    expect(resolution).toEqual({
+      ok: true,
+      redemptionId: ROW.redemption_id,
+      discountType: 'fixed',
+      discountValue: 100,
+    });
+  });
+
+  it('maps a plain discount to fixed and percentage to proportional', async () => {
+    const plain = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({
+        data: [{ ...ROW, reward_type: 'discount' }],
+        error: null,
+      })),
+      merchantId: 'm',
+      code: 'RDM-PLAIN',
+    });
+    const percent = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({
+        data: [{ ...ROW, reward_type: 'discount_percentage' }],
+        error: null,
+      })),
+      merchantId: 'm',
+      code: 'RDM-PCT',
+    });
+
+    expect(plain).toMatchObject({ ok: true, discountType: 'fixed' });
+    expect(percent).toMatchObject({ ok: true, discountType: 'percentage' });
+  });
+
+  it('rejects non-discount types as invalid without gating resolve-time state', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({
+        data: [{ ...ROW, reward_type: 'free_shipping', reward_value: null }],
+        error: null,
+      })),
+      merchantId: 'm',
+      code: 'RDM-SHIP',
+    });
+
+    expect(resolution.ok).toBe(false);
+    if (!resolution.ok) {
+      expect(resolution.response.status).toBe(400);
+      expect(await resolution.response.json()).toMatchObject({
+        code: 'discount_code_invalid',
+      });
+    }
+  });
+
+  it('does not gate used codes: they must reach the wrapper for replay', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({
+        data: [{ ...ROW, used: true }],
+        error: null,
+      })),
+      merchantId: 'm',
+      code: 'RDM-USED',
+    });
+
+    expect(resolution.ok).toBe(true);
+  });
+
+  it('maps a lookup failure to 500 without masking it as invalid', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({ data: null, error: { message: 'boom' } })),
+      merchantId: 'm',
+      code: 'RDM-ABCDEF12',
+    });
+
+    expect(resolution.ok).toBe(false);
+    if (!resolution.ok) {
+      expect(resolution.response.status).toBe(500);
+    }
+  });
+});

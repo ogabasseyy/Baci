@@ -39,6 +39,9 @@ def capability_context(*, now=None):
         revision = data.get("source_revision", "")
         if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
             raise ValueError("revision")
+        digest = data.get("evidence_digest", "")
+        if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise ValueError("evidence digest")
         if not isinstance(data.get("reviewed_at"), str):
             raise ValueError("reviewed_at type")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
@@ -95,6 +98,7 @@ def capability_context(*, now=None):
         payload = {
             "schema_version": data["schema_version"],
             "source_revision": revision,
+            "evidence_digest": digest,
             "reviewed_at": data["reviewed_at"],
             "capabilities": safe_rows,
         }

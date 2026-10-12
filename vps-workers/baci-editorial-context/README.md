@@ -37,7 +37,10 @@ without inspection.
 
 Owner operations: re-review the register at least every 14 days — a stale
 register makes the lane fail closed to the "Register unavailable" prompt text,
-so watch for that fallback in writer output. Treat write access to the
+so watch for that fallback in writer output. At deploy time, record the
+register's `evidence_digest` from the reviewed repo copy and confirm the same
+digest appears in generated writer prompts; a mismatch means the deployed
+register is not the reviewed one. Treat write access to the
 register path (`BACI_CAPABILITY_REGISTER_PATH`) as prompt control: the file is
 operator-reviewed evidence whose text reaches the writer prompt, so only
 trusted operators may write it, and the hash printed into each prompt is the

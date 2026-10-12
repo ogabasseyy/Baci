@@ -10,6 +10,7 @@ import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
 import { packageModule } from './security-integrity-package-module';
 import { parseVersion } from './security-integrity-parse-version';
+import { pathExists } from './security-integrity-path-exists';
 import { isAtLeast } from './security-integrity-version-floor';
 
 // Regression coverage for CVE-2026-103923 (GHSA-238p-pmpm-9mq7):
@@ -118,8 +119,16 @@ describe('katex integrity (CVE-2026-103923)', () => {
 
   it.each(candidateRoots())('ignores polluted trust in %s', async (root) => {
     // The minified bundle names no manifest field, so its subpath
-    // stays hardcoded; everything else resolves via the manifest.
+    // stays hardcoded but asserted explicitly: a build-layout rename
+    // fails here with a named error instead of a bare
+    // MODULE_NOT_FOUND from require. Everything else resolves via
+    // the manifest.
     for (const entry of [packageMain(root), 'dist/katex.min.js'] as const) {
+      if (!pathExists(join(root, entry))) {
+        throw new Error(
+          `katex integrity gate: expected build missing: ${entry}`
+        );
+      }
       // Both CJS builds carry the backport; the minified bundle is
       // unreviewable in diff view, so its behavior is asserted here.
       const katex = require(join(root, entry)) as Katex;

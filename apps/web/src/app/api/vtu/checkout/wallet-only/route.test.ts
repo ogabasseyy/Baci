@@ -644,4 +644,95 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
   });
+
+  it('cross-storefront collision: same customer but row recorded under another merchant rejects with 400', async () => {
+    // The fingerprint omits merchant binding, so the replay path
+    // asserts the recorded merchant id structurally rather than
+    // relying on per-merchant customer rows alone.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-other',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-OTHER',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/storefront/i),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('PK-race recovery: refuses to fulfill when the racing winner row belongs to another storefront', async () => {
+    let lookupCallCount = 0;
+    const otherRow = {
+      key: VALID_KEY,
+      vtu_transaction_id: 'vtu-tx-other-merchant',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-OTHER',
+      request_fingerprint: VALID_BODY_FINGERPRINT,
+    };
+    supabaseMockRef.current = {
+      from: vi.fn((table: string) => {
+        if (table === 'vtu_idempotency_keys') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(() => {
+                  lookupCallCount += 1;
+                  return Promise.resolve({
+                    data: lookupCallCount === 1 ? null : otherRow,
+                    error: null,
+                  });
+                }),
+              })),
+            })),
+            insert: vi.fn(() =>
+              Promise.resolve({
+                data: null,
+                error: {
+                  message: 'duplicate key value violates unique constraint',
+                },
+              })
+            ),
+          };
+        }
+        if (table === 'vtu_transactions') {
+          return {
+            delete: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn().mockResolvedValue({ error: null }),
+                })),
+              })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
+        };
+      }),
+      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(lookupCallCount).toBe(2);
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/storefront/i),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
 });

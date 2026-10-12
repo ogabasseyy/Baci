@@ -27,23 +27,19 @@ interface ExistingIdempotencyRow {
 }
 
 /**
- * Resolves the customers row owned by the authenticated user under the
- * given merchant. Returns null when no customer record exists for that
- * `(user, merchant)` pair (the legitimate cross-customer-collision
- * signal — the requester doesn't own the recorded idempotency row).
- *
- * Wraps the shared `resolveVtuCustomer` helper so the route validates
- * ownership the SAME way `preparePendingVtuTransaction` does (including
- * the email-fallback path that backfills user_id on email-linked
- * accounts). Without this shared call, an email-linked customer would
- * be rejected by the route's collision check on first replay even
- * though they own the row.
+ * Merchant + customers row owned by the authed user under the slug.
+ * Null customer = legitimate cross-customer signal (requester
+ * doesn't own the recorded row). The merchant id backs the replay
+ * storefront check: the fingerprint omits merchant binding, so
+ * cross-storefront key reuse is rejected structurally. Uses shared
+ * `resolveVtuCustomer` (same as prepare, incl. the email-fallback
+ * backfill) so email-linked customers pass first replay.
  */
-async function resolveRequestingCustomerId(
+async function resolveRequestingOwnership(
   supabase: SupabaseClient,
   user: NonNullable<Awaited<ReturnType<typeof authenticateApiRequest>>['user']>,
   merchantSlug: string
-): Promise<string | null> {
+): Promise<{ customerId: string | null; merchantId: string | null }> {
   // Alias-aware: the slug arrives in the POST body, which the proxy can't rewrite,
   // so a stale tab on a just-renamed store resolves via the alias table.
   const { data: merchant, error: merchantError } =
@@ -51,14 +47,17 @@ async function resolveRequestingCustomerId(
       supabase.from('merchants').select('id').eq('slug', s).maybeSingle()
     );
   if (merchantError || !merchant) {
-    return null;
+    return { customerId: null, merchantId: null };
   }
   const customer = await resolveVtuCustomer({
     supabase,
     merchantId: merchant.id as string,
     user,
   });
-  return customer?.id ?? null;
+  return {
+    customerId: customer?.id ?? null,
+    merchantId: merchant.id as string,
+  };
 }
 
 async function findExistingIdempotencyRow(
@@ -79,24 +78,12 @@ async function findExistingIdempotencyRow(
 }
 
 /**
- * Wallet-only VTU checkout.
- *
- * Skips the gateway entirely. The caller has committed to paying the
- * full bill amount from wallet credit (`walletAmount === amount`). The
- * route:
- *   1. Validates the client-supplied `Idempotency-Key` header (UUID).
- *   2. Looks up an existing key → vtu_transaction_id mapping. Reuses
- *      the row on retry (which makes the wallet RPC's source_id-based
- *      idempotency the second line of defence).
- *   3. On a fresh key: prepares the row, records the mapping, runs
- *      `fulfillPendingVtuTransaction` which performs the wallet debit
- *      (Phase B.5) before vending.
- *   4. Service-role client only — no `transactions` row, no Paystack
- *      hop, no anon/authenticated grants on `vtu_idempotency_keys`.
- *
- * The route MUST reject `walletAmount !== amount` with 400: partial
- * coverage is unsupported everywhere (the gateway routes are disabled
- * with VTU_WALLET_ONLY), so the wallet must cover the full amount.
+ * Wallet-only VTU checkout (no gateway; `walletAmount === amount`
+ * enforced — partial coverage unsupported, gateways stubbed). Flow:
+ * validate Idempotency-Key → replay existing mapping (wallet RPC
+ * idempotency second backstop) → fresh key: prepare, record,
+ * fulfill (wallet debit Phase B.5, then vend). Service-role client
+ * only; no `transactions` row or Paystack hop.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -144,26 +131,36 @@ export async function POST(request: NextRequest) {
 
     // Replay path: reuse the existing vtu_transaction_id. Three guards
     // before we trust the mapping:
-    //   1. Customer ownership (cross-customer collision → 400). A
-    //      stolen key from one customer must not be replayable
-    //      against another customer's row.
+    //   1. Ownership (cross-customer/storefront collision → 400). A
+    //      stolen key must not replay against another customer's row
+    //      or another storefront's row (the fingerprint omits
+    //      merchant binding, so the merchant id is asserted here).
     //   2. Payload fingerprint (changed-intent collision → 409). The
     //      mobile client correctly keeps the key on TimeoutError /
     //      NetworkError / 5xx, but the user could edit the form
     //      between attempts. Replaying the original vend on a
     //      changed payload would charge the wrong recipient/amount.
     if (existing) {
-      const requestingCustomerId = await resolveRequestingCustomerId(
+      const requestingOwnership = await resolveRequestingOwnership(
         supabase,
         auth.user,
         input.merchantSlug
       );
       if (
-        !requestingCustomerId ||
-        existing.customer_id !== requestingCustomerId
+        !requestingOwnership.customerId ||
+        existing.customer_id !== requestingOwnership.customerId
       ) {
         return createErrorResponse(
           'Idempotency-Key does not belong to this customer.',
+          400
+        );
+      }
+      if (
+        !requestingOwnership.merchantId ||
+        existing.merchant_id !== requestingOwnership.merchantId
+      ) {
+        return createErrorResponse(
+          'Idempotency-Key does not belong to this storefront.',
           400
         );
       }
@@ -237,15 +234,22 @@ export async function POST(request: NextRequest) {
         idempotencyKey
       );
       if (racedExisting) {
-        // Same guards as the regular replay path: ownership (no
-        // privilege-escalation via PK race) AND fingerprint (no
-        // changed-intent silently fulfilling the winner's payload).
+        // Same guards as the regular replay path: customer + merchant
+        // ownership (no privilege-escalation via PK race, no
+        // cross-storefront replay) AND fingerprint (no changed-intent
+        // silently fulfilling the winner's payload).
         if (
           !prepared.customer?.id ||
           racedExisting.customer_id !== prepared.customer.id
         ) {
           return createErrorResponse(
             'Idempotency-Key does not belong to this customer.',
+            400
+          );
+        }
+        if (racedExisting.merchant_id !== prepared.merchant.id) {
+          return createErrorResponse(
+            'Idempotency-Key does not belong to this storefront.',
             400
           );
         }

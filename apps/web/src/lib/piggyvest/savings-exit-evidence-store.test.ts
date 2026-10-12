@@ -109,6 +109,12 @@ describe('restricted local evidence recorder', () => {
     expect(() =>
       createSavingsExitEvidenceStore({
         ...configuration,
+        password: '  secret12  ',
+      })
+    ).toThrow();
+    expect(() =>
+      createSavingsExitEvidenceStore({
+        ...configuration,
         password: 'secret\0word',
       })
     ).toThrow();

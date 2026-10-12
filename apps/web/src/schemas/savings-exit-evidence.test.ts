@@ -34,6 +34,7 @@ describe('savings exit evidence boundaries', () => {
       { password: '' },
       { password: 'x'.repeat(129) },
       { password: ' '.repeat(8) },
+      { password: '  secret12  ' },
       { password: 'secret\0word' },
       { role: 'service_role' },
     ]) {

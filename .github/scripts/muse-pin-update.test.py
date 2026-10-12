@@ -131,6 +131,7 @@ class MusePinUpdateTests(unittest.TestCase):
             installer.parent.mkdir(parents=True)
             installer.write_text(
                 'MUSE_VERSION="1.4.6-R6000.1"\n'
+                '# From the stable-channel manifest (retrieved 2020-01-01 over TLS):\n'
                 'SHA_X86_LINUX="' + "a" * 64 + '"\n'
                 'SHA_AARCH64_LINUX="' + "b" * 64 + '"\n'
             )
@@ -141,9 +142,10 @@ class MusePinUpdateTests(unittest.TestCase):
                 'MUSE_PINNED_SHA_AARCH64 = (\n    "' + "b" * 64 + '"\n)\n'
             )
             pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
-            updater.update_files(root, pins)
+            updater.update_files(root, pins, retrieved="2026-01-02")
             installer_text = installer.read_text()
             anchors_text = anchors.read_text()
+            self.assertIn("(retrieved 2026-01-02 over TLS)", installer_text)
             for expected in pins.values():
                 self.assertIn(expected, installer_text)
                 self.assertIn(expected, anchors_text)

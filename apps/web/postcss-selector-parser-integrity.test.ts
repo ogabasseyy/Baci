@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
@@ -74,7 +74,12 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
   it.each(
     candidateRoots()
   )('keeps the linear-time membership backport applied in %s', (root) => {
-    const source = readFileSync(join(root, 'dist/parser.js'), 'utf8');
+    // Manifest-anchored marker source: the parser build must live next
+    // to the manifest-resolved entry, so a build-layout rename fails
+    // closed here (readFileSync throws) instead of testing a stale
+    // hardcoded path while the entry-driven gates move on.
+    const markerFile = join(root, dirname(packageMain(root)), 'parser.js');
+    const source = readFileSync(markerFile, 'utf8');
     // Markers match whitespace-normalized code, not exact source text,
     // so a secure reformat (spacing, line breaks) that preserves the
     // Set-based membership still passes. Identifier-level renames
@@ -97,7 +102,10 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
   it.each(
     candidateRoots()
   )('still parses flat class/id selectors correctly in %s', (root) => {
-    const parser = require(root) as () => Parser;
+    // Manifest-resolved entry like the katex suite: no ambient
+    // main-field resolution, so all three gates move together on a
+    // build-layout rename.
+    const parser = require(join(root, packageMain(root))) as () => Parser;
     const flat = `.a${'.b'.repeat(50)}#c`;
     expect(parser().processSync(flat)).toBe(flat);
     const ast = parser().astSync(flat);
@@ -151,7 +159,12 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     ];
     // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
     // wall-clock adjustments); the 1µs floor is a div-by-zero guard
-    // only — real small runs are ms-scale, so it never binds.
-    expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
+    // only — real small runs are ms-scale, so it never binds. Raw
+    // timings ride on the failure message for loaded-runner triage.
+    const ratio = large / Math.max(small, 1e-3);
+    expect(
+      ratio,
+      `scaling ratio ${ratio} exceeds 3 (small=${small}ms large=${large}ms)`
+    ).toBeLessThan(3);
   }, 70_000);
 });

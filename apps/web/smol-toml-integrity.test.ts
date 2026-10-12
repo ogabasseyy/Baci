@@ -77,7 +77,12 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     ];
     // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
     // wall-clock adjustments); the 1µs floor is a div-by-zero guard
-    // only — real small runs are ms-scale, so it never binds.
-    expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
+    // only — real small runs are ms-scale, so it never binds. Raw
+    // timings ride on the failure message for loaded-runner triage.
+    const ratio = large / Math.max(small, 1e-3);
+    expect(
+      ratio,
+      `scaling ratio ${ratio} exceeds 3 (small=${small}ms large=${large}ms)`
+    ).toBeLessThan(3);
   }, 70_000);
 });

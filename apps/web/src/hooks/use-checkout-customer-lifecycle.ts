@@ -171,7 +171,10 @@ export function useCheckoutCustomerLifecycle(
           clearIdentity();
           return;
         }
-        setUser(data.user);
+        // Resolve the customer BEFORE publishing the user: setting the new
+        // user while customerData still holds the previous merchant's
+        // record would run the prefill effect with that stale pairing,
+        // re-applying the old customer's fields over shopper edits.
         // Default to no customer so a slug change (or a session that stops
         // returning one) clears the previous merchant's record instead of
         // re-applying it to the new merchant's form.
@@ -190,6 +193,9 @@ export function useCheckoutCustomerLifecycle(
           }
         }
         if (!isCurrent()) return;
+        // Publish user and customer together so the prefill effect only
+        // ever sees the matched pair.
+        setUser(data.user);
         setCustomerData(loadedCustomer);
         setStep(1);
       } catch (error) {

@@ -20,8 +20,19 @@ describe('useCheckoutCustomerLifecycle identity switches', () => {
   });
 
   it('clears the previous merchant customer when a slug change yields none', async () => {
-    getUser.mockResolvedValue({
+    // Supabase returns a freshly parsed user object per getUser() call, so
+    // each call gets its own reference: reusing one object would let React
+    // bail out on the slug-change setUser and mask a stale user/customer
+    // pairing in the prefill effect.
+    getUser.mockImplementation(async () => ({
       data: { user: makeUser({ first_name: 'Meta' }) },
+    }));
+    // Hold the slug-change fetch open: an instant mock would flush the
+    // whole reload in one batch, but real network latency lets the
+    // intermediate render (new user, previous customer) commit first.
+    let resolveStoreB!: (value: Response) => void;
+    const storeBLoaded = new Promise<Response>((resolve) => {
+      resolveStoreB = resolve;
     });
     const customerA = {
       first_name: 'Ada',
@@ -40,14 +51,12 @@ describe('useCheckoutCustomerLifecycle identity switches', () => {
         },
       ],
     };
-    vi.mocked(fetch).mockImplementation(
-      async (url) =>
-        ({
-          json: async () =>
-            String(url).includes('store-b')
-              ? { authenticated: false }
-              : { authenticated: true, customer: customerA },
-        }) as Response
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes('store-b')
+        ? storeBLoaded
+        : ({
+            json: async () => ({ authenticated: true, customer: customerA }),
+          } as Response)
     );
 
     const { result, rerender } = setupLifecycleWithSlug('store-a');
@@ -63,6 +72,16 @@ describe('useCheckoutCustomerLifecycle identity switches', () => {
     });
 
     rerender({ slug: 'store-b' });
+    // Let the getUser resolution commit while the session fetch is still
+    // pending, reproducing the production render sequence.
+    await waitFor(() => expect(getUser).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+
+    await act(async () => {
+      resolveStoreB({
+        json: async () => ({ authenticated: false }),
+      } as Response);
+    });
 
     await waitFor(() =>
       expect(result.current.form.getValues('firstName')).toBe('Meta')

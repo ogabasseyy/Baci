@@ -4120,92 +4120,6 @@ describe('fulfillPendingVtuTransaction', () => {
       );
     });
 
-    it('wallet-only insufficient balance with exhausted failed-persist still stamps the decline marker', async () => {
-      // Without the marker, the row left behind (processing, no
-      // reference, no error, no walletDebited, card 0) is
-      // byte-identical to a crash strand — recovery would flip it to
-      // pending and a later top-up would auto-vend a rejected
-      // purchase (Codex R38 rlFA4). The marker fires adjacent to the
-      // live debit RPC, before the doomed payload writes.
-      vi.useFakeTimers();
-      const warnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      const errorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-      const rpcCalls: Array<{ name: string; args?: unknown }> = [];
-      const rpcImpl = vi.fn((name: string, args?: Record<string, unknown>) => {
-        rpcCalls.push({ name, args });
-        if (name === 'redeem_vtu_wallet_payment') {
-          return Promise.resolve({
-            data: null,
-            error: { message: 'insufficient_wallet_balance', code: 'P0001' },
-          });
-        }
-        return Promise.resolve({ data: null, error: null });
-      });
-
-      const supabase = createPendingTransactionSupabaseMock({
-        transactionRow: {
-          id: 'vtu-walletonly-race-exhausted',
-          merchant_id: 'merchant-1',
-          customer_id: 'customer-1',
-          type: 'airtime',
-          network_provider: 'MTN',
-          phone_number: '08012345678',
-          amount: 1000,
-          request_reference: 'VTU-WO-EXH',
-          transaction_id: null,
-          status: 'pending',
-          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
-          error_message: null,
-          merchant_commission: 10,
-          customer_cashback: 0,
-          biller_name: null,
-          biller_item_code: null,
-          customer_identifier: null,
-          source: 'checkout',
-        },
-        rpcImpl,
-        purchaseUpdateErrors: [
-          { message: 'payload write failed' },
-          { message: 'payload write failed' },
-          { message: 'payload write failed' },
-        ],
-      });
-
-      try {
-        const resultPromise = fulfillPendingVtuTransaction({
-          supabase,
-          transactionId: 'vtu-walletonly-race-exhausted',
-        });
-        // Attach before running timers: the rejection fires during
-        // runAllTimersAsync, and attaching after would surface an
-        // unhandled rejection.
-        const assertion = expect(resultPromise).rejects.toThrow(
-          'Failed to persist wallet-race VTU result'
-        );
-        await vi.runAllTimersAsync();
-        await assertion;
-      } finally {
-        vi.useRealTimers();
-        warnSpy.mockRestore();
-        errorSpy.mockRestore();
-      }
-
-      // Marker stamped (before the refund + payload attempts); the
-      // stranded predicate now excludes this row from re-drive.
-      expect(rpcCalls).toContainEqual({
-        name: 'mark_vtu_wallet_debit_declined',
-        args: {
-          p_declined_at: expect.any(String),
-          p_transaction_id: 'vtu-walletonly-race-exhausted',
-        },
-      });
-      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
-    });
-
     it('throws VtuPersistenceError when wallet debit RPC fails with a non-balance error (DB outage etc.)', async () => {
       // P1: a DB connection error / RLS misconfig surfaces as a
       // non-`insufficient_wallet_balance` error. The route MUST throw
@@ -4473,12 +4387,7 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  it('recovers a stranded pre-vend row to marked pending instead of limbo', async () => {
-    // The pre-vend restore failed while the database was down, so the
-    // row sits processing with no provider reference — the
-    // reconciliation claim declines it. Recovery flips it to marked
-    // pending (client retry AND cron re-drive it) and reports
-    // processing; the next pass re-drives claim → debit → vend.
+  function buildStrandedRowSupabase(ledgerData: unknown) {
     const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const single = vi
       .fn()
@@ -4509,11 +4418,9 @@ describe('fulfillPendingVtuTransaction', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          error_message: 'Reconciliation recovered stranded pre-vend row',
-          metadata: {
-            preVendInterruptedAt: staleAt,
-          },
-          status: 'pending',
+          error_message: null,
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          status: 'processing',
           transaction_id: null,
         },
         error: null,
@@ -4524,8 +4431,18 @@ describe('fulfillPendingVtuTransaction', () => {
     });
     updateEq.mockReturnValue(updateChain);
     const update = vi.fn(() => ({ eq: updateEq }));
+    const ledgerChain = {
+      eq: vi.fn(() => ledgerChain),
+      limit: vi.fn(() => ledgerChain),
+      maybeSingle: vi.fn().mockResolvedValue({ data: ledgerData, error: null }),
+      order: vi.fn(() => ledgerChain),
+    };
+    const rpc = vi.fn();
     const supabase = {
       from: vi.fn((table: string) => {
+        if (table === 'customer_wallet_transactions') {
+          return { select: vi.fn(() => ledgerChain) };
+        }
         if (table !== 'vtu_transactions') {
           throw new Error(`Unexpected table: ${table}`);
         }
@@ -4536,10 +4453,24 @@ describe('fulfillPendingVtuTransaction', () => {
           update,
         };
       }),
-      rpc: vi.fn(),
+      rpc,
     } as unknown as Parameters<
       typeof fulfillPendingVtuTransaction
     >[0]['supabase'];
+    return { supabase, update, rpc };
+  }
+
+  it('recovers a debited stranded pre-vend row to marked pending instead of limbo', async () => {
+    // The pre-vend restore failed while the database was down, so the
+    // row sits processing with no provider reference — the
+    // reconciliation claim declines it. The ledger proves a debit
+    // landed (money moved → duty to complete), so recovery flips it
+    // to marked pending (client retry AND cron re-drive it) and
+    // reports processing; the next pass re-drives claim → debit
+    // (idempotent, cached) → vend.
+    const { supabase, update } = buildStrandedRowSupabase({
+      id: 'ledger-debit-1',
+    });
 
     const result = await fulfillPendingVtuTransaction({
       supabase,
@@ -4553,6 +4484,36 @@ describe('fulfillPendingVtuTransaction', () => {
           preVendInterruptedAt: expect.any(String),
         }),
       })
+    );
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('never flips a never-debited strand: it may be an exhausted terminal decline', async () => {
+    // Joint-outage regression (Codex R39 rldXK): the debit RPC
+    // reported insufficient balance, then the marker AND the
+    // failed-persist writes all exhausted — the row left behind is
+    // byte-identical to a crash strand. No post-decision write can
+    // close this, so recovery fails closed on the ledger read: no
+    // debit → no flip, no vend — even though the wallet could fund
+    // later. The row stays processing (visible, support-recoverable)
+    // instead of auto-vending a rejected purchase with no submission.
+    // FAILS against pre-fix code (which flips unconditionally).
+    const { supabase, update, rpc } = buildStrandedRowSupabase(null);
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
     );
     expect(result).toMatchObject({
       reference: 'VTU-STRANDED',

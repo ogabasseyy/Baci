@@ -25,10 +25,7 @@ import {
 export { VtuPersistenceError };
 
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
-import {
-  markVtuWalletDebitDeclined,
-  VTU_DEBIT_DECLINED_MARKER_KEY,
-} from '@/lib/vtu-debit-decline-marker';
+import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import {
@@ -2434,7 +2431,22 @@ export async function fulfillPendingVtuTransaction({
       // the next pass re-drives it instead of stranding the debit
       // forever. The predicate requires proof no live worker holds
       // the row; re-read after so a raced settle reports terminal.
-      if (isStrandedPreVendVtuRow(row)) {
+      // Fail closed (Codex R39 rldXK): flip ONLY when the ledger
+      // proves a debit landed (money moved → duty to complete;
+      // re-drive is idempotent-safe). A never-debited strand may be
+      // a terminal insufficient-balance decline whose failed-persist
+      // exhausted — byte-identical to a crash strand — and flipping
+      // it would let a later top-up vend a rejected purchase with no
+      // new submission. No post-decision write can close this (any
+      // such write can exhaust in the same outage as the payload
+      // persist), so the safety lives in this read path instead.
+      // Never-debited strands stay processing (visible,
+      // support-recoverable). A ledger-read failure throws (no flip)
+      // — fail closed, the next pass retries the check.
+      if (
+        isStrandedPreVendVtuRow(row) &&
+        (await hasExistingVtuDebitLedger({ row, supabase }))
+      ) {
         await restoreInterruptedPreVendVtuRow({
           userSafeMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,
           row,
@@ -2569,21 +2581,7 @@ export async function fulfillPendingVtuTransaction({
       // through refundVtuToCustomerWallet (refunds card portion only;
       // wallet was never debited).
       if (isInsufficientWalletBalanceError(debitError)) {
-        // Stamp the durable decline marker FIRST (adjacent to the
-        // provably-live debit RPC, before refund + failed-persist):
-        // if that persistence later exhausts, the row would otherwise
-        // be indistinguishable from a crash strand and auto-re-driven
-        // after a later top-up (Codex R38 rlFA4). Never throws.
-        const declinedAt = new Date().toISOString();
-        await markVtuWalletDebitDeclined({
-          declinedAt,
-          supabase,
-          transactionId: row.id,
-        });
-        const raceMetadata = {
-          ...preDebitMetadata,
-          [VTU_DEBIT_DECLINED_MARKER_KEY]: declinedAt,
-        };
+        const raceMetadata = { ...preDebitMetadata };
         const raceRefund = await refundVtuToCustomerWallet({
           metadata: raceMetadata,
           row,

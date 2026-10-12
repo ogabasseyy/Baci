@@ -65,11 +65,12 @@ export interface StrandedPreVendRowCandidate {
  * without the wallet flag, and re-driving THAT would vend after a
  * partial refund. Genuine hybrid pre-vend strands stay processing
  * (visible, support-recoverable) rather than risk double value.
- * Rows stamped `walletDebitDeclinedInsufficientBalanceAt` are
- * declined too: the debit deterministically failed (terminal
- * rejection, not a crash), and re-driving after a later top-up
- * would auto-complete a purchase the customer was told failed —
- * with no new submission (Codex R38 rlFA4). They stay processing
+ * The flip itself is additionally ledger-gated at the call site:
+ * only strands with a proven debit are auto-recovered — a
+ * never-debited strand may be a terminal insufficient-balance
+ * decline whose failed-persist exhausted, and flipping it would
+ * let a later top-up vend a rejected purchase with no new
+ * submission (Codex R39 rldXK). Those stay processing
  * (visible, support-recoverable) instead.
  * A flip re-drives claim → idempotent debit → first vend.
  */
@@ -92,12 +93,6 @@ export function isStrandedPreVendVtuRow(
   }
   // Pre-vend proof (see docblock): a landed vend always has the flag.
   if (row.metadata?.walletDebited === true) {
-    return false;
-  }
-  // Terminal-decline proof (see docblock): an insufficient-balance
-  // decline is a rejection, not an interruption — never re-drive.
-  const declineMarker = row.metadata?.walletDebitDeclinedInsufficientBalanceAt;
-  if (typeof declineMarker === 'string' && declineMarker) {
     return false;
   }
   // Flow proof (see docblock): paymentSplit is written at prepare

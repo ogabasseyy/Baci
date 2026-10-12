@@ -148,7 +148,18 @@ quiesce_worker_release() {
   )"
   local gigl_quiesce_fd=10
   local gigl_quiesce_name
+  local gigl_quiesce_locks=()
+  # Collect names before opening persistent descriptors. A redirected while
+  # loop makes Bash reserve fd 10 to restore stdin and mark it close-on-exec;
+  # opening our first lock on that fd inside the loop leaves flock unable to
+  # inherit it. The for loop below has no stdin redirection to collide with.
   while IFS= read -r gigl_quiesce_name; do
+    [ -n "$gigl_quiesce_name" ] || continue
+    gigl_quiesce_locks+=("$gigl_quiesce_name")
+  done <<EOF
+$gigl_quiesce_names
+EOF
+  for gigl_quiesce_name in "${gigl_quiesce_locks[@]:-}"; do
     [ -n "$gigl_quiesce_name" ] || continue
     # The outer promote command already holds the GIGL runtime lock, and
     # flock locks are per open-file-description: reopening it here would
@@ -165,9 +176,7 @@ quiesce_worker_release() {
     eval "exec ${gigl_quiesce_fd}>>\"\$remote_dir/locks/${gigl_quiesce_name}\"" || return 1
     flock -w 600 -x "$gigl_quiesce_fd" || return 1
     gigl_quiesce_fd=$((gigl_quiesce_fd + 1))
-  done <<EOF
-$gigl_quiesce_names
-EOF
+  done
   # A global lock outside locks/ (absolute, or relative elsewhere) is
   # invisible to the name loop above, so hold the exact configured path
   # on its own fd AFTER every per-job lock: deferred-last by

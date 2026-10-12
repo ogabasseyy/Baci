@@ -16,7 +16,11 @@ describe('walletAccountErrorStatus', () => {
 
   it('maps configuration and DVA conflict codes to 409', () => {
     expect(walletAccountErrorStatus('GATEWAY_NOT_CONFIGURED')).toBe(409);
+    expect(walletAccountErrorStatus('WALLET_DVA_DISABLED_ACCOUNT')).toBe(409);
     expect(walletAccountErrorStatus('WALLET_DVA_ORDER_ALIAS_CONFLICT')).toBe(
+      409
+    );
+    expect(walletAccountErrorStatus('WALLET_DVA_PENDING_REVIEW_CONFLICT')).toBe(
       409
     );
     expect(walletAccountErrorStatus('WALLET_DVA_SUBACCOUNT_CONFLICT')).toBe(
@@ -58,5 +62,21 @@ describe('walletAccountErrorResponse', () => {
     );
 
     expect(walletAccountErrorResponse(error).status).toBe(500);
+  });
+
+  it('sanitizes storage error text instead of leaking database detail', async () => {
+    const error = new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'duplicate key value violates unique constraint "idx_customer"'
+    );
+
+    const response = walletAccountErrorResponse(error);
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({
+      code: 'WALLET_DVA_STORAGE_ERROR',
+      error: 'We could not save your transfer account. Please try again.',
+    });
   });
 });

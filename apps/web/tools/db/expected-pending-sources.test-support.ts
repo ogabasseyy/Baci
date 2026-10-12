@@ -1,5 +1,7 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
+import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
+import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
 import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending-sources.test-support';
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
@@ -13,12 +15,16 @@ import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-p
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
+import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
+import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
+import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
+import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
@@ -36,6 +42,8 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 });
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_CONNECTOR_PENDING_SOURCES,
+  ...EXPECTED_BLOG_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',
@@ -266,6 +274,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260926120000_public_storefront_domain_resolution.sql',
     sha256: 'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db',
   },
+  ...EXPECTED_PENDING_GUEST_CART_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
@@ -273,6 +282,14 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
   ...EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
+    sha256: 'e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4',
+  },
+  ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

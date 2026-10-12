@@ -32,6 +32,33 @@ function evaluatePageSpeedResult(
     inp: fieldInp ?? labInp,
   };
   const failures: PageSpeedFailure[] = [];
+  const runtimeCode = readSafeApiToken(
+    payload.lighthouseResult?.runtimeError?.code
+  );
+  // Lighthouse reports runtimeError.code NO_ERROR on success; only any
+  // other code is a genuine runtime failure. A present-but-unsanitizable
+  // code fails closed with a fixed message (never interpolated) rather
+  // than passing silently.
+  const rawRuntimeCode = payload.lighthouseResult?.runtimeError?.code;
+  if (runtimeCode && runtimeCode !== 'NO_ERROR') {
+    failures.push({
+      metric: 'request',
+      actual: null,
+      threshold: 0,
+      message: `Lighthouse runtime error: ${runtimeCode}`,
+    });
+  } else if (
+    rawRuntimeCode !== undefined &&
+    rawRuntimeCode !== null &&
+    runtimeCode === null
+  ) {
+    failures.push({
+      metric: 'request',
+      actual: null,
+      threshold: 0,
+      message: 'Lighthouse runtime error: (unrecognized code format)',
+    });
+  }
   for (const metric of [
     'performance',
     'accessibility',
@@ -41,7 +68,35 @@ function evaluatePageSpeedResult(
     const actual = scores[metric];
     const threshold = CATEGORY_THRESHOLDS[metric];
     if (actual === null || actual < threshold) {
-      failures.push({ metric, actual, threshold });
+      const failingRefs =
+        payload.lighthouseResult?.categories?.[metric]?.auditRefs?.filter(
+          (ref) =>
+            ref.weight > 0 &&
+            typeof payload.lighthouseResult?.audits?.[ref.id]?.score ===
+              'number' &&
+            (payload.lighthouseResult?.audits?.[ref.id]?.score ?? 1) < 1
+        ) ?? [];
+      const failedAudits = failingRefs
+        .map((ref) => readSafeApiToken(ref.id))
+        .filter((token): token is string => token !== null);
+      // The summary renders message-bearing failures verbatim, so the
+      // score and threshold must live inside the message or they vanish
+      // from reports for metrics the table omits (seo, accessibility,
+      // best-practices).
+      const scoreText = actual === null ? 'missing' : String(actual);
+      const auditDetail = failedAudits.length
+        ? [...new Set(failedAudits)].join(', ')
+        : `${failingRefs.length} omitted (unexpected ID format)`;
+      failures.push({
+        metric,
+        actual,
+        threshold,
+        ...(failingRefs.length
+          ? {
+              message: `Failing Lighthouse audits (score ${scoreText}, threshold ${threshold}): ${auditDetail}`,
+            }
+          : {}),
+      });
     }
   }
   for (const metric of ['lcp', 'cls', 'tbt'] as const) {

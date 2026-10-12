@@ -24,12 +24,10 @@ import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delive
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
-import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
-  const redvaultAvailability = useRedvaultPaymentAvailability(merchant?.id);
 
   // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
   // the pilot default when unset. Drives the state list source, the Places
@@ -194,48 +192,52 @@ export const CheckoutPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const { crypto, dva, handlePlaceOrder, walletFundedTransfer } =
-    useCheckoutPaymentExecution({
-      identity: {
-        merchantId: merchant?.id,
-        merchantSlug: merchant?.slug ?? undefined,
-        currencyCode,
-      },
-      form: {
-        session: checkoutFormState,
-        account,
-        user,
-      },
-      cart: {
-        cart,
-        checkoutCart,
-        checkoutCartTotal,
-        clearCart,
-        removeFromCart,
-      },
-      delivery: {
-        session: delivery,
-        merchantCountry,
-        giftWrappingCost,
-        effectiveItemSubtotal,
-        taxAmount: orderTotals?.taxAmount ?? 0,
-      },
-      merchant,
-      navigation: {
-        flow: checkoutFlow,
-        pushSuccessRoute: (url) => router.push(asRoute(url)),
-        getHref,
-      },
-      payment: {
-        session: paymentSession,
-        bankTransferAvailable: bankTransferCheckoutAvailable,
-        paystackAvailable: paystackCheckoutAvailable,
-        korapayAvailable: korapayCheckoutAvailable,
-        redvaultAvailable: redvaultAvailability.available,
-        currencyCode,
-      },
-      attempt: checkoutAttempt,
-    });
+  const {
+    crypto,
+    dva,
+    handlePlaceOrder,
+    redvaultAvailable,
+    walletFundedTransfer,
+  } = useCheckoutPaymentExecution({
+    identity: {
+      merchantId: merchant?.id,
+      merchantSlug: merchant?.slug ?? undefined,
+      currencyCode,
+    },
+    form: {
+      session: checkoutFormState,
+      account,
+      user,
+    },
+    cart: {
+      cart,
+      checkoutCart,
+      checkoutCartTotal,
+      clearCart,
+      removeFromCart,
+    },
+    delivery: {
+      session: delivery,
+      merchantCountry,
+      giftWrappingCost,
+      effectiveItemSubtotal,
+      taxAmount: orderTotals?.taxAmount ?? 0,
+    },
+    merchant,
+    navigation: {
+      flow: checkoutFlow,
+      pushSuccessRoute: (url) => router.push(asRoute(url)),
+      getHref,
+    },
+    payment: {
+      session: paymentSession,
+      bankTransferAvailable: bankTransferCheckoutAvailable,
+      paystackAvailable: paystackCheckoutAvailable,
+      korapayAvailable: korapayCheckoutAvailable,
+      currencyCode,
+    },
+    attempt: checkoutAttempt,
+  });
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
@@ -290,7 +292,7 @@ export const CheckoutPage: React.FC = () => {
     actions: {
       onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
     },
-    availability: { redvaultAvailable: redvaultAvailability.available },
+    availability: { redvaultAvailable },
   });
 
   return <CheckoutScreen {...screenModel} />;

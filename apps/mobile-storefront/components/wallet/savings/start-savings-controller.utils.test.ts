@@ -3,6 +3,7 @@ import type { Product } from '@/types/product';
 import {
   applyStartSavingsProductSelection,
   getErrorMessage,
+  getSavingsVariantOptions,
   INSUFFICIENT_WALLET_ERROR_CODE,
   isInsufficientWalletError,
   readParam,
@@ -10,14 +11,8 @@ import {
   toSelectedProductChoice,
   validateStartSavingsForm,
 } from './start-savings-controller.utils';
+import { selectedProduct } from './start-savings-product-choice.test-utils';
 
-const selectedProduct = {
-  id: 'product-1',
-  image: 'https://example.com/iphone.jpg',
-  name: 'iPhone 13 Pro Max',
-  price: 800000,
-  slug: 'iphone-13-pro-max',
-};
 const productFixture: Product = {
   ...selectedProduct,
   condition: 'uk_used',
@@ -43,6 +38,8 @@ describe('start savings controller utils', () => {
       ...selectedProduct,
       conditionLabel: 'Used',
       image: 'https://example.com/iphone.jpg',
+      requiresVariantSelection: true,
+      variantId: null,
       variantLabel: 'Storage: 128GB / 256GB',
     });
     expect(
@@ -55,7 +52,97 @@ describe('start savings controller utils', () => {
       conditionLabel: 'New',
       image: 'https://example.com/iphone-variant.jpg',
       price: 850000,
-      variantLabel: 'Storage: 256GB',
+      requiresVariantSelection: false,
+      variantId: 'variant-1',
+      variantLabel: 'Color: Black · Storage: 256GB',
+    });
+  });
+
+  it('keeps color and condition visible for otherwise identical device variants', () => {
+    const choices = (productFixture.variants ?? []).map((variant) =>
+      toSelectedProductChoice({
+        product: productFixture,
+        variantId: variant.id,
+      })
+    );
+
+    expect(choices[0]).toEqual(
+      expect.objectContaining({
+        conditionLabel: 'New',
+        variantLabel: 'Color: Black · Storage: 256GB',
+      })
+    );
+  });
+
+  it('gives same-color storage variants distinct condition labels', () => {
+    const selectedVariant = productFixture.variants?.[0];
+    if (!selectedVariant) {
+      throw new Error('Expected product fixture to have a variant.');
+    }
+
+    const options = getSavingsVariantOptions({
+      ...productFixture,
+      variants: [
+        selectedVariant,
+        {
+          ...selectedVariant,
+          condition: 'used',
+          id: 'variant-used',
+        },
+      ],
+    });
+
+    expect(options.map((option) => option.label)).toEqual([
+      'New · Color: Black · Storage: 256GB',
+      'Used · Color: Black · Storage: 256GB',
+    ]);
+  });
+
+  it('disables invalid-price variants without disabling future-sourceable stock', () => {
+    const selectedVariant = productFixture.variants?.[0];
+    if (!selectedVariant) {
+      throw new Error('Expected product fixture to have a variant.');
+    }
+
+    const options = getSavingsVariantOptions({
+      ...productFixture,
+      variants: [
+        {
+          ...selectedVariant,
+          id: 'variant-zero-price',
+          in_stock: false,
+          price: 0,
+        },
+        {
+          ...selectedVariant,
+          id: 'variant-nonfinite-price',
+          price: Number.NaN,
+        },
+        {
+          ...selectedVariant,
+          id: 'variant-future-sourceable',
+          in_stock: false,
+          price: 850000,
+        },
+      ],
+    });
+
+    expect(options.map((option) => [option.id, option.unavailable])).toEqual([
+      ['variant-zero-price', true],
+      ['variant-nonfinite-price', true],
+      ['variant-future-sourceable', false],
+    ]);
+  });
+
+  it('does not treat a multi-variant product summary as the chosen device', () => {
+    expect(toSelectedProductChoice({ product: productFixture })).toEqual({
+      ...selectedProduct,
+      conditionLabel: 'Used',
+      image: 'https://example.com/iphone.jpg',
+      price: 800000,
+      requiresVariantSelection: true,
+      variantId: null,
+      variantLabel: null,
     });
   });
 
@@ -81,7 +168,11 @@ describe('start savings controller utils', () => {
     expect(setFormError).toHaveBeenCalledWith(null);
     expect(setSearchValue).toHaveBeenCalledWith('iPhone 13 Pro Max');
     expect(setSelectedProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ price: 850000, variantLabel: 'Storage: 256GB' })
+      expect.objectContaining({
+        price: 850000,
+        variantId: 'variant-1',
+        variantLabel: 'Color: Black · Storage: 256GB',
+      })
     );
     expect(updateTargetAmount('')).toBe('850000');
     expect(updateTargetAmount('900000')).toBe('900000');
@@ -148,6 +239,16 @@ describe('start savings controller utils', () => {
     expect(
       validateStartSavingsForm({ ...validInput, selectedProduct: null })
     ).toBe('Select the product you want to save for.');
+    expect(
+      validateStartSavingsForm({
+        ...validInput,
+        selectedProduct: {
+          ...selectedProduct,
+          requiresVariantSelection: true,
+          variantId: null,
+        },
+      })
+    ).toBe('Select the exact device variant you want to save for.');
     expect(validateStartSavingsForm({ ...validInput, targetValue: 0 })).toBe(
       'Enter a valid target amount.'
     );
@@ -190,4 +291,27 @@ describe('start savings controller utils', () => {
       })
     ).toBe('You must accept the non-withdrawable savings terms.');
   });
+});
+
+it('falls back to the product photo when variant image fields are blank', () => {
+  const product: Product = {
+    id: 'image-test',
+    name: 'Phone',
+    slug: 'phone',
+    price: 1000,
+    image: 'https://example.com/phone.jpg',
+    variants: [
+      {
+        id: 'v1',
+        name: '128GB',
+        price: 1000,
+        image: '',
+        images: ['   '],
+        attributes: { storage: '128GB' },
+      },
+    ],
+  };
+  expect(toSelectedProductChoice({ product, variantId: 'v1' }).image).toBe(
+    product.image
+  );
 });

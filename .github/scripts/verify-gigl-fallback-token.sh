@@ -5,7 +5,8 @@
 # Mirror isExplicitlyDisabledEnv: only 0/false/off bypass this gate; an
 # unset flag counts as enabled, matching the runtime default.
 # The injector proves the Production key is DEFINED (Vercel pulls sensitive
-# values blank); it cannot prove the value is real or unexpired. Operators
+# values blank or as the CLI 57 [SENSITIVE] marker); it cannot prove the value
+# is real or unexpired. Operators
 # must keep the same rotated worker JWT in Vercel Production and the VPS
 # worker .env, or the retained manual fallback route returns 500.
 # Rotation procedure (expiry check + rotate steps):

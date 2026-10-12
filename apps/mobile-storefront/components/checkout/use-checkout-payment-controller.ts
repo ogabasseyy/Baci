@@ -19,8 +19,8 @@ import {
 } from '@/lib/klump-checkout';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import type { useCartStore } from '@/stores/cart-store';
+import { useRedvaultAvailability } from './use-redvault-availability';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
@@ -35,6 +35,7 @@ interface UseCheckoutPaymentControllerParams {
   merchantSlug: string;
   step: CheckoutStep;
   subtotal: number;
+  userId?: string;
 }
 
 export function useCheckoutPaymentController({
@@ -48,6 +49,7 @@ export function useCheckoutPaymentController({
   merchantSlug,
   step,
   subtotal,
+  userId,
 }: UseCheckoutPaymentControllerParams) {
   const { data: paymentSettings } = useMerchantPaymentSettings();
   const enabledPaymentMethods = getEnabledPaymentMethods(paymentSettings);
@@ -56,12 +58,15 @@ export function useCheckoutPaymentController({
       paymentSettings.wallet_paystack_dva_enabled &&
       paymentSettings.wallet_order_auto_debit_enabled
   );
-  const [availability, setAvailability] = useState<{
-    merchantId: string;
-    available: boolean;
-  } | null>(null);
-  const redvaultAvailable =
-    availability?.merchantId === merchantId && availability.available;
+  const redvaultAvailable = useRedvaultAvailability({
+    assuranceFee,
+    customerId,
+    deliveryFee,
+    isAuthenticated,
+    items,
+    merchantId,
+    userId,
+  });
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,
@@ -101,20 +106,6 @@ export function useCheckoutPaymentController({
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
   };
-
-  useEffect(() => {
-    let active = true;
-    void getRedvaultPaymentAvailability(merchantId)
-      .then((available) => {
-        if (active) setAvailability({ merchantId, available });
-      })
-      .catch(() => {
-        if (active) setAvailability({ merchantId, available: false });
-      });
-    return () => {
-      active = false;
-    };
-  }, [merchantId]);
 
   const resetPaymentSelection = () => {
     setSelectedPaymentState(null);

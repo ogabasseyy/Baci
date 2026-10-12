@@ -1,3 +1,4 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { z } from 'zod';
 import { mcpDiscoveryIntentSchema } from '../src/schemas/mcp-discovery-intent';
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from './search-category-guidance';
@@ -6,6 +7,7 @@ import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from './search-products-description';
 /** Search registration metadata/schema; retrieval handler remains in the server. */
 export function createSearchProductsToolConfig(widgetUri: string) {
   return {
+    outputSchema: mcpToolOutputSchemas.search_products,
     title: 'Search Products',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     description: MCP_SEARCH_PRODUCTS_DESCRIPTION,

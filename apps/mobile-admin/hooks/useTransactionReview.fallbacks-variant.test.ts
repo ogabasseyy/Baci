@@ -17,6 +17,10 @@ vi.mock('@/lib/fetch-transaction-review-rows', () => ({
   fetchTransactionReviewRows: mocks.fetchTransactionReviewRows,
 }));
 
+vi.mock('@/lib/search-transaction-review-orders', () => ({
+  searchTransactionReviewOrders: vi.fn(),
+}));
+
 vi.mock('@/lib/transaction-review', () => ({
   buildTransactionReviewRangeFilters: () => ({}),
   mapTransactionOrderRows: mocks.mapTransactionOrderRows,

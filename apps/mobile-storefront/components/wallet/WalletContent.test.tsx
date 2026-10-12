@@ -6,9 +6,9 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
 import { setClipboardString } from '@/lib/clipboard';
 import { WalletContent } from './WalletContent';
+import { createWalletContentProps } from './wallet-content.test-utils';
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -34,8 +34,8 @@ jest.mock('@/hooks/use-debounce', () => ({
   useDebounce: (value: string) => value,
 }));
 
-jest.mock('@/hooks/use-products', () => ({
-  useProducts: () => ({
+jest.mock('@/hooks/use-product-search', () => ({
+  useProductSearch: () => ({
     isLoading: false,
     products: [
       {
@@ -68,76 +68,7 @@ jest.mock('@/constants/wallet-funding', () => ({
 const mockSetClipboardString = jest.mocked(setClipboardString);
 
 describe('WalletContent', () => {
-  const props = {
-    activeSavingsGoal: {
-      contribution_amount: 10000,
-      contribution_frequency: 'weekly' as const,
-      current_amount: 50000,
-      id: 'goal-1',
-      maturity_date: '2026-09-30',
-      product_condition: 'Used',
-      product_image: 'https://cdn.example.com/device.jpg',
-      product_variant_label: 'Storage: 256GB',
-      source_mode: 'manual' as const,
-      status: 'active' as const,
-      target_amount: 100000,
-      title: 'iPhone 15 Pro',
-    },
-    canCreateFundingAccount: true,
-    colors: Colors.light,
-    contentContainerStyle: { paddingBottom: 32, paddingTop: 20 },
-    earningsBalance: 125000,
-    fundAmount: '',
-    fundingAccount: {
-      accountName: 'Ogabassey/Jane Doe',
-      accountNumber: '1234567890',
-      bankName: 'Titan Paystack',
-      provider: 'paystack' as const,
-    },
-    isAddingSavingsContribution: false,
-    isCreatingFundingAccount: false,
-    isFundPending: false,
-    isRedeemPending: false,
-    isRefetching: false,
-    loyaltyPoints: 2000,
-    needsPhone: false,
-    onChangeFundAmount: jest.fn(),
-    onCreateFundingAccount: jest.fn(),
-    onChangeRedeemPoints: jest.fn(),
-    onAddSavingsContribution: jest.fn(),
-    onChangeSavingsDevice: jest.fn(async () => true),
-    onChangeSavingsContributionAmount: jest.fn(),
-    onCloseSavingsProgress: jest.fn(),
-    onConfirmFund: jest.fn(),
-    onConfirmRedeem: jest.fn(),
-    onFundSavingsWallet: jest.fn(),
-    onManageCards: jest.fn(),
-    onOpenFundPanel: jest.fn(),
-    onOpenRedeemPanel: jest.fn(),
-    onQuickSave: jest.fn(),
-    onRefresh: jest.fn(),
-    onResetFund: jest.fn(),
-    onResetRedeem: jest.fn(),
-    onStartSavings: jest.fn(),
-    onSubmitPhone: jest.fn(async () => ({ success: true })),
-    redeemPoints: '',
-    savingsContributionAmount: '',
-    savingsBalance: 35000,
-    showFundPanel: false,
-    showQuickSave: true,
-    showRedeemPanel: false,
-    showSavingsProgress: false,
-    totalBalance: 160000,
-    transactions: [
-      {
-        amount: 2500.75,
-        created_at: '2026-04-21T12:30:00.000Z',
-        description: 'Order cashback',
-        id: 'tx-1',
-        type: 'credit' as const,
-      },
-    ],
-  };
+  const props = createWalletContentProps();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -148,7 +79,7 @@ describe('WalletContent', () => {
   it('mounts a single credit-check affordance while the fund panel is open', () => {
     mockCheckingStateEnabled = true;
 
-    render(<WalletContent {...props} showFundPanel={true} />);
+    render(<WalletContent hasSavedCards {...props} showFundPanel={true} />);
 
     // The fund panel owns the interactive affordance; the hero must not mount
     // a duplicate alongside it.
@@ -162,7 +93,7 @@ describe('WalletContent', () => {
   it('shows the hero credit-check affordance when the fund panel is closed', () => {
     mockCheckingStateEnabled = true;
 
-    render(<WalletContent {...props} showFundPanel={false} />);
+    render(<WalletContent hasSavedCards {...props} showFundPanel={false} />);
 
     expect(
       screen.getAllByRole('button', {
@@ -171,10 +102,26 @@ describe('WalletContent', () => {
     ).toHaveLength(1);
   });
 
-  it('renders earnings, savings, loyalty points, and primary actions', () => {
-    render(<WalletContent {...props} />);
+  it('dismisses the fund panel bottom sheet through the backdrop', () => {
+    const onResetFund = jest.fn();
+    render(
+      <WalletContent
+        hasSavedCards
+        {...props}
+        showFundPanel={true}
+        onResetFund={onResetFund}
+      />
+    );
 
-    expect(screen.getByText('Wallet')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Dismiss modal' }));
+
+    expect(onResetFund).toHaveBeenCalled();
+  });
+
+  it('renders earnings, savings, loyalty points, and primary actions', () => {
+    render(<WalletContent hasSavedCards {...props} />);
+
+    expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
     expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
     expect(screen.getByText('₦160,000')).toBeOnTheScreen();
     expect(screen.getAllByText('Earnings').length).toBeGreaterThan(0);
@@ -185,7 +132,7 @@ describe('WalletContent', () => {
       screen.getByRole('button', { name: 'Redeem loyalty points' })
     ).toBeOnTheScreen();
     expect(
-      screen.getByRole('button', { name: 'Add to Savings' })
+      screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
     ).toBeOnTheScreen();
     expect(
       screen.getByRole('button', { name: 'Manage Cards' })
@@ -196,7 +143,7 @@ describe('WalletContent', () => {
   });
 
   it('copies the funding account number from the account pill', async () => {
-    render(<WalletContent {...props} />);
+    render(<WalletContent hasSavedCards {...props} />);
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Copy funding account number' })
@@ -213,7 +160,7 @@ describe('WalletContent', () => {
   it('clears inline copy feedback after a short delay', async () => {
     jest.useFakeTimers();
     try {
-      render(<WalletContent {...props} />);
+      render(<WalletContent hasSavedCards {...props} />);
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Copy funding account number' })
@@ -237,7 +184,7 @@ describe('WalletContent', () => {
 
   it('shows inline feedback when account number copy fails', async () => {
     mockSetClipboardString.mockResolvedValue(false);
-    render(<WalletContent {...props} />);
+    render(<WalletContent hasSavedCards {...props} />);
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Copy funding account number' })
@@ -249,7 +196,7 @@ describe('WalletContent', () => {
   });
 
   it('shows create account button when no funding account exists', () => {
-    render(<WalletContent {...props} fundingAccount={null} />);
+    render(<WalletContent hasSavedCards {...props} fundingAccount={null} />);
 
     expect(
       screen.getByRole('button', { name: 'Create account number' })
@@ -259,6 +206,7 @@ describe('WalletContent', () => {
   it('passes through account creation unavailable messaging', () => {
     render(
       <WalletContent
+        hasSavedCards
         {...props}
         canCreateFundingAccount={false}
         createFundingAccountUnavailableMessage="Add a phone number to create your account number."
@@ -274,6 +222,7 @@ describe('WalletContent', () => {
   it('shows the phone prompt in the fund panel when a phone is needed', () => {
     render(
       <WalletContent
+        hasSavedCards
         {...props}
         canCreateFundingAccount={false}
         fundingAccount={null}
@@ -288,20 +237,21 @@ describe('WalletContent', () => {
     ).toBeOnTheScreen();
   });
 
-  it('wires start savings, manage cards, and quick save actions', () => {
-    render(<WalletContent {...props} />);
+  it('wires the plan action and card management without duplicate savings buttons', () => {
+    render(<WalletContent hasSavedCards {...props} />);
 
-    fireEvent.press(screen.getByRole('button', { name: 'Add to Savings' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
+    );
     fireEvent.press(screen.getByRole('button', { name: 'Manage Cards' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Quick Save' }));
 
     expect(props.onStartSavings).toHaveBeenCalledTimes(1);
     expect(props.onManageCards).toHaveBeenCalledTimes(1);
-    expect(props.onQuickSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
   });
 
   it('opens loyalty redemption from the hero loyalty row', () => {
-    render(<WalletContent {...props} />);
+    render(<WalletContent hasSavedCards {...props} />);
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Redeem loyalty points' })
@@ -313,6 +263,7 @@ describe('WalletContent', () => {
   it('hides quick save when there is no active savings context', () => {
     render(
       <WalletContent
+        hasSavedCards
         {...props}
         activeSavingsGoal={null}
         showQuickSave={false}
@@ -320,40 +271,6 @@ describe('WalletContent', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
-  });
-
-  it('renders savings progress modal and wires manual contribution actions', async () => {
-    render(<WalletContent {...props} showSavingsProgress />);
-
-    expect(screen.getByText('Saving streak')).toBeOnTheScreen();
-    expect(screen.getByText('50%')).toBeOnTheScreen();
-    expect(screen.getByText('Used')).toBeOnTheScreen();
-    expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
-
-    fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Confirm savings top-up' })
-    );
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Fund wallet for savings' })
-    );
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Change savings device' })
-    );
-    await act(async () => {
-      fireEvent.press(
-        screen.getByRole('button', { name: 'Select iPhone 16 Pro' })
-      );
-      await Promise.resolve();
-    });
-
-    expect(props.onChangeSavingsContributionAmount).toHaveBeenCalledWith('500');
-    expect(props.onAddSavingsContribution).toHaveBeenCalledTimes(1);
-    expect(props.onFundSavingsWallet).toHaveBeenCalledTimes(1);
-    expect(props.onChangeSavingsDevice).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'product-swap' }),
-      null
-    );
   });
 
   it('does not update copy feedback after unmounting', async () => {
@@ -368,7 +285,7 @@ describe('WalletContent', () => {
     );
 
     try {
-      const { unmount } = render(<WalletContent {...props} />);
+      const { unmount } = render(<WalletContent hasSavedCards {...props} />);
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Copy funding account number' })

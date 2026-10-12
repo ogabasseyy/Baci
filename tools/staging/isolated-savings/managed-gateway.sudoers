@@ -1,0 +1,3 @@
+Defaults:baci-savings-gateway env_reset, !setenv, timestamp_timeout=0
+Defaults:baci-savings-gateway env_delete += "NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH PYTHONPATH PYTHONHOME"
+baci-savings-gateway ALL=(root) NOPASSWD: NOSETENV: /opt/baci-savings-gateway/managed-inventory-helper.mjs ""

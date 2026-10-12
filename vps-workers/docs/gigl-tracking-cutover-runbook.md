@@ -289,7 +289,12 @@ API, in both directions:
 - Every promote records `<sha>:<in-flight-run-ids>` in the
   `ops/gigl-promote-record` branch (single file
   `.gigl-promote-record`, created automatically on first promote;
-  `[skip ci]` commits) — TWICE: immediately before the flip as a
+  plain commits with no `[skip ci]`; the Ops Promote Record workflow
+  re-validates the branch from the last validated tip on a 15-minute
+  schedule (intended cadence; GitHub can delay or drop scheduled runs,
+  so the interval does not bound detection delay)) — TWICE:
+  immediately before the
+  flip as a
   fail-closed gate (a broken record path refuses the promote before
   anything is mutated, so a promote can never land that no workflow
   can see) and immediately after as a refresh with flip-window runs.

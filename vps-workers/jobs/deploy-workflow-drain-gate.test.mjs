@@ -20,6 +20,17 @@ function jobBlock(name, nextName) {
 }
 
 describe('production cache-invalidation drain rollout gate', () => {
+  it('runs migrations on manual dispatch after successful readiness despite skipped changes', () => {
+    const migrations = jobBlock('db-migrations', 'gigl-worker-capability');
+    // Without an explicit status function, Actions adds success() across
+    // the dependency chain. The skipped changes ancestor then skips this
+    // job even after the always()-guarded readiness job succeeds.
+    assert.match(
+      migrations,
+      /^ {4}if: always\(\) && github\.ref == 'refs\/heads\/main' && needs\.vps-drain-readiness\.result == 'success'$/m
+    );
+  });
+
   it('verifies the installed VPS drain before production migrations', () => {
     const readiness = jobBlock('vps-drain-readiness', 'db-migrations');
     const migrations = jobBlock('db-migrations', 'deploy-production');

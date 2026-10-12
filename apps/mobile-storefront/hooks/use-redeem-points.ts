@@ -77,6 +77,7 @@ export function useRedeemPoints() {
         walletKeys.data({
           merchantId: currentMerchantId,
           ownerId: customerId,
+          userId: user?.id ?? undefined,
         })
       );
       const currentPoints =
@@ -189,6 +190,7 @@ export function useRedeemPoints() {
       const queryKey: WalletQueryKey = walletKeys.data({
         merchantId: activeMerchantId,
         ownerId: walletOwnerId,
+        userId: user?.id ?? undefined,
       });
 
       await queryClient.cancelQueries({ queryKey });

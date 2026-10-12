@@ -48,6 +48,19 @@ function runExpectingInjectorRefusal(contents) {
 }
 
 describe('verify gigl fallback token', () => {
+  it('accepts the Vercel CLI 57 sensitive marker without retaining it', () => {
+    const { stdout, updated } = runWithDotenv(
+      'GIGL_TRACKING_WORKER_TOKEN="[SENSITIVE]"\nOTHER_KEY="keep"\n'
+    );
+    assert.match(stdout, /build-time stand-in/);
+    assert.doesNotMatch(updated, /\[SENSITIVE\]/);
+    assert.match(updated, /OTHER_KEY="keep"/);
+    assert.match(
+      updated,
+      /GIGL_TRACKING_WORKER_TOKEN="build-time-presence-stand-in-not-used-at-runtime-000000000000"/
+    );
+  });
+
   for (const value of [
     '0',
     'false',

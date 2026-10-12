@@ -17,7 +17,8 @@ const originalEnv = Object.fromEntries(
 
 const PUBLIC_MCP_TOOL_NAMES = [
   'search_products',
-  'add_to_cart',
+  'prepare_storefront_cart_link',
+  'update_ogabassey_guest_cart',
   'get_product',
   'get_product_variants',
   'get_store_info',
@@ -54,6 +55,12 @@ afterEach(() => {
 });
 
 describe('agent readiness config', () => {
+  it('publishes bounded live delivery guidance', async () => {
+    const config = await importAgentReadiness({});
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('live GIG estimates');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('per-unit');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('product IDs');
+  });
   it('uses production Ogabassey discovery defaults', async () => {
     const config = await importAgentReadiness({});
 

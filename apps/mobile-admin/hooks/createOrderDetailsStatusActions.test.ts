@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOrderDetailsStatusActions } from './createOrderDetailsStatusActions';
+import { createPaidOrderStatusActions } from './createOrderDetailsStatusActions.test-support';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -202,44 +203,32 @@ describe('createOrderDetailsStatusActions', () => {
   });
 
   it('requires explicit confirmation before cancelling a paid order', async () => {
-    const updateStatus = vi.fn().mockResolvedValue(undefined);
-    const actions = createOrderDetailsStatusActions({
-      openShipmentFlow: vi.fn(),
-      order: {
-        id: 'order-paid',
-        amount_paid: 5000,
-        balance: 0,
-        created_at: '',
-        customer_email: 'customer@example.com',
-        customer_name: 'Ada',
-        customer_phone: null,
-        discount_amount: 0,
-        is_credit_order: false,
-        order_number: 'ORD-PAID',
-        payment_status: 'paid',
-        shipping_address: null,
-        shipping_status: 'processing',
-        total: 5000,
-        updated_at: '',
-      },
-      setShowCreditModal: vi.fn(),
-      setShowPaymentOptionModal: vi.fn(),
-      setShowStatusModal: vi.fn(),
-      setSuccessModal: vi.fn(),
-      updateStatus,
-    });
+    const { actions, setSuccessModal, updateStatus } =
+      createPaidOrderStatusActions();
 
     await actions.handleStatusUpdate('cancelled');
 
     expect(updateStatus).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Cancel paid order?',
-      expect.stringContaining('refund'),
+      expect.stringContaining('starts the customer refund process'),
       expect.arrayContaining([
         expect.objectContaining({ style: 'cancel', text: 'Keep Order' }),
         expect.objectContaining({ style: 'destructive', text: 'Cancel Order' }),
       ])
     );
+    expect(vi.mocked(Alert.alert).mock.calls[0]?.[1]).toContain(
+      'instead of cancelling again'
+    );
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    confirmation?.find((button) => button.text === 'Cancel Order')?.onPress?.();
+    await vi.waitFor(() => {
+      expect(setSuccessModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subMessage: expect.stringContaining('Check the refund status'),
+        })
+      );
+    });
   });
 
   it('does not claim the customer was emailed for shipped status updates', async () => {

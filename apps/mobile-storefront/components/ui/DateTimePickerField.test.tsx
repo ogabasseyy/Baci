@@ -5,9 +5,15 @@ import { DateTimePickerField } from './DateTimePickerField';
 
 let mockPickerEventType: 'dismissed' | 'set' = 'set';
 let mockColorScheme: 'light' | 'dark' = 'light';
+let renderedDisplay: string | undefined;
 let renderedThemeVariant: 'light' | 'dark' | undefined;
+let renderedIs24Hour: boolean | undefined;
+let renderedLocale: string | undefined;
 
 type MockDateTimePickerProps = {
+  display?: string;
+  is24Hour?: boolean;
+  locale?: string;
   mode: 'date' | 'time';
   onChange: (event: { type: 'dismissed' | 'set' }, date: Date) => void;
   themeVariant?: 'light' | 'dark';
@@ -20,8 +26,18 @@ jest.mock('@/components/useColorScheme', () => ({
 jest.mock('@react-native-community/datetimepicker', () => {
   return {
     __esModule: true,
-    default: ({ mode, onChange, themeVariant }: MockDateTimePickerProps) => {
+    default: ({
+      mode,
+      onChange,
+      themeVariant,
+      display,
+      is24Hour,
+      locale,
+    }: MockDateTimePickerProps) => {
       renderedThemeVariant = themeVariant;
+      renderedDisplay = display;
+      renderedIs24Hour = is24Hour;
+      renderedLocale = locale;
       const { Pressable, Text } =
         jest.requireActual<typeof import('react-native')>('react-native');
 
@@ -50,6 +66,8 @@ describe('DateTimePickerField', () => {
     mockPickerEventType = 'set';
     mockColorScheme = 'light';
     renderedThemeVariant = undefined;
+    renderedIs24Hour = undefined;
+    renderedLocale = undefined;
   });
 
   it('formats selected time values', () => {
@@ -69,6 +87,44 @@ describe('DateTimePickerField', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Mock time picker' }));
 
     expect(onChangeText).toHaveBeenCalledWith('07:05');
+  });
+
+  it('formats the display value and native picker only when opted in', () => {
+    const onChangeText = jest.fn();
+    render(
+      <DateTimePickerField
+        accessibilityLabel="Savings debit time"
+        displayFormattedValue
+        fallbackDisplay="06:20"
+        label="Preferred debit time"
+        mode="time"
+        onChangeText={onChangeText}
+        value="06:20"
+      />
+    );
+
+    expect(screen.getByText('6:20 AM')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Savings debit time' }));
+    expect(renderedIs24Hour).toBe(false);
+    expect(renderedLocale).toBe('en-US');
+  });
+
+  it('keeps the canonical value visible and native picker defaults unchanged without opt-in', () => {
+    render(
+      <DateTimePickerField
+        accessibilityLabel="Date of birth"
+        fallbackDisplay="Select your date of birth"
+        label="Date of birth"
+        mode="time"
+        onChangeText={jest.fn()}
+        value="06:20"
+      />
+    );
+
+    expect(screen.getByText('06:20')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Date of birth' }));
+    expect(renderedIs24Hour).toBeUndefined();
+    expect(renderedLocale).toBeUndefined();
   });
 
   it('formats selected date values', () => {
@@ -162,7 +218,7 @@ describe('DateTimePickerField', () => {
     expect(onChangeText).toHaveBeenCalledWith('06:20');
   });
 
-  it('presents the iOS spinner in a full-width modal instead of the field row', () => {
+  it('presents an inline iOS calendar with a fading backdrop', () => {
     if (Platform.OS !== 'ios') return;
 
     const rendered = render(
@@ -180,6 +236,8 @@ describe('DateTimePickerField', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Savings start date' }));
 
     const modal = rendered.UNSAFE_getByType(Modal);
+    expect(modal.props.animationType).toBe('fade');
+    expect(renderedDisplay).toBe('inline');
     expect(modal.props.visible).toBe(true);
     expect(modal.props.transparent).toBe(true);
     expect(modal.props.accessibilityViewIsModal).toBe(true);

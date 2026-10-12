@@ -1,0 +1,292 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const provider = vi.hoisted(() => ({
+  fetchRefund: vi.fn(),
+  verifyTransaction: vi.fn(),
+}));
+vi.mock('@/lib/verify-paystack-transaction', () => ({
+  verifyTransaction: provider.verifyTransaction,
+}));
+vi.mock('./fetch-paystack-refund', () => ({
+  fetchRefund: provider.fetchRefund,
+}));
+
+import { reconcilePaystackRefundEvent } from './reconcile-paystack-refund-event';
+import {
+  buildPaymentCandidates,
+  buildPaymentLookup,
+  buildRefundCandidates,
+  buildReviewInsert,
+  cancelledPaymentRow,
+  REFUND_FIXTURE,
+} from './reconcile-paystack-refund-event.test-helpers';
+
+describe('Paystack cancellation refund mismatch evidence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    provider.fetchRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: 42,
+        transaction: 123,
+        amount: 10000,
+        currency: 'NGN',
+        status: 'processed',
+      },
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      success: true,
+      data: { id: 123, reference: 'PSK-1', amount: 10000, currency: 'NGN' },
+    });
+  });
+
+  it('files a mismatched refund and continues to a second refund in one webhook', async () => {
+    const refund2 = {
+      ...REFUND_FIXTURE,
+      id: 'refund-2',
+      gateway_reference: '43',
+    };
+    const paymentLookup = buildPaymentLookup();
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE, refund2]))
+      .mockReturnValueOnce(paymentLookup)
+      .mockReturnValueOnce(review)
+      .mockReturnValueOnce(paymentLookup);
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data:
+          name === 'open_paystack_refund_reference_watch_v1'
+            ? []
+            : name === 'hold_paystack_cancellation_refund_for_review_v1'
+              ? true
+              : 'processed',
+        error: null,
+      })
+    );
+    provider.fetchRefund
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 42,
+          transaction: 999,
+          amount: 10000,
+          currency: 'NGN',
+          status: 'processed',
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 43,
+          transaction: 123,
+          amount: 10000,
+          currency: 'NGN',
+          status: 'processed',
+        },
+      });
+    await expect(
+      reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1')
+    ).resolves.toBeUndefined();
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        txn_id: 'refund-1',
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
+    // Two holds plus the trailing atomic open-and-rescan, which runs
+    // even when the passes handled matches — then the handled
+    // matches retain the watch for future completions.
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'hold_paystack_cancellation_refund_for_review_v1',
+      { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-2' })
+    );
+  });
+
+  it('merges duplicate mismatch evidence without replacing an existing review', async () => {
+    const review = {
+      ...buildReviewInsert({ code: '23505' }),
+      update: vi.fn(),
+    };
+    const from = vi
+      .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE]))
+      .mockReturnValueOnce(buildPaymentLookup())
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data: name === 'open_paystack_refund_reference_watch_v1' ? [] : true,
+        error: null,
+      })
+    );
+    provider.fetchRefund.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 42,
+        transaction: 999,
+        amount: 10000,
+        currency: 'NGN',
+        status: 'processed',
+      },
+    });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_review_v1',
+      {
+        p_order_id: 'order-1',
+        p_merchant_id: 'merchant-1',
+        p_refund_id: 'refund-1',
+        p_reason: 'paystack_refund_evidence_mismatch',
+      }
+    );
+    expect(review.update).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith(
+      'hold_paystack_cancellation_refund_for_review_v1',
+      { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
+    );
+  });
+
+  it('reconciles references with dots and equals signs', async () => {
+    const paymentCandidates = buildPaymentCandidates([]);
+    const stalledCandidates = buildPaymentCandidates([]);
+    const from = vi
+      .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(stalledCandidates);
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK.1=x');
+
+    expect(from).toHaveBeenCalledWith('transactions');
+    expect(paymentCandidates.eq).toHaveBeenCalledWith(
+      'gateway_reference',
+      'PSK.1=x'
+    );
+    // No completed payment carries the reference, so the stalled
+    // states scan runs before the event is acknowledged.
+    expect(stalledCandidates.in).toHaveBeenCalledWith('status', [
+      'pending',
+      'processing',
+      'failed',
+    ]);
+    // Both passes empty: the reference watch opens atomically with a
+    // confirming re-scan so a concurrent completion claims the watch
+    // instead of slipping through unhandled.
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK.1=x' })
+    );
+  });
+
+  it.each([
+    { cancelled_at: null, shipping_status: 'cancelled' },
+    {
+      cancelled_at: '2026-09-27T00:00:00Z',
+      shipping_status: 'delivered',
+    },
+    null,
+  ])('files non-cancellation evidence for payments whose order is not cancelled (%s)', async (cancelOrder) => {
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(
+        buildPaymentCandidates([
+          cancelledPaymentRow({ cancel_order: cancelOrder }),
+        ])
+      )
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // The customer may have been refunded while the order stays paid
+    // and fulfillable: acknowledging silently would lose the only
+    // evidence polling can never rediscover.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        order_id: 'order-1',
+        txn_id: null,
+      })
+    );
+  });
+
+  it('files orderless payments into the order-independent queue', async () => {
+    const paymentCandidates = buildPaymentCandidates([
+      cancelledPaymentRow({ order_id: null }),
+    ]);
+    const stalledCandidates = buildPaymentCandidates([]);
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(review)
+      .mockReturnValueOnce(stalledCandidates);
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // The orderless completed row files a generic review instead of
+    // staying silent: the signed refund is real evidence even
+    // detached, and the rescan match would otherwise be discarded
+    // while the watch closed. The handled match then retains the
+    // watch for future completions.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+      })
+    );
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
+  });
+
+  it('ignores references outside the shared alphabet', async () => {
+    const from = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    await reconcilePaystackRefundEvent(
+      { from, rpc } as never,
+      'bad reference!'
+    );
+
+    expect(from).not.toHaveBeenCalled();
+  });
+});

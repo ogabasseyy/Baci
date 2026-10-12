@@ -1,62 +1,58 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import { finalizeVerifiedWedge } from '@/lib/payments/finalize-verified-wedge';
+import { interleaveWedgeCandidates } from '@/lib/payments/interleave-wedge-candidates';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
+import type {
+  WedgedCandidate,
+  WedgedOrderSweepSummary,
+} from '@/lib/payments/reconcile-wedged-gateway-orders.types';
+import { remainingVerificationSignal } from '@/lib/payments/remaining-verification-signal';
 import {
   retireWedgeWithReview,
   stampWedgeResolution,
 } from '@/lib/payments/retire-wedge-with-review';
 import {
   buildJuicywayVerificationContext,
+  type HealableGateway,
   isHealableGateway,
   isTerminalGatewayVerificationReason,
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
 
-// Wedged gateway payments (completed txn, order never flipped), pending
-// Juicyway sessions whose success webhook never arrived, and pending rows
-// the sessionless verify GET already confirmed with the provider (flagged
-// through the proof-bound flag RPC): heal after re-verifying with the
-// gateway. Terminal outcomes file a review and stamp the row once.
+// Reverify wedged captures; file and stamp terminal outcomes once.
 
 const AMOUNT_TOLERANCE_MAJOR_UNITS = 0.01;
 const DEFAULT_LIMIT = 10;
 // Grace period so the sweep never races a webhook that is mid-flight.
 const DEFAULT_OLDER_THAN_MINUTES = 15;
 
-export interface WedgedOrderSweepSummary {
-  checked: number;
-  healed: Array<{ orderId: string; orderNumber: string | null }>;
-  detectedUnhealable: Array<{ transactionId: string; gateway: string }>;
-  reviewsFiled: Array<{ transactionId: string; orderId: string }>;
-  skipped: Array<{ transactionId: string; reason: string }>;
-  failed: Array<{ transactionId: string; reason: string }>;
-}
-
-type WedgedCandidate = {
-  id: string;
-  created_at: string;
-  order_id: string;
-  merchant_id: string;
-  amount: number | string | null;
-  currency: string | null;
-  platform_fee: number | null;
-  gateway: string;
-  gateway_reference: string | null;
-  metadata: Record<string, unknown> | null;
-  status: string;
-};
+export type { WedgedOrderSweepSummary } from './reconcile-wedged-gateway-orders.types';
 
 export async function reconcileWedgedGatewayOrders({
   supabase,
   scheduleAfter,
+  beforeSweep,
   limit = DEFAULT_LIMIT,
   olderThanMinutes = DEFAULT_OLDER_THAN_MINUTES,
+  deadlineMs,
 }: {
   supabase: SupabaseClient;
   scheduleAfter: (task: () => Promise<void>) => void;
+  beforeSweep?: (authorities: {
+    finalizePayment: typeof finalizeOrderGatewayPayment;
+    fileWedgeReview: typeof retireWedgeWithReview;
+  }) => Promise<void>;
   limit?: number;
   olderThanMinutes?: number;
+  deadlineMs?: number;
 }): Promise<WedgedOrderSweepSummary> {
+  await beforeSweep?.({
+    finalizePayment: finalizeOrderGatewayPayment,
+    fileWedgeReview: retireWedgeWithReview,
+  });
   const summary: WedgedOrderSweepSummary = {
     checked: 0,
     detectedUnhealable: [],
@@ -71,7 +67,7 @@ export async function reconcileWedgedGatewayOrders({
   // Cancelled/refunded orders stay in scope (the finalizer files their
   // review); every terminal outcome is stamped so it never consumes the
   // batch again nor starves healable candidates.
-  const { data: candidates, error: lookupError } = await supabase
+  const { data: mainCandidates, error: lookupError } = await supabase
     .from('transactions')
     .select(
       'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
@@ -95,8 +91,47 @@ export async function reconcileWedgedGatewayOrders({
     throw new Error(`wedged_order_lookup_failed: ${lookupError.message}`);
   }
 
-  for (const raw of candidates ?? []) {
+  // Filing-only retries: completed captures on paid orders whose
+  // duplicate filings both failed carry the retry marker. Unstamped
+  // only — a stamped row already reached a terminal outcome.
+  const { data: pendingRetries, error: pendingError } = await supabase
+    .from('transactions')
+    .select(
+      'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
+    )
+    .eq('transaction_type', 'payment')
+    .eq('status', 'completed')
+    .eq('orders.payment_status', 'paid')
+    .eq('metadata->>duplicate_capture_review_pending', 'true')
+    .not('order_id', 'is', null)
+    .lt('updated_at', cutoff)
+    .is('metadata->wedge_sweep_resolution', null)
+    .order('updated_at', { ascending: true })
+    .limit(limit);
+
+  if (pendingError) {
+    throw new Error(`wedged_order_lookup_failed: ${pendingError.message}`);
+  }
+
+  // Mains first: a full main batch must not starve filing-only
+  // retries past the deadline (see interleaveWedgeCandidates).
+  const candidates = interleaveWedgeCandidates(
+    (mainCandidates ?? []) as unknown[],
+    (pendingRetries ?? []) as unknown[]
+  );
+
+  for (const raw of candidates) {
     const candidate = raw as unknown as WedgedCandidate;
+    // Stop starting candidates at the pass deadline: serial provider
+    // re-verification can outlast the invocation budget, and unstarted
+    // rows stay eligible for the next sweep.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping wedged-order sweep at pass deadline',
+        transactionId: candidate.id,
+      });
+      break;
+    }
     summary.checked += 1;
 
     try {
@@ -138,6 +173,15 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
 
+      // A deadline leaves unstarted rows for the next pass.
+      const verifySignal = remainingVerificationSignal(deadlineMs);
+      if (verifySignal === null) {
+        logger.info({
+          message: 'Stopping wedged-order sweep at pass deadline',
+          transactionId: candidate.id,
+        });
+        break;
+      }
       const verification = await verifyGatewayCharge(
         candidate.gateway,
         candidate.gateway_reference,
@@ -146,7 +190,8 @@ export async function reconcileWedgedGatewayOrders({
               candidate.metadata,
               candidate.created_at
             )
-          : undefined
+          : undefined,
+        verifySignal
       );
 
       if (!verification.ok) {
@@ -192,10 +237,11 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
       if (
-        candidate.gateway !== 'juicyway' &&
+        normalizePaymentGateway(candidate.gateway) !== 'JUICYWAY' &&
         candidate.currency &&
         verification.currency &&
-        candidate.currency.toUpperCase() !== verification.currency.toUpperCase()
+        normalizeCurrencyCode(candidate.currency) !==
+          normalizeCurrencyCode(verification.currency)
       ) {
         summary.skipped.push({
           reason: 'currency_mismatch',
@@ -210,55 +256,24 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
 
-      const outcome = await finalizeOrderGatewayPayment({
-        actor: 'cron:reconcile-gateway-paid-orders',
-        gateway: candidate.gateway,
-        gatewayResponse: verification.response,
-        orderId: candidate.order_id,
-        reference: candidate.gateway_reference,
+      // Narrowed by the missing-reference and unhealable-gateway guards
+      // above: only reference-carrying healable-gateway candidates reach
+      // finalization.
+      const healableCandidate = candidate as Omit<
+        WedgedCandidate,
+        'gateway' | 'gateway_reference'
+      > & { gateway: HealableGateway; gateway_reference: string };
+      const finalizeAction = await finalizeVerifiedWedge({
+        candidate: healableCandidate,
+        deadlineMs,
+        finalizePayment: finalizeOrderGatewayPayment,
         scheduleAfter,
+        stampResolution: stampWedgeResolution,
+        summary,
         supabase,
-        transaction: {
-          amount: candidate.amount,
-          gateway_reference: candidate.gateway_reference,
-          id: candidate.id,
-          merchant_id: candidate.merchant_id,
-          order_id: candidate.order_id,
-          platform_fee: candidate.platform_fee,
-        },
-        wonTransactionFlip: candidate.status !== 'completed',
+        verification,
       });
-
-      if (outcome.kind === 'completed') {
-        logger.warn({
-          healed: outcome.healed,
-          message: 'Sweep healed a wedged gateway order payment',
-          orderId: candidate.order_id,
-          orderNumber: outcome.orderNumber,
-          transactionId: candidate.id,
-        });
-        summary.healed.push({
-          orderId: candidate.order_id,
-          orderNumber: outcome.orderNumber,
-        });
-      } else if (
-        outcome.kind === 'order_cancelled' ||
-        outcome.kind === 'order_skipped'
-      ) {
-        // The finalizer filed the reconciliation_review row for the captured
-        // funds; stamp the transaction so this terminal state is processed
-        // exactly once.
-        summary.reviewsFiled.push({
-          orderId: candidate.order_id,
-          transactionId: candidate.id,
-        });
-        await stampWedgeResolution(supabase, candidate, outcome.kind);
-      } else {
-        summary.failed.push({
-          reason: outcome.kind,
-          transactionId: candidate.id,
-        });
-      }
+      if (finalizeAction === 'stop') break;
     } catch (candidateError) {
       logger.error({
         error: candidateError,

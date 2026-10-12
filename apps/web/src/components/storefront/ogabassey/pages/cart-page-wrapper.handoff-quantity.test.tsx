@@ -63,6 +63,7 @@ function setupProductsQuery(result: {
   };
   vi.mocked(createClient).mockReturnValue({
     from: vi.fn(() => productsQuery),
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   } as unknown as ReturnType<typeof createClient>);
 
   return productsQuery;
@@ -217,12 +218,14 @@ describe('CartPageWrapper', () => {
   });
 
   it.each(['has_variants', 'has_condition_offers'])(
-    'rejects direct Google Shopping handoff for %s products', async (optionFlag) => {
+    'rejects but retains direct Google Shopping handoff for %s products', async (optionFlag) => {
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
       );
       window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=1');
-      const addToCart = mockUseCart({ cart: [{ id: '55555555-5555-4555-8555-555555555555', variantId: 'variant-1', quantity: 1 }] });
+      // The existing line carries no selected option, so the option need is
+      // unmet and the handoff must be rejected with guidance, not consumed.
+      const addToCart = mockUseCart({ cart: [{ id: '55555555-5555-4555-8555-555555555555', quantity: 1 }] });
       setupProductsQuery({ data: [{
         id: '55555555-5555-4555-8555-555555555555', name: 'Option Phone',
         status: 'active', images: [], manage_stock: true, stock_quantity: 3,
@@ -233,13 +236,50 @@ describe('CartPageWrapper', () => {
         expect.objectContaining({ title: 'Choose product options', variant: 'destructive' })
       ));
       expect(addToCart).not.toHaveBeenCalled();
-      await waitFor(() => expect(window.location.search).toBe(''));
+      // The option line stays retryable like its guest_cart counterpart
+      // instead of being silently consumed.
+      await waitFor(() => expect(window.location.search).toBe(
+        '?item_id=55555555-5555-4555-8555-555555555555&qty=1'
+      ));
       unmount();
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams(window.location.search) as ReturnType<typeof useSearchParams>
       );
       render(<CartPageWrapper merchantId="merchant-1" />);
-      expect(mockToast).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(2));
+    }
+  );
+
+  it.each([
+    { optionFlag: 'has_variants', satisfiedLine: { variantId: 'variant-1' } },
+    { optionFlag: 'has_condition_offers', satisfiedLine: { condition: 'new' } },
+  ])(
+    'consumes direct handoff when the cart already holds the selected $optionFlag option',
+    async ({ optionFlag, satisfiedLine }) => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
+      );
+      window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=1');
+      const addToCart = mockUseCart({
+        cart: [{
+          id: '55555555-5555-4555-8555-555555555555',
+          quantity: 1,
+          ...satisfiedLine,
+        }],
+      });
+      setupProductsQuery({ data: [{
+        id: '55555555-5555-4555-8555-555555555555', name: 'Option Phone',
+        status: 'active', images: [], manage_stock: true, stock_quantity: 3,
+        [optionFlag]: true,
+      }], error: null });
+
+      render(<CartPageWrapper merchantId="merchant-1" />);
+
+      // The shopper already selected the option on the PDP, so the handoff
+      // is consumed without re-toast rather than pinned in the URL forever.
+      await waitFor(() => expect(window.location.search).toBe(''));
+      expect(mockToast).not.toHaveBeenCalled();
+      expect(addToCart).not.toHaveBeenCalled();
     }
   );
 

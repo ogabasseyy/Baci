@@ -7,10 +7,14 @@ import {
   frozenEventPipelineAuthoritySources,
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
+import { eventPipelineGatewayCronAdminPaths } from '@/lib/events/event-pipeline-gateway-cron-admin-paths';
+import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
 import { eventPipelineManualOrderDocumentCredentialPaths } from '@/lib/events/event-pipeline-manual-order-document-credential-paths';
+import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
+import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
@@ -128,6 +132,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   ],
   authority: {
     adminImporters: eventPipelineAdminImporters,
+    adminPaths: eventPipelineGatewayCronAdminPaths,
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -139,11 +144,14 @@ export const EVENT_PIPELINE_BOUNDARY = {
       ...eventPipelineCredentialPaths,
       ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
+      ...eventPipelinePiggyvestCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
       ...eventPipelineManualOrderDocumentCredentialPaths,
+      ...eventPipelinePaystackRefundCredentialPaths,
+      ...eventPipelineGatewayCronCredentialPaths,
     ],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
@@ -175,6 +183,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ],

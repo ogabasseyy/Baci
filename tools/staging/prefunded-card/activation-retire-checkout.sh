@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec /usr/bin/ssh -t -o ServerAliveInterval=15 -o ConnectTimeout=15 bassey@82.29.190.219 'sudo /usr/bin/env -i HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C /bin/bash -c '"'"'set -euo pipefail; umask 077; root_dir=$(/usr/bin/mktemp -d /root/baci-checkout-retirement.XXXXXXXX); /usr/bin/install -o root -g root -m 0600 /home/bassey/baci-checkout-retirement-20260929-5f811fca3363/run-reviewed.sh "$root_dir/run-reviewed.sh"; printf '"'"'"'"'"'"'"'"'%s  %s\n'"'"'"'"'"'"'"'"' 8b436fb1de5958949ac24514eaa86c9c16efeb996ae758bd02445f79cd95e616 "$root_dir/run-reviewed.sh" | /usr/bin/sha256sum -c -; exec /bin/bash "$root_dir/run-reviewed.sh"'"'"''

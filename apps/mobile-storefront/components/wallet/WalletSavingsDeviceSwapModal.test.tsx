@@ -205,3 +205,34 @@ describe('WalletSavingsDeviceSwapModal', () => {
     expect(screen.queryByText('Change savings device')).toBeNull();
   });
 });
+
+it('loads a cached device before offering its exact variants and never submits preview pricing', async () => {
+  const onSelectDevice = jest.fn();
+  const resolveProduct = jest
+    .fn<() => Promise<Product>>()
+    .mockResolvedValue(products[0]);
+  render(
+    <WalletSavingsDeviceSwapModal
+      colors={Colors.light}
+      currentAmount={100000}
+      isLoading={false}
+      isPending={false}
+      visible
+      searchValue="iphone"
+      onClose={jest.fn()}
+      onSearchChange={jest.fn()}
+      onSelectDevice={onSelectDevice}
+      products={[
+        { ...products[0], price: 1, variants: [], searchPreview: true },
+      ]}
+      resolveProduct={resolveProduct}
+    />
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Select iPhone 15 Pro' }));
+  expect(onSelectDevice).not.toHaveBeenCalled();
+  await screen.findByRole('button', { name: /Select iPhone 15 Pro.*256GB/ });
+  fireEvent.press(
+    screen.getByRole('button', { name: /Select iPhone 15 Pro.*256GB/ })
+  );
+  expect(onSelectDevice).toHaveBeenCalledWith(products[0], 'variant-256');
+});

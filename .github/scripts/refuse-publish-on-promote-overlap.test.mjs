@@ -45,7 +45,8 @@ esac
 `
   );
   chmodSync(stubPath, 0o755);
-  const result = spawnSync('bash', [scriptPath], {
+  // Execute exactly as deploy.yml does so a missing executable bit fails CI.
+  const result = spawnSync(scriptPath, [], {
     cwd: workDir,
     encoding: 'utf8',
     env: {

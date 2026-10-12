@@ -313,5 +313,8 @@ describe('useUpdateOrderStatus', () => {
     expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['transaction-review', 'merchant-1'],
     });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count', 'merchant-1'],
+    });
   });
 });

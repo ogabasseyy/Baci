@@ -7,7 +7,7 @@ type MockRpcResponse = {
 
 type ProductLookup = {
   id: string;
-  name: string;
+  name: string | null;
   manage_stock: boolean;
   has_variants: boolean;
   has_condition_offers: boolean;

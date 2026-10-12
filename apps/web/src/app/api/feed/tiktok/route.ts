@@ -21,9 +21,12 @@ import {
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { googleMerchantFeedQuerySchema } from '@/schemas/google-merchant-feed-query';
 
 const UNLIMITED_STOCK_QUANTITY = 9999;
+
+const { normalizeParentProductIdentifiers } = productManufacturerIdentifiers;
 
 interface ResolvedTikTokImages {
   additionalImageUrls: string[];
@@ -181,6 +184,9 @@ function generateTikTokFeed(
         baseUrl: normalizedBaseUrl,
         product,
       });
+      // Rows carry parent identifiers only when they are usable non-blank
+      // strings; whitespace must not reach the feed.
+      const productIdentifiers = normalizeParentProductIdentifiers(product);
 
       return buildItemXml({
         additionalImageUrls: images.additionalImageUrls,
@@ -191,12 +197,12 @@ function generateTikTokFeed(
         currency,
         description: buildFeedDescription(product),
         googleProductCategory: product.google_product_category,
-        gtin: product.gtin,
+        gtin: productIdentifiers.gtin,
         id: product.id,
         imageUrl: images.primaryImageUrl,
         itemGroupId: product.sku || product.id,
         link: productUrl,
-        mpn: product.mpn,
+        mpn: productIdentifiers.mpn,
         price: product.price,
         productType: product.categories?.name || product.category,
         title: product.name,

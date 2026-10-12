@@ -28,6 +28,51 @@ describe('useStartSavingsPaymentMethods', () => {
     mockListCustomerPaymentMethods.mockResolvedValue([savedCard]);
   });
 
+  it('clears previous merchant selection immediately and ignores a cancelled old response', async () => {
+    let finishOld: (value: unknown[]) => void = () => undefined;
+    let failCurrent: (reason: Error) => void = () => undefined;
+    const oldRequest = new Promise<unknown[]>((resolve) => {
+      finishOld = resolve;
+    });
+    const currentRequest = new Promise<unknown[]>((_resolve, reject) => {
+      failCurrent = reject;
+    });
+    const { result, rerender } = renderHook(
+      ({ merchantId }: { merchantId: string }) =>
+        useStartSavingsPaymentMethods({
+          activeMerchantId: merchantId,
+          sourceMode: 'auto_debit',
+        }),
+      { initialProps: { merchantId: 'merchant-1' } }
+    );
+    await waitFor(() =>
+      expect(result.current.savedPaymentMethods).toHaveLength(1)
+    );
+    act(() => {
+      result.current.setSelectedPaymentMethodId(savedCard.id);
+    });
+    mockListCustomerPaymentMethods
+      .mockReturnValueOnce(oldRequest)
+      .mockReturnValueOnce(currentRequest);
+    rerender({ merchantId: 'merchant-2' });
+    expect(result.current.savedPaymentMethods).toEqual([]);
+    expect(result.current.selectedPaymentMethodId).toBeNull();
+    rerender({ merchantId: 'merchant-3' });
+    await act(async () => {
+      finishOld([savedCard]);
+      await oldRequest;
+    });
+    expect(result.current.savedPaymentMethods).toEqual([]);
+    expect(result.current.isLoadingPaymentMethods).toBe(true);
+    await act(async () => {
+      failCurrent(new Error('Synthetic read failure'));
+      await currentRequest.catch(() => undefined);
+    });
+    expect(result.current.savedPaymentMethods).toEqual([]);
+    expect(result.current.selectedPaymentMethodId).toBeNull();
+    expect(result.current.paymentMethodsError).toBe('Synthetic read failure');
+  });
+
   it('does not load cards until auto-debit is selected', () => {
     const { result } = renderHook(() =>
       useStartSavingsPaymentMethods({

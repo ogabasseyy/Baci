@@ -42,10 +42,29 @@ describe('completeOrderGatewayPayment', () => {
       'complete_order_gateway_payment',
       {
         p_actor: 'webhook:BAC-REF',
+        p_expected_outstanding_minor: null,
         p_gateway_response: { status: 'success' },
         p_order_id: 'order-1',
         p_transaction_id: 'txn-1',
       }
+    );
+  });
+
+  it('forwards the gated outstanding balance for the compare-and-swap', async () => {
+    const supabase = buildSupabaseMock({ data: completionPayload });
+
+    await completeOrderGatewayPayment({
+      actor: 'cron:reconcile-gateway-paid-orders',
+      expectedOutstandingMinor: 7000,
+      gatewayResponse: null,
+      orderId: 'order-1',
+      supabase,
+      transactionId: 'txn-1',
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.objectContaining({ p_expected_outstanding_minor: 7000 })
     );
   });
 

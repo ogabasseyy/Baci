@@ -12,6 +12,8 @@ import { zeptoMailRequest } from '@/lib/zeptomail-transport';
 
 const DEFAULT_FROM_DOMAIN = getZeptoMailFromDomain();
 
+export { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
+
 /**
  * Resolve the ZeptoMail API token. Lives here (not in the retry unit) so
  * the transport split never reaches the credential authority directly.
@@ -123,6 +125,7 @@ function normalizeRuntimeRecipientEmail(email: unknown): string | null {
 }
 
 interface SendEmailParams {
+  signal?: AbortSignal;
   to: string;
   toName?: string;
   subject: string;
@@ -145,6 +148,16 @@ interface SendEmailParams {
   clientReference?: string;
   beforeTransportDispatch?: () => Promise<void>;
   resetTransportDispatch?: () => Promise<void>;
+  // Absolute epoch-ms cutoff for the platform-sender fallback: when set
+  // the fallback is a single shot (the primary loop already spent the
+  // retry budget), skipped unless that one attempt fits, so a cron
+  // drain keeps a retryable row instead of stranding it mid-send as
+  // permanently delivery_uncertain.
+  fallbackDeadlineMs?: number;
+  // Cap transport attempts per sender (default: full retry loop). Tight
+  // cron phases pass 1 and let the next tick retry instead of burning
+  // the phase on in-process retries.
+  maxAttemptsPerSender?: number;
 }
 
 interface EmailAttachment {
@@ -238,19 +251,29 @@ async function insertEmailAttempts(
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('email_send_attempts')
-    .insert(attempts)
-    .select('id');
+  // Audit writes must never throw: callers treat a throw from
+  // sendEmail as pre-dispatch (safe to retry), so a transport throw
+  // here — after the provider already accepted — would either
+  // duplicate the send or corrupt the outcome. Resolve every
+  // failure and let the send result speak for itself.
+  try {
+    const { data, error } = await supabase
+      .from('email_send_attempts')
+      .insert(attempts)
+      .select('id');
 
-  if (error) {
-    console.error('Failed to log email attempts:', error);
+    if (error) {
+      console.error('Failed to log email attempts:', error);
+      return [];
+    }
+
+    return (data ?? [])
+      .map((row) => row.id)
+      .filter((value): value is string => typeof value === 'string');
+  } catch (transportError) {
+    console.error('Failed to log email attempts:', transportError);
     return [];
   }
-
-  return (data ?? [])
-    .map((row) => row.id)
-    .filter((value): value is string => typeof value === 'string');
 }
 
 async function updateEmailAttempts(
@@ -266,16 +289,23 @@ async function updateEmailAttempts(
     return;
   }
 
-  const { error } = await supabase
-    .from('email_send_attempts')
-    .update({
-      ...patch,
-      updated_at: new Date().toISOString(),
-    })
-    .in('id', ids);
+  // Never throws, for the same dispatch-boundary reason as the
+  // insert above: the accepted-audit call runs after the provider
+  // already took the message.
+  try {
+    const { error } = await supabase
+      .from('email_send_attempts')
+      .update({
+        ...patch,
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', ids);
 
-  if (error) {
-    console.error('Failed to update email attempts:', error);
+    if (error) {
+      console.error('Failed to update email attempts:', error);
+    }
+  } catch (transportError) {
+    console.error('Failed to update email attempts:', transportError);
   }
 }
 
@@ -316,12 +346,20 @@ function createAuditAttempt(params: {
 }
 
 /**
- * Sleep helper for retry delays
- */
-/**
- * Send transactional email via ZeptoMail with HTML content
+ * Send transactional email via ZeptoMail with HTML content.
+ *
+ * Dispatch boundary: every outcome reached after the first transport
+ * attempt resolves as an EmailResult — the per-attempt loop catches
+ * transport throws and the audit writes never throw — so a throw from
+ * this function means no dispatch happened (sender resolution, or a
+ * caller-supplied transport callback) and the caller may safely
+ * retry. The one exception is a caller-supplied
+ * beforeTransportDispatch/resetTransportDispatch callback that throws
+ * after a send: keep such callbacks infallible or resolve their
+ * errors.
  */
 export async function sendEmail({
+  signal,
   to,
   toName,
   subject,
@@ -336,6 +374,8 @@ export async function sendEmail({
   clientReference,
   beforeTransportDispatch,
   resetTransportDispatch,
+  fallbackDeadlineMs,
+  maxAttemptsPerSender = RETRY_CONFIG.maxRetries + 1,
 }: SendEmailParams): Promise<EmailResult> {
   const sender = await resolveSenderAddress(
     emailType,
@@ -413,6 +453,9 @@ export async function sendEmail({
   ]);
   const outcome = await runZeptoMailTransport({
     sender,
+    signal,
+    fallbackDeadlineMs,
+    maxAttemptsPerSender,
     content: {
       recipientEmail,
       recipientName: toName,

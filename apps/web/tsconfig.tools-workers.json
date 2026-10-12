@@ -12,6 +12,8 @@
     ]
   },
   "include": [
+    "../../tools/staging/prefunded-card/treasury-snapshot-cli.ts",
+    "../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts",
     "tools/events/**/*.ts",
     "tools/db/**/*.ts",
     "tools/cost/**/*.ts",

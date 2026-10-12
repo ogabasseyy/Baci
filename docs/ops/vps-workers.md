@@ -66,7 +66,7 @@ Some cron work intentionally remains in the web app because it needs web-only ru
   service-role-only Petrock IMEI product snapshot and reports low reseller
   balance without enabling any Petrock tier.
 - `supabase-retention-cleanup`, scheduled daily at 03:20.
-- `/api/cron/process-settlements`, scheduled daily at 05:00.
+- `/api/cron/process-settlements`, scheduled daily at 05:00. Budget-skipped runs still return HTTP 200 with `success: true` by design (paging on unacknowledgeable deferred work would mask fresh failures): monitors must check the `skippedDueToBudget` / `sideEffectSkippedDueToBudget` / `notificationSkippedDueToBudget` payload flags and the `cron budget exhausted` warn logs, not the status code alone. Likewise, dead-lettered (`exhausted`) and `uncertain` refund notifications warn without 503ing (no ack primitive exists yet, so paging would pin the cron red and mask fresh failures): alert on the `Cancellation drain has dead-lettered notifications awaiting review` / `Cancellation drain has uncertain notifications awaiting review` warn logs or the `paystackRefundNotifications.exhausted` / `.uncertain` payload counts, and work the operations review queue — affected customers/merchants are never told their refund completed until a human routes the row.
 - `/api/cron/reconcile-vtu-processing`, scheduled every 5 minutes.
 - `/api/cron/merchant-signup-health`, scheduled every 5 minutes. Verifies the
   merchant read/write policy shapes plus every authenticated grant used by
@@ -75,7 +75,7 @@ Some cron work intentionally remains in the web app because it needs web-only ru
   privacy-safe `admin_signup_health` PostHog event; telemetry failure never
   changes the health response. See `docs/ops/mobile-signup-monitoring.md`. Log:
   `/home/bassey/baci-workers/logs/merchant-signup-health.log`.
-- `/api/cron/reconcile-gateway-paid-orders`, scheduled hourly at :20. Safety net behind the payment webhook's own heal-on-retry: heals "wedged" gateway orders (completed transaction, order never flipped to paid) after re-verifying with the gateway, then drains failed paid-order side effects (settlement / receipt email / ad tracking) for orders that are paid but whose outbox recorded a failure. Log: `/home/bassey/baci-workers/logs/reconcile-gateway-paid-orders.log`.
+- `/api/cron/reconcile-gateway-paid-orders`, scheduled hourly at :20. Re-verifies Paystack payment attempts older than 12 hours on paid or partially paid orders with a separate completed payment, and clears only references currently reported abandoned or failed by Paystack. A DVA placeholder may also be cleared after Paystack returns 404 when the placeholder itself carries the DVA marker. Older unmarked 404s stay open for manual verification. Pending, successful, and unverifiable attempts remain open. The sweep rotates unresolved rows so old attempts cannot starve later ones. It also heals "wedged" gateway orders (completed transaction, order never flipped to paid) after re-verifying with the gateway, then drains failed paid-order side effects (settlement / receipt email / ad tracking). Log: `/home/bassey/baci-workers/logs/reconcile-gateway-paid-orders.log`.
 - `/api/cron/wallet-payouts`, scheduled daily at 06:00.
 - `/api/cron/vtu-cashback-summaries`, scheduled monthly on the 1st at 08:30.
 - `/api/cron/publish-scheduled-posts`, scheduled every 15 minutes.

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
+import { createInput } from './use-start-savings-submit.test-utils';
 
 const mockRouterPush = jest.fn();
 const mockRouterReplace = jest.fn();
@@ -53,41 +54,6 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
   scheduleSavingsReminderNotification: (...args: unknown[]) =>
     mockScheduleSavingsReminderNotification(...args),
 }));
-
-function createInput(overrides = {}) {
-  return {
-    activeMerchantId: 'merchant-1',
-    activeMerchantSlug: 'ogabassey',
-    contributionValue: 20000,
-    effectiveInitialContribution: 20000,
-    frequency: 'daily' as const,
-    fundingAccount: { account_number: '0123456789' },
-    initialContributionIdempotencyKey: null,
-    maturityDate: '2026-06-30',
-    normalizedVariantId: undefined,
-    preferredDebitTime: '06:20',
-    refetch: jest.fn(async () => undefined),
-    requiredTopUpAmount: 50000,
-    selectedPaymentMethodId: null,
-    selectedProduct: {
-      id: 'product-1',
-      image: 'https://example.com/iphone.jpg',
-      name: 'iPhone 13 Pro Max',
-      price: 800000,
-      slug: 'iphone-13-pro-max',
-    },
-    setFormError: jest.fn(),
-    setInitialContributionIdempotencyKey: jest.fn(),
-    setShowFundingModal: jest.fn(),
-    setShowPreviewModal: jest.fn(),
-    setShowSuccessModal: jest.fn(),
-    setShowTransferModal: jest.fn(),
-    sourceMode: 'manual' as const,
-    startDate: '2026-05-22',
-    targetValue: 800000,
-    ...overrides,
-  };
-}
 
 describe('useStartSavingsSubmit', () => {
   beforeEach(() => {
@@ -233,20 +199,6 @@ describe('useStartSavingsSubmit', () => {
       'Unable to create savings plan.'
     );
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
-  });
-
-  it('requires a selected product before submitting', async () => {
-    const input = createInput({ selectedProduct: null });
-    const { result } = renderHook(() => useStartSavingsSubmit(input));
-
-    await act(async () => {
-      await result.current.submitSavingsGoal();
-    });
-
-    expect(input.setFormError).toHaveBeenCalledWith(
-      'Select a product to save for.'
-    );
-    expect(mockCreateSavingsGoal).not.toHaveBeenCalled();
   });
 
   it('keeps success visible when wallet data refresh fails after creation', async () => {

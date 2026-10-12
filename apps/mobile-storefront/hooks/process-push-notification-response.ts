@@ -12,7 +12,11 @@ type Navigate = (
   isCurrent?: () => boolean
 ) => void | Promise<void>;
 type OnHandled = (response: NotificationResponse) => unknown;
-type ProcessOptions = { isRetry?: boolean };
+type ProcessOptions = {
+  isRetry?: boolean;
+  activeMerchantId?: string | null;
+  invalidateSavingsWallet?: () => void | Promise<void>;
+};
 
 const log = createLogger('PushNotificationResponse');
 const openedNotificationIds = new Set<string>();
@@ -35,6 +39,7 @@ type PendingNotificationResponse = {
   response: NotificationResponse;
   navigate: Navigate;
   onHandled?: OnHandled;
+  options?: ProcessOptions;
   attempts: number;
   retryTimer?: ReturnType<typeof setTimeout>;
 };
@@ -77,7 +82,7 @@ function schedulePendingNotificationResponse(responseKey: string): void {
       current.response,
       current.navigate,
       current.onHandled,
-      { isRetry: true }
+      { ...current.options, isRetry: true }
     );
   }, PENDING_RESPONSE_RETRY_DELAY_MS);
 }
@@ -86,7 +91,8 @@ function queuePendingNotificationResponse(
   responseKey: string,
   response: NotificationResponse,
   navigate: Navigate,
-  onHandled?: OnHandled
+  onHandled?: OnHandled,
+  options?: ProcessOptions
 ): void {
   const pending = pendingNotificationResponses.get(responseKey) ?? {
     response,
@@ -96,6 +102,7 @@ function queuePendingNotificationResponse(
   pending.response = response;
   pending.navigate = navigate;
   pending.onHandled = onHandled;
+  pending.options = options;
   pending.attempts += 1;
 
   if (pending.attempts > MAX_PENDING_RESPONSE_RETRIES) {
@@ -229,16 +236,29 @@ export function processPushNotificationResponse(
 
     let handlingResult: void | Promise<void>;
     try {
-      handlingResult = handleNotificationResponse(response, (screen, params) =>
-        navigate(screen, params, () => latestResponseKey === responseKey)
-      );
+      const navigateFromResponse = (
+        screen: string,
+        params?: Record<string, string>
+      ) => navigate(screen, params, () => latestResponseKey === responseKey);
+      handlingResult =
+        options?.activeMerchantId !== undefined ||
+        options?.invalidateSavingsWallet
+          ? handleNotificationResponse(
+              response,
+              navigateFromResponse,
+              undefined,
+              options.activeMerchantId,
+              options.invalidateSavingsWallet
+            )
+          : handleNotificationResponse(response, navigateFromResponse);
     } catch (error) {
       log.warn('Failed to handle notification response:', error);
       queuePendingNotificationResponse(
         responseKey,
         response,
         navigate,
-        onHandled
+        onHandled,
+        options
       );
       return;
     }
@@ -255,7 +275,8 @@ export function processPushNotificationResponse(
             responseKey,
             response,
             navigate,
-            onHandled
+            onHandled,
+            options
           );
         })
         .finally(() => {

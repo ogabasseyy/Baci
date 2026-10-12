@@ -13,7 +13,13 @@ type MockUserResult = {
 };
 
 type MockSessionResult = {
-  data: { session: { access_token: string; expires_at?: number } | null };
+  data: {
+    session: {
+      access_token: string;
+      expires_at?: number;
+      user?: { id: string };
+    } | null;
+  };
   error: Error | null;
 };
 
@@ -53,7 +59,9 @@ beforeEach(() => {
     error: null,
   });
   mockGetSession.mockResolvedValue({
-    data: { session: { access_token: 'token-123' } },
+    data: {
+      session: { access_token: 'token-123', user: { id: 'user-1' } },
+    },
     error: null,
   });
 });

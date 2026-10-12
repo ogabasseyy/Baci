@@ -7,6 +7,9 @@ const DOT_COUNT = 3;
 const DOT_SIZE = 8;
 const DOT_DELAY_MS = 160;
 const DOT_ANIMATION_MS = 520;
+// Fixed dot positions: the animated array is created once and never
+// reordered, so positional keys are stable by construction.
+const DOT_KEYS = ['typing-dot-0', 'typing-dot-1', 'typing-dot-2'];
 
 export function TypingIndicator() {
   const [animatedValues] = useState(() =>
@@ -56,18 +59,18 @@ export function TypingIndicator() {
       accessibilityLabel="Ogabassey AI is typing"
       accessibilityRole="progressbar"
     >
-      {animatedValues.map((value, index) => (
+      {DOT_KEYS.map((key, index) => (
         <Animated.View
-          key={index}
+          key={key}
           testID="typing-indicator-dot"
           style={[
             styles.dot,
             dotShadowStyle,
             {
-              opacity: value,
+              opacity: animatedValues[index],
               transform: [
                 {
-                  scale: value.interpolate({
+                  scale: animatedValues[index].interpolate({
                     inputRange: [0.35, 1],
                     outputRange: [0.82, 1.15],
                   }),

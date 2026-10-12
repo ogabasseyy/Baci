@@ -20,7 +20,15 @@ if [ "${FAKE_CURL_FAIL:-0}" = '1' ]; then
   printf '%s\n' "$FAKE_ERROR_RESPONSE"
   exit 22
 fi
-printf '%s\n' "$FAKE_RESPONSE"
+# pg_roles masks the field even when pg_authid.rolpassword is NULL.
+# Model that catalog behavior so an invalid password-presence query cannot
+# pass simply because the HTTP fixture supplies an idealized result.
+if [ "${FAKE_CATALOG_MASK:-0}" = 1 ] && \
+  jq -er '.query | test("FROM pg_roles WHERE rolname =")' >/dev/null <<<"$payload"; then
+  jq 'map(.has_password = true)' <<<"$FAKE_RESPONSE"
+else
+  printf '%s\n' "$FAKE_RESPONSE"
+fi
 FAKE_CURL
 chmod +x "$fake_bin/curl"
 
@@ -64,6 +72,13 @@ grep -q 'pgrst.db_pre_request=public.enforce_gigl_tracking_worker_request_scope'
 check 'pins the exact hook setting value' 0 "$?"
 if grep -q '\$role' "$fixture_root/queries.log"; then literal=0; else literal=1; fi
 check 'leaves no uninterpolated jq variable in SQL' 1 "$literal"
+
+if FAKE_CATALOG_MASK=1 run_verifier '[{"login":false,"has_password":false,"hooks":1,"active_hook":1,"grants":1}]'; then
+  status=0
+else
+  status=$?
+fi
+check 'accepts a passwordless role despite the pg_roles mask' 0 "$status"
 
 # Production shape: postgres-meta serializes count(*) bigint as JSON
 # strings. The numeric fixtures above must keep passing too (older API

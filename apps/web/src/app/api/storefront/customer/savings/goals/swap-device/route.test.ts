@@ -47,6 +47,28 @@ function createProductQuery(result: {
   return query;
 }
 
+const VARIANTS_RPC = 'get_storefront_product_variants';
+const SWAP_RPC = 'swap_customer_savings_goal_device';
+
+function createRoutedRpc({
+  variantRows,
+  swap,
+}: {
+  variantRows: unknown;
+  swap: { data: unknown; error: unknown };
+}) {
+  return vi.fn((fn: string) => {
+    if (fn === VARIANTS_RPC) {
+      return Promise.resolve({ data: variantRows, error: null });
+    }
+    return Promise.resolve(swap);
+  });
+}
+
+function swapRpcCalls(rpc: ReturnType<typeof vi.fn>) {
+  return rpc.mock.calls.filter(([fn]) => fn === SWAP_RPC);
+}
+
 describe('/api/storefront/customer/savings/goals/swap-device', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +123,13 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
         images: ['https://cdn.example.com/iphone.jpg'],
         name: 'iPhone 15 Pro',
         price: '700000',
-        variants: [
+      },
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: createRoutedRpc({
+        variantRows: [
           {
             attributes: { storage: '256GB' },
             condition: 'used',
@@ -109,24 +137,21 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
             images: ['https://cdn.example.com/iphone-256.jpg'],
             price_override: '650000',
             primary_image: 'https://cdn.example.com/iphone-256.jpg',
+            product_id: '00000000-0000-4000-8000-000000000101',
           },
         ],
-      },
-      error: null,
-    });
-    const mockSupabase = {
-      from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          {
-            current_amount: '120000',
-            goal_id: 'goal-1',
-            goal_status: 'active',
-            success: true,
-            target_amount: '650000',
-          },
-        ],
-        error: null,
+        swap: {
+          data: [
+            {
+              current_amount: '120000',
+              goal_id: 'goal-1',
+              goal_status: 'active',
+              success: true,
+              target_amount: '650000',
+            },
+          ],
+          error: null,
+        },
       }),
     };
     mockResolveCustomerSavingsContext.mockResolvedValue({
@@ -148,8 +173,11 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
     expect(response.status).toBe(200);
     expect(mockSupabase.from).toHaveBeenCalledWith('products');
     expect(productQuery.select).toHaveBeenCalledWith(
-      expect.stringContaining('variants:product_variants')
+      'id, name, price, images, condition'
     );
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(VARIANTS_RPC, {
+      p_product_ids: ['00000000-0000-4000-8000-000000000101'],
+    });
     expect(productQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(productQuery.eq).toHaveBeenCalledWith(
       'id',
@@ -189,15 +217,17 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
         images: ['https://cdn.example.com/iphone.jpg'],
         name: 'iPhone 15 Pro',
         price: '700000',
-        variants: [],
       },
       error: null,
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: { message: 'boom' },
+      rpc: createRoutedRpc({
+        variantRows: [],
+        swap: {
+          data: null,
+          error: { message: 'boom' },
+        },
       }),
     };
     mockResolveCustomerSavingsContext.mockResolvedValue({
@@ -237,13 +267,15 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
         images: [],
         name: 'iPhone 15 Pro',
         price: '700000',
-        variants: [],
       },
       error: null,
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn(),
+      rpc: createRoutedRpc({
+        variantRows: [],
+        swap: { data: null, error: null },
+      }),
     };
     mockResolveCustomerSavingsContext.mockResolvedValue({
       customer: { id: 'customer-1' },
@@ -263,6 +295,51 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
 
     expect(response.status).toBe(404);
     expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_NOT_FOUND');
-    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(swapRpcCalls(mockSupabase.rpc)).toHaveLength(0);
+  });
+
+  it('requires an exact variant when swapping onto a product that has variants', async () => {
+    const productQuery = createProductQuery({
+      data: {
+        condition: 'used',
+        id: '00000000-0000-4000-8000-000000000101',
+        images: [],
+        name: 'iPhone 15 Pro',
+        price: '700000',
+      },
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: createRoutedRpc({
+        variantRows: [
+          {
+            attributes: { storage: '256GB' },
+            id: '00000000-0000-4000-8000-000000000102',
+            price_override: '650000',
+            product_id: '00000000-0000-4000-8000-000000000101',
+          },
+        ],
+        swap: { data: null, error: null },
+      }),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        goalId: '00000000-0000-4000-8000-000000000201',
+        merchantSlug: 'ogabassey',
+        productId: '00000000-0000-4000-8000-000000000101',
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_REQUIRED');
+    expect(swapRpcCalls(mockSupabase.rpc)).toHaveLength(0);
   });
 });

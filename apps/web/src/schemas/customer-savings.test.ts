@@ -218,6 +218,37 @@ describe('customer savings schemas', () => {
     expect(result.title).toBe('iPhone savings');
   });
 
+  it('accepts an optional goal idempotency key and drops blanks', () => {
+    const base = {
+      contributionAmount: 20000,
+      contributionFrequency: 'daily',
+      maturityDate: '2026-07-01',
+      merchantSlug: 'ogabassey',
+      nonWithdrawableAccepted: true,
+      productId: VALID_PRODUCT_ID,
+      sourceMode: 'manual',
+      startDate: '2026-06-01',
+      targetAmount: 800000,
+      termsAccepted: true,
+    } as const;
+
+    expect(
+      customerSavingsCreateGoalSchema.parse({
+        ...base,
+        goalIdempotencyKey: '  goal-key-1  ',
+      }).goalIdempotencyKey
+    ).toBe('goal-key-1');
+    expect(
+      customerSavingsCreateGoalSchema.parse(base).goalIdempotencyKey
+    ).toBeUndefined();
+    expect(
+      customerSavingsCreateGoalSchema.parse({
+        ...base,
+        goalIdempotencyKey: '   ',
+      }).goalIdempotencyKey
+    ).toBeUndefined();
+  });
+
   it('requires idempotency key for manual contributions', () => {
     const result = customerSavingsManualContributionSchema.safeParse({
       amount: 20000,

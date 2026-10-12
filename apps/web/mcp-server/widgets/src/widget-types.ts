@@ -24,6 +24,7 @@ export interface CartItem {
 export interface WidgetState {
   cart: CartItem[];
   cartUrl?: string;
+  cartToken?: string;
   [key: string]: unknown; // Index signature for type compatibility
 }
 

@@ -87,6 +87,7 @@ export function useInvoiceGeneratedCapture({
     budgetOrderRef.current = orderId;
     attemptsRef.current = 0;
   }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: order primitives intentionally stand in for the order object — refreshes replace its identity while primitives are unchanged, and an identity dep would restart the polling lane pointlessly.
   useEffect(() => {
     if (!orderId || !order || !isUnpaidInvoiceOrder(order)) {
       return;

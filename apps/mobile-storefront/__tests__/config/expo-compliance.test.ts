@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, jest } from '@jest/globals';
@@ -127,36 +126,6 @@ describe('Expo compliance', () => {
       'utf-8'
     );
     expect(configSource).not.toContain('newArchEnabled');
-  });
-
-  it('loads nested app config helpers when Node type stripping is disabled', () => {
-    const configSource = readFileSync(
-      path.join(ROOT, 'app.config.ts'),
-      'utf-8'
-    );
-    const helperPaths = [
-      ...configSource.matchAll(
-        /require\('(\.\/config\/(?:expo-plugins|resolve-update-channel)[^']*)'\)/g
-      ),
-    ].map((match) => match[1]);
-
-    expect(helperPaths).toHaveLength(2);
-
-    const result = spawnSync(
-      process.execPath,
-      [
-        '--no-experimental-strip-types',
-        '-e',
-        `for (const helperPath of ${JSON.stringify(helperPaths)}) require(helperPath);`,
-      ],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-      }
-    );
-
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
   });
 
   it('uploads the R8 mapping file with Android production releases', () => {

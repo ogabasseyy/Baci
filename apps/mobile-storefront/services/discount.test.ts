@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { validateDiscountCode } from './discount';
 
 describe('validateDiscountCode', () => {
@@ -7,7 +8,7 @@ describe('validateDiscountCode', () => {
   });
 
   it('POSTs to the validate endpoint with normalized code + targeting and parses the response', async () => {
-    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+    const fetchMock = jest.fn<FetchImplementation>().mockResolvedValue(
       new Response(
         JSON.stringify({
           valid: true,
@@ -44,7 +45,7 @@ describe('validateDiscountCode', () => {
 
   it('parses a rejected response', async () => {
     const fetchMock = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValue(
         new Response(
           JSON.stringify({ valid: false, error: 'Invalid discount code' }),
@@ -63,7 +64,7 @@ describe('validateDiscountCode', () => {
   });
 
   it('throws when the endpoint returns a non-ok HTTP response', async () => {
-    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+    const fetchMock = jest.fn<FetchImplementation>().mockResolvedValue(
       new Response(JSON.stringify({ error: 'rate limited' }), {
         status: 429,
         headers: { 'Content-Type': 'application/json' },
@@ -81,7 +82,7 @@ describe('validateDiscountCode', () => {
   });
 
   it('throws when the response fails schema validation', async () => {
-    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+    const fetchMock = jest.fn<FetchImplementation>().mockResolvedValue(
       new Response(JSON.stringify({ valid: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

@@ -13,14 +13,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as Crypto from 'expo-crypto';
 import { createElement, type PropsWithChildren } from 'react';
+import * as walletSavingsInterest from './wallet-savings-interest';
 
 const mockCalculateCommerce =
   jest.fn<(type: string, payload: unknown) => Promise<unknown>>();
 const mockRpc = jest.fn<(name: string, params?: unknown) => Promise<unknown>>();
 const mockFrom = jest.fn<(table: string) => unknown>();
 const mockTrackEvent = jest.fn();
+const mockReadPrimary = jest.fn<() => Promise<unknown>>();
 type RealtimeHandler = () => void;
 const mockRealtimeHandlers: Record<string, RealtimeHandler[]> = {};
+
+jest.mock('./resolve-wallet-funding-account', () => {
+  const actual = jest.requireActual(
+    './resolve-wallet-funding-account'
+  ) as typeof import('./resolve-wallet-funding-account');
+  return {
+    ...actual,
+    readPrimaryFundingAccount: () => mockReadPrimary(),
+  };
+});
 
 jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: (type: string, payload: unknown) =>
@@ -67,6 +79,13 @@ jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-redemption-id'),
 }));
 
+const mockCreateWalletFundingAccount =
+  jest.fn<(input: unknown) => Promise<unknown>>();
+jest.mock('@/lib/wallet-funding-account', () => ({
+  createWalletFundingAccount: (input: unknown) =>
+    mockCreateWalletFundingAccount(input),
+}));
+
 jest.mock('@/stores/auth-store', () => {
   const { create } = require('zustand');
 
@@ -79,7 +98,12 @@ jest.mock('@/stores/auth-store', () => {
   };
 });
 
-import { useRedeemPoints, useWallet, walletKeys } from '@/hooks/use-wallet';
+import {
+  useCreateWalletFundingAccount,
+  useRedeemPoints,
+  useWallet,
+  walletKeys,
+} from '@/hooks/use-wallet';
 import { PENDING_LOYALTY_REDEMPTION_TTL_MS } from '@/lib/loyalty-redemption-idempotency';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -134,7 +158,11 @@ function createTestClient() {
 function setupHook() {
   const queryClient = createTestClient();
   queryClient.setQueryData<WalletQueryData>(
-    walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+    walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-1',
+    }),
     {
       wallet: { balance: 0, loyalty_points: 1000 },
       transactions: [],
@@ -150,6 +178,7 @@ function setupHook() {
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockReadPrimary.mockResolvedValue({ status: 'unavailable' });
   for (const table of Object.keys(mockRealtimeHandlers)) {
     delete mockRealtimeHandlers[table];
   }
@@ -383,6 +412,22 @@ describe('useWallet', () => {
   });
 
   it('adds savings balance and funding account data to the wallet payload', async () => {
+    // Legacy merchant: primary authoritatively absent, so the stored
+    // DVA projects.
+    mockReadPrimary.mockResolvedValue({ status: 'not_ready' });
+    // Earnings come from the savings-interest RPC wiring, not the spendable
+    // balance: stub a credited value that differs from the wallet balance.
+    const interestSpy = jest.spyOn(
+      walletSavingsInterest,
+      'fetchWalletSavingsInterest'
+    );
+    interestSpy.mockResolvedValue({
+      status: 'available',
+      creditedInterestKobo: 125050,
+      goalInterestKobo: [],
+    } as Awaited<
+      ReturnType<typeof walletSavingsInterest.fetchWalletSavingsInterest>
+    >);
     setupWalletTableMocks({
       fundingAccountResult: createQueryResult({
         account_name: 'Ogabassey/Jane Doe',
@@ -409,7 +454,8 @@ describe('useWallet', () => {
 
     expect(result.current.data?.wallet).toMatchObject({
       balance: 5000,
-      earnings_balance: 5000,
+      earnings_available: true,
+      earnings_balance: 1250.5,
       funding_account: {
         account_name: 'Ogabassey/Jane Doe',
         account_number: '1234567890',
@@ -421,7 +467,9 @@ describe('useWallet', () => {
       savings_balance: 35000.5,
       total_balance: 40000.5,
     });
+    expect(interestSpy).toHaveBeenCalledWith('merchant-1');
 
+    interestSpy.mockRestore();
     unmount();
     queryClient.clear();
   });
@@ -519,6 +567,89 @@ describe('useWallet', () => {
       loyalty_points: 1200,
     });
     expect(customerFilters).toContainEqual(['user_id', 'user-1']);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('holds the wallet query while customer and user identities disagree', async () => {
+    const { tableCalls } = setupWalletTableMocks();
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-1',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    const queryClient = createTestClient();
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(result.current.data).toBeUndefined();
+    expect(tableCalls).toEqual([]);
+
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-2',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.wallet.balance).toBe(750);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('fetches a fresh wallet after a user rotation instead of serving stale cache', async () => {
+    setupWalletTableMocks();
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-2',
+        },
+        merchantId: 'merchant-1',
+        user: createMockUser('user-2'),
+      });
+    });
+    const queryClient = createTestClient();
+    queryClient.setQueryData<WalletQueryData>(
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
+      {
+        wallet: { balance: 3210, loyalty_points: 400 },
+        transactions: [],
+      }
+    );
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.wallet).toMatchObject({
+      balance: 750,
+      loyalty_points: 1200,
+    });
 
     unmount();
     queryClient.clear();
@@ -683,9 +814,13 @@ describe('useWallet', () => {
 
     await waitFor(() => expect(result.current.data).toBeDefined());
 
+    // The non-UUID test merchant cannot satisfy the interest request schema,
+    // so earnings resolve to the explicit unavailable marker while the empty
+    // wallet still loads.
     expect(result.current.data?.wallet).toMatchObject({
       balance: 0,
-      earnings_balance: 0,
+      earnings_available: false,
+      earnings_balance: null,
       loyalty_points: 1200,
       savings_balance: 0,
       total_balance: 0,
@@ -763,6 +898,7 @@ describe('useWallet', () => {
       queryKey: walletKeys.data({
         merchantId: 'merchant-1',
         ownerId: 'customer-1',
+        userId: 'user-1',
       }),
     });
 
@@ -774,7 +910,11 @@ describe('useWallet', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 3210, loyalty_points: 400 },
         transactions: [],
@@ -800,7 +940,11 @@ describe('useWallet', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 3210, loyalty_points: 400 },
         transactions: [],
@@ -935,7 +1079,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -954,7 +1102,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -973,7 +1125,11 @@ describe('useRedeemPoints', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData<WalletQueryData>(
-        walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' })
+        walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        })
       )?.wallet.loyalty_points
     ).toBe(1000);
     unmount();
@@ -991,10 +1147,12 @@ describe('useRedeemPoints', () => {
     const originalQueryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     const changedQueryKey = walletKeys.data({
       merchantId: 'merchant-2',
       ownerId: 'customer-2',
+      userId: 'user-2',
     });
     queryClient.setQueryData<WalletQueryData>(originalQueryKey, {
       wallet: { balance: 0, loyalty_points: 1000 },
@@ -1048,6 +1206,7 @@ describe('useRedeemPoints', () => {
     const queryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     queryClient.setQueryData<WalletQueryData>(queryKey, {
       wallet: { balance: 0, loyalty_points: 50 },
@@ -1149,6 +1308,7 @@ describe('useRedeemPoints', () => {
     const queryKey = walletKeys.data({
       merchantId: 'merchant-1',
       ownerId: 'customer-1',
+      userId: 'user-1',
     });
     queryClient.setQueryData<WalletQueryData>(queryKey, {
       wallet: { balance: 0, loyalty_points: 200 },
@@ -1292,7 +1452,11 @@ describe('useRedeemPoints', () => {
 
     const { result, unmount, queryClient } = setupHook();
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-1', ownerId: 'customer-1' }),
+      walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
       {
         wallet: { balance: 0, loyalty_points: 800 },
         transactions: [],
@@ -1414,7 +1578,11 @@ describe('useRedeemPoints', () => {
       });
     });
     queryClient.setQueryData<WalletQueryData>(
-      walletKeys.data({ merchantId: 'merchant-2', ownerId: 'customer-2' }),
+      walletKeys.data({
+        merchantId: 'merchant-2',
+        ownerId: 'customer-2',
+        userId: 'user-2',
+      }),
       {
         wallet: { balance: 0, loyalty_points: 1000 },
         transactions: [],
@@ -1443,6 +1611,41 @@ describe('useRedeemPoints', () => {
         p_redemption_id: 'redemption-id-2',
       })
     );
+
+    unmount();
+    queryClient.clear();
+  });
+});
+
+describe('useCreateWalletFundingAccount', () => {
+  it('refreshes the wallet display after creation so the new account is visible', async () => {
+    const queryClient = createTestClient();
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    mockCreateWalletFundingAccount.mockResolvedValue({
+      account: { accountNumber: '1234567890', bankName: 'Titan Paystack' },
+    });
+    const { result, unmount } = renderHook(
+      () => useCreateWalletFundingAccount(),
+      { wrapper: createWrapper(queryClient) }
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(mockCreateWalletFundingAccount).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+    });
+    // Replacement for the removed Account Ready alert: the wallet query
+    // refetches and the funding-account card shows the new number.
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      }),
+    });
 
     unmount();
     queryClient.clear();

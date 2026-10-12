@@ -174,12 +174,16 @@ describe('product-hydration', () => {
     expect(result[0]).toBe(rows[0]);
   });
 
-  it('falls back to original rows when variant hydration fails', async () => {
+  it('marks attempted rows when variant hydration throws', async () => {
     const rows = [
       {
         id: 'needs-hydration',
         has_variants: true,
         variants: [],
+      },
+      {
+        id: 'not-attempted',
+        has_variants: false,
       },
     ];
     mockHydrateProductRowsWithStorefrontVariants.mockImplementationOnce(() =>
@@ -188,7 +192,13 @@ describe('product-hydration', () => {
 
     const result = await hydrateRowsNeedingStorefrontVariants(rows);
 
-    expect(result).toBe(rows);
+    // Thrown failures carry the same marker as RPC error results so
+    // exact variant links surface retry; unattempted rows stay clean.
+    expect(result).toEqual([
+      { ...rows[0], variants_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Failed to hydrate storefront variants; using original rows',
       expect.objectContaining({
@@ -286,12 +296,16 @@ describe('product-hydration', () => {
     expect(result[1]).toBe(rows[1]);
   });
 
-  it('falls back to original rows when offer hydration fails', async () => {
+  it('marks attempted rows when offer hydration throws', async () => {
     const rows = [
       {
         id: 'offer-product',
         has_condition_offers: true,
         offers: [],
+      },
+      {
+        id: 'not-attempted',
+        has_condition_offers: false,
       },
     ];
     mockHydrateProductRowsWithConditionOffers.mockImplementationOnce(() =>
@@ -300,7 +314,13 @@ describe('product-hydration', () => {
 
     const result = await hydrateRowsNeedingConditionOffers(rows);
 
-    expect(result).toBe(rows);
+    // Thrown failures carry the same marker as RPC error results so
+    // exact offer links surface retry; unattempted rows stay clean.
+    expect(result).toEqual([
+      { ...rows[0], offers_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Failed to hydrate condition offers; using original rows',
       expect.objectContaining({

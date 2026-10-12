@@ -49,7 +49,17 @@ export async function hydrateRowsNeedingStorefrontVariants(
     log.warn('Failed to hydrate storefront variants; using original rows', {
       error,
     });
-    return rows;
+    // Thrown failures (retry exhaustion) must carry the same marker as
+    // RPC error results, or exact variant links render a normal PDP
+    // with no retry state. Only attempted rows are marked.
+    const attemptedIds = new Set(
+      rowsToHydrate.map((row) => row.id).filter((id) => typeof id === 'string')
+    );
+    return rows.map((row) =>
+      typeof row.id === 'string' && attemptedIds.has(row.id)
+        ? { ...row, variants_hydration_failed: true }
+        : row
+    );
   }
 
   const hydratedById = new Map(
@@ -115,7 +125,18 @@ export async function hydrateRowsNeedingConditionOffers(
     log.warn('Failed to hydrate condition offers; using original rows', {
       error,
     });
-    return rows;
+    // Thrown failures (retry exhaustion) must carry the same marker as
+    // RPC error results, or exact offer links silently drop the
+    // requested offer instead of surfacing retry. Only attempted rows
+    // are marked.
+    const attemptedIds = new Set(
+      rowsToHydrate.map((row) => row.id).filter((id) => typeof id === 'string')
+    );
+    return rows.map((row) =>
+      typeof row.id === 'string' && attemptedIds.has(row.id)
+        ? { ...row, offers_hydration_failed: true }
+        : row
+    );
   }
 
   const hydratedById = new Map(

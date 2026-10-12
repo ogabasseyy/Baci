@@ -43,6 +43,15 @@ export type OfferLineResolutionInput = {
   offerId?: string;
   submittedCondition?: string;
   quantity?: number;
+  /**
+   * Total quantity across every cart line naming this product/offer.
+   * Duplicate lines arise naturally when an offer changes between
+   * canonical aliases (each spelling is its own cart line while the
+   * validator treats them as equivalent); the order RPC decrements the
+   * shared allocation once per aggregated total, so the stock check
+   * must compare the same aggregate, not each line alone.
+   */
+  aggregateOfferQuantity?: number;
   offer?: { condition: string | null; stock_quantity?: number | string | null };
   parentEligible: boolean;
 };
@@ -51,8 +60,9 @@ export type OfferLineResolutionInput = {
  * Resolves the offer-line checks for one cart validation item: a missing
  * live row (the RPC returns active rows only), a stale row on a
  * variant-bearing or flag-disabled parent, a condition the merchant
- * changed after the line landed in the cart, a line quantity above the
- * live offer allocation, or a contradictory variant+offer combo.
+ * changed after the line landed in the cart, an aggregate offer
+ * quantity above the live offer allocation, or a contradictory
+ * variant+offer combo.
  * Returns the invalid-line key, or null when the line passes every
  * offer check (non-offer lines always pass).
  */
@@ -64,6 +74,7 @@ export function getInvalidOfferLineKey({
   quantity,
   offer,
   parentEligible,
+  aggregateOfferQuantity,
 }: OfferLineResolutionInput): string | null {
   // Non-variant offer lines price from the live condition offer, not
   // the parent: pricing them from products.price would silently
@@ -107,10 +118,16 @@ export function getInvalidOfferLineKey({
   // check — there is nothing to compare.
   if (!variantId && offerId && offer) {
     const scalar = Number(offer.stock_quantity ?? Number.NaN);
+    // Compare the aggregate across duplicate lines (see input docs):
+    // the RPC decrements the shared allocation once per total.
+    const comparedQuantity =
+      typeof aggregateOfferQuantity === 'number'
+        ? aggregateOfferQuantity
+        : quantity;
     if (
-      typeof quantity === 'number' &&
+      typeof comparedQuantity === 'number' &&
       Number.isFinite(scalar) &&
-      quantity > scalar
+      comparedQuantity > scalar
     ) {
       return getCartValidationKey(strId, undefined, offerId);
     }

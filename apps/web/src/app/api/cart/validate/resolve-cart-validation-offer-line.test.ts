@@ -149,6 +149,24 @@ describe('getInvalidOfferLineKey', () => {
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
 
+  it('invalidates duplicate lines whose aggregate exceeds the allocation', () => {
+    // Two quantity-1 lines for one allocation-1 offer (e.g. canonical
+    // aliases kept as separate cart lines): each line alone fits, but
+    // the order RPC decrements the shared total and rejects the second.
+    const input = {
+      strId: STR_ID,
+      offerId: OFFER_ID,
+      quantity: 1,
+      aggregateOfferQuantity: 2,
+      offer: { condition: 'used', stock_quantity: 1 },
+      parentEligible: true,
+    };
+    expect(getInvalidOfferLineKey(input)).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    expect(
+      getInvalidOfferLineKey({ ...input, aggregateOfferQuantity: 1 })
+    ).toBeNull();
+  });
+
   it('passes quantities within the allocation and skips unknown scalars', () => {
     expect(
       getInvalidOfferLineKey({

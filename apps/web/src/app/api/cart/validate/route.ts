@@ -186,6 +186,25 @@ export async function POST(request: NextRequest) {
     }[] = [];
     const seenPriceChangeKeys = new Set<string>();
 
+    // Total quantity per product/offer across every line: the order RPC
+    // decrements the shared offer allocation once per aggregated total,
+    // so the per-line stock check below must compare the same aggregate
+    // (duplicate lines arise when an offer changes canonical aliases).
+    const offerQuantityTotals = new Map<string, number>();
+    for (const item of validationItems) {
+      if (
+        !item.variantId &&
+        item.offerId &&
+        typeof item.quantity === 'number'
+      ) {
+        const key = `${String(item.id)}::${item.offerId}`;
+        offerQuantityTotals.set(
+          key,
+          (offerQuantityTotals.get(key) ?? 0) + item.quantity
+        );
+      }
+    }
+
     for (const item of validationItems) {
       const strId = String(item.id);
       const product = productMap.get(strId);
@@ -228,6 +247,10 @@ export async function POST(request: NextRequest) {
         offerId: item.offerId,
         submittedCondition: item.condition,
         quantity: item.quantity,
+        aggregateOfferQuantity:
+          !item.variantId && item.offerId
+            ? offerQuantityTotals.get(`${strId}::${item.offerId}`)
+            : undefined,
         offer,
         parentEligible: isOfferParentEligible(
           product,

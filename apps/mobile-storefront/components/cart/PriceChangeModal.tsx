@@ -88,7 +88,7 @@ export default function PriceChangeModal({
           >
             {changes.map((change) => (
               <View
-                key={change.id}
+                key={`price-${change.id}`}
                 style={[styles.priceChangeRow, { borderColor: colors.border }]}
                 accessible={true}
                 accessibilityLabel={`${change.name}: price changed from ${formatPrice(
@@ -123,7 +123,7 @@ export default function PriceChangeModal({
             ))}
             {conditionChanges.map((change) => (
               <View
-                key={change.id}
+                key={`condition-${change.id}`}
                 style={[styles.priceChangeRow, { borderColor: colors.border }]}
                 accessible={true}
                 accessibilityLabel={`${change.name}: condition changed from ${change.oldCondition} to ${change.newCondition}`}

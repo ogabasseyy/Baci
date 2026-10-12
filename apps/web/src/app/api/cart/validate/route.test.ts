@@ -418,6 +418,60 @@ describe('POST /api/cart/validate', () => {
     });
   });
 
+  it('invalidates duplicate alias lines whose aggregate exceeds the offer allocation', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'iPhone 15',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 0,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+      },
+    ];
+    mocks.offers = [
+      {
+        offer_id: OFFER_ID,
+        condition: 'refurbished',
+        price: 400_000,
+        stock_quantity: 1,
+      },
+    ];
+
+    // Each spelling is its own cart line, but the order RPC decrements
+    // the shared allocation once per total — both must invalidate.
+    const response = await postCartValidate({
+      cartItems: [
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'refurbished',
+          quantity: 1,
+        },
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'open_box',
+          quantity: 1,
+        },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
+  });
+
   it('scopes offer price changes to the matching offer line', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

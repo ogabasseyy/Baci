@@ -17,16 +17,20 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     // prepared dir — binding would stamp a warm navigation as cold.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     const prepared = await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     expect(
       JSON.parse(await readFile(join(dir, 'run', 'run.json'), 'utf8'))
     ).toEqual({
+      deviceScaleFactor: 2,
       profileDir: join(dir, 'profile'),
       runId: prepared.runId,
       tool: 'browsertime',
+      viewport: { height: 667, width: 375 },
     });
     const pngBytes = await pngBuffer(750, 1334);
     const shotPath = join(dir, 'shot.png');
@@ -48,12 +52,10 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       })
     );
     const base = {
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
       screenshot: shotPath,
-      viewport: '375x667',
     };
     const defaultLog = await browserLog(
       dir,
@@ -81,9 +83,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     // parsing, so no version line is needed to reach it.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const harPath = join(dir, 'raw.har');
     await writeFile(
@@ -116,12 +120,10 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     await expect(
       finishRun({
         browserLog: twoLaunchLog,
-        dpr: '2',
         har: harPath,
         outDir: join(dir, 'bound'),
         runJson: join(dir, 'run', 'run.json'),
         screenshot: shotPath,
-        viewport: '375x667',
       })
     ).rejects.toThrow(/2 launches with the prepared profile dir/);
   });
@@ -133,9 +135,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     // segment's navigation count exposes the warm retry.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const harPath = join(dir, 'raw.har');
     await writeFile(
@@ -169,12 +173,10 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     await expect(
       finishRun({
         browserLog: twoNavLog,
-        dpr: '2',
         har: harPath,
         outDir: join(dir, 'bound'),
         runJson: join(dir, 'run', 'run.json'),
         screenshot: shotPath,
-        viewport: '375x667',
       })
     ).rejects.toThrow(/2 navigations in the prepared-profile launch segment/);
   });
@@ -185,9 +187,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     // chromedriver log swapped in for the verbose one).
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const harPath = join(dir, 'raw.har');
     await writeFile(
@@ -220,12 +224,10 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     await expect(
       finishRun({
         browserLog: markerlessLog,
-        dpr: '2',
         har: harPath,
         outDir: join(dir, 'bound'),
         runJson: join(dir, 'run', 'run.json'),
         screenshot: shotPath,
-        viewport: '375x667',
       })
     ).rejects.toThrow(/binds only with its verbose navigation record/);
   });
@@ -235,9 +237,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     // segments (Caps-style drivers) carry firstNavigationUnverified.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const harPath = join(dir, 'raw.har');
     await writeFile(
@@ -259,12 +263,10 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     await writeFile(shotPath, await pngBuffer(750, 1334));
     const bound = await finishRun({
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
       screenshot: shotPath,
-      viewport: '375x667',
     });
     const launch = JSON.parse(await readFile(bound.browserLaunch, 'utf8'));
     expect(launch.firstNavigationUnverified).toBe(undefined);

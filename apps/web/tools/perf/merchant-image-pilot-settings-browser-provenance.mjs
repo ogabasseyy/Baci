@@ -48,6 +48,17 @@ export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
       ok: false,
     };
   }
+  // The runner flags markerless non-Browsertime binds explicitly: that
+  // flag is a refusal, not a warning — a log that cannot show the first
+  // navigation cannot certify a cold cache, and a gate that passed it
+  // would certify cold on unattested evidence.
+  if (artifact.firstNavigationUnverified === true) {
+    return {
+      error:
+        'browser-provenance first navigation is explicitly unverified (markerless log cannot prove a cold cache); re-capture with a navigation-marked verbose log',
+      ok: false,
+    };
+  }
   if (pages?.length > 1) {
     return {
       error: 'one browser launch can certify exactly one HAR iteration',

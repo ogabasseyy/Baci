@@ -3,10 +3,11 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { prepareRun } from './merchant-image-pilot-runner.mjs';
+import { prepareRun, runRunner } from './merchant-image-pilot-runner.mjs';
 import { finishRun } from './merchant-image-pilot-runner-finish.mjs';
 import {
   browserLog,
+  finishBase,
   pngBuffer,
   ROUTE,
 } from './merchant-image-pilot-runner-fixtures.mjs';
@@ -35,9 +36,11 @@ describe('merchant-image-pilot-runner', () => {
     // the real gate's provenance and run-binding checks.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     const prepared = await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     expect(prepared.runId).toMatch(/^[0-9a-f-]{36}$/);
     // Real capture order: navigate first, screenshot after — the runner
@@ -73,12 +76,10 @@ describe('merchant-image-pilot-runner', () => {
     await writeFile(shotPath, pngBytes);
     const finished = await finishRun({
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
       screenshot: shotPath,
-      viewport: '375x667',
     });
     expect(finished.runId).toBe(prepared.runId);
     // The raw export is never mutated: the stamp lands on the copy.
@@ -120,26 +121,76 @@ describe('merchant-image-pilot-runner', () => {
     expect(JSON.parse(gate.stdout).ok).toBe(true);
   });
 
+  it('prepare attests the session geometry once; finish takes no geometry flags', async () => {
+    // Single attestation point: --viewport/--dpr belong to prepare and
+    // land in run.json; a stale finish command carrying them fails
+    // loudly instead of running while ignoring them.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    await expect(
+      prepareRun({
+        dpr: '2',
+        outDir: join(dir, 'run'),
+        profileDir: join(dir, 'profile'),
+        tool: 'browsertime',
+      })
+    ).rejects.toThrow(/missing required --viewport/);
+    await expect(
+      runRunner([
+        '--phase=finish',
+        `--run-json=${join(dir, 'run', 'run.json')}`,
+        `--har=${join(dir, 'raw.har')}`,
+        `--screenshot=${join(dir, 'shot.png')}`,
+        `--browser-log=${join(dir, 'browser.log')}`,
+        `--out-dir=${join(dir, 'bound')}`,
+        '--viewport=375x667',
+      ])
+    ).rejects.toThrow(/--viewport\/--dpr belong to prepare/);
+  });
+
+  it('finish refuses a run handle minted before session geometry', async () => {
+    // Pre-geometry handles cannot finish: without the session pair
+    // there is nothing to check the capture pixels against.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    const { base } = await finishBase(dir);
+    const runJson = JSON.parse(await readFile(base.runJson, 'utf8'));
+    delete runJson.viewport;
+    await writeFile(base.runJson, JSON.stringify(runJson));
+    const log = await browserLog(dir, 'browser.log', join(dir, 'profile'));
+    await expect(finishRun({ ...base, browserLog: log })).rejects.toThrow(
+      /no session viewport \(re-prepare with --viewport\)/
+    );
+  });
+
   it('prepare refuses a non-empty profile dir instead of blessing it', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     const profileDir = join(dir, 'profile');
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir,
       tool: 'browsertime',
+      viewport: '375x667',
     });
     await writeFile(join(profileDir, 'Default'), 'stale state');
     await expect(
-      prepareRun({ outDir: join(dir, 'run2'), profileDir, tool: 'browsertime' })
+      prepareRun({
+        dpr: '2',
+        outDir: join(dir, 'run2'),
+        profileDir,
+        tool: 'browsertime',
+        viewport: '375x667',
+      })
     ).rejects.toThrow(/not empty/);
   });
 
   it('finish reads the executable version from the recorded log', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const harPath = join(dir, 'raw.har');
     await writeFile(
@@ -161,12 +212,10 @@ describe('merchant-image-pilot-runner', () => {
     const shotPath = join(dir, 'shot.png');
     await writeFile(shotPath, pngBytes);
     const base = {
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
       screenshot: shotPath,
-      viewport: '375x667',
     };
     const launchLines = [
       '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',

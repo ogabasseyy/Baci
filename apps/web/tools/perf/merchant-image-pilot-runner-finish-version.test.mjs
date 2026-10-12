@@ -41,18 +41,18 @@ describe('merchant-image-pilot-runner version binding', () => {
     );
   });
 
-  it('refuses a screenshot whose pixels disagree with the viewport', async () => {
-    // finishBase captures 750x1334 (viewport 375x667 at dpr 2): caller
-    // text claiming anything else must refuse, not mint geometry the
-    // gate would trust from the record alone.
+  it('refuses a screenshot whose pixels disagree with the session viewport', async () => {
+    // finishBase captures 750x1334: a session attesting 750x1334 at
+    // dpr 2 must refuse, not mint geometry the gate would trust from
+    // the record alone.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
-    const { base, profileDir } = await finishBase(dir);
+    const { base, profileDir } = await finishBase(dir, {
+      viewport: '750x1334',
+    });
     const log = await browserLogSessions(dir, 'geo.log', [
       { profileDir, version: '154.0.0.0' },
     ]);
-    await expect(
-      finishRun({ ...base, browserLog: log, viewport: '750x1334' })
-    ).rejects.toThrow(
+    await expect(finishRun({ ...base, browserLog: log })).rejects.toThrow(
       /screenshot is 750x1334 but viewport 750x1334 at dpr 2 requires 1500x2668/
     );
   });

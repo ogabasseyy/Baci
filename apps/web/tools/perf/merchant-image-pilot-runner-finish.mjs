@@ -12,26 +12,27 @@
 // equally forgeable), only refuse the inconsistent and the stale.
 // Capture authenticity is an operator responsibility, same as HAR
 // authorship; the recorded hashes freeze the pair the operator chose.
-import { createHash } from 'node:crypto';
-import { copyFile, mkdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   MAX_BROWSER_LOG_BYTES,
   MAX_HAR_BYTES,
   MAX_SCREENSHOT_BYTES,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
-import {
-  readUpToBytes,
-  writeJson,
-} from './merchant-image-pilot-preflight-shared.mjs';
+import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 import {
   resolvePreparedLaunch,
   SESSION_NAV_SLACK_MS,
 } from './merchant-image-pilot-runner-finish-log.mjs';
-import {
-  parseDimensions,
-  parsePositiveNumber,
-} from './merchant-image-pilot-settings-helpers.mjs';
 
 const PROVENANCE_WINDOW_MS = 3_600_000;
 
@@ -39,6 +40,18 @@ const PROVENANCE_WINDOW_MS = 3_600_000;
 // capture-vs-navigation bound takes none: it mirrors the gate's strict
 // capturedAt check exactly, so finish refuses what the gate would fail.
 const CLOCK_SKEW_MS = 5_000;
+
+// Finish owns its destination directory: the only files it may replace
+// are the five it writes. Anything else at the destination (another
+// dir's run.json, an operator's notes) refuses instead of being swept
+// into the replaced set's backup and deleted.
+const BOUND_SET_NAMES = new Set([
+  'browser-launch.json',
+  'profile-reset.json',
+  'run.har',
+  'screenshot-capture.json',
+  'screenshot.png',
+]);
 
 export function required(value, flag) {
   if (value === undefined || value === '') {
@@ -69,12 +82,11 @@ function pngDimensions(bytes, screenshot) {
 
 export async function finishRun({
   browserLog,
-  dpr,
   har,
+  io = {},
   outDir,
   runJson,
   screenshot,
-  viewport,
 }) {
   const handleRead = await readUpToBytes(required(runJson, 'run-json'), 65536);
   const handle = JSON.parse(handleRead.bytes.toString('utf8'));
@@ -83,6 +95,32 @@ export async function finishRun({
   }
   if (typeof handle.profileDir !== 'string' || handle.profileDir.length === 0) {
     throw new Error(`run handle has no prepared profile dir: ${runJson}`);
+  }
+  // Session geometry, not finish flags: prepare attests the pair once
+  // beside the profile it mints, and finish derives it from this same
+  // handle — a second attestation here would let a same-product pair
+  // slip in between prepare and finish. Handles minted before the
+  // session record carried geometry cannot finish; re-prepare.
+  const sessionViewport = handle.viewport;
+  if (
+    !sessionViewport ||
+    !Number.isInteger(sessionViewport.width) ||
+    sessionViewport.width < 1 ||
+    !Number.isInteger(sessionViewport.height) ||
+    sessionViewport.height < 1
+  ) {
+    throw new Error(
+      `run handle has no session viewport (re-prepare with --viewport): ${runJson}`
+    );
+  }
+  if (
+    typeof handle.deviceScaleFactor !== 'number' ||
+    !Number.isFinite(handle.deviceScaleFactor) ||
+    handle.deviceScaleFactor <= 0
+  ) {
+    throw new Error(
+      `run handle has no session deviceScaleFactor (re-prepare with --dpr): ${runJson}`
+    );
   }
   // Profile binding: the browser's recorded command line (Browsertime
   // --verbose log) must show exactly one launch with the exact prepared
@@ -217,14 +255,11 @@ export async function finishRun({
       `screenshot exceeds ${MAX_SCREENSHOT_BYTES} bytes: ${screenshot}`
     );
   }
-  const { height, width } = parseDimensions(
-    required(viewport, 'viewport'),
-    'viewport'
-  );
-  const deviceScaleFactor = parsePositiveNumber(required(dpr, 'dpr'), 'dpr');
-  // The claimed viewport/dpr are caller text: the capture's actual
-  // pixels must agree, or a wrong-size file gains a geometry the gate
-  // would trust from the record alone.
+  const { height, width } = sessionViewport;
+  const deviceScaleFactor = handle.deviceScaleFactor;
+  // The session record attests the pair; the capture's actual pixels
+  // must agree, or a wrong-size file gains a geometry the gate would
+  // trust from the record alone.
   const expectedWidth = Math.round(width * deviceScaleFactor);
   const expectedHeight = Math.round(height * deviceScaleFactor);
   const actual = pngDimensions(shotRead.bytes, screenshot);
@@ -233,9 +268,39 @@ export async function finishRun({
       `screenshot is ${actual.width}x${actual.height} but viewport ${width}x${height} at dpr ${deviceScaleFactor} requires ${expectedWidth}x${expectedHeight}: ${screenshot}`
     );
   }
-  await writeFile(boundHar, `${JSON.stringify(harJson)}\n`);
-  const capturePath = join(out, 'screenshot-capture.json');
-  await writeJson(capturePath, {
+  const fsx = {
+    copyFile,
+    mkdir,
+    readdir,
+    rename,
+    rm,
+    writeFile,
+    ...io,
+  };
+  // A retry into an earlier finish of the same run replaces the five
+  // bound files; anything else at the destination refuses, before
+  // anything is staged. Same-dir-as-prepare refuses here too: run.json
+  // is not a bound artifact, so finishing over the prepare dir would
+  // delete the run handle it just read.
+  const prior = await fsx
+    .readdir(out, { withFileTypes: true })
+    .catch((error) => {
+      if (error?.code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    });
+  if (prior !== null) {
+    const foreign = prior
+      .filter((entry) => !entry.isFile() || !BOUND_SET_NAMES.has(entry.name))
+      .map((entry) => entry.name);
+    if (foreign.length > 0) {
+      throw new Error(
+        `finish destination holds files outside the bound set (${foreign.join(', ')}); finish into a fresh directory: ${out}`
+      );
+    }
+  }
+  const captureRecord = {
     capturedAt: new Date(shotMtimeMs).toISOString(),
     deviceScaleFactor,
     event: 'screenshot-capture',
@@ -243,15 +308,7 @@ export async function finishRun({
     screenshotSha256: createHash('sha256').update(shotRead.bytes).digest('hex'),
     tool: handle.tool,
     viewport: { height, width },
-  });
-  await copyFile(screenshot, join(out, 'screenshot.png'));
-  // Keep the bound set self-contained: when finishing into another
-  // directory, the profile-reset record travels with it. A run handle
-  // without its reset record is an incomplete run, not a partial bind.
-  const resetDest = join(out, 'profile-reset.json');
-  if (resolve(resetSource) !== resolve(resetDest)) {
-    await writeFile(resetDest, resetRead.bytes);
-  }
+  };
   // Executable provenance for the gate: the log-recorded dotted build
   // and launch time, bound to this run id inside the same window the
   // HAR checks. Validated here (bind time), not at the gate. launchedAt
@@ -259,19 +316,80 @@ export async function finishRun({
   // segments fall back to the reset time, which always precedes the
   // navigation and keeps the gate's ordering check meaningful only for
   // stamped logs.
-  const launchPath = join(out, 'browser-launch.json');
-  await writeJson(launchPath, {
+  const launchRecord = {
     event: 'browser-launch',
     executableVersion,
     // Markerless non-Browsertime segments (Caps-style drivers) bind
     // with first navigation explicitly unverified: no silent cold
-    // certification, and downstream gates can fail on the flag.
+    // certification, and the settings gate refuses the flag.
     ...(navigationCount === 0 ? { firstNavigationUnverified: true } : {}),
     launchedAt:
       sessionMs === null ? reset.resetAt : new Date(sessionMs).toISOString(),
     runId: handle.runId,
     tool: handle.tool,
-  });
+  };
+  // Atomic publication: the complete set is staged in a sibling
+  // directory (same parent, so the renames never cross filesystems)
+  // and swapped over the destination. The destination always holds
+  // one complete set — a failure at any point leaves the previous
+  // set live, so ENOSPC mid-publish can no longer strand a mixed
+  // set. Crash windows: a missing destination (downstream reads
+  // fail closed) or an inert .staging/.prev sibling beside it.
+  const staged = `${out}.staging-${randomUUID()}`;
+  const writeStagedJson = (name, value) =>
+    fsx.writeFile(join(staged, name), `${JSON.stringify(value, null, 2)}\n`);
+  await fsx.mkdir(staged, { recursive: true });
+  try {
+    await fsx.writeFile(
+      join(staged, 'run.har'),
+      `${JSON.stringify(harJson)}\n`
+    );
+    await writeStagedJson('screenshot-capture.json', captureRecord);
+    await fsx.copyFile(screenshot, join(staged, 'screenshot.png'));
+    // Keep the bound set self-contained: the profile-reset record
+    // travels with it. A run handle without its reset record is an
+    // incomplete run, not a partial bind.
+    await fsx.writeFile(join(staged, 'profile-reset.json'), resetRead.bytes);
+    await writeStagedJson('browser-launch.json', launchRecord);
+    const backup = `${out}.prev-${randomUUID()}`;
+    try {
+      await fsx.rename(out, backup);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    try {
+      await fsx.rename(staged, out);
+    } catch (error) {
+      // The old set moved aside but the new one did not land: restore
+      // it, so a failed swap never leaves the destination missing.
+      try {
+        await fsx.rename(backup, out);
+      } catch {
+        // Best-effort restore: the original swap error below is the
+        // failure the operator must see, and a missing destination
+        // fails closed downstream.
+      }
+      throw error;
+    }
+    try {
+      await fsx.rm(backup, { force: true, recursive: true });
+    } catch {
+      // Best-effort backup removal: a leftover .prev sibling only
+      // wastes space; validators read the destination only.
+    }
+  } catch (error) {
+    try {
+      await fsx.rm(staged, { force: true, recursive: true });
+    } catch {
+      // Best-effort staging cleanup: the original publish error below
+      // is the failure the operator must see.
+    }
+    throw error;
+  }
+  const launchPath = join(out, 'browser-launch.json');
+  const capturePath = join(out, 'screenshot-capture.json');
   return {
     browserLaunch: launchPath,
     capture: capturePath,

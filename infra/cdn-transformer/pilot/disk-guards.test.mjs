@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +9,7 @@ import {
   createStagingBudget,
   fsyncDir,
   getAvailableBytes,
+  GUARDED_READ_FLAGS,
   isUnsupportedSyncError,
   readUpToBytes,
   removeOwnedStaging,
@@ -106,6 +108,25 @@ test('readUpToBytes caps allocation at the claim plus one byte', async () => {
     truncated: false,
   });
   await assert.rejects(() => readUpToBytes(join(base, 'missing.bin'), 10));
+});
+
+test('readUpToBytes refuses a symlink swapped in for guarded bytes', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('O_NOFOLLOW degrades to plain read on Windows');
+    return;
+  }
+  // The flag bits are pinned directly: a revert to plain 'r' would
+  // pass every bytes test while reopening the read-through-link hole.
+  assert.equal(
+    GUARDED_READ_FLAGS & fsConstants.O_NOFOLLOW,
+    fsConstants.O_NOFOLLOW
+  );
+  const base = await mkdtemp(join(tmpdir(), 'pilot-read-link-'));
+  const target = join(base, 'target.bin');
+  await writeFile(target, Buffer.from('elsewhere'));
+  const link = join(base, 'guarded.bin');
+  await symlink(target, link);
+  await assert.rejects(() => readUpToBytes(link, 1024), /ELOOP/);
 });
 
 test('readUpToBytes streams multi-chunk files to the cap', async () => {

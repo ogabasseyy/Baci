@@ -1,4 +1,5 @@
 import 'server-only';
+import { constants as fsConstants } from 'node:fs';
 import { open } from 'node:fs/promises';
 
 // Bounded read: at most maxBytes + 1, looping to EOF-or-cap (a single
@@ -12,11 +13,18 @@ import { open } from 'node:fs/promises';
 // cannot import infra).
 const READ_CHUNK_BYTES = 64 * 1024;
 
+// Read flags for staged bytes: O_RDONLY plus O_NOFOLLOW so a symlink
+// swapped in after the caller's lstat refuses at open time (ELOOP)
+// instead of serving the link target's bytes. Pinned by the flags
+// test; O_NOFOLLOW is a zero bit where the platform lacks it, so the
+// open degrades to plain 'r' there.
+export const STAGED_READ_FLAGS = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+
 export async function readUpToBytes(
   path: string,
   maxBytes: number
 ): Promise<{ bytes: Buffer; truncated: boolean }> {
-  const handle = await open(path, 'r');
+  const handle = await open(path, STAGED_READ_FLAGS);
   try {
     // Chunked probe: stream 64 KiB at a time instead of allocating
     // maxBytes + 1 upfront, so a large ceiling (per-entry staged sizes

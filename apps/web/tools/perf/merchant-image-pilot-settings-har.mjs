@@ -167,8 +167,9 @@ export async function checkHar(args, pass, fail, warn, recorded) {
       } else {
         recorded.screenshotProvenance = shot.summary;
         // Independent pair check: the PNG product above cannot tell
-        // 750x1334@1 from 375x667@2, so the runner-recorded CSS
-        // viewport and deviceScaleFactor each match exactly — no
+        // 750x1334@1 from 375x667@2, so the session-recorded CSS
+        // viewport and deviceScaleFactor (attested once at prepare,
+        // carried through the capture record) each match exactly — no
         // tolerance, since recorded configuration has no rounding.
         if (
           shot.viewport.width !== viewport.width ||

@@ -14,9 +14,11 @@ describe('merchant-image-pilot-runner finish screenshot timing', () => {
   it('binds the screenshot mtime and refuses out-of-window captures', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     const prepared = await prepareRun({
+      dpr: '2',
       outDir: join(dir, 'run'),
       profileDir: join(dir, 'profile'),
       tool: 'browsertime',
+      viewport: '375x667',
     });
     const writeHar = (name, startedDateTime) =>
       writeFile(
@@ -33,11 +35,9 @@ describe('merchant-image-pilot-runner finish screenshot timing', () => {
     const pngBytes = await pngBuffer(750, 1334);
     const base = {
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
-      viewport: '375x667',
     };
     // A stale file from another run gains no fresh capturedAt.
     const staleShot = join(dir, 'stale.png');

@@ -26,6 +26,22 @@ describe('merchant-image-pilot-settings browser provenance', () => {
     );
   });
 
+  it('refuses a launch with first navigation explicitly unverified', () => {
+    // A markerless bind flags itself at bind time; the gate must refuse
+    // it, not certify cold on unattested evidence.
+    const flagged = JSON.stringify({
+      ...JSON.parse(valid),
+      firstNavigationUnverified: true,
+    });
+    expect(
+      verifyBrowserProvenance(flagged, pages, '154', 'launch.json')
+    ).toEqual({
+      error:
+        'browser-provenance first navigation is explicitly unverified (markerless log cannot prove a cold cache); re-capture with a navigation-marked verbose log',
+      ok: false,
+    });
+  });
+
   it('refuses unreadable, malformed, and misshapen launches', () => {
     expect(
       verifyBrowserProvenance(null, pages, '154', 'missing.json').error

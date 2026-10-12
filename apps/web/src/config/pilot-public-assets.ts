@@ -163,16 +163,28 @@ export function resolveRoutePublicDir(): string {
   // are set they must resolve to the SAME tree, or the gate and the
   // request verifier inspect different directories (one passing while
   // the other serves different bytes). Explicit route var wins; the
-  // stashed gate root is the fallback; cwd/public is last. Empty counts
-  // as unset everywhere, so '' never resolves '__pilot' against ''.
+  // fallback is the same standalone-aware resolution the gate uses
+  // (stashed root, else the tree beside the standalone server, else
+  // cwd/public) — never a bare cwd/public that would diverge from the
+  // gate on a standalone cold start. Empty counts as unset everywhere,
+  // so '' never resolves '__pilot' against ''.
   const explicit = process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || null;
-  const stashed = process.env.BACI_PILOT_PUBLIC_DIR || null;
-  if (explicit && stashed && canonicalDir(explicit) !== canonicalDir(stashed)) {
+  // The fallback is the same standalone-aware resolution the gate uses;
+  // the agreement check only runs against an ANCHORED gate root
+  // (stashed or standalone-server-anchored). A bare cwd/public legacy
+  // fallback is not a verified tree, so an explicit route var without
+  // any gate root stays trusted (the lab dev flow), as before.
+  const gateRoot = gateVerifiedRoot();
+  if (
+    explicit &&
+    gateRoot &&
+    canonicalDir(explicit) !== canonicalDir(gateRoot)
+  ) {
     throw new Error(
       'merchant image pilot: BACI_IMAGE_PILOT_PUBLIC_DIR disagrees with the build-gate public dir; refusing to serve from an unverified tree'
     );
   }
-  return explicit || stashed || join(process.cwd(), 'public');
+  return explicit || gateRoot || join(process.cwd(), 'public');
 }
 
 // Canonical spelling for tree-identity comparison: lexical resolve()
@@ -187,7 +199,11 @@ function canonicalDir(path: string): string {
   }
 }
 
-export function resolvePilotPublicDir(): string {
+// The gate's anchored public root, shared by the gate and the route
+// resolver so both sides agree: the stashed verified tree, else the
+// tree beside the standalone server. Null when neither anchors — the
+// legacy cwd/public fallback is not an anchored root.
+function gateVerifiedRoot(): string | null {
   const stashed = process.env.BACI_PILOT_PUBLIC_DIR;
   if (stashed) {
     return stashed;
@@ -196,7 +212,11 @@ export function resolvePilotPublicDir(): string {
     // resolve: argv[1] may be invoked relative; the gate needs absolute.
     return join(dirname(resolve(process.argv[1])), 'public');
   }
-  return join(process.cwd(), 'public');
+  return null;
+}
+
+export function resolvePilotPublicDir(): string {
+  return gateVerifiedRoot() ?? join(process.cwd(), 'public');
 }
 
 export function assertPilotPublicAssets(

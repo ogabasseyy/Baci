@@ -183,6 +183,10 @@ export async function runJob({
       expectedSha256: job.expectedSha256,
       role: job.role,
       snapshotPath: frozenCopy,
+      // Verified source body bytes for the pass-through rescue: lets a
+      // branch-compatible source smaller than the cheapest encode save
+      // its rung instead of failing the ladder on the budget floor.
+      sourceBytes: snapshot.bytes.length,
       stagingBudget,
       stagingDir,
     });

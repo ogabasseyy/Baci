@@ -1,6 +1,11 @@
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BUDGETS, QUALITY_LADDER, TIERS } from './constants.mjs';
+import {
+  BUDGETS,
+  DELIVERY_GUARD,
+  QUALITY_LADDER,
+  TIERS,
+} from './constants.mjs';
 import {
   PilotEncodeError,
   enqueuePilotOp,
@@ -147,6 +152,7 @@ export async function encodeRoleLadder({
   role,
   signal,
   snapshotPath,
+  sourceBytes = null,
   stagingBudget,
   stagingDir,
 }) {
@@ -192,10 +198,41 @@ export async function encodeRoleLadder({
         floorBytes = attempt.bytes;
       }
       if (!accepted) {
-        throw new PilotEncodeError(
-          'budget-floor-exceeded',
-          `${role} ${actualWidth}px ${format} needs ${floorBytes} bytes at quality floor 55 (ceiling ${ceiling})`
-        );
+        // Pass-through before the fatal: when the validated source is
+        // itself a smaller, branch-compatible delivery than the
+        // cheapest encode, the rung carries the floor attempt's bytes
+        // so the never-larger guard routes it to original-passthrough
+        // instead of aborting the ladder. (The disposition replaces
+        // the placeholder path/sha with the staged source copy, so the
+        // snapshot path below never reaches the manifest.) Budgets
+        // still bind incompatible sources and sources no smaller
+        // than the floor — those keep the fatal.
+        const passthroughCompatible =
+          DELIVERY_GUARD.passthroughFormats.includes(source.format) &&
+          source.format === format;
+        if (
+          passthroughCompatible &&
+          Number.isInteger(sourceBytes) &&
+          sourceBytes > 0 &&
+          sourceBytes < floorBytes
+        ) {
+          accepted = {
+            bytes: floorBytes,
+            output: {
+              bytes: floorBytes,
+              height: source.orientedHeight,
+              path: snapshotPath,
+              sha256: expectedSha256,
+              width: source.orientedWidth,
+            },
+            quality: null,
+          };
+        } else {
+          throw new PilotEncodeError(
+            'budget-floor-exceeded',
+            `${role} ${actualWidth}px ${format} needs ${floorBytes} bytes at quality floor 55 (ceiling ${ceiling})`
+          );
+        }
       }
       encodedByWidth.set(key, accepted);
     }

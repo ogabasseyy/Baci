@@ -218,7 +218,9 @@ describe('resolvePilotPublicDir', () => {
 });
 
 describe('resolveRoutePublicDir', () => {
+  const argv1 = process.argv[1];
   afterEach(() => {
+    process.argv[1] = argv1;
     vi.unstubAllEnvs();
   });
   it('prefers the explicit route var, then the gate stash, then cwd', () => {
@@ -234,6 +236,25 @@ describe('resolveRoutePublicDir', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/gate/public');
     expect(() => resolveRoutePublicDir()).toThrow(/disagrees/);
+  });
+  it('trusts an explicit route var with no anchored gate root', () => {
+    // Lab dev flow: explicit override, no stash, no standalone boot.
+    // A legacy cwd/public fallback is not a verified tree, so there
+    // is nothing to disagree with.
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
+    expect(resolveRoutePublicDir()).toBe('/route/public');
+  });
+  it('falls back to the standalone-aware gate root on a cold start', () => {
+    // No stash, no explicit var, standalone boot: the route must serve
+    // the tree beside the server (where the gate verified), not a bare
+    // cwd/public that diverges from the gate.
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
+    process.argv[1] = '/srv/standalone/apps/web/server.js';
+    expect(resolveRoutePublicDir()).toBe('/srv/standalone/apps/web/public');
   });
   it('accepts symlinked-ancestor aliases of the same tree', () => {
     // The route var may spell the tree through a symlinked ancestor

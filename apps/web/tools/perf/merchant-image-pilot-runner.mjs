@@ -7,6 +7,8 @@
 //
 //   1. prepare: mint a run id, create the fresh browser profile dir, and
 //      emit the profile-reset record plus a run handle for phase 2.
+//      The handle also attests the session geometry (viewport + dpr)
+//      once; finish derives it from there and takes no geometry flags.
 //   2. (operator navigates with the prepared profile and captures the
 //      HAR + screenshot, within the hour)
 //   3. finish: stamp the run id into a COPY of the HAR, bind the
@@ -22,6 +24,10 @@ import { join } from 'node:path';
 import { writeJson } from './merchant-image-pilot-preflight-shared.mjs';
 import { parseArgs as parseStrictArgs } from './merchant-image-pilot-readiness-config.mjs';
 import { finishRun, required } from './merchant-image-pilot-runner-finish.mjs';
+import {
+  parseDimensions,
+  parsePositiveNumber,
+} from './merchant-image-pilot-settings-helpers.mjs';
 
 const RUNNER_CLI_OPTIONS = [
   'browser-log',
@@ -43,10 +49,19 @@ function checkedTool(tool) {
   return tool;
 }
 
-export async function prepareRun({ outDir, profileDir, tool }) {
+export async function prepareRun({ dpr, outDir, profileDir, tool, viewport }) {
   const checked = checkedTool(required(tool, 'tool'));
   const profile = required(profileDir, 'profile-dir');
   const out = required(outDir, 'out-dir');
+  // The session attests its own geometry once, here, beside the profile
+  // it mints: finish derives the pair from this record instead of
+  // accepting a second attestation as flags, so no same-product pair
+  // can be swapped in between prepare and finish.
+  const sessionViewport = parseDimensions(
+    required(viewport, 'viewport'),
+    'viewport'
+  );
+  const sessionDpr = parsePositiveNumber(required(dpr, 'dpr'), 'dpr');
   await mkdir(profile, { recursive: true });
   // Fresh by construction: a non-empty directory is someone else's
   // profile, never a reset. The operator removes it or picks another
@@ -66,36 +81,46 @@ export async function prepareRun({ outDir, profileDir, tool }) {
     tool: checked,
   });
   await writeJson(join(out, 'run.json'), {
+    deviceScaleFactor: sessionDpr,
     profileDir: profile,
     runId,
     tool: checked,
+    viewport: { height: sessionViewport.height, width: sessionViewport.width },
   });
   return { outDir: out, profileDir: profile, resetAt, runId };
 }
 
 const USAGE = `merchant-image-pilot-runner.mjs binds measurement evidence to the effective-settings gate.
-  prepare: --phase=prepare --profile-dir=P --tool=T --out-dir=O
-  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --viewport=WxH --dpr=N --browser-log=B.log --out-dir=O2
-  (capture with Browsertime --verbose and the prepared profile dir; finish verifies the recorded launch and session version before binding)`;
+  prepare: --phase=prepare --profile-dir=P --tool=T --out-dir=O --viewport=WxH --dpr=N
+  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --browser-log=B.log --out-dir=O2
+  (capture with Browsertime --verbose and the prepared profile dir; finish derives the session geometry from run.json and verifies the recorded launch and session version before binding)`;
 
 export async function runRunner(argv) {
   const args = parseStrictArgs(argv, RUNNER_CLI_OPTIONS);
   if (args.phase === 'prepare') {
     return await prepareRun({
+      dpr: args.dpr,
       outDir: args['out-dir'],
       profileDir: args['profile-dir'],
       tool: args.tool,
+      viewport: args.viewport,
     });
   }
   if (args.phase === 'finish') {
+    // Geometry moved to the session record: a stale finish command
+    // carrying --viewport/--dpr must fail loudly, never run while
+    // silently ignoring the pair the operator thinks they set.
+    if (args.viewport !== undefined || args.dpr !== undefined) {
+      throw new Error(
+        `bad --phase=finish: --viewport/--dpr belong to prepare (the session run.json attests geometry); finish derives them\n${USAGE}`
+      );
+    }
     return await finishRun({
       browserLog: args['browser-log'],
-      dpr: args.dpr,
       har: args.har,
       outDir: args['out-dir'],
       runJson: args['run-json'],
       screenshot: args.screenshot,
-      viewport: args.viewport,
     });
   }
   throw new Error(`bad --phase: ${args.phase ?? '(missing)'}\n${USAGE}`);

@@ -68,13 +68,20 @@ export async function browserLogSessions(dir, name, sessions) {
 }
 
 // Ready-to-finish run: prepared handle, screenshot, and single-page HAR
-// with the standard finishRun argument object.
-export async function finishBase(dir) {
+// with the standard finishRun argument object. The session geometry
+// defaults to the standard mobile pair; tests for mismatched captures
+// attest a different pair at prepare time.
+export async function finishBase(
+  dir,
+  { dpr = '2', viewport = '375x667' } = {}
+) {
   const profileDir = join(dir, 'profile');
   const prepared = await prepareRun({
+    dpr,
     outDir: join(dir, 'run'),
     profileDir,
     tool: 'browsertime',
+    viewport,
   });
   // HAR first, screenshot second: finish refuses captures that predate
   // the navigation, so the shot mtime must not precede startedDateTime.
@@ -98,12 +105,10 @@ export async function finishBase(dir) {
   await writeFile(shotPath, await pngBuffer(750, 1334));
   return {
     base: {
-      dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
       screenshot: shotPath,
-      viewport: '375x667',
     },
     prepared,
     profileDir,

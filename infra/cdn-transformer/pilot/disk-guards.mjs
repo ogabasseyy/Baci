@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { constants as fsConstants, createReadStream } from 'node:fs';
 import { lstat, open, realpath, rm, statfs, unlink } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { MAX_STAGING_BYTES, MIN_FREE_BYTES } from './constants.mjs';
@@ -77,8 +77,16 @@ export async function sha256File(path) {
   return hash.digest('hex');
 }
 
+// Read flags for guarded bytes: O_RDONLY plus O_NOFOLLOW so a symlink
+// swapped in after the caller's lstat refuses at open time (ELOOP)
+// instead of serving the link target's bytes. Pinned by the flags
+// test; O_NOFOLLOW is a zero bit where the platform lacks it, so the
+// open degrades to plain 'r' there.
+export const GUARDED_READ_FLAGS =
+  fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+
 export async function readUpToBytes(path, maxBytes) {
-  const handle = await open(path, 'r');
+  const handle = await open(path, GUARDED_READ_FLAGS);
   try {
     const chunks = [];
     let bytesRead = 0;

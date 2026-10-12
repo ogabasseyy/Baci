@@ -5,7 +5,7 @@
 // exit 0 with { ok: true|false }; protocol misuse or unexpected crashes exit
 // non-zero so the parent can distinguish rejection from worker failure.
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { stat, unlink } from 'node:fs/promises';
 import sharp from 'sharp';
 import {
   ACCEPTED_INPUT_FORMATS,
@@ -166,6 +166,18 @@ export async function handleEncodeOp(op, io = {}) {
   ) {
     throw new WorkerInputError('bad-request', 'invalid encode quality');
   }
+  // Per-attempt byte cap from the parent (rung ceiling within remaining
+  // staging headroom): the worker must reject the in-memory result
+  // before writing it, so an incompressible encode never lands up to
+  // MAX_ENCODED_BYTES on disk against a smaller reservation. Missing
+  // or malformed caps refuse loudly — an uncapped write is the hole.
+  if (
+    typeof op.maxBytes !== 'number' ||
+    !Number.isInteger(op.maxBytes) ||
+    op.maxBytes < 0
+  ) {
+    throw new WorkerInputError('bad-request', 'invalid encode maxBytes');
+  }
   const inputBytes = await readInputOnce(op.input, io.readFile);
   const inputSha = createHash('sha256').update(inputBytes).digest('hex');
   if (inputSha !== op.expectedInputSha256) {
@@ -199,6 +211,7 @@ export async function handleEncodeOp(op, io = {}) {
   // predictable pathname is never reopened and no rename+symlink swap
   // can redirect the write outside the staging tree.
   const claim = await claimEncodeOutput(op.output);
+  let overBudgetBytes = null;
   try {
     const bytes = await pipeline.toBuffer();
     if (bytes.length > MAX_ENCODED_BYTES) {
@@ -207,8 +220,15 @@ export async function handleEncodeOp(op, io = {}) {
         'encoded output exceeds the byte budget'
       );
     }
-    await claim.handle.writeFile(bytes);
-    await claim.handle.sync();
+    if (bytes.length > op.maxBytes) {
+      // Rejected BEFORE the write: nothing lands on disk against the
+      // smaller reservation, so the staging cap holds even while the
+      // parent's post-write comparison still runs as defense in depth.
+      overBudgetBytes = bytes.length;
+    } else {
+      await claim.handle.writeFile(bytes);
+      await claim.handle.sync();
+    }
   } catch (error) {
     if (error instanceof WorkerInputError) {
       throw error;
@@ -219,6 +239,28 @@ export async function handleEncodeOp(op, io = {}) {
     );
   } finally {
     await claim.handle.close();
+  }
+  if (overBudgetBytes !== null) {
+    // Remove the empty claim: unlink never follows a trailing symlink,
+    // so a swap between the close and now only deletes the planted
+    // name. A removal failure is fatal — retained bytes outside the
+    // staging cap must never pass silently.
+    try {
+      await unlink(op.output);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw new WorkerInputError(
+          'encode-failed',
+          `over-budget claim could not be removed (${error?.code ?? 'unknown'})`
+        );
+      }
+    }
+    return {
+      bytes: overBudgetBytes,
+      ok: true,
+      output: op.output,
+      status: 'over-budget',
+    };
   }
   await verifyEncodeOutput(op.output, claim);
   const info = await stat(op.output);

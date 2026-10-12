@@ -230,6 +230,7 @@ test('handlers use the verified bytes, not later path content', async () => {
       format: 'webp',
       input: swappedPath,
       op: 'encode',
+      maxBytes: 1_000_000,
       output,
       quality: 70,
       width: 96,
@@ -319,6 +320,7 @@ test('encode refuses a symlinked output without touching its target', async () =
           format: 'webp',
           input: fixture('tiny-48x48.png'),
           op: 'encode',
+          maxBytes: 1_000_000,
           output,
           quality: 70,
           width: 96,
@@ -342,6 +344,7 @@ test('encode refuses a symlinked output without touching its target', async () =
           format: 'webp',
           input: fixture('tiny-48x48.png'),
           op: 'encode',
+          maxBytes: 1_000_000,
           output: dangling,
           quality: 70,
           width: 96,
@@ -368,6 +371,7 @@ test('encode reclaims a stale regular output and certifies the fresh bytes', asy
       format: 'webp',
       input: fixture('tiny-48x48.png'),
       op: 'encode',
+      maxBytes: 1_000_000,
       output,
       quality: 70,
       width: 96,
@@ -384,4 +388,59 @@ test('encode reclaims a stale regular output and certifies the fresh bytes', asy
     encoded.sha256
   );
   assert.equal(published.length, encoded.bytes);
+});
+
+test('encode rejects past maxBytes before writing, leaving no file', async () => {
+  const { lstat } = await import('node:fs/promises');
+  const verifiedBytes = await readFile(fixture('tiny-48x48.png'));
+  const expectedInputSha256 = createHash('sha256')
+    .update(verifiedBytes)
+    .digest('hex');
+  const io = { readFile: async () => verifiedBytes };
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-cap-'));
+  const output = join(dir, 'out.webp');
+  // 10 bytes: far below any real webp encoding, so the in-memory
+  // result must reject without the worker writing a byte.
+  const rejected = await handleEncodeOp(
+    {
+      expectedInputSha256,
+      format: 'webp',
+      input: fixture('tiny-48x48.png'),
+      maxBytes: 10,
+      op: 'encode',
+      output,
+      quality: 70,
+      width: 96,
+    },
+    io
+  );
+  assert.equal(rejected.ok, true);
+  assert.equal(rejected.status, 'over-budget');
+  assert.ok(rejected.bytes > 10);
+  // Not even the empty claim remains: the staging dir holds nothing
+  // against the reservation.
+  await assert.rejects(() => lstat(output), /ENOENT/);
+  // A missing or malformed cap refuses loudly — never uncapped.
+  for (const maxBytes of [undefined, -1, 1.5, '100']) {
+    await assert.rejects(
+      () =>
+        handleEncodeOp(
+          {
+            expectedInputSha256,
+            format: 'webp',
+            input: fixture('tiny-48x48.png'),
+            maxBytes,
+            op: 'encode',
+            output: join(dir, `bad-${String(maxBytes)}.webp`),
+            quality: 70,
+            width: 96,
+          },
+          io
+        ),
+      (error) => {
+        assert.equal(error?.code, 'bad-request');
+        return true;
+      }
+    );
+  }
 });

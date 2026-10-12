@@ -130,6 +130,17 @@ test('isStaleInventoryLock never steals by age from a live owner', async () => {
     JSON.stringify({ startedAt: ancient, token: 'noid' })
   );
   assert.equal(await isStaleInventoryLock(noid), true);
+  // Non-positive pids probe process groups (pid 0 always signals), so
+  // accepting them would wedge every acquisition on a corrupt owner.
+  for (const pid of [0, -1, -process.pid]) {
+    const corrupt = join(dir, `corrupt-${pid}.lock`);
+    await mkdir(corrupt);
+    await write(
+      join(corrupt, 'owner.json'),
+      JSON.stringify({ pid, startedAt: ancient, token: `corrupt-${pid}` })
+    );
+    assert.equal(await isStaleInventoryLock(corrupt), true);
+  }
 });
 
 test('appendInventoryRecord waits for a live owner instead of stealing by age', async () => {

@@ -110,7 +110,10 @@ describe('merchant-image-pilot-settings gate', () => {
           },
           throttlingMethod: 'simulate',
         },
-        environment: {},
+        environment: {
+          hostUserAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+        },
       })
     );
     const { execFile } = await import('node:child_process');
@@ -264,7 +267,10 @@ describe('merchant-image-pilot-settings gate', () => {
           },
           throttlingMethod: 'simulate',
         },
-        environment: {},
+        environment: {
+          hostUserAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+        },
       })
     );
     const disabled = await run([`--lighthouse=${lhDisabled}`, ...lhArgs]);
@@ -292,7 +298,10 @@ describe('merchant-image-pilot-settings gate', () => {
           },
           throttlingMethod: 'simulate',
         },
-        environment: {},
+        environment: {
+          hostUserAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+        },
       })
     );
     const wrongMode = await run([`--lighthouse=${lhDesktop}`, ...lhArgs]);
@@ -408,7 +417,10 @@ describe('merchant-image-pilot-settings gate', () => {
           throttling,
           throttlingMethod,
         },
-        environment: {},
+        environment: {
+          hostUserAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+        },
       });
     const { execFile } = await import('node:child_process');
     const runLh = (lhBody, extra) =>
@@ -1023,7 +1035,12 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     '--expect-cpu-slowdown=4',
   ];
 
-  function lhReport(urls) {
+  // Real-host browser UA (not the emulated request UA): Lighthouse
+  // records the executable it drove in environment.hostUserAgent.
+  const HOST_UA =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
+
+  function lhReport(urls, hostUserAgent = HOST_UA) {
     return {
       configSettings: {
         formFactor: 'mobile',
@@ -1041,7 +1058,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
         },
         throttlingMethod: 'simulate',
       },
-      environment: {},
+      environment: { hostUserAgent },
       ...urls,
     };
   }
@@ -1135,6 +1152,36 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     });
     expect(redirected.error).not.toBe(null);
     expect(redirected.stdout).toMatch(/finalDisplayedUrl is .* expected /);
+  });
+
+  it('fails a Lighthouse report from a different Chrome major', async () => {
+    // Matching route, viewport, and throttling does not make metrics
+    // from another browser build comparable: the host UA (the real
+    // executable, not emulated configuration) must show the expected
+    // major.
+    const pngBytes = await pngBuffer(750, 1334);
+    const harPages = [{ ...DATED_PAGE }];
+    const urls = { finalDisplayedUrl: ROUTE, requestedUrl: ROUTE };
+    const matched = await runWithReport({
+      harPages,
+      pngBytes,
+      report: lhReport(urls),
+    });
+    expect(JSON.parse(matched.stdout).ok).toBe(true);
+    const otherMajor = await runWithReport({
+      harPages,
+      pngBytes,
+      report: lhReport(urls, HOST_UA.replace('Chrome/154.', 'Chrome/153.')),
+    });
+    expect(otherMajor.error).not.toBe(null);
+    expect(otherMajor.stdout).toMatch(/lighthouse\.browser/);
+    const missingUa = await runWithReport({
+      harPages,
+      pngBytes,
+      report: lhReport(urls, null),
+    });
+    expect(missingUa.error).not.toBe(null);
+    expect(missingUa.stdout).toMatch(/lighthouse\.browser/);
   });
 
   it('rejects a structurally valid screenshot whose pixels do not decode', async () => {

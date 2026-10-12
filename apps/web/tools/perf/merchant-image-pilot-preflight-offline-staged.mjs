@@ -124,10 +124,11 @@ export async function loadCommittedFillerPins(configPath = GATE_CONFIG_PATH) {
 // gate — so offline verifies the on-disk bytes against those committed
 // pins and records the PIN, never the disk digest: hashing a replacement
 // swapped in after the build/startup check would bless the mutable bytes
-// and let the served gate pass the same replacement. Best-effort by
-// design: an absent dir, an overfull dir, or an unreadable file simply
-// yields no entry, and the served gate then fails closed on any filler
-// URL it meets instead of comparing two mutable views.
+// and let the served gate pass the same replacement. Fail-closed, never
+// best-effort: every store grid references these images, so an absent
+// dir, an overfull dir, a missing pin, or an unreadable file fails the
+// offline gate here instead of reporting ok and deferring detection to
+// the optional served gate.
 export async function collectFillerHashes({
   checks,
   failures,
@@ -164,13 +165,26 @@ export async function collectFillerHashes({
   try {
     entries = await readdir(join(publicDir, '__pilot', 'fillers'));
   } catch {
-    return done();
+    fail(
+      checks,
+      failures,
+      'fillers-pinned',
+      'fillers directory is missing or unreadable'
+    );
+    return hashes;
   }
   // Legit dirs hold three pinned files; past this the dir is planted or
-  // corrupt, and pinning nothing fails the served filler URLs loudly.
+  // corrupt, and the grids that reference these images are broken.
   if (entries.length > 64) {
-    return done();
+    fail(
+      checks,
+      failures,
+      'fillers-pinned',
+      `fillers directory holds ${entries.length} entries, past the 64-file cap`
+    );
+    return hashes;
   }
+  const seen = new Set();
   for (const file of entries) {
     const expected = pins[file];
     if (!expected) {
@@ -182,6 +196,10 @@ export async function collectFillerHashes({
       );
       continue;
     }
+    // On disk: the missing-pin check below must only fire for pins with
+    // no entry at all — unreadable, oversized, and mismatched files
+    // already carry their own precise failure.
+    seen.add(file);
     let read;
     try {
       read = await readUpToBytes(
@@ -189,19 +207,34 @@ export async function collectFillerHashes({
         MAX_INPUT_BYTES
       );
     } catch {
+      fail(checks, failures, 'fillers-pinned', `filler is unreadable: ${file}`);
       continue;
     }
-    if (!read.truncated) {
-      if (sha256Hex(read.bytes) !== expected) {
-        fail(
-          checks,
-          failures,
-          'fillers-pinned',
-          `filler hash mismatch: ${file}`
-        );
-        continue;
-      }
-      hashes[`/__pilot/fillers/${file}`] = expected;
+    if (read.truncated) {
+      fail(
+        checks,
+        failures,
+        'fillers-pinned',
+        `filler exceeds ${MAX_INPUT_BYTES} bytes: ${file}`
+      );
+      continue;
+    }
+    if (sha256Hex(read.bytes) !== expected) {
+      fail(checks, failures, 'fillers-pinned', `filler hash mismatch: ${file}`);
+      continue;
+    }
+    hashes[`/__pilot/fillers/${file}`] = expected;
+  }
+  // Every committed pin must resolve to a file on disk: a pin with no
+  // file is a grid image the served gate can never satisfy.
+  for (const name of Object.keys(pins)) {
+    if (!seen.has(name)) {
+      fail(
+        checks,
+        failures,
+        'fillers-pinned',
+        `pinned filler is missing from the staged tree: ${name}`
+      );
     }
   }
   return done();

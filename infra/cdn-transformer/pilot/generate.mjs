@@ -39,6 +39,29 @@ async function findPnpmPin() {
 }
 
 
+// A confined output child is a real directory whose canonical path is
+// exactly the joined path: any symlink in the chain (or a non-directory
+// squat) resolves elsewhere and refuses. Checked at setup AND
+// immediately before the report write — a run-long window sits between
+// them, and a mid-run swap would otherwise redirect the final write
+// outside the output root. Residual TOCTOU between the recheck and the
+// write is inherent to pathname writes; the window is microseconds, not
+// the whole generation.
+export async function assertConfinedChild(outputRoot, child) {
+  const path = join(outputRoot, child);
+  const info = await lstat(path);
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    (await realpath(path)) !== path
+  ) {
+    throw new PilotGenerateError(
+      'unsafe-output-directory',
+      `${child} must be a confined directory, not a symlink`
+    );
+  }
+}
+
 export async function runPilotGeneration({
   inputRoot,
   inventoryPath,
@@ -62,10 +85,7 @@ export async function runPilotGeneration({
   for (const child of ['claims', 'generations', 'reports']) {
     const path = join(outputRoot, child);
     await mkdir(path, { recursive: true });
-    const info = await lstat(path);
-    if (info.isSymbolicLink() || !info.isDirectory() || await realpath(path) !== path) {
-      throw new PilotGenerateError('unsafe-output-directory', `${child} must be a confined directory, not a symlink`);
-    }
+    await assertConfinedChild(outputRoot, child);
   }
   // Cross-process encode serialization: the worker pool only serializes
   // within this process, so the run holds the output-root-wide encoder
@@ -108,6 +128,10 @@ export async function runPilotGeneration({
     },
   };
   const reportName = `${report.createdAt.replace(/[:.]/g, '-')}-${createRunToken()}.json`;
+  // Re-confine immediately before publication: the setup check ran a
+  // whole generation ago, and a swapped-in symlink would otherwise
+  // redirect this write outside the output root.
+  await assertConfinedChild(outputRoot, 'reports');
   await writeFile(join(outputRoot, 'reports', reportName), `${JSON.stringify(report, null, 2)}\n`);
   return { failed, ok, reused, total: results.length };
 }

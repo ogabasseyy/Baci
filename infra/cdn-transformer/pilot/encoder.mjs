@@ -65,11 +65,19 @@ export async function encodeVariant({
   ) {
     return { bytes: budgetBytes, quality, status: 'over-budget' };
   }
+  // The worker enforces the attempt cap pre-write (nothing lands on
+  // disk past it), but the cap is the rung ceiling WITHIN remaining
+  // headroom — never the headroom alone — so a shrunken remainder
+  // cannot authorize a write the rung ceiling forbids.
+  const maxBytes = stagingBudget
+    ? Math.min(budgetBytes, stagingBudget.cap - stagingBudget.used)
+    : budgetBytes;
   const encoded = await runWorkerOp(
     {
       expectedInputSha256: expectedSha256,
       format,
       input: snapshotPath,
+      maxBytes,
       op: 'encode',
       output,
       quality,
@@ -77,13 +85,13 @@ export async function encodeVariant({
     },
     { deadlineMs, signal }
   );
-  // Remove and reject BEFORE charging: the worker can produce far more
-  // than the reserved ceiling, and charging actuals first would throw
-  // past the cap (leaving the oversized file on disk) or — worse —
-  // permanently charge bytes for a file this branch then unlinks. After
-  // the reorder, charge() only ever sees in-budget actuals the reserve
+  // Remove and reject BEFORE charging. The worker already rejected its
+  // in-memory result past maxBytes without writing, so this branch is
+  // defense in depth (a worker that ignored its cap still cannot leave
+  // oversized bytes behind): the file — if any — is removed before any
+  // charge, and charge() only ever sees in-budget actuals the reserve
   // check already proved to fit, so it cannot throw here.
-  if (encoded.bytes > budgetBytes) {
+  if (encoded.status === 'over-budget' || encoded.bytes > budgetBytes) {
     // Removal failure fails the job: a retained over-budget file holds
     // unaccounted bytes outside the staging cap, and continuing with
     // lower qualities could stack several such files before job-scope

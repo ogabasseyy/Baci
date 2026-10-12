@@ -213,7 +213,12 @@ export async function loadLabConfig(
     } else {
       // No accepted manifest to name the format: decode it from the
       // hash-verified bytes themselves, never from an unaccepted claim.
-      format = await snapshotFormat(snapshot);
+      // Unsafe bytes (active, animated, truncated, foreign) throw here
+      // instead of staging under the public tree.
+      format = await snapshotFormat(
+        snapshot,
+        `${status.binding.merchantId}/${status.binding.slotId}`
+      );
     }
     const fileName = originalFileName(status.binding, format);
     const originalDest = join(originalsStage, fileName);

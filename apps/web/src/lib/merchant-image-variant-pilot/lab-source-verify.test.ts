@@ -3,7 +3,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { assertSnapshotMatchesSource } from './lab-source-verify';
+import {
+  assertSnapshotMatchesSource,
+  snapshotFormat,
+} from './lab-source-verify';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -199,5 +202,62 @@ describe('assertSnapshotMatchesSource', () => {
         'merchant/slot'
       )
     ).rejects.toThrow(/animated/);
+  });
+});
+
+describe('snapshotFormat', () => {
+  it('names a still accepted-format snapshot from its bytes', async () => {
+    const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).resolves.toBe(
+      'png'
+    );
+  });
+
+  it('rejects an active SVG instead of staging it under the public tree', async () => {
+    // Metadata alone reports `svg` and the extension map would stage it
+    // as same-origin active content while every hash check passes.
+    const snapshot = await readFile(
+      join(GENERATOR_FIXTURES, 'vector-image.svg')
+    );
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).rejects.toThrow(
+      /decodes as "svg"/
+    );
+  });
+
+  it('rejects animated bytes before naming a suffix', async () => {
+    const snapshot = await readFile(
+      join(GENERATOR_FIXTURES, 'anim-2frame.webp')
+    );
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).rejects.toThrow(
+      /animated/
+    );
+  });
+
+  it('rejects a still GIF: not a generator input, so no suffix', async () => {
+    // Single-frame GIF passes the stills and full-decode gates but is
+    // outside the generator's accepted inputs — staging it would
+    // publish a baseline the pilot can never optimize.
+    const snapshot = await sharp({
+      create: {
+        background: '#ffffff',
+        channels: 3,
+        height: 4,
+        width: 4,
+      },
+    })
+      .gif()
+      .toBuffer();
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).rejects.toThrow(
+      /decodes as "gif"/
+    );
+  });
+
+  it('rejects a header-readable but pixel-truncated snapshot', async () => {
+    const snapshot = await readFile(
+      join(GENERATOR_FIXTURES, 'corrupt-truncated.jpg')
+    );
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).rejects.toThrow(
+      /does not fully decode/
+    );
   });
 });

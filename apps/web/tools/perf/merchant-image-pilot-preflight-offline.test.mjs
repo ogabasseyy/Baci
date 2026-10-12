@@ -205,6 +205,26 @@ async function setupOfflineAssets(assets) {
       )
     )
   );
+  // The fail-closed fillers gate requires the real committed filler
+  // bytes: copy them from the repo public tree so the committed pins
+  // verify against genuine files.
+  const fillersDir = join(publicDir, '__pilot', 'fillers');
+  await mkdir(fillersDir, { recursive: true });
+  const committedFillers = join(
+    here,
+    '..',
+    '..',
+    'public',
+    '__pilot',
+    'fillers'
+  );
+  for (const name of [
+    'grid-filler-600x400-a.png',
+    'grid-filler-600x400-b.png',
+    'grid-filler-600x400-c.png',
+  ]) {
+    await copyFile(join(committedFillers, name), join(fillersDir, name));
+  }
   return {
     acceptancesPath,
     assets: staged,
@@ -827,6 +847,16 @@ describe('preflight offline gate', () => {
       ])
     );
     expected[only.stagedOriginal] = only.sourceSha;
+    // Plus the committed filler pins (the PIN, not the disk digest):
+    // the fail-closed fillers gate verifies the staged bytes against
+    // the boot gate's pins and records those.
+    const { loadCommittedFillerPins } = await import(
+      './merchant-image-pilot-preflight-offline-staged.mjs'
+    );
+    const pins = await loadCommittedFillerPins();
+    for (const [name, pin] of Object.entries(pins)) {
+      expected[`/__pilot/fillers/${name}`] = pin;
+    }
     expect(report.stagedHashes).toEqual(expected);
   });
 });

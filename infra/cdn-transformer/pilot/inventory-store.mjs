@@ -66,9 +66,13 @@ async function isStaleOwnerText(lockDir, owner) {
     // been unparsable past the grace is a crashed holder's.
     return await isBeyondOwnerGrace(lockDir);
   }
-  if (!Number.isInteger(parsed.pid)) {
-    // No identity to probe; our writer always records an integer pid, so
-    // this file is not from a live holder of ours.
+  // Strictly positive: kill(0, 0) probes the current process GROUP
+  // (always live) and negative PIDs probe process groups, so a pid-0 or
+  // negative owner would classify as permanently live and make every
+  // acquisition time out. Our writer always records a positive integer
+  // pid, and a torn write cannot parse as valid JSON, so any other
+  // value is a corrupt owner — stale, never held.
+  if (!Number.isInteger(parsed.pid) || parsed.pid <= 0) {
     return true;
   }
   // Age alone never proves death: a stalled-but-live owner past any

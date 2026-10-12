@@ -1,11 +1,12 @@
-import { writeFile } from 'node:fs/promises';
+import { open, rename } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCliArgs } from './cli-args.mjs';
 import {
   MAX_INVENTORY_BYTES,
   MAX_QUALITY_SHEET_EMBEDDED_BYTES,
 } from './constants.mjs';
-import { readUpToBytes } from './disk-guards.mjs';
+import { fsyncDir, isUnsupportedSyncError, readUpToBytes } from './disk-guards.mjs';
 import {
   buildEncoderIdentity,
   currentRecipeId,
@@ -261,6 +262,37 @@ export async function readSlotsGeometry(slotsPath) {
   }
 }
 
+// All-or-nothing sheet publish: a direct write truncates the final
+// path first, so an interruption or filesystem error leaves a
+// valid-looking HTML prefix showing only the early assets — and a
+// reviewer approves an incomplete sample. Temp + sync + atomic rename
+// (same pattern as the inventory publish) leaves the old sheet or the
+// new one, never a prefix.
+export async function publishQualitySheet(out, html, options = {}) {
+  const tmp = join(
+    dirname(out),
+    `.quality-sheet-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
+  );
+  const handle = await open(tmp, 'w');
+  try {
+    await handle.writeFile(html);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(tmp, out);
+  const syncDir = options.fsyncDir ?? fsyncDir;
+  try {
+    await syncDir(dirname(out));
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      throw new PilotSheetError(
+        `sheet directory sync failed (${error?.code ?? 'unknown'})`
+      );
+    }
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   (async () => {
     const args = parseCliArgs(process.argv.slice(2), [
@@ -277,7 +309,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       outputRoot: args['output-root'],
       slots,
     });
-    await writeFile(args.out, html);
+    await publishQualitySheet(args.out, html);
     console.log(JSON.stringify({ bytes: html.length, out: args.out }));
   })().catch((error) => {
     console.error(error instanceof Error ? error.message : error);

@@ -11,7 +11,7 @@ import { acquireEncoderLock } from './encoder-lock.mjs';
 import { runJob } from './generate-job.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { loadGeneration } from './manifest-store.mjs';
-import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
+import { assertConfinedChild, parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
@@ -65,6 +65,27 @@ for (const child of ['claims', 'generations', 'reports']) {
     assert.deepEqual(await readdir(outside), []);
   });
 }
+
+test('report re-confinement refuses a mid-run reports swap', async () => {
+  // The setup check ran a whole generation ago: a reports dir swapped
+  // for a symlink (or a file squat) after setup must refuse before the
+  // final write instead of publishing outside the output root.
+  const { mkdtemp } = await import('node:fs/promises');
+  const { realpath } = await import('node:fs/promises');
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'pilot-reconfine-')));
+  for (const child of ['claims', 'generations', 'reports']) {
+    await mkdir(join(root, child));
+  }
+  await assertConfinedChild(root, 'reports');
+  const outside = join(root, 'outside');
+  await mkdir(outside);
+  const link = join(root, 'link');
+  await symlink(outside, link);
+  await assert.rejects(assertConfinedChild(root, 'link'), /confined directory/);
+  const squat = join(root, 'squat');
+  await writeFile(squat, 'planted');
+  await assert.rejects(assertConfinedChild(root, 'squat'), /confined directory/);
+});
 
 test('generates, commits, and reports two jobs end to end', async () => {
   const { inputRoot, outputRoot } = await setup();

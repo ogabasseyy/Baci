@@ -14,7 +14,11 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runPilotGeneration } from './generate.mjs';
 import { currentRecipeId } from './generation-identity.mjs';
-import { buildQualitySheet, readSlotsGeometry } from './quality-sheet.mjs';
+import {
+  buildQualitySheet,
+  publishQualitySheet,
+  readSlotsGeometry,
+} from './quality-sheet.mjs';
 import { parseMountCrop } from './quality-sheet-render.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -538,5 +542,26 @@ test('parseMountCrop derives canonical mounts, explicit wins, hero stays intrins
   assert.throws(
     () => parseMountCrop({ cssWidth: 40, mount: null }, 'header-logo'),
     /mount must be an object/
+  );
+});
+
+test('publishQualitySheet replaces the old sheet atomically, never a prefix', async () => {
+  const { mkdtemp, readdir } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-sheet-publish-'));
+  const out = join(dir, 'sheet.html');
+  await writeFile(out, '<old-sheet/>');
+  const html = `<html>${'x'.repeat(100_000)}</html>`;
+  await publishQualitySheet(out, html);
+  assert.equal(await readFile(out, 'utf8'), html);
+  assert.deepEqual(await readdir(dir), ['sheet.html']);
+  // A real directory-sync failure is loud (unsupported platforms stay
+  // silent, matching the inventory publish downgrade philosophy).
+  await assert.rejects(
+    publishQualitySheet(join(dir, 'sheet2.html'), html, {
+      fsyncDir: async () => {
+        throw Object.assign(new Error('nope'), { code: 'EIO' });
+      },
+    }),
+    /sheet directory sync failed/
   );
 });

@@ -113,6 +113,26 @@ describe('submitUtilityCheckout', () => {
     });
   });
 
+  it('rejects 2xx bodies missing the success contract (reference + status)', async () => {
+    // A malformed 2xx must NOT finalize success: the hook would
+    // forget the key and a retry would mint fresh and double-charge
+    // a committed debit. Ambiguous error (no status) keeps the key.
+    for (const body of [
+      {},
+      { amount: 100 },
+      { amount: 100, reference: 'REF1' },
+      { amount: 100, reference: 'REF1', status: 'weird' },
+      { amount: 100, reference: '', status: 'successful' },
+    ]) {
+      mockFetchWithCsrf.mockResolvedValueOnce(jsonResponse(body));
+      const result = await submitUtilityCheckout(baseRequest);
+      expect(result).toEqual({
+        kind: 'error',
+        message: 'Payment checkout returned an invalid response',
+      });
+    }
+  });
+
   it('reports a processing wallet purchase without failing', async () => {
     mockFetchWithCsrf.mockResolvedValue(
       jsonResponse({ amount: 100, reference: 'REF1', status: 'processing' })

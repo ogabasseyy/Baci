@@ -18,11 +18,15 @@ const RECONCILABLE_VTU_TYPES = [
 // restored to pending (requery without a vendReference is PENDING
 // forever) and pre-vend interruptions (debit RPC / walletDebited
 // write failures — reference-less, so the reconcile claim declines
-// them). Plain pending rows (never debited: mapping-less orphans,
-// PK-race leftovers) stay excluded: the reconciler must never touch
-// them.
+// them). Failed rows persist BEFORE their refund is attempted, so a
+// transient reversal failure would strand the debit when the customer
+// closes the client instead of retrying (the 500 keeps the key, but
+// only a retry re-drives it): failed+debited+unrefunded rows are
+// selected so the failed branch confirms the refund. Plain pending
+// rows (never debited: mapping-less orphans, PK-race leftovers) and
+// already-refunded failures stay excluded.
 const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null))';
+  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,metadata->>walletDebited.eq.true,metadata->>refundIssued.is.null)';
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

@@ -174,13 +174,13 @@ export function recallPendingVtuKey(
 }
 
 /**
- * Frees one registry slot. Past-TTL entries go first (live recall
- * would drop them on access anyway, regardless of reference state).
- * Otherwise the oldest within-TTL entry goes — no client-side signal
- * proves terminality, so this documented last resort needs 33 live
- * purchases inside 24h to matter; staleness is deliberately NOT a
- * victim criterion (a referenced entry older than five minutes may
- * still be processing, and the stale branch needs its key).
+ * Frees one registry slot by dropping a past-TTL entry (live recall
+ * would drop it on access anyway, regardless of reference state).
+ * When every entry is still live the registry OVERFLOWS past the cap
+ * instead of evicting: no client-side signal proves terminality, so
+ * deleting a live attempt would lose deduplication and its retry
+ * would mint fresh and double-debit. Entries are tiny and the 24h
+ * TTL bounds retention, so overflow is cheap and self-healing.
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
@@ -189,11 +189,6 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
       forgottenScopedKeys.set(scoped, now);
       return;
     }
-  }
-  const oldest = pendingPurchases.keys().next();
-  if (!oldest.done) {
-    pendingPurchases.delete(oldest.value);
-    forgottenScopedKeys.set(oldest.value, now);
   }
 }
 

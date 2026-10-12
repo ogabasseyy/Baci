@@ -18,6 +18,7 @@ import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provide
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
+import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
 import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
@@ -2408,45 +2409,6 @@ async function executeVtuPurchase(
     // token delivery (and any biller-side phone validation) works correctly.
     getCustomerPhoneForBill(row)
   );
-}
-
-/**
- * Best-effort restore for pre-vend interruptions (debit RPC error,
- * walletDebited metadata write failure): flips the claimed row back
- * to pending with a resume marker so client retry AND the cron
- * re-drive it (claim → debit, idempotent → vend). Without this the
- * row sits processing with no provider reference, which the
- * reconciliation claim declines — debited with no vend or refund,
- * forever. Failures of THIS write only log: the original throw
- * below still surfaces, preserving today's behavior in that case.
- */
-async function restoreInterruptedPreVendVtuRow({
-  errorMessage,
-  row,
-  supabase,
-}: {
-  errorMessage: string;
-  row: VtuTransactionRow;
-  supabase: SupabaseClient;
-}): Promise<void> {
-  const { error } = await supabase
-    .from('vtu_transactions')
-    .update({
-      error_message: errorMessage,
-      metadata: {
-        ...(row.metadata ?? {}),
-        preVendInterruptedAt: new Date().toISOString(),
-      },
-      status: 'pending',
-    })
-    .eq('id', row.id)
-    .eq('status', 'processing');
-  if (error) {
-    console.error('Failed to restore interrupted pre-vend VTU row:', {
-      error: error.message,
-      transactionId: row.id,
-    });
-  }
 }
 
 export async function fulfillPendingVtuTransaction({

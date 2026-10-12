@@ -165,7 +165,11 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(descriptor)).toBeNull();
   });
 
-  it('evicts the oldest entry past the cap', () => {
+  it('overflows past the cap rather than evicting live attempts', () => {
+    // Evicting a live (unconfirmed) entry would lose deduplication:
+    // retrying it would mint fresh and double-debit. Only past-TTL
+    // entries are eviction victims; live overflow is cheap and the
+    // 24h TTL bounds retention.
     const descriptors = Array.from(
       { length: 40 },
       (_, index) =>
@@ -174,16 +178,17 @@ describe('pending-vtu-idempotency', () => {
     for (const descriptor of descriptors) {
       rememberPendingVtuPurchase(descriptor, `key-${descriptor}`);
     }
-    expect(recallPendingVtuKey(descriptors[0])).toBeNull();
+    expect(recallPendingVtuKey(descriptors[0])).toBe(`key-${descriptors[0]}`);
     expect(recallPendingVtuKey(descriptors[descriptors.length - 1])).toBe(
       `key-${descriptors[descriptors.length - 1]}`
     );
   });
 
-  it('protects young referenced entries (even stale) from eviction', () => {
+  it('keeps stale referenced entries past the cap (no live victim exists)', () => {
     // Staleness is deliberately NOT a victim criterion: a referenced
     // entry older than five minutes may still be processing, and the
-    // stale branch needs its key. The oldest live entry goes instead.
+    // stale branch needs its key. With every entry live, the 33rd
+    // remember overflows instead of evicting.
     clearPendingVtuKeys();
     jest.useFakeTimers();
     try {
@@ -198,10 +203,10 @@ describe('pending-vtu-idempotency', () => {
           1000
       );
       rememberPendingVtuPurchase('cap-new', 'key-new');
-      // Youngest-but-stale survivor kept (referenced ⇒ recallable iff present)…
+      // Stale-but-referenced survivor kept…
       expect(recallPendingVtuKey('cap-31')).toBe('key-31');
-      // …oldest live entry evicted instead.
-      expect(recallPendingVtuKey('cap-0')).toBeNull();
+      // …oldest live entry kept too (overflow, not eviction)…
+      expect(recallPendingVtuKey('cap-0')).toBe('key-0');
       expect(recallPendingVtuKey('cap-new')).toBe('key-new');
     } finally {
       jest.useRealTimers();

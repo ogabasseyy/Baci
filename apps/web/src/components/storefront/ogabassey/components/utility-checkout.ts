@@ -85,6 +85,23 @@ export function isUtilityCheckoutResponse(
   );
 }
 
+/**
+ * Strict wallet-only success contract (mirrors mobile's
+ * WalletOnlyVtuResponseSchema): a 2xx body is a success ONLY with a
+ * non-empty reference and a successful|processing status. Anything
+ * else is malformed — the caller must keep the idempotency key (the
+ * debit may have committed) instead of finalizing success.
+ */
+export function isWalletOnlySuccessResponse(
+  data: UtilityCheckoutResponse
+): data is UtilityCheckoutResponse & { reference: string; status: string } {
+  return (
+    typeof data.reference === 'string' &&
+    data.reference.length > 0 &&
+    (data.status === 'successful' || data.status === 'processing')
+  );
+}
+
 export function getCheckoutErrorMessage(data: unknown) {
   return isUtilityCheckoutResponse(data) && data.error
     ? data.error

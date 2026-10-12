@@ -2,6 +2,7 @@ import { fetchWithCsrf } from '@/lib/api-client';
 import {
   getCheckoutErrorMessage,
   isUtilityCheckoutResponse,
+  isWalletOnlySuccessResponse,
   parseUtilityCheckoutCashback,
   type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
@@ -94,6 +95,13 @@ export const submitUtilityCheckout = async ({
       };
     }
     if (!isUtilityCheckoutResponse(parsedData)) {
+      throw new Error('Payment checkout returned an invalid response');
+    }
+    if (!isWalletOnlySuccessResponse(parsedData)) {
+      // 2xx without a reference + successful|processing status: the
+      // debit may have committed, so this MUST NOT finalize success
+      // (which forgets the key — a retry would mint fresh and
+      // double-charge). Ambiguous error keeps the key for replay.
       throw new Error('Payment checkout returned an invalid response');
     }
     const data = parsedData;

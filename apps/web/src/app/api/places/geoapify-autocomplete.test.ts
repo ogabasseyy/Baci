@@ -79,6 +79,13 @@ describe('Geoapify address mapping', () => {
       1
     );
   });
+  it('lowercases an uppercase country for the filter and the match check', async () => {
+    respond([result]);
+    const predictions = await fetchGeoapifyPredictions('Allen Avenue', 'NG');
+    expect(predictions).toHaveLength(1);
+    const url = new URL(String(mockFetch.mock.calls[0][0]));
+    expect(url.searchParams.get('filter')).toBe('countrycode:ng');
+  });
   it.each([
     undefined,
     '',

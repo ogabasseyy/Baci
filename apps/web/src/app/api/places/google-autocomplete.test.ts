@@ -66,6 +66,14 @@ describe('Google autocomplete provider boundary', () => {
     expect(reserveGooglePlacesRequest).toHaveBeenCalledWith('autocomplete');
     expect(JSON.stringify(result)).not.toContain('places-test-key');
   });
+  it('lowercases an uppercase country code for direct callers', async () => {
+    vi.mocked(fetchLegacyPlacesJson).mockResolvedValue(
+      legacyResponse({ status: 'OK', predictions: [] })
+    );
+    await fetchGoogleAutocomplete('Lagos', 'session', 'NG');
+    const [rawUrl] = vi.mocked(fetchLegacyPlacesJson).mock.calls[0];
+    expect(new URL(rawUrl).searchParams.get('components')).toBe('country:ng');
+  });
   it('uses the Maps key and description when optional formatting is missing', async () => {
     vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
     vi.mocked(fetchLegacyPlacesJson).mockResolvedValue(

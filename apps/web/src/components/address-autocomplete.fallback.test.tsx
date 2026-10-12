@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { type ComponentProps, type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { getPlaceDetails, getPlacePredictions } from '@/lib/google-places';
+import {
+  type GooglePlaceDetails,
+  getPlaceDetails,
+  getPlacePredictions,
+} from '@/lib/google-places';
 import { AddressAutocomplete } from './address-autocomplete';
 
 // Exit animations are browser concerns; selection/reset assertions are immediate.
@@ -171,6 +175,58 @@ it.each([
   expect(
     screen.queryByRole('link', { name: 'Geoapify' })
   ).not.toBeInTheDocument();
+});
+
+it.each([
+  'Reset form',
+  'Load another address',
+])('cancels the pending debounced lookup when the parent invokes %s', async (action) => {
+  vi.mocked(getPlacePredictions).mockResolvedValue([geo]);
+  render(<ControlledAddress />);
+  const input = screen.getByRole('textbox', { name: 'Address' });
+  fireEvent.change(input, { target: { value: 'Allen Avenue' } });
+  // Reset before the debounce fires: no provider call, no stale dropdown.
+  fireEvent.click(screen.getByRole('button', { name: action }));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  expect(getPlacePredictions).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole('button', { name: /20 Allen Avenue/ })
+  ).not.toBeInTheDocument();
+});
+
+it('discards a pending Google details lookup when the parent resets the field', async () => {
+  vi.mocked(getPlacePredictions).mockResolvedValue([
+    {
+      placeId: 'google-id',
+      mainText: 'Allen Avenue',
+      secondaryText: 'Lagos',
+      fullText: 'Allen Avenue, Lagos',
+    },
+  ]);
+  let resolveDetails!: (value: GooglePlaceDetails) => void;
+  vi.mocked(getPlaceDetails).mockReturnValue(
+    new Promise<GooglePlaceDetails>((resolve) => {
+      resolveDetails = resolve;
+    })
+  );
+  render(<ControlledAddress />);
+  const input = screen.getByRole('textbox', { name: 'Address' });
+  await search(input, 'Allen Avenue');
+  await act(async () =>
+    fireEvent.click(screen.getByRole('button', { name: /Allen Avenue/ }))
+  );
+  // Parent resets while the Details request is in flight.
+  fireEvent.click(screen.getByRole('button', { name: 'Reset form' }));
+  await act(async () =>
+    resolveDetails({
+      placeId: 'google-id',
+      formattedAddress: 'Allen Avenue, Lagos',
+      city: 'Lagos',
+    })
+  );
+  expect(input).toHaveValue('');
 });
 
 it.each([

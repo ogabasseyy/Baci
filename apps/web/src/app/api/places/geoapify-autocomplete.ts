@@ -19,12 +19,16 @@ export async function fetchGeoapifyPredictions(
   if (!(await reserveGeoapifyRequest()))
     throw new GeoapifyAutocompleteError(429);
 
+  // Geoapify documents lowercase countrycode filters; normalize once so
+  // direct callers cannot desync the request filter from the match check.
+  const normalizedCountry = country?.toLowerCase();
   const url = new URL('https://api.geoapify.com/v1/geocode/autocomplete');
   url.searchParams.set('text', input);
   url.searchParams.set('format', 'json');
   url.searchParams.set('limit', '5');
   url.searchParams.set('apiKey', apiKey);
-  if (country) url.searchParams.set('filter', `countrycode:${country}`);
+  if (normalizedCountry)
+    url.searchParams.set('filter', `countrycode:${normalizedCountry}`);
 
   try {
     const response = await fetch(url.toString(), {
@@ -42,9 +46,9 @@ export async function fetchGeoapifyPredictions(
       .filter(
         // The request already restricts country; reject only conflicting metadata.
         (result) =>
-          !country ||
+          !normalizedCountry ||
           !result.country_code ||
-          result.country_code.toLowerCase() === country
+          result.country_code.toLowerCase() === normalizedCountry
       )
       .map((result) => {
         const placeId = `geoapify:${result.place_id}`;

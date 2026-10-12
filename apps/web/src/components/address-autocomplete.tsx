@@ -45,24 +45,35 @@ export function AddressAutocomplete({
     provider: 'google' | 'geoapify';
     values: string[];
   } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const predictionRequestId = useRef(0);
+  const placeDetailsRequestId = useRef(0);
   // Sync internal value with the controlled prop during render (prev-prop
   // compare) so users never see a stale frame between commits.
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
     if (value !== undefined) {
-      if (value !== internalValue) clearProviderError();
+      if (value !== internalValue) {
+        // Invalidate pending work like handleClear: a pending debounce or
+        // in-flight request would otherwise restore stale suggestions or
+        // overwrite the newly loaded address via onSelect.
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        predictionRequestId.current += 1;
+        placeDetailsRequestId.current += 1;
+        setPredictions([]);
+        setIsOpen(false);
+        setIsLoading(false);
+        clearProviderError();
+      }
       setInternalValue(value);
       if (selectedAddress && !selectedAddress.values.includes(value)) {
         setSelectedAddress(null);
       }
     }
   }
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
-  const predictionRequestId = useRef(0);
-  const placeDetailsRequestId = useRef(0);
 
   // Initialize session token and mark as mounted
   useEffect(() => {

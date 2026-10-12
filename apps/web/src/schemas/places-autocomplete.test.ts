@@ -22,6 +22,15 @@ describe('autocomplete request schema', () => {
       input: '',
     });
   });
+  it.each([
+    'other',
+    'false',
+    '',
+  ])('ignores unknown fallback values instead of rejecting: %j', (fallback) => {
+    expect(
+      placesAutocompleteSchema.safeParse({ input: 'Lagos', fallback }).success
+    ).toBe(true);
+  });
   it('accepts the exact search and token length bounds', () => {
     expect(
       placesAutocompleteSchema.safeParse({
@@ -36,7 +45,7 @@ describe('autocomplete request schema', () => {
     { input: 'x'.repeat(301) },
     { input: 'Lagos', country: 'Nigeria' },
     { input: 'Lagos', country: 'N1' },
-    { input: 'Lagos', fallback: 'other' },
+    { input: 'Lagos', fallback: 123 },
     { input: 'Lagos', sessionToken: 's'.repeat(257) },
   ])('rejects malformed request %j', (input) => {
     expect(placesAutocompleteSchema.safeParse(input).success).toBe(false);

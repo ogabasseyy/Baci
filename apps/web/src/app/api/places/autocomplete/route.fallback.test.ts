@@ -103,6 +103,29 @@ describe('address provider fallback', () => {
     expect(JSON.stringify(data)).not.toContain('test-geo-key');
   });
 
+  it.each([
+    'other',
+    'false',
+  ])('ignores an unknown fallback value without failing or falling back: %s', async (fallback) => {
+    mockFetch.mockResolvedValueOnce(
+      respond(
+        createGoogleResponse([
+          {
+            placeId: 'google-id',
+            mainText: 'Lagos',
+            fullText: 'Lagos, Nigeria',
+          },
+        ])
+      )
+    );
+    const response = await GET(
+      makeRequest({ fallback, input: 'Lagos', country: 'ng' })
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).predictions[0].placeId).toBe('google-id');
+    expect(reserveGeoapifyRequest).not.toHaveBeenCalled();
+  });
+
   it('does not call Google after the application monthly cap', async () => {
     vi.mocked(reserveGooglePlacesRequest).mockResolvedValue(false);
     mockFetch.mockResolvedValueOnce(respond({ results: [geoResult] }));

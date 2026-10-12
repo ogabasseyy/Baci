@@ -35,7 +35,8 @@ export async function fetchGoogleAutocomplete(
   url.searchParams.set('input', input);
   url.searchParams.set('key', apiKey);
   if (sessionToken) url.searchParams.set('sessiontoken', sessionToken);
-  if (country) url.searchParams.set('components', `country:${country}`);
+  if (country)
+    url.searchParams.set('components', `country:${country.toLowerCase()}`);
 
   try {
     const result = await fetchLegacyPlacesJson<LegacyAutocompleteResponse>(

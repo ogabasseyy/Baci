@@ -178,6 +178,7 @@ describe('receiptDetailQueryOptions', () => {
           description: 'Paystack DVA payment',
           dva_account_number: '1111111111',
           gateway: 'paystack',
+          order_id: 'order-1',
           status: 'completed',
           transaction_type: 'payment',
         },

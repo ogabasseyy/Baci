@@ -36,6 +36,13 @@ const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;
 const RECONCILIATION_PAGE_WINDOW_MS = 5 * 60 * 1000;
+// Worst-case single-row cost: overlay refresh verify (~30s Monnify
+// financial) + fulfill requery (2 x 15s Kuda status) + vend (up to
+// 30s) + settlement overhead. Rows stop starting while less than
+// this remains before the deadline, so a slow batch defers leftovers
+// to the next cron tick instead of dying mid-row at maxDuration and
+// stranding charged rows across page rotations (Codex R43 rnTRm).
+const RECONCILIATION_SINGLE_ROW_WORST_CASE_MS = 120_000;
 
 interface ProcessingVtuCandidate {
   id: string;
@@ -84,11 +91,21 @@ function getReconciliationPageOffset({
   return pageIndex * pageSize;
 }
 
+/**
+ * Drives one page of reconciliation candidates. `deadlineMs` is the
+ * invoker's hard stop (epoch ms — the cron passes invocation start +
+ * maxDuration): rows stop starting while less than a worst-case
+ * single row remains, and leftovers ride the next page rotation.
+ * Required: unbounded sequential batches can overrun maxDuration
+ * and strand charged rows mid-backlog (Codex R43 rnTRm).
+ */
 export async function reconcileProcessingVtuTransactions({
+  deadlineMs,
   limit,
   now = new Date(),
   supabase,
 }: {
+  deadlineMs: number;
   limit?: number;
   now?: Date;
   supabase: SupabaseClient;
@@ -132,7 +149,7 @@ export async function reconcileProcessingVtuTransactions({
 
   const candidates = (data ?? []) as ProcessingVtuCandidate[];
   const summary: VtuProcessingReconciliationSummary = {
-    checked: candidates.length,
+    checked: 0,
     errored: 0,
     errors: [],
     failed: 0,
@@ -141,6 +158,16 @@ export async function reconcileProcessingVtuTransactions({
   };
 
   for (const candidate of candidates) {
+    if (Date.now() >= deadlineMs - RECONCILIATION_SINGLE_ROW_WORST_CASE_MS) {
+      console.warn(
+        'VTU reconciliation stopping early: route deadline approaching:',
+        {
+          checked: summary.checked,
+          deferred: candidates.length - summary.checked,
+        }
+      );
+      break;
+    }
     try {
       // No client values on this path: refresh a server-minted
       // validation reference (airtime) so the re-drive below does
@@ -168,6 +195,8 @@ export async function reconcileProcessingVtuTransactions({
         message: getErrorMessage(error),
         transactionId: candidate.id,
       });
+    } finally {
+      summary.checked += 1;
     }
   }
 

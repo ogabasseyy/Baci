@@ -500,6 +500,70 @@ describe('GET /api/vtu/history', () => {
     });
   });
 
+  it('does not let reference-less rows starve eligible rows of backfill budget', async () => {
+    // Three reference-less processing rows sit ahead of an eligible
+    // row. They would be rejected downstream anyway; if they consumed
+    // the 3-slot MAX_TOKEN_BACKFILL_SCHEDULES budget first, the
+    // eligible row would never be scheduled (Codex R43 rnTRj).
+    const { GET } = await import('./route');
+    const referenceLess = (id: string) => ({
+      amount: '2500',
+      biller_name: 'EKEDC NG',
+      created_at: '2026-04-08T12:00:00.000Z',
+      customer_cashback: '0',
+      error_message: null,
+      id,
+      metadata: {},
+      request_reference: `VTU-${id}`,
+      status: 'processing',
+      transaction_id: null,
+      type: 'electricity',
+    });
+    transactionsData = [
+      referenceLess('tx-ref-1'),
+      referenceLess('tx-ref-2'),
+      referenceLess('tx-ref-3'),
+      {
+        amount: '2500',
+        biller_name: 'EKEDC NG',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_cashback: '0',
+        id: 'tx-eligible',
+        metadata: {},
+        request_reference: 'VTU-eligible',
+        status: 'successful',
+        transaction_id: 'kuda-bill-eligible',
+        type: 'electricity',
+      },
+    ];
+    paymentRowsData = [];
+    mockBackfillVtuVoucherPin.mockResolvedValue('1234-5678');
+
+    const response = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(response.status).toBe(200);
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+
+    const scheduledBackfillClaim = mockAfter.mock.calls[0]?.[0] as
+      | (() => Promise<void>)
+      | undefined;
+    expect(scheduledBackfillClaim).toBeDefined();
+    if (!scheduledBackfillClaim) {
+      throw new Error('Expected voucher-pin backfill claim to be scheduled');
+    }
+    await scheduledBackfillClaim();
+
+    expect(vtuTransactionUpdateEqCalls).toContainEqual(['id', 'tx-eligible']);
+    expect(vtuTransactionUpdatePayloads).toEqual([
+      {
+        metadata: expect.objectContaining({
+          voucherPinBackfillScheduledAt: expect.any(String),
+        }),
+      },
+    ]);
+  });
+
   it('schedules processing bill reconciliation from history polling', async () => {
     const { GET } = await import('./route');
     transactionsData = [

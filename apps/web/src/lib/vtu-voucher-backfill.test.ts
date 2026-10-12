@@ -7,6 +7,7 @@ import {
 import {
   extractMetadataField,
   hasRecentBackfillSchedule,
+  isReferenceLessProcessingTransaction,
   isString,
   MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS,
   normalizeMetadata,
@@ -138,6 +139,37 @@ describe('vtu-voucher-backfill', () => {
         [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date(
           Date.now() - TOKEN_BACKFILL_DEDUPE_WINDOW_MS - 1000
         ).toISOString(),
+      })
+    ).toBe(false);
+  });
+
+  it('flags only processing rows with neither provider reference nor response', () => {
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'processing',
+        transaction_id: null,
+      })
+    ).toBe(true);
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'processing',
+        transaction_id: 'kuda-ref-1',
+      })
+    ).toBe(false);
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: 'Accepted',
+        status: 'processing',
+        transaction_id: null,
+      })
+    ).toBe(false);
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'successful',
+        transaction_id: null,
       })
     ).toBe(false);
   });

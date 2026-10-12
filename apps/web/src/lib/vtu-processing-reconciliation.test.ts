@@ -79,6 +79,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       .mockResolvedValueOnce({ status: 'processing' });
 
     const result = await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
       limit: 2,
       now: new Date('2026-05-07T21:14:00.000Z'),
       supabase: supabase as never,
@@ -168,6 +169,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const result = await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
       limit: 1,
       now: new Date('2026-05-07T21:14:00.000Z'),
       supabase: supabase as never,
@@ -197,6 +199,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
       limit: 25,
       now: new Date('1970-01-01T00:05:00.000Z'),
       supabase: supabase as never,
@@ -222,6 +225,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       .mockResolvedValueOnce({ status: 'failed' });
 
     const result = await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
       supabase: supabase as never,
     });
 
@@ -251,7 +255,10 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     await expect(
-      reconcileProcessingVtuTransactions({ supabase: supabase as never })
+      reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() + 3_600_000,
+        supabase: supabase as never,
+      })
     ).rejects.toThrow(
       'Failed to fetch processing VTU transactions: database timeout'
     );
@@ -267,10 +274,76 @@ describe('reconcileProcessingVtuTransactions', () => {
     const supabase = createSupabase({ countQuery, dataQuery });
 
     await expect(
-      reconcileProcessingVtuTransactions({ supabase: supabase as never })
+      reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() + 3_600_000,
+        supabase: supabase as never,
+      })
     ).rejects.toThrow(
       'Failed to count processing VTU transactions: count timeout'
     );
     expect(dataQuery.select).not.toHaveBeenCalled();
+  });
+
+  it('starts nothing when the deadline is already exhausted', async () => {
+    const countQuery = createProcessingQuery({ count: 2 });
+    const dataQuery = createProcessingQuery({
+      data: [{ id: 'tx-1' }, { id: 'tx-2' }],
+    });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const result = await reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() - 1_000,
+        limit: 2,
+        supabase: supabase as never,
+      });
+
+      expect(result).toMatchObject({ checked: 0 });
+      expect(fulfillPendingVtuTransactionMock).not.toHaveBeenCalled();
+      expect(overlayReplayAttributesMock).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'VTU reconciliation stopping early: route deadline approaching:',
+        expect.objectContaining({ checked: 0, deferred: 2 })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('stops mid-batch once remaining budget drops below one worst-case row', async () => {
+    // 300s deadline, 120s single-row reserve: rows cost 100s each, so
+    // rows 1-2 run (t=0/100, remaining 300/200) and row 3 stops
+    // (t=200, remaining 100 < 120). Leftovers ride the next rotation
+    // instead of dying mid-row at maxDuration (Codex R43 rnTRm).
+    vi.useFakeTimers();
+    const countQuery = createProcessingQuery({ count: 3 });
+    const dataQuery = createProcessingQuery({
+      data: [{ id: 'tx-1' }, { id: 'tx-2' }, { id: 'tx-3' }],
+    });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockImplementation(async () => {
+      await vi.advanceTimersByTimeAsync(100_000);
+      return { status: 'processing' };
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const result = await reconcileProcessingVtuTransactions({
+        deadlineMs: Date.now() + 300_000,
+        limit: 3,
+        supabase: supabase as never,
+      });
+
+      expect(result).toMatchObject({ checked: 2, processing: 2 });
+      expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'VTU reconciliation stopping early: route deadline approaching:',
+        expect.objectContaining({ checked: 2, deferred: 1 })
+      );
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

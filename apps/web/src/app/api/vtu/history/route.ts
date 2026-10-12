@@ -8,6 +8,7 @@ import {
 import {
   extractMetadataField,
   hasRecentBackfillSchedule,
+  isReferenceLessProcessingTransaction,
   isString,
   MAX_TOKEN_BACKFILL_SCHEDULES,
   normalizeMetadata,
@@ -228,7 +229,12 @@ export async function GET(request: NextRequest) {
         candidate.voucherPin !== null ||
         !shouldBackfillForStatus(candidate.transaction.status) ||
         !shouldBackfillForType(candidate.transaction.type) ||
-        hasRecentBackfillSchedule(candidate.metadata)
+        hasRecentBackfillSchedule(candidate.metadata) ||
+        // Pre-filter BEFORE the 3-slot budget: reference-less rows
+        // would be rejected downstream anyway, and letting them
+        // consume slots starves eligible rows behind them forever
+        // (Codex R43 rnTRj).
+        isReferenceLessProcessingTransaction(candidate.transaction)
       ) {
         continue;
       }

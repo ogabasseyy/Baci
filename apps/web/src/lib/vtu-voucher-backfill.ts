@@ -92,6 +92,33 @@ export function shouldBackfillForStatus(status: unknown): boolean {
   return status === 'successful' || status === 'processing';
 }
 
+/**
+ * True for processing rows with neither provider reference nor
+ * response (mirrors the reconciliation-claim precondition). Such
+ * rows can never resolve a pin through fulfill, and scheduling
+ * them would bump updated_at (postponing pre-vend recovery) while
+ * consuming backfill budget ahead of eligible rows — so candidate
+ * builders must filter them BEFORE the budget, and the scheduler
+ * re-checks defensively (Codex R42 rm5ao, R43 rnTRj).
+ */
+export function isReferenceLessProcessingTransaction(
+  transaction: Pick<
+    VoucherPinBackfillTransaction,
+    'error_message' | 'status' | 'transaction_id'
+  >
+): boolean {
+  if (transaction.status !== 'processing') {
+    return false;
+  }
+  const providerReference = isString(transaction.transaction_id)
+    ? transaction.transaction_id.trim()
+    : '';
+  const providerResponse = isString(transaction.error_message)
+    ? transaction.error_message.trim()
+    : '';
+  return providerReference === '' && providerResponse === '';
+}
+
 function getBackfillAttempts(metadata: MetadataRecord): number {
   const raw = metadata[VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY];
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
@@ -219,15 +246,6 @@ export async function scheduleVoucherPinBackfill({
   transaction: VoucherPinBackfillTransaction;
   voucherPin: string | null;
 }): Promise<boolean> {
-  // Provider evidence, mirroring the reconciliation claim: a
-  // processing row with neither reference nor response can never
-  // resolve a pin through fulfill.
-  const providerReference = isString(transaction.transaction_id)
-    ? transaction.transaction_id.trim()
-    : '';
-  const providerResponse = isString(transaction.error_message)
-    ? transaction.error_message.trim()
-    : '';
   if (
     voucherPin !== null ||
     !shouldBackfillForStatus(transaction.status) ||
@@ -238,9 +256,9 @@ export async function scheduleVoucherPinBackfill({
     // 5-minute pre-vend staleness gate indefinitely while history
     // polling continues (Codex R42 rm5ao). Successful rows still
     // backfill (their Kuda lookup keys on the request reference).
-    (transaction.status === 'processing' &&
-      providerReference === '' &&
-      providerResponse === '')
+    // Candidate builders pre-filter this before any budget (R43
+    // rnTRj); this re-check defends direct callers.
+    isReferenceLessProcessingTransaction(transaction)
   ) {
     return false;
   }

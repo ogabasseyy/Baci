@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { lstat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { readUpToBytes } from '@/lib/merchant-image-variant-pilot/lab-config-stage-io';
 
@@ -11,11 +11,11 @@ const MAX_STAGED_ENTRIES = 256;
 const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 
 // Last fully verified snapshot: size+mtime+ctime per path, keyed by the
-// exact staged set (paths AND expected digests). Repeat GETs re-stat
+// exact staged set (paths AND expected digests). Repeat GETs re-lstat
 // (cheap) and skip the re-read/re-hash only when every entry is
 // byte-identical to a snapshot that already passed the full check. Any
-// size change, mtime change, ctime change, missing file, or changed
-// expectation re-runs the full read+hash below. ctime closes the
+// size change, mtime change, ctime change, missing file, link swap, or
+// changed expectation re-runs the full read+hash below. ctime closes the
 // mtime-pinning hole: utimens can freeze mtime after a rewrite, but the
 // write itself bumps ctime, so pinned-mtime drift always re-hashes.
 let lastVerified: { fingerprint: string; key: string } | null = null;
@@ -64,8 +64,23 @@ export async function verifyStagedBytes(
       `merchant image pilot: ${unique.length} staged lab asset(s) exceed the ${MAX_STAGED_ENTRIES}-entry verification budget; re-run pnpm pilot:stage and restart the origin`
     );
   }
+  // lstat, not stat: a symlink swapped in after startup must not
+  // validate (or cache) against its external target's bytes, and a
+  // multi-linked file can change out from under the verified hash
+  // without touching the public tree. Both refuse like a missing file
+  // so nothing unverified is served or cached.
+  const links = new Set<number>();
   const sizes = await Promise.all(
-    unique.map((entry) => stat(entry.path).catch(() => null))
+    unique.map(async (entry, index) => {
+      const info = await lstat(entry.path).catch(() => null);
+      if (!info || info.isSymbolicLink() || !info.isFile() || info.nlink > 1) {
+        if (info) {
+          links.add(index);
+        }
+        return null;
+      }
+      return info;
+    })
   );
   const totalBytes = sizes.reduce((sum, info) => sum + (info?.size ?? 0), 0);
   if (totalBytes > MAX_STAGED_BYTES) {
@@ -87,7 +102,10 @@ export async function verifyStagedBytes(
       unique.map(async (entry, index) => {
         const stated = sizes[index];
         if (stated === null) {
-          return { detail: 'missing', path: entry.path };
+          return {
+            detail: links.has(index) ? 'link rejected' : 'missing',
+            path: entry.path,
+          };
         }
         // Read bounded by the statted size: a file that grew between
         // the stat and the read (or a swapped-in giant) must fail on

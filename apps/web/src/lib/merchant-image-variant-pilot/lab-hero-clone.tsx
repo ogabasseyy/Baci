@@ -42,7 +42,7 @@ import type { ProjectedOgabasseyMobile } from './ogabassey-mobile-adapter';
 // original URL; this clone renders the pilot arm. See lab-hero-clone.test.tsx
 // for the structural parity proof (clone-control vs original).
 
-export function LabHeroSlideImage({
+function LabHeroSlideImage({
   projection,
 }: {
   projection: ProjectedOgabasseyMobile;

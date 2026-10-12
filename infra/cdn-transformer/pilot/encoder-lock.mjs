@@ -191,7 +191,6 @@ export async function acquireEncoderLock(outputRoot, options = {}) {
         if (released) {
           return;
         }
-        released = true;
         // Atomic release, mirroring the steal protocol: move the pathname
         // aside, then verify the MOVED file is our claim before deleting.
         // Read-then-unlink would delete a successor's claim published
@@ -204,10 +203,18 @@ export async function acquireEncoderLock(outputRoot, options = {}) {
         );
         try {
           await rename(path, releasing);
-        } catch {
-          // Already gone (stolen or released): nothing of ours to free.
+        } catch (error) {
+          // Only ENOENT means already gone (stolen or released). Any
+          // other failure leaves the lock live, so stay unreleased
+          // (retryable) and propagate — the caller must not report a
+          // successful release while the lock is still held.
+          if (error?.code !== 'ENOENT') {
+            throw error;
+          }
+          released = true;
           return;
         }
+        released = true;
         const moved = await readLockText(releasing).catch(() => null);
         let movedHolder = null;
         try {

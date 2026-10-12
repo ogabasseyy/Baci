@@ -172,6 +172,24 @@ test('writeConfinedFile publishes exclusively inside the checked parent', async 
   );
 });
 
+test('writeConfinedFile sync:false still confines and rebinds', async () => {
+  // Degraded-durability path: no fsync, but the exclusive create and
+  // the post-close identity rebind hold exactly as in the synced path.
+  const { readFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-confined-nosync-'));
+  await writeConfinedFile(dir, 'report.json', Buffer.from('marked'), {
+    sync: false,
+  });
+  assert.equal(await readFile(join(dir, 'report.json'), 'utf8'), 'marked');
+  await assert.rejects(
+    () =>
+      writeConfinedFile(dir, 'report.json', Buffer.from('again'), {
+        sync: false,
+      }),
+    /EEXIST/
+  );
+});
+
 test('writeConfinedFile refuses a parent swapped for a symlink', async () => {
   // A staging parent renamed away and replaced with a link after setup:
   // 'wx' alone would create through the link outside the owned tree.

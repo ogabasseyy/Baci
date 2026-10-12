@@ -176,14 +176,21 @@ async function canonicalConfinedDir(dir) {
   return realpath(dir);
 }
 
-export async function writeConfinedFile(dir, name, bytes) {
+export async function writeConfinedFile(dir, name, bytes, options = {}) {
+  const { sync = true } = options;
   const expected = await canonicalConfinedDir(dir);
   const path = join(expected, name);
   const handle = await open(path, 'wx');
   let identity;
   try {
     await handle.writeFile(bytes);
-    await handle.sync();
+    // sync:false skips only the fsync: confinement (exclusive create in
+    // the canonical parent) and the post-close rebind below still hold.
+    // Degraded-durability callers use this after classifying an
+    // unsupported-sync failure, never preemptively.
+    if (sync) {
+      await handle.sync();
+    }
     identity = await handle.stat();
   } finally {
     await handle.close();

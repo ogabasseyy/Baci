@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import {
+  link,
+  mkdtemp,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -66,6 +74,28 @@ describe('verifyStagedBytes', () => {
     await expect(
       verifyStagedBytes([entry, { ...entry, sha256: '0'.repeat(64) }])
     ).rejects.toThrow(/1 staged lab asset\(s\) unverified/);
+  });
+
+  it('rejects links even when the target bytes match the hash', async () => {
+    // A symlink or hardlink swapped in after startup: matching bytes
+    // must not validate (or cache), because the external target can
+    // change out from under the hash before Next serves the file.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-link-'));
+    const bytes = Buffer.from('staged-bytes');
+    const target = join(dir, 'target.avif');
+    await writeFile(target, bytes);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const linked = join(dir, 'linked.avif');
+    await symlink(target, linked);
+    const hardlinked = join(dir, 'hardlinked.avif');
+    await writeFile(hardlinked, bytes);
+    await link(hardlinked, join(dir, 'outside.avif'));
+    await expect(
+      verifyStagedBytes([
+        { path: linked, sha256 },
+        { path: hardlinked, sha256 },
+      ])
+    ).rejects.toThrow(/2 staged lab asset\(s\) unverified/);
   });
 
   it('fails closed on missing or drifted bytes, naming the operator fix', async () => {

@@ -1,4 +1,4 @@
-import { readFile, mkdir, lstat, realpath } from 'node:fs/promises';
+import { readFile, mkdir, lstat, realpath, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -11,7 +11,10 @@ import {
 } from './constants.mjs';
 import { createRunToken } from './claims.mjs';
 import { parseCliArgs } from './cli-args.mjs';
-import { writeConfinedFile } from './disk-guards.mjs';
+import {
+  isUnsupportedSyncError,
+  writeConfinedFile,
+} from './disk-guards.mjs';
 import { acquireEncoderLock } from './encoder-lock.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { PilotGenerateError, runJob } from './generate-job.mjs';
@@ -136,11 +139,24 @@ export async function runPilotGeneration({
   // hook lets tests win that race deterministically — the write still
   // refuses, because the binding happens inside the write itself.
   await hooks.beforeReportWrite?.();
-  await writeConfinedFile(
-    join(outputRoot, 'reports'),
-    reportName,
-    `${JSON.stringify(report, null, 2)}\n`
-  );
+  const writeReport = hooks.writeReportFile ?? writeConfinedFile;
+  const serializeReport = () => `${JSON.stringify(report, null, 2)}\n`;
+  try {
+    await writeReport(join(outputRoot, 'reports'), reportName, serializeReport());
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      throw error;
+    }
+    // Degraded durability, same as generation commits: the jobs already
+    // published, so record the marked summary unsynced rather than
+    // exiting nonzero with no report at all. The failed attempt left
+    // bytes behind; remove them so the exclusive retry owns the name.
+    report.durability = 'sync-unsupported';
+    await unlink(join(outputRoot, 'reports', reportName)).catch(() => undefined);
+    await writeReport(join(outputRoot, 'reports'), reportName, serializeReport(), {
+      sync: false,
+    });
+  }
   return { failed, ok, reused, total: results.length };
 }
 

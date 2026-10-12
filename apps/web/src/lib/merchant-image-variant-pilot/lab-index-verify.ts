@@ -4,7 +4,7 @@ import type {
   PilotInventoryBinding,
   PilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
-import { readUpToBytes } from './lab-config-stage-io';
+import { readUpToBytes } from './lab-config-stage-io-read';
 import { resolveLabGenerationDir } from './lab-generation-dir';
 import { labGenerationIdFor } from './lab-generation-identity';
 

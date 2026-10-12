@@ -2,13 +2,15 @@ import 'server-only';
 import { join } from 'node:path';
 import { isPilotLabEnabled } from '@/config/pilot-lab-enabled';
 import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
+import { ensureStageDir } from './lab-config-stage-dirs';
 import {
-  ensureStageDir,
-  originalFileName,
-  readVerifiedSnapshot,
   stageVerifiedTier,
   writeStagedBytesIfChanged,
 } from './lab-config-stage-io';
+import {
+  originalFileName,
+  readVerifiedSnapshot,
+} from './lab-config-stage-read';
 import { reconcileStagedTree } from './lab-config-stage-reconcile';
 import { resolveLabGenerationDir } from './lab-generation-dir';
 import {

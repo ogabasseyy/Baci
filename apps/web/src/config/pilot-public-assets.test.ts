@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   linkSync,
@@ -157,6 +158,24 @@ describe('non-lab public assets gate', () => {
       { recursive: true }
     );
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(/hardlinked file/);
+  });
+  it('rejects a FIFO planted inside a managed entry', () => {
+    // A single-linked FIFO passes the symlink and hardlink gates; Next
+    // would then block serving it. mkfifo exists only on POSIX.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    execFileSync('mkfifo', [
+      join(dir, '__pilot', 'originals', 'merchant.avif'),
+    ]);
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(/special file/);
   });
   it('requires the exact filler set in non-lab trees too', () => {
     const dir = root();

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { readUpToBytes } from '@/lib/merchant-image-variant-pilot/lab-config-stage-io';
+import { readUpToBytes } from '@/lib/merchant-image-variant-pilot/lab-config-stage-io-read';
 
 // Per-request verification budget: the staged set is frozen at stage
 // time and lab-small (tiers + originals per accepted binding), so an

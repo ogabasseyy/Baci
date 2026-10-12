@@ -15,6 +15,23 @@ export function generationDir(outputRoot, generationId) {
   return join(outputRoot, 'generations', generationId);
 }
 
+// A FIFO, socket, or device in place of a published entry would block
+// the bounded reader in open()/read() (the byte ceiling bounds reads,
+// not waits), hanging reuse and quality-sheet loads. Only regular
+// files load; anything else is corruption, never a hang. lstat never
+// follows links, so a planted symlink rejects here too.
+async function assertRegularEntry(path, label, missing) {
+  const entry = await lstat(path).catch(() => {
+    throw missing();
+  });
+  if (!entry.isFile()) {
+    throw new PilotManifestError(
+      'generation-corrupt',
+      `output is not a regular file: ${label}`
+    );
+  }
+}
+
 export async function loadGeneration(outputRoot, generationId) {
   const dir = generationDir(outputRoot, generationId);
   // A symlinked generation entry is never reusable: lstat succeeds on
@@ -66,6 +83,12 @@ export async function loadGeneration(outputRoot, generationId) {
   // process before schema validation can run.
   let text;
   try {
+    await assertRegularEntry(
+      join(dir, 'manifest.json'),
+      'manifest.json',
+      () =>
+        new PilotManifestError('generation-missing', 'generation is not published')
+    );
     const read = await readUpToBytes(
       join(dir, 'manifest.json'),
       MAX_MANIFEST_BYTES
@@ -110,6 +133,15 @@ export async function loadGeneration(outputRoot, generationId) {
     // file rejects on size without allocating the whole file.
     let bytes;
     try {
+      await assertRegularEntry(
+        join(dir, tier.path),
+        tier.path,
+        () =>
+          new PilotManifestError(
+            'generation-corrupt',
+            `output missing: ${tier.path}`
+          )
+      );
       const read = await readUpToBytes(join(dir, tier.path), tier.bytes);
       if (read.truncated) {
         throw new PilotManifestError(

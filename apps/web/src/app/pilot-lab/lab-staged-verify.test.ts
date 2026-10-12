@@ -21,11 +21,11 @@ const { grownPaths } = vi.hoisted(() => ({
 }));
 
 vi.mock(
-  '@/lib/merchant-image-variant-pilot/lab-config-stage-io',
+  '@/lib/merchant-image-variant-pilot/lab-config-stage-io-read',
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import('@/lib/merchant-image-variant-pilot/lab-config-stage-io')
+        typeof import('@/lib/merchant-image-variant-pilot/lab-config-stage-io-read')
       >();
     return {
       ...actual,

@@ -72,6 +72,15 @@ function assertConfinedEntry(root: string, name: string): void {
           `lab public pilot tree entry "${name}" contains a hardlinked file`
         );
       }
+      // Next serves every non-directory public entry: a FIFO, socket,
+      // or device with one link would pass the checks above and then
+      // block (or leak) on GET, so every descendant must be a regular
+      // file or a directory.
+      if (!childStat.isDirectory() && !childStat.isFile()) {
+        throw new Error(
+          `lab public pilot tree entry "${name}" contains a special file`
+        );
+      }
       confined(childPath);
       if (childStat.isDirectory()) {
         pending.push(childPath);

@@ -2,7 +2,7 @@ import { mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ensureStageDir } from './lab-config-stage-io';
+import { ensureStageDir } from './lab-config-stage-dirs';
 
 describe('ensureStageDir planted-symlink rejection', () => {
   it('rejects a pre-planted __pilot symlink with no out-of-tree changes', async () => {
@@ -30,5 +30,12 @@ describe('ensureStageDir planted-symlink rejection', () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-traversal-'));
     await expect(ensureStageDir(dir, '..', 'evil')).rejects.toThrow(/escapes/);
     expect(await readdir(dir)).toEqual([]);
+  });
+
+  it('refuses stage directories that escape the public dir', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-escape-'));
+    const elsewhere = await mkdtemp(join(tmpdir(), 'pilot-stage-req-'));
+    await symlink(elsewhere, join(dir, '__pilot'));
+    await expect(ensureStageDir(dir, '__pilot')).rejects.toThrow(/escapes/);
   });
 });

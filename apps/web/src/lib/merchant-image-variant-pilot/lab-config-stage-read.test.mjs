@@ -10,7 +10,10 @@ describe('staged snapshot cap parity', () => {
     const { dirname, join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
     const here = dirname(fileURLToPath(import.meta.url));
-    const source = await readFile(join(here, 'lab-config-stage-io.ts'), 'utf8');
+    const source = await readFile(
+      join(here, 'lab-config-stage-read.ts'),
+      'utf8'
+    );
     const match = source.match(
       /MAX_STAGED_SNAPSHOT_BYTES = (\d+) \* 1024 \* 1024/
     );

@@ -14,33 +14,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ensureStageDir } from './lab-config-stage-dirs';
 import {
-  ensureStageDir,
-  readUpToBytes,
-  readVerifiedSnapshot,
   STAGED_CREATE_FLAGS,
   stageVerifiedTier,
   writeStagedBytesIfChanged,
 } from './lab-config-stage-io';
-
-describe('readUpToBytes', () => {
-  it('streams multi-chunk files to the cap', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-read-chunked-'));
-    const file = join(dir, 'big.bin');
-    const payload = Buffer.alloc(200 * 1024);
-    for (let index = 0; index < payload.length; index += 1) {
-      payload[index] = index % 251;
-    }
-    await writeFile(file, payload);
-    await expect(readUpToBytes(file, 300 * 1024)).resolves.toEqual({
-      bytes: payload,
-      truncated: false,
-    });
-    const capped = await readUpToBytes(file, 100 * 1024);
-    expect(capped.truncated).toBe(true);
-    expect(capped.bytes).toEqual(payload.subarray(0, 100 * 1024));
-  });
-});
 
 describe('stageVerifiedTier', () => {
   it('stages exactly the bytes it validated', async () => {
@@ -147,13 +126,6 @@ describe('writeStagedBytesIfChanged', () => {
     ).rejects.toThrow(/symlink/);
     expect((await lstat(link)).isSymbolicLink()).toBe(true);
     expect(await readFile(outside)).toEqual(bytes);
-  });
-
-  it('refuses stage directories that escape the public dir', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-escape-'));
-    const elsewhere = await mkdtemp(join(tmpdir(), 'pilot-stage-req-'));
-    await symlink(elsewhere, join(dir, '__pilot'));
-    await expect(ensureStageDir(dir, '__pilot')).rejects.toThrow(/escapes/);
   });
 
   it('replaces a hardlinked destination even when the bytes match', async () => {
@@ -264,32 +236,5 @@ describe('writeStagedBytesIfChanged', () => {
       )
     ).rejects.toThrow(/escapes the stage root/);
     expect(await readdir(outside)).toEqual([]);
-  });
-});
-
-describe('readVerifiedSnapshot', () => {
-  it('reads hash-verified snapshots and rejects over-cap inputs', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-snap-'));
-    const bytes = Buffer.from('snapshot-bytes');
-    await writeFile(join(dir, 'a.png'), bytes);
-    const sha = createHash('sha256').update(bytes).digest('hex');
-    await expect(readVerifiedSnapshot(dir, 'a.png', sha)).resolves.toEqual(
-      bytes
-    );
-    await expect(
-      readVerifiedSnapshot(dir, 'a.png', '0'.repeat(64))
-    ).rejects.toThrow(/differ from the frozen hash/);
-    await expect(
-      readVerifiedSnapshot(dir, '../escape.png', sha)
-    ).rejects.toThrow(/escapes/);
-    const big = Buffer.alloc(10 * 1024 * 1024 + 1, 7);
-    await writeFile(join(dir, 'big.png'), big);
-    await expect(
-      readVerifiedSnapshot(
-        dir,
-        'big.png',
-        createHash('sha256').update(big).digest('hex')
-      )
-    ).rejects.toThrow(/exceeds the .* input limit/);
   });
 });

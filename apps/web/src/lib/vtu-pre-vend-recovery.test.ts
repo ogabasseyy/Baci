@@ -107,7 +107,26 @@ describe('isStrandedPreVendVtuRow', () => {
   ).toISOString();
   const freshAt = new Date(Date.now() - 1000).toISOString();
 
-  it('flags a stale reference-less processing row with no provider evidence', () => {
+  it('flags a stale reference-less processing row with no debit marker', () => {
+    // No walletDebited flag: the debit-flag write never landed, so no
+    // provider call ever ran (the flag persists first). Re-driving
+    // vends for the first time — it cannot double-credit.
+    expect(
+      isStrandedPreVendVtuRow({
+        id: 'vtu-1',
+        status: 'processing',
+        transaction_id: null,
+        error_message: null,
+        metadata: {},
+        updated_at: staleAt,
+      })
+    ).toBe(true);
+  });
+
+  it('declines a flagged row: the vend may have landed (post-vend persist failure)', () => {
+    // Same reference-less shape, but the persisted flag proves the
+    // flow reached the provider call: flipping would re-vend and
+    // double-credit. Left to provider-evidence reconciliation.
     expect(
       isStrandedPreVendVtuRow({
         id: 'vtu-1',
@@ -117,7 +136,7 @@ describe('isStrandedPreVendVtuRow', () => {
         metadata: { walletDebited: true },
         updated_at: staleAt,
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('declines rows a live worker could still hold', () => {

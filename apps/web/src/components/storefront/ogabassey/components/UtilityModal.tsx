@@ -282,6 +282,7 @@ export const UtilityModal = ({
             <UtilitySuccessView
               activeTab={activeTab}
               amount={successAmount}
+              merchantSlug={merchant?.slug}
               onClose={handleClose}
               processing={step === 'processing'}
               reference={transactionRef}

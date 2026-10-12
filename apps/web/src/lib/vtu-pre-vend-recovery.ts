@@ -35,13 +35,14 @@ export interface StrandedPreVendRowCandidate {
 /**
  * True for a processing row whose pre-vend restore failed while the
  * database was down: no provider reference, no provider message (so
- * the reconciliation claim declines it), no Monnify vend reference
- * (the vend was never called — every driver died pre-vend, and the
- * claim gate blocks all other drivers), and stale enough that no
- * live worker can hold it. Flipping such a row to marked pending
- * re-drives claim → idempotent debit → vend on the next pass.
- * Rows WITH provider evidence are never stranded: the vend may have
- * landed, and re-vending would double-credit at the provider.
+ * the reconciliation claim declines it), no Monnify vend reference,
+ * NO persisted walletDebited flag, and stale enough that no live
+ * worker can hold it. The flag absence is the pre-vend proof: the
+ * flag persists before the first provider call, so a post-vend
+ * persistence failure (vend landed, result write exhausted — same
+ * reference-less shape) always carries the flag and is declined.
+ * Flipping a flagged row would re-vend and double-credit at the
+ * provider. A flip re-drives claim → idempotent debit → first vend.
  */
 export function isStrandedPreVendVtuRow(
   row: StrandedPreVendRowCandidate,
@@ -58,6 +59,10 @@ export function isStrandedPreVendVtuRow(
   }
   const vendReference = row.metadata?.monnifyVendReference;
   if (typeof vendReference === 'string' && vendReference) {
+    return false;
+  }
+  // Pre-vend proof (see docblock): a landed vend always has the flag.
+  if (row.metadata?.walletDebited === true) {
     return false;
   }
   if (!row.updated_at) {

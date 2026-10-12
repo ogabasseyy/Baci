@@ -15,6 +15,7 @@ import {
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { calculateCommerce } from '@/lib/supabase/client';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
+import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
 import { COMMISSION_CATEGORY_MAP, type PurchaseInput } from '@/schemas/vtu';
@@ -439,12 +440,7 @@ export async function resolveVtuCustomer({
 }: {
   supabase: SupabaseClient;
   merchantId: string;
-  /**
-   * Throw on transient lookup errors instead of resolving null. The
-   * wallet-only route opts in: a swallowed error surfaces as 400/404
-   * (key rotated) instead of 5xx (key kept), so a retry-after-recovery
-   * mints fresh and debits twice. Legacy callers keep null (404).
-   */
+  /** Strict policy (see vtu-strict-lookups): throw instead of null. */
   strictLookups?: boolean;
   user: User;
 }) {
@@ -454,9 +450,11 @@ export async function resolveVtuCustomer({
     .eq('merchant_id', merchantId)
     .eq('user_id', user.id)
     .maybeSingle();
-  if (byUserIdError && strictLookups) {
-    throw new Error(`Failed to look up VTU customer: ${byUserIdError.message}`);
-  }
+  throwIfStrictVtuLookupError({
+    context: 'look up VTU customer',
+    error: byUserIdError,
+    strictLookups,
+  });
 
   if (byUserId) {
     return byUserId as CustomerRecord;
@@ -472,9 +470,11 @@ export async function resolveVtuCustomer({
     .eq('merchant_id', merchantId)
     .eq('email', user.email)
     .maybeSingle();
-  if (byEmailError && strictLookups) {
-    throw new Error(`Failed to look up VTU customer: ${byEmailError.message}`);
-  }
+  throwIfStrictVtuLookupError({
+    context: 'look up VTU customer',
+    error: byEmailError,
+    strictLookups,
+  });
 
   if (byEmail && !byEmail.user_id) {
     await supabase
@@ -538,11 +538,13 @@ export async function preparePendingVtuTransaction({
         .maybeSingle()
     );
 
-  // Strict: a transient merchant/settings lookup error must 500 (key
-  // kept), never masquerade as a terminal 400/404 (key rotated).
-  if (merchantError && strictLookups) {
-    throw new Error(`Failed to resolve VTU merchant: ${merchantError.message}`);
-  }
+  // Strict: a transient lookup error must 500 (key kept), never
+  // masquerade as a terminal 400/404 (key rotated).
+  throwIfStrictVtuLookupError({
+    context: 'resolve VTU merchant',
+    error: merchantError,
+    strictLookups,
+  });
   if (merchantError || !merchant) {
     throw new Error('Merchant not found');
   }
@@ -554,11 +556,11 @@ export async function preparePendingVtuTransaction({
     )
     .eq('merchant_id', merchant.id)
     .single();
-  if (settingsError && strictLookups) {
-    throw new Error(
-      `Failed to load VTU merchant settings: ${settingsError.message}`
-    );
-  }
+  throwIfStrictVtuLookupError({
+    context: 'load VTU merchant settings',
+    error: settingsError,
+    strictLookups,
+  });
 
   const featureSettings = (settings ?? {}) as FeatureSettingsRecord;
   if (!featureSettings.vtu_enabled) {

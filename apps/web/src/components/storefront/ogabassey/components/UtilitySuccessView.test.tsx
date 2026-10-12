@@ -74,4 +74,103 @@ describe('UtilitySuccessView', () => {
 
     expect(screen.queryByText('Voucher / Token')).not.toBeInTheDocument();
   });
+
+  it('backfills a late voucher on a processing bill purchase', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-PROC',
+              status: 'successful',
+              voucher_pin: 'BACKFILLED-PIN',
+            },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-PROC"
+        />
+      );
+
+      // The reconciler-persisted token flips the card to success.
+      expect(await screen.findByText('Success!')).toBeInTheDocument();
+      expect(screen.getByText('BACKFILLED-PIN')).toBeInTheDocument();
+      expect(screen.queryByText('Processing…')).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('renders terminal failure when the backfill reports it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [{ request_reference: 'VTU-FAIL', status: 'failed' }],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-FAIL"
+        />
+      );
+
+      expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
+      expect(screen.getByText(/was refunded/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('shows polling copy while a processing bill token is still missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            { request_reference: 'VTU-PROC', status: 'processing' },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-PROC"
+        />
+      );
+
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
+      expect(
+        screen.getByText(/will appear here automatically/)
+      ).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

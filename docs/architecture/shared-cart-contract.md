@@ -264,3 +264,33 @@ the default ports).
   continuation when the pairing fragment is present (transfer links
   unchanged otherwise); old MCP `?item_id=` / `?guest_cart=` transfer
   URLs keep working byte-for-byte.
+
+## Task 7 web cart linkage
+
+- `useSharedCart({merchantId, merchantSlug, sessionGeneration})` owns the
+  linked web cart: cache-seeded instant display, server adopt, lazy
+  creation on the first action, one FIFO send queue with original retry
+  keys, tempId-to-lineId resolution, and rejection of lower-version
+  responses within a generation. Storage is a display/recovery cache and
+  one-time legacy import source, never an independent writer after
+  linking. The import receipt persists until success; failures retry
+  explicitly without duplicating committed lines.
+- Fallback convergence without realtime: 15 s jittered poll plus 60 s
+  reconciliation poll, only while a cart surface is visible, a cart is
+  linked, and the tab is foreground; hidden tabs stop and refetch on
+  return/focus. Poll requests carry no cart identity beyond the session
+  proof; commands carry `{command, expectedVersion, operationId}` only.
+- `StorefrontCartProvider` delegates per merchant when the server frame
+  passes `merchantId` with an evaluated `shared_cart` grant and the
+  active slug matches the served slug. Otherwise — missing flag, missing
+  id, or slug switch away — the provider runs the legacy local cart
+  with zero server calls. Legacy hydration/persist/validation effects
+  are fenced while delegated; every slug change bumps the session
+  generation so late responses cannot cross merchants.
+- Negotiation/vouchers: per-line negotiated prices and voucher
+  attachments ride server commands (reprice = remove-plus-add);
+  assurance toggles stay display-local. Cart-wide negotiation is
+  provider-emulated as proportional per-line reprices (no server
+  group-deal op); local edits void it with legacy semantics, remote
+  voiding is out of scope for the pilot. Delegated voucher adds pin
+  quantity 1 per the Task 6 merge rules.

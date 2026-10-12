@@ -18,8 +18,10 @@ ChatGPT, web and mobile. No merge, deploy or live orders from this work.
 - [x] Task 4: legacy migration without duplicate writers (see evidence below)
 - [x] Task 5: authorized cart HTTP endpoints (see evidence below)
 - [x] Task 6: secure replay-safe handoff and merge (see evidence below)
-- [ ] Tasks 7–14 per dependency order
-  (7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
+- [x] Task 7: web cart with optimistic feedback and fetch recovery
+  (see evidence below)
+- [ ] Tasks 8–14 per dependency order
+  (11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
 
 ## Task 1 evidence
 
@@ -309,3 +311,95 @@ wording landed in `cart-link-tool.ts` (which owns the description),
 also closing the Task 4 description checkbox.
 (c) No share/issue button added to the cart page: issuance exists as
 lib + POST route; cart UI actions belong to Task 7.
+
+## Task 7 evidence
+
+New: `apps/web/src/hooks/cart/{use-shared-cart.ts,use-shared-cart.test.ts,
+shared-cart-client.ts,shared-cart-client.test.ts,shared-cart-reducer.ts,
+shared-cart-reducer.test.ts,storefront-cart-provider.shared-cart.test.tsx}`.
+Modified: `storefront-cart-provider.tsx` (delegation),
+`storefront-shell-frame.tsx` (+2 frame tests: enrollment wiring),
+`cart-storage.ts`, `cart-persistence.ts`, `cart-types.ts` (display markers,
+extension fields), `storefront-cart-provider.merchant-switch.test.tsx`
+(+2 delegated navigation tests).
+
+TDD (each RED recorded before GREEN):
+- 7a storage/types: temp markers stripped on persist, display items extend
+  CartItem, context extension fields (sharedCartEnabled/syncStatus/
+  syncError/retryPendingSync).
+- 7b reducer 42/42: optimistic FIFO queue, tempId→lineId resolution,
+  version rebase (lower-version responses rejected within a generation),
+  original retry keys preserved, failed-operation rollback, stale totals
+  fenced by generation.
+- 7c client 14/14: typed retryable/fatal mapping, no cartId travels on send
+  (server resolves the cart from the session proof).
+- 7d hook 29/29: cache-seeded instant display, adopt/reconcile, lazy
+  creation on first action, one-time legacy import via Task 6 merge rules
+  (receipt kept until success), failed-import explicit retry without
+  duplication, reprice as remove-plus-add, display-local assurance,
+  15 s jittered fallback poll + 60 s reconcile poll gated on visible
+  surface with cartId, hidden-tab stop, late-response fencing by
+  sessionGeneration. Two real bugs found by tests: fatal import sends
+  never flipped importStatus to failed (finishImportOp now reports the
+  outcome); stale-retry snapshot versions are ignored (test data fixed,
+  reducer guard confirmed).
+- 7e provider delegation 13/13 + frame 2/2 + switch 2/2: enrollment binds
+  merchantId to the served slug (server-evaluated `shared_cart` grant);
+  unenrolled merchants and missing flags stay fully local with zero
+  server calls; legacy add gating (default-variant resolution, voucher
+  stock exemption, out-of-stock/unresolved-variant blocks) extracted to
+  `gateAddToCart` and shared by both modes; legacy hydration/persist/
+  validation effects fenced while delegated; every slug change bumps the
+  session generation; group negotiation emulated as proportional
+  per-line server reprices with legacy void semantics (void clears queue
+  ahead of the edit except the edited line, whose line ID must stay live;
+  quantity updates queue ahead with clamped re-add quantities).
+
+Gates: `vitest run src/hooks/cart` 155/155 (11 files); handoff + cart +
+storefront sweep 2305/2305 (416 files); `tsc --noEmit` clean;
+`biome check` clean (814 files incl. frame).
+
+Deviations:
+(a) No server group-deal operation exists (Task 3 has per-line
+negotiation only), so cart-wide negotiation is provider-emulated via
+N remove-plus-add pairs with the legacy ratio math. Remote voiding
+(another device editing mid-deal) is not implemented: confirmed
+per-line prices stand, the flag clears on local edits. Recorded as a
+pilot limitation; a server op or Task 8 event can close it.
+(b) Delegated voucher adds pin quantity 1 per the Task 6 merge rules;
+legacy keeps its unpinned behavior. Intended server-authoritative
+divergence, flagged for 11A checkout review.
+(c) Legacy update-to-no-match quirk mirrored exactly (flag drops,
+prices stay) so both modes share one behavior instead of diverging.
+
+Pre-commit review gate (Task 7): `coderabbit review --agent -t
+uncommitted` completed on all 18 Task 7 files with 7 findings, each
+verified against current code and fixed with TDD (13 new tests: 1
+reducer + 12 hook):
+- Queue stall on repeat edits (major): set_quantity claimed the op id
+  as pendingTempId, so a second edit blocked on a temp only an add
+  reconcile resolves. Reducer no longer claims temps on edit;
+  targetForLine prefers a stable serverLineId.
+- ensureCart stranding (major): provisioning failures returned a bare
+  false, parking the head entry with no timer. ensureCart now returns
+  real {code, retryable} detail (null only when the generation moved
+  on); the sender surfaces it via command/failed so the retry loop
+  and retryPendingSync own recovery, and every create failure
+  releases the attempt latch (stable op key replays safely).
+- Cross-merchant cache write (major): the persist effect now skips
+  the transition commit where reducer state still belongs to the
+  previous generation.
+- Hidden-mount stall (major): adoption waits for the first
+  visibilitychange instead of returning early; foreground refresh
+  yields the first fetch to adoption.
+- quizAwardId voucher gap (minor): hook stock exemption + qty pin now
+  match gateAddToCart.
+- Import settle on drop (minor): prune-based settlement fails the
+  import (with the live syncError code) when tracked ops leave the
+  queue via conflict-cap drops, cascade drops, or fatal refetch
+  failures.
+- Poll/reconcile hydration (minor): hydrateMissing moved to hook
+  scope with a link-run fence and is called after adopt, poll,
+  foreground refresh, and reconcile; ids filter against the latest
+  snapshot seen (the reducer's confirmed copy is null pre-adopt and
+  stale in the dispatch lag window).

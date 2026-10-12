@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  bumpCartSessionGeneration,
+  clearSharedCartImportReceipt,
   generateCartItemId,
   getCartFromStorage,
+  getCartSessionGeneration,
   getCartWideNegotiationFromStorage,
   getMerchantSlugFromStorage,
+  getSharedCartImportReceipt,
   getStorefrontCartStorageKey,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
+  saveSharedCartImportReceipt,
+  stripUnconfirmedDisplayLines,
+  subscribeCartSessionGeneration,
 } from './cart-storage';
-import type { CartItem } from './cart-types';
+import type { CartItem, SharedCartDisplayItem } from './cart-types';
 
 const logger = vi.hoisted(() => ({
   error: vi.fn(),
@@ -159,5 +166,102 @@ describe('cart-storage', () => {
     expect(getCartWideNegotiationFromStorage('ogabassey')).toBe(false);
 
     getItem.mockRestore();
+  });
+
+  it('round-trips the legacy import receipt per merchant slug', () => {
+    expect(getSharedCartImportReceipt('ogabassey')).toBeNull();
+
+    saveSharedCartImportReceipt('ogabassey', {
+      cartId: '22222222-2222-4222-8222-222222222222',
+      importedAt: '2026-10-12T08:00:00.000Z',
+      lineCount: 2,
+    });
+
+    expect(getSharedCartImportReceipt('ogabassey')).toEqual({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      importedAt: '2026-10-12T08:00:00.000Z',
+      lineCount: 2,
+    });
+    // A different merchant slug keeps its own receipt.
+    expect(getSharedCartImportReceipt('other')).toBeNull();
+
+    clearSharedCartImportReceipt('ogabassey');
+    expect(getSharedCartImportReceipt('ogabassey')).toBeNull();
+  });
+
+  it('strips unconfirmed temp lines before persisting the display', () => {
+    const persistable = stripUnconfirmedDisplayLines([
+      {
+        cartItemId: 'line-1',
+        id: 'prod-1',
+        name: 'Phone',
+        pendingTempId: null,
+        price: 100,
+        quantity: 1,
+        serverLineId: 'line-1',
+      },
+      {
+        cartItemId: 'temp:temp-1',
+        hydrationFailed: true,
+        id: 'prod-9',
+        name: 'Camera',
+        pendingTempId: 'temp-1',
+        price: 250,
+        quantity: 1,
+        serverLineId: null,
+      },
+    ] as SharedCartDisplayItem[]);
+
+    expect(persistable).toHaveLength(1);
+    expect(persistable[0]).toMatchObject({ id: 'prod-1' });
+    expect(persistable[0]).not.toHaveProperty('pendingTempId');
+    expect(persistable[0]).not.toHaveProperty('hydrationFailed');
+  });
+
+  it('rejects malformed import receipts instead of importing twice', () => {
+    localStorage.setItem('baci-cart-ogabassey-shared-import', '{bad json');
+    expect(getSharedCartImportReceipt('ogabassey')).toBeNull();
+
+    localStorage.setItem(
+      'baci-cart-ogabassey-shared-import',
+      JSON.stringify({ cartId: 42 })
+    );
+    expect(getSharedCartImportReceipt('ogabassey')).toBeNull();
+  });
+
+  it('drops temp optimistic markers when reading stored lines', () => {
+    localStorage.setItem(
+      'baci-cart-ogabassey-guest',
+      JSON.stringify([
+        {
+          id: 'cart-item-1',
+          name: 'iPhone 16',
+          price: 1200000,
+          quantity: 1,
+          pendingTempId: 'temp-1',
+          hydrationFailed: true,
+          serverLineId: 'line-1',
+        },
+      ])
+    );
+
+    const [line] = getCartFromStorage('ogabassey') as SharedCartDisplayItem[];
+    expect(line.pendingTempId).toBeUndefined();
+    expect(line.hydrationFailed).toBeUndefined();
+    expect(line.serverLineId).toBe('line-1');
+  });
+
+  it('bumps the session generation and notifies subscribers', () => {
+    const start = getCartSessionGeneration();
+    const listener = vi.fn();
+    const unsubscribe = subscribeCartSessionGeneration(listener);
+
+    expect(bumpCartSessionGeneration()).toBe(start + 1);
+    expect(getCartSessionGeneration()).toBe(start + 1);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    bumpCartSessionGeneration();
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,29 @@
+import type { CartErrorCode } from '@baci/shared/cart';
 import type { Product } from '@/lib/products';
+
+/**
+ * Link markers for a shared-cart display line. `serverLineId` is the
+ * stable id once the server confirms the line; `pendingTempId` marks
+ * an optimistic line whose command has not reconciled yet. Temp lines
+ * never persist: storage strips the marker on save and drops it on load.
+ */
+export interface SharedCartLineMarkers {
+  serverLineId?: string | null;
+  pendingTempId?: string | null;
+  /** True when the line is confirmed but its catalog details failed to load. */
+  hydrationFailed?: boolean;
+}
+
+export type SharedCartDisplayItem = CartItem & SharedCartLineMarkers;
+
+export type SharedCartSyncStatus = 'synced' | 'pending' | 'retrying' | 'error';
+
+export type SharedCartImportStatus =
+  | 'none'
+  | 'pending'
+  | 'done'
+  | 'skipped'
+  | 'failed';
 
 export interface CartItem extends Product {
   quantity: number;
@@ -68,4 +93,12 @@ export interface CartContextType {
   dismissUpsell: () => void;
   hasSmartCartPro: boolean;
   isHydrated: boolean;
+  /** Present only when the provider delegates to the shared server cart. */
+  sharedCartEnabled?: boolean;
+  /** Last-confirmed-plus-pending sync state; absent in legacy mode. */
+  syncStatus?: SharedCartSyncStatus;
+  /** Last sync failure code, cleared on the next success. */
+  syncError?: CartErrorCode | null;
+  /** Re-sends the head of the pending queue with its original retry key. */
+  retryPendingSync?: () => void;
 }

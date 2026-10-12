@@ -12,6 +12,7 @@
 //     --expect-route=https://lab.example.com/pilot-lab/store/id?arm=pilot \
 //     --expect-chrome-major=154 --expect-viewport=375x667 --expect-dpr=3 \
 //     --screenshot-provenance=<runner-capture-artifact.json> \
+//     --browser-provenance=<runner-launch-artifact.json> \
 //     [--cache-provenance=<runner-reset-artifact.json>] \
 //     [--browser-version=<dotted-executable-build>]
 // Add --lighthouse plus --expect-form-factor, --expect-throttling-method,
@@ -21,7 +22,14 @@
 // --expect-request-latency-ms/--expect-download-kbps/--expect-upload-kbps
 // for devtools). Exits 0 with a JSON report on stdout when
 // every setting matches. --cache-provenance is REQUIRED for the cold-cache
-// claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold; --browser-version stays optional.
+// claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold.
+// --browser-provenance is REQUIRED for the executable claim: the request
+// UA is emulated and a bare --browser-version string is unbound caller
+// text, so only a runner launch record (event/tool/runId/
+// executableVersion/launchedAt) bound <=1h before the run and to the
+// navigation via the single-use _meta.runId proves the executable. The
+// --browser-version flag survives only as a cross-check that must match
+// the run-bound version when supplied.
 // --cache-provenance takes a PATH to a runner profile-reset artifact
 // (event/freshProfile/profileDir/resetAt/runId/tool), bound <=1h before
 // the run and to the navigation via the single-use _meta.runId.

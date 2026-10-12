@@ -11,7 +11,10 @@ import {
   MAX_SCREENSHOT_BYTES,
   SHARP_LIMITS,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
-import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
+import {
+  readBoundedText,
+  readUpToBytes,
+} from './merchant-image-pilot-preflight-shared.mjs';
 import {
   findCacheHits,
   harUserAgent,
@@ -19,7 +22,6 @@ import {
   parsePositiveInteger,
   parsePositiveNumber,
   pngDimensions,
-  verifyBrowserVersion,
   verifyHarConnectivity,
   verifyHarIterations,
   verifyHarRoute,
@@ -45,20 +47,7 @@ async function assertPngDecodes(bytes, dimensions) {
   }
 }
 
-// Bounded operator-artifact read: an unconsumed multi-gigabyte file must
-// fail the gate by size, never exhaust the collector before parsing.
-async function readBoundedText(path, maxBytes) {
-  try {
-    const read = await readUpToBytes(path, maxBytes);
-    return {
-      text: read.truncated ? null : read.bytes.toString('utf8'),
-      truncated: read.truncated,
-    };
-  } catch {
-    return { text: null, truncated: false };
-  }
-}
-
+import { verifyBrowserProvenance } from './merchant-image-pilot-settings-browser-provenance.mjs';
 import {
   verifyCacheProvenance,
   verifyScreenshotProvenance,
@@ -106,8 +95,8 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   const ua = harUserAgent(har);
   recorded.browser = ua;
   // The request User-Agent is emulated configuration, not independent proof
-  // of the browser executable version. The optional --browser-version
-  // attestation (runner/CDP metadata) is recorded separately below.
+  // of the browser executable version. The required --browser-provenance
+  // runner launch record proves the executable separately below.
   if (!ua?.includes(`Chrome/${args['expect-chrome-major']}.`)) {
     fail(
       'har.browser',
@@ -252,18 +241,45 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   } else {
     pass('har.cache-provenance');
   }
-  if (args['browser-version'] === undefined) {
-    warn(
+  // The executable version must be proven by a runner launch record
+  // bound to this navigation: the request UA is emulated and a bare
+  // --browser-version string is unbound caller text, so an older-Chrome
+  // run could otherwise pass the expected-major gate. The optional flag
+  // survives only as a cross-check that must match the run evidence.
+  const browserProvenancePath = args['browser-provenance'];
+  if (browserProvenancePath === undefined) {
+    fail(
       'har.browser-version',
-      'unknown (no runner/CDP executable version supplied; UA above is emulated)'
+      'no runner/CDP executable provenance supplied (pass --browser-provenance=<runner-launch-artifact.json>)'
     );
   } else {
-    const version = args['browser-version'];
-    recorded.browserExecutable = version;
-    const checked = verifyBrowserVersion(version, args['expect-chrome-major']);
-    if (!checked.ok) {
-      fail('har.browser-version', checked.error);
+    const bounded = await readBoundedText(
+      browserProvenancePath,
+      MAX_INVENTORY_BYTES
+    );
+    const browser = bounded.truncated
+      ? {
+          error: 'browser provenance artifact exceeds the operator-JSON budget',
+          ok: false,
+        }
+      : verifyBrowserProvenance(
+          bounded.text,
+          pages,
+          args['expect-chrome-major'],
+          browserProvenancePath
+        );
+    if (!browser.ok) {
+      fail('har.browser-version', browser.error);
+    } else if (
+      args['browser-version'] !== undefined &&
+      args['browser-version'] !== browser.executableVersion
+    ) {
+      fail(
+        'har.browser-version',
+        `attested --browser-version "${args['browser-version']}" contradicts the run-bound executable ${browser.executableVersion}`
+      );
     } else {
+      recorded.browserExecutable = browser.executableVersion;
       pass('har.browser-version');
     }
   }

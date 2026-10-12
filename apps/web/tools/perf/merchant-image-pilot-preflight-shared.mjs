@@ -2,7 +2,7 @@
 // small predicates. Every preflight module builds on these; nothing here
 // knows about inventories, manifests, or served pages.
 import { createHash } from 'node:crypto';
-import { lstat, realpath } from 'node:fs/promises';
+import { lstat, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PILOT_UUID_PATTERN } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
@@ -185,4 +185,24 @@ export async function resolveGenerationDir(outputRoot, generationId) {
     throw new Error('generation entry escapes the output root');
   }
   return dir;
+}
+
+// Pretty-printed operator-artifact write: runner records stay
+// human-inspectable without per-site formatting boilerplate.
+export async function writeJson(path, value) {
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+// Bounded operator-artifact read: an unconsumed multi-gigabyte file must
+// fail the gate by size, never exhaust the collector before parsing.
+export async function readBoundedText(path, maxBytes) {
+  try {
+    const read = await readUpToBytes(path, maxBytes);
+    return {
+      text: read.truncated ? null : read.bytes.toString('utf8'),
+      truncated: read.truncated,
+    };
+  } catch {
+    return { text: null, truncated: false };
+  }
 }

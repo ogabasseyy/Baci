@@ -19,6 +19,7 @@ import {
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { loadGeneration } from './manifest-store.mjs';
 import {
+  assertSnapshotFormat,
   escapeHtml,
   originalContentType,
   PilotSheetError,
@@ -164,6 +165,11 @@ export async function buildQualitySheet({
     if (!parsed.ok) {
       throw new PilotSheetError('stored manifest is invalid');
     }
+    await assertSnapshotFormat(
+      snapshot.bytes,
+      manifest.source.format,
+      record.assetId
+    );
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;

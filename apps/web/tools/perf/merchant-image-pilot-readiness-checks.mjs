@@ -106,6 +106,14 @@ export function slotMountProblems(
   if (!slot) {
     return [`slot "${mount.slotId}" mount is absent`];
   }
+  // Binding identity alone never suffices: a mount measured under the
+  // wrong slot inherits geometry and crop that were not accepted for
+  // it, so the section slot must equal the accepted slot exactly.
+  if (slot.slotId !== mount.slotId) {
+    return [
+      `slot "${mount.slotId}" mount renders under slot "${slot.slotId ?? 'unslotted'}" (binding/slot mismatch)`,
+    ];
+  }
   if (slot.status) {
     return [`slot "${mount.slotId}" renders only "${slot.status}"`];
   }

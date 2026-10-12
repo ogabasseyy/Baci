@@ -9,13 +9,15 @@
 //      HAR + screenshot, within the hour)
 //   3. finish: stamp the run id into a COPY of the HAR (the raw export
 //      is never mutated), hash the screenshot, and emit the
-//      screenshot-capture record.
+//      screenshot-capture and browser-launch records.
 //
 // Honesty boundaries: freshProfile is true by construction (the runner
 // creates the profile dir itself and refuses non-empty ones), and
 // finish binds only when the browser's recorded command line shows a
 // launch with that exact profile dir — a default- or reused-profile
-// accident refuses instead of stamping a warm navigation as cold.
+// accident refuses instead of stamping a warm navigation as cold. The
+// launch record reuses the profile-reset timestamp: the log proves the
+// launch happened after that reset, inside the run window.
 // finish also refuses stale (>1h), future-dated, multi-page, and
 // already-bound HARs instead of emitting records the gate would fail —
 // bind-time refusal, not gate-time surprise.
@@ -27,7 +29,10 @@ import {
   MAX_HAR_BYTES,
   MAX_SCREENSHOT_BYTES,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
-import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
+import {
+  readUpToBytes,
+  writeJson,
+} from './merchant-image-pilot-preflight-shared.mjs';
 import { parseArgs as parseStrictArgs } from './merchant-image-pilot-readiness-config.mjs';
 import {
   parseDimensions,
@@ -36,6 +41,7 @@ import {
 
 const RUNNER_CLI_OPTIONS = [
   'browser-log',
+  'browser-version',
   'dpr',
   'har',
   'out-dir',
@@ -77,25 +83,19 @@ export async function prepareRun({ outDir, profileDir, tool }) {
   await mkdir(out, { recursive: true });
   const runId = randomUUID();
   const resetAt = new Date().toISOString();
-  await writeFile(
-    join(out, 'profile-reset.json'),
-    `${JSON.stringify(
-      {
-        event: 'profile-reset',
-        freshProfile: true,
-        profileDir: profile,
-        resetAt,
-        runId,
-        tool: checked,
-      },
-      null,
-      2
-    )}\n`
-  );
-  await writeFile(
-    join(out, 'run.json'),
-    `${JSON.stringify({ profileDir: profile, runId, tool: checked }, null, 2)}\n`
-  );
+  await writeJson(join(out, 'profile-reset.json'), {
+    event: 'profile-reset',
+    freshProfile: true,
+    profileDir: profile,
+    resetAt,
+    runId,
+    tool: checked,
+  });
+  await writeJson(join(out, 'run.json'), {
+    profileDir: profile,
+    runId,
+    tool: checked,
+  });
   return { outDir: out, profileDir: profile, resetAt, runId };
 }
 
@@ -105,6 +105,7 @@ function escapeRegExp(text) {
 
 export async function finishRun({
   browserLog,
+  browserVersion,
   dpr,
   har,
   outDir,
@@ -198,42 +199,59 @@ export async function finishRun({
   );
   const deviceScaleFactor = parsePositiveNumber(required(dpr, 'dpr'), 'dpr');
   const capturePath = join(out, 'screenshot-capture.json');
-  await writeFile(
-    capturePath,
-    `${JSON.stringify(
-      {
-        capturedAt: new Date().toISOString(),
-        deviceScaleFactor,
-        event: 'screenshot-capture',
-        runId: handle.runId,
-        screenshotSha256: createHash('sha256')
-          .update(shotRead.bytes)
-          .digest('hex'),
-        tool: handle.tool,
-        viewport: { height, width },
-      },
-      null,
-      2
-    )}\n`
-  );
+  await writeJson(capturePath, {
+    capturedAt: new Date().toISOString(),
+    deviceScaleFactor,
+    event: 'screenshot-capture',
+    runId: handle.runId,
+    screenshotSha256: createHash('sha256').update(shotRead.bytes).digest('hex'),
+    tool: handle.tool,
+    viewport: { height, width },
+  });
   await copyFile(screenshot, join(out, 'screenshot.png'));
   // Keep the bound set self-contained: when finishing into another
   // directory, the profile-reset record travels with it. A run handle
   // without its reset record is an incomplete run, not a partial bind.
   const resetSource = join(dirname(runJson), 'profile-reset.json');
+  const resetRead = await readUpToBytes(resetSource, 64 * 1024).catch(() => {
+    throw new Error(`run handle has no profile-reset record: ${resetSource}`);
+  });
   const resetDest = join(out, 'profile-reset.json');
   if (resolve(resetSource) !== resolve(resetDest)) {
-    const resetRead = await readUpToBytes(resetSource, 64 * 1024).catch(() => {
-      throw new Error(`run handle has no profile-reset record: ${resetSource}`);
-    });
     await writeFile(resetDest, resetRead.bytes);
   }
-  return { capture: capturePath, har: boundHar, runId: handle.runId };
+  // Executable provenance for the gate: the operator-observed dotted
+  // build, bound to this run id inside the same window the HAR checks.
+  // Validated here (bind time), not at the gate.
+  const reset = JSON.parse(resetRead.bytes.toString('utf8'));
+  if (!Number.isFinite(Date.parse(reset?.resetAt ?? ''))) {
+    throw new Error(
+      `profile-reset record has no usable resetAt: ${resetSource}`
+    );
+  }
+  const executableVersion = required(browserVersion, 'browser-version');
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(executableVersion)) {
+    throw new Error(`bad --browser-version: ${executableVersion}`);
+  }
+  const launchPath = join(out, 'browser-launch.json');
+  await writeJson(launchPath, {
+    event: 'browser-launch',
+    executableVersion,
+    launchedAt: reset.resetAt,
+    runId: handle.runId,
+    tool: handle.tool,
+  });
+  return {
+    browserLaunch: launchPath,
+    capture: capturePath,
+    har: boundHar,
+    runId: handle.runId,
+  };
 }
 
 const USAGE = `merchant-image-pilot-runner.mjs binds measurement evidence to the effective-settings gate.
   prepare: --phase=prepare --profile-dir=P --tool=T --out-dir=O
-  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --viewport=WxH --dpr=N --browser-log=B.log --out-dir=O2
+  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --viewport=WxH --dpr=N --browser-log=B.log --browser-version=V --out-dir=O2
   (capture with Browsertime --verbose and the prepared profile dir; finish verifies the recorded launch before binding)`;
 
 export async function runRunner(argv) {
@@ -248,6 +266,7 @@ export async function runRunner(argv) {
   if (args.phase === 'finish') {
     return await finishRun({
       browserLog: args['browser-log'],
+      browserVersion: args['browser-version'],
       dpr: args.dpr,
       har: args.har,
       outDir: args['out-dir'],

@@ -161,6 +161,34 @@ test('derives the original MIME from verified bytes, not the inventory label', a
   }
 });
 
+test('rejects a stored manifest mislabeling the snapshot format', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const { readdir } = await import('node:fs/promises');
+  const [generationId] = await readdir(join(outputRoot, 'generations'));
+  const manifestPath = join(
+    outputRoot,
+    'generations',
+    generationId,
+    'manifest.json'
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  // Schema-valid flip: the generation id covers the source hash but
+  // not its format, so only a snapshot decode catches the lie before
+  // the baseline embeds under the wrong MIME.
+  manifest.source.format = 'jpeg';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath,
+        outputRoot,
+        slots: { 'header-logo': { cssWidth: 40 } },
+      }),
+    /decodes as png but the manifest claims jpeg/
+  );
+});
+
 test('escapes inventory dimension metadata in captions', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));

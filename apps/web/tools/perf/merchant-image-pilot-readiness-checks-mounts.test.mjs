@@ -54,6 +54,17 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         viewportWidth: 390,
       })
     ).toEqual(['slot "header-logo" mount is absent']);
+    // Binding identity alone never locates the mount: the same binding
+    // rendered under another slot inherits unaccepted geometry.
+    expect(
+      slotMountProblems({ ...goodSlot, slotId: 'footer-logo' }, mount, {
+        arm: 'pilot',
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
+    ).toEqual([
+      'slot "header-logo" mount renders under slot "footer-logo" (binding/slot mismatch)',
+    ]);
     expect(
       slotMountProblems({ ...goodSlot, status: 'not-optimized' }, mount, {
         arm: 'pilot',

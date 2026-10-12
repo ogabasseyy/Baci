@@ -1,6 +1,8 @@
 // Quality-sheet rendering helpers: escaping, mount-crop parsing, and
 // tier cells. Orchestration (generation lookup, sheet assembly, CLI)
 // stays in quality-sheet.mjs, which re-exports PilotSheetError.
+import sharp from 'sharp';
+import { normalizeFormat } from './encode-worker-formats.mjs';
 
 export class PilotSheetError extends Error {
   constructor(message) {
@@ -41,6 +43,32 @@ export function originalContentType(sourceFormat, assetId) {
     );
   }
   return escapeHtml(contentType);
+}
+
+// Bind the manifest's source-format claim to the verified snapshot
+// bytes: the generation id covers the source hash but not its format,
+// so a schema-valid stored manifest mislabeling PNG bytes as JPEG
+// would otherwise embed a broken or browser-sniffed baseline while
+// its derivatives render normally. Header-level metadata suffices —
+// container magic identifies the format without a pixel decode.
+export async function assertSnapshotFormat(
+  snapshotBytes,
+  sourceFormat,
+  assetId
+) {
+  let decoded;
+  try {
+    decoded = normalizeFormat(await sharp(snapshotBytes).metadata());
+  } catch {
+    throw new PilotSheetError(
+      `snapshot for asset "${assetId}" does not decode`
+    );
+  }
+  if (decoded !== sourceFormat) {
+    throw new PilotSheetError(
+      `snapshot for asset "${assetId}" decodes as ${decoded ?? 'unknown'} but the manifest claims ${sourceFormat}`
+    );
+  }
 }
 
 export function tierCells(tier, files, cssWidth, crop, boxWidth) {

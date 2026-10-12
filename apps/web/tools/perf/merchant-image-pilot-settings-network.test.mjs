@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  browserProvenanceArg,
   DATED_PAGE,
   pngBuffer,
   provenanceArg,
@@ -96,7 +97,13 @@ describe('merchant-image-pilot-settings network profile evidence', () => {
       });
     const provenance = await provenanceArg(dir);
     const shot = await screenshotProvenanceArg(dir, pngBytes);
-    const base = [provenance, shot, '--expect-throttling-method=simulate'];
+    const browser = await browserProvenanceArg(dir);
+    const base = [
+      provenance,
+      shot,
+      browser,
+      '--expect-throttling-method=simulate',
+    ];
     // Matched simulate profile passes.
     const matched = await runLh(
       reportFor({ cpuSlowdownMultiplier: 4, rttMs: 150, throughputKbps: 1000 }),
@@ -128,6 +135,7 @@ describe('merchant-image-pilot-settings network profile evidence', () => {
     const devtoolsBase = [
       provenance,
       shot,
+      browser,
       '--expect-throttling-method=devtools',
     ];
     const devtools = await runLh(

@@ -55,6 +55,29 @@ describe('preflight served mount coverage', () => {
     expect(result.mounted).toEqual([]);
   });
 
+  it('fails a binding rendered under the wrong slot', () => {
+    const mount = {
+      assetId: 'card-a',
+      binding: `${MERCHANT}/card-a`,
+      generationId: 'c'.repeat(64),
+      merchantId: MERCHANT,
+      role: 'product',
+      slotId: 'product-card',
+      stagedOriginal: `/__pilot/originals/${MERCHANT}-card-a.png`,
+    };
+    // Right binding, wrong data-pilot-lab-slot: the image would be
+    // measured in a slot whose geometry was not accepted for it.
+    const html = `<main data-pilot-lab-arm="pilot"><section data-pilot-lab-slot="product-card-2" data-pilot-lab-binding="${MERCHANT}/card-a"><picture data-pilot-lab-picture="pilot"></picture></section></main>`;
+    const result = assertServedMountCoverage(html, {
+      arm: 'pilot',
+      expectedMounts: [mount],
+      origin: 'http://localhost:3129',
+      surface: 'store',
+    });
+    expect(result.failures.join('\n')).toMatch(/binding\/slot mismatch/);
+    expect(result.mounted).toEqual([]);
+  });
+
   it('reports binding-less uncovered-consumer markers without failing coverage', () => {
     // Plan §3 CSS heroes render status-only sections (no binding): mount
     // coverage skips them (nothing expected), but the reported rows name

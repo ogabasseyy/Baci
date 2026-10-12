@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  browserProvenanceArg,
   DATED_PAGE,
   pngBuffer,
   provenanceArg,
@@ -80,6 +81,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
       deviceScaleFactor: 2,
       viewport: { height: 667, width: 375 },
     });
+    const browser = await browserProvenanceArg(dir);
     const { execFile } = await import('node:child_process');
     return new Promise((resolve) => {
       execFile(
@@ -101,6 +103,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
           '--expect-dpr=2',
           provenance,
           shotArg,
+          browser,
           ...LH_FLAGS,
         ],
         (error, stdout) => resolve({ error, stdout })
@@ -235,6 +238,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
       deviceScaleFactor: 2,
       viewport: { height: 667, width: 375 },
     });
+    const browser = await browserProvenanceArg(dir);
     const { execFile } = await import('node:child_process');
     const gatePath = join(
       // @ts-expect-error import.meta.dirname is provided by vitest.
@@ -252,6 +256,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
       '--expect-dpr=2',
       provenance,
       shotArg,
+      browser,
     ];
     const hugeReport = await sparse('huge-report.json', 65 * 1024 * 1024);
     const lh = await new Promise((resolve) => {

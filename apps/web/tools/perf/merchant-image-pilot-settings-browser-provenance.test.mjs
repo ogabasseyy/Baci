@@ -1,0 +1,106 @@
+import { describe, expect, it } from 'vitest';
+import { verifyBrowserProvenance } from './merchant-image-pilot-settings-browser-provenance.mjs';
+
+describe('merchant-image-pilot-settings browser provenance', () => {
+  const pages = [
+    {
+      _meta: { runId: 'run-navigation-1' },
+      startedDateTime: '2026-10-04T00:10:00.000Z',
+    },
+  ];
+  const valid = JSON.stringify({
+    event: 'browser-launch',
+    executableVersion: '154.0.0.0',
+    launchedAt: '2026-10-04T00:09:30.000Z',
+    runId: 'run-navigation-1',
+    tool: 'browsertime',
+  });
+
+  it('binds a runner launch to the measured navigation', () => {
+    expect(verifyBrowserProvenance(valid, pages, '154', 'launch.json')).toEqual(
+      {
+        executableVersion: '154.0.0.0',
+        ok: true,
+        summary: 'browsertime@154.0.0.0',
+      }
+    );
+  });
+
+  it('refuses unreadable, malformed, and misshapen launches', () => {
+    expect(
+      verifyBrowserProvenance(null, pages, '154', 'missing.json').error
+    ).toMatch(/cannot read/);
+    expect(verifyBrowserProvenance('{nope', pages, '154').error).toMatch(
+      /not valid JSON/
+    );
+    for (const [label, patch] of [
+      ['event', { event: 'run-start' }],
+      ['tool', { tool: '' }],
+      ['runId', { runId: '' }],
+      ['version', { executableVersion: 154 }],
+      ['launchedAt', { launchedAt: 'yesterday' }],
+    ]) {
+      const text = JSON.stringify({ ...JSON.parse(valid), ...patch });
+      expect(verifyBrowserProvenance(text, pages, '154').error, label).toMatch(
+        /must be a runner browser-launch record/
+      );
+    }
+  });
+
+  it('requires the launch to certify exactly this navigation', () => {
+    expect(
+      verifyBrowserProvenance(valid, [...pages, ...pages], '154').error
+    ).toMatch(/exactly one HAR iteration/);
+    expect(verifyBrowserProvenance(valid, [{}], '154').error).toMatch(
+      /carries no _meta.runId/
+    );
+    const otherRun = JSON.stringify({
+      ...JSON.parse(valid),
+      runId: 'run-other',
+    });
+    expect(verifyBrowserProvenance(otherRun, pages, '154').error).toMatch(
+      /runId does not match/
+    );
+    expect(
+      verifyBrowserProvenance(
+        valid,
+        [{ _meta: { runId: 'run-navigation-1' } }],
+        '154'
+      ).error
+    ).toMatch(/carry no startedDateTime/);
+  });
+
+  it('requires the launch inside the run window', () => {
+    const postdated = JSON.stringify({
+      ...JSON.parse(valid),
+      launchedAt: '2026-10-04T00:11:00.000Z',
+    });
+    expect(verifyBrowserProvenance(postdated, pages, '154').error).toMatch(
+      /postdates the measured run/
+    );
+    const stale = JSON.stringify({
+      ...JSON.parse(valid),
+      launchedAt: '2026-10-03T00:09:30.000Z',
+    });
+    expect(verifyBrowserProvenance(stale, pages, '154').error).toMatch(
+      /launch is stale/
+    );
+  });
+
+  it('requires the run-bound executable major', () => {
+    const older = JSON.stringify({
+      ...JSON.parse(valid),
+      executableVersion: '153.0.0.0',
+    });
+    expect(verifyBrowserProvenance(older, pages, '154').error).toMatch(
+      /does not match Chrome 154/
+    );
+    const malformed = JSON.stringify({
+      ...JSON.parse(valid),
+      executableVersion: 'debian-chromium',
+    });
+    expect(verifyBrowserProvenance(malformed, pages, '154').error).toMatch(
+      /not a dotted browser build/
+    );
+  });
+});

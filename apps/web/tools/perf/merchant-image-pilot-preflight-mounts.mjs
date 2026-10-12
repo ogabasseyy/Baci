@@ -73,6 +73,15 @@ export function assertServedMountCoverage(
       );
       continue;
     }
+    // Binding identity alone never suffices: a mount rendered under the
+    // wrong data-pilot-lab-slot would be measured in a slot whose
+    // geometry and crop were not accepted for it.
+    if (section.slotId !== mount.slotId) {
+      failures.push(
+        `${name}: expected ${mount.slotId} mount renders under slot "${section.slotId ?? 'unslotted'}" (binding/slot mismatch)`
+      );
+      continue;
+    }
     const rendered = bindingCounts.get(mount.binding) ?? 0;
     if (rendered > 1) {
       failures.push(

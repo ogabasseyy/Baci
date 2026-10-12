@@ -59,9 +59,34 @@ export async function screenshotProvenanceArg(dir, pngBytes, overrides = {}) {
   return `--screenshot-provenance=${path}`;
 }
 
+export async function browserProvenanceArg(dir, overrides = {}) {
+  const path = join(dir, `launch-${Math.random().toString(36).slice(2)}.json`);
+  await writeFile(
+    path,
+    JSON.stringify({
+      event: 'browser-launch',
+      executableVersion: '154.0.0.0',
+      launchedAt: '2026-10-04T00:09:30.000Z',
+      runId: 'run-navigation-1',
+      tool: 'browsertime',
+      ...overrides,
+    })
+  );
+  return `--browser-provenance=${path}`;
+}
+
 export async function runWithEntries(
   entries,
-  { extra = [], pages, provenance, provenanceRaw, shot = {}, shotRaw } = {}
+  {
+    browser = {},
+    browserRaw,
+    extra = [],
+    pages,
+    provenance,
+    provenanceRaw,
+    shot = {},
+    shotRaw,
+  } = {}
 ) {
   const dir = await mkdtemp(join(tmpdir(), 'pilot-settings-cache-'));
   const harPath = join(dir, 'browsertime.har');
@@ -98,14 +123,25 @@ export async function runWithEntries(
   await writeFile(pngPath, shotBytes);
   // Provenance is a runner artifact file: {} writes a valid one bound
   // to the dated pages, a string passes through literally (bogus
-  // paths), and provenanceRaw writes non-JSON bytes. Screenshots bind
-  // by default (the geometry gate requires it); shot:false omits the
-  // binding for the missing-provenance case.
+  // paths), and provenanceRaw writes non-JSON bytes. Screenshots and
+  // browser launches bind by default (their gates require them);
+  // shot:false / browser:false omit the binding for the
+  // missing-provenance cases.
   const provenanceArgs = [];
   if (typeof provenance === 'string') {
     provenanceArgs.push(`--cache-provenance=${provenance}`);
   } else if (provenance !== undefined) {
     provenanceArgs.push(await provenanceArg(dir, provenance));
+  }
+  if (typeof browser === 'string') {
+    provenanceArgs.push(`--browser-provenance=${browser}`);
+  } else if (browser !== false) {
+    provenanceArgs.push(await browserProvenanceArg(dir, browser ?? {}));
+  }
+  if (browserRaw !== undefined) {
+    const rawPath = join(dir, 'launch-raw.json');
+    await writeFile(rawPath, browserRaw);
+    provenanceArgs.push(`--browser-provenance=${rawPath}`);
   }
   if (provenanceRaw !== undefined) {
     const rawPath = join(dir, 'reset-raw.json');

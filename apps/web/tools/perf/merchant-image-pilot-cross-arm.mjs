@@ -24,11 +24,15 @@ export function crossArmProblems(left, right, expectedMounts) {
     problems.push('selected-slot boxes differ between arms');
   }
   for (const mount of expectedMounts) {
+    // Binding AND slot: comparing a binding rendered under different
+    // slots across arms would equate unaccepted geometry.
     const l = (left.slots ?? []).find(
-      (entry) => entry.binding === mount.binding
+      (entry) =>
+        entry.binding === mount.binding && entry.slotId === mount.slotId
     );
     const r = (right.slots ?? []).find(
-      (entry) => entry.binding === mount.binding
+      (entry) =>
+        entry.binding === mount.binding && entry.slotId === mount.slotId
     );
     if (!l?.rect || !r?.rect) {
       problems.push(

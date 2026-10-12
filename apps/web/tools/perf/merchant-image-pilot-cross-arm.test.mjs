@@ -11,6 +11,7 @@ describe('mounted image geometry parity', () => {
         binding: mount.binding,
         rect: { ...box, width: 390 },
         img: { box: imageBox },
+        slotId: mount.slotId,
       },
     ],
   });
@@ -49,6 +50,7 @@ describe('mounted image geometry parity', () => {
           binding: mount.binding,
           rect: { ...box, width: 390 },
           img: { box: { ...box }, objectFit: fit },
+          slotId: mount.slotId,
         },
       ],
     });
@@ -60,5 +62,15 @@ describe('mounted image geometry parity', () => {
     ).toContain(
       'slot "header-logo" object-fit differs between arms (control cover, pilot contain)'
     );
+  });
+  it('refuses to compare a binding rendered under different slots', () => {
+    // Same binding, same boxes — but the pilot renders under another
+    // slot: equating the two would bless unaccepted geometry, so the
+    // accepted slot reads as missing on the diverged arm instead.
+    const moved = geometry();
+    moved.slots[0].slotId = 'footer-logo';
+    expect(crossArmProblems(geometry(), moved, [mount])).toEqual([
+      'slot "header-logo" missing geometry for cross-arm comparison',
+    ]);
   });
 });

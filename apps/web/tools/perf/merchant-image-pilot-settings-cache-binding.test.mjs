@@ -90,30 +90,70 @@ describe('merchant-image-pilot-settings cache evidence: provenance binding', () 
     );
   });
 
-  it('records the attested browser executable separately from the emulated UA', async () => {
-    const unknown = await runWithEntries([{ status: 200 }]);
-    expect(unknown.report.warnings.join('\n')).toMatch(
-      /har\.browser-version: unknown/
-    );
-    const attested = await runWithEntries([{ status: 200 }], {
-      extra: ['--browser-version=154.0.0.0'],
+  it('requires run-bound browser executable provenance, not caller text', async () => {
+    // Absent launch record: the emulated request UA cannot prove the
+    // executable, so the gate fails instead of warning unknown.
+    const missing = await runWithEntries([{ status: 200 }], {
+      browser: false,
       provenance: {},
     });
-    expect(attested.error).toBe(null);
-    expect(attested.report.warnings).toEqual([]);
-    expect(attested.report.recorded.browserExecutable).toBe('154.0.0.0');
+    expect(missing.error).not.toBe(null);
+    expect(missing.report.failures.join('\n')).toMatch(
+      /har\.browser-version: no runner\/CDP executable provenance/
+    );
+    // Valid launch: the recorded executable comes from run evidence.
+    const bound = await runWithEntries([{ status: 200 }], {
+      provenance: {},
+    });
+    expect(bound.error).toBe(null);
+    expect(bound.report.ok).toBe(true);
+    expect(bound.report.recorded.browserExecutable).toBe('154.0.0.0');
+    // Older-Chrome run: same UA shape, wrong executable major.
     const wrongMajor = await runWithEntries([{ status: 200 }], {
-      extra: ['--browser-version=153.0.0.0'],
+      browser: { executableVersion: '153.0.0.0' },
       provenance: {},
     });
     expect(wrongMajor.error).not.toBe(null);
     expect(wrongMajor.report.failures.join('\n')).toMatch(
-      /har\.browser-version/
+      /har\.browser-version: attested executable 153\.0\.0\.0 does not match Chrome 154/
     );
-    const malformed = await runWithEntries([{ status: 200 }], {
-      extra: ['--browser-version=debian-chromium'],
+    // Unbound launch: runId, staleness, and shape all refuse.
+    for (const [label, browser, pattern] of [
+      ['runId', { runId: 'run-other' }, /runId does not match/],
+      ['stale', { launchedAt: '2026-10-03T00:09:30.000Z' }, /launch is stale/],
+      [
+        'postdated',
+        { launchedAt: '2026-10-04T01:09:30.000Z' },
+        /postdates the measured run/,
+      ],
+      [
+        'malformed',
+        { executableVersion: 'debian-chromium' },
+        /not a dotted browser build/,
+      ],
+    ]) {
+      const unbound = await runWithEntries([{ status: 200 }], {
+        browser,
+        provenance: {},
+      });
+      expect(unbound.error, label).not.toBe(null);
+      expect(unbound.report.failures.join('\n'), label).toMatch(pattern);
+    }
+    // The --browser-version flag survives only as a cross-check: a
+    // contradiction with the run evidence fails, a match passes.
+    const contradicting = await runWithEntries([{ status: 200 }], {
+      extra: ['--browser-version=153.0.0.0'],
       provenance: {},
     });
-    expect(malformed.error).not.toBe(null);
+    expect(contradicting.error).not.toBe(null);
+    expect(contradicting.report.failures.join('\n')).toMatch(
+      /contradicts the run-bound executable/
+    );
+    const matching = await runWithEntries([{ status: 200 }], {
+      extra: ['--browser-version=154.0.0.0'],
+      provenance: {},
+    });
+    expect(matching.error).toBe(null);
+    expect(matching.report.ok).toBe(true);
   });
 });

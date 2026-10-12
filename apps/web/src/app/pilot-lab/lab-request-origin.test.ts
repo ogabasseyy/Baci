@@ -17,6 +17,15 @@ describe('labRequestOrigin', () => {
     expect(labRequestOrigin({ host: 'LOCALHOST' })).toBe('http://localhost');
   });
 
+  it('echoes bracketed IPv6 loopback and defaults bare IPv6', () => {
+    // WHATWG hostname keeps the brackets, so the '[::1]' disjunct is
+    // the live IPv6 path — not dead code. Bare '::1' cannot parse as
+    // a URL host and fails closed to the loopback default instead.
+    expect(labRequestOrigin({ host: '[::1]:3122' })).toBe('http://[::1]:3122');
+    expect(labRequestOrigin({ host: '[::1]' })).toBe('http://[::1]');
+    expect(labRequestOrigin({ host: '::1' })).toBe('http://localhost:3000');
+  });
+
   it('collapses localhost subdomains to the canonical origin', () => {
     // A request-supplied subdomain must never reach rendered URLs, even
     // inside the loopback namespace — and neither must its port: the

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  browserProvenanceArg,
   DATED_PAGE,
   pngBuffer,
   provenanceArg,
@@ -20,6 +21,7 @@ describe('merchant-image-pilot-settings viewport and DPR evidence', () => {
     const harPath = join(dir, 'browsertime.har');
     const pngPath = join(dir, 'shot.png');
     const provenance = await provenanceArg(dir);
+    const browser = await browserProvenanceArg(dir);
     await writeFile(
       harPath,
       JSON.stringify({
@@ -64,6 +66,7 @@ describe('merchant-image-pilot-settings viewport and DPR evidence', () => {
           '--expect-dpr=2',
           provenance,
           shotWrongPair,
+          browser,
         ],
         (execError, execStdout) =>
           resolve({ error: execError, stdout: execStdout })

@@ -1,0 +1,104 @@
+// Runner browser-launch provenance for the pilot effective-settings
+// gate: the request User-Agent is emulated configuration, and a bare
+// --browser-version string is unbound caller text, so neither proves
+// which executable produced the HAR. The runner instead records the
+// launch it measured in an artifact the gate binds to the navigation:
+//   {"event":"browser-launch","tool":"<runner name>",
+//    "runId":"<single-use navigation id>",
+//    "executableVersion":"<dotted build>","launchedAt":"<ISO datetime>"}
+// One launch certifies exactly one HAR iteration: the runId must equal
+// the page's _meta.runId, and the launch must precede the navigation
+// by at most one hour (a stale or post-run launch proves nothing about
+// this run). Split from the provenance validators under the repo
+// ceiling. No I/O, no subprocesses.
+import { verifyBrowserVersion } from './merchant-image-pilot-settings-helpers.mjs';
+
+export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
+  if (text === null || text === undefined) {
+    return {
+      error: `cannot read browser-provenance artifact ${sourceLabel}`,
+      ok: false,
+    };
+  }
+  let artifact;
+  try {
+    artifact = JSON.parse(String(text));
+  } catch {
+    return {
+      error: 'browser-provenance artifact is not valid JSON',
+      ok: false,
+    };
+  }
+  if (
+    !artifact ||
+    typeof artifact !== 'object' ||
+    artifact.event !== 'browser-launch' ||
+    typeof artifact.tool !== 'string' ||
+    artifact.tool.length === 0 ||
+    typeof artifact.runId !== 'string' ||
+    artifact.runId.length === 0 ||
+    artifact.runId.length > 128 ||
+    typeof artifact.executableVersion !== 'string' ||
+    typeof artifact.launchedAt !== 'string' ||
+    !Number.isFinite(Date.parse(artifact.launchedAt))
+  ) {
+    return {
+      error:
+        'browser-provenance artifact must be a runner browser-launch record {event, tool, runId, executableVersion, launchedAt}',
+      ok: false,
+    };
+  }
+  if (pages?.length > 1) {
+    return {
+      error: 'one browser launch can certify exactly one HAR iteration',
+      ok: false,
+    };
+  }
+  const pageRunId = pages?.[0]?._meta?.runId;
+  if (typeof pageRunId !== 'string' || pageRunId.length === 0) {
+    return {
+      error: 'browser-provenance cannot bind: HAR page carries no _meta.runId',
+      ok: false,
+    };
+  }
+  if (pageRunId !== artifact.runId) {
+    return {
+      error:
+        'browser-provenance runId does not match the measured navigation: one launch certifies exactly one navigation',
+      ok: false,
+    };
+  }
+  const starts = (pages ?? [])
+    .map((page) => Date.parse(page?.startedDateTime))
+    .filter(Number.isFinite);
+  if (starts.length === 0) {
+    return {
+      error:
+        'browser-provenance cannot bind: HAR pages carry no startedDateTime',
+      ok: false,
+    };
+  }
+  const earliest = Math.min(...starts);
+  const launchedAt = Date.parse(artifact.launchedAt);
+  if (launchedAt > earliest) {
+    return {
+      error: 'browser-provenance launch postdates the measured run',
+      ok: false,
+    };
+  }
+  if (earliest - launchedAt > 3_600_000) {
+    return {
+      error: 'browser-provenance launch is stale (>1h before the measured run)',
+      ok: false,
+    };
+  }
+  const checked = verifyBrowserVersion(artifact.executableVersion, expectMajor);
+  if (!checked.ok) {
+    return checked;
+  }
+  return {
+    executableVersion: artifact.executableVersion,
+    ok: true,
+    summary: `${artifact.tool}@${artifact.executableVersion}`,
+  };
+}

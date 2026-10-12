@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  browserProvenanceArg,
   DATED_PAGE,
   pngBuffer,
   provenanceArg,
@@ -34,6 +35,7 @@ describe('merchant-image-pilot-settings route and artifact bounds', () => {
       viewport: { height: 667, width: 375 },
     });
     const provenance = await provenanceArg(dir);
+    const browser = await browserProvenanceArg(dir);
     const { execFile } = await import('node:child_process');
     return new Promise((resolve) => {
       execFile(
@@ -54,6 +56,7 @@ describe('merchant-image-pilot-settings route and artifact bounds', () => {
           '--expect-dpr=2',
           provenance,
           shot,
+          browser,
           ...extra,
         ],
         (error, stdout) => resolve({ error, stdout })

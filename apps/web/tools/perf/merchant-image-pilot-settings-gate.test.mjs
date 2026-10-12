@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  browserProvenanceArg,
   DATED_PAGE,
   pngBuffer,
   provenanceArg,
@@ -19,6 +20,7 @@ describe('merchant-image-pilot-settings gate', () => {
     const pngPath = join(dir, 'shot.png');
     const lhPath = join(dir, 'report.json');
     const provenance = await provenanceArg(dir);
+    const browser = await browserProvenanceArg(dir);
     await writeFile(
       harPath,
       JSON.stringify({
@@ -113,6 +115,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-dpr=2',
       provenance,
       shot,
+      browser,
     ]);
     expect(harOnly.error).toBe(null);
     expect(harOnly.stdout).toMatch(/lighthouse\.skipped/);
@@ -132,6 +135,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-dpr=2',
       provenance,
       shot668,
+      browser,
     ]);
     expect(rounded.error).toBe(null);
     const wrongDpr = await run([
@@ -173,6 +177,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-lh-viewport=412x823',
       '--expect-lh-dpr=1.75',
       '--expect-cpu-slowdown=4',
+      browser,
     ]);
     expect(mismatched.stdout).not.toBe(matched.stdout);
     expect(matched.error).toBe(null);
@@ -188,6 +193,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-dpr=2',
       provenance,
       shot,
+      browser,
       '--expect-form-factor=mobile',
       '--expect-throttling-method=simulate',
       '--expect-rtt-ms=150',

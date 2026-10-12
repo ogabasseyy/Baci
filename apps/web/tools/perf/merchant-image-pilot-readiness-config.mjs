@@ -22,6 +22,7 @@ export const READINESS_CLI_OPTIONS = [
 ];
 
 export const SETTINGS_CLI_OPTIONS = [
+  'browser-provenance',
   'browser-version',
   'cache-provenance',
   'expect-cpu-slowdown',

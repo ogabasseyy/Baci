@@ -55,6 +55,8 @@ def ensure_not_downgrade(new_version, current_version, allow_downgrade=False):
 
 
 def resolve_pins(channel):
+    if not isinstance(channel, dict):
+        raise ValueError("stable channel did not return a JSON object")
     version = channel.get("version")
     manifest_url = channel.get("manifest_url")
     if channel.get("state") != "public" or not isinstance(version, str) \
@@ -64,6 +66,8 @@ def resolve_pins(channel):
     if parsed.scheme != "https" or parsed.hostname != MANIFEST_HOST:
         raise ValueError("stable channel returned an untrusted manifest URL")
     manifest = fetch_json(manifest_url, MANIFEST_HOST)
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest did not return a JSON object")
     if manifest.get("version") != version or manifest.get("checksum_algorithm") != "sha256":
         raise ValueError("manifest version or checksum algorithm does not match channel metadata")
     artifacts = manifest.get("artifacts")

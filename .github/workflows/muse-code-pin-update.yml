@@ -46,6 +46,23 @@ jobs:
           done
           for script in .github/scripts/muse-review/*.sh; do bash -n "$script"; done
 
+      - name: Smoke-test the pinned installer against the real binary
+        if: steps.pin.outcome == 'success'
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Muse pin unchanged; skipping installer smoke test."
+            exit 0
+          fi
+          # The offline suites only prove install.sh and the SARIF pins
+          # agree with each other; both are rewritten from the same
+          # manifest. Run the installer so a wrong manifest checksum
+          # fails closed here instead of at Muse review runtime.
+          export HOME="${RUNNER_TEMP}/muse-smoke-home"
+          mkdir -p "$HOME"
+          export GITHUB_PATH="${RUNNER_TEMP}/muse-smoke-path"
+          bash .github/scripts/muse-review/install.sh
+
       - name: Create pin update pull request
         env:
           # Prefer a dedicated automation token when configured: pushes and
@@ -60,9 +77,14 @@ jobs:
             exit 0
           fi
           existing="$(gh pr list --state open --limit 200 --json headRefName,url,isCrossRepository \
-            --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .url' | head -n1)"
+            --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .headRefName' | head -n1)"
           if [[ -n "$existing" ]]; then
-            echo "An open Muse pin update already exists: $existing"
+            echo "An open Muse pin update already exists on $existing; re-dispatching its checks."
+            # A prior run may have created the PR but failed before
+            # dispatching checks; re-dispatch so it cannot stay checkless.
+            gh workflow run ci.yml --ref "$existing"
+            gh workflow run security.yml --ref "$existing" -f trusted_changed=true
+            gh workflow run muse-review-selftest.yml --ref "$existing"
             exit 0
           fi
           branch="automation/muse-code-pin-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -81,6 +103,6 @@ jobs:
             # Dispatch them explicitly against the new branch so the checks
             # exist on the PR head commit.
             gh workflow run ci.yml --ref "$branch"
-            gh workflow run security.yml --ref "$branch"
+            gh workflow run security.yml --ref "$branch" -f trusted_changed=true
             gh workflow run muse-review-selftest.yml --ref "$branch"
           fi

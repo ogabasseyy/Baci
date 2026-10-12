@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,11 +14,17 @@ import {
   assertNoUnboundStagedContent,
 } from './pilot-public-assets-triage';
 
-const PINNED = new Set([
+const PINNED_NAMES = [
   'grid-filler-600x400-a.png',
   'grid-filler-600x400-b.png',
   'grid-filler-600x400-c.png',
-]);
+];
+const PINNED = Object.fromEntries(
+  PINNED_NAMES.map((name) => [
+    name,
+    createHash('sha256').update(`committed ${name}`).digest('hex'),
+  ])
+);
 
 const roots: string[] = [];
 function root() {
@@ -50,18 +57,43 @@ describe('assertNonLabFillers', () => {
       assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
     ).toThrow(/not a confined directory/);
   });
-  it('passes pinned fixtures by name without hashing', () => {
+  it('passes pinned fixtures by name but warns on hash drift', () => {
     // A recompressed filler (right name, wrong bytes) must not brick a
-    // non-lab boot: hash pinning is lab-only.
+    // non-lab boot — but the drift must be visible, not silently
+    // served: hash refusal is lab-only, hash warning is not.
     const dir = root();
     const fillers = join(dir, '__pilot', 'fillers');
     mkdirSync(fillers, { recursive: true });
-    for (const name of PINNED) {
+    for (const name of PINNED_NAMES) {
       writeFileSync(join(fillers, name), 'recompressed bytes');
     }
-    expect(() =>
-      assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
-    ).not.toThrow();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() =>
+        assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
+      ).not.toThrow();
+      expect(warn).toHaveBeenCalledTimes(3);
+      expect(warn.mock.calls[0][0]).toMatch(/does not match the pinned hash/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it('stays silent for pinned fixtures with matching hashes', () => {
+    const dir = root();
+    const fillers = join(dir, '__pilot', 'fillers');
+    mkdirSync(fillers, { recursive: true });
+    for (const name of PINNED_NAMES) {
+      writeFileSync(join(fillers, name), `committed ${name}`);
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() =>
+        assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
+      ).not.toThrow();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
   it('warns on non-merchant strays under fillers', () => {
     const dir = root();

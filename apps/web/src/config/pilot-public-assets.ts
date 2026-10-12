@@ -254,7 +254,7 @@ export function assertPilotPublicAssets(
       if (labEnabled) {
         assertFillers(join(root, name));
       } else {
-        assertNonLabFillers(root, name, new Set(Object.keys(FILLERS)));
+        assertNonLabFillers(root, name, FILLERS);
       }
       sawFillers = true;
       continue;

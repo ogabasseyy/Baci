@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { register } from './instrumentation';
 
@@ -147,6 +148,39 @@ describe('instrumentation pilot boot gate', () => {
     expect(registerOTelMock).toHaveBeenCalledOnce();
   });
 
+  it('degrades to a warned cwd check when unanchored with lab off', async () => {
+    // A lab-only feature must not brick unrelated boots: without an
+    // anchored root and with the lab off, register warns loudly and
+    // checks the legacy cwd tree instead of throwing.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw new Error('cannot anchor the public tree');
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(register()).resolves.toBe(undefined);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toMatch(/cannot anchor/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
+      join(process.cwd(), 'public')
+    );
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+  it('stays fatal when unanchored with lab on', async () => {
+    // Lab mode demands a verified tree: an unanchored lab boot refuses
+    // instead of inspecting a lookalike.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw new Error('cannot anchor the public tree');
+    });
+    await expect(register()).rejects.toThrow(/cannot anchor/);
+    expect(assertPilotPublicAssetsMock).not.toHaveBeenCalled();
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
   it('boots the pilot gate against the resolved public dir, never bare cwd', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     await register();

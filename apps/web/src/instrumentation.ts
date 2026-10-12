@@ -55,15 +55,33 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     // Standalone starts can reuse serialized Next config: recheck the actual
     // runtime public tree, including lab-built artifacts started with flag off.
-    // The root resolves through the shared helper (config-stashed,
-    // standalone-anchored, or cwd) so boot inspects the same tree the
-    // build gate did — never a cwd-dependent lookalike.
+    // The root resolves through the shared helper (config-stashed or
+    // standalone-anchored) so boot inspects the same tree the build gate
+    // did — never a silently wrong lookalike.
     const { assertPilotPublicAssets, resolvePilotPublicDir } = await import(
       '@/config/pilot-public-assets'
     );
-    const pilotPublicDir = resolvePilotPublicDir();
-    assertPilotPublicAssets(pilotPublicDir);
     const { isPilotLabEnabled } = await import('@/config/pilot-lab-enabled');
+    let pilotPublicDir: string;
+    try {
+      pilotPublicDir = resolvePilotPublicDir();
+    } catch (error) {
+      // Unanchored boot (no config stash, no standalone path): lab mode
+      // demands a verified tree and stays fatal, but a lab-only feature
+      // must not brick unrelated boots (serverless, custom servers,
+      // test harnesses). With the lab off, check the legacy cwd tree
+      // and warn loudly that anything outside it is unseen. Detected
+      // staged content still refuses below; only the anchor failure
+      // degrades.
+      if (isPilotLabEnabled()) {
+        throw error;
+      }
+      console.warn(
+        'merchant image pilot: startup gate cannot anchor the public tree (no config stash, no standalone path); checking cwd/public only — staged content elsewhere would be served unverified'
+      );
+      pilotPublicDir = join(process.cwd(), 'public');
+    }
+    assertPilotPublicAssets(pilotPublicDir);
     if (isPilotLabEnabled()) {
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'

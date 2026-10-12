@@ -10,7 +10,7 @@ import { readUpToBytes } from '@/lib/merchant-image-variant-pilot/lab-config-sta
 const MAX_STAGED_ENTRIES = 256;
 const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 
-// Last fully verified snapshot: size+mtime+ctime per path, keyed by the
+// Last fully verified snapshots: size+mtime+ctime per path, keyed by the
 // exact staged set (paths AND expected digests). Repeat GETs re-lstat
 // (cheap) and skip the re-read/re-hash only when every entry is
 // byte-identical to a snapshot that already passed the full check. Any
@@ -18,13 +18,20 @@ const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 // changed expectation re-runs the full read+hash below. ctime closes the
 // mtime-pinning hole: utimens can freeze mtime after a rewrite, but the
 // write itself bumps ctime, so pinned-mtime drift always re-hashes.
-let lastVerified: { fingerprint: string; key: string } | null = null;
+// Keyed (not single-slot): the staged+fillers twin verifies two sets
+// per request, and a single slot would alternately evict so neither
+// fast path ever hits. Bounded small — production holds two entries;
+// anything older is simply re-verified.
+const lastVerified = new Map<string, string>();
+const MAX_VERIFIED_SETS = 4;
 
-// In-flight full check, shared by concurrent requests: after drift,
-// every lab GET would otherwise pay its own hashing pass (bounded at
-// 256 MiB each). Joiners must present the identical stat snapshot, so
-// a shared verdict is always the verdict they would have computed.
-let inflight: { flightKey: string; promise: Promise<void> } | null = null;
+// In-flight full checks, shared by concurrent requests and keyed by
+// stat snapshot for the same reason: after drift, every lab GET would
+// otherwise pay its own hashing pass (bounded at 256 MiB each).
+// Joiners must present the identical stat snapshot, so a shared
+// verdict is always the verdict they would have computed. Entries
+// delete on settle, so no bound is needed.
+const inflight = new Map<string, Promise<void>>();
 
 function snapshotKey(paths: readonly { path: string; sha256: string }[]) {
   return JSON.stringify(paths.map((entry) => [entry.path, entry.sha256]));
@@ -96,27 +103,24 @@ export async function verifyStagedBytes(
   }
   const key = snapshotKey(unique);
   const fingerprint = fingerprintStats(sizes);
-  if (
-    fingerprint !== null &&
-    lastVerified?.key === key &&
-    lastVerified.fingerprint === fingerprint
-  ) {
+  if (fingerprint !== null && lastVerified.get(key) === fingerprint) {
     return;
   }
   // Same stat snapshot (missing files included as nulls): joiners share
   // this pass's verdict because it is byte-for-byte the pass they
   // would have run — same inputs, same details on failure.
   const flightKey = `${key}\n${JSON.stringify(sizes.map((info) => (info === null ? null : [info.size, info.mtimeMs, info.ctimeMs])))}`;
-  if (inflight?.flightKey === flightKey) {
-    return inflight.promise;
+  const joined = inflight.get(flightKey);
+  if (joined) {
+    return joined;
   }
   const promise = verifyUncached(unique, sizes, links, key, fingerprint);
-  inflight = { flightKey, promise };
+  inflight.set(flightKey, promise);
   try {
     await promise;
   } finally {
-    if (inflight?.promise === promise) {
-      inflight = null;
+    if (inflight.get(flightKey) === promise) {
+      inflight.delete(flightKey);
     }
   }
 }
@@ -195,6 +199,13 @@ async function verifyUncached(
     );
   }
   if (fingerprint !== null) {
-    lastVerified = { fingerprint, key };
+    lastVerified.set(key, fingerprint);
+    while (lastVerified.size > MAX_VERIFIED_SETS) {
+      const oldest = lastVerified.keys().next().value as string | undefined;
+      if (oldest === undefined) {
+        break;
+      }
+      lastVerified.delete(oldest);
+    }
   }
 }

@@ -33,8 +33,11 @@ test('gate-only changes set pilot=true', async () => {
     'apps/web/src/instrumentation.ts',
     'apps/web/src/instrumentation-pilot.test.ts',
     'apps/web/next.config.ts',
+    'apps/web/next.config.pilot-assets.test.ts',
     'apps/web/src/components/storefront/product-card.tsx',
+    'apps/web/src/components/storefront/product-card.test.tsx',
     'apps/web/src/lib/storefront-product-href.ts',
+    'apps/web/src/lib/storefront-product-href.test.ts',
     'apps/web/package.json',
   ];
   for (const name of gateOnly) {

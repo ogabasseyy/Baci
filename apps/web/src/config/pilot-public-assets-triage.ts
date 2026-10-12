@@ -3,7 +3,14 @@
 // walks, staged-shape scans, and the degraded-mode checks. Lab-only
 // filler hash pinning stays with the gate; everything here runs in both
 // modes or in degraded lab boot.
-import { lstatSync, readdirSync, realpathSync, type Stats } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  type Stats,
+} from 'node:fs';
 import { extname, join, sep } from 'node:path';
 
 export function assertConfinedEntry(
@@ -160,15 +167,19 @@ export function assertNonLabEntry(root: string, name: string): void {
 // or a fillers symlink — was publicly servable with no gate noticing.
 // Confinement is unconditional (a symlinked fillers dir refuses, in
 // both modes); contents triage like any other entry except the pinned
-// fixture names pass by exact name WITHOUT hash comparison, so a
-// recompressed filler still cannot brick a non-lab boot.
+// fixture names pass by exact name WITHOUT hash refusal, so a
+// recompressed filler still cannot brick a non-lab boot. Pinned-name
+// drift still warns (hash-checked, warn-only): a merchant image
+// planted under a trusted filler name would otherwise be served with
+// no record anywhere.
 export function assertNonLabFillers(
   root: string,
   name: string,
-  pinnedNames: ReadonlySet<string>
+  pinnedFillers: Readonly<Record<string, string>>
 ): void {
   assertConfinedEntry(root, name, 'non-lab public pilot tree');
   const dir = join(root, name);
+  const pinnedNames = new Set(Object.keys(pinnedFillers));
   let strays = 0;
   // Top level exempts the pinned fixtures; anything nested is scanned
   // in full (fillers ship flat, so a subdirectory is already stray).
@@ -197,6 +208,23 @@ export function assertNonLabFillers(
         );
       }
       strays += 1;
+    }
+  }
+  // Plain read (not the pinned-fd reader): a TOCTOU here only skews a
+  // warning, never a safety decision — and warn-only is the point.
+  for (const [file, expected] of Object.entries(pinnedFillers)) {
+    let digest: string;
+    try {
+      digest = createHash('sha256')
+        .update(readFileSync(join(dir, file)))
+        .digest('hex');
+    } catch {
+      continue;
+    }
+    if (digest !== expected) {
+      console.warn(
+        `non-lab public pilot tree filler "${file}" does not match the pinned hash; served as-is — restore it or ignore`
+      );
     }
   }
   if (strays > 0) {

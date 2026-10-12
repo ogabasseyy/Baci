@@ -261,4 +261,26 @@ describe('verifyStagedBytesAndFillers', () => {
       )
     ).rejects.toThrow(/restore public\/__pilot\/fillers from version control/);
   });
+
+  it('reads nothing on a repeat twin verification (both sets stay cached)', async () => {
+    // The twin verifies two sets per request: a single-slot cache would
+    // alternately evict so every GET re-hashes everything. Both sets
+    // must hold their fast path across repeat calls.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-fillers-cache-'));
+    const tier = join(dir, 'tier.avif');
+    const filler = join(dir, 'filler.png');
+    const tierBytes = Buffer.from('tier');
+    const fillerBytes = Buffer.from('filler');
+    await writeFile(tier, tierBytes);
+    await writeFile(filler, fillerBytes);
+    const sha = (bytes: Buffer) =>
+      createHash('sha256').update(bytes).digest('hex');
+    const staged = [{ path: tier, sha256: sha(tierBytes) }];
+    const fillers = [{ path: filler, sha256: sha(fillerBytes) }];
+    await verifyStagedBytesAndFillers(staged, fillers);
+    const firstPassReads = readCalls.count;
+    expect(firstPassReads).toBeGreaterThan(0);
+    await verifyStagedBytesAndFillers(staged, fillers);
+    expect(readCalls.count).toBe(firstPassReads);
+  });
 });

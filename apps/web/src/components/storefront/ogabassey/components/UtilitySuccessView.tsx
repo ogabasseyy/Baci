@@ -53,7 +53,9 @@ export function UtilitySuccessView({
         </div>
         {voucherPin ? (
           <div className="flex justify-between">
-            <span className="text-gray-500">Voucher / Token</span>
+            <span className="text-store-background-text/70">
+              Voucher / Token
+            </span>
             <span className="font-mono text-xs">{voucherPin}</span>
           </div>
         ) : null}

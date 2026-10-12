@@ -11,6 +11,18 @@
  * them. The registry merges the snapshot on recall/persist, so only
  * simultaneous cross-tab mints can still diverge (documented residual
  * — sync recall cannot take an async lock).
+ *
+ * Privacy note: snapshot keys embed the purchase signature (recipient
+ * phone / meter identifiers) in plaintext, like the existing
+ * sessionStorage utility draft. Recall is owner+merchant scoped (a
+ * foreign account can never USE these keys) and entries expire after
+ * 24h, but anyone with same-profile devtools access can read the
+ * identifiers until then. True confidentiality is impossible here —
+ * reload recovery requires the mapping to be readable after restart,
+ * and any on-disk salt/key is equally readable — so hashing would
+ * only deter casual glances while risking the recall path. App-wide
+ * sign-out storage clearing is the real fix for the shared-device
+ * class (orders, drafts, and this snapshot alike); tracked separately.
  */
 
 /**

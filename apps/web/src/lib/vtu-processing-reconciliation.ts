@@ -13,13 +13,16 @@ const RECONCILABLE_VTU_TYPES = [
   'cable_tv',
   'betting',
 ] as const;
-// Processing rows requery by provider reference; transient-marked pending
-// rows (debited, vend timed out before returning a reference) re-vend
-// instead — requery without a vendReference is PENDING forever. Plain
-// pending rows (never debited: mapping-less orphans, PK-race leftovers)
-// stay excluded: the reconciler must never touch them.
+// Processing rows requery by provider reference; marked pending rows
+// re-vend instead (claim → idempotent debit → vend): Monnify timeouts
+// restored to pending (requery without a vendReference is PENDING
+// forever) and pre-vend interruptions (debit RPC / walletDebited
+// write failures — reference-less, so the reconcile claim declines
+// them). Plain pending rows (never debited: mapping-less orphans,
+// PK-race leftovers) stay excluded: the reconciler must never touch
+// them.
 const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)';
+  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null))';
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

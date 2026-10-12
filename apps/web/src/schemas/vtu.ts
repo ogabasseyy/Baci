@@ -292,11 +292,4 @@ export const vtuSavedCardChargeSchema = purchaseSchemaBase
   })
   .superRefine(applyPurchaseRequirements);
 
-/** Maps our bill type enum to commission calculation categories */
-export const COMMISSION_CATEGORY_MAP: Record<BillType, string> = {
-  airtime: 'AIRTIME',
-  data: 'DATA',
-  electricity: 'ELECTRICITY',
-  cable_tv: 'CABLE',
-  betting: 'BETTING',
-};
+export { COMMISSION_CATEGORY_MAP } from './vtu-commission';

@@ -80,7 +80,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null))'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -96,7 +96,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null))'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -127,11 +127,12 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
   });
 
-  it('selects transient-marked pending rows so debited timeouts re-vend', async () => {
-    // A Monnify vend that times out before returning a reference is
-    // restored to pending: requery without a vendReference is PENDING
-    // forever, so only the pending claim → re-vend flow can resolve
-    // it. Plain pending rows stay excluded (mapping-less orphans).
+  it('selects marked pending rows so interrupted debits re-vend', async () => {
+    // Monnify timeouts (no vendReference: requery is PENDING forever)
+    // and pre-vend interruptions (no reference at all: the reconcile
+    // claim declines them) restore to marked pending so the claim →
+    // re-vend flow resolves them. Plain pending rows stay excluded
+    // (mapping-less orphans).
     const countQuery = createProcessingQuery({ count: 1 });
     const dataQuery = createProcessingQuery({ data: [{ id: 'tx-retry' }] });
     const supabase = createSupabase({ countQuery, dataQuery });
@@ -146,7 +147,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null))';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({

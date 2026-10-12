@@ -1933,15 +1933,55 @@ async function resolveCurrentVtuTransactionState({
   }
 
   if (currentRow.status === 'failed') {
-    const metadata = currentRow.metadata ?? {};
-    const refundIssued = metadata.refundIssued === true;
-    const refundedAmount = Number(metadata.refundAmount ?? currentRow.amount);
+    // Concurrent return (replay/cron overlap): the winner may have
+    // persisted failed but not yet confirmed the refund. Confirm it
+    // here — this response is terminal (the client rotates the key),
+    // and failed rows are cron-excluded, so an unconfirmed refund
+    // would strand the debit with no re-drive. Idempotent: a prior
+    // pass's flags short-circuit inside the helper.
+    const refundMetadata = { ...(currentRow.metadata ?? {}) };
+    const refund = await refundVtuToCustomerWallet({
+      metadata: refundMetadata,
+      row: currentRow,
+      supabase,
+    });
+    throwIfVtuRefundUnconfirmed({
+      row: currentRow,
+      refundIssued: refund.refundIssued,
+      refundedAmount: refund.refundedAmount,
+      failedMessage: currentRow.error_message ?? undefined,
+      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+      message: `Unable to confirm VTU refund before returning concurrent failed purchase for ${currentRow.id}`,
+    });
+    if (refund.metadataChanged) {
+      const { error: refundMetadataUpdateError } = await supabase
+        .from('vtu_transactions')
+        .update({ metadata: refundMetadata })
+        .eq('id', currentRow.id)
+        .eq('status', 'failed');
+      if (refundMetadataUpdateError) {
+        // Same fail-closed shape as the direct failed branch: the
+        // wallet was credited but the row doesn't say so. Throw so
+        // the next request retries the metadata write (the RPC
+        // short-circuits on the existing ledger row).
+        console.error('Failed to persist concurrent VTU refund metadata:', {
+          error: refundMetadataUpdateError.message,
+          metadata: getSafeMetadataDiagnostics(refundMetadata),
+          transactionId: currentRow.id,
+        });
+        throwVtuPersistenceError(
+          `Failed to persist concurrent VTU refund metadata for ${currentRow.id}: ${refundMetadataUpdateError.message}`
+        );
+      }
+    }
     return {
       amount: Number(currentRow.amount) || 0,
       error: currentRow.error_message || 'Purchase failed',
       reference: currentRow.request_reference,
-      ...(refundIssued &&
-        refundedAmount > 0 && { refundedToWallet: refundedAmount }),
+      ...(refund.refundIssued &&
+        refund.refundedAmount > 0 && {
+          refundedToWallet: refund.refundedAmount,
+        }),
       status: 'failed',
     };
   }
@@ -2370,6 +2410,45 @@ async function executeVtuPurchase(
   );
 }
 
+/**
+ * Best-effort restore for pre-vend interruptions (debit RPC error,
+ * walletDebited metadata write failure): flips the claimed row back
+ * to pending with a resume marker so client retry AND the cron
+ * re-drive it (claim → debit, idempotent → vend). Without this the
+ * row sits processing with no provider reference, which the
+ * reconciliation claim declines — debited with no vend or refund,
+ * forever. Failures of THIS write only log: the original throw
+ * below still surfaces, preserving today's behavior in that case.
+ */
+async function restoreInterruptedPreVendVtuRow({
+  errorMessage,
+  row,
+  supabase,
+}: {
+  errorMessage: string;
+  row: VtuTransactionRow;
+  supabase: SupabaseClient;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('vtu_transactions')
+    .update({
+      error_message: errorMessage,
+      metadata: {
+        ...(row.metadata ?? {}),
+        preVendInterruptedAt: new Date().toISOString(),
+      },
+      status: 'pending',
+    })
+    .eq('id', row.id)
+    .eq('status', 'processing');
+  if (error) {
+    console.error('Failed to restore interrupted pre-vend VTU row:', {
+      error: error.message,
+      transactionId: row.id,
+    });
+  }
+}
+
 export async function fulfillPendingVtuTransaction({
   retryFailed = false,
   supabase,
@@ -2612,6 +2691,11 @@ export async function fulfillPendingVtuTransaction({
             metadata: getSafeMetadataDiagnostics(raceMetadata),
             transactionId: row.id,
           });
+          // Deliberately NOT restored to pending (unlike the two
+          // sites below): the card-leg refund above may have issued,
+          // and re-driving would run it again with no record of the
+          // first — a double refund. Pre-existing crash window,
+          // unchanged by the pre-vend restore.
           throwVtuPersistenceError('Failed to persist wallet-race VTU result');
         }
         return {
@@ -2625,15 +2709,21 @@ export async function fulfillPendingVtuTransaction({
           status: 'failed',
         };
       }
-      // Any other RPC error: throw so the webhook caller retries the
-      // whole flow safely. The debit RPC is idempotent so re-running
-      // is safe.
+      // Any other RPC error: restore to marked pending so retry AND
+      // cron re-drive (the debit RPC is idempotent so re-running is
+      // safe), then throw so the caller surfaces 5xx (client keeps
+      // the key and replays onto this row).
       console.error('VTU wallet debit RPC failed:', {
         amount: paymentSplitForDebit.wallet,
         customerId: row.customer_id,
         error: debitError.message,
         rpc: 'redeem_vtu_wallet_payment',
         transactionId: row.id,
+      });
+      await restoreInterruptedPreVendVtuRow({
+        errorMessage: `Failed to debit VTU wallet for ${row.id}: ${debitError.message}`,
+        row,
+        supabase,
       });
       throwVtuPersistenceError(
         `Failed to debit VTU wallet for ${row.id}: ${debitError.message}`
@@ -2650,16 +2740,21 @@ export async function fulfillPendingVtuTransaction({
       .update({ metadata: debitedMetadata })
       .eq('id', row.id);
     if (walletDebitedPersistError) {
-      // Fail closed: the wallet was credited via the (idempotent) RPC
-      // but the row still says walletDebited=false. Continuing would
-      // mean the next fulfillment retry calls the RPC again (cheap —
-      // it short-circuits on the existing ledger row) then vends. That
-      // is safe but wasteful; throw so the caller retries the metadata
-      // write before vending.
+      // Fail closed: the wallet was debited via the (idempotent) RPC
+      // but the row still says walletDebited=false. Restore to marked
+      // pending so the retry re-drives (the RPC short-circuits on the
+      // existing ledger row, the metadata write is retried, then it
+      // vends) instead of stranding a reference-less processing row
+      // the reconciliation claim declines.
       console.error('Failed to persist VTU walletDebited metadata:', {
         error: walletDebitedPersistError.message,
         metadata: getSafeMetadataDiagnostics(debitedMetadata),
         transactionId: row.id,
+      });
+      await restoreInterruptedPreVendVtuRow({
+        errorMessage: `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`,
+        row,
+        supabase,
       });
       throwVtuPersistenceError(
         `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`

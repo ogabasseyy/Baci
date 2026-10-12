@@ -3068,6 +3068,76 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('confirms the refund when losing the reconcile claim to an unrefunded failed row', async () => {
+    // Replay/cron overlap: the winner persisted failed but hasn't
+    // confirmed the refund yet. This terminal response must confirm
+    // it — the client rotates the key on 400 and failed rows are
+    // cron-excluded, so anything less strands the debit forever.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Checking status',
+      status: 'processing',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      currentTransactionData: {
+        error_message: 'Kuda rejected the vend',
+        metadata: {},
+        status: 'failed',
+        transaction_id: 'kuda-air-1',
+      },
+      purchaseUpdateData: null,
+      rpcImpl,
+      updatePayloads,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-air-1',
+        status: 'processing',
+        metadata: {},
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(rpcImpl).toHaveBeenCalledWith('refund_customer_wallet_for_vtu', {
+      p_customer_id: 'customer-1',
+      p_merchant_id: 'merchant-1',
+      p_amount: 1000,
+      p_vtu_transaction_id: 'vtu-1',
+      p_description: expect.stringContaining('Refund for failed'),
+    });
+    expect(result).toEqual({
+      amount: 1000,
+      error: 'Kuda rejected the vend',
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ refundIssued: true }),
+      })
+    );
+  });
+
   it('reconciles a processing airtime transaction with Kuda status', async () => {
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Request successful',
@@ -4102,6 +4172,113 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.anything()
       );
+    });
+
+    it('restores debit-RPC failures to marked pending so retry/cron re-drives them', async () => {
+      // Without the restore the row sits processing with no provider
+      // reference, which the reconciliation claim declines — debited
+      // with no vend or refund, forever.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection terminated', code: '08006' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        transactionRow: {
+          id: 'vtu-debit-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-DBRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-debit-restore',
+        })
+      ).rejects.toThrow(/Failed to debit VTU wallet/);
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          error_message: expect.stringMatching(/Failed to debit VTU wallet/),
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+    });
+
+    it('restores walletDebited write failures to marked pending (debit is kept, re-drive short-circuits)', async () => {
+      // The debit RPC committed but the flag write failed: restore so
+      // the retry re-drives (RPC short-circuits on the ledger row,
+      // flag write retried, then vend) instead of stranding a
+      // reference-less processing row the claim declines.
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        updateErrors: { finalMetadata: { message: 'write failed' } },
+        transactionRow: {
+          id: 'vtu-debited-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-DEBITEDRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-debited-restore',
+        })
+      ).rejects.toThrow(/Failed to persist walletDebited/);
+      // The restore write itself also hits the injected failure
+      // (best-effort: logged, original throw preserved) — but the
+      // attempt is recorded, proving the path runs.
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     });
 
     it('skips redeem RPC when walletDebited is already true and proceeds to vend', async () => {

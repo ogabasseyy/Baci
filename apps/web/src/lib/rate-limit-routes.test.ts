@@ -43,6 +43,19 @@ describe('rate-limit route matching', () => {
     ).toBe(100);
   });
 
+  it('bounds anonymous cart bootstraps below the storefront bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/bootstrap')).toMatchObject({
+      pattern: '/api/storefront/cart/bootstrap',
+      config: { maxRequests: 20, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/storefront/cart').config.maxRequests).toBe(
+      100
+    );
+    expect(
+      getRateLimitConfig('/api/storefront/cart/commands').config.maxRequests
+    ).toBe(100);
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

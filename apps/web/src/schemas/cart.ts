@@ -95,3 +95,13 @@ export const createCartRequestSchema = z.strictObject({
   lines: z.array(cartInputLineSchema).max(20).optional(),
   operationId: operationIdSchema,
 });
+
+/**
+ * Bootstrap body. The merchant slug is a lookup hint for hosts without
+ * trusted merchant headers (platform root host, previews, native); it is
+ * resolved through the published-store mapping and never confers
+ * authority by itself.
+ */
+export const cartBootstrapRequestSchema = z.strictObject({
+  merchantSlug: z.string().trim().min(1).max(128).optional(),
+});

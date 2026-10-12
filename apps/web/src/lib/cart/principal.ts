@@ -40,6 +40,11 @@ export interface ResolveCartPrincipalDeps {
   resolveMerchant: (request: Request) => Promise<CartMerchantContext | null>;
   verify: (proof: string) => Promise<CartSessionVerification>;
   readCookie?: (request: Request, name: string) => string | null;
+  /**
+   * Overrides proof extraction (e.g. native Bearer [REDACTED] before cookies).
+   * Defaults to the merchant-namespaced session cookie.
+   */
+  readProof?: (request: Request, cookieName: string) => string | null;
 }
 
 /**
@@ -81,7 +86,10 @@ export async function resolveCartPrincipal(
   }
 
   const readCookie = deps.readCookie ?? readCookieFromRequest;
-  const proof = readCookie(request, cartSessionCookieName(merchant.slug));
+  const cookieName = cartSessionCookieName(merchant.slug);
+  const proof = deps.readProof
+    ? deps.readProof(request, cookieName)
+    : readCookie(request, cookieName);
   if (!proof) {
     return { error: 'missing_proof', ok: false };
   }

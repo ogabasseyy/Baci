@@ -48,6 +48,7 @@ function shapeResult(
   const priced = buildCartSnapshot(result.state);
   return {
     cart: priced.snapshot,
+    ...(result.grantId ? { grantId: result.grantId } : null),
     ok: true,
     operationId,
     replayed: result.replayed || result.state.replayed,

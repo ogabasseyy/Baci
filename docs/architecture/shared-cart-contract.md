@@ -199,3 +199,42 @@ the default ports).
   mutation-errors and legacy-migration import and run in bare Node via
   tsx with no web runtime; `worker-boundary.test.ts` trips on any new
   `server-only`, `@/`, `next` or `zod` import.
+
+## Task 5 HTTP endpoints and route authority
+
+- `POST /api/storefront/cart/bootstrap` mints a 15-minute bootstrap
+  proof for the resolved merchant; it creates no cart, account or auth
+  session. `GET /api/storefront/cart` returns the authorized snapshot
+  for a session proof and sets no cookie. `POST
+  /api/storefront/cart` lazily creates one cart per operation id and
+  returns the upgraded session proof. `POST
+  /api/storefront/cart/commands` consumes `CartMutationInput`.
+- Merchant resolution trusts proxy `x-merchant-slug` /
+  `x-merchant-domain` headers only when they match the request Host
+  (mirroring the shipping-quote trust rule); otherwise a slug/domain
+  hint from query or bootstrap body resolves through the established
+  `resolve_storefront_auth_merchant` mapping plus the retired-slug
+  alias table. Only published stores resolve. Forwarded-host headers
+  are never consulted, and body JSON can never override the host.
+- Proofs travel in the merchant-namespaced HttpOnly cookie (web) or
+  as `Authorization: Bearer cp1…` (native secure storage); only
+  `cp1.`-prefixed Bearer values are cart proofs, so Supabase JWTs
+  never enter the cart flow. Responses always carry `Cache-Control:
+  private, no-store`; two stores on one origin keep separate cookies
+  and never share cached state.
+- Browser POSTs pass the existing double-submit CSRF check; Bearer
+  requests skip it per current policy. Typed `{code, error}` bodies
+  map failures to 400/401/403/404/409/429, with outages as 503 —
+  never confused with 404 not-found/expiry. Bootstrap proofs read as
+  `not_found` on session routes; session proofs are `forbidden` on
+  the creation route.
+- Quotas layer tenant/principal Redis window counters (bootstrap
+  30/h, create 10/h, commands/snapshot 240/min) over the proxy
+  per-IP rate limit, which gains a tight 20/min bootstrap bucket.
+- `commerce_cart_create` returns the server-minted `grantId` on fresh
+  and replayed outcomes (migration 20261012050400, additive key only)
+  so routes can issue the session proof; `CartResult` carries it as
+  an optional field and routes fail closed when it is absent.
+- No proxy changes were needed: `/api/*` already passes through API
+  security (rate limit, content-type, origin) on subdomains, custom
+  domains and the root host.

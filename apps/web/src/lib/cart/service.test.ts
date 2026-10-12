@@ -147,6 +147,26 @@ describe('createCart', () => {
     expect(result).toMatchObject({ code: 'invalid_item', ok: false });
     expect(client.rpc).not.toHaveBeenCalled();
   });
+
+  it('carries the server-minted grant id for session proof issuance', async () => {
+    const client = clientReturning({
+      code: null,
+      grantId: '99999999-9999-4999-8999-999999999991',
+      ok: true,
+      replayed: false,
+      state: { ...rawState(), lines: [], version: 1 },
+    });
+
+    const result = await createCart(
+      { client: client as never, principal: bootstrapPrincipal() },
+      { lines: [], operationId: 'create-4' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.grantId).toBe('99999999-9999-4999-8999-999999999991');
+    }
+  });
 });
 
 describe('mutateCart', () => {

@@ -179,5 +179,47 @@ Sequencing note: UCP route wiring of the new guards lands in Task 10
 (adapters); until then no migrated UCP rows can exist because nothing
 calls migrate, and the trigger fences every writer regardless.
 
+## Task 5 evidence
+
+New: `apps/web/src/app/api/storefront/cart/{route,bootstrap/route,
+commands/route}.ts` + colocated tests; `apps/web/src/lib/cart/
+{request-context,response}.ts` + tests; `cart-runtime-env.test.ts`;
+migration `20261012050400_commerce_cart_create_grant.sql`;
+`supabase/tests/commerce_cart_create_grant.sql` (4 sections).
+Modified: shared `CartResult` (+optional `grantId`), repository
+(uuid-validated `grantId` parse), service passthrough, principal
+(`readProof` dep), `schemas/cart.ts` (+`cartBootstrapRequestSchema`,
+merchant-override rejection pinned), `cart-runtime-env`
+(+`getCartProofEnvironment`, VITEST-aware client guard),
+`rate-limit-routes.ts` (+20/min bootstrap bucket).
+
+TDD (each RED recorded before GREEN):
+- Repository 2 RED → impl → 7/7; service 1 RED → 12/12.
+- SQL RED: §1 `create must return a uuid grantId` on 50200 alone.
+  GREEN: 4/4 grant sections; full 21-section commands suite also green
+  with 50400 applied (throwaway path-rewritten copy in /tmp).
+- Principal `readProof` 1 RED → 10/10; schema 2 RED → 13/13.
+- Response 11/11 (incl. 409-with-cart reconciliation extra);
+  runtime-env 3/3; request-context 23/23 (trust matrix, alias
+  follow-through, unpublished/RPC-failure gating, cookie/Bearer
+  proof preference, scope rules, quota isolation).
+- Routes with real CSRF/proofs/quota/merchant-resolution/service and
+  only anon-RPC + alias + scoped-client seams mocked: bootstrap 9/9,
+  cart 14/14, commands 8/8.
+- Neighbors: cart lib + schema + routes + rate-limit 212/212 across
+  23 files; shared cart 21/21. Web + shared typechecks clean;
+  Biome clean.
+- SQL regressions on disposable PG 18.6 (fresh initdb per
+  unconditional-CREATE-ROLE suite): access, commands (21 §),
+  concurrency 3/3 via overlap runner, legacy migration, create
+  grant — all green.
+
+Design notes: merchant headers cross-checked against Host (shipping
+quote rule); forwarded-host never read; CSRF failures return uniform
+typed `forbidden` instead of the csrf helper's shape; proxy needed no
+changes (verified `/api` allowed on subdomains, security stage
+covers the new paths).
+
 Review handoffs: Phase A packet delivered (Tasks 1–2). Phase B packet
-after this commit; commits stay reviewable per task.
+delivered (Tasks 3–4). Phase C packet after this commit; commits stay
+reviewable per task.

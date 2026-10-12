@@ -138,4 +138,39 @@ describe('resolveCartPrincipal', () => {
 
     expect(result).toEqual({ error: 'merchant_unresolved', ok: false });
   });
+
+  it('accepts a native Bearer proof through an injected proof reader', async () => {
+    const request = new Request('https://ogabassey.example.com/store', {
+      headers: { authorization: 'Bearer cp1.native-proof.signature' },
+    });
+    const result = await resolveCartPrincipal(request, {
+      readProof: (candidate) => {
+        const header = candidate.headers.get('authorization');
+        const match = header?.match(/^\s*bearer\s+(.+?)\s*$/i);
+        return match?.[1] ?? null;
+      },
+      resolveMerchant: async () => MERCHANT_A,
+      verify: async (proof) =>
+        proof === 'cp1.native-proof.signature'
+          ? sessionVerification()
+          : { error: 'invalid_proof', ok: false },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('keeps the merchant-namespaced cookie as the default proof source', async () => {
+    const result = await resolveCartPrincipal(
+      requestWithCookie('baci-cart-ogabassey=proof-a'),
+      {
+        resolveMerchant: async () => MERCHANT_A,
+        verify: async (proof) =>
+          proof === 'proof-a'
+            ? sessionVerification()
+            : { error: 'invalid_proof', ok: false },
+      }
+    );
+
+    expect(result.ok).toBe(true);
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cartBootstrapRequestSchema,
   cartValidateSchema,
   createCartRequestSchema,
   sharedCartMutationRequestSchema,
@@ -182,6 +183,39 @@ describe('createCartRequestSchema', () => {
       createCartRequestSchema.safeParse({
         currency: 'naira',
         operationId: 'create-1',
+      }).success
+    ).toBe(false);
+  });
+
+  it('never accepts a client-supplied merchant override', () => {
+    const result = createCartRequestSchema.safeParse({
+      merchantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      operationId: 'create-9',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('cartBootstrapRequestSchema', () => {
+  it('accepts an empty body and an optional merchant hint', () => {
+    expect(cartBootstrapRequestSchema.safeParse({}).success).toBe(true);
+    const hinted = cartBootstrapRequestSchema.safeParse({
+      merchantSlug: 'ogabassey',
+    });
+    expect(hinted.success).toBe(true);
+    if (hinted.success) {
+      expect(hinted.data.merchantSlug).toBe('ogabassey');
+    }
+  });
+
+  it('rejects blank hints and unknown fields', () => {
+    expect(
+      cartBootstrapRequestSchema.safeParse({ merchantSlug: '  ' }).success
+    ).toBe(false);
+    expect(
+      cartBootstrapRequestSchema.safeParse({
+        merchantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       }).success
     ).toBe(false);
   });

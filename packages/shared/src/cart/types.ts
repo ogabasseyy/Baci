@@ -136,6 +136,12 @@ export type CartResult =
       operationId: string;
       replayed: boolean;
       warnings: CartWarning[];
+      /**
+       * Server-minted grant id, present only on creation outcomes so
+       * the route can issue the follow-up session proof. Never accept
+       * this value from client input.
+       */
+      grantId?: string;
     }
   | { ok: false; code: CartErrorCode; cart?: CartSnapshot };
 

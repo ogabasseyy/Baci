@@ -125,6 +125,39 @@ describe('rpcCreateCart', () => {
     expect(client.rpc.mock.calls[0][0]).toBe('commerce_cart_create');
     expect(JSON.stringify(params)).not.toContain('price');
   });
+
+  it('surfaces the server-minted grant id for session proof issuance', async () => {
+    const grantId = '99999999-9999-4999-8999-999999999991';
+    const client = clientReturning({
+      code: null,
+      grantId,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    });
+
+    const result = await rpcCreateCart(client as never, {
+      operationId: 'create-2',
+    });
+
+    expect(result.grantId).toBe(grantId);
+  });
+
+  it('drops malformed grant ids instead of trusting them', async () => {
+    const client = clientReturning({
+      code: null,
+      grantId: 'not-a-grant',
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    });
+
+    const result = await rpcCreateCart(client as never, {
+      operationId: 'create-3',
+    });
+
+    expect(result.grantId).toBeNull();
+  });
 });
 
 describe('rpcGetCart', () => {

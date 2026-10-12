@@ -48,6 +48,12 @@ export interface RawMutationResult {
    * replayed outcome is older than current state without another read.
    */
   currentVersion: number | null;
+  /**
+   * Server-minted grant id, present only on creation outcomes. Routes
+   * use it to issue the follow-up session proof; never trust client
+   * input for this value.
+   */
+  grantId: string | null;
 }
 
 export interface MutateCartArgs {
@@ -96,6 +102,9 @@ const CART_STATES: ReadonlySet<string> = new Set([
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
+
+const UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 function parseLine(value: unknown): RawCartLine | null {
   if (!isRecord(value)) return null;
@@ -225,6 +234,10 @@ export function parseRawMutationResult(data: unknown): RawMutationResult {
       typeof data.currentVersion === 'number' &&
       Number.isInteger(data.currentVersion)
         ? data.currentVersion
+        : null,
+    grantId:
+      typeof data.grantId === 'string' && UUID_PATTERN.test(data.grantId)
+        ? data.grantId
         : null,
     ok: data.ok,
     replayed: data.replayed === true,

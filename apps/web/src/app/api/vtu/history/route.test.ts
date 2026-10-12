@@ -847,6 +847,61 @@ describe('GET /api/vtu/history', () => {
     ]);
   });
 
+  it('totals the reversed wallet leg for wallet-only failures', async () => {
+    // The persisted refundAmount is the card leg (0 here); the wallet
+    // leg carries the restoration — the view must show ₦1,000, not ₦0.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-wallet-only',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 0,
+          paymentSplit: { wallet: 1000, card: 0 },
+        },
+        request_reference: 'VTU-WO',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-hybrid',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 700,
+          paymentSplit: { wallet: 300, card: 700 },
+        },
+        request_reference: 'VTU-HY',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-wallet-only',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+      expect.objectContaining({
+        id: 'tx-hybrid',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+    ]);
+  });
+
   it('never flags successful or never-debited rows as refund-pending', async () => {
     const { GET } = await import('./route');
     transactionsData = [

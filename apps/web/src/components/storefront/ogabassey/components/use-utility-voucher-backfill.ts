@@ -6,19 +6,26 @@ import { useEffect, useState } from 'react';
 // token after the initial 202 returns, once the provider reports back.
 // Poll the history endpoint until the pin is persisted so the success
 // view can surface it without forcing a replay (which the stale guard
-// would suppress as "Purchase Already Completed"). Mirrors mobile's
+// would suppress as "Purchase Already Completed"). Airtime/data ride
+// the same loop for settlement tracking (no voucher expected): without
+// it a telco 202 would sit on "Processing" forever, never settle the
+// retained key or refetch the wallet. Mirrors mobile's
 // useVtuVoucherPinBackfill; web has no TanStack Query, so this uses a
 // plain effect loop with the same interval and attempt cap.
 export const UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS = 3000;
-export const UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS = 10;
+export const UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS = 10_000;
+export const UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS = 10;
+export const UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS = 43;
 
 const TAB_TO_HISTORY_TYPE: Record<string, string> = {
+  airtime: 'airtime',
+  data: 'data',
   power: 'electricity',
   tv: 'cable_tv',
   betting: 'betting',
 };
 
-export function isUtilityVoucherBackfillTab(tab: string): boolean {
+export function isUtilityBackfillTab(tab: string): boolean {
   return TAB_TO_HISTORY_TYPE[tab] !== undefined;
 }
 
@@ -103,6 +110,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Backoff schedule: 3s for the first 10 attempts (fast provider
+ * confirmations), then 10s. 43 attempts span ~6 minutes — enough to
+ * cover a full reconciliation pass (45s cron age gate + 5-minute
+ * voucher schedule) instead of giving up after 27s.
+ */
+function backfillPollDelayMs(attempt: number): number {
+  return attempt <= UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS
+    ? UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+    : UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS;
+}
+
 export function useUtilityVoucherBackfill({
   enabled,
   merchantSlug,
@@ -182,7 +201,7 @@ export function useUtilityVoucherBackfill({
           }
         }
         if (attempt < UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS) {
-          await sleep(UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS);
+          await sleep(backfillPollDelayMs(attempt));
         }
       }
     })();

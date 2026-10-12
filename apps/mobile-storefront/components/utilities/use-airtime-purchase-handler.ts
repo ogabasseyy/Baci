@@ -4,6 +4,7 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
   buildVtuPurchaseDescriptor,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
@@ -87,9 +88,13 @@ async function executeAirtimePurchase({
         // before suppressing the UI: PRESERVE success (terminal and
         // processing) — the charge committed while their UI was
         // suppressed, so their switch-back repeat must replay the
-        // original outcome, not mint fresh and debit twice. The
-        // stale-success guard still protects genuinely new intents.
+        // original outcome, not mint fresh and debit twice. Terminal
+        // observations also record completion (processing notes must
+        // NOT): the stale guard keys off completion time.
         notePendingVtuReference(descriptor, result.reference);
+        if (result.status !== 'processing') {
+          markPendingVtuCompleted(descriptor);
+        }
         return;
       }
       if (result.status === 'processing') {

@@ -58,6 +58,13 @@ interface PendingVtuPurchase {
   reference: string | null;
   /** Client-local timestamp of the original submit (elapsed math only). */
   rememberedAt: number;
+  /**
+   * When terminal success was first OBSERVED (null while
+   * processing/unanswered). The stale predicate keys off THIS, never
+   * the submit/noted time, so a slow first completion is presented
+   * instead of misreported as "Already Completed".
+   */
+  completedAt: number | null;
 }
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
@@ -78,7 +85,12 @@ export function hydratePendingVtuPurchases(
 ): void {
   for (const [scoped, entry] of parsePendingVtuSnapshot(serialized, now)) {
     if (!pendingPurchases.has(scoped)) {
-      pendingPurchases.set(scoped, entry);
+      // Legacy snapshots predate completion tracking: normalize the
+      // absent field so restore never crashes on old rows.
+      pendingPurchases.set(scoped, {
+        ...entry,
+        completedAt: entry.completedAt ?? null,
+      });
     }
   }
 }
@@ -180,6 +192,7 @@ export function rememberPendingVtuPurchase(
     key,
     reference: null,
     rememberedAt: Date.now(),
+    completedAt: null,
   });
   persistPendingVtuPurchases();
 }
@@ -197,18 +210,48 @@ export function notePendingVtuReference(
 }
 
 /**
+ * True when this reference was noted for the descriptor (mirrors web):
+ * lets tests prove a processing note landed without waiting out the
+ * stale window (noted-but-uncompleted entries are never stale).
+ */
+export function hasNotedPendingVtuReference(
+  descriptor: string,
+  reference: string
+): boolean {
+  return pendingPurchases.get(descriptor)?.reference === reference;
+}
+
+/**
+ * Records terminal success observed on a RETAINED entry (the
+ * switched-success path, which notes without resetting). Immediate
+ * successes reset instead, so they never need this. First observation
+ * wins: re-marking must not extend the window.
+ */
+export function markPendingVtuCompleted(
+  descriptor: string,
+  now: number = Date.now()
+): void {
+  const pending = pendingPurchases.get(descriptor);
+  if (pending && pending.completedAt === null) {
+    pending.completedAt = now;
+    persistPendingVtuPurchases();
+  }
+}
+
+/**
  * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: same NOTED reference, but
- * the original submit is older than the recall window, so this submit
- * is a NEW intent, not a retry. Callers MUST forget the descriptor
- * and prompt a fresh submit instead of presenting the earlier vend as
- * the new purchase. Reference-less entries are NEVER stale: the user
- * saw failure (any success/processing response would have finalized
- * the entry), so a re-tap is definitionally a retry. Reusing the key
- * lets the authoritative server dedupe; forcing a fresh key would
- * assert non-existence the client cannot know and double-debit a slow
- * retry of an already-committed attempt. Past the TTL recall already
- * dropped them, so this predicate never sees them.
+ * instead of resolving the current submit: same NOTED reference AND
+ * completion was observed longer ago than the recall window, so this
+ * submit is a NEW intent, not a retry. Callers MUST forget the
+ * descriptor and prompt a fresh submit instead of presenting the
+ * earlier vend as the new purchase. Staleness keys off the COMPLETION
+ * time, never the submit/noted time: a reference noted while
+ * processing (or a completion observed seconds ago) is NOT stale, so
+ * a slow first completion is presented instead of misreported as
+ * "Already Completed" (which would reset the key and double-debit
+ * the prompted retry). Entries with no OBSERVED completion are NEVER
+ * stale. Past the TTL recall already dropped them, so this predicate
+ * never sees them.
  */
 export function isStalePendingVtuSuccess(
   descriptor: string,
@@ -216,10 +259,15 @@ export function isStalePendingVtuSuccess(
   now: number = Date.now()
 ): boolean {
   const pending = pendingPurchases.get(descriptor);
-  if (!pending || now - pending.rememberedAt <= PENDING_VTU_STALE_AFTER_MS) {
+  if (
+    !pending ||
+    pending.reference === null ||
+    pending.reference !== reference ||
+    pending.completedAt === null
+  ) {
     return false;
   }
-  return pending.reference !== null && pending.reference === reference;
+  return now - pending.completedAt > PENDING_VTU_STALE_AFTER_MS;
 }
 
 /** Drops the recall entry once its purchase reaches a terminal outcome. */

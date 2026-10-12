@@ -3,6 +3,7 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
   buildVtuPurchaseDescriptor,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
@@ -126,9 +127,13 @@ export function createDataFormPurchaseHandler({
           // Finalize the SUBMITTER's entry (descriptor captured at
           // submit) before suppressing the UI: PRESERVE success —
           // their switch-back repeat must replay the original outcome,
-          // not mint fresh and debit twice (stale guard covers new
-          // intents).
+          // not mint fresh and debit twice. Terminal observations also
+          // record completion (processing notes must NOT): the stale
+          // guard keys off completion time.
           notePendingVtuReference(descriptor, result.reference);
+          if (result.status !== 'processing') {
+            markPendingVtuCompleted(descriptor);
+          }
           return;
         }
         // Only rotate on terminal success. 'processing' means the

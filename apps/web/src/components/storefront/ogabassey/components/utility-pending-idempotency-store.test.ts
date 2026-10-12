@@ -12,6 +12,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     key: 'k',
     reference: null,
     rememberedAt: Date.now(),
+    completedAt: null,
     ...overrides,
   };
 }
@@ -113,6 +114,28 @@ describe('utility-pending-idempotency-store', () => {
       )
     ).toEqual({
       entries: [['a', entry({ rememberedAt: now })]],
+      forgotten: [],
+    });
+  });
+
+  it('round-trips completion timestamps; legacy entries default to null', () => {
+    const now = Date.now();
+    const serialized = serializePendingVtuEntries(
+      [['a', entry({ completedAt: now - 1000 })]],
+      []
+    );
+
+    expect(parsePendingVtuSnapshot(serialized, now)).toEqual({
+      entries: [['a', entry({ completedAt: now - 1000 })]],
+      forgotten: [],
+    });
+    // Pre-completion-tracking snapshots omit the field: fail open so
+    // the first replay presents success instead of "Already Completed".
+    const legacy = { key: 'k', reference: null, rememberedAt: now };
+    expect(
+      parsePendingVtuSnapshot(JSON.stringify([['a', legacy]]), now)
+    ).toEqual({
+      entries: [['a', entry({ rememberedAt: now, completedAt: null })]],
       forgotten: [],
     });
   });

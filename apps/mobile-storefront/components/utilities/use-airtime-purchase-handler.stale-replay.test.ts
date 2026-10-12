@@ -5,8 +5,12 @@ import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
 import {
   buildVtuPurchaseDescriptor,
+  clearPendingVtuKeys,
+  hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
+  recallPendingVtuKey,
   PENDING_VTU_STALE_AFTER_MS,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
@@ -35,6 +39,9 @@ jest.mock('@/lib/utility-wallet-readiness', () => ({
 describe('airtime stale success replay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Hermetic registry: each test re-seeds its own entries (prior
+    // order-dependent assertions leaned on cross-test leftovers).
+    clearPendingVtuKeys();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
@@ -62,7 +69,15 @@ describe('airtime stale success replay', () => {
           walletBalance: 5000,
           walletError: null,
           walletIsLoading: false,
-          getWalletIdempotencyKey: jest.fn(() => 'stale-airtime-key'),
+          // Mirrors the production hook: recall-first, remember only
+          // when no entry exists (a blind re-remember would wipe the
+          // note/completion the stale guard needs).
+          getWalletIdempotencyKey: jest.fn((descriptor: string) => {
+            const recalled = recallPendingVtuKey(descriptor);
+            if (recalled) return recalled;
+            rememberPendingVtuPurchase(descriptor, 'stale-airtime-key');
+            return 'stale-airtime-key';
+          }),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
           captureSubmittingUserId: () => 'test-user',
@@ -91,6 +106,46 @@ describe('airtime stale success replay', () => {
     notePendingVtuReference(buildVtuPurchaseDescriptor(submitted), reference);
   }
 
+  it('presents a slow first completion instead of already-completed', async () => {
+    // Staleness keys off OBSERVED completion, not the submit: a 202
+    // noted early and completed minutes later must present the vend.
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'processing',
+      amount: 500,
+      reference: 'WAL-STALE-AIR',
+    });
+    const first = renderHandler({ onSuccess, resetWalletIdempotencyKey });
+    await first.result.current.handlePurchase();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    seedPendingFromLastCall('WAL-STALE-AIR');
+
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(Date.now() + 6 * 60 * 1000);
+    try {
+      mockChargeWalletForVtu.mockResolvedValueOnce({
+        status: 'successful',
+        amount: 500,
+        reference: 'WAL-STALE-AIR',
+      });
+      // Fresh mount, as after Back to Home + reopen Utilities.
+      const second = renderHandler({ onSuccess, resetWalletIdempotencyKey });
+      await second.result.current.handlePurchase();
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(onSuccess).toHaveBeenCalledTimes(2);
+    expect(onSuccess).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reference: 'WAL-STALE-AIR' })
+    );
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Purchase Already Completed',
+      expect.anything()
+    );
+  });
+
   it('prompts a fresh submit instead of presenting a stale replay as new', async () => {
     const onSuccess = jest.fn();
     const resetWalletIdempotencyKey = jest.fn();
@@ -103,6 +158,13 @@ describe('airtime stale success replay', () => {
     await first.result.current.handlePurchase();
     expect(onSuccess).toHaveBeenCalledTimes(1);
     seedPendingFromLastCall('WAL-STALE-AIR');
+    // Completion was observed (as a switched-terminal success would
+    // record); the customer returns long after with the same payload.
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    markPendingVtuCompleted(buildVtuPurchaseDescriptor(submitted));
 
     const now = jest.spyOn(Date, 'now');
     now.mockReturnValue(Date.now() + 6 * 60 * 1000);
@@ -187,7 +249,10 @@ describe('airtime stale success replay', () => {
     ).toBe(true);
   });
 
-  it('notes the processing reference when the account switched mid-flight', async () => {
+  it('notes (without completing) a switched processing reference', async () => {
+    // The note lands, but no completion is recorded: when the vend
+    // resolves minutes later the replay must PRESENT it, not report
+    // "Already Completed" (the stale guard keys off completion time).
     const onSuccess = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'processing',
@@ -205,13 +270,41 @@ describe('airtime stale success replay', () => {
       string,
       unknown
     >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(hasNotedPendingVtuReference(descriptor, 'WAL-SWITCH-PROC')).toBe(
+      true
+    );
     expect(
       isStalePendingVtuSuccess(
-        buildVtuPurchaseDescriptor(submitted),
+        descriptor,
         'WAL-SWITCH-PROC',
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
-    ).toBe(true);
+    ).toBe(false);
+
+    // Switch-back replay minutes later: first completion presents.
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(Date.now() + 6 * 60 * 1000);
+    try {
+      mockChargeWalletForVtu.mockResolvedValueOnce({
+        status: 'successful',
+        amount: 500,
+        reference: 'WAL-SWITCH-PROC',
+      });
+      const second = renderHandler({ onSuccess });
+      await second.result.current.handlePurchase();
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ reference: 'WAL-SWITCH-PROC' })
+    );
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Purchase Already Completed',
+      expect.anything()
+    );
   });
 
   it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {

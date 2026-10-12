@@ -44,6 +44,14 @@ interface PendingVtuPurchase {
   reference: string | null;
   /** Client-local timestamp of the original submit (elapsed math only). */
   rememberedAt: number;
+  /**
+   * Client-local timestamp when terminal success was first OBSERVED on
+   * this entry (null while processing/unanswered). The stale-success
+   * predicate keys off THIS — never off the submit/noted time — so a
+   * slow first completion (e.g. via reconciliation minutes later) is
+   * presented instead of misreported as "Already Completed".
+   */
+  completedAt: number | null;
 }
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
@@ -81,7 +89,12 @@ export function hydratePendingVtuPurchases(
   for (const [scoped, entry] of parsePendingVtuSnapshot(serialized, now)
     .entries) {
     if (!pendingPurchases.has(scoped)) {
-      pendingPurchases.set(scoped, entry);
+      // Legacy snapshots predate completion tracking: normalize the
+      // absent field so restore never crashes on old rows.
+      pendingPurchases.set(scoped, {
+        ...entry,
+        completedAt: entry.completedAt ?? null,
+      });
     }
   }
 }
@@ -116,7 +129,10 @@ function syncPendingVtuPurchasesFromSnapshot(): void {
     if (tombstonedAt !== undefined && entry.rememberedAt <= tombstonedAt) {
       continue;
     }
-    pendingPurchases.set(scoped, entry);
+    pendingPurchases.set(scoped, {
+      ...entry,
+      completedAt: entry.completedAt ?? null,
+    });
   }
 }
 
@@ -207,6 +223,7 @@ export function rememberPendingVtuPurchase(
     key,
     reference: null,
     rememberedAt: Date.now(),
+    completedAt: null,
   });
   forgottenScopedKeys.delete(payloadSignature);
   persistPendingVtuPurchases();
@@ -220,6 +237,26 @@ export function notePendingVtuReference(
   const pending = pendingPurchases.get(payloadSignature);
   if (pending) {
     pending.reference = reference;
+    persistPendingVtuPurchases();
+  }
+}
+
+/**
+ * Records that terminal success was observed on a RETAINED entry (the
+ * switched-success path, which notes without forgetting). Immediate
+ * successes forget the entry instead, so they never need this. The
+ * timestamp lets the stale predicate distinguish a slow first
+ * completion (present it) from a repeat long after completion
+ * ("Already Completed"). First observation wins: re-marking must not
+ * extend the window.
+ */
+export function markPendingVtuCompleted(
+  payloadSignature: string,
+  now: number = Date.now()
+): void {
+  const pending = pendingPurchases.get(payloadSignature);
+  if (pending && pending.completedAt === null) {
+    pending.completedAt = now;
     persistPendingVtuPurchases();
   }
 }
@@ -240,17 +277,18 @@ export function hasNotedPendingVtuReference(
 
 /**
  * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: same NOTED reference, but
- * the original submit is older than the recall window, so this submit
- * is a NEW intent, not a retry. Callers MUST forget the signature
- * and prompt a fresh submit instead of presenting the earlier vend as
- * the new purchase. Reference-less entries are NEVER stale: the user
- * saw failure (any success/processing response would have finalized
- * the entry), so a re-tap is definitionally a retry. Reusing the key
- * lets the authoritative server dedupe; forcing a fresh key would
- * assert non-existence the client cannot know and double-debit a slow
- * retry of an already-committed attempt. Past the TTL recall already
- * dropped them, so this predicate never sees them.
+ * instead of resolving the current submit: same NOTED reference AND
+ * completion was observed longer ago than the recall window, so this
+ * submit is a NEW intent, not a retry. Callers MUST forget the
+ * signature and prompt a fresh submit instead of presenting the
+ * earlier vend as the new purchase. Staleness keys off the COMPLETION
+ * time, never the submit/noted time: a reference noted while
+ * processing (or a completion observed seconds ago) is NOT stale, so
+ * a slow first completion — e.g. via reconciliation minutes after a
+ * 202 — is presented instead of misreported as "Already Completed"
+ * (which would forget the key and double-debit the prompted retry).
+ * Entries with no OBSERVED completion are NEVER stale. Past the TTL
+ * recall already dropped them, so this predicate never sees them.
  */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,
@@ -258,10 +296,15 @@ export function isStalePendingVtuSuccess(
   now: number = Date.now()
 ): boolean {
   const pending = pendingPurchases.get(payloadSignature);
-  if (!pending || now - pending.rememberedAt <= PENDING_VTU_STALE_AFTER_MS) {
+  if (
+    !pending ||
+    pending.reference === null ||
+    pending.reference !== reference ||
+    pending.completedAt === null
+  ) {
     return false;
   }
-  return pending.reference !== null && pending.reference === reference;
+  return now - pending.completedAt > PENDING_VTU_STALE_AFTER_MS;
 }
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {

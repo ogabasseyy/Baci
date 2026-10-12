@@ -2,7 +2,9 @@ import {
   buildVtuPurchaseDescriptor,
   clearPendingVtuKeys,
   forgetPendingVtuPurchase,
+  hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
@@ -91,6 +93,16 @@ describe('pending-vtu-idempotency', () => {
     const rememberedAt = Date.now();
     rememberPendingVtuPurchase(descriptor, 'key-stale');
     notePendingVtuReference(descriptor, 'REF-OLD');
+    // Noted but never completed: never stale, however old the submit.
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-OLD',
+        rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
+
+    markPendingVtuCompleted(descriptor, rememberedAt);
     expect(isStalePendingVtuSuccess(descriptor, 'REF-OLD', rememberedAt)).toBe(
       false
     );
@@ -109,6 +121,65 @@ describe('pending-vtu-idempotency', () => {
         rememberedAt + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('presents a slow first completion instead of aging the submit', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 3,
+      phoneNumber: 'slow-check',
+    });
+    const submittedAt = Date.now();
+    rememberPendingVtuPurchase(descriptor, 'key-slow');
+    notePendingVtuReference(descriptor, 'REF-SLOW');
+
+    const completedAt = submittedAt + PENDING_VTU_STALE_AFTER_MS + 60_000;
+    markPendingVtuCompleted(descriptor, completedAt);
+    expect(
+      isStalePendingVtuSuccess(descriptor, 'REF-SLOW', completedAt + 1000)
+    ).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-SLOW',
+        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('keeps the first completion when re-marked', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 4,
+      phoneNumber: 'remark-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-remark');
+    notePendingVtuReference(descriptor, 'REF-1');
+    const first = Date.now();
+    markPendingVtuCompleted(descriptor, first);
+    markPendingVtuCompleted(descriptor, first + 10_000);
+
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-1',
+        first + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('recognizes a noted reference independently of completion', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 5,
+      phoneNumber: 'noted-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-noted');
+
+    expect(hasNotedPendingVtuReference(descriptor, 'REF-1')).toBe(false);
+    notePendingVtuReference(descriptor, 'REF-1');
+    expect(hasNotedPendingVtuReference(descriptor, 'REF-1')).toBe(true);
+    expect(hasNotedPendingVtuReference(descriptor, 'REF-OTHER')).toBe(false);
   });
 
   it('never flags a reference-less entry as stale', () => {

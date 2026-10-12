@@ -118,6 +118,7 @@ describe('isStrandedPreVendVtuRow', () => {
         transaction_id: null,
         error_message: null,
         metadata: {},
+        created_at: new Date().toISOString(),
         updated_at: staleAt,
       })
     ).toBe(true);
@@ -134,6 +135,7 @@ describe('isStrandedPreVendVtuRow', () => {
         transaction_id: null,
         error_message: null,
         metadata: { walletDebited: true },
+        created_at: new Date().toISOString(),
         updated_at: staleAt,
       })
     ).toBe(false);
@@ -147,6 +149,7 @@ describe('isStrandedPreVendVtuRow', () => {
         transaction_id: null,
         error_message: null,
         metadata: {},
+        created_at: new Date().toISOString(),
         updated_at: freshAt,
       })
     ).toBe(false);
@@ -169,6 +172,7 @@ describe('isStrandedPreVendVtuRow', () => {
     const base = {
       id: 'vtu-1',
       status: 'processing' as const,
+      created_at: new Date().toISOString(),
       updated_at: staleAt,
     };
     expect(
@@ -197,6 +201,37 @@ describe('isStrandedPreVendVtuRow', () => {
     ).toBe(false);
   });
 
+  it('declines pre-marker legacy rows whose flag absence proves nothing', () => {
+    // Created before the walletDebited marker shipped: the flow that
+    // stranded this row never knew the flag, so absence is not
+    // pre-vend evidence — flipping could re-vend a landed purchase.
+    expect(
+      isStrandedPreVendVtuRow({
+        id: 'vtu-1',
+        status: 'processing',
+        transaction_id: null,
+        error_message: null,
+        metadata: {},
+        created_at: '2026-01-15T00:00:00.000Z',
+        updated_at: staleAt,
+      })
+    ).toBe(false);
+  });
+
+  it('declines rows with a missing creation timestamp', () => {
+    expect(
+      isStrandedPreVendVtuRow({
+        id: 'vtu-1',
+        status: 'processing',
+        transaction_id: null,
+        error_message: null,
+        metadata: {},
+        created_at: null,
+        updated_at: staleAt,
+      })
+    ).toBe(false);
+  });
+
   it('declines non-processing rows', () => {
     expect(
       isStrandedPreVendVtuRow({
@@ -205,6 +240,7 @@ describe('isStrandedPreVendVtuRow', () => {
         transaction_id: null,
         error_message: null,
         metadata: {},
+        created_at: new Date().toISOString(),
         updated_at: staleAt,
       })
     ).toBe(false);

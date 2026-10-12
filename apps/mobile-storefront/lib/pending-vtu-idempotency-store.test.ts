@@ -8,6 +8,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     key: 'k',
     reference: null,
     rememberedAt: Date.now(),
+    completedAt: null,
     ...overrides,
   };
 }
@@ -24,6 +25,23 @@ describe('pending-vtu-idempotency-store', () => {
       ['a', entry({ key: 'key-a', reference: 'REF-A', rememberedAt })],
       ['b', entry({ key: 'key-b', rememberedAt })],
     ]);
+  });
+
+  it('round-trips completion timestamps; legacy entries default to null', () => {
+    const now = Date.now();
+    const serialized = serializePendingVtuEntries([
+      ['a', entry({ completedAt: now - 1000 })],
+    ]);
+
+    expect(parsePendingVtuSnapshot(serialized, now)).toEqual([
+      ['a', entry({ completedAt: now - 1000 })],
+    ]);
+    // Pre-completion-tracking snapshots omit the field: fail open so
+    // the first replay presents success instead of "Already Completed".
+    const legacy = { key: 'k', reference: null, rememberedAt: now };
+    expect(
+      parsePendingVtuSnapshot(JSON.stringify([['a', legacy]]), now)
+    ).toEqual([['a', entry({ rememberedAt: now, completedAt: null })]]);
   });
 
   it('drops TTL-expired entries on serialize and parse', () => {

@@ -22,8 +22,20 @@ const PRE_VEND_RESTORE_BACKOFF_MS = [100, 250] as const;
  */
 export const STRANDED_PRE_VEND_STALE_MS = 5 * 60 * 1000;
 
+/**
+ * The walletDebited marker shipped in wallet reconciliation (PR #1479,
+ * 2026-05-06). Rows created before it never knew the flag, so flag
+ * absence on them proves nothing — flipping one could re-vend a
+ * legacy purchase whose provider call already landed. Only rows from
+ * the marker era are eligible for stranded-row recovery.
+ */
+export const STRANDED_PRE_VEND_MIN_CREATED_MS = Date.parse(
+  '2026-05-06T00:00:00.000Z'
+);
+
 /** Structural shape the stranded-row predicate needs. */
 export interface StrandedPreVendRowCandidate {
+  created_at?: string | null;
   error_message?: string | null;
   id: string;
   metadata?: Record<string, unknown> | null;
@@ -36,13 +48,15 @@ export interface StrandedPreVendRowCandidate {
  * True for a processing row whose pre-vend restore failed while the
  * database was down: no provider reference, no provider message (so
  * the reconciliation claim declines it), no Monnify vend reference,
- * NO persisted walletDebited flag, and stale enough that no live
- * worker can hold it. The flag absence is the pre-vend proof: the
- * flag persists before the first provider call, so a post-vend
- * persistence failure (vend landed, result write exhausted — same
- * reference-less shape) always carries the flag and is declined.
- * Flipping a flagged row would re-vend and double-credit at the
- * provider. A flip re-drives claim → idempotent debit → first vend.
+ * NO persisted walletDebited flag, created in the marker era, and
+ * stale enough that no live worker can hold it. The flag absence is
+ * the pre-vend proof: the flag persists before the first provider
+ * call, so a post-vend persistence failure (vend landed, result write
+ * exhausted — same reference-less shape) always carries the flag and
+ * is declined. Flipping a flagged row would re-vend and
+ * double-credit at the provider. Pre-marker rows are declined too:
+ * their flag absence proves nothing. A flip re-drives claim →
+ * idempotent debit → first vend.
  */
 export function isStrandedPreVendVtuRow(
   row: StrandedPreVendRowCandidate,
@@ -63,6 +77,19 @@ export function isStrandedPreVendVtuRow(
   }
   // Pre-vend proof (see docblock): a landed vend always has the flag.
   if (row.metadata?.walletDebited === true) {
+    return false;
+  }
+  // Legacy exclusion: pre-marker rows never knew the flag, so their
+  // flag absence is not pre-vend evidence. Fail closed on missing or
+  // unparseable timestamps.
+  if (!row.created_at) {
+    return false;
+  }
+  const createdAtMs = new Date(row.created_at).getTime();
+  if (!Number.isFinite(createdAtMs)) {
+    return false;
+  }
+  if (createdAtMs < STRANDED_PRE_VEND_MIN_CREATED_MS) {
     return false;
   }
   if (!row.updated_at) {

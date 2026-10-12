@@ -276,6 +276,39 @@ describe('UtilitySuccessView', () => {
     }
   });
 
+  it('polls telco processing purchases for settlement', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      json: async () => ({
+        transactions: [
+          { request_reference: 'VTU-TELCO', status: 'processing' },
+        ],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="airtime"
+          amount={500}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-TELCO"
+        />
+      );
+
+      expect(
+        await screen.findByText(/updates automatically when it settles/)
+      ).toBeInTheDocument();
+      expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain(
+        'type=airtime'
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('never notifies the owner for an immediate (non-backfilled) outcome', () => {
     const onSettled = vi.fn();
     render(
@@ -293,7 +326,7 @@ describe('UtilitySuccessView', () => {
     expect(onSettled).not.toHaveBeenCalled();
   });
 
-  it('shows polling copy while a processing bill token is still missing', async () => {
+  it('shows polling copy while a processing purchase is still missing its outcome', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -319,7 +352,7 @@ describe('UtilitySuccessView', () => {
 
       expect(screen.getByText('Processing…')).toBeInTheDocument();
       expect(
-        screen.getByText(/will appear here automatically/)
+        screen.getByText(/updates automatically when it settles/)
       ).toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();

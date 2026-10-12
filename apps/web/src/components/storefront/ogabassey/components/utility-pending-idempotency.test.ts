@@ -6,6 +6,7 @@ import {
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
@@ -193,7 +194,17 @@ describe('utility-pending-idempotency', () => {
     const signature = '{"stale":true}';
     getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-1');
+    // Staleness keys off OBSERVED completion: a noted-but-uncompleted
+    // entry is never stale, however old the submit.
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-1',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
 
+    markPendingVtuCompleted(signature);
     expect(isStalePendingVtuSuccess(signature, 'REF-1')).toBe(false);
     expect(
       isStalePendingVtuSuccess(
@@ -210,6 +221,46 @@ describe('utility-pending-idempotency', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('presents a slow first completion instead of aging the submit', () => {
+    // A 202 noted early, completed minutes later via reconciliation:
+    // the replay must present the vend, not "Already Completed" (which
+    // would forget the key and double-debit the prompted retry).
+    const signature = '{"slow":true}';
+    const submittedAt = Date.now();
+    getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-SLOW');
+
+    const completedAt = submittedAt + PENDING_VTU_STALE_AFTER_MS + 60_000;
+    markPendingVtuCompleted(signature, completedAt);
+    expect(
+      isStalePendingVtuSuccess(signature, 'REF-SLOW', completedAt + 1000)
+    ).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-SLOW',
+        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('keeps the first completion when re-marked', () => {
+    const signature = '{"remark":true}';
+    getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-1');
+    const first = Date.now();
+    markPendingVtuCompleted(signature, first);
+    markPendingVtuCompleted(signature, first + 10_000);
+
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-1',
+        first + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 
   it('recognizes a noted reference as the replay of its processing vend', () => {

@@ -3,8 +3,11 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
   buildVtuPurchaseDescriptor,
+  clearPendingVtuKeys,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
+  recallPendingVtuKey,
   PENDING_VTU_STALE_AFTER_MS,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
@@ -33,6 +36,8 @@ jest.mock('@/lib/utility-wallet-readiness', () => ({
 describe('bill stale success replay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Hermetic registry: each test re-seeds its own entries.
+    clearPendingVtuKeys();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
@@ -64,7 +69,15 @@ describe('bill stale success replay', () => {
         walletBalance: 5000,
         walletError: null,
         walletIsLoading: false,
-        getWalletIdempotencyKey: jest.fn(() => 'stale-bill-key'),
+        // Mirrors the production hook: recall-first, remember only
+        // when no entry exists (a blind re-remember would wipe the
+        // note/completion the stale guard needs).
+        getWalletIdempotencyKey: jest.fn((descriptor: string) => {
+          const recalled = recallPendingVtuKey(descriptor);
+          if (recalled) return recalled;
+          rememberPendingVtuPurchase(descriptor, 'stale-bill-key');
+          return 'stale-bill-key';
+        }),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
         captureSubmittingUserId: () => 'test-user',
@@ -92,6 +105,55 @@ describe('bill stale success replay', () => {
     return handlePurchase();
   }
 
+  function seedPendingFromLastCall(reference: string) {
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    rememberPendingVtuPurchase(
+      buildVtuPurchaseDescriptor(submitted),
+      'stale-bill-key'
+    );
+    notePendingVtuReference(buildVtuPurchaseDescriptor(submitted), reference);
+  }
+
+  it('presents a slow first completion instead of already-completed', async () => {
+    // Staleness keys off OBSERVED completion, not the submit: a 202
+    // noted early and completed minutes later must present the vend.
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'processing',
+      amount: 1000,
+      reference: 'WAL-STALE-BILL',
+    });
+    await runPurchase({ onSuccess, resetWalletIdempotencyKey });
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    seedPendingFromLastCall('WAL-STALE-BILL');
+
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(Date.now() + 6 * 60 * 1000);
+    try {
+      mockChargeWalletForVtu.mockResolvedValueOnce({
+        status: 'successful',
+        amount: 1000,
+        reference: 'WAL-STALE-BILL',
+      });
+      await runPurchase({ onSuccess, resetWalletIdempotencyKey });
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(onSuccess).toHaveBeenCalledTimes(2);
+    expect(onSuccess).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reference: 'WAL-STALE-BILL' })
+    );
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Purchase Already Completed',
+      expect.anything()
+    );
+  });
+
   it('prompts a fresh submit instead of presenting a stale replay as new', async () => {
     const onSuccess = jest.fn();
     const resetWalletIdempotencyKey = jest.fn();
@@ -116,6 +178,9 @@ describe('bill stale success replay', () => {
       buildVtuPurchaseDescriptor(submitted),
       'WAL-STALE-BILL'
     );
+    // Completion was observed (as a switched-terminal success would
+    // record); the customer returns long after with the same payload.
+    markPendingVtuCompleted(buildVtuPurchaseDescriptor(submitted));
 
     // The original completed long ago; this identical resubmit is a new
     // intent answered with the old vend.

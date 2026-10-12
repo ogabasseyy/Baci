@@ -4,7 +4,11 @@ import type {
   Customer,
   CustomerUser,
 } from '@/contexts/customer-auth-context';
-import { clearPendingVtuKeys } from './utility-pending-idempotency';
+import {
+  clearPendingVtuKeys,
+  markPendingVtuCompleted,
+  scopePendingVtuSignature,
+} from './utility-pending-idempotency';
 import { useUtilityPurchase } from './use-utility-purchase';
 
 const mockSubmit = vi.hoisted(() => vi.fn());
@@ -559,7 +563,12 @@ describe('useUtilityPurchase', () => {
     expect(setWalletBalance).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects a stale success replay as already-completed instead of presenting the old vend', async () => {
+  it('presents a slow first completion instead of already-completed', async () => {
+    // Staleness keys off OBSERVED completion, not the submit: a 202
+    // noted early and completed minutes later (reconciliation) must
+    // present the vend. The old age-of-submit check misreported this
+    // as "Already Completed", forgot the key, and double-debited the
+    // prompted retry.
     vi.useFakeTimers();
     try {
       const seenKeys: string[] = [];
@@ -595,8 +604,67 @@ describe('useUtilityPurchase', () => {
       // waitFor hangs under fake timers; the awaited act already flushes.
       expect(result.current.step).toBe('processing');
 
-      // The vend settles while the modal is closed; the customer comes
-      // back much later and buys the same recipient + amount.
+      // The vend settles minutes later; the replay is its FIRST
+      // completion — present it.
+      vi.advanceTimersByTime(6 * 60 * 1000);
+      await act(async () => {
+        result.current.handleAirtimeDataSubmit(airtime);
+      });
+
+      expect(result.current.step).toBe('success');
+      expect(result.current.transactionRef).toBe('REF-OLD');
+      // Same key replayed (not a fresh mint), no Already-Completed prompt.
+      expect(seenKeys).toHaveLength(2);
+      expect(seenKeys[1]).toBe(seenKeys[0]);
+      expect(mockToast).not.toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Purchase Already Completed' })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a replay past the completion window as already-completed', async () => {
+    vi.useFakeTimers();
+    try {
+      const seenKeys: string[] = [];
+      mockSubmit.mockImplementation(
+        async (request: {
+          getWalletIdempotencyKey: (signature: string) => string;
+        }) => {
+          seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+          // First submit is still processing; the replay lands later.
+          return seenKeys.length === 1
+            ? {
+                kind: 'wallet-success',
+                reference: 'REF-OLD',
+                amount: 1000,
+                processing: true,
+              }
+            : {
+                kind: 'wallet-success',
+                reference: 'REF-OLD',
+                amount: 1000,
+                processing: false,
+              };
+        }
+      );
+      const setWalletBalance = vi.fn();
+      const { result } = renderHook(() =>
+        useUtilityPurchase(baseParams({ setWalletBalance }))
+      );
+
+      await act(async () => {
+        result.current.handleAirtimeDataSubmit(airtime);
+      });
+      expect(result.current.step).toBe('processing');
+
+      // Completion is observed (as a switch-back replay would), then
+      // the customer returns long after with the same payload: a NEW
+      // intent, so the replay must not present the old vend.
+      const scoped = scopePendingVtuSignature('user-1', 'merchant-1', 'SIG');
+      vi.advanceTimersByTime(60 * 1000);
+      markPendingVtuCompleted(scoped);
       vi.advanceTimersByTime(6 * 60 * 1000);
       await act(async () => {
         result.current.handleAirtimeDataSubmit(airtime);

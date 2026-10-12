@@ -44,6 +44,8 @@ export interface PersistedPendingVtuEntry {
   key: string;
   reference: string | null;
   rememberedAt: number;
+  /** Null for entries snapshotted before completion tracking shipped. */
+  completedAt?: number | null;
 }
 
 /**
@@ -65,7 +67,12 @@ export interface ParsedPendingVtuSnapshot {
 
 export type PendingVtuEntryInput = [
   string,
-  { key: string; reference: string | null; rememberedAt: number },
+  {
+    key: string;
+    reference: string | null;
+    rememberedAt: number;
+    completedAt?: number | null;
+  },
 ];
 
 function isPersistedEntry(
@@ -118,6 +125,7 @@ export function serializePendingVtuEntries(
           key: entry.key,
           reference: entry.reference,
           rememberedAt: entry.rememberedAt,
+          completedAt: entry.completedAt ?? null,
         },
       ]);
     }
@@ -177,6 +185,10 @@ export function parsePendingVtuSnapshot(
         key: entry.key,
         reference: entry.reference ?? null,
         rememberedAt: entry.rememberedAt,
+        // Pre-completion-tracking snapshots omit this: fail open (first
+        // replay presents success, then forgets — never "Completed").
+        completedAt:
+          typeof entry.completedAt === 'number' ? entry.completedAt : null,
       },
     ]);
   }

@@ -2,6 +2,10 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  getPaymentStatusKey,
+  projectHistoryTransaction,
+} from '@/lib/vtu-history-transaction-projection';
+import {
   extractMetadataField,
   hasRecentBackfillSchedule,
   isString,
@@ -14,57 +18,6 @@ import {
 import { historyQuerySchema } from '@/schemas/vtu';
 
 const PAYMENT_STATUS_BATCH_SIZE = 250;
-
-type PaymentGateway = 'paystack' | 'korapay';
-
-function isPaymentGateway(value: unknown): value is PaymentGateway {
-  return value === 'paystack' || value === 'korapay';
-}
-
-function getPaymentStatusKey(gateway: string, reference: string): string {
-  return `${gateway}:${reference}`;
-}
-
-function parseHistoryNumber({
-  field,
-  invalidMessage,
-  transactionId,
-  value,
-}: {
-  field: string;
-  invalidMessage: string;
-  transactionId: unknown;
-  value: unknown;
-}) {
-  const amount = Number(value);
-  if (Number.isFinite(amount)) {
-    return amount;
-  }
-
-  console.error(invalidMessage, {
-    [field]: value,
-    transactionId,
-  });
-  return 0;
-}
-
-function parseHistoryAmount(value: unknown, transactionId: unknown) {
-  return parseHistoryNumber({
-    field: 'amount',
-    invalidMessage: 'Invalid VTU transaction amount in history response:',
-    transactionId,
-    value,
-  });
-}
-
-function parseHistoryCashback(value: unknown, transactionId: unknown) {
-  return parseHistoryNumber({
-    field: 'customerCashback',
-    invalidMessage: 'Invalid VTU customer cashback amount in history response:',
-    transactionId,
-    value,
-  });
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -289,78 +242,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       transactions: transactionsWithVoucherPins.map(
-        ({ transaction, voucherPin }) => {
-          const {
-            metadata: transactionMetadata,
-            transaction_id: _transactionId,
-            ...publicTransaction
-          } = transaction;
-          const dataPlanCode = extractMetadataField(
-            transactionMetadata,
-            'dataPlanCode',
-            isString
-          );
-          // Delivered units (e.g. prepaid electricity kWh) and the meter/
-          // customer address, surfaced so the receipt can render them.
-          const units = extractMetadataField(
-            transactionMetadata,
-            'units',
-            isString
-          );
-          const address = extractMetadataField(
-            transactionMetadata,
-            'address',
-            isString
-          );
-          const paymentGateway = extractMetadataField(
-            transactionMetadata,
-            'gateway',
-            isPaymentGateway
-          );
-          const paymentReference = extractMetadataField(
-            transactionMetadata,
-            'paymentReference',
-            isString
-          );
-          // Refund confirmation for failed wallet debits: the failed
-          // status persists BEFORE the refund RPC runs, so clients must
-          // not treat failed as refunded. Pending = debited, failed,
-          // refund not yet issued (the cron confirms it).
-          const walletDebited = transactionMetadata.walletDebited === true;
-          const refundIssued = transactionMetadata.refundIssued === true;
-          const refundAmount = transactionMetadata.refundAmount;
-          const refundedToWallet =
-            refundIssued && typeof refundAmount === 'number'
-              ? refundAmount
-              : null;
-
-          return {
-            ...publicTransaction,
-            amount: parseHistoryAmount(transaction.amount, transaction.id),
-            customer_cashback:
-              transaction.customer_cashback != null
-                ? parseHistoryCashback(
-                    transaction.customer_cashback,
-                    transaction.id
-                  )
-                : null,
-            payment_gateway: paymentGateway,
-            payment_reference: paymentReference,
-            payment_status:
-              paymentGateway && paymentReference
-                ? (paymentStatusByReference.get(
-                    getPaymentStatusKey(paymentGateway, paymentReference)
-                  ) ?? null)
-                : null,
-            repeat_data_plan_code: dataPlanCode,
-            voucher_pin: voucherPin,
-            units,
-            address,
-            refund_pending:
-              transaction.status === 'failed' && walletDebited && !refundIssued,
-            refunded_to_wallet: refundedToWallet,
-          };
-        }
+        ({ transaction, voucherPin }) =>
+          projectHistoryTransaction({
+            paymentStatusByReference,
+            transaction,
+            voucherPin,
+          })
       ),
     });
   } catch (error) {

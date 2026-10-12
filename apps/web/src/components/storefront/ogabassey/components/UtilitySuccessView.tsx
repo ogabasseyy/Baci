@@ -3,7 +3,7 @@
 import { Check, Clock, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import {
-  isUtilityVoucherBackfillTab,
+  isUtilityBackfillTab,
   useUtilityVoucherBackfill,
 } from './use-utility-voucher-backfill';
 
@@ -48,10 +48,13 @@ export function UtilitySuccessView({
   const failedPending =
     processing && backfill.failed && !backfill.refundConfirmed;
   const resolvedProcessing = processing && !succeeded && !failedTerminal;
+  // Polling copy only when the loop can actually run (known tab +
+  // merchant slug); otherwise the static check-back copy applies.
   const polling =
     resolvedProcessing &&
     !failedPending &&
-    isUtilityVoucherBackfillTab(activeTab);
+    !!merchantSlug &&
+    isUtilityBackfillTab(activeTab);
 
   // Tell the purchase owner the shown 202 settled, exactly once, so it
   // forgets the retained key (buy-again mints fresh instead of
@@ -133,7 +136,7 @@ export function UtilitySuccessView({
       <p className="text-gray-500 mb-6">
         {resolvedProcessing
           ? polling
-            ? 'Your transaction is being processed. Your token will appear here automatically.'
+            ? 'Your transaction is being processed. This screen updates automatically when it settles.'
             : 'Your transaction is being processed. It can still fail or be refunded — check back shortly.'
           : 'Your transaction has been processed successfully.'}
       </p>

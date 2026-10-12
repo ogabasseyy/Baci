@@ -13,6 +13,8 @@ interface PersistedPendingVtuPurchase {
   key: string;
   reference: string | null;
   rememberedAt: number;
+  /** Absent for entries snapshotted before completion tracking shipped. */
+  completedAt?: number | null;
 }
 
 /**
@@ -59,6 +61,7 @@ export function serializePendingVtuEntries(
           key: entry.key,
           reference: entry.reference ?? null,
           rememberedAt: entry.rememberedAt,
+          completedAt: entry.completedAt ?? null,
         },
       ]);
     }
@@ -88,11 +91,24 @@ export function parsePendingVtuSnapshot(
   if (!Array.isArray(parsed)) {
     return [];
   }
-  return parsed.filter(
-    (item): item is [string, PersistedPendingVtuPurchase] =>
-      isPersistedEntry(item) &&
-      now - item[1].rememberedAt <= PERSISTED_VTU_KEY_TTL_MS
-  );
+  return parsed
+    .filter(
+      (item): item is [string, PersistedPendingVtuPurchase] =>
+        isPersistedEntry(item) &&
+        now - item[1].rememberedAt <= PERSISTED_VTU_KEY_TTL_MS
+    )
+    .map(([scoped, entry]) => [
+      scoped,
+      {
+        key: entry.key,
+        reference: entry.reference ?? null,
+        rememberedAt: entry.rememberedAt,
+        // Pre-completion-tracking snapshots omit this: fail open
+        // (first replay presents success, then resets).
+        completedAt:
+          typeof entry.completedAt === 'number' ? entry.completedAt : null,
+      },
+    ]) as [string, PersistedPendingVtuPurchase][];
 }
 
 interface PendingVtuKeyStore {

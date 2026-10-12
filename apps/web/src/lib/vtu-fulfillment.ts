@@ -120,6 +120,8 @@ interface VtuTransactionRow {
   type: 'airtime' | 'data' | 'electricity' | 'cable_tv' | 'betting';
   /** Last write; drives the stranded pre-vend staleness gate. */
   updated_at?: string | null;
+  /** Creation time; excludes pre-marker legacy rows from recovery. */
+  created_at?: string | null;
 }
 
 interface VtuFallbackCreditCorrection {
@@ -2428,7 +2430,7 @@ export async function fulfillPendingVtuTransaction({
   const { data: existing, error: existingError } = await supabase
     .from('vtu_transactions')
     .select(
-      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source, updated_at'
+      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source, updated_at, created_at'
     )
     .eq('id', transactionId)
     .single();

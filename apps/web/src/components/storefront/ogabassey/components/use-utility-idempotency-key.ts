@@ -7,6 +7,7 @@ import {
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
   scopePendingVtuSignature,
@@ -78,10 +79,12 @@ export function shouldRotateVtuKeyForStatus(status: unknown): boolean {
  * while their UI was suppressed, so their switch-back repeat must
  * replay the original outcome — forgetting would mint a fresh key
  * and debit/vend a second time. A genuinely new intent stays safe
- * via the stale-success guard ("Purchase Already Completed").
- * Status-bearing terminal errors forget the key — otherwise the
- * retained key replays the dead transaction when they retry.
- * Ambiguous errors keep the key so the retry dedupes.
+ * via the stale-success guard ("Purchase Already Completed"). Terminal
+ * observations also record completion (processing notes don't), so
+ * the guard keys off completion time. Status-bearing terminal errors
+ * forget the key — otherwise the retained key replays the dead
+ * transaction when they retry. Ambiguous errors keep the key so the
+ * retry dedupes.
  */
 export function finalizeSwitchedAttempt(
   attempt: UtilityIdempotencyAttempt | null,
@@ -92,6 +95,13 @@ export function finalizeSwitchedAttempt(
   }
   if (result.kind === 'wallet-success') {
     notePendingVtuReference(attempt.scoped, result.reference);
+    // Terminal observations also record completion (processing notes
+    // must NOT): the stale predicate keys off completion time, so a
+    // switch-back repeat minutes later presents this vend instead of
+    // misreporting it as "Already Completed".
+    if (!result.processing) {
+      markPendingVtuCompleted(attempt.scoped);
+    }
   } else if (
     result.kind === 'error' &&
     shouldRotateVtuKeyForStatus(result.status)

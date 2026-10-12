@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
   hasNotedPendingVtuReference,
+  markPendingVtuCompleted,
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import {
@@ -196,7 +197,7 @@ describe('useUtilityIdempotencyKey', () => {
     expect(recallB).toBe(attemptB.key);
   });
 
-  it('reports a success stale only when the noted reference is past the window', () => {
+  it('reports a success stale only when completion is past the window', () => {
     vi.useFakeTimers();
     try {
       const { result } = renderHook(() =>
@@ -209,6 +210,17 @@ describe('useUtilityIdempotencyKey', () => {
       });
       expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
 
+      act(() => {
+        vi.advanceTimersByTime(6 * 60 * 1000);
+      });
+      // Noted but never completed: still not stale — a slow first
+      // completion must present, not "Already Completed".
+      expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
+
+      act(() => {
+        markPendingVtuCompleted(scoped);
+      });
+      expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
       act(() => {
         vi.advanceTimersByTime(6 * 60 * 1000);
       });
@@ -251,6 +263,52 @@ describe('finalizeSwitchedAttempt', () => {
     });
     expect(repeat).toBe(attempt.key);
     expect(result.current.isScopedReplay(attempt.scoped, 'REF-1')).toBe(true);
+  });
+
+  it('records completion on switched terminal success (processing notes do not)', () => {
+    // The stale guard keys off completion time: a switch-back repeat
+    // minutes later must present this vend, while a repeat long after
+    // reports "Already Completed". Processing notes must NOT mark.
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useUtilityIdempotencyKey({ customerId: 'customer-a' })
+      );
+      let terminal = { key: '', scoped: '', recalled: false };
+      let processing = { key: '', scoped: '', recalled: false };
+      act(() => {
+        terminal = result.current.captureAttemptKey('SIG-TERM');
+        processing = result.current.captureAttemptKey('SIG-PROC');
+      });
+
+      finalizeSwitchedAttempt(terminal, {
+        kind: 'wallet-success',
+        reference: 'REF-TERM',
+        amount: 1000,
+        processing: false,
+      });
+      finalizeSwitchedAttempt(processing, {
+        kind: 'wallet-success',
+        reference: 'REF-PROC',
+        amount: 1000,
+        processing: true,
+      });
+      expect(
+        result.current.isScopedStale(terminal.scoped, 'REF-TERM')
+      ).toBe(false);
+
+      act(() => {
+        vi.advanceTimersByTime(6 * 60 * 1000);
+      });
+      expect(result.current.isScopedStale(terminal.scoped, 'REF-TERM')).toBe(
+        true
+      );
+      expect(
+        result.current.isScopedStale(processing.scoped, 'REF-PROC')
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('notes the reference when the switched result is processing', () => {

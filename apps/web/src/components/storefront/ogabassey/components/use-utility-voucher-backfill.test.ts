@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  isUtilityVoucherBackfillTab,
+  isUtilityBackfillTab,
   parseUtilityVoucherBackfill,
   useUtilityVoucherBackfill,
   UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS,
@@ -141,13 +141,14 @@ describe('parseUtilityVoucherBackfill', () => {
   });
 });
 
-describe('isUtilityVoucherBackfillTab', () => {
-  it('covers bill tabs only', () => {
-    expect(isUtilityVoucherBackfillTab('power')).toBe(true);
-    expect(isUtilityVoucherBackfillTab('tv')).toBe(true);
-    expect(isUtilityVoucherBackfillTab('betting')).toBe(true);
-    expect(isUtilityVoucherBackfillTab('airtime')).toBe(false);
-    expect(isUtilityVoucherBackfillTab('data')).toBe(false);
+describe('isUtilityBackfillTab', () => {
+  it('covers every utility tab (telco rides along for settlement)', () => {
+    expect(isUtilityBackfillTab('power')).toBe(true);
+    expect(isUtilityBackfillTab('tv')).toBe(true);
+    expect(isUtilityBackfillTab('betting')).toBe(true);
+    expect(isUtilityBackfillTab('airtime')).toBe(true);
+    expect(isUtilityBackfillTab('data')).toBe(true);
+    expect(isUtilityBackfillTab('nope')).toBe(false);
   });
 });
 
@@ -321,16 +322,32 @@ describe('useUtilityVoucherBackfill', () => {
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(
-        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS *
-          (UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS + 2)
-      );
+      // Past the ~6-minute backoff window: 10×3s + 33×10s + margin.
+      await vi.advanceTimersByTimeAsync(400_000);
     });
 
     expect(result.current.successful).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(
       UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS
     );
+  });
+
+  it('backs off to 10s after the first 10 fast attempts', async () => {
+    const fetchMock = mockHistory(() => ({ transactions: [pendingRow] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      // t=35s: attempts 1-10 at 3s cadence (t=0..27), #11 at t=30,
+      // #12 not until t=40.
+      await vi.advanceTimersByTimeAsync(35_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(11);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(12);
   });
 
   it('retries transient 5xx within the attempt budget', async () => {
@@ -431,13 +448,11 @@ describe('useUtilityVoucherBackfill', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('never fetches for non-bill tabs or missing inputs', async () => {
+  it('never fetches for unknown tabs or missing inputs', async () => {
     const fetchMock = mockHistory(() => ({ transactions: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    renderHook(() =>
-      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
-    );
+    renderHook(() => useUtilityVoucherBackfill({ ...input, utilityTab: 'nope' }));
     renderHook(() => useUtilityVoucherBackfill({ ...input, merchantSlug: null }));
     renderHook(() => useUtilityVoucherBackfill({ ...input, enabled: false }));
     await act(async () => {
@@ -447,6 +462,33 @@ describe('useUtilityVoucherBackfill', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('polls telco processing purchases for settlement', async () => {
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain(
+      'type=airtime'
+    );
   });
 
   it('queries history scoped to the tab type and merchant', async () => {

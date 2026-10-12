@@ -82,6 +82,23 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row(status="production_verified")]))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_duplicate_json_keys_fail_closed(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "capabilities.json"
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
+            path.write_text('{"schema_version": 1, "schema_version": 1, "reviewed_at": "%s", "source_revision": "%s", "capabilities": []}' % (now, "a" * 40))
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
+                result = capability_context()
+            self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_oversized_evidence_or_scope_fails_closed(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        evidence = {"workflow": "w" * 1001, "deployed_revision": "b" * 40, "verified_at": now, "entitlement": "plan", "observation": "seen"}
+        result = self.render(_register([_row(status="production_verified", production_evidence=evidence)]))
+        self.assertIn("Register unavailable, invalid or stale", result)
+        result = self.render(_register([_row()], review_scope="s" * 1001))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_deeply_nested_register_fails_closed(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
@@ -108,12 +125,15 @@ class CapabilityContextTests(unittest.TestCase):
         refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
         for ref in refs:
             self.assertTrue((repo / ref).exists(), f"cited source missing: {ref}")
+        reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
+        age = dt.datetime.now(dt.timezone.utc) - reviewed
+        self.assertLessEqual(age, dt.timedelta(days=14), "register reviewed_at is outside the 14-day evidence window")
         proc = subprocess.run(
             ["git", "-C", str(repo), "diff", "--name-only", f"{data['source_revision']}..HEAD"],
             capture_output=True, text=True,
         )
         if proc.returncode != 0:
-            self.skipTest("source revision not in local history")
+            self.fail(f"source_revision {data['source_revision']} cannot be resolved in this checkout: {proc.stderr.strip()}")
         changed = set(proc.stdout.split())
         drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
         self.assertEqual(drift, [], f"cited paths changed since source_revision: {drift}")

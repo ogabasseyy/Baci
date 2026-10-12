@@ -50,7 +50,7 @@
       "id": "imports", "title": "Catalog import and inventory", "status": "code_evidenced",
       "claim": "Baci implements bulk CSV product imports, variants and stock-management workflows, including serialized inventory.",
       "limitations": "Requires the products:create permission. Barcode fields are not proof of barcode scanning or POS. General catalog export and product bundles require separate verification.",
-      "source_refs": ["apps/web/src/components/products/csv-bulk-import-dialog.tsx", "apps/web/src/schemas/inventory.ts"]
+      "source_refs": ["apps/web/src/components/products/csv-bulk-import-dialog.tsx", "apps/web/src/app/api/products/bulk-import/route.ts", "apps/mobile-admin/components/product/ProductStockControls.tsx"]
     },
     {
       "id": "expenses", "title": "Expenses and profit reporting", "status": "code_evidenced",

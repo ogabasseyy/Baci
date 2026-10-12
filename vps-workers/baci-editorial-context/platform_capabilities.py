@@ -23,7 +23,14 @@ def capability_context(*, now=None):
         raw = path.read_bytes()
         if len(raw) > 200_000:
             raise ValueError("oversized")
-        data = json.loads(raw)
+        def _reject_duplicate_keys(pairs):
+            obj = {}
+            for key, value in pairs:
+                if key in obj:
+                    raise ValueError("duplicate key")
+                obj[key] = value
+            return obj
+        data = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
         if not isinstance(data, dict) or data.get("schema_version") != 1:
             raise ValueError("schema")
         revision = data.get("source_revision", "")
@@ -56,7 +63,7 @@ def capability_context(*, now=None):
                 if not isinstance(evidence, dict):
                     raise ValueError("production evidence missing")
                 for key in ("workflow", "entitlement", "observation"):
-                    if not isinstance(evidence.get(key), str) or not evidence[key].strip():
+                    if not isinstance(evidence.get(key), str) or not evidence[key].strip() or len(evidence[key]) > 1000:
                         raise ValueError("production evidence incomplete")
                 deployed = evidence.get("deployed_revision", "")
                 if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
@@ -83,6 +90,8 @@ def capability_context(*, now=None):
             "capabilities": safe_rows,
         }
         if isinstance(data.get("review_scope"), str):
+            if len(data["review_scope"]) > 1000:
+                raise ValueError("review scope size")
             payload["review_scope"] = data["review_scope"]
         serialized = (
             json.dumps(payload, sort_keys=True)

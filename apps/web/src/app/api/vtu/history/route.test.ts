@@ -14,6 +14,12 @@ vi.mock('@/lib/api-auth', () => ({
     mockAuthenticateApiRequest(...args),
 }));
 
+const mockGetCurrentSlugForAlias = vi.fn();
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: (...args: unknown[]) =>
+    mockGetCurrentSlugForAlias(...args),
+}));
+
 const mockAfter = vi.fn();
 vi.mock('next/server', async () => {
   const actual =
@@ -35,6 +41,7 @@ vi.mock('@/lib/vtu-fulfillment', () => ({
 
 let merchantData: { id: string } | null = null;
 let merchantError: unknown = null;
+let merchantDataBySlug: Record<string, { id: string } | null> = {};
 let customerByUserIdData: { id: string; user_id: string | null } | null = null;
 let customerByEmailData: { id: string; user_id: string | null } | null = null;
 let transactionsData: Record<string, unknown>[] | null = null;
@@ -128,9 +135,14 @@ function createMockSupabase() {
       if (table === 'merchants') {
         return {
           select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue({
-                data: merchantData,
+            eq: vi.fn((field: string, value: unknown) => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data:
+                  field === 'slug' &&
+                  typeof value === 'string' &&
+                  value in merchantDataBySlug
+                    ? merchantDataBySlug[value]
+                    : merchantData,
                 error: merchantError,
               }),
             })),
@@ -186,6 +198,9 @@ describe('GET /api/vtu/history', () => {
     mockFulfillPendingVtuTransaction.mockReset();
     merchantData = { id: 'merchant-1' };
     merchantError = null;
+    merchantDataBySlug = {};
+    mockGetCurrentSlugForAlias.mockReset();
+    mockGetCurrentSlugForAlias.mockResolvedValue(null);
     customerByUserIdData = { id: 'customer-1', user_id: 'user-1' };
     customerByEmailData = null;
     transactionsData = [
@@ -939,5 +954,37 @@ describe('GET /api/vtu/history', () => {
         refunded_to_wallet: null,
       }),
     ]);
+  });
+
+  it('resolves a stale slug via the alias fallback instead of 404', async () => {
+    // Store renamed while a processing tab stayed open: the tab polls
+    // with the retired slug, which must resolve, not strand the
+    // backfill on a permanent 404.
+    merchantData = null;
+    merchantDataBySlug = {
+      'old-slug': null,
+      'new-slug': { id: 'merchant-1' },
+    };
+    mockGetCurrentSlugForAlias.mockResolvedValue('new-slug');
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=old-slug'));
+    const data = await response.json();
+
+    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledWith('old-slug');
+    expect(response.status).toBe(200);
+    expect(data.transactions).toHaveLength(1);
+  });
+
+  it('returns 404 for an unknown slug with no alias', async () => {
+    merchantData = null;
+    mockGetCurrentSlugForAlias.mockResolvedValue(null);
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=nope'));
+    const data = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(data.error).toBe('Merchant not found');
   });
 });

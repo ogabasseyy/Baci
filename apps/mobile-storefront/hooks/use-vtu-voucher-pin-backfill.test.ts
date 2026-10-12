@@ -3,6 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import {
+  clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import {
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL_MS,
   useVtuVoucherPinBackfill,
@@ -72,6 +80,7 @@ const BASE_INPUT = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  clearPendingVtuKeys();
   jest.useFakeTimers();
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
   mockUseAuthStore.mockReturnValue('user-1');
@@ -145,13 +154,102 @@ describe('useVtuVoucherPinBackfill', () => {
       () =>
         useVtuVoucherPinBackfill({
           ...BASE_INPUT,
-          utilityType: 'airtime' as never,
+          utilityType: 'unknown-type' as never,
         }),
       { wrapper }
     );
 
     expect(result.current).toBeNull();
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it('polls telco types for settlement and marks the retained entry', async () => {
+    rememberPendingVtuPurchase('hook-telco', 'key-hook-telco');
+    notePendingVtuReference('hook-telco', 'REF-001');
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(
+      () => useVtuVoucherPinBackfill({ ...BASE_INPUT, utilityType: 'airtime' }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    // Terminal observation stops the loop (no pin expected for telco).
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(result.current).toBeNull();
+    // ...and settles the registry so the stale guard can fire later.
+    expect(isStalePendingVtuSuccess('hook-telco', 'REF-001')).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        'hook-telco',
+        'REF-001',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('forgets the retained entry when history reports failure', async () => {
+    rememberPendingVtuPurchase('hook-fail', 'key-hook-fail');
+    notePendingVtuReference('hook-fail', 'REF-001');
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'failed',
+          },
+        ],
+      })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('hook-fail')).toBeNull();
+  });
+
+  it('keeps polling while history reports a non-terminal status', async () => {
+    rememberPendingVtuPurchase('hook-proc', 'key-hook-proc');
+    notePendingVtuReference('hook-proc', 'REF-001');
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'processing',
+          },
+        ],
+      })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(2));
+    // Non-terminal: the retained entry is untouched.
+    expect(
+      isStalePendingVtuSuccess(
+        'hook-proc',
+        'REF-001',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
   });
 
   it('returns null immediately when userId is absent (unauthenticated)', () => {

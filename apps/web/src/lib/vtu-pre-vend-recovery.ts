@@ -114,13 +114,18 @@ export function isStrandedPreVendVtuRow(
  * reconciler's stranded-row recovery flips it once stale. Extracted
  * from vtu-fulfillment.ts per the Boy Scout Rule (that module is
  * over the 300-line budget).
+ *
+ * `userSafeMessage` is persisted to `error_message`, which
+ * /api/vtu/history returns to the customer — it MUST be a fixed
+ * template with NO raw provider/DB text. Log raw causes at the call
+ * site (server logs only), never through here.
  */
 export async function restoreInterruptedPreVendVtuRow({
-  errorMessage,
+  userSafeMessage,
   row,
   supabase,
 }: {
-  errorMessage: string;
+  userSafeMessage: string;
   row: PreVendRestoreRow;
   supabase: SupabaseClient;
 }): Promise<void> {
@@ -133,7 +138,7 @@ export async function restoreInterruptedPreVendVtuRow({
     const { error } = await supabase
       .from('vtu_transactions')
       .update({
-        error_message: errorMessage,
+        error_message: userSafeMessage,
         metadata: {
           ...(row.metadata ?? {}),
           preVendInterruptedAt: new Date().toISOString(),

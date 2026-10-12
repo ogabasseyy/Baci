@@ -2505,7 +2505,7 @@ export async function fulfillPendingVtuTransaction({
       // the row; re-read after so a raced settle reports terminal.
       if (isStrandedPreVendVtuRow(row)) {
         await restoreInterruptedPreVendVtuRow({
-          errorMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,
+          userSafeMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,
           row,
           supabase,
         });
@@ -2702,7 +2702,10 @@ export async function fulfillPendingVtuTransaction({
         transactionId: row.id,
       });
       await restoreInterruptedPreVendVtuRow({
-        errorMessage: `Failed to debit VTU wallet for ${row.id}: ${debitError.message}`,
+        // Fixed user-safe template: the raw RPC error stays in the
+        // server log above — error_message is customer-visible history.
+        userSafeMessage:
+          'VTU wallet debit failed; the purchase will resume automatically.',
         row,
         supabase,
       });
@@ -2733,7 +2736,10 @@ export async function fulfillPendingVtuTransaction({
         transactionId: row.id,
       });
       await restoreInterruptedPreVendVtuRow({
-        errorMessage: `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`,
+        // Fixed user-safe template: the raw DB error stays in the
+        // server log above — error_message is customer-visible history.
+        userSafeMessage:
+          'VTU wallet debit confirmation failed; the purchase will resume automatically.',
         row,
         supabase,
       });

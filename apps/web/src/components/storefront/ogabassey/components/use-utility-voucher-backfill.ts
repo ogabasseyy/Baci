@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { settlePendingVtuByReference } from './utility-pending-idempotency';
 
 // Bill-style purchases (power, TV, betting) may receive their voucher /
 // token after the initial 202 returns, once the provider reports back.
@@ -194,9 +195,15 @@ export function useUtilityVoucherBackfill({
         }
         if (parsed) {
           // Surface every observation (e.g. failed with a pending
-          // refund) while polling continues; terminal ones stop.
+          // refund) while polling continues; terminal ones settle
+          // the retained registry entry (success marks completion,
+          // failure forgets) and stop.
           setBackfill(parsed);
           if (isTerminalBackfill(parsed)) {
+            settlePendingVtuByReference(
+              reference,
+              parsed.failed ? 'failed' : 'successful'
+            );
             return;
           }
         }

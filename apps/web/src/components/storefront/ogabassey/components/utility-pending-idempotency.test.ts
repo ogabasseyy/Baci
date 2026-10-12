@@ -11,6 +11,7 @@ import {
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
+  settlePendingVtuByReference,
 } from './utility-pending-idempotency';
 import {
   loadPendingVtuSnapshot,
@@ -261,6 +262,61 @@ describe('utility-pending-idempotency', () => {
         first + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('settles retained entries by noted reference on terminal history', () => {
+    const signature = '{"settle":true}';
+    getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-SETTLE');
+
+    // Unknown references touch nothing.
+    settlePendingVtuByReference('REF-OTHER', 'successful');
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-SETTLE',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
+
+    // Observed success marks completion: fresh replays present, old
+    // ones prompt a fresh submit.
+    const completedAt = Date.now();
+    settlePendingVtuByReference('REF-SETTLE', 'successful', completedAt);
+    expect(isStalePendingVtuSuccess(signature, 'REF-SETTLE')).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-SETTLE',
+        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+    // First observation wins.
+    settlePendingVtuByReference(
+      'REF-SETTLE',
+      'successful',
+      completedAt + 10_000
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        signature,
+        'REF-SETTLE',
+        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('forgets retained entries by noted reference on failed history', () => {
+    const signature = '{"settle-fail":true}';
+    const key = getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-FAIL');
+
+    // A retry must mint fresh and attempt anew — replaying a dead row
+    // would wedge the customer on the old error.
+    settlePendingVtuByReference('REF-FAIL', 'failed');
+
+    expect(recallPendingVtuKey(signature)).toBeUndefined();
+    expect(getPendingVtuKey(signature)).not.toBe(key);
   });
 
   it('recognizes a noted reference as the replay of its processing vend', () => {

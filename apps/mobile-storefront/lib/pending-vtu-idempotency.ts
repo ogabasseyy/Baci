@@ -103,14 +103,11 @@ function persistPendingVtuPurchases(): void {
 hydratePendingVtuPurchases(loadPendingVtuSnapshot());
 
 /**
- * Binds a purchase descriptor to the submitting owner + merchant. The
- * descriptor deliberately omits identity (mirroring the server
- * fingerprint), so without this a sign-out + second customer could
- * recall the first customer's key for the same recipient/amount — and
- * the route rejects it as belonging to another customer. Callers MUST
- * scope ONCE per submission and pass the scoped key to every registry
- * call: a module-global scope would let an account switch mid-flight
- * redirect one customer's completion onto another customer's entry.
+ * Binds a purchase descriptor to the submitting owner + merchant (the
+ * descriptor omits identity, mirroring the server fingerprint).
+ * Callers MUST scope ONCE per submission: a module-global scope would
+ * let an account switch mid-flight redirect one customer's completion
+ * onto another customer's entry.
  */
 export function scopePendingVtuKey(
   ownerId: string | null | undefined,
@@ -136,13 +133,10 @@ export function buildVtuPurchaseDescriptor(
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
- * Entries past the 7-day TTL are dropped instead of recalled — including
- * referenced ones. No client-side signal proves terminality (noted
- * references mark non-terminal processing responses, and the server
- * leaves unconfirmed rows processing indefinitely), so retention is
- * horizon-based: 7 days dwarf any plausible processing duration, while
- * infinite retention would accumulate unboundedly and wedge the cap.
- * The 5min stale check still arbitrates success replays within the TTL.
+ * Past-TTL entries are dropped instead of recalled (no client signal
+ * proves terminality, so retention is horizon-based: 7 days dwarf any
+ * plausible processing duration). The 5min stale check still
+ * arbitrates success replays within the TTL.
  */
 export function recallPendingVtuKey(
   descriptor: string,
@@ -209,11 +203,7 @@ export function notePendingVtuReference(
   }
 }
 
-/**
- * True when this reference was noted for the descriptor (mirrors web):
- * lets tests prove a processing note landed without waiting out the
- * stale window (noted-but-uncompleted entries are never stale).
- */
+/** True when this reference was noted for the descriptor. */
 export function hasNotedPendingVtuReference(
   descriptor: string,
   reference: string
@@ -221,12 +211,7 @@ export function hasNotedPendingVtuReference(
   return pendingPurchases.get(descriptor)?.reference === reference;
 }
 
-/**
- * Records terminal success observed on a RETAINED entry (the
- * switched-success path, which notes without resetting). Immediate
- * successes reset instead, so they never need this. First observation
- * wins: re-marking must not extend the window.
- */
+/** Records observed success on a RETAINED entry (first wins; immediate successes reset instead). */
 export function markPendingVtuCompleted(
   descriptor: string,
   now: number = Date.now()
@@ -245,11 +230,10 @@ export function markPendingVtuCompleted(
  * submit is a NEW intent, not a retry. Callers MUST forget the
  * descriptor and prompt a fresh submit instead of presenting the
  * earlier vend as the new purchase. Staleness keys off the COMPLETION
- * time, never the submit/noted time: a reference noted while
- * processing (or a completion observed seconds ago) is NOT stale, so
- * a slow first completion is presented instead of misreported as
- * "Already Completed" (which would reset the key and double-debit
- * the prompted retry). Entries with no OBSERVED completion are NEVER
+ * time, never the submit/noted time, so a slow first completion is
+ * presented instead of misreported as "Already Completed" (which
+ * would reset the key and double-debit the prompted retry).
+ * Entries with no OBSERVED completion are NEVER
  * stale. Past the TTL recall already dropped them, so this predicate
  * never sees them.
  */
@@ -268,6 +252,35 @@ export function isStalePendingVtuSuccess(
     return false;
   }
   return now - pending.completedAt > PENDING_VTU_STALE_AFTER_MS;
+}
+
+/**
+ * Settles retained entries by NOTED server reference. The voucher
+ * backfill learns terminality from history — not from a response — so
+ * it knows the reference but not the descriptor. Success marks
+ * completion (the stale guard then arbitrates replays); failure
+ * forgets (a retry must mint fresh — replaying a dead row wedges the
+ * customer on the old error). First mark wins.
+ */
+export function settlePendingVtuByReference(
+  reference: string,
+  status: 'successful' | 'failed',
+  now: number = Date.now()
+): void {
+  let touched = false;
+  for (const [descriptor, pending] of pendingPurchases) {
+    if (pending.reference !== reference) continue;
+    if (status === 'successful') {
+      if (pending.completedAt === null) {
+        pending.completedAt = now;
+        touched = true;
+      }
+    } else {
+      pendingPurchases.delete(descriptor);
+      touched = true;
+    }
+  }
+  if (touched) persistPendingVtuPurchases();
 }
 
 /** Drops the recall entry once its purchase reaches a terminal outcome. */

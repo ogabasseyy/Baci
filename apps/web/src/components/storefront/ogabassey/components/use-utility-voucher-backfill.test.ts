@@ -1,6 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from './utility-pending-idempotency';
+import {
   isUtilityBackfillTab,
   parseUtilityVoucherBackfill,
   useUtilityVoucherBackfill,
@@ -504,5 +512,67 @@ describe('useUtilityVoucherBackfill', () => {
     expect(url).toContain('/api/vtu/history?');
     expect(url).toContain('merchantSlug=ogabassey');
     expect(url).toContain('type=electricity');
+  });
+
+  it('marks the retained entry when history reports success', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook":true}', 'key-hook');
+    notePendingVtuReference('{"hook":true}', 'VTU-1');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      isStalePendingVtuSuccess('{"hook":true}', 'VTU-1')
+    ).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        '{"hook":true}',
+        'VTU-1',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('forgets the retained entry on refund-confirmed failure', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-fail":true}', 'key-hook-fail');
+    notePendingVtuReference('{"hook-fail":true}', 'VTU-1');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'failed',
+          refund_pending: false,
+          refunded_to_wallet: 1000,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('{"hook-fail":true}')).toBeUndefined();
   });
 });

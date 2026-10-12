@@ -4222,12 +4222,19 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(updatePayloads).toContainEqual(
         expect.objectContaining({
           status: 'pending',
-          error_message: expect.stringMatching(/Failed to debit VTU wallet/),
+          // Fixed user-safe template: error_message is
+          // customer-visible via history, so the raw RPC error
+          // ('connection terminated') must NOT be persisted.
+          error_message:
+            'VTU wallet debit failed; the purchase will resume automatically.',
           metadata: expect.objectContaining({
             preVendInterruptedAt: expect.any(String),
           }),
         })
       );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('connection terminated');
+      }
     });
 
     it('restores walletDebited write failures to marked pending (debit is kept, re-drive short-circuits)', async () => {
@@ -4273,11 +4280,19 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(updatePayloads).toContainEqual(
         expect.objectContaining({
           status: 'pending',
+          // Fixed user-safe template: the raw DB error ('write
+          // failed') stays in server logs, never in history-visible
+          // error_message.
+          error_message:
+            'VTU wallet debit confirmation failed; the purchase will resume automatically.',
           metadata: expect.objectContaining({
             preVendInterruptedAt: expect.any(String),
           }),
         })
       );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('write failed');
+      }
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     });
 

@@ -26,14 +26,16 @@ describe('restoreInterruptedPreVendVtuRow', () => {
     const { eq, supabase, update } = createSupabase();
 
     await restoreInterruptedPreVendVtuRow({
-      errorMessage: 'Failed to debit VTU wallet for vtu-1: boom',
+      userSafeMessage:
+        'VTU wallet debit failed; the purchase will resume automatically.',
       row: { id: 'vtu-1', metadata: { paymentSplit: { wallet: 300 } } },
       supabase: supabase as never,
     });
 
     expect(supabase.from).toHaveBeenCalledWith('vtu_transactions');
     expect(update).toHaveBeenCalledWith({
-      error_message: 'Failed to debit VTU wallet for vtu-1: boom',
+      error_message:
+        'VTU wallet debit failed; the purchase will resume automatically.',
       metadata: expect.objectContaining({
         paymentSplit: { wallet: 300 },
         preVendInterruptedAt: expect.any(String),
@@ -51,7 +53,7 @@ describe('restoreInterruptedPreVendVtuRow', () => {
     try {
       await expect(
         restoreInterruptedPreVendVtuRow({
-          errorMessage: 'boom',
+          userSafeMessage: 'boom',
           row: { id: 'vtu-1' },
           supabase: supabase as never,
         })
@@ -88,7 +90,7 @@ describe('restoreInterruptedPreVendVtuRow', () => {
 
     try {
       await restoreInterruptedPreVendVtuRow({
-        errorMessage: 'boom',
+        userSafeMessage: 'boom',
         row: { id: 'vtu-1' },
         supabase: supabase as never,
       });

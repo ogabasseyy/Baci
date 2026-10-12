@@ -11,6 +11,7 @@ import {
   rememberPendingVtuPurchase,
   scopePendingVtuKey,
   serializePendingVtuPurchases,
+  settlePendingVtuByReference,
 } from './pending-vtu-idempotency';
 import { PERSISTED_VTU_KEY_TTL_MS } from './pending-vtu-idempotency-store';
 
@@ -166,6 +167,60 @@ describe('pending-vtu-idempotency', () => {
         first + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('settles retained entries by noted reference on terminal history', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 4,
+      phoneNumber: 'settle-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-settle');
+    notePendingVtuReference(descriptor, 'REF-SETTLE');
+
+    // Unknown references touch nothing.
+    settlePendingVtuByReference('REF-OTHER', 'successful');
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-SETTLE',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
+
+    // Observed success marks completion: fresh replays present, old
+    // ones prompt a fresh submit. First observation wins.
+    const completedAt = Date.now();
+    settlePendingVtuByReference('REF-SETTLE', 'successful', completedAt);
+    settlePendingVtuByReference(
+      'REF-SETTLE',
+      'successful',
+      completedAt + 10_000
+    );
+    expect(isStalePendingVtuSuccess(descriptor, 'REF-SETTLE')).toBe(false);
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'REF-SETTLE',
+        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+  });
+
+  it('forgets retained entries by noted reference on failed history', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'data',
+      amount: 5,
+      phoneNumber: 'settle-fail-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-settle-fail');
+    notePendingVtuReference(descriptor, 'REF-FAIL');
+
+    // A retry must mint fresh and attempt anew — replaying a dead row
+    // would wedge the customer on the old error.
+    settlePendingVtuByReference('REF-FAIL', 'failed');
+
+    expect(recallPendingVtuKey(descriptor)).toBeNull();
   });
 
   it('recognizes a noted reference independently of completion', () => {

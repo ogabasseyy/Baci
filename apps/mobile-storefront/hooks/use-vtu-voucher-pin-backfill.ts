@@ -4,6 +4,7 @@ import type { ValidUtilityType } from '@/components/utilities/utility-purchase.t
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { settlePendingVtuByReference } from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { VtuHistoryResponseSchema } from '@/schemas/vtu-history';
 import { useAuthStore } from '@/stores/auth-store';
@@ -12,16 +13,35 @@ import { useAuthStore } from '@/stores/auth-store';
 // token after the initial confirm response returns, once the upstream provider
 // reports back. Poll the history endpoint until the pin is persisted so the
 // success screen can surface it without forcing the user to re-open history.
+// Airtime/data ride the same loop for SETTLEMENT (no voucher expected):
+// a terminal observation settles the retained idempotency entry, without
+// which an identical later purchase would recall the key and present the
+// old vend as new — forever, since the stale guard only fires past an
+// OBSERVED completion.
 export const POLL_INTERVAL_MS = 3000;
 export const MAX_POLL_ATTEMPTS = 10;
 
+type BackfillApiType =
+  | 'electricity'
+  | 'cable_tv'
+  | 'betting'
+  | 'airtime'
+  | 'data';
+
 const UTILITY_TYPE_TO_API_TYPE: Partial<
-  Record<ValidUtilityType, 'electricity' | 'cable_tv' | 'betting'>
+  Record<ValidUtilityType, BackfillApiType>
 > = {
   power: 'electricity',
   tv: 'cable_tv',
   gaming: 'betting',
+  airtime: 'airtime',
+  data: 'data',
 };
+
+interface BackfillObservation {
+  pin: string | null;
+  status: string | null;
+}
 
 interface UseVtuVoucherPinBackfillInput {
   enabled: boolean;
@@ -35,9 +55,9 @@ async function fetchVoucherPin({
   apiType,
   reference,
 }: {
-  apiType: 'electricity' | 'cable_tv' | 'betting' | null;
+  apiType: BackfillApiType | null;
   reference: string | null | undefined;
-}): Promise<string | null> {
+}): Promise<BackfillObservation | null> {
   const { data: sessionData, error: sessionError } =
     await supabase.auth.getSession();
   if (sessionError || !sessionData.session) {
@@ -92,7 +112,15 @@ async function fetchVoucherPin({
   );
   const pin =
     typeof match?.voucher_pin === 'string' ? match.voucher_pin.trim() : '';
-  return pin || null;
+  const status = typeof match?.status === 'string' ? match.status : null;
+  // Terminality learned from history settles the retained registry
+  // entry (success marks completion, failure forgets): the response
+  // path never saw it, so without this the stale guard could never
+  // fire for this purchase.
+  if (reference && (status === 'successful' || status === 'failed')) {
+    settlePendingVtuByReference(reference, status);
+  }
+  return { pin: pin || null, status };
 }
 
 export function useVtuVoucherPinBackfill({
@@ -107,14 +135,20 @@ export function useVtuVoucherPinBackfill({
   // it at 1 forever. Track fetch attempts independently so the cap is reliable.
   const fetchCountRef = useRef(0);
 
-  const { data } = useQuery<string | null>({
+  const { data } = useQuery<BackfillObservation | null>({
     queryKey: ['vtu', 'voucher-pin-backfill', userId, apiType, reference],
     enabled: queryEnabled,
     staleTime: 0,
     gcTime: 0,
     retry: 0,
     refetchInterval: (q) => {
-      if (q.state.data || q.state.status === 'error') {
+      const observed = q.state.data;
+      if (
+        observed?.pin ||
+        observed?.status === 'successful' ||
+        observed?.status === 'failed' ||
+        q.state.status === 'error'
+      ) {
         return false;
       }
       if (fetchCountRef.current >= MAX_POLL_ATTEMPTS) {
@@ -128,5 +162,5 @@ export function useVtuVoucherPinBackfill({
     },
   });
 
-  return data ?? null;
+  return data?.pin ?? null;
 }

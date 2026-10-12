@@ -15,6 +15,7 @@ import {
   shouldBackfillForStatus,
   shouldBackfillForType,
 } from '@/lib/vtu-voucher-backfill';
+import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 import { historyQuerySchema } from '@/schemas/vtu';
 
 const PAYMENT_STATUS_BATCH_SIZE = 250;
@@ -46,11 +47,17 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { merchantSlug, type, limit } = parsed.data;
 
-    const { data: merchant, error: merchantError } = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('slug', merchantSlug)
-      .single();
+    // Alias-aware (mirrors checkout): a processing tab open across a
+    // store rename polls with the stale slug; without the fallback the
+    // backfill 404s, treats it as permanent, and never settles.
+    const { data: merchant, error: merchantError } =
+      await withMerchantSlugAliasFallback(merchantSlug, (resolvedSlug) =>
+        supabase
+          .from('merchants')
+          .select('id')
+          .eq('slug', resolvedSlug)
+          .maybeSingle()
+      );
 
     if (merchantError || !merchant) {
       return NextResponse.json(

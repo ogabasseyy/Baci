@@ -8,7 +8,8 @@ import { fetchLegacyPlacesJson } from '../legacy-places';
 import { reserveGooglePlacesRequest } from '../provider-budget';
 
 const GOOGLE_API_KEY =
-  process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  process.env.GOOGLE_PLACES_API_KEY?.trim() ||
+  process.env.GOOGLE_MAPS_API_KEY?.trim();
 const LEGACY_PLACES_DETAILS_URL =
   'https://maps.googleapis.com/maps/api/place/details/json';
 const MAX_SESSION_TOKEN_LENGTH = 256;
@@ -118,7 +119,10 @@ export async function GET(request: NextRequest) {
 
     const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
       detailsUrl.toString(),
-      () => reserveGooglePlacesRequest('details')
+      () => reserveGooglePlacesRequest('details'),
+      // Fail fast like autocomplete: the user can retry a 5s stall
+      // manually instead of waiting through ~16.5s of timeouts.
+      { retryTimeouts: false }
     );
 
     if (!fetched.ok) {

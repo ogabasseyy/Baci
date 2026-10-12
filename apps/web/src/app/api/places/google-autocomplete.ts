@@ -18,8 +18,11 @@ export async function fetchGoogleAutocomplete(
   sessionToken?: string,
   country?: string
 ) {
+  // Trim like env.ts: a whitespace-only key must take the NOT_CONFIGURED
+  // path (which permits Geoapify fallback), not spend budget upstream.
   const apiKey =
-    process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    process.env.GOOGLE_PLACES_API_KEY?.trim() ||
+    process.env.GOOGLE_MAPS_API_KEY?.trim();
   if (!apiKey)
     return {
       status: 500,

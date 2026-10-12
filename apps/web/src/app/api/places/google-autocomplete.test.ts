@@ -103,6 +103,17 @@ describe('Google autocomplete provider boundary', () => {
     expect(fetchLegacyPlacesJson).not.toHaveBeenCalled();
     expect(reserveGooglePlacesRequest).not.toHaveBeenCalled();
   });
+  it('treats a whitespace-only Google key as unconfigured', async () => {
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '   ');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', '  ');
+    const result = await fetchGoogleAutocomplete('Lagos');
+    expect(result.status).toBe(500);
+    expect(result.body).toMatchObject({
+      code: 'PLACES_AUTOCOMPLETE_NOT_CONFIGURED',
+    });
+    expect(fetchLegacyPlacesJson).not.toHaveBeenCalled();
+    expect(reserveGooglePlacesRequest).not.toHaveBeenCalled();
+  });
   it.each([
     'ZERO_RESULTS',
     'OK',

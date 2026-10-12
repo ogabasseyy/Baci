@@ -250,4 +250,28 @@ describe('GET /api/places/details', () => {
       code: 'PLACES_DETAILS_UPSTREAM_ERROR',
     });
   });
+
+  it('fails fast on a stalled upstream instead of retrying timeouts', async () => {
+    mockFetch.mockRejectedValueOnce(
+      new DOMException('Timed out', 'TimeoutError')
+    );
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    expect(response.status).toBe(500);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a whitespace-only Google key as unconfigured', async () => {
+    vi.resetModules();
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '   ');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', '  ');
+    const { GET: reload } = await import('./route');
+    const response = await reload(makeRequest({ placeId: 'ChIJ1234' }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Google Places API not configured',
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
+  });
 });

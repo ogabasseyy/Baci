@@ -102,7 +102,9 @@ export type CartErrorCode =
   | 'cart_locked'
   | 'refresh_required'
   | 'temporarily_unavailable'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'merge_conflict'
+  | 'handoff_consumed';
 
 export interface CartWarning {
   code: string;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   cartBootstrapRequestSchema,
+  cartHandoffIssueRequestSchema,
+  cartHandoffRedeemRequestSchema,
   cartValidateSchema,
   createCartRequestSchema,
   sharedCartMutationRequestSchema,
@@ -194,6 +196,100 @@ describe('createCartRequestSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('cartHandoffIssueRequestSchema', () => {
+  it('accepts web and app-bound native destinations', () => {
+    expect(
+      cartHandoffIssueRequestSchema.safeParse({
+        destination: { type: 'web' },
+        operationId: 'handoff-op-1',
+      }).success
+    ).toBe(true);
+    expect(
+      cartHandoffIssueRequestSchema.safeParse({
+        destination: { app: 'storefront', type: 'native' },
+        operationId: 'handoff-op-2',
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects unknown destinations and merchant overrides', () => {
+    expect(
+      cartHandoffIssueRequestSchema.safeParse({
+        destination: { type: 'sms' },
+        operationId: 'handoff-op-1',
+      }).success
+    ).toBe(false);
+    expect(
+      cartHandoffIssueRequestSchema.safeParse({
+        destination: { type: 'web' },
+        merchantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        operationId: 'handoff-op-1',
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe('cartHandoffRedeemRequestSchema', () => {
+  it('accepts a full merge redemption with resolutions', () => {
+    const result = cartHandoffRedeemRequestSchema.safeParse({
+      attemptId: 'attempt-1',
+      choice: 'merge',
+      destCartId: '22222222-2222-4222-8222-222222222222',
+      expectedDestVersion: 2,
+      expectedIncomingVersion: 3,
+      handoffId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      lines: [
+        {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          quantity: 1,
+        },
+      ],
+      resolutions: [
+        {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          keep: 'incoming',
+        },
+      ],
+      token: 'ch1.payload.signature',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects malformed tokens, ids and client prices', () => {
+    const base = {
+      attemptId: 'attempt-1',
+      choice: 'connect',
+      handoffId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      token: 'ch1.payload.signature',
+    };
+    expect(
+      cartHandoffRedeemRequestSchema.safeParse({ ...base, token: 'nope' })
+        .success
+    ).toBe(false);
+    expect(
+      cartHandoffRedeemRequestSchema.safeParse({ ...base, handoffId: 'nope' })
+        .success
+    ).toBe(false);
+    expect(
+      cartHandoffRedeemRequestSchema.safeParse({
+        ...base,
+        choice: 'merge',
+        destCartId: '22222222-2222-4222-8222-222222222222',
+        expectedDestVersion: 1,
+        expectedIncomingVersion: 1,
+        lines: [
+          {
+            item: { productId: '11111111-1111-4111-8111-111111111111' },
+            quantity: 1,
+            unitPriceMinor: 99,
+          },
+        ],
+      }).success
+    ).toBe(false);
   });
 });
 

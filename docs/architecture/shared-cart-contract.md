@@ -238,3 +238,29 @@ the default ports).
 - No proxy changes were needed: `/api/*` already passes through API
   security (rate limit, content-type, origin) on subdomains, custom
   domains and the root host.
+
+## Task 6 handoff grants and merge
+
+- `POST /api/storefront/cart/handoff` issues a five-minute single-use
+  grant for an origin session principal and returns the continuation
+  URL (`/cart#handoff=<token>&hid=<id>`, secret in the fragment).
+  `GET /api/storefront/cart/handoff?handoff_id=` previews the pending
+  snapshot anonymously and never consumes. `POST
+  /api/storefront/cart/handoff/redeem` consumes with an explicit
+  `connect` | `merge` | `keep_existing` choice and sets the host-only
+  HttpOnly merchant-namespaced session cookie.
+- Grant tokens are deterministic HMACs (`ch1.`); the table stores only
+  the sha256 hash, so issue replays recompute the identical URL with
+  no stored secret. Same operation key + different body returns
+  `idempotency_conflict`; consumed grants answer `handoff_consumed`
+  (404) and never silently revive.
+- New `CartErrorCode` values: `merge_conflict` (409, with per-line
+  conflicts for an explicit choice) and `handoff_consumed` (404).
+  Only successful redemption consumes; validation failures leave the
+  grant pending, and the winning destination attempt replays
+  byte-identically from its receipt.
+- Quotas: issue 60/h, redeem 120/h, preview 120/min, over a 20/min
+  proxy bucket on the handoff paths. The `/cart` page mounts the
+  continuation when the pairing fragment is present (transfer links
+  unchanged otherwise); old MCP `?item_id=` / `?guest_cart=` transfer
+  URLs keep working byte-for-byte.

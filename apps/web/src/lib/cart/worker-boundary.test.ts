@@ -13,6 +13,8 @@ const WORKER_MODULES = [
   'pricing.ts',
   'mutation-errors.ts',
   'legacy-migration.ts',
+  'merge.ts',
+  'handoff.ts',
 ];
 
 const BANNED_SOURCES = [

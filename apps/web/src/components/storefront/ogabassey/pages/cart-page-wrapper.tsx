@@ -6,6 +6,7 @@ import { useCart } from '@/hooks/cart';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
 import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
+import { CartHandoff } from '../../cart/cart-handoff';
 import { CartPage } from './cart-page';
 
 interface CartPageWrapperProps {
@@ -18,16 +19,29 @@ interface CartPageWrapperProps {
  * Cart page wrapper that handles item_id query parameter for direct add-to-cart links.
  * Supports URLs like: /cart?item_id=123 or /cart?item_id=123,456,789
  * Used by ChatGPT MCP integration and Google Shopping.
+ *
+ * A shared-cart pairing fragment (`/cart#handoff=<token>&hid=<id>`) mounts
+ * the handoff continuation instead: the secret lives in the fragment so it
+ * never reaches the server, and the one-time transfer links keep working
+ * unchanged when no pairing is present.
  */
 export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
   const searchParams = useSearchParams();
   const { addToCart, cart, isHydrated } = useCart();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  // Parsed once: the continuation strips the fragment on mount, but the
+  // pairing it captured still owns this surface.
+  const [pairing] = useState(() =>
+    typeof window === 'undefined' ? null : parseHandoffPairing(window.location.hash)
+  );
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
 
   useEffect(() => {
+    // A pairing owns the surface: importing link items into the local cart
+    // underneath the continuation choice would corrupt the merge decision.
+    if (pairing) return;
     const guestTransfer = resolveGuestCartTransfer(searchParams.get('guest_cart'));
     const itemIds = guestTransfer ? guestTransfer.itemIds : searchParams.get('item_id');
     const rawQuantity = searchParams.get('qty');
@@ -92,7 +106,13 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
       toast,
       setIsLoading,
     }).then((succeeded) => { if (!succeeded) processedRef.current = false; });
-  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated]);
+  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated, pairing]);
+
+  // The pairing needs no local cart: mount the continuation immediately so
+  // the transfer screen and its third-party scripts never see the secret.
+  if (pairing) {
+    return <CartHandoff token={pairing.token} handoffId={pairing.handoffId} />;
+  }
 
   // Wait for persisted items before deciding whether the cart is empty.
   if (!isHydrated || isLoading) {
@@ -109,4 +129,13 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   }
 
   return <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />;
+}
+
+function parseHandoffPairing(hash: string): { token: string; handoffId: string } | null {
+  if (!hash || hash === '#') return null;
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const token = params.get('handoff');
+  const handoffId = params.get('hid');
+  if (!token || !handoffId) return null;
+  return { token, handoffId };
 }

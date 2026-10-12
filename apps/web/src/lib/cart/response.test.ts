@@ -62,6 +62,14 @@ describe('cartErrorResponse', () => {
   it('maps version and idempotency conflicts to 409', async () => {
     expect(cartErrorResponse('version_conflict').status).toBe(409);
     expect(cartErrorResponse('idempotency_conflict').status).toBe(409);
+    expect(cartErrorResponse('merge_conflict').status).toBe(409);
+  });
+
+  it('maps consumed handoff links to 404 without a retryable signal', async () => {
+    const response = cartErrorResponse('handoff_consumed');
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe('handoff_consumed');
   });
 
   it('maps quotas to 429 and outages to 503, never to 404', async () => {

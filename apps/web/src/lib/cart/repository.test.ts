@@ -50,6 +50,26 @@ describe('rpcMutateCart', () => {
     );
   });
 
+  it('parses handoff failure codes as business outcomes', async () => {
+    for (const code of ['merge_conflict', 'handoff_consumed'] as const) {
+      const client = clientReturning({
+        code,
+        ok: false,
+        replayed: false,
+        state: null,
+      });
+
+      const result = await rpcMutateCart(client as never, {
+        cartId: CART_ID,
+        command: { type: 'clear' },
+        expectedVersion: 1,
+        operationId: `op-${code}`,
+      });
+
+      expect(result).toMatchObject({ code, ok: false });
+    }
+  });
+
   it('returns business failures without throwing', async () => {
     const client = clientReturning({
       code: 'version_conflict',

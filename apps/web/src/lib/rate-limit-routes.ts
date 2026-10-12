@@ -31,6 +31,9 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // gets its own tight per-IP bucket below the storefront ceiling. Cart
   // reads/writes stay on the parent bucket plus tenant/principal quotas.
   '/api/storefront/cart/bootstrap': { maxRequests: 20, windowMs: 60_000 },
+  // Handoff preview is unauthenticated and redemption carries a
+  // single-use capability: bound below the storefront ceiling.
+  '/api/storefront/cart/handoff': { maxRequests: 20, windowMs: 60_000 },
   '/api/storefront/negotiation-evidence': {
     maxRequests: 10,
     windowMs: 60_000,

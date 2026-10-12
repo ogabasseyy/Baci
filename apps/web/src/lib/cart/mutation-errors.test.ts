@@ -12,6 +12,17 @@ describe('safeCartErrorMessage', () => {
       /grant|claim|rls/i
     );
   });
+
+  it('covers handoff outcomes without leaking token state', () => {
+    expect(safeCartErrorMessage('merge_conflict')).toMatch(/choice|choose/i);
+    expect(safeCartErrorMessage('merge_conflict')).not.toMatch(
+      /token|hash|grant/i
+    );
+    expect(safeCartErrorMessage('handoff_consumed')).toMatch(/used|link/i);
+    expect(safeCartErrorMessage('handoff_consumed')).not.toMatch(
+      /token|hash|attempt/i
+    );
+  });
 });
 
 describe('isRetryableCartError', () => {

@@ -56,6 +56,18 @@ describe('rate-limit route matching', () => {
     ).toBe(100);
   });
 
+  it('bounds handoff issue, redeem and preview below the storefront bucket', () => {
+    for (const path of [
+      '/api/storefront/cart/handoff',
+      '/api/storefront/cart/handoff/redeem',
+    ]) {
+      expect(getRateLimitConfig(path)).toMatchObject({
+        config: { maxRequests: 20, windowMs: 60_000 },
+        pattern: '/api/storefront/cart/handoff',
+      });
+    }
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

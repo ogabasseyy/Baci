@@ -105,3 +105,30 @@ export const createCartRequestSchema = z.strictObject({
 export const cartBootstrapRequestSchema = z.strictObject({
   merchantSlug: z.string().trim().min(1).max(128).optional(),
 });
+
+const handoffDestinationSchema = z.strictObject({
+  app: z.enum(['storefront', 'admin']).optional(),
+  type: z.enum(['web', 'native']),
+});
+
+export const cartHandoffIssueRequestSchema = z.strictObject({
+  destination: handoffDestinationSchema,
+  operationId: operationIdSchema,
+});
+
+const handoffResolutionSchema = z.strictObject({
+  item: cartItemIdentitySchema,
+  keep: z.enum(['incoming', 'existing']),
+});
+
+export const cartHandoffRedeemRequestSchema = z.strictObject({
+  attemptId: z.string().trim().min(1).max(128),
+  choice: z.enum(['connect', 'merge', 'keep_existing']),
+  destCartId: z.uuid().optional(),
+  expectedDestVersion: z.number().int().min(1).optional(),
+  expectedIncomingVersion: z.number().int().min(1).optional(),
+  handoffId: z.uuid(),
+  lines: z.array(cartInputLineSchema).max(20).optional(),
+  resolutions: z.array(handoffResolutionSchema).max(20).optional(),
+  token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
+});

@@ -4,6 +4,10 @@ const SAFE_MESSAGES: Record<CartErrorCode, string> = {
   cart_locked:
     'This cart is closed for checkout. Start a new cart to keep shopping.',
   expired: 'This cart has expired. Start a new cart to keep shopping.',
+  handoff_consumed:
+    'This cart link was already used. Ask the sender for a fresh link.',
+  merge_conflict:
+    'Some items differ between the carts. Choose which version to keep.',
   idempotency_conflict:
     'This change was already sent with different details. Refresh and try again.',
   invalid_item: 'One of these items is no longer available as requested.',

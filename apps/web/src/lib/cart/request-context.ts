@@ -243,7 +243,7 @@ export interface CartRequestContextDeps {
   verify: (
     proof: string
   ) => CartSessionVerification | Promise<CartSessionVerification>;
-  requireScope: 'bootstrap' | 'session';
+  requireScope: 'bootstrap' | 'session' | 'any';
   /**
    * Route-specific outcome when the proof scope does not fit: session
    * routes report a missing cart for bootstrap proofs, while the
@@ -290,7 +290,7 @@ export async function resolveCartRequestContext(
     throw error;
   }
 
-  if (principal.scope !== deps.requireScope) {
+  if (deps.requireScope !== 'any' && principal.scope !== deps.requireScope) {
     return { error: deps.wrongScopeError, ok: false };
   }
   return { merchant: merchant.merchant, ok: true, principal };
@@ -300,7 +300,10 @@ export type CartQuotaOperation =
   | 'bootstrap'
   | 'create'
   | 'commands'
-  | 'snapshot';
+  | 'snapshot'
+  | 'handoff_issue'
+  | 'handoff_redeem'
+  | 'handoff_preview';
 
 export interface CartQuotaInput {
   operation: CartQuotaOperation;
@@ -328,6 +331,11 @@ const CART_QUOTA_BUDGETS: Record<
   // Burst-friendly for quantity taps, bounded per principal.
   commands: { limit: 240, windowMs: 60 * 1000 },
   snapshot: { limit: 240, windowMs: 60 * 1000 },
+  // Handoff links are short-lived capabilities: generous enough for
+  // conflict retries, bounded per merchant and principal (or client).
+  handoff_issue: { limit: 60, windowMs: 60 * 60 * 1000 },
+  handoff_redeem: { limit: 120, windowMs: 60 * 60 * 1000 },
+  handoff_preview: { limit: 120, windowMs: 60 * 1000 },
 };
 
 type WindowCounter = { count: number; resetTime: number };

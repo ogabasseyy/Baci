@@ -421,6 +421,31 @@ describe('resolveCartRequestContext', () => {
     expect(result).toEqual({ error: 'not_found', ok: false });
   });
 
+  it('accepts either scope when a route allows both', async () => {
+    const request = new Request('https://ogabassey.usebaci.com/api/x', {
+      headers: {
+        cookie: 'baci-cart-ogabassey=cp1.bootstrap.signature',
+        'x-merchant-slug': 'ogabassey',
+      },
+    });
+
+    const bootstrapResult = await resolveCartRequestContext(request, {
+      merchant: merchantDeps(),
+      requireScope: 'any',
+      verify: async () => bootstrapVerification(),
+      wrongScopeError: 'not_found',
+    });
+    expect(bootstrapResult.ok).toBe(true);
+
+    const sessionResult = await resolveCartRequestContext(request, {
+      merchant: merchantDeps(),
+      requireScope: 'any',
+      verify: async () => sessionVerification(),
+      wrongScopeError: 'not_found',
+    });
+    expect(sessionResult.ok).toBe(true);
+  });
+
   it('fails closed when proof configuration is missing', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
@@ -461,6 +486,31 @@ describe('checkCartQuota', () => {
     result = await checkCartQuota(input);
     expect(result.allowed).toBe(false);
     expect(result.remaining).toBe(0);
+    __resetCartQuotaStoreForTesting();
+  });
+
+  it('gives handoff issue, redeem and preview independent budgets', async () => {
+    __resetCartQuotaStoreForTesting();
+    const issue = await checkCartQuota({
+      merchantId: MERCHANT_ID,
+      operation: 'handoff_issue',
+      subject: 'guest-o1',
+    });
+    const redeem = await checkCartQuota({
+      merchantId: MERCHANT_ID,
+      operation: 'handoff_redeem',
+      subject: 'guest-d1',
+    });
+    const preview = await checkCartQuota({
+      merchantId: MERCHANT_ID,
+      operation: 'handoff_preview',
+      subject: 'ip-9',
+    });
+
+    expect(issue.limit).toBeGreaterThan(0);
+    expect(issue.remaining).toBe(issue.limit - 1);
+    expect(redeem.remaining).toBe(redeem.limit - 1);
+    expect(preview.remaining).toBe(preview.limit - 1);
     __resetCartQuotaStoreForTesting();
   });
 

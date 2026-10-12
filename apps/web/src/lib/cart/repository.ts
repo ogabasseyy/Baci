@@ -89,6 +89,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set([
   'refresh_required',
   'temporarily_unavailable',
   'rate_limited',
+  'merge_conflict',
+  'handoff_consumed',
 ]);
 
 const CART_STATES: ReadonlySet<string> = new Set([

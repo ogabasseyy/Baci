@@ -11,5 +11,5 @@
 +        if capability_context is not None:
 +            platform_rules += capability_context()
 +        else:
-+            platform_rules += "Baci capability evidence: Register unavailable, invalid or stale. Hold unsupported Baci capability comparisons for editorial verification.\n"
++            platform_rules += "Baci capability evidence: Register unavailable, invalid or stale. Documentation omission is not evidence of feature absence. Hold unsupported Baci capability comparisons for editorial verification.\n"
      if candidate and candidate.get("status") == "no_candidate":

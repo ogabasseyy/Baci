@@ -86,7 +86,7 @@
       "id": "unverified-parity", "title": "Capabilities requiring further verification", "status": "unverified",
       "claim": "Dedicated offline POS, multi-location stock, customer-group segmentation, bundles, general merchant API access, wholesale commerce and secure digital fulfillment are not established by this audit.",
       "limitations": "Unverified is not absent. Require exact workflow, deployed version, entitlement and end-to-end evidence before claiming availability, absence or complete competitor parity.",
-      "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx", "apps/web/src/lib/llms-markdown-platform.ts"]
+      "source_refs": ["docs/product/capability-evidence-workflow.md"]
     }
   ]
 }

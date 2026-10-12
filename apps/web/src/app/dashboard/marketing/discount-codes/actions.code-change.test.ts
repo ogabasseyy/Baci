@@ -48,12 +48,15 @@ describe('discount code RDM reservation on change', () => {
     });
   });
 
-  function mockUpdateFlow(currentCode: string | null) {
+  function mockUpdateFlow(
+    currentCode: string | null,
+    fetchError: unknown = null
+  ) {
     const updateSingle = vi.fn().mockResolvedValue({ error: null });
     const updateMock = vi.fn((..._args: unknown[]) => chainTo(updateSingle));
     const fetchSingle = vi.fn().mockResolvedValue({
-      data: currentCode === null ? null : { code: currentCode },
-      error: null,
+      data: fetchError || currentCode === null ? null : { code: currentCode },
+      error: fetchError,
     });
     mockCreateClient.mockReturnValue({
       auth: { getUser: mockGetUser },
@@ -108,5 +111,19 @@ describe('discount code RDM reservation on change', () => {
 
     expect(updateMock).toHaveBeenCalledTimes(1);
     expect(updateMock.mock.calls[0]?.[0]).toMatchObject({ code: 'SAVE31' });
+  });
+
+  it('surfaces a lookup failure instead of misreporting reserved', async () => {
+    mockUpdateFlow('RDM-LEGACY-01', new Error('connection reset'));
+
+    await expect(
+      upsertDiscountCode({
+        id: 'dc-1',
+        code: 'RDM-LEGACY-01',
+        discount_type: 'fixed_amount',
+        discount_value: 100,
+        is_active: false,
+      })
+    ).rejects.toThrow('connection reset');
   });
 });

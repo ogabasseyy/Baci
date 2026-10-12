@@ -177,14 +177,12 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit cannot be honored (no order context here),
-  -- and wallets are NGN-only: fail closed. Same predicates as status; sync.
+  -- Minimum-gated store credit cannot be honored (no order context here):
+  -- fail closed. Currency is locked and gated pre-mint below (same
+  -- rejection as the status RPC hides; keep the two in sync).
   IF v_reward.reward_type = 'store_credit'
-     AND (
-       (v_reward.minimum_order_amount IS NOT NULL
-        AND v_reward.minimum_order_amount > 0)
-       OR NOT public.merchant_resolves_to_ngn(p_merchant_id)
-     ) THEN
+     AND v_reward.minimum_order_amount IS NOT NULL
+     AND v_reward.minimum_order_amount > 0 THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
@@ -199,6 +197,15 @@ BEGIN
 
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
+
+  -- Lock merchant currency before minting (store_credit only): a later flip
+  -- would strand a phantom redemption; the held lock stays valid to settlement.
+  IF v_reward.reward_type = 'store_credit' THEN
+    PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
+    IF NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
+      RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+    END IF;
+  END IF;
 
   -- Mint a merchant-unique code (probe + insert-retry), excluding
   -- merchant discount_codes too: checkout resolves merchant-first, so
@@ -246,14 +253,7 @@ BEGIN
   END IF;
 
   -- store_credit fulfillment: credit the wallet ledger checkout spends.
-  -- Revalidate currency under lock (the guard above is stale by now): a
-  -- committed flip fails closed on the fresh snapshot, an in-flight flip
-  -- blocks on this row until it commits or aborts.
   IF v_reward.reward_type = 'store_credit' THEN
-    PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
-    IF NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
-      RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
-    END IF;
     PERFORM public.credit_customer_wallet(
       p_customer_id, p_merchant_id, v_reward.reward_value,
       'loyalty_redemption', v_redemption_id,

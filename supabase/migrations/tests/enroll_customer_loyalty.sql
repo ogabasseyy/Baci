@@ -35,5 +35,6 @@
 \ir enroll_customer_loyalty_adjustment.sql
 \ir enroll_customer_loyalty_redemption_guards.sql
 \ir enroll_customer_loyalty_status_receipts.sql
+\ir enroll_customer_loyalty_cancel_reuse.sql
 
 ROLLBACK;

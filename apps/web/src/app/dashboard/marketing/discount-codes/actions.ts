@@ -130,12 +130,17 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
   // to a reserved prefix fail with the same message as before.
   let codeChanged = true;
   if (validatedInput.id) {
-    const { data: currentRow } = await supabase
+    const { data: currentRow, error: currentRowError } = await supabase
       .from('discount_codes')
       .select('code')
       .eq('id', validatedInput.id)
       .eq('merchant_id', merchant.id)
       .maybeSingle();
+    // A failed lookup is a retryable error, not an absent row: treating
+    // it as changed would falsely reserve an unchanged legacy RDM- code.
+    if (currentRowError) {
+      throw new Error(currentRowError.message);
+    }
     codeChanged =
       currentRow?.code?.toUpperCase() !== validatedInput.code.toUpperCase();
   }

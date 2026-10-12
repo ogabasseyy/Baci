@@ -61,10 +61,15 @@ BEGIN
     -- minimum; only pre-fix NULL rows fall back to live).
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount),
     rr.expires_at,
-    COALESCE(rr.used, false),
+    -- Effectively used: a claim stamped to a cancelled order is reusable
+    -- (the release trigger skips rows locked by an in-flight retry, and
+    -- cancelled is terminal so the read cannot stale). The wrapper
+    -- re-verifies under lock before claiming.
+    COALESCE(rr.used, false) AND o.shipping_status IS DISTINCT FROM 'cancelled',
     rw.name::text
   FROM public.reward_redemptions rr
   LEFT JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
+  LEFT JOIN public.orders o ON o.id = rr.used_on_order_id
   WHERE rr.merchant_id = p_merchant_id
     AND pg_catalog.upper(rr.discount_code)
       = pg_catalog.upper(pg_catalog.btrim(p_code))

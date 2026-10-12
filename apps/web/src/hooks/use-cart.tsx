@@ -1,8 +1,11 @@
 'use client';
 
-import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
+import {
+  findMatchingCartLineIndex,
+  resolveCartLineAssurance,
+} from '@/hooks/cart/cart-line-merge-policy';
 import {
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   generateCartItemId,
@@ -374,44 +377,11 @@ export const CartProvider = ({
       );
 
       // Robust duplicate check: Match by cartItemId OR Legacy ID/Variant
-      const existingItemIndex = prev.findIndex((item) => {
-        // 1. Direct V2 Match (:: separator)
-        if (item.cartItemId === cartItemId) return true;
-
-        // 2. Legacy V1 Match (old - separator format stored in cart)
-        // A V1 id encodes variant/color/storage/condition but never the
-        // exact condition offer, so its price basis is unknown: an
-        // exact-offer add must not merge into it (mirrors the offer guard
-        // on ID-less legacy lines below).
-        if (
-          item.cartItemId?.includes('-') &&
-          !item.cartItemId.includes('::') &&
-          !normalizedOptions?.offerId
-        ) {
-          // Rebuild what the old generateCartItemId would have produced
-          const legacyParts = [product.id];
-          if (options?.variantId) legacyParts.push(options.variantId);
-          if (options?.color) legacyParts.push(options.color);
-          if (options?.storage) legacyParts.push(options.storage);
-          if (options?.condition) legacyParts.push(options.condition);
-          if (item.cartItemId === legacyParts.join('-')) return true;
-        }
-
-        // 3. Legacy Match (if item has no cartItemId)
-        if (!item.cartItemId && item.id === product.id) {
-          const itemVar = item.variantId;
-          const newVar = normalizedOptions?.variantId;
-          if (itemVar !== newVar) return false;
-          if (item.offerId !== normalizedOptions?.offerId) return false;
-
-          // Check if V2 options are used (legacy items have none)
-          // If adding item with V2 options, don't match legacy item
-          if (normalizedOptions?.color || normalizedOptions?.storage)
-            return false;
-
-          return true;
-        }
-        return false;
+      const existingItemIndex = findMatchingCartLineIndex(prev, {
+        productId: product.id,
+        cartItemId,
+        options,
+        normalizedOptions,
       });
 
       if (existingItemIndex >= 0) {
@@ -423,18 +393,10 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
-          hasAssurance: resolveAddedLineAssurance(
-            normalizedOptions?.hasAssurance,
-            item,
-            {
-              smartCartProEnabled: enableSmartCartPro,
-              merchantSlug,
-              hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId ||
-                  normalizedOptions?.quizVoucherToken
-              ),
-            }
-          ),
+          hasAssurance: resolveCartLineAssurance(normalizedOptions, item, {
+            smartCartProEnabled: enableSmartCartPro,
+            merchantSlug,
+          }),
         };
         return newCart;
       }
@@ -461,18 +423,10 @@ export const CartProvider = ({
             | undefined,
           offerId: normalizedOptions?.offerId,
           negotiationStatus: 'none',
-          hasAssurance: resolveAddedLineAssurance(
-            normalizedOptions?.hasAssurance,
-            undefined,
-            {
-              smartCartProEnabled: enableSmartCartPro,
-              merchantSlug,
-              hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId ||
-                  normalizedOptions?.quizVoucherToken
-              ),
-            }
-          ),
+          hasAssurance: resolveCartLineAssurance(normalizedOptions, undefined, {
+            smartCartProEnabled: enableSmartCartPro,
+            merchantSlug,
+          }),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];

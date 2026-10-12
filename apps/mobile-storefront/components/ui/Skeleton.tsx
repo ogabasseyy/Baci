@@ -105,6 +105,7 @@ export function ProductGridSkeleton({ count = 4 }: { count?: number }) {
     <View style={styles.grid}>
       {Array.from({ length: count }).map((_, index) => (
         <View
+          // biome-ignore lint/suspicious/noArrayIndexKey: identical placeholders with no state to preserve
           key={`grid-skeleton-item-${index}`}
           style={[
             styles.gridItem,

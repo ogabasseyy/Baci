@@ -1,5 +1,4 @@
 import { jest } from '@jest/globals';
-import { syncStorage } from '../lib/storage';
 
 const mockMerchantSlug: { current: string } = {
   current: 'ogabassey',

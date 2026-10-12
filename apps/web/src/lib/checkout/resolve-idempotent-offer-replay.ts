@@ -99,6 +99,14 @@ async function readStoredReplayEconomics({
     const assuranceFees = new Map<string, number>();
     const items = row?.items;
     if (Array.isArray(items)) {
+      // An order can repeat one product+offer across lines (distinct
+      // quantities or assurance choices, hence distinct fees): a bare
+      // product::offer key collapses them and replays the last fee onto
+      // every line, so an identical retry hashes a different payload and
+      // trips checkout_idempotency_conflict. The RPC orders lines by
+      // line_id (payload insertion order), so suffix each key with its
+      // per-key occurrence ordinal and consume positionally below.
+      const seen = new Map<string, number>();
       for (const entry of items as {
         product_id?: unknown;
         offer_id?: unknown;
@@ -107,12 +115,15 @@ async function readStoredReplayEconomics({
       }[]) {
         if (entry?.product_id == null || entry?.offer_id == null) continue;
         const key = `${String(entry.product_id)}::${String(entry.offer_id)}`;
+        const ordinal = seen.get(key) ?? 0;
+        seen.set(key, ordinal + 1);
+        const ordinalKey = `${key}::${ordinal}`;
         if (typeof entry?.condition === 'string' && entry.condition !== '') {
-          conditions.set(key, entry.condition);
+          conditions.set(ordinalKey, entry.condition);
         }
         const fee = coerceAmount(entry?.assurance_fee);
         if (fee != null) {
-          assuranceFees.set(key, fee);
+          assuranceFees.set(ordinalKey, fee);
         }
       }
     }
@@ -206,15 +217,22 @@ export async function resolveIdempotentOfferReplay({
   // a stored match keep the client spelling (fail-open per line). The
   // stored canonical assurance fee restores the same way: the replay
   // price map is empty, so the fee recompute below is a no-op and the
-  // retry would otherwise hash the client-derived fee.
+  // retry would otherwise hash the client-derived fee. Repeated
+  // product+offer lines consume their per-key ordinal in payload order
+  // (a retry resubmits the identical payload, so ordinals line up);
+  // lines without a stored ordinal keep the client values (fail-open).
+  const consumed = new Map<string, number>();
   for (const item of orderItemsPayload) {
     if (item.offer_id == null) continue;
     const key = `${String(item.product_id)}::${String(item.offer_id)}`;
-    const storedCondition = stored.conditions.get(key);
+    const ordinal = consumed.get(key) ?? 0;
+    consumed.set(key, ordinal + 1);
+    const ordinalKey = `${key}::${ordinal}`;
+    const storedCondition = stored.conditions.get(ordinalKey);
     if (storedCondition != null) {
       item.condition = storedCondition;
     }
-    const storedFee = stored.assuranceFees.get(key);
+    const storedFee = stored.assuranceFees.get(ordinalKey);
     if (storedFee != null) {
       item.assurance_fee = storedFee;
     }

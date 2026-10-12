@@ -7,6 +7,7 @@ import { OrderDetailsItemsCard } from './OrderDetailsItemsCard';
 import type { OrderDetailsItem } from './order-details.types';
 
 const mocks = vi.hoisted(() => ({
+  alert: vi.fn(),
   safeImage: vi.fn(),
   setStringAsync: vi.fn(),
 }));
@@ -38,6 +39,7 @@ vi.mock('react-native', async () => {
   const React = await import('react');
 
   return {
+    Alert: { alert: mocks.alert },
     StatusBar: () => null,
     Pressable: ({
       children,
@@ -232,6 +234,32 @@ describe('OrderDetailsItemsCard', () => {
     });
     // The copy press must not bubble to the row select on web targets.
     expect(onSelectItem).not.toHaveBeenCalled();
+  });
+
+  it('alerts instead of failing silent when the clipboard write rejects', async () => {
+    mocks.setStringAsync.mockRejectedValueOnce(new Error('denied'));
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('ref 55555555'));
+
+    await vi.waitFor(() => {
+      expect(mocks.alert).toHaveBeenCalledWith(
+        'Copy failed',
+        expect.stringContaining('Could not copy')
+      );
+    });
   });
 
   it('renders snapshot labels without a ref when the offer was deleted', () => {

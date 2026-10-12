@@ -121,6 +121,7 @@ export function SnowEffect() {
     <View style={styles.container}>
       {Array.from({ length: NUM_SNOWFLAKES }).map((_, i) => (
         <Snowflake
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-count decorative flakes positioned by index
           key={i}
           index={i}
           color={tokens.snowColor ?? palette.white}

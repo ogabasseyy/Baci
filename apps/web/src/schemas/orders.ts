@@ -7,6 +7,17 @@ import {
   sanitizeUrl,
 } from '@/lib/sanitize-core';
 import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
+import {
+  aliasFieldsMismatchMessage,
+  matchingAliasFields,
+} from './order-alias-fields';
+import {
+  OFFER_VARIANT_EXCLUSION_ERROR,
+  OFFER_VOUCHER_EXCLUSION_ERROR,
+  offerVariantExclusionHolds,
+  offerVoucherExclusionHolds,
+  orderItemOfferAliasFields,
+} from './order-item-offer-aliases';
 
 const optionalHttpUrlSchema = z.preprocess(
   (value) => {
@@ -77,22 +88,6 @@ const optionalVoucherTokenSchema = z.preprocess((value) => {
   return sanitized.length > 0 ? sanitized : undefined;
 }, z.string().max(VOUCHER_TOKEN_MAX_LENGTH).optional());
 
-function matchingAliasFields<Left extends string, Right extends string>(
-  left: Left,
-  right: Right
-) {
-  return (data: { [Key in Left | Right]?: unknown }) => {
-    const leftValue = data[left];
-    const rightValue = data[right];
-
-    return !leftValue || !rightValue || leftValue === rightValue;
-  };
-}
-
-function aliasFieldsMismatchMessage(left: string, right: string) {
-  return `${left} and ${right} must match when both are provided`;
-}
-
 const orderCreateSchemaBase = z
   .object({
     merchant_id: z.uuid(),
@@ -141,8 +136,7 @@ const orderCreateSchemaBase = z
               ),
             variantId: z.string().optional(),
             variant_id: z.string().optional(),
-            offerId: z.string().optional(),
-            offer_id: z.string().optional(),
+            ...orderItemOfferAliasFields,
             variantName: optionalVariantNameSchema,
             variant_name: optionalVariantNameSchema,
             variantAttributes: z
@@ -175,15 +169,9 @@ const orderCreateSchemaBase = z
           .refine(matchingAliasFields('offerId', 'offer_id'), {
             error: aliasFieldsMismatchMessage('offerId', 'offer_id'),
           })
-          .refine(
-            (data) =>
-              !(data.variantId || data.variant_id) ||
-              !(data.offerId || data.offer_id),
-            {
-              error:
-                'variantId/variant_id and offerId/offer_id cannot be combined on one order item',
-            }
-          )
+          .refine(offerVariantExclusionHolds, {
+            error: OFFER_VARIANT_EXCLUSION_ERROR,
+          })
           .refine(matchingAliasFields('voucherToken', 'voucher_token'), {
             error: aliasFieldsMismatchMessage('voucherToken', 'voucher_token'),
           })
@@ -193,23 +181,13 @@ const orderCreateSchemaBase = z
               'voucher_award_id'
             ),
           })
-          .refine(
-            (data) =>
-              !(
-                data.voucherAwardId ||
-                data.voucherToken ||
-                data.voucher_award_id ||
-                data.voucher_token
-              ) || !(data.offerId || data.offer_id),
-            {
-              // The voucher RPC's reserved-order branch ignores submitted
-              // item economics while the route recomputes VAT from the
-              // offer's live price: a cheaper same-product offer would
-              // understate the recorded tax on the prize order.
-              error:
-                'offerId/offer_id cannot be combined with a quiz-voucher redemption on one order item',
-            }
-          )
+          .refine(offerVoucherExclusionHolds, {
+            // The voucher RPC's reserved-order branch ignores submitted
+            // item economics while the route recomputes VAT from the
+            // offer's live price: a cheaper same-product offer would
+            // understate the recorded tax on the prize order.
+            error: OFFER_VOUCHER_EXCLUSION_ERROR,
+          })
       )
       // Matches admin-order-edit's order-items cap: bounds per-line offer
       // verification fan-out (fetchLiveOrderOffers) on public requests.

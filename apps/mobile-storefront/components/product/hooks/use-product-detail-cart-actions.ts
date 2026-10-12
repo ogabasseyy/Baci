@@ -29,7 +29,7 @@ export function useProductDetailCartActions(
   // check, including the sibling aggregate an initial add must fit.
   const {
     updateQuantity: validatedUpdateQuantity,
-    addToCart: validatedAddToCart,
+    addToCartAsync: validatedAddToCartAsync,
   } = useCart();
   const [flyingParticles, setFlyingParticles] = useState<
     { id: number; startX: number; startY: number }[]
@@ -155,7 +155,12 @@ export function useProductDetailCartActions(
           routeData.suppressConditionOfferMatch
         )
       : null;
-    validatedAddToCart({
+    // Success-only signals (ad attribution, added toast) wait for the
+    // validated add: a stock rejection rolls the line back and already
+    // surfaces its own error toast, so reporting success here would
+    // misattribute an out-of-stock tap. Haptics/animation above stay
+    // optimistic press feedback.
+    void validatedAddToCartAsync({
       product_id: product.id,
       slug: product.slug,
       variant_id: routeData.effectiveSelectedVariantId || undefined,
@@ -181,14 +186,21 @@ export function useProductDetailCartActions(
       storage: routeData.effectiveSelectedStorage || undefined,
       condition: conditionDisplay,
       variant_name: routeData.currentVariantDisplaySelection?.variant.name,
-    });
-    void trackProductRouteAddToCart(product, purchaseState.effectivePrice);
-    setShowAddedToast(true);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => {
-      setShowAddedToast(false);
-      toastTimerRef.current = null;
-    }, 2000);
+    }).then(
+      () => {
+        void trackProductRouteAddToCart(product, purchaseState.effectivePrice);
+        setShowAddedToast(true);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          setShowAddedToast(false);
+          toastTimerRef.current = null;
+        }, 2000);
+      },
+      () => {
+        // Rejections already surface the mutation's stock-error toast;
+        // nothing success-shaped may run here.
+      }
+    );
   };
 
   const handleUpdateQuantity = (

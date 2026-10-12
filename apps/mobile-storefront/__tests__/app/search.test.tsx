@@ -3,7 +3,6 @@ let mockFocused = true;
 import { act, render } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
 import type SearchScreenView from '@/components/search/SearchScreenView';
-import type { Product } from '@/types/product';
 import SearchScreen from '../../app/search';
 
 type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;

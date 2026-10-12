@@ -333,4 +333,85 @@ describe('resolveIdempotentOfferReplay', () => {
     expect(result.value.storedReplayDiscountAmount).toBeNull();
     expect(payload[0].assurance_fee).toBe(5200);
   });
+
+  it('restores per-line fees when one product+offer repeats across lines', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: null,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 4500,
+            },
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 9000,
+            },
+          ],
+        },
+      ],
+    });
+    // Two lines share one product+offer (distinct assurance choices):
+    // a bare product::offer key would replay the last fee (9000) onto
+    // both, so the identical retry would hash a different payload.
+    const payload = [
+      { ...offerLine, assurance_fee: 0 },
+      { ...offerLine, assurance_fee: 0 },
+    ];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].assurance_fee).toBe(4500);
+    expect(payload[1].assurance_fee).toBe(9000);
+  });
+
+  it('leaves extra repeated lines untouched when stored ordinals run out', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: null,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 4500,
+            },
+          ],
+        },
+      ],
+    });
+    const payload = [
+      { ...offerLine, assurance_fee: 0 },
+      { ...offerLine, assurance_fee: 7777 },
+    ];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].assurance_fee).toBe(4500);
+    expect(payload[1].assurance_fee).toBe(7777);
+  });
 });

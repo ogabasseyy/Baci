@@ -14,6 +14,7 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
+import { createUpdateQuantityMutation } from './cart-quantity-mutation';
 import { getCachedOptionStock } from './cart-query-cache';
 import {
   type AddToCartInput,
@@ -188,77 +189,20 @@ export function useCart() {
   /**
    * Update quantity with optimistic update and stock validation
    */
-  const updateQuantityMutation = useMutation({
-    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
-      // H21 fix: Read fresh items from store instead of stale closure variable
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === id);
-      if (!item) throw new Error('Item not found');
-
-      // Validate stock for the new quantity, with cached fallback for
-      // offline. onMutate already applied the new quantity to the store,
-      // so the product aggregate below is the post-update total strict
-      // sibling caps need.
-      const stockCheck = await checkStock(
-        item.product_id,
-        quantity,
-        getCachedOptionStock(queryClient, item.product_id, {
-          variantId: item.variant_id ?? null,
-          offerId: item.offer_id ?? null,
-        }),
-        {
-          variantId: item.variant_id ?? null,
-          offerId: item.offer_id ?? null,
-          aggregateQuantity: getExistingProductQuantityForStock(
-            item.product_id
-          ),
-        }
-      );
-
-      if (!stockCheck.available) {
-        throw new Error(
-          `Only ${stockCheck.currentStock} items available in stock`
-        );
-      }
-
-      return { id, quantity, stockCheck };
-    },
-
-    onMutate: ({ id, quantity }) => {
-      // Read fresh from store to avoid stale closure
-      const previousItems = [...useCartStore.getState().items];
-
-      // Optimistically update quantity
-      updateQuantityInStore(id, quantity);
-
-      return { previousItems };
-    },
-
-    onError: (_error, _, context) => {
-      if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
-      }
-      showCartToast(
-        'Stock Error: Quantity adjusted to available stock',
-        'error'
-      );
-    },
-
-    onSuccess: (data) => {
-      // Bug #96 fix: Read fresh items from store instead of stale closure
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === data.id);
-      if (item) {
-        queryClient.invalidateQueries({
-          queryKey: ['product', item.product_id],
-        });
-      }
-    },
-  });
+  const updateQuantityMutation = useMutation(
+    createUpdateQuantityMutation({ queryClient, updateQuantityInStore })
+  );
 
   // Wrapped functions for easier consumption
   const addToCart = (item: AddToCartInput) => {
     addToCartMutation.mutate(item);
+  };
+
+  // Promise variant for callers that must gate success-only behavior
+  // (analytics, confirmation toasts) on validation succeeding: the
+  // fire-and-forget wrapper above cannot report a stock rejection.
+  const addToCartAsync = (item: AddToCartInput) => {
+    return addToCartMutation.mutateAsync(item);
   };
 
   const removeFromCart = (id: string) => {
@@ -277,6 +221,7 @@ export function useCart() {
 
     // Optimistic actions
     addToCart,
+    addToCartAsync,
     removeFromCart,
     updateQuantity,
 

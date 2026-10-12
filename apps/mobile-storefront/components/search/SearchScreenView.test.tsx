@@ -1,10 +1,6 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import {
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  StyleSheet,
-} from 'react-native';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 const mockResultsEvents: {
   bottomSpace?: number;

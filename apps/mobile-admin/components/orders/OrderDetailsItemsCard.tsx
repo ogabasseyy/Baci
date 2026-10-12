@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import SafeImage from '@/components/ui/SafeImage';
 import type { ThemeColors } from '@/constants/theme';
 import { formatProductCondition } from '@/lib/product-condition';
@@ -117,7 +117,15 @@ export function OrderDetailsItemsCard({
                     // Web targets bubble presses to the row handler; native
                     // does not, so the optional call is a no-op there.
                     event?.stopPropagation?.();
-                    void copyOfferRef(String(item.offer_id));
+                    // Clipboard writes can reject (permissions, web denial):
+                    // surface a failure instead of failing silent on a ref
+                    // the truncated label never confirms.
+                    copyOfferRef(String(item.offer_id)).catch(() => {
+                      Alert.alert(
+                        'Copy failed',
+                        'Could not copy the offer reference. Please try again.'
+                      );
+                    });
                   }}
                   style={styles.offerRefRow}
                 >

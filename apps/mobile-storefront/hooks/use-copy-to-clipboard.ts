@@ -28,6 +28,9 @@ export function useCopyToClipboard({
     }
   };
 
+  // Unmount-only cleanup: the timer helper only touches refs, and listing
+  // it would resubscribe (and run the unmount branch) on every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
     return () => {
       isMountedRef.current = false;

@@ -221,6 +221,9 @@ export function usePiggyvestPrimaryCapability(
   // would keep routing through legacy) until remount even after the
   // merchant is server-enabled mid-session.
   const [revision, setRevision] = useState(0);
+  // `revision` is an intentional retrigger: never read, but bumping it is
+  // what reprobes an expired negative verdict on a mounted screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
     if (!merchantId) {
       setAvailable(false);

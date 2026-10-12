@@ -94,7 +94,7 @@ export function UtilityTypeTabs({
   }, [selectedType, viewportWidth, measurementVersion]);
 
   const handleTabLayout =
-    (index: number, type: UtilityType) => (event: LayoutChangeEvent) => {
+    (_index: number, type: UtilityType) => (event: LayoutChangeEvent) => {
       const nextWidth = event.nativeEvent.layout.width;
       if (nextWidth <= 0) return;
 

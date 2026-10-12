@@ -13,12 +13,15 @@ jest.mock('@/services/tiktok-product-route-tracking', () => ({
 }));
 
 const mockValidatedUpdateQuantity = jest.fn();
-const mockValidatedAddToCart = jest.fn();
+const mockValidatedAddToCartAsync = jest.fn(
+  async (..._args: unknown[]): Promise<unknown> => ({ ok: true })
+);
 jest.mock('@/hooks/use-cart', () => ({
   useCart: () => ({
     updateQuantity: (...args: unknown[]) =>
       mockValidatedUpdateQuantity(...args),
-    addToCart: (...args: unknown[]) => mockValidatedAddToCart(...args),
+    addToCartAsync: (...args: unknown[]) =>
+      mockValidatedAddToCartAsync(...args),
   }),
 }));
 
@@ -83,24 +86,25 @@ function buildArgs(
 describe('useProductDetailCartActions add-to-cart image', () => {
   beforeEach(() => {
     mockTrackAddToCart.mockClear();
-    mockValidatedAddToCart.mockClear();
+    mockValidatedAddToCartAsync.mockClear();
+    mockValidatedAddToCartAsync.mockResolvedValue({ ok: true });
     mockValidatedUpdateQuantity.mockClear();
   });
 
-  it("uses the selected color's image even when the gallery shows another color", () => {
+  it("uses the selected color's image even when the gallery shows another color", async () => {
     const { args } = buildArgs();
     const { result } = renderHook(() => useProductDetailCartActions(...args));
 
-    act(() => {
+    await act(async () => {
       result.current.handleAddToCart();
     });
 
-    expect(mockValidatedAddToCart).toHaveBeenCalledTimes(1);
+    expect(mockValidatedAddToCartAsync).toHaveBeenCalledTimes(1);
     // The raw store writer must never see an initial add: only the
     // validated mutation checks stock and the sibling aggregate.
     const cartState = args[1] as unknown as { addItem: jest.Mock };
     expect(cartState.addItem).not.toHaveBeenCalled();
-    expect(mockValidatedAddToCart.mock.calls[0]?.[0]).toEqual(
+    expect(mockValidatedAddToCartAsync.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         color: 'Black',
         image_url: 'https://cdn.example.com/iphone-15-black.avif',
@@ -108,17 +112,17 @@ describe('useProductDetailCartActions add-to-cart image', () => {
     );
   });
 
-  it('falls back to the displayed gallery frame when the color has no image', () => {
+  it('falls back to the displayed gallery frame when the color has no image', async () => {
     const { args } = buildArgs({
       routeData: { resolvedColorImages: {} },
     });
     const { result } = renderHook(() => useProductDetailCartActions(...args));
 
-    act(() => {
+    await act(async () => {
       result.current.handleAddToCart();
     });
 
-    expect(mockValidatedAddToCart.mock.calls[0]?.[0]).toEqual(
+    expect(mockValidatedAddToCartAsync.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         image_url: 'https://cdn.example.com/iphone-15-yellow.avif',
       })
@@ -129,10 +133,11 @@ describe('useProductDetailCartActions add-to-cart image', () => {
 describe('useProductDetailCartActions catalog basis', () => {
   beforeEach(() => {
     mockTrackAddToCart.mockClear();
-    mockValidatedAddToCart.mockClear();
+    mockValidatedAddToCartAsync.mockClear();
+    mockValidatedAddToCartAsync.mockResolvedValue({ ok: true });
     mockValidatedUpdateQuantity.mockClear();
   });
-  it('omits the catalog price for a non-variant condition offer', () => {
+  it('omits the catalog price for a non-variant condition offer', async () => {
     const { args } = buildArgs({
       routeData: {
         product: {
@@ -158,11 +163,11 @@ describe('useProductDetailCartActions catalog basis', () => {
     });
     const { result } = renderHook(() => useProductDetailCartActions(...args));
 
-    act(() => {
+    await act(async () => {
       result.current.handleAddToCart();
     });
 
-    const added = mockValidatedAddToCart.mock.calls[0]?.[0] as Record<
+    const added = mockValidatedAddToCartAsync.mock.calls[0]?.[0] as Record<
       string,
       unknown
     >;
@@ -201,7 +206,7 @@ describe('useProductDetailCartActions catalog basis', () => {
     expect(cartState.removeItem).not.toHaveBeenCalled();
   });
 
-  it('omits the catalog price without a condition offer', () => {
+  it('omits the catalog price without a condition offer', async () => {
     const { args } = buildArgs({
       routeData: {
         product: {
@@ -218,15 +223,64 @@ describe('useProductDetailCartActions catalog basis', () => {
     });
     const { result } = renderHook(() => useProductDetailCartActions(...args));
 
-    act(() => {
+    await act(async () => {
       result.current.handleAddToCart();
     });
 
-    const added = mockValidatedAddToCart.mock.calls[0]?.[0] as Record<
+    const added = mockValidatedAddToCartAsync.mock.calls[0]?.[0] as Record<
       string,
       unknown
     >;
     expect(added).toEqual(expect.objectContaining({ offer_id: undefined }));
     expect(added).not.toHaveProperty('catalog_price');
+  });
+});
+
+describe('useProductDetailCartActions success signals', () => {
+  beforeEach(() => {
+    mockTrackAddToCart.mockClear();
+    mockValidatedAddToCartAsync.mockClear();
+    mockValidatedAddToCartAsync.mockResolvedValue({ ok: true });
+    mockValidatedUpdateQuantity.mockClear();
+  });
+
+  it('tracks and toasts only after the validated add succeeds', async () => {
+    const { args } = buildArgs();
+    const { result } = renderHook(() => useProductDetailCartActions(...args));
+
+    act(() => {
+      result.current.handleAddToCart();
+    });
+    // Nothing success-shaped may fire before validation settles.
+    expect(mockTrackAddToCart).not.toHaveBeenCalled();
+    expect(result.current.showAddedToast).toBe(false);
+
+    await act(async () => {
+      await mockValidatedAddToCartAsync.mock.results[0]?.value;
+    });
+
+    expect(mockValidatedAddToCartAsync).toHaveBeenCalledTimes(1);
+    expect(mockTrackAddToCart).toHaveBeenCalledTimes(1);
+    expect(result.current.showAddedToast).toBe(true);
+  });
+
+  it('skips tracking and the toast when the validated add rejects', async () => {
+    mockValidatedAddToCartAsync.mockRejectedValueOnce(
+      new Error('Only 0 items available in stock')
+    );
+    const { args } = buildArgs();
+    const { result } = renderHook(() => useProductDetailCartActions(...args));
+
+    await act(async () => {
+      result.current.handleAddToCart();
+      const pending = mockValidatedAddToCartAsync.mock.results[0]?.value as
+        | Promise<unknown>
+        | undefined;
+      await pending?.catch(() => {});
+    });
+
+    expect(mockValidatedAddToCartAsync).toHaveBeenCalledTimes(1);
+    expect(mockTrackAddToCart).not.toHaveBeenCalled();
+    expect(result.current.showAddedToast).toBe(false);
   });
 });

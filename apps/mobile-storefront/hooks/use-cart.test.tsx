@@ -33,6 +33,25 @@ jest.mock('../lib/storage', () => ({
   },
 }));
 
+const actualCartStock = jest.requireActual(
+  './cart-stock'
+) as typeof import('./cart-stock');
+const mockCheckStock = jest.fn();
+jest.mock('./cart-stock', () => {
+  const actual = jest.requireActual('./cart-stock');
+  return {
+    ...actual,
+    checkStock: (...args: unknown[]) => mockCheckStock(...args),
+  };
+});
+// Default through to the real stock check so existing tests keep
+// exercising it; ordering tests below override per-call.
+mockCheckStock.mockImplementation((...args: unknown[]) =>
+  (actualCartStock.checkStock as (...callArgs: unknown[]) => Promise<unknown>)(
+    ...args
+  )
+);
+
 describe('useCart stock validation', () => {
   beforeEach(() => {
     useCartStore.setState({ items: [], isLoading: false, lineSequence: 0 });
@@ -181,6 +200,103 @@ describe('useCart stock validation', () => {
       expect(useCartStore.getState().items).toEqual([
         expect.objectContaining({ offer_id: 'offer-7', price: 180000 }),
       ]);
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('ignores a stale quantity failure after a newer edit succeeds', async () => {
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 1,
+    });
+    const lineId = useCartStore.getState().items[0].id;
+
+    type StockResult = { available: boolean; currentStock: number };
+    let releaseFirst!: (result: StockResult) => void;
+    const firstGate = new Promise<StockResult>((resolve) => {
+      releaseFirst = resolve;
+    });
+    mockCheckStock
+      .mockImplementationOnce(() => firstGate)
+      .mockImplementationOnce(async () => ({
+        available: true,
+        currentStock: 9,
+      }));
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      act(() => {
+        result.current.updateQuantity(lineId, 5);
+      });
+      act(() => {
+        result.current.updateQuantity(lineId, 2);
+      });
+      await waitFor(() => {
+        expect(mockCheckStock).toHaveBeenCalledTimes(2);
+      });
+      // The newer edit settles first; only then does the older check fail.
+      await waitFor(() => {
+        expect(result.current.isUpdatingQuantity).toBe(false);
+      });
+      await act(async () => {
+        releaseFirst({ available: false, currentStock: 1 });
+      });
+
+      expect(useCartStore.getState().items[0].quantity).toBe(2);
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('restores the previous quantity when the only edit fails', async () => {
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 1,
+    });
+    const lineId = useCartStore.getState().items[0].id;
+    mockCheckStock.mockImplementationOnce(async () => ({
+      available: false,
+      currentStock: 1,
+    }));
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      act(() => {
+        result.current.updateQuantity(lineId, 5);
+      });
+
+      await waitFor(() => {
+        expect(useCartStore.getState().items[0].quantity).toBe(1);
+      });
     } finally {
       unmount();
       queryClient.clear();

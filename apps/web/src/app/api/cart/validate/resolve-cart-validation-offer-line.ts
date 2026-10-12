@@ -37,6 +37,43 @@ export function isOfferParentEligible(
   return true;
 }
 
+export type OfferQuantityTotalInput = {
+  id: string | number;
+  variantId?: string;
+  offerId?: string;
+  quantity?: number;
+};
+
+/**
+ * Total validated quantity per product/offer across every cart line.
+ * Duplicate lines arise when an offer changes between canonical
+ * aliases; the order RPC decrements the shared offer allocation once
+ * per aggregated total, so the per-line stock check must compare the
+ * same aggregate. Lines with variants, without offers, or without a
+ * numeric quantity contribute nothing.
+ */
+export function buildOfferQuantityTotals(
+  items: readonly OfferQuantityTotalInput[]
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    if (!item.variantId && item.offerId && typeof item.quantity === 'number') {
+      const key = `${String(item.id)}::${item.offerId}`;
+      totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+    }
+  }
+  return totals;
+}
+
+/** Reads one product/offer aggregate built by buildOfferQuantityTotals. */
+export function readOfferQuantityTotal(
+  totals: ReadonlyMap<string, number>,
+  productId: string,
+  offerId: string
+): number | undefined {
+  return totals.get(`${productId}::${offerId}`);
+}
+
 export type OfferLineResolutionInput = {
   strId: string;
   variantId?: string;

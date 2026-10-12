@@ -9,9 +9,11 @@ import {
 } from './cart-offer-prices';
 import { prepareCartValidationItems } from './prepare-cart-validation-items';
 import {
+  buildOfferQuantityTotals,
   getCartValidationKey,
   getInvalidOfferLineKey,
   isOfferParentEligible,
+  readOfferQuantityTotal,
 } from './resolve-cart-validation-offer-line';
 
 type CartProductRow = {
@@ -186,24 +188,7 @@ export async function POST(request: NextRequest) {
     }[] = [];
     const seenPriceChangeKeys = new Set<string>();
 
-    // Total quantity per product/offer across every line: the order RPC
-    // decrements the shared offer allocation once per aggregated total,
-    // so the per-line stock check below must compare the same aggregate
-    // (duplicate lines arise when an offer changes canonical aliases).
-    const offerQuantityTotals = new Map<string, number>();
-    for (const item of validationItems) {
-      if (
-        !item.variantId &&
-        item.offerId &&
-        typeof item.quantity === 'number'
-      ) {
-        const key = `${String(item.id)}::${item.offerId}`;
-        offerQuantityTotals.set(
-          key,
-          (offerQuantityTotals.get(key) ?? 0) + item.quantity
-        );
-      }
-    }
+    const offerQuantityTotals = buildOfferQuantityTotals(validationItems);
 
     for (const item of validationItems) {
       const strId = String(item.id);
@@ -249,7 +234,7 @@ export async function POST(request: NextRequest) {
         quantity: item.quantity,
         aggregateOfferQuantity:
           !item.variantId && item.offerId
-            ? offerQuantityTotals.get(`${strId}::${item.offerId}`)
+            ? readOfferQuantityTotal(offerQuantityTotals, strId, item.offerId)
             : undefined,
         offer,
         parentEligible: isOfferParentEligible(

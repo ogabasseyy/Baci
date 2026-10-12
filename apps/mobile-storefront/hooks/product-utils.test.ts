@@ -407,7 +407,10 @@ describe('product-utils', () => {
 
     await expect(
       resolveProductRow('merchant-1', 'iphone-13-pro')
-    ).resolves.toEqual(productWithoutEmbeddedVariants);
+    ).resolves.toEqual({
+      ...productWithoutEmbeddedVariants,
+      variants_hydration_failed: true,
+    });
 
     expect(mockRpc).toHaveBeenCalledTimes(2);
   });

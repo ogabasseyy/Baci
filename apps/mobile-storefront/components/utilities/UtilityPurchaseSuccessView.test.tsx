@@ -14,7 +14,11 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockBackfillResult = jest.fn<
-  () => { pin: string | null; status: 'successful' | 'failed' | null }
+  () => {
+    pin: string | null;
+    status: 'successful' | 'failed' | null;
+    refundConfirmed?: boolean;
+  }
 >(() => ({ pin: null, status: null }));
 
 jest.mock('@/hooks/use-vtu-voucher-pin-backfill', () => ({
@@ -35,6 +39,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
       customerIdentifier,
       isAuthenticated,
       onCreateAccount,
+      refundConfirmed,
       status,
       txReference,
       type,
@@ -45,6 +50,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
       customerIdentifier?: string;
       isAuthenticated: boolean;
       onCreateAccount: () => void;
+      refundConfirmed?: boolean;
       status?: string;
       txReference: string;
       type: string;
@@ -56,6 +62,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
         <Text>{`Customer ${customerIdentifier ?? 'none'}`}</Text>
         <Text>{`Reference ${txReference}`}</Text>
         <Text>{`Status ${status ?? 'successful'}`}</Text>
+        <Text>{`Refund ${String(refundConfirmed ?? 'none')}`}</Text>
         <Text>{`Voucher ${voucherPin ?? 'none'}`}</Text>
         <Text>{`Cashback ${cashback?.amount ?? 'none'}`}</Text>
         <Text>{isAuthenticated ? 'Authenticated' : 'Guest'}</Text>
@@ -214,7 +221,11 @@ describe('UtilityPurchaseSuccessView', () => {
   });
 
   it('notifies once when polling settles a processing purchase', () => {
-    mockBackfillResult.mockReturnValue({ pin: null, status: 'failed' });
+    mockBackfillResult.mockReturnValue({
+      pin: null,
+      refundConfirmed: true,
+      status: 'failed',
+    });
     const onBackfillSettled = jest.fn();
 
     render(
@@ -236,6 +247,9 @@ describe('UtilityPurchaseSuccessView', () => {
     );
 
     expect(screen.getByText('Status failed')).toBeOnTheScreen();
+    // The refund proof travels with the status — the failed copy gates
+    // on it rather than trusting `failed` alone.
+    expect(screen.getByText('Refund true')).toBeOnTheScreen();
     expect(onBackfillSettled).toHaveBeenCalledTimes(1);
     expect(onBackfillSettled).toHaveBeenCalledWith('failed');
   });

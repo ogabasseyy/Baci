@@ -43,14 +43,17 @@ export function UtilityPurchaseSuccessView({
   type,
   bottomPadding,
 }: UtilityPurchaseSuccessViewProps) {
-  const { pin: backfilledVoucherPin, status: backfilledStatus } =
-    useVtuVoucherPinBackfill({
-      enabled:
-        (data.status === 'successful' || data.status === 'processing') &&
-        !data.voucherPin,
-      reference: data.reference,
-      utilityType: type,
-    });
+  const {
+    pin: backfilledVoucherPin,
+    refundConfirmed,
+    status: backfilledStatus,
+  } = useVtuVoucherPinBackfill({
+    enabled:
+      (data.status === 'successful' || data.status === 'processing') &&
+      !data.voucherPin,
+    reference: data.reference,
+    utilityType: type,
+  });
   const voucherPin = data.voucherPin || backfilledVoucherPin;
   // A settled observation supersedes the submit-time status: without
   // this a telco purchase stays on "Payment Received" forever (no
@@ -91,6 +94,7 @@ export function UtilityPurchaseSuccessView({
         cashback={data.cashback ?? null}
         isAuthenticated={isAuthenticated}
         onCreateAccount={onCreateAccount}
+        refundConfirmed={refundConfirmed}
         status={status}
         voucherPin={voucherPin ?? null}
       />

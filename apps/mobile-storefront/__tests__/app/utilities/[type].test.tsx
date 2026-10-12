@@ -269,7 +269,11 @@ jest.mock('@/hooks/use-vtu-history', () => ({
 jest.mock('@/hooks/use-vtu-voucher-pin-backfill', () => ({
   // The hook never returns null (VtuVoucherPinBackfill); a null mock
   // crashes the success view destructure.
-  useVtuVoucherPinBackfill: () => ({ pin: null, status: null }),
+  useVtuVoucherPinBackfill: () => ({
+    pin: null,
+    refundConfirmed: false,
+    status: null,
+  }),
 }));
 
 describe('UtilityPurchaseScreen', () => {

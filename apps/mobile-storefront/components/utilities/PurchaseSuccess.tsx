@@ -36,6 +36,8 @@ interface PurchaseSuccessProps {
   onCreateAccount: () => void;
   status?: PurchaseStatus;
   voucherPin?: string | null;
+  /** Refund proof: failed WITHOUT this flag must not claim a refund. */
+  refundConfirmed?: boolean | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -52,10 +54,12 @@ function isTokenGeneratingType(type: string) {
 
 function getPurchaseMessage({
   identifier,
+  refundConfirmed,
   status,
   type,
 }: {
   identifier: string;
+  refundConfirmed: boolean | null | undefined;
   status: PurchaseStatus;
   type: string;
 }) {
@@ -71,12 +75,17 @@ function getPurchaseMessage({
         : `Your ${typeLabel} payment was received. We are ${action} now.`;
     }
     case 'failed':
-      // Wallet-only flow: failed only surfaces after the backfill
-      // observes refund_pending === false, so the refund is already
-      // confirmed — say so instead of suggesting another rail.
+      // Wallet-only flow, gated on proof: the refunded claim renders
+      // ONLY with refundConfirmed. Without it (a future caller passing
+      // failed from route params or a deep link) the copy stays soft.
+      if (refundConfirmed === true) {
+        return identifier
+          ? `Your ${typeLabel} purchase for ${identifier} failed. Your wallet has been refunded — please try again.`
+          : `Your ${typeLabel} purchase failed. Your wallet has been refunded — please try again.`;
+      }
       return identifier
-        ? `Your ${typeLabel} purchase for ${identifier} failed. Your wallet has been refunded — please try again.`
-        : `Your ${typeLabel} purchase failed. Your wallet has been refunded — please try again.`;
+        ? `Your ${typeLabel} purchase for ${identifier} failed. Please check your wallet balance and try again.`
+        : `Your ${typeLabel} purchase failed. Please check your wallet balance and try again.`;
     case 'cancelled':
       return identifier
         ? `Your ${typeLabel} payment for ${identifier} was cancelled.`
@@ -174,6 +183,7 @@ export function PurchaseSuccess({
   onCreateAccount,
   status = 'successful',
   voucherPin,
+  refundConfirmed,
 }: PurchaseSuccessProps) {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -181,7 +191,12 @@ export function PurchaseSuccess({
   const identifier = phoneNumber || customerIdentifier || '';
   const presentation = getPurchasePresentation(status);
   const receiptStatus = getReceiptStatus(status);
-  const messageText = getPurchaseMessage({ identifier, status, type });
+  const messageText = getPurchaseMessage({
+    identifier,
+    refundConfirmed,
+    status,
+    type,
+  });
   const isTokenGenerating = isTokenGeneratingType(type);
   const processingNoticeTitle = isTokenGenerating
     ? 'Generating your token'

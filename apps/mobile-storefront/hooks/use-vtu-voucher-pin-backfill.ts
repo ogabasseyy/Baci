@@ -59,6 +59,13 @@ export interface VtuVoucherPinBackfill {
   pin: string | null;
   /** Last terminal status observed; null while non-terminal. */
   status: VtuBackfillTerminalStatus | null;
+  /**
+   * Refund proof for the failure copy: true only when history shows
+   * failed with refund_pending === false. Downstream copy must gate
+   * on this — never on `failed` alone, which future callers could
+   * pass without proof.
+   */
+  refundConfirmed: boolean;
 }
 
 function toTerminalStatus(
@@ -235,5 +242,6 @@ export function useVtuVoucherPinBackfill({
   return {
     pin: data?.pin ?? null,
     status: toTerminalStatus(data),
+    refundConfirmed: data?.status === 'failed' && data?.refundPending === false,
   };
 }

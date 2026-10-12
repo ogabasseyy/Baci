@@ -315,6 +315,7 @@ describe('PurchaseSuccess', () => {
         cashback={null}
         isAuthenticated={true}
         onCreateAccount={jest.fn()}
+        refundConfirmed={true}
         status="failed"
       />
     );
@@ -323,6 +324,47 @@ describe('PurchaseSuccess', () => {
     expect(
       screen.getByText(
         'Your electricity purchase for 43901766923 failed. Your wallet has been refunded — please try again.'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the failed copy soft without refund proof', () => {
+    // A failed status WITHOUT refundConfirmed (e.g. a future caller
+    // passing failed from route params) must not assert a refund.
+    const { rerender } = render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. Please check your wallet balance and try again.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/has been refunded/)).not.toBeOnTheScreen();
+
+    rerender(
+      <PurchaseSuccess
+        type="airtime"
+        txReference="ref-456"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        refundConfirmed={false}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your airtime purchase failed. Please check your wallet balance and try again.'
       )
     ).toBeOnTheScreen();
   });

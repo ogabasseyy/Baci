@@ -4,7 +4,13 @@ import { verifyBillCustomer } from '@/lib/monnify-bills';
 
 /**
  * Replay overlay for mutable VTU attempt attributes (Codex R31 fQGZ,
- * R32 f8Zk/f8Z0, R33 gtRN, R37 rktSo).
+ * R32 f8Zk/f8Z0, R33 gtRN, R37 rktSo, R42 rm5aj).
+ *
+ * The patch RPC applies only while the row is pending: a replay
+ * racing in-flight fulfillment must not bump updated_at (that would
+ * invalidate the original request's post-claim compare-and-set
+ * token). Non-pending rows silently skip — they never consume
+ * overlaid attributes anyway.
  *
  * `metadata.customerPhone` feeds Monnify/Kuda bill calls and
  * `metadata.validationReference` is sent back on Monnify re-drives,

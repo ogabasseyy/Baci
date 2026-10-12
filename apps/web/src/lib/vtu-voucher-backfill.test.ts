@@ -384,6 +384,59 @@ describe('vtu-voucher-backfill', () => {
     );
   });
 
+  it('skips reference-less processing rows: no pin can resolve and scheduling would postpone recovery', async () => {
+    // The reconciliation claim declines without a provider reference
+    // or response, so fulfill can never resolve a pin here — and
+    // every schedule/clear cycle bumps updated_at, postponing the
+    // 5-minute pre-vend staleness gate indefinitely while history
+    // polling continues (Codex R42 rm5ao).
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: { alpha: 'first' },
+      originalMetadata: { alpha: 'first' },
+      supabase,
+      transaction: createTransaction({
+        status: 'processing',
+        transaction_id: null,
+      }),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.fulfillPendingVtuTransaction).not.toHaveBeenCalled();
+  });
+
+  it('still schedules processing rows carrying a provider response message', async () => {
+    // A provider response lets the reconciliation claim proceed, so
+    // scheduling stays useful (may resolve a pin via fulfill).
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+    mocks.fulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'REQ-123',
+      status: 'processing',
+    });
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: { alpha: 'first' },
+      originalMetadata: { alpha: 'first' },
+      supabase,
+      transaction: createTransaction({
+        error_message: 'ACCEPTED',
+        status: 'processing',
+        transaction_id: null,
+      }),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(update).toHaveBeenCalled();
+  });
+
   it('uses a null metadata comparison when the original metadata is absent', async () => {
     const updateQuery = createUpdateQueryMock();
     const { supabase } = createSupabaseMock(updateQuery);

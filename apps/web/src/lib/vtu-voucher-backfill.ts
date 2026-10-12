@@ -44,6 +44,7 @@ export const MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS = 10;
 export const TOKEN_BACKFILL_DEDUPE_WINDOW_MS = 5_000;
 
 interface VoucherPinBackfillTransaction {
+  error_message?: unknown;
   id: unknown;
   request_reference: unknown;
   status: unknown;
@@ -218,11 +219,28 @@ export async function scheduleVoucherPinBackfill({
   transaction: VoucherPinBackfillTransaction;
   voucherPin: string | null;
 }): Promise<boolean> {
+  // Provider evidence, mirroring the reconciliation claim: a
+  // processing row with neither reference nor response can never
+  // resolve a pin through fulfill.
+  const providerReference = isString(transaction.transaction_id)
+    ? transaction.transaction_id.trim()
+    : '';
+  const providerResponse = isString(transaction.error_message)
+    ? transaction.error_message.trim()
+    : '';
   if (
     voucherPin !== null ||
     !shouldBackfillForStatus(transaction.status) ||
     !shouldBackfillForType(transaction.type) ||
-    hasRecentBackfillSchedule(metadata)
+    hasRecentBackfillSchedule(metadata) ||
+    // Reference-less processing rows can never resolve a pin — and
+    // every schedule/clear cycle bumps updated_at, postponing the
+    // 5-minute pre-vend staleness gate indefinitely while history
+    // polling continues (Codex R42 rm5ao). Successful rows still
+    // backfill (their Kuda lookup keys on the request reference).
+    (transaction.status === 'processing' &&
+      providerReference === '' &&
+      providerResponse === '')
   ) {
     return false;
   }

@@ -12,10 +12,9 @@ import type { Product } from '@/lib/products';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
 import {
-  applyOfferAllocationCap,
-  capQuantityToStrictPool,
-  getStrictSerializedPool,
-  resolveCappedOfferAllocation,
+  capAddedSimpleLineQuantity,
+  capUpdatedSimpleLineQuantity,
+  resolveSimpleLineAddCaps,
 } from './cart-stock-caps';
 import {
   DEFAULT_ASSURANCE_RATE,
@@ -379,24 +378,15 @@ export function StorefrontCartProvider({
       return;
     }
 
-    // The offer identity travels on the add options (merging matches
-    // it), so the same allocation cap covers fresh and merged adds.
-    const cappedOfferAllocation = resolveCappedOfferAllocation({
+    // Add-path caps (offer allocation + shared strict pool) live in
+    // cart-stock-caps; the same caps cover fresh and merged adds.
+    const addCaps = resolveSimpleLineAddCaps({
+      product: productForCart,
       isVoucherLine: isQuizPrizeVoucherLine,
+      variantId: normalizedOptions?.variantId,
       offerId: normalizedOptions?.offerId,
       stock: productForCart.stock,
     });
-
-    // Strict serialized siblings share one base-unit pool: each offer
-    // line also passes its own scalar cap, so without an aggregate the
-    // cart could hold two units against a single available unit that
-    // order creation then rejects on the second line. Variant adds
-    // resolve their own units and voucher lines redeem pre-reserved
-    // units, so the aggregate covers simple base/offer adds only.
-    const strictPool =
-      !isQuizPrizeVoucherLine && normalizedOptions?.variantId == null
-        ? getStrictSerializedPool(productForCart)
-        : undefined;
 
     if (product.has_variants && !normalizedOptions?.variantId) {
       logger.warn({
@@ -422,28 +412,21 @@ export function StorefrontCartProvider({
       if (existingIndex >= 0) {
         const nextCart = [...previousCart];
         const existingItem = nextCart[existingIndex];
-        const mergedQuantity =
-          cappedOfferAllocation !== undefined
-            ? Math.min(existingItem.quantity + quantity, cappedOfferAllocation)
-            : existingItem.quantity + quantity;
-        if (cappedOfferAllocation !== undefined && mergedQuantity <= 0) {
-          return previousCart;
-        }
-        // Sibling units outside the merging line: the merged line may
-        // only take remaining pool headroom.
-        const poolCappedMerged = capQuantityToStrictPool({
-          strictPool,
+        // The merged line may only take remaining pool headroom outside
+        // its siblings.
+        const capped = capAddedSimpleLineQuantity({
+          caps: addCaps,
           cart: previousCart,
           productId: productForCart.id,
           excludeIndex: existingIndex,
-          quantity: mergedQuantity,
+          quantity: existingItem.quantity + quantity,
         });
-        if (strictPool !== undefined && poolCappedMerged <= 0) {
+        if ('keepPrevious' in capped) {
           return previousCart;
         }
         nextCart[existingIndex] = {
           ...existingItem,
-          quantity: poolCappedMerged,
+          quantity: capped.quantity,
           cartItemId: existingItem.cartItemId || cartItemId,
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
@@ -460,22 +443,14 @@ export function StorefrontCartProvider({
         };
         result = nextCart;
       } else {
-        const freshQuantity =
-          cappedOfferAllocation !== undefined
-            ? Math.min(quantity, cappedOfferAllocation)
-            : quantity;
-        if (cappedOfferAllocation !== undefined && freshQuantity <= 0) {
-          return previousCart;
-        }
-        // Fresh siblings share the pool with every existing simple line:
-        // the new line may only take remaining headroom.
-        const poolCappedFresh = capQuantityToStrictPool({
-          strictPool,
+        // The new line may only take remaining pool headroom.
+        const capped = capAddedSimpleLineQuantity({
+          caps: addCaps,
           cart: previousCart,
           productId: productForCart.id,
-          quantity: freshQuantity,
+          quantity,
         });
-        if (strictPool !== undefined && poolCappedFresh <= 0) {
+        if ('keepPrevious' in capped) {
           return previousCart;
         }
         result = [
@@ -483,7 +458,7 @@ export function StorefrontCartProvider({
           {
             ...productForCart,
             cartItemId,
-            quantity: poolCappedFresh,
+            quantity: capped.quantity,
             variantId: normalizedOptions?.variantId,
             variantAttributes: normalizedOptions?.variantAttributes,
             selectedColor: normalizedOptions?.color,
@@ -625,41 +600,18 @@ export function StorefrontCartProvider({
       const minimumOrderQuantity = item.minimum_order_quantity || 1;
       let nextQuantity =
         quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
-      const allocationCap = applyOfferAllocationCap({
-        offerId: item.offerId,
-        stock: item.stock,
+      // Update-path caps (offer allocation + strict pool) live in
+      // cart-stock-caps with the add-path rules.
+      const capped = capUpdatedSimpleLineQuantity({
+        item,
+        cart: previousCart,
+        excludeIndex: targetIndex,
         quantity: nextQuantity,
       });
-      if (allocationCap) {
-        if ('keepPrevious' in allocationCap) {
-          return previousCart;
-        }
-        nextQuantity = allocationCap.quantity;
+      if ('keepPrevious' in capped) {
+        return previousCart;
       }
-      // Strict serialized siblings share one base-unit pool: a quantity
-      // bump must also fit the pool headroom outside this line, or the
-      // cart could hold units order creation rejects. Variant and
-      // voucher lines are outside the aggregate, same as adds.
-      if (
-        item.variantId == null &&
-        item.quizAwardId == null &&
-        item.quizVoucherToken == null
-      ) {
-        const strictPool = getStrictSerializedPool(item);
-        if (strictPool !== undefined) {
-          const poolCapped = capQuantityToStrictPool({
-            strictPool,
-            cart: previousCart,
-            productId: item.id,
-            excludeIndex: targetIndex,
-            quantity: nextQuantity,
-          });
-          if (poolCapped <= 0) {
-            return previousCart;
-          }
-          nextQuantity = poolCapped;
-        }
-      }
+      nextQuantity = capped.quantity;
       nextCart[targetIndex] = {
         ...item,
         quantity: nextQuantity,

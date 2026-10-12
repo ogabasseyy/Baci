@@ -19,6 +19,13 @@ export interface IdempotentOfferReplayResolution {
    * fresh recompute (fresh orders and fail-open probe/read failures).
    */
   storedReplayTaxAmount: number | null;
+  /**
+   * The stored order's discount_amount on a replay hit. The F1 bypass
+   * skips the negotiation recompute, so without the restore the retry
+   * hashes a zero discount against the first attempt's nonzero one.
+   * Null forces the normal derived-discount path.
+   */
+  storedReplayDiscountAmount: number | null;
 }
 
 export type ResolveIdempotentOfferReplayResult =
@@ -28,13 +35,18 @@ export type ResolveIdempotentOfferReplayResult =
 
 interface StoredReplayEconomics {
   taxAmount: number | null;
+  discountAmount: number | null;
   /** `${product_id}::${offer_id}` → stored line condition. */
   conditions: Map<string, string>;
+  /** `${product_id}::${offer_id}` → stored canonical assurance fee. */
+  assuranceFees: Map<string, number>;
 }
 
 const EMPTY_REPLAY_ECONOMICS: StoredReplayEconomics = {
   taxAmount: null,
+  discountAmount: null,
   conditions: new Map<string, string>(),
+  assuranceFees: new Map<string, number>(),
 };
 
 async function readStoredReplayEconomics({
@@ -70,40 +82,45 @@ async function readStoredReplayEconomics({
     // order vanished between the probe and this read — fail open.
     const row = (Array.isArray(data) ? data[0] : data) as {
       tax_amount?: unknown;
+      discount_amount?: unknown;
       items?: unknown;
     } | null;
     // PostgREST may decode numeric as a string; blank/null stays fail-open.
-    const rawTax = row?.tax_amount;
-    const tax =
-      typeof rawTax === 'number'
-        ? rawTax
-        : typeof rawTax === 'string' && rawTax.trim() !== ''
-          ? Number(rawTax)
-          : Number.NaN;
+    const coerceAmount = (raw: unknown): number | null => {
+      const value =
+        typeof raw === 'number'
+          ? raw
+          : typeof raw === 'string' && raw.trim() !== ''
+            ? Number(raw)
+            : Number.NaN;
+      return Number.isFinite(value) ? value : null;
+    };
     const conditions = new Map<string, string>();
+    const assuranceFees = new Map<string, number>();
     const items = row?.items;
     if (Array.isArray(items)) {
       for (const entry of items as {
         product_id?: unknown;
         offer_id?: unknown;
         condition?: unknown;
+        assurance_fee?: unknown;
       }[]) {
-        if (
-          entry?.product_id != null &&
-          entry?.offer_id != null &&
-          typeof entry?.condition === 'string' &&
-          entry.condition !== ''
-        ) {
-          conditions.set(
-            `${String(entry.product_id)}::${String(entry.offer_id)}`,
-            entry.condition
-          );
+        if (entry?.product_id == null || entry?.offer_id == null) continue;
+        const key = `${String(entry.product_id)}::${String(entry.offer_id)}`;
+        if (typeof entry?.condition === 'string' && entry.condition !== '') {
+          conditions.set(key, entry.condition);
+        }
+        const fee = coerceAmount(entry?.assurance_fee);
+        if (fee != null) {
+          assuranceFees.set(key, fee);
         }
       }
     }
     return {
-      taxAmount: Number.isFinite(tax) ? tax : null,
+      taxAmount: coerceAmount(row?.tax_amount),
+      discountAmount: coerceAmount(row?.discount_amount),
       conditions,
+      assuranceFees,
     };
   } catch (readError) {
     logger.warn({
@@ -126,8 +143,9 @@ async function readStoredReplayEconomics({
  * and skip mutable offer verification on a hit — downstream preflights
  * fall back to parent prices, the discount/rate recomputes are bypassed
  * the same way, and the RPC's request-hash check remains the authority
- * for conflicts. The stored tax_amount and per-line conditions are
- * restored from the keyed order so the retry hashes the identical payload.
+ * for conflicts. The stored tax_amount, discount_amount, per-line
+ * conditions, and per-line assurance fees are restored from the keyed
+ * order so the retry hashes the identical payload.
  */
 export async function resolveIdempotentOfferReplay({
   merchantId,
@@ -169,6 +187,7 @@ export async function resolveIdempotentOfferReplay({
         liveOfferConditions: offerEconomics.liveOfferConditions,
         liveOfferPrices: offerEconomics.liveOfferPrices,
         storedReplayTaxAmount: null,
+        storedReplayDiscountAmount: null,
       },
     };
   }
@@ -184,14 +203,20 @@ export async function resolveIdempotentOfferReplay({
   // offer spelling before hashing; restore the stored spelling per line so
   // the identical retry hashes the same payload (mirrors the economics
   // mutation above — item conditions are hash-significant). Lines without
-  // a stored match keep the client spelling (fail-open per line).
+  // a stored match keep the client spelling (fail-open per line). The
+  // stored canonical assurance fee restores the same way: the replay
+  // price map is empty, so the fee recompute below is a no-op and the
+  // retry would otherwise hash the client-derived fee.
   for (const item of orderItemsPayload) {
     if (item.offer_id == null) continue;
-    const storedCondition = stored.conditions.get(
-      `${String(item.product_id)}::${String(item.offer_id)}`
-    );
+    const key = `${String(item.product_id)}::${String(item.offer_id)}`;
+    const storedCondition = stored.conditions.get(key);
     if (storedCondition != null) {
       item.condition = storedCondition;
+    }
+    const storedFee = stored.assuranceFees.get(key);
+    if (storedFee != null) {
+      item.assurance_fee = storedFee;
     }
   }
   return {
@@ -201,6 +226,7 @@ export async function resolveIdempotentOfferReplay({
       liveOfferConditions: new Map<string, string>(),
       liveOfferPrices: new Map<string, number>(),
       storedReplayTaxAmount: stored.taxAmount,
+      storedReplayDiscountAmount: stored.discountAmount,
     },
   };
 }

@@ -22,6 +22,7 @@ import type { CartItem } from '@/stores/cart-store';
 import {
   type CartConditionChange,
   type CartPriceChange,
+  type CartUnavailableLine,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
   getDriftedOfferCondition,
@@ -31,7 +32,7 @@ import {
   resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
 
-export type { CartConditionChange, CartPriceChange };
+export type { CartConditionChange, CartPriceChange, CartUnavailableLine };
 export { pickChangedConditionById, pickChangedPriceById };
 
 const log = createLogger('CartReprice');
@@ -53,6 +54,9 @@ export interface RepriceResult {
    * render as a bogus "X to X" price move.
    */
   conditionChanges: CartConditionChange[];
+  /** Lines whose row vanished after a successful lookup. Failed lookups
+   * fail open and never land here; checkout must stop for these. */
+  unavailable: CartUnavailableLine[];
 }
 
 type VariantOverrideRow = {
@@ -66,6 +70,7 @@ const EMPTY_RESULT: RepriceResult = {
   conditionById: {},
   changes: [],
   conditionChanges: [],
+  unavailable: [],
 };
 
 export async function repriceCartItems(
@@ -166,6 +171,7 @@ export async function repriceCartItems(
       conditionById: {},
       changes: [],
       conditionChanges: [],
+      unavailable: [],
     };
     for (const item of items) {
       // Voucher reward lines (quiz awards, price 0) are validated by the
@@ -183,8 +189,8 @@ export async function repriceCartItems(
       }
 
       // Exact offer lines reprice from the live offer row. A failed lookup
-      // or a vanished/inactive offer skips the line instead of corrupting
-      // it with the base price; availability is validated at checkout.
+      // skips the line, but a vanished offer after a successful lookup
+      // is unavailable (the orders route would reject it).
       if (
         !item.variant_id &&
         typeof item.offer_id === 'string' &&
@@ -192,7 +198,9 @@ export async function repriceCartItems(
       ) {
         if (!offerLookupFailed) {
           const live = resolveOfferLinePrice(item, offerPrice);
-          if (live) {
+          if (!live) {
+            result.unavailable.push({ id: item.id, name: item.name });
+          } else {
             result.priceById[item.id] = live.price;
             // A merchant-edited condition refreshes with the price so the
             // line matches what checkout will accept.
@@ -243,8 +251,9 @@ export async function repriceCartItems(
 
       const basePrice = productPrice.get(item.product_id);
       if (basePrice == null) {
-        // Product missing/inactive — leave the line untouched; availability is
-        // validated separately at checkout.
+        // The lookup above succeeded, so a missing row means the product
+        // is gone or inactive — unavailable, like a vanished offer.
+        result.unavailable.push({ id: item.id, name: item.name });
         continue;
       }
       // Authoritative unit price: variant.price_override ?? product.price.

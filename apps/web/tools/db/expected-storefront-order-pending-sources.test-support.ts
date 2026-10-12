@@ -151,4 +151,9 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20261011220000_storefront_order_replay_economics_probe.sql',
     sha256: 'd9a4090026d4501b5bebeaaa05837b900483bfee243c254810ce4e150c203ed5',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261011240000_storefront_order_replay_economics_discount_fees.sql',
+    sha256: '99cf2ab649624b874e89699088e8a90896ae080e559f28c07ca1964a239687c1',
+  },
 ];

@@ -7,6 +7,7 @@ import { isVariantBearingProduct } from './product-variant-state';
 const log = createLogger('ProductHydration');
 
 export interface HydratableProductRow extends Record<string, unknown> {
+  base_inventory_hydration_failed?: unknown;
   has_condition_offers?: unknown;
   has_variants?: unknown;
   id?: unknown;
@@ -92,7 +93,17 @@ export async function hydrateRowsNeedingBaseInventory(
     log.warn('Failed to hydrate base inventory; using original rows', {
       error,
     });
-    return rows;
+    // Thrown failures (retry exhaustion) must carry the same marker as
+    // RPC error results, or the PDP renders the stock fallback with no
+    // retry state. Only attempted rows are marked.
+    const attemptedIds = new Set(
+      rowsToHydrate.map((row) => row.id).filter((id) => typeof id === 'string')
+    );
+    return rows.map((row) =>
+      typeof row.id === 'string' && attemptedIds.has(row.id)
+        ? { ...row, base_inventory_hydration_failed: true }
+        : row
+    );
   }
 
   const hydratedById = new Map(

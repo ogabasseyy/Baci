@@ -227,6 +227,7 @@ describe('useCheckoutSubmit recovery', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     mockCreateOrder.mockImplementation(async () => {
       cartItems = [];
@@ -248,6 +249,7 @@ describe('useCheckoutSubmit recovery', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     const checkoutError = new Error('payment init failed');
     mockCreateOrder.mockImplementation(async () => {
@@ -279,6 +281,7 @@ describe('useCheckoutSubmit recovery', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({
@@ -318,6 +321,7 @@ describe('useCheckoutSubmit recovery', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     const order = {
       created_at: '2026-07-09T12:00:00.000Z',

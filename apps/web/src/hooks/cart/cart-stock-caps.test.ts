@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOfferAllocationCap,
+  capAddedSimpleLineQuantity,
   capQuantityToStrictPool,
+  capUpdatedSimpleLineQuantity,
   getSimpleProductCartTotal,
   getStrictSerializedPool,
   resolveCappedOfferAllocation,
+  resolveSimpleLineAddCaps,
 } from './cart-stock-caps';
 import type { CartItem } from './cart-types';
 
@@ -174,5 +177,148 @@ describe('capQuantityToStrictPool', () => {
         quantity: 5,
       })
     ).toBe(0);
+  });
+});
+
+describe('resolveSimpleLineAddCaps', () => {
+  const strictProduct = {
+    inventory_tracking_policy: 'serialized_strict',
+    stock_quantity: 4,
+  } as CartItem;
+
+  it('returns the offer allocation and strict pool for simple offer adds', () => {
+    expect(
+      resolveSimpleLineAddCaps({
+        product: strictProduct,
+        isVoucherLine: false,
+        variantId: null,
+        offerId: 'offer-1',
+        stock: 6,
+      })
+    ).toEqual({ cappedOfferAllocation: 6, strictPool: 4 });
+  });
+
+  it('skips the pool for variant and voucher adds', () => {
+    expect(
+      resolveSimpleLineAddCaps({
+        product: strictProduct,
+        isVoucherLine: false,
+        variantId: 'variant-1',
+        offerId: null,
+        stock: 6,
+      }).strictPool
+    ).toBeUndefined();
+    expect(
+      resolveSimpleLineAddCaps({
+        product: strictProduct,
+        isVoucherLine: true,
+        variantId: null,
+        offerId: 'offer-1',
+        stock: 6,
+      })
+    ).toEqual({ cappedOfferAllocation: undefined, strictPool: undefined });
+  });
+});
+
+describe('capAddedSimpleLineQuantity', () => {
+  const cart = [line({ quantity: 3 })];
+
+  it('caps through the offer allocation then pool headroom', () => {
+    expect(
+      capAddedSimpleLineQuantity({
+        caps: { cappedOfferAllocation: 5, strictPool: 4 },
+        cart,
+        productId: 'p1',
+        excludeIndex: 0,
+        quantity: 8,
+      })
+    ).toEqual({ quantity: 4 });
+  });
+
+  it('keeps the previous cart when either gate goes to zero', () => {
+    expect(
+      capAddedSimpleLineQuantity({
+        caps: { cappedOfferAllocation: 0, strictPool: undefined },
+        cart,
+        productId: 'p1',
+        quantity: 2,
+      })
+    ).toEqual({ keepPrevious: true });
+    expect(
+      capAddedSimpleLineQuantity({
+        caps: { cappedOfferAllocation: undefined, strictPool: 3 },
+        cart,
+        productId: 'p1',
+        quantity: 2,
+      })
+    ).toEqual({ keepPrevious: true });
+  });
+
+  it('passes uncapped quantities through untouched', () => {
+    expect(
+      capAddedSimpleLineQuantity({
+        caps: { cappedOfferAllocation: undefined, strictPool: undefined },
+        cart,
+        productId: 'p1',
+        quantity: 2,
+      })
+    ).toEqual({ quantity: 2 });
+  });
+});
+
+describe('capUpdatedSimpleLineQuantity', () => {
+  const cart = [line({ quantity: 1 }), line({ quantity: 2 })];
+
+  it('applies the allocation cap then pool headroom outside the line', () => {
+    const item = line({
+      quantity: 1,
+      offerId: 'offer-1',
+      stock: 5,
+      inventory_tracking_policy: 'serialized_strict',
+      stock_quantity: 4,
+    });
+    expect(
+      capUpdatedSimpleLineQuantity({ item, cart, excludeIndex: 0, quantity: 9 })
+    ).toEqual({ quantity: 2 });
+  });
+
+  it('keeps the previous quantity on zero allocation or headroom', () => {
+    const deadOffer = line({ offerId: 'offer-1', stock: 0 });
+    expect(
+      capUpdatedSimpleLineQuantity({
+        item: deadOffer,
+        cart,
+        excludeIndex: 0,
+        quantity: 4,
+      })
+    ).toEqual({ keepPrevious: true });
+    const noHeadroom = line({
+      inventory_tracking_policy: 'serialized_strict',
+      stock_quantity: 2,
+    });
+    expect(
+      capUpdatedSimpleLineQuantity({
+        item: noHeadroom,
+        cart,
+        excludeIndex: 0,
+        quantity: 4,
+      })
+    ).toEqual({ keepPrevious: true });
+  });
+
+  it('skips the pool aggregate for variant and voucher lines', () => {
+    const variant = line({
+      variantId: 'variant-1',
+      inventory_tracking_policy: 'serialized_strict',
+      stock_quantity: 1,
+    });
+    expect(
+      capUpdatedSimpleLineQuantity({
+        item: variant,
+        cart,
+        excludeIndex: 0,
+        quantity: 4,
+      })
+    ).toEqual({ quantity: 4 });
   });
 });

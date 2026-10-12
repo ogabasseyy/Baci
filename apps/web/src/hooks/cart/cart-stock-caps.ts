@@ -6,6 +6,134 @@ type StrictPoolProductLike = Pick<
   'inventory_tracking_policy' | 'stock_quantity'
 >;
 
+export interface SimpleLineAddCaps {
+  cappedOfferAllocation: number | undefined;
+  strictPool: number | undefined;
+}
+
+/**
+ * Add-path caps for a simple base/offer line: the offer's own allocation
+ * plus the shared strict base-unit pool (sibling offer lines aggregate
+ * against it, mirroring order creation). The offer identity travels on
+ * the add options (merging matches it), so the same caps cover fresh and
+ * merged adds. Variant adds resolve their own units and voucher lines
+ * redeem pre-reserved units, so both skip the pool.
+ */
+export function resolveSimpleLineAddCaps({
+  product,
+  isVoucherLine,
+  variantId,
+  offerId,
+  stock,
+}: {
+  product: StrictPoolProductLike;
+  isVoucherLine: boolean;
+  variantId: string | null | undefined;
+  offerId: string | null | undefined;
+  stock: number | null | undefined;
+}): SimpleLineAddCaps {
+  return {
+    cappedOfferAllocation: resolveCappedOfferAllocation({
+      isVoucherLine,
+      offerId,
+      stock,
+    }),
+    strictPool:
+      !isVoucherLine && variantId == null
+        ? getStrictSerializedPool(product)
+        : undefined,
+  };
+}
+
+/**
+ * Desired add quantity through the add-path caps: the offer allocation
+ * first, then strict-pool headroom outside the excluded sibling. Zero
+ * through either gate keeps the previous cart (validation prunes dead
+ * lines) instead of adding a zero-quantity line.
+ */
+export function capAddedSimpleLineQuantity({
+  caps,
+  cart,
+  productId,
+  excludeIndex = -1,
+  quantity,
+}: {
+  caps: SimpleLineAddCaps;
+  cart: CartItem[];
+  productId: string;
+  excludeIndex?: number;
+  quantity: number;
+}): { quantity: number } | { keepPrevious: true } {
+  const offerCapped =
+    caps.cappedOfferAllocation !== undefined
+      ? Math.min(quantity, caps.cappedOfferAllocation)
+      : quantity;
+  if (caps.cappedOfferAllocation !== undefined && offerCapped <= 0) {
+    return { keepPrevious: true };
+  }
+  const poolCapped = capQuantityToStrictPool({
+    strictPool: caps.strictPool,
+    cart,
+    productId,
+    excludeIndex,
+    quantity: offerCapped,
+  });
+  if (caps.strictPool !== undefined && poolCapped <= 0) {
+    return { keepPrevious: true };
+  }
+  return { quantity: poolCapped };
+}
+
+/**
+ * Update-path caps (same rules as adds): the offer allocation, then
+ * strict-pool headroom outside this line. Variant and voucher lines
+ * skip the pool aggregate, same as adds. A zero allocation or zero
+ * headroom keeps the previous quantity instead of deleting the line;
+ * validation prunes dead lines.
+ */
+export function capUpdatedSimpleLineQuantity({
+  item,
+  cart,
+  excludeIndex,
+  quantity,
+}: {
+  item: CartItem;
+  cart: CartItem[];
+  excludeIndex: number;
+  quantity: number;
+}): { quantity: number } | { keepPrevious: true } {
+  const allocationCap = applyOfferAllocationCap({
+    offerId: item.offerId,
+    stock: item.stock,
+    quantity,
+  });
+  if (allocationCap && 'keepPrevious' in allocationCap) {
+    return { keepPrevious: true };
+  }
+  const desired = allocationCap ? allocationCap.quantity : quantity;
+  if (
+    item.variantId == null &&
+    item.quizAwardId == null &&
+    item.quizVoucherToken == null
+  ) {
+    const strictPool = getStrictSerializedPool(item);
+    if (strictPool !== undefined) {
+      const poolCapped = capQuantityToStrictPool({
+        strictPool,
+        cart,
+        productId: item.id,
+        excludeIndex,
+        quantity: desired,
+      });
+      if (poolCapped <= 0) {
+        return { keepPrevious: true };
+      }
+      return { quantity: poolCapped };
+    }
+  }
+  return { quantity: desired };
+}
+
 /**
  * Shared base-unit pool for a strict serialized product. Hydration folds
  * exact units into stock_quantity while each offer add carries its own

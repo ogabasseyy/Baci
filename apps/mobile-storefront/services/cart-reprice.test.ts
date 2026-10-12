@@ -108,6 +108,7 @@ describe('repriceCartItems', () => {
       conditionById: {},
       changes: [],
       conditionChanges: [],
+      unavailable: [],
     });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
@@ -121,6 +122,7 @@ describe('repriceCartItems', () => {
       conditionById: {},
       changes: [],
       conditionChanges: [],
+      unavailable: [],
     });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
@@ -268,6 +270,7 @@ describe('repriceCartItems', () => {
       conditionById: {},
       changes: [],
       conditionChanges: [],
+      unavailable: [],
     });
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockWarn).toHaveBeenCalledWith(
@@ -557,6 +560,49 @@ describe('repriceCartItems', () => {
 
     expect(result.priceById).toEqual({});
     expect(result.changes).toEqual([]);
+    // Vanished after a successful lookup: unavailable, so checkout can
+    // stop with a removal path instead of looping invalid_offer.
+    expect(result.unavailable).toEqual([
+      { id: 'gone-line', name: 'iPhone 13' },
+      { id: 'foreign-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('marks a line unavailable when its product vanished after a successful lookup', async () => {
+    const goneLine = createCartItem({
+      id: 'gone-line',
+      product_id: 'gone-product',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({ data: [], error: null });
+
+    const result = await repriceCartItems([goneLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'gone-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('fails open without unavailable lines when the lookups error', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue(null);
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([]);
   });
 
   it('does not fetch offers when no lines carry an offer id', async () => {

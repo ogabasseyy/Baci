@@ -169,6 +169,7 @@ type OrderCreateItem = OrderCreateInput['items'][number];
 type OrderQuoteValidationPayloadItem = {
   price?: number | string | null;
   product_id?: string | null;
+  offer_id?: string | null;
   quantity: number;
 };
 type OrderQuoteValidationProductRow = {
@@ -254,10 +255,12 @@ function getVoucherOrderAmountDueBeforeGateway({
 async function buildOrderQuoteValidationItems({
   items,
   merchantId,
+  offerPrices,
   supabase,
 }: {
   items: OrderQuoteValidationPayloadItem[];
   merchantId: string;
+  offerPrices: Map<string, number>;
   supabase: ReturnType<typeof createClient>;
 }) {
   const productIds = Array.from(
@@ -293,9 +296,17 @@ async function buildOrderQuoteValidationItems({
       const product = item.product_id
         ? (productMap.get(item.product_id) ?? null)
         : null;
+      // Exact offer lines bill the live offer price (the RPC persists
+      // it), not the submitted price the shopper quoted days ago.
+      // Validating against the stale value accepts checkout while the
+      // booking guard later rejects fulfillment as a quote mismatch.
+      const liveOfferPrice =
+        item.offer_id && item.product_id
+          ? offerPrices.get(`${item.product_id}::${item.offer_id}`)
+          : undefined;
       return {
         name: product?.name ?? null,
-        price: item.price ?? null,
+        price: liveOfferPrice ?? item.price ?? null,
         quantity: item.quantity,
         product,
       };
@@ -1007,6 +1018,7 @@ export async function POST(request: NextRequest) {
       isIdempotentOfferOrderReplay,
       liveOfferConditions,
       liveOfferPrices,
+      storedReplayDiscountAmount,
       storedReplayTaxAmount,
     } = offerReplay.value;
 
@@ -1318,9 +1330,16 @@ export async function POST(request: NextRequest) {
       merchantCanAutoNegotiate &&
       !requestedDiscountCode &&
       (typeof body.expected_total === 'number' || source === 'mobile_app');
-    const serverDerivedDiscountAmount = shouldApplyServerDerivedDiscount
-      ? (negotiationDiscount?.totalDiscount ?? 0)
-      : 0;
+    // F1 replay: the bypass skipped the negotiation recompute, so the
+    // stored discount restores unconditionally (like the stored tax
+    // above) — hashing a recomputed zero against the first attempt's
+    // nonzero discount would conflict instead of replaying.
+    const serverDerivedDiscountAmount =
+      storedReplayDiscountAmount != null
+        ? storedReplayDiscountAmount
+        : shouldApplyServerDerivedDiscount
+          ? (negotiationDiscount?.totalDiscount ?? 0)
+          : 0;
 
     recomputeOfferAssuranceFees(orderItemsPayload, liveOfferPrices, {
       applied: shouldApplyServerDerivedDiscount,
@@ -1409,6 +1428,7 @@ export async function POST(request: NextRequest) {
         quoteValidationItems = await buildOrderQuoteValidationItems({
           items: orderItemsPayload,
           merchantId: body.merchant_id,
+          offerPrices: liveOfferPrices,
           supabase,
         });
       } catch (quoteValidationItemsError) {

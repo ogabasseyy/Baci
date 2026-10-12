@@ -58,14 +58,14 @@ describe('storefront-product-base-inventory', () => {
     ]);
   });
 
-  it('keeps the original rows when the base inventory lookup fails', async () => {
+  it('marks attempted rows when the base inventory lookup fails', async () => {
     mockRpc.mockReturnValueOnce(
       Promise.resolve({ data: null, error: { message: 'boom' } })
     );
 
     const rows = [{ id: 'product-1', base_available_units: 9 }];
-    await expect(hydrateProductRowsWithBaseInventory(rows)).resolves.toEqual(
-      rows
-    );
+    await expect(hydrateProductRowsWithBaseInventory(rows)).resolves.toEqual([
+      { ...rows[0], base_inventory_hydration_failed: true },
+    ]);
   });
 });

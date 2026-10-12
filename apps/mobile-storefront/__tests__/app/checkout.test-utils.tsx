@@ -300,6 +300,7 @@ jest.mock('@/services/cart-reprice', () => {
       conditionById: {},
       changes: [],
       conditionChanges: [],
+      unavailable: [],
     })),
   };
 });

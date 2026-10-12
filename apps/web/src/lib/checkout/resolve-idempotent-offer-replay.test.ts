@@ -229,4 +229,108 @@ describe('resolveIdempotentOfferReplay', () => {
       false
     );
   });
+
+  it('restores the stored discount and canonical fee on a replay hit', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: 8000,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 4500,
+            },
+          ],
+        },
+      ],
+    });
+    // The retry carries the client-derived fee; the first attempt hashed
+    // the canonicalized fee, so the payload must be rewritten to match.
+    const payload = [{ ...offerLine, assurance_fee: 5200 }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.storedReplayDiscountAmount).toBe(8000);
+    expect(payload[0].assurance_fee).toBe(4500);
+  });
+
+  it('coerces string-decoded discount and fee numerics', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: '8000.00',
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: '4500.00',
+            },
+          ],
+        },
+      ],
+    });
+    const payload = [{ ...offerLine, assurance_fee: 5200 }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.storedReplayDiscountAmount).toBe(8000);
+    expect(payload[0].assurance_fee).toBe(4500);
+  });
+
+  it('keeps the client fee when the stored fee is blank (fail-open)', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: null,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: null,
+            },
+          ],
+        },
+      ],
+    });
+    const payload = [{ ...offerLine, assurance_fee: 5200 }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.storedReplayDiscountAmount).toBeNull();
+    expect(payload[0].assurance_fee).toBe(5200);
+  });
 });

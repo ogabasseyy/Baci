@@ -91,6 +91,36 @@ describe('cart query cache helpers', () => {
     ).toBe(4);
   });
 
+  it('resolves serialized base units from the hydrated detail entry', () => {
+    // The list row predates base-inventory hydration (legacy scalar 0);
+    // the detail entry carries the hydrated strict units the PDP used
+    // to allow the add. The cache must agree or checkStock rolls back
+    // a valid add.
+    seedListPages(queryClient, [
+      { products: [{ id: 'product-1', stock_quantity: 0 }] },
+    ]);
+    seedProductDetail(queryClient, 'strict-phone', {
+      id: 'product-1',
+      slug: 'strict-phone',
+      stock_quantity: 0,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 3,
+    });
+
+    expect(getCachedOptionStock(queryClient, 'product-1')).toBe(3);
+  });
+
+  it('fails closed for strict base lines without hydrated units', () => {
+    seedProductDetail(queryClient, 'strict-phone', {
+      id: 'product-1',
+      slug: 'strict-phone',
+      stock_quantity: 0,
+      base_effective_policy: 'serialized_strict',
+    });
+
+    expect(getCachedOptionStock(queryClient, 'product-1')).toBeUndefined();
+  });
+
   it('resolves the cached variant quantity instead of the parent total', () => {
     seedListPages(queryClient, [
       {

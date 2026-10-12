@@ -4268,6 +4268,113 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
+  it('validates saved GIGL quotes against the live offer price, not the stale submitted price', async () => {
+    // The shopper quoted at 500_000 when the offer was live at 500_000;
+    // the submitted payload still carries a stale 495_000 (within the
+    // negotiation floor, so the line itself is acceptable). The order RPC
+    // persists the live offer price, so validating the quote against the
+    // submitted value accepts checkout while the booking guard later
+    // rejects fulfillment as a quote mismatch.
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {
+        get_product_offers: {
+          data: [
+            { offer_id: LIVE_OFFER_ID, price: 500_000, condition: 'used' },
+          ],
+          error: null,
+        },
+      },
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Phone',
+            price: 500_000,
+            vat_category_code: 'S',
+            vat_rate: 0,
+          },
+        ],
+        shippingQuote: {
+          provider: 'GIGL',
+          provider_rate_id: 'GIGL_INTL_1_2_3_1',
+          price: 4500,
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          quote_request: {
+            merchantId: MERCHANT_ID,
+            sessionId: 'session-1',
+            shipmentType: 'international',
+            receiver: {
+              name: 'Jane Customer',
+              phone: '+14165550123',
+              address: '123 Queen Street West',
+              city: 'Toronto',
+              state: 'Ontario',
+              country: 'Canada',
+              countryCode: 'CA',
+              postalCode: 'M5V 3L9',
+            },
+            items: [
+              {
+                name: 'Phone',
+                quantity: 1,
+                weight: 1,
+                value: 500_000,
+                hsCode: '851712',
+                length: 10,
+                width: 8,
+                height: 6,
+              },
+            ],
+          },
+        },
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              product_id: '11111111-1111-4111-8111-111111111111',
+              name: 'Phone',
+              quantity: 1,
+              price: 495_000,
+              offerId: LIVE_OFFER_ID,
+              condition: 'used',
+            },
+          ],
+          subtotal: 495_000,
+          shipping_fee: 4500,
+          selected_quote_id: '11111111-1111-4111-8111-111111111111',
+          shipping_provider: 'GIGL',
+          shipping_address: {
+            address: '123 Queen Street West',
+            city: 'Toronto',
+            state: 'Ontario',
+            country: 'Canada',
+            countryCode: 'CA',
+            postalCode: 'M5V 3L9',
+          },
+        }),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+  });
+
   it('rejects selected GIGL international quotes with stale product shipping metadata', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(
@@ -5020,6 +5127,98 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
             offer_id: LIVE_OFFER_ID,
             has_assurance: true,
             assurance_fee: 20_000, // 400000 * 1 * 0.05 on the live offer
+          }),
+        ],
+      })
+    );
+  });
+
+  it('restores the stored discount and canonical fee on an offer replay hit', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_storefront_order_replay_economics') {
+          return Promise.resolve({
+            data: [
+              {
+                tax_amount: 30000,
+                discount_amount: 8000,
+                items: [
+                  {
+                    product_id: OFFER_PRODUCT_ID,
+                    offer_id: LIVE_OFFER_ID,
+                    condition: 'used',
+                    assurance_fee: 4500,
+                  },
+                ],
+              },
+            ],
+            error: null,
+          });
+        }
+        // The offer died between attempts: live verification is skipped
+        // on the replay hit, so this returning empty must not 400.
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'replay-checkout-1' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 100,
+            name: 'Used Phone',
+            has_assurance: true,
+            assurance_fee: 5200,
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    // The bypass skips the negotiation recompute and the fee recompute
+    // is a no-op on the empty replay price map, so the stored values
+    // must reach the RPC or the retry hashes a conflict.
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_discount_amount: 8000,
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            assurance_fee: 4500,
           }),
         ],
       })

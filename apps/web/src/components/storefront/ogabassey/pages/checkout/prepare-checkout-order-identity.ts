@@ -34,6 +34,7 @@ export function prepareCheckoutOrderIdentity({
         assurance_fee: item.assurance_fee,
         variantId: item.variantId,
         variantAttributes: item.variantAttributes,
+        offer_id: item.offer_id,
       })),
     });
 

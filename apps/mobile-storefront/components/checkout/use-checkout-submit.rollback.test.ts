@@ -194,6 +194,7 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     mockCreateOrder.mockImplementation(async (request) => {
       // Mirror production: freeze the request, substituting the stored
@@ -243,6 +244,7 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({
@@ -273,6 +275,7 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({

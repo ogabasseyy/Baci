@@ -249,6 +249,41 @@ describe('product-hydration', () => {
     expect(result[1]).toBe(rows[1]);
   });
 
+  it('marks attempted rows when base inventory hydration throws', async () => {
+    const rows = [
+      {
+        id: 'simple-product',
+        has_variants: false,
+        variants: [],
+      },
+      {
+        id: 'variant-product',
+        has_variants: true,
+        variants: [],
+      },
+    ];
+    mockHydrateProductRowsWithBaseInventory.mockImplementationOnce(() =>
+      Promise.reject(new Error('RPC failed'))
+    );
+
+    const result = await hydrateRowsNeedingBaseInventory(rows);
+
+    // Thrown failures carry the same marker as RPC error results so the
+    // PDP surfaces retry instead of the stock fallback; unattempted rows
+    // stay clean.
+    expect(result).toEqual([
+      { ...rows[0], base_inventory_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Failed to hydrate base inventory; using original rows',
+      expect.objectContaining({
+        error: expect.any(Error),
+      })
+    );
+  });
+
   it('identifies only flagged rows as condition-offer candidates', () => {
     expect(needsConditionOffersHydration({ has_condition_offers: true })).toBe(
       true

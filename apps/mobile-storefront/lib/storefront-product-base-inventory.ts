@@ -12,7 +12,15 @@ export async function hydrateProductRowsWithBaseInventory<
     );
 
   if (inventoryByProductId === null) {
-    return rows;
+    // RPC error results must carry the same marker as thrown failures:
+    // unmarked rows fall through to the raw stock_quantity fallback and
+    // render purchasable/out-of-stock with no retry state. Only rows
+    // with a usable id were attempted.
+    return rows.map((row) =>
+      typeof row.id === 'string'
+        ? { ...row, base_inventory_hydration_failed: true }
+        : row
+    );
   }
 
   return rows.map((row) => {

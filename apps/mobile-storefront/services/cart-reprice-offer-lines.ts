@@ -20,6 +20,11 @@ export interface CartPriceChange {
   newPrice: number;
 }
 
+export interface CartUnavailableLine {
+  id: string;
+  name: string;
+}
+
 export interface CartConditionChange {
   id: string;
   name: string;

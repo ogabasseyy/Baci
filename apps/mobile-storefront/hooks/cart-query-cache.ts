@@ -147,7 +147,22 @@ export function getCachedOptionStock(
   const variantId = options?.variantId ?? null;
   const offerId = variantId === null ? (options?.offerId ?? null) : null;
   if (variantId === null && offerId === null) {
-    return getCachedProductStock(queryClient, productId);
+    // Base lines resolve the same serialized policies as the PDP
+    // purchase fallback: a strict base with units left is available even
+    // when the legacy scalar reads 0. Prefer the hydrated detail entry
+    // (list rows predate base-inventory hydration).
+    const base =
+      findDetailCachedProduct(queryClient, productId) ??
+      findCachedProduct(queryClient, productId);
+    if (!base) return undefined;
+    if (base.base_effective_policy === 'serialized_strict') {
+      const units = finiteOrUndefined(base.base_available_units);
+      return units === undefined ? undefined : Math.max(0, units);
+    }
+    if (base.base_effective_policy === 'serialized_then_unlimited') {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    return finiteOrUndefined(base.stock_quantity);
   }
 
   const product = findCachedProductWithOption(queryClient, productId, {

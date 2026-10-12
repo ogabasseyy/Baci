@@ -83,6 +83,7 @@ export function createStatusResult() {
         points_cost: 200,
         reward_type: 'free_shipping',
         reward_value: null,
+        minimum_order_amount: null,
       },
     ],
     referral_code: 'ABCD1234',

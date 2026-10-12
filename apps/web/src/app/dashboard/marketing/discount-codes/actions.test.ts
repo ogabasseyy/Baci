@@ -109,6 +109,21 @@ describe('discount code actions staff access', () => {
     );
   });
 
+  it('rejects the reserved loyalty prefix', async () => {
+    mockEnsurePermission.mockResolvedValue({
+      merchant: { id: 'merchant-staff' },
+      staffAccess: { isOwner: false, isStaff: true, role: 'marketing' },
+    });
+
+    await expect(
+      upsertDiscountCode({
+        code: 'rdm-abcdef12',
+        discount_type: 'percentage',
+        discount_value: 20,
+      })
+    ).rejects.toThrow('RDM-');
+  });
+
   it('uses marketing edit permission for updates', async () => {
     const singleMock = vi.fn().mockResolvedValue({ error: null });
     const selectMock = vi.fn().mockReturnValue({ single: singleMock });

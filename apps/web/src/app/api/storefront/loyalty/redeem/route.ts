@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
+import { getRedemptionInstructions } from '@/lib/loyalty-redemption-instructions';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
-import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { createClient } from '@/lib/supabase/server';
 import {
   type StorefrontLoyaltyRedeemResult,
@@ -51,51 +51,6 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   redemption_code_collision:
     'Could not generate a redemption code. Please retry.',
 };
-
-function getRedemptionInstructions(
-  reward: {
-    reward_type: string;
-    discount_type?: string;
-    discount_value?: number;
-  },
-  merchantCurrency: { country?: string | null; payout_currency?: string | null }
-): string {
-  switch (reward.reward_type) {
-    case 'discount':
-      // Plain discounts without a positive value stay redeemable (the
-      // RPC's valued guard covers only the valued types), but neither
-      // checkout entry point bridges them — so manual fulfillment, not
-      // a checkout promise the wrapper must reject as not_applicable.
-      if (reward.discount_value == null || reward.discount_value <= 0) {
-        return 'Present this code to receive your discount. Contact the store for details.';
-      }
-      if (reward.discount_type === 'percentage') {
-        return `Apply this code at checkout to receive ${reward.discount_value}% off your order.`;
-      }
-      // Same formatter as the rewards catalog: fixed-value labels render
-      // in the merchant's own payout currency (NGN fallback matches the
-      // previous hardcoded symbol when the merchant row is unreadable).
-      return `Apply this code at checkout to receive ${formatMerchantCurrency(
-        reward.discount_value ?? 0,
-        {
-          country: merchantCurrency.country ?? null,
-          payout_currency: merchantCurrency.payout_currency ?? null,
-        },
-        { maximumFractionDigits: 0 }
-      )} off your order.`;
-    case 'free_shipping':
-      // Manual fulfillment: the checkout bridge accepts discount codes only.
-      return 'Present this code to receive free shipping on your order. Contact the store for details.';
-    case 'free_product':
-      return 'Present this code to claim your free product. Contact the store for details.';
-    case 'exclusive_access':
-      return 'This code grants you early access to new products and exclusive sales.';
-    case 'store_credit':
-      return 'The credit has been added to your store balance and applies automatically at checkout.';
-    default:
-      return 'Apply this code at checkout or present it in-store to redeem your reward.';
-  }
-}
 
 // POST - Redeem a reward. The RPC re-verifies ownership and redeems
 // atomically (loyalty tables are merchant-only under RLS); the response
@@ -259,9 +214,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Merchant currency for fixed-value instruction labels (country and
-    // payout_currency are anon-granted published columns, so this read
-    // is safe under RLS; failures fall back to the NGN default below).
-    const { data: merchantRow } = await supabase
+    // payout_currency are anon-granted published columns). A failed
+    // lookup passes null so the copy stays currency-neutral instead of
+    // mislabeling a non-NGN reward as NGN; only a cleanly absent row
+    // falls back to the NGN default.
+    const { data: merchantRow, error: merchantError } = await supabase
       .from('merchants')
       .select('country, payout_currency')
       .eq('id', parsed.data.merchant_id)
@@ -285,7 +242,7 @@ export async function POST(request: NextRequest) {
             discount_type: catalog.discount_type,
             discount_value: redemption.reward_value ?? undefined,
           },
-          merchantRow ?? {}
+          merchantError ? null : (merchantRow ?? {})
         ),
       },
     });

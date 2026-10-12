@@ -27,6 +27,7 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
             points_cost: 100,
             reward_type: 'discount_percentage',
             reward_value: 10,
+            minimum_order_amount: null,
           },
           {
             id: 'r-credit',
@@ -35,6 +36,7 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
             points_cost: 300,
             reward_type: 'store_credit',
             reward_value: 500,
+            minimum_order_amount: 2500,
           },
         ],
       },
@@ -65,6 +67,7 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
         points_required: 300,
         reward_type: 'store_credit',
         discount_value: 500,
+        minimum_order_amount: 2500,
         active: true,
       },
     ]);
@@ -260,5 +263,32 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
     expect(body.settings.welcome_bonus).toBe(0);
     expect(body.settings.referral_bonus_referrer).toBe(0);
     expect(body.settings.referral_bonus_referee).toBe(0);
+  });
+
+  it('never reports the current tier as next when names repeat', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        lifetime_points: 1500,
+        current_tier: 'Silver',
+        tiers: [
+          { name: 'Bronze', minPoints: 0 },
+          { name: 'Silver', minPoints: 1000 },
+          { name: 'Silver', minPoints: 5000 },
+          { name: 'Gold', minPoints: 10000 },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.tier).toBe('silver');
+    expect(body.next_tier).toBe('gold');
+    expect(body.points_to_next_tier).toBe(8500);
   });
 });

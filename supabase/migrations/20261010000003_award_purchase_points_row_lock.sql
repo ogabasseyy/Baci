@@ -50,6 +50,19 @@ BEGIN
         RETURN 0; -- Loyalty program not enabled
     END IF;
 
+    -- NULL or non-positive earning config awards nothing, checked before
+    -- the membership below is created: without this a first purchase
+    -- under a zero divisor would mint a bonus-less row (a PL/pgSQL
+    -- return commits the insert) and silently forfeit signup bonuses.
+    -- A NULL divisor would also yield NULL points (slipping past the
+    -- <= 0 check) and a zero divisor raises, failing checkout.
+    IF v_settings.points_currency_unit IS NULL
+       OR v_settings.points_currency_unit <= 0
+       OR v_settings.points_per_currency IS NULL
+       OR v_settings.points_per_currency <= 0 THEN
+        RETURN 0;
+    END IF;
+
     -- Get or create customer loyalty account. Lock the row: concurrent
     -- writers (referral credits, other purchases) must serialize on the
     -- read-modify-write below instead of overwriting each other.
@@ -102,16 +115,6 @@ BEGIN
     END IF;
 
     v_multiplier := COALESCE(v_multiplier, 1.0);
-
-    -- NULL or non-positive earning config awards nothing: without this a
-    -- NULL divisor yields NULL points (which slips past the <= 0 check
-    -- below) and a zero divisor raises division-by-zero, failing checkout.
-    IF v_settings.points_currency_unit IS NULL
-       OR v_settings.points_currency_unit <= 0
-       OR v_settings.points_per_currency IS NULL
-       OR v_settings.points_per_currency <= 0 THEN
-        RETURN 0;
-    END IF;
 
     -- Calculate points
     v_points_earned := FLOOR(

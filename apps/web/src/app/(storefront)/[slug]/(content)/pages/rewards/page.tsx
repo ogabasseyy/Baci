@@ -2,7 +2,7 @@
 
 import { Gift, History, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LoyaltyEnrollmentForm } from '@/components/storefront/loyalty/loyalty-enrollment-form';
 import { LoyaltyStatusCard } from '@/components/storefront/loyalty/loyalty-status-card';
 import { RewardsCatalog } from '@/components/storefront/loyalty/rewards-catalog';
@@ -54,6 +54,14 @@ export default function RewardsPage() {
     setRefreshToken((token) => token + 1);
   };
 
+  // The skeleton is for the initial fetch only. A background refetch
+  // (e.g. after onRedeemed) must not unmount the enrolled subtree: that
+  // would destroy the success dialog holding the just-issued code.
+  const [hasLoaded, setHasLoaded] = useState(false);
+  useEffect(() => {
+    if (!loading) setHasLoaded(true);
+  }, [loading]);
+
   // Loading state
   if (!merchantId) {
     return (
@@ -87,7 +95,7 @@ export default function RewardsPage() {
         </p>
       </div>
 
-      {loading ? (
+      {loading && !hasLoaded ? (
         <div className="space-y-6">
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-64 w-full" />

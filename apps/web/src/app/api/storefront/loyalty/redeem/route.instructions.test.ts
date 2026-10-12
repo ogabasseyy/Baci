@@ -51,7 +51,7 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
     );
   });
 
-  it('falls back to NGN instructions when the merchant row is unreadable', async () => {
+  it('stays currency-neutral when the merchant lookup fails', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {
         ...createSuccessResult(),
@@ -67,6 +67,39 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
         error: null,
       })
       .mockResolvedValueOnce({ data: null, error: { code: 'PGRST500' } });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.instructions).toBe(
+      'Apply this code at checkout to receive a fixed-amount discount off your order.'
+    );
+    expect(body.data.instructions).not.toContain('₦');
+  });
+
+  it('falls back to NGN only when the merchant row is cleanly absent', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createSuccessResult(),
+        reward_name: 'Two thousand off',
+        reward_type: 'discount_fixed',
+        reward_value: 2000,
+      },
+      error: null,
+    });
+    mocks.mockMaybeSingle
+      .mockResolvedValueOnce({
+        data: { id: CUSTOMER_ID },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null });
 
     const response = await POST(
       createRequest({

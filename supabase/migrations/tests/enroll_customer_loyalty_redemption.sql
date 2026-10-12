@@ -238,3 +238,32 @@ SELECT pg_temp.assert_true(
   ),
   'rejected non-positive redemption mutated state or stayed visible'
 );
+
+-- Stock decrements only after the redemption insert: a RETURN rolls
+-- back nothing, so decrementing before the mint loop would leak a unit
+-- when code generation exhausts its retries. (Exhaustion needs five
+-- RNG collisions, so the ordering itself is pinned, not the outcome.)
+SELECT pg_temp.assert_true(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+    ),
+    'redemption_code_collision'
+  ) < pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+    ),
+    'stock_quantity = stock_quantity - 1'
+  ),
+  'stock decrements before the mint loop can fail'
+);
+
+-- The code probe excludes merchant discount_codes as well as prior
+-- redemptions: checkout resolves merchant-first, so a merchant RDM-*
+-- code would otherwise shadow the redemption after points+stock.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%FROM public.discount_codes%pg_catalog.upper(code) = v_redemption_code%',
+  'code mint does not probe the merchant namespace'
+);

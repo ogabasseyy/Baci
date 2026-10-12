@@ -50,6 +50,7 @@ interface Reward {
     | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
+  minimum_order_amount?: number;
 }
 
 const rewardIcons = {
@@ -138,10 +139,14 @@ export function RewardsCatalog({
       return 'Free Product';
     }
     if (reward.reward_type === 'store_credit') {
+      // Up to 2 fraction digits: the RPC credits the exact value (e.g.
+      // USD 5.50), so rounding to $6 would advertise money never paid.
       const formattedValue = formatMerchantCurrency(
         reward.discount_value ?? 0,
         { country: merchantCountry, payout_currency: merchantPayoutCurrency },
-        { maximumFractionDigits: 0 }
+        // Explicit minimum: the shared normalizer would otherwise pin
+        // whole values to .00 when only a maximum is given.
+        { minimumFractionDigits: 0, maximumFractionDigits: 2 }
       );
       return `${formattedValue} Store Credit`;
     }
@@ -238,6 +243,20 @@ export function RewardsCatalog({
                       {reward.points_required.toLocaleString()} pts
                     </span>
                   </div>
+                  {(reward.minimum_order_amount ?? 0) > 0 && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Min. order{' '}
+                      {formatMerchantCurrency(
+                        reward.minimum_order_amount ?? 0,
+                        {
+                          country: merchantCountry,
+                          payout_currency: merchantPayoutCurrency,
+                        },
+                        { maximumFractionDigits: 0 }
+                      )}{' '}
+                      at checkout
+                    </p>
+                  )}
 
                   <Button
                     className="w-full"

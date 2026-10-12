@@ -6,8 +6,7 @@
 -- valued-reward guard, store_credit fulfillment, balance check,
 -- unique-code mint, deduction, and ledger row. The caller must own the
 -- customer row (customers.user_id = auth.uid()). Drop the 3-arg
--- signature: the idempotency key changes the argument list, and
--- CREATE OR REPLACE would leave the old overload behind.
+-- signature: the idempotency key changes the argument list.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
@@ -40,14 +39,6 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
-  FROM public.loyalty_settings
-  WHERE merchant_id = p_merchant_id;
-
-  IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
-    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
-  END IF;
-
   -- Existence, liveness, and ownership in one predicate (see enrollment).
   -- Runs before the replay lookup below: the stored success carries the
   -- redemption code, and returning it before this check would expose it
@@ -63,11 +54,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
-  -- Idempotency: a client retry replays the stored success instead of
-  -- minting a second redemption. The key lock serializes concurrent
-  -- same-key retries so the loser replays the winner (no orphans).
-  -- Failures are never stored, so a failed attempt retries fresh.
-  -- NULL keeps legacy direct calls working (the route always sends one).
+  -- Idempotency: a retry replays the stored success (key lock
+  -- serializes concurrent same-key retries; failures are never stored).
+  -- Runs before the program gate: the receipt replays even if the
+  -- merchant later disables or deletes the program row.
   IF p_idempotency_key IS NOT NULL THEN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtext('loyalty_redeem:' || p_idempotency_key::text)
@@ -78,6 +68,14 @@ BEGIN
     IF v_replay IS NOT NULL THEN
       RETURN v_replay;
     END IF;
+  END IF;
+
+  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
+  FROM public.loyalty_settings
+  WHERE merchant_id = p_merchant_id;
+
+  IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
+    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
 
   -- Lock the member row: concurrent redemptions must serialize on the
@@ -209,16 +207,9 @@ BEGIN
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
 
-  IF v_reward.stock_quantity IS NOT NULL THEN
-    UPDATE public.loyalty_rewards
-    SET stock_quantity = stock_quantity - 1,
-        updated_at = pg_catalog.now()
-    WHERE id = p_reward_id;
-  END IF;
-
-  -- Mint a merchant-unique code (probe + insert-retry like the referral
-  -- path): without the retry a 12-hex collision would resolve the wrong
-  -- redemption at checkout.
+  -- Mint a merchant-unique code (probe + insert-retry), excluding
+  -- merchant discount_codes too: checkout resolves merchant-first, so
+  -- a merchant RDM-* code would shadow the redemption.
   LOOP
     v_attempt := v_attempt + 1;
     v_redemption_code := 'RDM-' || pg_catalog.upper(pg_catalog.substring(pg_catalog.md5(pg_catalog.random()::text || pg_catalog.clock_timestamp()::text), 1, 12));
@@ -226,6 +217,10 @@ BEGIN
       SELECT 1 FROM public.reward_redemptions
       WHERE merchant_id = p_merchant_id
         AND pg_catalog.upper(discount_code) = v_redemption_code
+    ) AND NOT EXISTS (
+      SELECT 1 FROM public.discount_codes
+      WHERE merchant_id = p_merchant_id
+        AND pg_catalog.upper(code) = v_redemption_code
     ) THEN
       BEGIN
         INSERT INTO public.reward_redemptions (
@@ -245,6 +240,15 @@ BEGIN
       RETURN jsonb_build_object('success', false, 'error', 'redemption_code_collision');
     END IF;
   END LOOP;
+
+  -- Stock decrements only after the insert: a RETURN rolls back
+  -- nothing, so decrementing first would leak a unit on exhaustion.
+  IF v_reward.stock_quantity IS NOT NULL THEN
+    UPDATE public.loyalty_rewards
+    SET stock_quantity = stock_quantity - 1,
+        updated_at = pg_catalog.now()
+    WHERE id = p_reward_id;
+  END IF;
 
   -- store_credit fulfillment: credit the spendable customer balance in
   -- the same transaction (row locked: concurrent credits serialize).

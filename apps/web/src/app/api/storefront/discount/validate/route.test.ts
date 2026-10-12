@@ -134,17 +134,14 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
-  it('reports an already-used loyalty code', async () => {
+  it('collapses an already-used loyalty code to generic invalid', async () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code' ? [] : [loyaltyRow({ used: true })]
     );
 
     const body = await (await POST(request(baseBody))).json();
 
-    expect(body).toEqual({
-      valid: false,
-      error: 'Discount code has already been used',
-    });
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
   it('rejects a non-discount loyalty type as invalid', async () => {
@@ -174,7 +171,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body.error).toContain('Minimum purchase of');
   });
 
-  it('rejects an expired loyalty code', async () => {
+  it('collapses an expired loyalty code to generic invalid', async () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code'
         ? []
@@ -183,10 +180,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
 
     const body = await (await POST(request(baseBody))).json();
 
-    expect(body).toEqual({
-      valid: false,
-      error: 'Discount code has expired',
-    });
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
   it('falls back to invalid when the loyalty lookup errors', async () => {
@@ -202,7 +196,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
-  it('rejects a code whose reward was disabled after redeem', async () => {
+  it('collapses a disabled-reward code to generic invalid', async () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code'
         ? []
@@ -211,10 +205,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
 
     const body = await (await POST(request(baseBody))).json();
 
-    expect(body).toEqual({
-      valid: false,
-      error: 'This reward is no longer available',
-    });
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
   it('rejects a code with an unknown reward-enabled state', async () => {

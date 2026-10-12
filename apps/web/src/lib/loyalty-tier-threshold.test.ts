@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { toLadderThreshold } from './loyalty-tier-threshold';
+import {
+  dedupeLadderByName,
+  toLadderThreshold,
+} from './loyalty-tier-threshold';
 
 describe('toLadderThreshold', () => {
   it('passes safe integers through', () => {
@@ -32,5 +35,20 @@ describe('toLadderThreshold', () => {
     expect(toLadderThreshold('gold')).toBe(0);
     expect(toLadderThreshold('')).toBe(0);
     expect(toLadderThreshold({})).toBe(0);
+  });
+
+  it('keeps the lowest rung per case-insensitive name', () => {
+    expect(
+      dedupeLadderByName([
+        { name: 'bronze', minPoints: 0 },
+        { name: 'silver', minPoints: 1000 },
+        { name: 'SILVER', minPoints: 5000 },
+        { name: 'gold', minPoints: 10000 },
+      ])
+    ).toEqual([
+      { name: 'bronze', minPoints: 0 },
+      { name: 'silver', minPoints: 1000 },
+      { name: 'gold', minPoints: 10000 },
+    ]);
   });
 });

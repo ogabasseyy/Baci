@@ -23,6 +23,9 @@ const loyaltyStatusRewardSchema = z.object({
   points_cost: z.number(),
   reward_type: z.string(),
   reward_value: z.number().nullable(),
+  // Surfaced so the catalog can disclose the checkout minimum before
+  // the customer irreversibly spends points on the redemption.
+  minimum_order_amount: z.number().nullable(),
 });
 
 const loyaltyStatusTransactionSchema = z.object({

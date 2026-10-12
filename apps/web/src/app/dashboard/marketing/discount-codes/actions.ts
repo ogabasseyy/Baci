@@ -10,7 +10,15 @@ import { createClient } from '@/lib/supabase/server';
 const upsertDiscountCodeSchema = z
   .object({
     id: z.string().optional(),
-    code: z.string().min(1, 'Code is required'),
+    // RDM- is reserved for loyalty redemptions (issue #3165):
+    // checkout resolves merchant codes first, so a merchant RDM-*
+    // code would shadow the loyalty redemption.
+    code: z
+      .string()
+      .min(1, 'Code is required')
+      .refine((c) => !c.trim().toUpperCase().startsWith('RDM-'), {
+        message: 'Code prefix RDM- is reserved for loyalty redemptions',
+      }),
     description: z.string().optional(),
     discount_type: z.enum(['percentage', 'fixed_amount']),
     discount_value: z.number().positive('Discount value must be positive'),

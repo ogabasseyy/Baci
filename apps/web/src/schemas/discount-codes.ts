@@ -1,7 +1,19 @@
 import { z } from 'zod';
 
 const discountCodeFields = {
-  code: z.string().trim().min(1).max(50).toUpperCase(),
+  // RDM- is reserved for loyalty redemptions (issue #3165): checkout
+  // resolves merchant codes first, so a merchant RDM-* code would
+  // shadow the loyalty redemption even after points+stock. The refine
+  // sees the uppercased value, so the reservation is case-insensitive.
+  code: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .toUpperCase()
+    .refine((c) => !c.startsWith('RDM-'), {
+      message: 'Code prefix RDM- is reserved for loyalty redemptions',
+    }),
   description: z.string().max(500).nullable().optional(),
   discount_type: z.enum(['percentage', 'fixed_amount']),
   discount_value: z.number().positive(),

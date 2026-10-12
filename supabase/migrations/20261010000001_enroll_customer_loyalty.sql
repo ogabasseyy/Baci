@@ -75,14 +75,19 @@ BEGIN
   END IF;
 
   -- Fail closed when the program is missing or disabled. Clamp negative
-  -- merchant config to zero so balances can never go negative.
+  -- merchant config to zero so balances can never go negative. FOR UPDATE
+  -- pins the row through settlement: a concurrent settings upsert (disable
+  -- or bonus change) blocks until this transaction commits instead of
+  -- slipping in under the stale read. No deadlock risk: the settings
+  -- endpoint never takes the advisory creation lock below.
   SELECT
     GREATEST(COALESCE(signup_bonus_points, 0), 0),
     GREATEST(COALESCE(referral_bonus_points, 0), 0)
   INTO v_signup_bonus, v_referral_bonus
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
-    AND enabled IS TRUE;
+    AND enabled IS TRUE
+  FOR UPDATE;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');

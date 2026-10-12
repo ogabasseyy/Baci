@@ -245,3 +245,30 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'cross-customer replay leaked the stored code'
 );
+
+-- 23g. The replay lookup precedes the program-state gate: a receipt
+-- replays even after the merchant disables the program, instead of
+-- failing program_unavailable on already-consumed points+stock. The
+-- program is re-enabled immediately: later files need it live.
+UPDATE public.loyalty_settings
+SET enabled = false
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000113');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000024',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Too pricey'),
+     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+   ) AS result),
+  'disabled program blocked the idempotent replay'
+);
+
+UPDATE public.loyalty_settings
+SET enabled = true
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';

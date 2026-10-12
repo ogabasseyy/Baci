@@ -108,3 +108,25 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'tier-crossing status returned the wrong tier'
 );
+
+-- 15. The catalog projection surfaces minimum_order_amount so the UI can
+-- disclose the checkout minimum before the customer spends points.
+UPDATE public.loyalty_rewards
+SET minimum_order_amount = 2500
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Free shipping';
+
+-- Member 011 belongs to user 101 (same caller as case 14): the status
+-- function rejects cross-owner reads, so re-auth past case 14b's 105.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT (value ->> 'minimum_order_amount')::numeric = 2500
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'rewards') AS value
+   WHERE value ->> 'name' = 'Free shipping'),
+  'status projection dropped minimum_order_amount'
+);

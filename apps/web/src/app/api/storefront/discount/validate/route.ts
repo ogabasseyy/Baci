@@ -105,29 +105,18 @@ export async function POST(request: NextRequest) {
           Number.isFinite(loyaltyValue) &&
           loyaltyValue > 0
         ) {
-          // Match the order wrapper's policy gate: a code whose reward
-          // was disabled after redeem must not preflight as valid.
-          if (loyaltyCode.reward_enabled !== true) {
-            return NextResponse.json(
-              {
-                valid: false,
-                error: 'This reward is no longer available',
-              },
-              { status: 200 }
-            );
-          }
-          if (loyaltyCode.used) {
-            return NextResponse.json(
-              { valid: false, error: 'Discount code has already been used' },
-              { status: 200 }
-            );
-          }
+          // Dead codes collapse to the same generic invalid an unknown
+          // code gets: distinct used/expired/disabled messages would let
+          // anyone probe live codes without spending. The order wrapper
+          // re-enforces state and keeps the authoritative distinction.
           if (
-            loyaltyCode.expires_at &&
-            new Date(loyaltyCode.expires_at) < new Date()
+            loyaltyCode.reward_enabled !== true ||
+            loyaltyCode.used ||
+            (loyaltyCode.expires_at &&
+              new Date(loyaltyCode.expires_at) < new Date())
           ) {
             return NextResponse.json(
-              { valid: false, error: 'Discount code has expired' },
+              { valid: false, error: 'Invalid discount code' },
               { status: 200 }
             );
           }

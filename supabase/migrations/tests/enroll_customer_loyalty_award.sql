@@ -177,3 +177,36 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+-- 5h. A broken earning config must not mint a membership: with a zero
+-- divisor a first purchase returns 0 and creates no customer_loyalty
+-- row, so the customer still receives signup bonuses when enrolling.
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES (
+  '02aa0000-0000-4000-8000-000000000012',
+  '02aa0000-0000-4000-8000-000000000001',
+  'award-b@example.com'
+);
+
+UPDATE public.loyalty_settings
+SET points_currency_unit = 0
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '02aa0000-0000-4000-8000-000000000012',
+    '02aa0000-0000-4000-8000-000000000001',
+    '02aa0000-0000-4000-8000-0000000000a5',
+    250
+  ) = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '02aa0000-0000-4000-8000-000000000012'
+  ),
+  'zero divisor minted a bonus-less membership'
+);
+
+UPDATE public.loyalty_settings
+SET points_currency_unit = 100
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';

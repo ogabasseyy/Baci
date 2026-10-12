@@ -2,7 +2,10 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
-import { toLadderThreshold } from '@/lib/loyalty-tier-threshold';
+import {
+  dedupeLadderByName,
+  toLadderThreshold,
+} from '@/lib/loyalty-tier-threshold';
 import { createClient } from '@/lib/supabase/server';
 import {
   type StorefrontLoyaltyStatusResult,
@@ -186,21 +189,18 @@ export async function GET(request: NextRequest) {
     // falls back to bronze styling for names outside the standard four.
     const tier = status.current_tier.toLowerCase();
 
-    // Progress along the merchant-defined ladder (the same tiers
-    // calculate_loyalty_tier uses), not the hardcoded defaults: a merchant
-    // with custom tiers (Starter/VIP) must never be shown silver/gold. Search
-    // after the member's current rung — a threshold raised after the tier was
-    // earned must not report the current tier as next (which would render
-    // negative progress). Names outside the ladder fall back to a
-    // lifetime-only search.
-    const ladder = [...status.tiers]
-      .map((entry) => ({
-        name: entry.name.toLowerCase(),
-        minPoints: entry.minPoints,
-        multiplier: entry.multiplier ?? null,
-        perks: entry.perks ?? [],
-      }))
-      .sort((a, b) => a.minPoints - b.minPoints);
+    // Progress along the deduped merchant ladder (same tiers SQL uses);
+    // search after the member's rung, lifetime-only for unknown names.
+    const ladder = dedupeLadderByName(
+      [...status.tiers]
+        .map((entry) => ({
+          name: entry.name.toLowerCase(),
+          minPoints: entry.minPoints,
+          multiplier: entry.multiplier ?? null,
+          perks: entry.perks ?? [],
+        }))
+        .sort((a, b) => a.minPoints - b.minPoints)
+    );
     const currentPosition = ladder.findIndex((entry) => entry.name === tier);
     const rungsAhead =
       currentPosition >= 0 ? ladder.slice(currentPosition + 1) : ladder;
@@ -251,6 +251,8 @@ export async function GET(request: NextRequest) {
         reward_type: catalog.reward_type,
         discount_type: catalog.discount_type,
         discount_value: reward.reward_value ?? undefined,
+        // Catalog discloses the checkout minimum before points are spent.
+        minimum_order_amount: reward.minimum_order_amount ?? undefined,
         active: true,
       };
     });

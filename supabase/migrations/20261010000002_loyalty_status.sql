@@ -160,7 +160,8 @@ BEGIN
       'description', description,
       'points_cost', points_cost,
       'reward_type', reward_type,
-      'reward_value', reward_value
+      'reward_value', reward_value,
+      'minimum_order_amount', minimum_order_amount
     ) AS reward
     FROM public.loyalty_rewards
     WHERE merchant_id = p_merchant_id

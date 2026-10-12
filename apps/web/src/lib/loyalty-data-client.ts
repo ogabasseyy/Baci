@@ -15,6 +15,7 @@ export interface LoyaltyReward {
     | 'store_credit';
   discount_type?: 'percentage' | 'fixed';
   discount_value?: number;
+  minimum_order_amount?: number;
   active: boolean;
 }
 

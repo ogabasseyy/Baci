@@ -85,4 +85,49 @@ describe('RewardsPage', () => {
       '/test-store/account/login?redirect=/test-store/pages/rewards'
     );
   });
+
+  it('keeps the enrolled subtree mounted during a background refetch', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    const settled = {
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    };
+    loyaltyMock.mockReturnValue(settled as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // The catalog fires onRedeemed -> page refetch -> loading flips true
+    // while old data is still rendered. The catalog (and its success
+    // dialog) must survive; only the initial fetch shows the skeleton.
+    catalogMock.mockClear();
+    loyaltyMock.mockReturnValue({ ...settled, loading: true } as never);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).toHaveBeenCalled();
+  });
 });

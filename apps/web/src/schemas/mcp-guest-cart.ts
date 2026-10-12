@@ -23,6 +23,23 @@ export const mcpGuestCartInputSchema = z
       .describe(
         'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
       ),
+    expectedVersion: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        'Expected canonical cart version for shared-cart writes; omit for legacy guest carts'
+      ),
+    operationId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe(
+        'Idempotency key for shared-cart writes; omit for legacy guest carts'
+      ),
   })
   .refine((value) => value.quantity !== 0 || value.cart_token !== undefined, {
     message: 'cart_token is required to remove a product',

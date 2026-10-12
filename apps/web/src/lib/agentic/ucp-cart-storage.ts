@@ -20,9 +20,54 @@ export interface UcpCartSessionRecord {
   expires_at?: string;
   merchant_id: string;
   metadata: JsonRecord;
+  migratedToCartId?: string | null;
   shipping_address: JsonRecord | null;
   status: UcpCartInternalStatus;
   updated_at?: string;
+}
+
+/**
+ * Thrown when a UCP cart has migrated to the shared canonical cart. Safe
+ * and retryable: the caller refreshes onto the canonical cart instead of
+ * writing the retired row.
+ */
+export class UcpCartMigratedError extends Error {
+  override readonly name = 'UcpCartMigratedError';
+  readonly code = 'refresh_required' as const;
+  readonly retryable = true;
+  readonly cartId: string | null;
+  constructor(cartId?: string | null) {
+    super('Agent cart moved to the shared cart; refresh to continue');
+    this.cartId = cartId ?? null;
+  }
+}
+
+/** Guards a UCP write path against retired (migrated) carts. */
+export function assertUcpCartNotMigrated(record: {
+  migratedToCartId?: string | null;
+}): void {
+  if (record.migratedToCartId) {
+    throw new UcpCartMigratedError(record.migratedToCartId);
+  }
+}
+
+/**
+ * Maps a database fence violation to the migrated error so late writers
+ * get refresh_required; every other error passes through untouched.
+ */
+export function mapUcpCartWriteError(error: unknown): unknown {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string' &&
+    (error as { message: string }).message.includes(
+      'migrated cart is read-only'
+    )
+  ) {
+    return new UcpCartMigratedError();
+  }
+  return error;
 }
 
 export function buildUcpCartInsert({

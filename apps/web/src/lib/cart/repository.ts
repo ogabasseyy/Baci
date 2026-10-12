@@ -185,7 +185,8 @@ function parseState(value: unknown): RawCartState | null {
   };
 }
 
-function parseResult(data: unknown): RawMutationResult {
+/** Parses and validates a raw cart RPC envelope, failing closed. */
+export function parseRawMutationResult(data: unknown): RawMutationResult {
   if (!isRecord(data) || typeof data.ok !== 'boolean') {
     throw new CartRepositoryError(
       'temporarily_unavailable',
@@ -254,7 +255,7 @@ async function callCartRpc(
       `Cart RPC ${name} failed`
     );
   }
-  return parseResult(response.data);
+  return parseRawMutationResult(response.data);
 }
 
 /**

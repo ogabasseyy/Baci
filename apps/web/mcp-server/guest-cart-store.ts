@@ -7,6 +7,7 @@ import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
 import {
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 
@@ -68,11 +69,21 @@ export class GuestCartStore {
 
   private async rpc<T>(name: string, params: Record<string, unknown>) {
     const { data, error } = await this.supabase.rpc(name, params);
-    if (error)
+    if (error) {
+      // A migration that lands between the fence check and the write trips
+      // the database fence trigger: report refresh, never an outage.
+      if (
+        typeof (error as { message?: unknown }).message === 'string' &&
+        (error as { message: string }).message.includes(
+          'migrated cart is read-only'
+        )
+      )
+        throw new GuestCartMigratedError();
       throw new GuestCartStorageUnavailableError(
         `guest cart storage failed (${name})`,
         error.code ?? undefined
       );
+    }
     return data as T;
   }
 
@@ -100,6 +111,17 @@ export class GuestCartStore {
       expires_at: parsed.data.expires_at,
       version,
     };
+  }
+
+  private async getMigration(token: string): Promise<string | null> {
+    const rows = await this.rpc<{ migrated_to_cart_id: unknown }[]>(
+      'get_mcp_guest_cart_migration',
+      { p_token: token }
+    );
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    return typeof row?.migrated_to_cart_id === 'string'
+      ? row.migrated_to_cart_id
+      : null;
   }
 
   private async deleteBestEffort(
@@ -230,6 +252,10 @@ export class GuestCartStore {
           await this.deleteBestEffort(token, cart.version);
           throw new GuestCartExpiredError();
         }
+        // A migrated cart is retired: refuse the write before validation
+        // or TTL extension so the canonical cart stays the only writer.
+        const migratedTo = await this.getMigration(token);
+        if (migratedTo) throw new GuestCartMigratedError(migratedTo);
         // Absolute quantities make a lost-response retry safe without incrementing twice.
         const items = [
           ...cart.items.filter(

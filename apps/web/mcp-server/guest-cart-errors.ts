@@ -12,6 +12,15 @@ export class GuestCartFullError extends Error {
   }
 }
 
+export class GuestCartMigratedError extends Error {
+  override readonly name = 'GuestCartMigratedError';
+  readonly cartId: string | null;
+  constructor(cartId?: string | null) {
+    super('Guest cart moved to the shared cart; refresh to continue');
+    this.cartId = cartId ?? null;
+  }
+}
+
 export class GuestCartStorageUnavailableError extends Error {
   override readonly name = 'GuestCartStorageUnavailableError';
   // Token-free failure code for health/logs: only the code is safe to

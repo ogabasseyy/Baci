@@ -15,8 +15,9 @@ ChatGPT, web and mobile. No merge, deploy or live orders from this work.
 - [x] Task 1: baseline + shared contract (see evidence below)
 - [x] Task 2: scoped guest access + canonical schema (see evidence below)
 - [x] Task 3: atomic commands + authoritative pricing (see evidence below)
-- [ ] Tasks 4–14 per dependency order
-  (4 → 5 → 6 → 7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
+- [x] Task 4: legacy migration without duplicate writers (see evidence below)
+- [ ] Tasks 5–14 per dependency order
+  (5 → 6 → 7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
 
 ## Task 1 evidence
 
@@ -142,5 +143,41 @@ outage rules, voucher/negotiation handling, verbatim options with
 checkout-time value enforcement, stable `replace` IDs, 7-day receipt
 retention, standalone-worker-safe TS boundary).
 
+## Task 4 evidence
+
+New: `apps/web/src/lib/cart/legacy-migration.ts` (hash, 1:1 mappers,
+migrate call) + tests; migration
+`20261012050300_commerce_cart_legacy_migration.sql` (hash/fence columns,
+maintaining + fence triggers, migrate RPC, MCP fence lookup);
+`supabase/tests/commerce_cart_legacy_migration.sql` (11 sections).
+Modified: `mcp-guest-cart.ts` (+`expectedVersion`/`operationId` only),
+`guest-cart-errors.ts` (+`GuestCartMigratedError`), `guest-cart-store.ts`
+(proactive fence check + trigger mapping), fake supabase (migration
+mirror), `ucp-cart-storage.ts` (record field, assert, error mapping).
+Also fixed a Task 3 latent bug: temp tables now dropped when present so
+repeated replace/migrate calls share one transaction (new §21 pins it).
+
+TDD:
+- SQL RED: §2 failed on the canned RPC shell after §1 hash checks
+  passed. SQL GREEN: 11/11 sections (hash fixtures, exact migration,
+  replay, second-token refresh without attach/duplicate, foreign
+  principal denied, stale-version refresh + fresh retry, missing/invalid
+  fail-closed, fence trigger blocks, UCP fencing + staleness, lookup).
+- Race GREEN (throwaway `/tmp/baci-cart-race/`): two sessions, one
+  cart `a9e670fb`, one ref, loser replayed.
+- JS RED→GREEN: migration client 8/8 (incl. DB-matching sha256
+  fixture), MCP schema 18/18, store 17 incl. 3 fencing, UCP 5/5,
+  worker-boundary tripwire green.
+- Bare-node proof: tsx imports all 5 worker modules with zero web
+  runtime imports (7 functions verified callable).
+- Web typecheck clean (incl. tools-workers, mcp); Biome clean.
+- Neighbor suites green: store concurrency, fake, tool + failures,
+  cart schema tests (82/82 across 8 files).
+- CodeRabbit still unavailable (quota); flagged for packet review.
+
+Sequencing note: UCP route wiring of the new guards lands in Task 10
+(adapters); until then no migrated UCP rows can exist because nothing
+calls migrate, and the trigger fences every writer regardless.
+
 Review handoffs: Phase A packet delivered (Tasks 1–2). Phase B packet
-after Task 4; commits stay reviewable per task.
+after this commit; commits stay reviewable per task.

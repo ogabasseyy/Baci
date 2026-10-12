@@ -168,3 +168,34 @@ the default ports).
 - TS service/repository/pricing import no Next.js runtime modules and
   take an injected client, so the standalone MCP worker can reuse them
   (Task 4 proves the worker boundary separately).
+
+## Task 4 legacy migration and fencing
+
+- `commerce_cart_migrate_legacy(provider, hash, op, lines, version,
+  currency)` runs under a bootstrap principal: advisory lock per legacy
+  key, convergent mapping in `commerce_cart_legacy_refs`, exactly one
+  initial grant, catalog-validated lines with preserved
+  identity/quantity and catalog pricing. Unknown handles report
+  `not_found`; invalid lines fail `invalid_item` with nothing fenced.
+- A principal that already migrated one legacy token gets
+  `refresh_required` plus its existing cart for any other token: a
+  second legacy cart is never attached and never duplicates. Replays
+  require a live grant for the mapped cart, else `unauthorized`.
+- Optimistic fencing closes the read-then-migrate window: MCP matches
+  the legacy row version, UCP matches `updated_at`; a mismatch returns
+  `refresh_required` for re-read and retry. Fencing and creation commit
+  atomically in the RPC.
+- Retired rows are fenced for every writer by UPDATE triggers on
+  `mcp_guest_carts` and `agentic_cart_sessions`; retention DELETEs stay
+  allowed. The MCP store checks the fence lookup before validating or
+  extending TTL and maps mid-flight fence trips to
+  `GuestCartMigratedError`; UCP writes get `UcpCartMigratedError`
+  (`refresh_required`, retryable) via the storage guard, wired into
+  routes in Task 10.
+- MCP tool input accepts only two new optional fields,
+  `expectedVersion` and `operationId`, for canonical writes (Task 10).
+  Legacy TTL/expiry and guest UX semantics are unchanged.
+- Worker boundary proven: service, repository, pricing,
+  mutation-errors and legacy-migration import and run in bare Node via
+  tsx with no web runtime; `worker-boundary.test.ts` trips on any new
+  `server-only`, `@/`, `next` or `zod` import.

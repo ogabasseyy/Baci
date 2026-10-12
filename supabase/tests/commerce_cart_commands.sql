@@ -595,4 +595,28 @@ END
 $$;
 RESET ROLE;
 
+-- 21. Repeated replaces in one transaction succeed (no temp-table residue).
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_id":"22222222-2222-4222-8222-222222222222","cart_grant_id":"99999999-9999-4999-8999-999999999991","cart_principal_id":"guest-a1","cart_scope":"session"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-replace-twice-1', 10,
+    '{"type":"replace","lines":[]}'::jsonb
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'first replace must succeed, got %', v_result; END IF;
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-replace-twice-2', 11,
+    '{"type":"replace","lines":[{"item":{"productId":"33333333-3333-4333-8333-333333333333"},"quantity":1}]}'::jsonb
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'second replace must succeed, got %', v_result; END IF;
+  IF (v_result -> 'state' ->> 'version')::integer <> 12 THEN
+    RAISE EXCEPTION 'replaces must advance the version, got %', v_result;
+  END IF;
+END
+$$;
+RESET ROLE;
+
 ROLLBACK;

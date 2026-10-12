@@ -585,6 +585,13 @@ BEGIN
       OR jsonb_array_length(p_command -> 'lines') > 20 THEN
       RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
     END IF;
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = 'cart_replace_want' AND n.nspname LIKE 'pg_temp%'
+    ) THEN
+      DROP TABLE cart_replace_want;
+    END IF;
     CREATE TEMPORARY TABLE cart_replace_want (
       product_id uuid, variant_id uuid, condition text, options jsonb,
       quantity integer, voucher_token text, voucher_award uuid,

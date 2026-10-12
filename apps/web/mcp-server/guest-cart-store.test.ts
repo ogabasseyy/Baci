@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
@@ -261,4 +262,42 @@ it('fails creation with a retry-later code when the table is at capacity', async
   expect(outcome).toBe('capacity_exhausted');
   expect(store.lastStorageErrorCode).toBe('capacity_exhausted');
   expect(fake.calls).toHaveLength(1);
+});
+
+it('blocks writes to a migrated cart with the canonical mapping', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([{ product_id: id, quantity: 1 }]));
+  fake.migrate(token, other);
+  const store = storeOn(fake.supabase);
+  const failure = await store
+    .update(token, { product_id: other, quantity: 1 }, validate)
+    .then(
+      () => 'wrote',
+      (error: unknown) => error
+    );
+  expect(failure).toBeInstanceOf(GuestCartMigratedError);
+  expect((failure as GuestCartMigratedError).cartId).toBe(other);
+  expect(
+    fake.calls.some((call) => call.name === 'upsert_mcp_guest_cart')
+  ).toBe(false);
+  expect(store.lastStorageErrorCode).toBeNull();
+});
+
+it('maps a mid-flight migration fence to the migrated error', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([{ product_id: id, quantity: 1 }]));
+  fake.intercept((name) => {
+    if (name === 'upsert_mcp_guest_cart') fake.migrate(token, other);
+  });
+  const store = storeOn(fake.supabase);
+  await expect(
+    store.update(token, { product_id: other, quantity: 1 }, validate)
+  ).rejects.toBeInstanceOf(GuestCartMigratedError);
+});
+
+it('still probes a migrated token as live', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([{ product_id: id, quantity: 1 }]));
+  fake.migrate(token, other);
+  await expect(storeOn(fake.supabase).hasToken(token)).resolves.toBe(true);
 });

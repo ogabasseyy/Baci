@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { primaryCardCustodyFixture as fixture } from './primary-wallet-card-custody.test-fixture';
 import { applyPrimaryCardSignedCustody } from './primary-wallet-card-custody-signed';
@@ -39,7 +39,9 @@ describe('signed primary custody boundary', () => {
   });
   it('verifies rotation retries against retained secrets', async () => {
     const input = setup();
-    const retainedSecret = randomBytes(32).toString('hex');
+    const retainedSecret = createHash('sha256')
+      .update('retained-custody-key')
+      .digest('hex');
     const signature = createHmac('sha512', retainedSecret)
       .update(input.rawBody)
       .digest('hex');

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
@@ -35,7 +35,9 @@ describe('private signed raw-byte custody intake', () => {
       .fn()
       .mockResolvedValueOnce(fixture.ready)
       .mockResolvedValueOnce('accepted');
-    const retainedSecret = randomBytes(32).toString('hex');
+    const retainedSecret = createHash('sha256')
+      .update('retained-custody-key')
+      .digest('hex');
     const accept = createPrimaryCardCustodyInboxIntake({
       configuration: {
         ...fixture.configuration,

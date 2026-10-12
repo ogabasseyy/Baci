@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { applyPrimaryWalletSignedInflow } from './primary-wallet-signed-inflow';
 
@@ -10,8 +10,11 @@ vi.mock('./primary-wallet-inflow-receipt', () => ({
     return { eventId: 'test-event', providerWalletId: 'test-wallet' };
   }),
 }));
-// Per-run random key shared by signing and verification; no committed secret.
-const secret = randomBytes(32).toString('hex');
+// Deterministic key derived from a stable label: reproducible across runs
+// (no random test data) with no committed secret material.
+const secret = createHash('sha256')
+  .update('test-only-webhook-secret')
+  .digest('hex');
 const rawBody = Buffer.from('{ "eventId": "test-event" }');
 const signature = createHmac('sha512', secret).update(rawBody).digest('hex');
 

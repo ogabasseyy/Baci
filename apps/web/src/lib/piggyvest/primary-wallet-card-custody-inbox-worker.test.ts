@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
 import { createPrimaryCardCustodyInboxWorker } from './primary-wallet-card-custody-inbox-worker';
@@ -56,7 +56,9 @@ describe('leased durable custody receipt worker', () => {
     );
   });
   it('completes rotation retries signed with a retained key', async () => {
-    const retainedSecret = randomBytes(32).toString('hex');
+    const retainedSecret = createHash('sha256')
+      .update('retained-custody-key')
+      .digest('hex');
     const signature = createHmac('sha512', retainedSecret)
       .update(Buffer.from(fixture.claim.rawHex, 'hex'))
       .digest('hex');

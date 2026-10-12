@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
@@ -12,10 +12,10 @@ const boundary = vi.hoisted(() => ({
   families: ['bank'] as string[],
 }));
 vi.mock('server-only', () => ({}));
-// Holder for the per-run key: mock factories below are hoisted above imports,
-// so they read the shared value instead of a literal secret.
+// Holder for the deterministic key: mock factories below are hoisted above
+// imports, so they read the shared derived value instead of a literal secret.
 const testSecret = vi.hoisted(() => ({ value: '' }));
-testSecret.value = randomBytes(32).toString('hex');
+testSecret.value = createHash('sha256').update('fixture-secret').digest('hex');
 
 vi.mock('@/env', () => ({
   getPiggyvestWebhookSecret: () => testSecret.value,

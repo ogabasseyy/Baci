@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgres-configuration';
@@ -69,7 +69,9 @@ describe.skipIf(process.env.PIGGYVEST_RUN_LOCAL_POSTGRES !== '1')(
     });
 
     it('connects raw authenticated request intake to durable storage and quarantine', async () => {
-      const secret = randomBytes(32).toString('hex');
+      const secret = createHash('sha256')
+        .update('synthetic-runtime-secret')
+        .digest('hex');
       const runtime = createPiggyvestStagingRuntime({
         intake: {
           environment: 'staging',

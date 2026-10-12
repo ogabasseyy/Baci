@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { primaryCardCustodyFixture as fixture } from './primary-wallet-card-custody.test-fixture';
 import { primaryCardCustodyInboxFixture as inbox } from './primary-wallet-card-custody-inbox.test-fixture';
 
@@ -17,8 +17,11 @@ const policy = {
   exhaustiveAliasContractApproved: true,
 };
 const policyBytes = JSON.stringify(policy);
-// Per-run random key shared by signing and verification; no committed secret.
-const policyIssuerKey = randomBytes(32).toString('hex');
+// Deterministic key derived from a stable label: reproducible across runs
+// (no random test data) with no committed secret material.
+const policyIssuerKey = createHash('sha256')
+  .update('mock-approved-transfer-policy-key')
+  .digest('hex');
 const {
   custody: _custody,
   webhookSecret: _webhookSecret,

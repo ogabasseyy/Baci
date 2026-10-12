@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { primaryCardCustodyFixture as fixture } from './primary-wallet-card-custody.test-fixture';
 import { createPrimaryCardCustodyLaunchBinding } from './primary-wallet-card-custody-launch-binding';
@@ -17,8 +17,11 @@ const bytes = Buffer.from(
     ],
   })
 );
-// Per-run random key shared by signing and verification; no committed secret.
-const issuerKey = randomBytes(32).toString('hex');
+// Deterministic key derived from a stable label: reproducible across runs
+// (no random test data) with no committed secret material.
+const issuerKey = createHash('sha256')
+  .update('mock-issuer-delivery-key')
+  .digest('hex');
 const approval = {
   approved: 'true',
   path: '/fixture/crosswalk.json',

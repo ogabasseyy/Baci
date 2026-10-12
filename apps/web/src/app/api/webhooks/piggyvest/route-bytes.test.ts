@@ -1,12 +1,14 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ createServiceClient: vi.fn() }));
-// Holder for the per-run key: mock factories below are hoisted above imports,
-// so they read the shared value instead of a literal secret.
+// Holder for the deterministic key: mock factories below are hoisted above
+// imports, so they read the shared derived value instead of a literal secret.
 const testSecret = vi.hoisted(() => ({ value: '' }));
-testSecret.value = randomBytes(32).toString('hex');
+testSecret.value = createHash('sha256')
+  .update('synthetic-staging-byte-test')
+  .digest('hex');
 const secret = testSecret.value;
 
 vi.mock('@/env', () => ({

@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import {
+  PILOT_MAX_AXIS_PIXELS,
   PILOT_MAX_DECODE_CHANNELS,
   PILOT_MAX_DECODED_PIXELS,
   PILOT_SHARP_LIMITS,
@@ -46,6 +47,19 @@ export async function snapshotFormat(
   if ((metadata.pages ?? 1) > 1) {
     throw new Error(
       `merchant image pilot: snapshot for "${label}" is animated but the pilot stages stills only`
+    );
+  }
+  // The generator's per-axis ceiling (rotation only swaps axes, so the
+  // raw metadata pair decides like assertAcceptedMetadata): a fully
+  // decodable 20,000x1 strip passes the 40M-pixel Sharp limit but must
+  // still refuse — staging it would publish an original the generator
+  // rejects on sight.
+  if (
+    (metadata.width ?? 0) > PILOT_MAX_AXIS_PIXELS ||
+    (metadata.height ?? 0) > PILOT_MAX_AXIS_PIXELS
+  ) {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" is ${metadata.width}x${metadata.height} but axes are capped at ${PILOT_MAX_AXIS_PIXELS}`
     );
   }
   // metadata() is header-only: force a full pixel decode (bounded by the

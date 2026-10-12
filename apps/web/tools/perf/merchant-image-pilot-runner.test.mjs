@@ -8,6 +8,21 @@ import { finishRun, prepareRun } from './merchant-image-pilot-runner.mjs';
 
 const ROUTE = 'http://localhost:3000/pilot-lab/store/ogabassey?arm=pilot';
 
+// Realistic Browsertime --verbose launch line: the runner binds only
+// when the recorded command line shows the prepared profile dir.
+async function browserLog(dir, name, profileDir) {
+  const path = join(dir, name);
+  await writeFile(
+    path,
+    [
+      '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      `  --user-data-dir=${profileDir} --headless --no-first-run`,
+      '[browsertime] Navigating to http://localhost:3000/pilot-lab/store/ogabassey?arm=pilot',
+    ].join('\n')
+  );
+  return path;
+}
+
 function pngBuffer(width, height) {
   return sharp({
     create: { background: '#ffffff', channels: 3, height, width },
@@ -75,6 +90,7 @@ describe('merchant-image-pilot-runner', () => {
       })
     );
     const finished = await finishRun({
+      browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
       dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
@@ -133,6 +149,7 @@ describe('merchant-image-pilot-runner', () => {
     const shotPath = join(dir, 'shot.png');
     await writeFile(shotPath, pngBytes);
     const base = {
+      browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
       dpr: '2',
       outDir: join(dir, 'bound'),
       runJson: join(dir, 'run', 'run.json'),
@@ -184,6 +201,7 @@ describe('merchant-image-pilot-runner', () => {
     const harPath = join(dir, 'raw.har');
     await writeHar(harPath);
     const args = {
+      browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
       dpr: '2',
       har: harPath,
       outDir: join(dir, 'bound'),
@@ -213,5 +231,68 @@ describe('merchant-image-pilot-runner', () => {
         })
       );
     }
+  });
+
+  it('refuses a HAR whose browser never launched the prepared profile', async () => {
+    // The default-profile accident: the operator captures with another
+    // profile, so the recorded command line shows no launch with the
+    // prepared dir — binding would stamp a warm navigation as cold.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    const prepared = await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    expect(
+      JSON.parse(await readFile(join(dir, 'run', 'run.json'), 'utf8'))
+    ).toEqual({
+      profileDir: join(dir, 'profile'),
+      runId: prepared.runId,
+      tool: 'browsertime',
+    });
+    const pngBytes = await pngBuffer(750, 1334);
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, pngBytes);
+    const harPath = join(dir, 'raw.har');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const base = {
+      dpr: '2',
+      har: harPath,
+      outDir: join(dir, 'bound'),
+      runJson: join(dir, 'run', 'run.json'),
+      screenshot: shotPath,
+      viewport: '375x667',
+    };
+    const defaultLog = await browserLog(
+      dir,
+      'default.log',
+      '/tmp/accidental-default'
+    );
+    await expect(
+      finishRun({ ...base, browserLog: defaultLog })
+    ).rejects.toThrow(/no launch with the prepared profile dir/);
+    // A sibling-prefix path must not satisfy the match either.
+    const prefixLog = await browserLog(
+      dir,
+      'prefix.log',
+      `${join(dir, 'profile')}-sibling`
+    );
+    await expect(finishRun({ ...base, browserLog: prefixLog })).rejects.toThrow(
+      /no launch with the prepared profile dir/
+    );
   });
 });

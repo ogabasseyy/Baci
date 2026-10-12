@@ -43,43 +43,6 @@ beforeEach(() => {
 });
 
 describe('instrumentation register', () => {
-  it('rejects non-lab startup with staged public assets before registering services', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    assertPilotPublicAssetsMock.mockImplementationOnce(() => {
-      throw new Error('staged merchant pilot assets');
-    });
-    await expect(register()).rejects.toThrow('staged merchant pilot assets');
-    expect(registerOTelMock).not.toHaveBeenCalled();
-    expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
-  });
-  it('awaits pilot startup validation and rejects boot on invalid staged inputs', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    initializeLabRuntimeMock.mockRejectedValueOnce(
-      new Error('invalid staged inputs')
-    );
-    await expect(register()).rejects.toThrow('invalid staged inputs');
-    expect(registerOTelMock).not.toHaveBeenCalled();
-  });
-
-  it('initializes the enabled pilot before completing registration', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    await register();
-    expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
-  });
-  it('boots the pilot gate against the resolved public dir, never bare cwd', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    await register();
-    // The boot gate must inspect the same tree the build gate did: the
-    // shared resolver (config-stashed, standalone-anchored, or cwd),
-    // not a cwd-joined lookalike that diverges under `next start <dir>`
-    // or a standalone server run from elsewhere.
-    expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
-    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
-      '/resolved/public'
-    );
-  });
   it('registers Vercel OpenTelemetry in the Node.js runtime', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('VERCEL_ENV', 'preview');

@@ -12,15 +12,18 @@
 //      screenshot-capture record.
 //
 // Honesty boundaries: freshProfile is true by construction (the runner
-// creates the profile dir itself and refuses non-empty ones); the
-// operator must actually point the browser at it. finish refuses stale
-// (>1h), future-dated, multi-page, and already-bound HARs instead of
-// emitting records the gate would fail — bind-time refusal, not
-// gate-time surprise.
+// creates the profile dir itself and refuses non-empty ones), and
+// finish binds only when the browser's recorded command line shows a
+// launch with that exact profile dir — a default- or reused-profile
+// accident refuses instead of stamping a warm navigation as cold.
+// finish also refuses stale (>1h), future-dated, multi-page, and
+// already-bound HARs instead of emitting records the gate would fail —
+// bind-time refusal, not gate-time surprise.
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import {
+  MAX_BROWSER_LOG_BYTES,
   MAX_HAR_BYTES,
   MAX_SCREENSHOT_BYTES,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
@@ -32,6 +35,7 @@ import {
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 const RUNNER_CLI_OPTIONS = [
+  'browser-log',
   'dpr',
   'har',
   'out-dir',
@@ -90,12 +94,17 @@ export async function prepareRun({ outDir, profileDir, tool }) {
   );
   await writeFile(
     join(out, 'run.json'),
-    `${JSON.stringify({ runId, tool: checked }, null, 2)}\n`
+    `${JSON.stringify({ profileDir: profile, runId, tool: checked }, null, 2)}\n`
   );
   return { outDir: out, profileDir: profile, resetAt, runId };
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function finishRun({
+  browserLog,
   dpr,
   har,
   outDir,
@@ -107,6 +116,32 @@ export async function finishRun({
   const handle = JSON.parse(handleRead.bytes.toString('utf8'));
   if (typeof handle?.runId !== 'string' || handle.runId.length === 0) {
     throw new Error(`run handle has no run id: ${runJson}`);
+  }
+  if (typeof handle.profileDir !== 'string' || handle.profileDir.length === 0) {
+    throw new Error(`run handle has no prepared profile dir: ${runJson}`);
+  }
+  // Profile binding: the browser's recorded command line (Browsertime
+  // --verbose log) must show a launch with the exact prepared profile
+  // dir. A default- or reused-profile accident leaves no such token and
+  // refuses here instead of stamping a warm navigation as cold. The
+  // match is delimiter-terminated so a sibling prefix (/a/prof vs the
+  // prepared /a/profile) cannot satisfy it.
+  const logRead = await readUpToBytes(
+    required(browserLog, 'browser-log'),
+    MAX_BROWSER_LOG_BYTES
+  );
+  if (logRead.truncated) {
+    throw new Error(
+      `browser log exceeds ${MAX_BROWSER_LOG_BYTES} bytes: ${browserLog}`
+    );
+  }
+  const launched = new RegExp(
+    `user-data-dir=${escapeRegExp(handle.profileDir)}(?=["'\\s]|$)`
+  );
+  if (!launched.test(logRead.bytes.toString('utf8'))) {
+    throw new Error(
+      `browser log shows no launch with the prepared profile dir (${handle.profileDir}); refusing to bind: ${browserLog}`
+    );
   }
   const out = required(outDir, 'out-dir');
   await mkdir(out, { recursive: true });
@@ -198,7 +233,8 @@ export async function finishRun({
 
 const USAGE = `merchant-image-pilot-runner.mjs binds measurement evidence to the effective-settings gate.
   prepare: --phase=prepare --profile-dir=P --tool=T --out-dir=O
-  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --viewport=WxH --dpr=N --out-dir=O2`;
+  finish:  --phase=finish --run-json=O/run.json --har=H.har --screenshot=S.png --viewport=WxH --dpr=N --browser-log=B.log --out-dir=O2
+  (capture with Browsertime --verbose and the prepared profile dir; finish verifies the recorded launch before binding)`;
 
 export async function runRunner(argv) {
   const args = parseStrictArgs(argv, RUNNER_CLI_OPTIONS);
@@ -211,6 +247,7 @@ export async function runRunner(argv) {
   }
   if (args.phase === 'finish') {
     return await finishRun({
+      browserLog: args['browser-log'],
       dpr: args.dpr,
       har: args.har,
       outDir: args['out-dir'],

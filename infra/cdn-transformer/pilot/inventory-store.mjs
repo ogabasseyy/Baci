@@ -7,8 +7,10 @@
 // ownership-checked: a slow append whose lock was stolen must not delete
 // the replacement and admit a third appender alongside it.
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_INVENTORY_LOCK_BYTES } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 
 export class PilotAcquireError extends Error {
   constructor(message) {
@@ -47,8 +49,21 @@ async function isBeyondOwnerGrace(lockDir) {
   return Date.now() - info.mtimeMs > INVENTORY_LOCK_OWNER_GRACE_MS;
 }
 
-function readOwnerText(lockDir) {
-  return readFile(join(lockDir, 'owner.json'), 'utf8').catch(() => null);
+// Owner reads go through the byte ceiling: a corrupt or replaced
+// multi-gigabyte owner.json classifies as unreadable (null) instead of
+// exhausting the acquirer, holder check, or release. Null flows into
+// the existing grace/eviction outcomes, so every path still fails
+// closed — stale owners reap past the grace, live ones wedge loudly.
+async function readOwnerText(lockDir) {
+  try {
+    const { bytes, truncated } = await readUpToBytes(
+      join(lockDir, 'owner.json'),
+      MAX_INVENTORY_LOCK_BYTES
+    );
+    return truncated ? null : bytes.toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 async function isStaleOwnerText(lockDir, owner) {
@@ -140,9 +155,7 @@ export async function acquireInventoryLock(lockDir, hooks = {}) {
       // readable at the live path. A stealer acting after that sees a
       // live owner and backs off, which closes the race both ways.
       await hooks.afterOwnerWrite?.();
-      const live = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
-        () => null
-      );
+      const live = await readOwnerText(lockDir);
       let liveToken = null;
       if (live !== null) {
         try {
@@ -229,9 +242,7 @@ export async function assertInventoryLockHeld(lockDir, token) {
 }
 
 export async function releaseInventoryLock(lockDir, token) {
-  const owner = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
-    () => null
-  );
+  const owner = await readOwnerText(lockDir);
   if (owner === null) {
     return;
   }

@@ -88,6 +88,18 @@ export const MAX_SERVED_PAGE_BYTES = 16 * 1024 * 1024;
 // must read the record before classifying it.
 export const MAX_ENCODER_LOCK_BYTES = 64 * 1024;
 
+// Inventory lock owner record: honest owners are ~100 bytes of JSON,
+// so a 64 KiB ceiling only ever trips on a corrupt or replaced file —
+// while acquisition, ownership checks, and release must read the
+// record before classifying it.
+export const MAX_INVENTORY_LOCK_BYTES = 64 * 1024;
+
+// Browser verbose log scanned for the prepared profile binding: runner
+// logs run kilobytes to low megabytes, so a 16 MiB ceiling only ever
+// trips on a wrong or hostile file — while finish must read the log
+// before binding the HAR to the run.
+export const MAX_BROWSER_LOG_BYTES = 16 * 1024 * 1024;
+
 // Merchant UUID predicate shared by every contract mirror. Zod 3's
 // .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
 // so both sides spell the rule explicitly instead: versions 1-8 plus the

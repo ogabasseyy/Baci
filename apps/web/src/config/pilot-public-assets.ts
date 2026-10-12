@@ -70,7 +70,17 @@ function assertConfinedEntry(root: string, name: string): void {
 }
 
 function assertFillers(fillersDir: string, labEnabled: boolean): void {
-  directoryExists(fillersDir);
+  // The caller lists this entry, so it existed a moment ago — but a
+  // file squatting the name (or a mid-boot deletion) is not the
+  // directory: fail with the curated message, not a raw ENOTDIR/ENOENT
+  // path leak from the read below.
+  if (!directoryExists(fillersDir)) {
+    throw new Error(
+      labEnabled
+        ? 'lab public pilot tree is missing the fillers directory'
+        : 'non-lab public pilot tree is missing the fillers directory'
+    );
+  }
   const files = readdirSync(fillersDir);
   for (const file of files) {
     const expected = FILLERS[file];

@@ -252,6 +252,25 @@ describe('snapshotFormat', () => {
     );
   });
 
+  it('rejects a decodable snapshot past the generator axis ceiling', async () => {
+    // 20,000x1 fully decodes under the 40M-pixel Sharp limit, but the
+    // generator caps each axis at 16,384: staging it would publish an
+    // original assertAcceptedMetadata rejects on sight.
+    const snapshot = await sharp({
+      create: {
+        background: '#ffffff',
+        channels: 3,
+        height: 1,
+        width: 20000,
+      },
+    })
+      .png()
+      .toBuffer();
+    await expect(snapshotFormat(snapshot, 'merchant/slot')).rejects.toThrow(
+      /axes are capped at 16384/
+    );
+  });
+
   it('rejects a header-readable but pixel-truncated snapshot', async () => {
     const snapshot = await readFile(
       join(GENERATOR_FIXTURES, 'corrupt-truncated.jpg')

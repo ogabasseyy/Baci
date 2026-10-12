@@ -141,6 +141,25 @@ test('isStaleInventoryLock never steals by age from a live owner', async () => {
     );
     assert.equal(await isStaleInventoryLock(corrupt), true);
   }
+  // Oversized owners classify through the byte ceiling, never by
+  // buffering: a giant record reads as unreadable (null), so an aged
+  // one reaps as stale while a fresh one wedges loudly like any other
+  // unverifiable holder.
+  const { MAX_INVENTORY_LOCK_BYTES } = await import('./constants.mjs');
+  const { utimes } = await import('node:fs/promises');
+  const giant = `{"token":"${'x'.repeat(MAX_INVENTORY_LOCK_BYTES)}"}`;
+  const old = join(dir, 'giant-old.lock');
+  await mkdir(old);
+  await write(join(old, 'owner.json'), giant);
+  // The grace reads the lock DIRECTORY mtime: age it after the write
+  // (file creation refreshes it).
+  const aged = new Date(Date.now() - 300_000);
+  await utimes(old, aged, aged);
+  assert.equal(await isStaleInventoryLock(old), true);
+  const fresh = join(dir, 'giant-fresh.lock');
+  await mkdir(fresh);
+  await write(join(fresh, 'owner.json'), giant);
+  assert.equal(await isStaleInventoryLock(fresh), false);
 });
 
 test('appendInventoryRecord waits for a live owner instead of stealing by age', async () => {

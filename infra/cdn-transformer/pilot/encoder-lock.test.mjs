@@ -64,6 +64,24 @@ test('different roots serialize on the shared host lock', async () => {
   await second.release();
 });
 
+test('a world-writable lock directory is refused, never served', async () => {
+  // A predictable host path pre-created lax by another user would let
+  // them forge or replace encoder.lock: ownership and mode gate the
+  // directory before any claim is read or published. POSIX-only (the
+  // suite runs on macOS/Linux CI).
+  if (typeof process.getuid !== 'function') {
+    return;
+  }
+  const { chmod } = await import('node:fs/promises');
+  const outputRoot = await setupRoot();
+  const locksDir = await setupLocks();
+  await chmod(locksDir, 0o777);
+  await assert.rejects(
+    acquireEncoderLock(outputRoot, { locksDir }),
+    /writable by another user/
+  );
+});
+
 test('isolated lock dirs never contend', async () => {
   const first = await acquireEncoderLock(await setupRoot(), {
     locksDir: await setupLocks(),

@@ -11,6 +11,11 @@ export const PILOT_MAX_JOBS = 20;
 // contract fixtures (sourcePixelsTooMany must fail on both sides) and
 // lab-decode-limits.test.mjs.
 export const PILOT_MAX_DECODED_PIXELS = 40_000_000;
+// Mirror of MAX_AXIS_PIXELS in
+// infra/cdn-transformer/pilot/constants.mjs. The unaccepted-snapshot
+// path enforces the generator's per-axis ceiling so staging never
+// publishes an original the generator would reject.
+export const PILOT_MAX_AXIS_PIXELS = 16384;
 // Mirror of MAX_INPUT_BYTES in
 // infra/cdn-transformer/pilot/constants.mjs: the manifest source-bytes
 // claim is capped at the acquisition ceiling on every mirror, so an

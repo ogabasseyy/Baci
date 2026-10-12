@@ -33,6 +33,7 @@ export type { PilotRole } from './merchant-image-variant-pilot-constants';
 // Public barrel: constants, acceptance, and binding live in sibling modules
 // and are re-exported here so existing importers are unaffected.
 export {
+  PILOT_MAX_AXIS_PIXELS,
   PILOT_MAX_DECODE_CHANNELS,
   PILOT_MAX_DECODED_PIXELS,
   PILOT_MAX_JOBS,

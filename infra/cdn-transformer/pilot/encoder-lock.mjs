@@ -41,10 +41,14 @@ const ACQUIRE_ATTEMPTS = 3;
 const CLAIM_TEMP_MAX_AGE_MS = 3_600_000;
 
 // A lock directory — host default or injected — must be a real
-// directory, never a symlink: recursive mkdir would sail through a
-// planted link and push every lock op outside the intended tree.
-// Canonicalized before use (the tmpdir itself may resolve through a
-// system link).
+// directory owned by this user and unwritable by anyone else: a
+// world-writable directory pre-created by another user would
+// otherwise let them replace or forge encoder.lock and defeat
+// serialization (or block generation outright). Type, owner, and
+// mode are all verified; canonicalized before use (the tmpdir
+// itself may resolve through a system link). POSIX-only: platforms
+// without uid/mode semantics (Windows) rely on the per-user tmpdir
+// ACLs instead.
 async function assertConfinedLocksDir(dir) {
   const info = await lstat(dir).catch(() => null);
   const real = info ? await realpath(dir).catch(() => null) : null;
@@ -54,18 +58,32 @@ async function assertConfinedLocksDir(dir) {
       'encoder locks must be a confined directory, not a symlink'
     );
   }
+  if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
+    throw new PilotGenerateError(
+      'unsafe-output-directory',
+      'encoder locks directory is owned by another user'
+    );
+  }
+  if (typeof process.getuid === 'function' && (info.mode & 0o022) !== 0) {
+    throw new PilotGenerateError(
+      'unsafe-output-directory',
+      'encoder locks directory is writable by another user'
+    );
+  }
   return real;
 }
 
 // Shared host lock directory, scoped to the effective uid: another
 // user's records would classify EPERM-held forever (a cross-user DoS)
 // or invite cross-user steals, while same-user concurrent roots — the
-// bound that matters — still serialize.
+// bound that matters — still serialize. Created owner-only so a
+// pre-existing lax directory fails the mode check above instead of
+// silently serving shared state.
 async function hostEncoderLocksDir() {
   const euid =
     typeof process.geteuid === 'function' ? process.geteuid() : 'shared';
   const dir = join(tmpdir(), `pilot-encoder-locks-${euid}`);
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   return assertConfinedLocksDir(dir);
 }
 

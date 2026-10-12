@@ -143,6 +143,10 @@ describe('cancellation refund in-flight deferral', () => {
           },
         ])
       )
+      // The terminal-anomaly probe loads refund rows before the
+      // deferral; none here, so the run still defers for claim
+      // finalization.
+      .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({ update });
 
     const error = await executeOrderCancellationSideEffect({
@@ -156,7 +160,7 @@ describe('cancellation refund in-flight deferral', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
     expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
 

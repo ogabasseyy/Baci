@@ -131,4 +131,53 @@ describe('cancellation refund manual-linked-leg deferral', () => {
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
+
+  it('defers a partial manual on a non-Paystack leg instead of quarantining it', async () => {
+    const paymentQuery = transactionQuery([
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'korapay',
+        gateway_reference: 'KPY-1',
+        id: 'payment-1',
+        status: 'completed',
+      },
+    ]);
+    const refundQuery = transactionQuery([
+      {
+        amount: 40,
+        currency: 'NGN',
+        gateway: 'manual',
+        gateway_reference: 'split-1#1',
+        id: 'refund-1',
+        metadata: { payment_transaction_id: 'payment-1' },
+        status: 'completed',
+      },
+    ]);
+    const resetEq = vi.fn().mockReturnThis();
+    const resetUpdate = vi.fn().mockReturnValue({ eq: resetEq });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce(refundQuery)
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update: resetUpdate });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    // Quarantining here would terminalize the row as
+    // delivery_uncertain and disable further recording; the merchant
+    // simply has not finished, so the run must defer for completion.
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_manual_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(resetUpdate).toHaveBeenCalledWith({ attempts: 0 });
+  });
 });

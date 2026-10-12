@@ -93,47 +93,13 @@ BEGIN
       'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
   -- Terminal coverage comes capped per payment leg from the shared
   -- helper: an overfunded leg's excess must not zero the remainder
-  -- while sibling legs sit uncovered. Pending stays a global sum:
-  -- over-counting in-flight money only blocks actions safely.
-  -- Nonmatching-currency rows (null or foreign) stay out of
-  -- coverage but count as pending: the manager cannot convert
-  -- money, so an unexplained linked row must block recording
-  -- until reconciliation instead of leaving the full balance
-  -- recordable beside it (double-record). The outer WHERE keeps
-  -- only the link-validated predicate for this reason: currency
-  -- filtering here would drop the row from both sums.
-  SELECT private.capped_refund_coverage_v1(
-      p_order_id, v_order.merchant_id, v_order.currency),
-    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
-      OR (status IN ('completed','refunded')
-        AND (public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
-          OR (public.normalized_gateway_name_v1(gateway)='MANUAL'
-            AND metadata->>'method'='paystack'))
-        AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')
-      OR (status IN ('completed','refunded')
-        AND upper(btrim(currency)) IS DISTINCT FROM upper(btrim(
-          COALESCE(NULLIF(BTRIM(v_order.currency),''),'NGN'))))
-      OR (status IN ('completed','refunded')
-        AND NOT COALESCE((EXISTS (SELECT 1 FROM public.transactions leg
-            WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
-              AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
-              AND leg.transaction_type='payment'
-              AND (public.normalized_gateway_name_v1(transactions.gateway)='MANUAL'
-                OR public.normalized_gateway_name_v1(transactions.gateway)
-                  =public.normalized_gateway_name_v1(leg.gateway)))
-          OR (transactions.metadata->>'payment_transaction_id' IS NULL
-            AND v_sole_external_leg
-            AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway)),false))),0)
-    INTO v_refunded,v_pending FROM public.transactions
-    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
-    -- No link predicate above: a row claiming a leg outside this
-    -- order (or otherwise unresolvable) must reach the FILTER's
-    -- mismatch branch and hold pending, not vanish from both sums.
-    -- Excluding it would leave the full balance recordable beside
-    -- possibly real provider money (double-record) while the claim
-    -- finalizes past evidence nothing ever reconciles. The mismatch
-    -- test compares links as text so a malformed link blocks
-    -- instead of raising.
+  -- while sibling legs sit uncovered. Pending is the extracted
+  -- global-sum helper (split for the 300-line boundary).
+  v_refunded := private.capped_refund_coverage_v1(
+    p_order_id, v_order.merchant_id, v_order.currency);
+  v_pending := private.pending_refund_evidence_v1(p_order_id,
+    v_order.merchant_id, v_order.currency,
+    v_sole_external_leg, v_sole_leg_gateway);
   -- Self-terminal payment legs (e.g. PayPal flips the payment row
   -- itself instead of inserting a refund row) count toward their side:
   -- refunded legs are returned money, refund_pending legs are
@@ -284,6 +250,21 @@ BEGIN
     -- implies a pre-existing row), so refresh it or this response
     -- advertises a retry the next call rejects until the next poll.
     v_manual_partial := v_remaining > 0;
+  END IF;
+  -- Internal-only reversals satisfy the refund without touching the
+  -- refund ledger, so the transactions-scoped sync trigger never
+  -- persists the terminal label: without this the response reports
+  -- refunded while the order row stays paid, and a dashboard refresh
+  -- reverts the panel while reporting stays stale. Persist before
+  -- exposing. Transaction-driven zeros already flipped via the
+  -- trigger, so the UPDATE's own predicate scopes it to the
+  -- internal-only (and legacy-drift) remainder; cancelled-only and
+  -- merchant-scoped like the trigger.
+  IF v_remaining <= 0 AND v_refunded > 0 THEN
+    UPDATE public.orders o SET payment_status = 'refunded', updated_at = now()
+     WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id
+       AND o.payment_status IS DISTINCT FROM 'refunded'
+       AND o.shipping_status IN ('cancelled', 'canceled');
   END IF;
   -- Response shaping lives in the response helper (part 3).
   RETURN private.refund_status_response(p_order_id,

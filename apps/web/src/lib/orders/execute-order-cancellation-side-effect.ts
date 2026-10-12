@@ -16,6 +16,7 @@ import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-ca
 import { quarantineInternalOnlyManualPaystack } from '@/lib/orders/quarantine-internal-only-manual-paystack';
 import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { quarantineRefundedLegTerminalAnomaly } from '@/lib/orders/quarantine-refunded-leg-terminal-anomaly';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
@@ -72,23 +73,27 @@ export async function executeOrderCancellationSideEffect({
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
   }
-  const actionableLegs = transactionRows.filter(
-    (row) => row.status !== 'refunded'
-  );
-  if (actionableLegs.length === 0) {
-    // Every leg self-terminalized (no separate refund row to initiate
-    // or verify): defer so the drain reclaims and the claim observes
-    // the terminal evidence and finalizes, instead of failing a row
-    // with nothing actionable or completing past the finalizer.
-    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
-    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
-  }
-  const allLegs = actionableLegs as GatewayPaymentTransaction[];
   // Link validity spans every funded leg, including self-terminal
   // refunded ones: a terminal refund row linked to a refunded leg is
   // legitimate evidence, not an outside-order link. Only initiation
   // and outstanding-balance work scope to the actionable set.
   const linkLegs = transactionRows as GatewayPaymentTransaction[];
+  const actionableLegs = transactionRows.filter(
+    (row) => row.status !== 'refunded'
+  );
+  if (actionableLegs.length === 0) {
+    // Every leg self-terminalized: probe terminal-evidence anomalies
+    // first (the claim routes them here; deferring past them spins
+    // the drain), then defer for claim finalization.
+    await quarantineRefundedLegTerminalAnomaly({
+      legs: linkLegs,
+      order,
+      supabase,
+    });
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
+  }
+  const allLegs = actionableLegs as GatewayPaymentTransaction[];
   // Only external legs initiate provider refunds or verify listings.
   const transactions = allLegs.filter((t) =>
     isExternalPaymentGateway(t.gateway)
@@ -174,11 +179,17 @@ export async function executeOrderCancellationSideEffect({
   // legs. In-flight non-Paystack legs (e.g. PayPal flips the payment row
   // itself while its provider refund is pending) are not unsupported:
   // their provider refund resolves on its own, so they must reach the
-  // provider-awaiting deferral below instead. Reference-less legs still
-  // quarantine — with nothing to track they can never resolve by waiting.
+  // provider-awaiting deferral below instead. Manual-pending legs bypass
+  // too: the merchant is still recording the balance (no provider
+  // reference needed for manual records), and quarantining would
+  // disable recording (delivery_uncertain) instead of deferring for
+  // completion — unverifiable Paystack claims still quarantine via the
+  // withheld path. Other reference-less legs quarantine: with nothing
+  // to track they can never resolve by waiting.
   const unsupportedLegs = transactions.filter(
     (transaction) =>
       !refundedPaymentIds.has(transaction.id) &&
+      !manualPendingLegIds.has(transaction.id) &&
       (!transaction.gateway_reference ||
         (normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' &&
           transaction.status !== 'refund_pending'))

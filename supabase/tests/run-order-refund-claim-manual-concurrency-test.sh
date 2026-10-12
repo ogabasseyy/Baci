@@ -131,6 +131,7 @@ if [ "${SKIP_REFRESH:-0}" != '1' ]; then
     -f "$repo_root/supabase/migrations/20261002090100_order_refund_coverage.sql" \
     -f "$repo_root/supabase/migrations/20261002090200_order_refund_record_helpers.sql" \
     -f "$repo_root/supabase/migrations/20261002090250_order_refund_response.sql" \
+    -f "$repo_root/supabase/migrations/20261002090275_order_refund_pending.sql" \
     -f "$repo_root/supabase/migrations/20261002090300_order_refund_manage.sql" \
     -f "$repo_root/supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql" \
     -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"

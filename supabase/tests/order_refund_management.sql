@@ -1269,6 +1269,12 @@ BEGIN
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000051',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-051',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000053',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-053',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000054',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-054',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
@@ -1436,7 +1442,21 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000051', 'refund', 100, 'NGN',
       'completed', 'korapay', 'kp-51',
       jsonb_build_object(
-        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000075'));
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000075')),
+    -- A foreign-currency capture that self-terminalized: the refunded
+    -- leg prices in different money, so neither the label nor the
+    -- aggregate claim may treat it as returned.
+    ('9ef12000-0000-4000-8000-000000000080',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000053', 'payment', 100, 'USD',
+      'completed', 'paystack', 'pp-53', '{}'::jsonb),
+    -- A wallet-only cancellation reversed through the internal
+    -- ledger: no refund rows, no side-effect row — the status read
+    -- itself must persist the terminal label.
+    ('9ef12000-0000-4000-8000-000000000081',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000054', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'w-54', '{}'::jsonb);
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1501,6 +1521,25 @@ BEGIN
   IF v_label <> 'paid' THEN
     RAISE EXCEPTION 'live-capture gap erased by excess, got %', v_label;
   END IF;
+  -- A foreign-currency capture that self-terminalizes is not
+  -- returned money: the label must not flip on the transition.
+  UPDATE public.transactions SET status = 'refunded'
+  WHERE id = '9ef12000-0000-4000-8000-000000000080';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000053';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'foreign-currency leg flipped label, got %', v_label;
+  END IF;
+  -- The wallet-only order reverses through the internal ledger
+  -- (reusing the main-block wallet and customer).
+  INSERT INTO public.customer_wallet_transactions (
+    wallet_id, customer_id, merchant_id, type, amount, balance_after,
+    source_type, source_id
+  ) VALUES (
+    '9ef14000-0000-4000-8000-000000000001',
+    '9ef10200-0000-4000-8000-000000000001',
+    '9ef10100-0000-4000-8000-000000000001', 'adjustment', 100, 180,
+    'order_reversal', '9ef11000-0000-4000-8000-000000000054');
 END;
 $refund_round33_fixtures$;
 
@@ -1602,6 +1641,37 @@ BEGIN
   IF (v_result->>'pending')::numeric <> 100 THEN
     RAISE EXCEPTION 'cross-gateway row not held pending, got %',
       v_result->>'pending';
+  END IF;
+  -- A self-terminalized foreign-currency leg holds the full
+  -- remainder: the claim test below asserts the aggregate gate
+  -- agrees instead of finalizing unvalidated money.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000053'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'foreign-currency leg reduced remainder, got %',
+      v_result->>'remaining';
+  END IF;
+  -- Internal-only reversals persist the terminal label on read: with
+  -- no refund ledger rows the sync trigger never fires, so the
+  -- status call itself must persist refunded instead of exposing a
+  -- label a refresh would revert.
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000054';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'internal-only order pre-flipped, got %', v_label;
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000054'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'internal-only reversal not terminal, got %',
+      v_result->>'status';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000054';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'internal-only label not persisted, got %', v_label;
   END IF;
   -- A first manual record that leaves a balance behind is partial in
   -- the same response: the panel must not advertise a retry the
@@ -2138,6 +2208,15 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000051');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'anomalous evidence finalized, got %', v_status;
+  END IF;
+  -- A self-terminalized foreign-currency leg is not validated
+  -- money: the claim routes to the worker instead of finalizing.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000053', 'refund',
+    '9ef13000-0000-4000-8000-000000000053');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'foreign-currency leg finalized, got %', v_status;
   END IF;
   -- The claim pins its orders-row lock explicitly: claim-vs-manual
   -- serialization must not rest on the incidental side-effect FK.

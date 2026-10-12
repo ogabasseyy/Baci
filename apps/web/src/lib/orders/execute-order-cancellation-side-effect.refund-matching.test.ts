@@ -250,6 +250,52 @@ describe('cancellation refund leg matching', () => {
     );
   });
 
+  it('quarantines terminal anomalies when every leg already refunded', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            ...payment('payment-1', 100, 'paystack-ref-1'),
+            status: 'refunded',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: '42',
+            id: 'refund-orphan',
+            metadata: { provider_refund_status: 'processed' },
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    // The claim routes anomalous terminal evidence here instead of
+    // finalizing: deferring past it would spin the drain forever
+    // with settlement unrunnable, so the blocker quarantines.
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
   it('initiates clean legs before quarantining mismatched ones', async () => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });

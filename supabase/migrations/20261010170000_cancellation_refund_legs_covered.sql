@@ -199,6 +199,22 @@ BEGIN
              AND v_sole_external_leg
              AND public.normalized_gateway_name_v1(anomaly.gateway) = v_sole_leg_gateway)), false)
        )
+  ) AND NOT EXISTS (
+    -- Self-terminal refunded legs are invisible to the coverage scans
+    -- above (completed/refund_pending only), so a blank or
+    -- foreign-currency one would finalize without validation while
+    -- the manager excludes its amount and the notification ledger
+    -- rejects the mismatch — a finalized order with contradictory
+    -- outstanding money and a dead-lettered notification. A refunded
+    -- leg counts as returned only in the order currency.
+    SELECT 1 FROM public.transactions self_terminal
+     WHERE self_terminal.order_id = p_order_id
+       AND self_terminal.merchant_id = p_merchant_id
+       AND self_terminal.transaction_type = 'payment'
+       AND self_terminal.status = 'refunded'
+       AND self_terminal.amount > 0
+       AND UPPER(BTRIM(self_terminal.currency))
+         IS DISTINCT FROM UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')))
   );
 END; $$;
 REVOKE ALL ON FUNCTION private.cancellation_refund_legs_covered_v1(uuid,uuid,text)

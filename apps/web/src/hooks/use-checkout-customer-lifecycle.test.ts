@@ -198,6 +198,17 @@ describe('useCheckoutCustomerLifecycle', () => {
       last_name: 'Lovelace',
       email: 'buyer@example.com',
       phone: '+2348012345678',
+      saved_addresses: [
+        {
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+          phone: '+2348098765432',
+          address: '12 Broad Street',
+          city: 'Lagos',
+          state: 'Lagos',
+          is_default: true,
+        },
+      ],
     };
     vi.mocked(fetch).mockImplementation(
       async (url) =>
@@ -221,12 +232,23 @@ describe('useCheckoutCustomerLifecycle', () => {
     );
     await waitFor(() => expect(result.current.pageLoading).toBe(false));
     expect(result.current.form.getValues('firstName')).toBe('Ada');
+    expect(result.current.form.getValues('address')).toBe('12 Broad Street');
 
     rerender({ slug: 'store-b' });
 
     await waitFor(() =>
       expect(result.current.form.getValues('firstName')).toBe('Meta')
     );
+    // Merchant A's saved-address prefill must not leak into merchant B's
+    // form: metadata supplies only first_name, the rest revert to blank.
+    expect(result.current.form.getValues()).toMatchObject({
+      firstName: 'Meta',
+      lastName: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+    });
   });
 
   it('drops the previous customer when auth succeeds without one', async () => {

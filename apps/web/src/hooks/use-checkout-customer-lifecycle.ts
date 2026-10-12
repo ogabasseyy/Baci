@@ -1,5 +1,5 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetValue } from 'react-hook-form';
 import { createClient } from '@/lib/supabase/client';
 
@@ -164,8 +164,32 @@ export function useCheckoutCustomerLifecycle(
     };
   }, [merchantSlug]);
 
+  // Values this hook wrote via prefill, so an identity switch can revert
+  // them instead of leaking the previous merchant/user record into the
+  // new form. Fields the shopper edited since are left alone unless the
+  // new identity's prefill writes them (prior overwrite behavior).
+  const appliedPrefillRef = useRef<
+    Partial<Record<keyof CheckoutShippingValues, string>>
+  >({});
+
   useEffect(() => {
-    applyCheckoutCustomerPrefill({ user, customerData }, setValue);
+    const applied = appliedPrefillRef.current;
+    const next: Partial<Record<keyof CheckoutShippingValues, string>> = {};
+    for (const name of Object.keys(
+      applied
+    ) as (keyof CheckoutShippingValues)[]) {
+      setValue(name, '', { shouldValidate: true, shouldDirty: true });
+    }
+    const setAndTrack: UseFormSetValue<CheckoutShippingValues> = (
+      name,
+      value,
+      options
+    ) => {
+      setValue(name, value, options);
+      if (typeof value === 'string') next[name] = value;
+    };
+    applyCheckoutCustomerPrefill({ user, customerData }, setAndTrack);
+    appliedPrefillRef.current = next;
   }, [user, customerData, setValue]);
 
   const handleAuthSuccess = (

@@ -19,41 +19,120 @@ describe('parseUtilityVoucherBackfill', () => {
               request_reference: 'VTU-1',
               status: 'successful',
               voucher_pin: ' 1234-5678 ',
+              refund_pending: false,
             },
           ],
         },
         'VTU-1'
       )
-    ).toEqual({ failed: false, pin: '1234-5678' });
+    ).toEqual({
+      failed: false,
+      pin: '1234-5678',
+      refundConfirmed: true,
+      refundedAmount: null,
+      successful: true,
+    });
   });
 
-  it('reports terminal failure without a pin', () => {
+  it('reports success even when no voucher is expected', () => {
     expect(
       parseUtilityVoucherBackfill(
         {
           transactions: [
-            { request_reference: 'VTU-1', status: 'failed' },
+            {
+              request_reference: 'VTU-1',
+              status: 'successful',
+              refund_pending: false,
+            },
           ],
         },
         'VTU-1'
       )
-    ).toEqual({ failed: true, pin: null });
+    ).toEqual({
+      failed: false,
+      pin: null,
+      refundConfirmed: true,
+      refundedAmount: null,
+      successful: true,
+    });
+  });
+
+  it('reports a refund-confirmed failure with the amount', () => {
+    expect(
+      parseUtilityVoucherBackfill(
+        {
+          transactions: [
+            {
+              request_reference: 'VTU-1',
+              status: 'failed',
+              refund_pending: false,
+              refunded_to_wallet: 1000,
+            },
+          ],
+        },
+        'VTU-1'
+      )
+    ).toEqual({
+      failed: true,
+      pin: null,
+      refundConfirmed: true,
+      refundedAmount: 1000,
+      successful: false,
+    });
+  });
+
+  it('marks a failed row with a pending refund as unconfirmed', () => {
+    expect(
+      parseUtilityVoucherBackfill(
+        {
+          transactions: [
+            {
+              request_reference: 'VTU-1',
+              status: 'failed',
+              refund_pending: true,
+            },
+          ],
+        },
+        'VTU-1'
+      )
+    ).toEqual({
+      failed: true,
+      pin: null,
+      refundConfirmed: false,
+      refundedAmount: null,
+      successful: false,
+    });
+  });
+
+  it('fails closed when the refund flag is missing', () => {
+    expect(
+      parseUtilityVoucherBackfill(
+        {
+          transactions: [{ request_reference: 'VTU-1', status: 'failed' }],
+        },
+        'VTU-1'
+      )
+    ).toMatchObject({ failed: true, refundConfirmed: false });
   });
 
   it('keeps polling when the row is missing or pin-less and non-terminal', () => {
-    expect(
-      parseUtilityVoucherBackfill({ transactions: [] }, 'VTU-1')
-    ).toEqual({ failed: false, pin: null });
+    expect(parseUtilityVoucherBackfill({ transactions: [] }, 'VTU-1')).toEqual(
+      {
+        failed: false,
+        pin: null,
+        refundConfirmed: false,
+        refundedAmount: null,
+        successful: false,
+      }
+    );
     expect(
       parseUtilityVoucherBackfill(
         {
-          transactions: [
-            { request_reference: 'VTU-1', status: 'processing' },
-          ],
+          transactions: [{ request_reference: 'VTU-1', status: 'processing' }],
         },
         'VTU-1'
       )
-    ).toEqual({ failed: false, pin: null });
+    ).toMatchObject({ failed: false, pin: null, successful: false });
   });
 
   it('returns null on a schema mismatch so polling halts', () => {
@@ -101,6 +180,8 @@ describe('useUtilityVoucherBackfill', () => {
     utilityTab: 'power',
   };
 
+  const pendingRow = { request_reference: 'VTU-1', status: 'processing' };
+
   it('resolves the pin once a poll finds it', async () => {
     let calls = 0;
     const fetchMock = mockHistory(() => {
@@ -108,12 +189,13 @@ describe('useUtilityVoucherBackfill', () => {
       return {
         transactions:
           calls < 3
-            ? [{ request_reference: 'VTU-1', status: 'processing' }]
+            ? [pendingRow]
             : [
                 {
                   request_reference: 'VTU-1',
                   status: 'successful',
                   voucher_pin: 'PIN-1',
+                  refund_pending: false,
                 },
               ],
       };
@@ -121,7 +203,7 @@ describe('useUtilityVoucherBackfill', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
-    expect(result.current).toEqual({ failed: false, pin: null });
+    expect(result.current.pin).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
@@ -129,7 +211,7 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current).toEqual({ failed: false, pin: 'PIN-1' });
+    expect(result.current).toMatchObject({ pin: 'PIN-1', successful: true });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     // Polling stops after resolution: no further fetches.
     await act(async () => {
@@ -140,9 +222,15 @@ describe('useUtilityVoucherBackfill', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('reports terminal failure and stops', async () => {
+  it('resolves pin-less success instead of polling forever', async () => {
     const fetchMock = mockHistory(() => ({
-      transactions: [{ request_reference: 'VTU-1', status: 'failed' }],
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -153,14 +241,82 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current).toEqual({ failed: true, pin: null });
+    expect(result.current).toMatchObject({ pin: null, successful: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('caps attempts when the pin never arrives', async () => {
+  it('waits for refund confirmation before terminalizing a failure', async () => {
+    let calls = 0;
+    const fetchMock = mockHistory(() => {
+      calls += 1;
+      return {
+        transactions: [
+          calls < 2
+            ? {
+                request_reference: 'VTU-1',
+                status: 'failed',
+                refund_pending: true,
+              }
+            : {
+                request_reference: 'VTU-1',
+                status: 'failed',
+                refund_pending: false,
+                refunded_to_wallet: 1000,
+              },
+        ],
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    // First poll saw failed+pending (nonterminal, kept polling); the
+    // second saw the confirmed refund.
+    expect(result.current).toEqual({
+      failed: true,
+      pin: null,
+      refundConfirmed: true,
+      refundedAmount: 1000,
+      successful: false,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces failed-pending observations while polling continues', async () => {
     const fetchMock = mockHistory(() => ({
-      transactions: [{ request_reference: 'VTU-1', status: 'processing' }],
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'failed',
+          refund_pending: true,
+        },
+      ],
     }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    // Nonterminal but visible: the view shows the pending-refund card
+    // instead of the spinner while attempts continue.
+    expect(result.current).toMatchObject({
+      failed: true,
+      refundConfirmed: false,
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('caps attempts when nothing terminal arrives', async () => {
+    const fetchMock = mockHistory(() => ({ transactions: [pendingRow] }));
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
@@ -171,14 +327,83 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current).toEqual({ failed: false, pin: null });
+    expect(result.current.successful).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(
       UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS
     );
   });
 
-  it('halts on HTTP errors instead of burning attempts', async () => {
-    const fetchMock = mockHistory(() => ({}), false, 500);
+  it('retries transient 5xx within the attempt budget', async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return { ok: false, status: 500, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-1',
+              status: 'successful',
+              voucher_pin: 'PIN-1',
+              refund_pending: false,
+            },
+          ],
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    expect(result.current.pin).toBe('PIN-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries network failures within the attempt budget', async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new Error('Network request failed');
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-1',
+              status: 'successful',
+              refund_pending: false,
+            },
+          ],
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('halts on non-retriable 4xx instead of burning attempts', async () => {
+    const fetchMock = mockHistory(() => ({}), false, 401);
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
@@ -188,7 +413,7 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current).toEqual({ failed: false, pin: null });
+    expect(result.current.successful).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -210,10 +435,10 @@ describe('useUtilityVoucherBackfill', () => {
     const fetchMock = mockHistory(() => ({ transactions: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    renderHook(() => useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' }));
     renderHook(() =>
-      useUtilityVoucherBackfill({ ...input, merchantSlug: null })
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
     );
+    renderHook(() => useUtilityVoucherBackfill({ ...input, merchantSlug: null }));
     renderHook(() => useUtilityVoucherBackfill({ ...input, enabled: false }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(

@@ -784,4 +784,105 @@ describe('GET /api/vtu/history', () => {
     expect(response.status).toBe(200);
     expect(data.transactions).toEqual([]);
   });
+
+  it('flags a failed debited row with no issued refund as refund-pending', async () => {
+    // Failed persists before the refund RPC runs: clients must keep
+    // polling (and never claim the refund) until this clears.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-failed',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: { walletDebited: true },
+        request_reference: 'VTU-FAIL',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-failed',
+        refund_pending: true,
+        refunded_to_wallet: null,
+      }),
+    ]);
+  });
+
+  it('exposes the confirmed refund amount once issued', async () => {
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-refunded',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 1000,
+        },
+        request_reference: 'VTU-REFUNDED',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-refunded',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+    ]);
+  });
+
+  it('never flags successful or never-debited rows as refund-pending', async () => {
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-ok',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'successful',
+        amount: '1000',
+        metadata: { walletDebited: true },
+        request_reference: 'VTU-OK',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-failed-nopay',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {},
+        request_reference: 'VTU-NOPAY',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({ id: 'tx-ok', refund_pending: false }),
+      expect.objectContaining({
+        id: 'tx-failed-nopay',
+        refund_pending: false,
+        refunded_to_wallet: null,
+      }),
+    ]);
+  });
 });

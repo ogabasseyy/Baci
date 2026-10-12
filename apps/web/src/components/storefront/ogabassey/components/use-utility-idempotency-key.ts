@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
   forgetPendingVtuPurchase,
@@ -37,7 +38,9 @@ interface UseUtilityIdempotencyKeyResult {
   forgetScopedKey: (scoped: string) => void;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
+  markAttemptShown: (scoped: string | null) => void;
   noteScopedReference: (scoped: string, reference: string) => void;
+  settleShownAttempt: () => void;
 }
 
 /**
@@ -116,6 +119,11 @@ export function useUtilityIdempotencyKey({
   merchantId,
   userId,
 }: UseUtilityIdempotencyKeyInput): UseUtilityIdempotencyKeyResult {
+  // Scoped key of the attempt on the success/processing screen: the
+  // voucher backfill settles it when a 202 later reports terminal, so
+  // buy-again mints fresh instead of replaying the old vend as new.
+  const shownAttemptScopedRef = useRef<string | null>(null);
+
   const captureAttemptKey = (payloadSignature: string) => {
     // merchantId is guaranteed defined here: the purchase readiness
     // gate blocks submit until the merchant hydrates, so no attempt
@@ -146,11 +154,27 @@ export function useUtilityIdempotencyKey({
     return hasNotedPendingVtuReference(scoped, reference);
   };
 
+  const markAttemptShown = (scoped: string | null) => {
+    shownAttemptScopedRef.current = scoped;
+  };
+
+  const settleShownAttempt = () => {
+    // The backfill proved the shown 202 terminal: forget its retained
+    // key so buy-again mints fresh instead of replaying the old vend
+    // as a new success. Idempotent (a second call is a no-op).
+    if (shownAttemptScopedRef.current) {
+      forgetPendingVtuPurchase(shownAttemptScopedRef.current);
+      shownAttemptScopedRef.current = null;
+    }
+  };
+
   return {
     captureAttemptKey,
     forgetScopedKey,
     isScopedReplay,
     isScopedStale,
+    markAttemptShown,
     noteScopedReference,
+    settleShownAttempt,
   };
 }

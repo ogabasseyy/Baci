@@ -78,6 +78,7 @@ export const UtilityModal = ({
     handleBillSubmit,
     loading,
     setStep,
+    settleBackfilledAttempt,
     step,
     successAmount,
     transactionRef,
@@ -284,6 +285,7 @@ export const UtilityModal = ({
               amount={successAmount}
               merchantSlug={merchant?.slug}
               onClose={handleClose}
+              onSettled={settleBackfilledAttempt}
               processing={step === 'processing'}
               reference={transactionRef}
               voucherPin={transactionVoucherPin}

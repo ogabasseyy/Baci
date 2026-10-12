@@ -23,13 +23,25 @@ export function isUtilityVoucherBackfillTab(tab: string): boolean {
 }
 
 export interface UtilityVoucherBackfill {
-  /** The purchase terminally failed: render failure, not the spinner. */
+  /** Failed observed; terminal only once refundConfirmed. */
   failed: boolean;
   /** Backfilled voucher/token; null until the provider reports it. */
   pin: string | null;
+  /**
+   * No refund outstanding: either never debited or the refund RPC
+   * landed. Fail-closed (explicit false only): a missing flag keeps
+   * polling rather than claiming a refund without proof.
+   */
+  refundConfirmed: boolean;
+  /** Amount credited back, when known. */
+  refundedAmount: number | null;
+  /** Successful observed — even when no voucher is expected. */
+  successful: boolean;
 }
 
 interface HistoryTransactionRow {
+  refund_pending?: unknown;
+  refunded_to_wallet?: unknown;
   request_reference?: unknown;
   status?: unknown;
   voucher_pin?: unknown;
@@ -38,14 +50,15 @@ interface HistoryTransactionRow {
 /**
  * Extracts the backfill outcome for one reference. Returns null on a
  * schema mismatch (the caller halts: polling a broken contract burns
- * attempts returning nothing). A missing row or a pin-less
- * non-terminal row keeps polling (pin null, failed false).
+ * attempts returning nothing). A missing row, a pin-less non-terminal
+ * row, or a failed row with a pending refund keeps polling.
  */
 export function parseUtilityVoucherBackfill(
   body: unknown,
   reference: string
 ): UtilityVoucherBackfill | null {
-  const transactions = (body as { transactions?: unknown } | null)?.transactions;
+  const transactions = (body as { transactions?: unknown } | null)
+    ?.transactions;
   if (!Array.isArray(transactions)) {
     return null;
   }
@@ -54,14 +67,36 @@ export function parseUtilityVoucherBackfill(
       (row as HistoryTransactionRow | null)?.request_reference === reference
   ) as HistoryTransactionRow | undefined;
   if (!match) {
-    return { failed: false, pin: null };
+    return {
+      failed: false,
+      pin: null,
+      refundConfirmed: false,
+      refundedAmount: null,
+      successful: false,
+    };
   }
   const pin =
     typeof match.voucher_pin === 'string' ? match.voucher_pin.trim() : '';
+  const refundedAmount =
+    typeof match.refunded_to_wallet === 'number'
+      ? match.refunded_to_wallet
+      : null;
   return {
     failed: match.status === 'failed',
     pin: pin || null,
+    refundConfirmed: match.refund_pending === false,
+    refundedAmount,
+    successful: match.status === 'successful',
   };
+}
+
+/** Terminal backfill: show it and stop polling. */
+function isTerminalBackfill(backfill: UtilityVoucherBackfill): boolean {
+  return (
+    backfill.pin !== null ||
+    backfill.successful ||
+    (backfill.failed && backfill.refundConfirmed)
+  );
 }
 
 function sleep(ms: number): Promise<void> {
@@ -82,6 +117,9 @@ export function useUtilityVoucherBackfill({
   const [backfill, setBackfill] = useState<UtilityVoucherBackfill>({
     failed: false,
     pin: null,
+    refundConfirmed: false,
+    refundedAmount: null,
+    successful: false,
   });
 
   useEffect(() => {
@@ -102,33 +140,46 @@ export function useUtilityVoucherBackfill({
         attempt <= UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS;
         attempt += 1
       ) {
-        let parsed: UtilityVoucherBackfill | null;
+        let parsed: UtilityVoucherBackfill | null = null;
         try {
-          const response = await fetch(`/api/vtu/history?${params.toString()}`, {
-            signal: controller.signal,
-          });
-          // HTTP/network/schema failures halt polling: the purchase
-          // outcome is unknown, so keep the static processing copy
-          // instead of burning attempts or misreporting failure.
-          if (!response.ok) {
-            return;
-          }
-          parsed = parseUtilityVoucherBackfill(
-            await response.json(),
-            reference
+          const response = await fetch(
+            `/api/vtu/history?${params.toString()}`,
+            { signal: controller.signal }
           );
-          if (parsed === null) {
-            return;
+          if (!response.ok) {
+            // 5xx/429 are transient: consume the attempt and retry.
+            // Other 4xx (auth, bad request) won't heal by retrying.
+            if (response.status !== 429 && response.status < 500) {
+              return;
+            }
+          } else {
+            parsed = parseUtilityVoucherBackfill(
+              await response.json(),
+              reference
+            );
+            // Broken contract: halt instead of burning attempts.
+            if (parsed === null) {
+              return;
+            }
           }
         } catch {
+          // Network/timeout failure: transient, retry within budget.
+          // Abort (unmount) lands here too — the cancelled check below
+          // stops the loop without another fetch.
+          if (controller.signal.aborted) {
+            return;
+          }
+        }
+        if (cancelled || controller.signal.aborted) {
           return;
         }
-        if (cancelled) {
-          return;
-        }
-        if (parsed.pin || parsed.failed) {
+        if (parsed) {
+          // Surface every observation (e.g. failed with a pending
+          // refund) while polling continues; terminal ones stop.
           setBackfill(parsed);
-          return;
+          if (isTerminalBackfill(parsed)) {
+            return;
+          }
         }
         if (attempt < UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS) {
           await sleep(UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS);

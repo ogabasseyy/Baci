@@ -112,13 +112,20 @@ describe('UtilitySuccessView', () => {
     }
   });
 
-  it('renders terminal failure when the backfill reports it', async () => {
+  it('renders terminal failure once the refund is confirmed', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
         ok: true,
         json: async () => ({
-          transactions: [{ request_reference: 'VTU-FAIL', status: 'failed' }],
+          transactions: [
+            {
+              request_reference: 'VTU-FAIL',
+              status: 'failed',
+              refund_pending: false,
+              refunded_to_wallet: 1000,
+            },
+          ],
         }),
       }))
     );
@@ -135,10 +142,155 @@ describe('UtilitySuccessView', () => {
       );
 
       expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
-      expect(screen.getByText(/was refunded/)).toBeInTheDocument();
+      expect(screen.getByText(/1,000 was refunded/)).toBeInTheDocument();
+      // Themed danger tokens (not hardcoded red) so merchant palettes apply.
+      const icon = screen.getByText('Purchase failed').parentElement
+        ?.children[0];
+      expect(icon?.className).toContain('store-danger-bg');
+      expect(icon?.className).toContain('store-danger-text');
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('never claims a refund while one is still pending', async () => {
+    // Failed persists before the refund RPC runs: an unconfirmed
+    // failure must not say the amount was refunded.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-FAIL',
+              status: 'failed',
+              refund_pending: true,
+            },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-FAIL"
+        />
+      );
+
+      expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
+      expect(screen.getByText(/being processed/)).toBeInTheDocument();
+      expect(screen.queryByText(/was refunded/)).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('flips pin-less backfilled success to the success screen', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-PROC',
+              status: 'successful',
+              refund_pending: false,
+            },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="tv"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-PROC"
+        />
+      );
+
+      expect(await screen.findByText('Success!')).toBeInTheDocument();
+      expect(screen.queryByText('Voucher / Token')).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('notifies the owner exactly once when the backfill settles', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-PROC',
+              status: 'successful',
+              voucher_pin: 'PIN-1',
+              refund_pending: false,
+            },
+          ],
+        }),
+      }))
+    );
+    const onSettled = vi.fn();
+    try {
+      const { rerender } = render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          onSettled={onSettled}
+          processing={true}
+          reference="VTU-PROC"
+        />
+      );
+
+      expect(await screen.findByText('Success!')).toBeInTheDocument();
+      expect(onSettled).toHaveBeenCalledTimes(1);
+      rerender(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          onSettled={onSettled}
+          processing={true}
+          reference="VTU-PROC"
+        />
+      );
+      expect(onSettled).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('never notifies the owner for an immediate (non-backfilled) outcome', () => {
+    const onSettled = vi.fn();
+    render(
+      <UtilitySuccessView
+        activeTab="airtime"
+        amount={1500}
+        onClose={vi.fn()}
+        onSettled={onSettled}
+        reference="VTU-123"
+        voucherPin="PIN-0"
+      />
+    );
+
+    expect(screen.getByText('Success!')).toBeInTheDocument();
+    expect(onSettled).not.toHaveBeenCalled();
   });
 
   it('shows polling copy while a processing bill token is still missing', async () => {

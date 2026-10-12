@@ -322,6 +322,17 @@ export async function GET(request: NextRequest) {
             'paymentReference',
             isString
           );
+          // Refund confirmation for failed wallet debits: the failed
+          // status persists BEFORE the refund RPC runs, so clients must
+          // not treat failed as refunded. Pending = debited, failed,
+          // refund not yet issued (the cron confirms it).
+          const walletDebited = transactionMetadata.walletDebited === true;
+          const refundIssued = transactionMetadata.refundIssued === true;
+          const refundAmount = transactionMetadata.refundAmount;
+          const refundedToWallet =
+            refundIssued && typeof refundAmount === 'number'
+              ? refundAmount
+              : null;
 
           return {
             ...publicTransaction,
@@ -345,6 +356,11 @@ export async function GET(request: NextRequest) {
             voucher_pin: voucherPin,
             units,
             address,
+            refund_pending:
+              transaction.status === 'failed' &&
+              walletDebited &&
+              !refundIssued,
+            refunded_to_wallet: refundedToWallet,
           };
         }
       ),

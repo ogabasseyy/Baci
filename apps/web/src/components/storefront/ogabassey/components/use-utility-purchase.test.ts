@@ -868,4 +868,46 @@ describe('useUtilityPurchase', () => {
     expect(result.current.step).toBe('success');
     expect(result.current.transactionRef).toBe('REF-A');
   });
+
+  it('settleBackfilledAttempt forgets the shown 202 key and refetches the wallet', async () => {
+    // The voucher backfill proved the shown 202 terminal: the next
+    // same-payload submit must mint fresh (not replay the old vend as
+    // a new success), and the wallet must refetch (the debit — or a
+    // later worker refund — settled after the optimistic update).
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-PROC',
+          amount: 1000,
+          processing: true,
+        };
+      }
+    );
+    const refreshWallet = vi.fn();
+    const { result } = renderHook(() =>
+      useUtilityPurchase(baseParams({ refreshWallet }))
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(result.current.step).toBe('processing');
+    const refreshesAfterSubmit = refreshWallet.mock.calls.length;
+
+    act(() => {
+      result.current.settleBackfilledAttempt();
+    });
+    expect(refreshWallet.mock.calls.length).toBe(refreshesAfterSubmit + 1);
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[1]).not.toBe(seenKeys[0]);
+  });
 });

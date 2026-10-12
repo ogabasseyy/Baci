@@ -64,6 +64,7 @@ interface UseUtilityPurchaseReturn {
   handleBillSubmit: (data: BillSubmit) => void;
   loading: boolean;
   setStep: Dispatch<SetStateAction<UtilityPurchaseStep>>;
+  settleBackfilledAttempt: () => void;
   step: UtilityPurchaseStep;
   successAmount: number;
   transactionRef: string;
@@ -101,13 +102,10 @@ export function useUtilityPurchase({
   const [transactionVoucherPin, setTransactionVoucherPin] = useState<
     string | null
   >(null);
-  // Debits already reflected in the displayed balance: a retained key
-  // replays the SAME transaction, so replays must not decrement again.
+  // Replays reuse the SAME transaction: never decrement twice.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-  // Latest identity per render; a mid-flight switch discards the stale
-  // result instead of writing one customer's update into another's
-  // session. User-first: customer-first flips on hydration (false
-  // switch → discard + double-debit the retry).
+  // Per-render identity; user-first (customer-first flips on hydration
+  // → false switch → double-debit). A stale result is discarded.
   const latestIdentityRef = useRef<string | null>(null);
   latestIdentityRef.current = user?.id ?? customer?.id ?? null;
   const {
@@ -115,7 +113,9 @@ export function useUtilityPurchase({
     forgetScopedKey,
     isScopedReplay,
     isScopedStale,
+    markAttemptShown,
     noteScopedReference,
+    settleShownAttempt,
   } = useUtilityIdempotencyKey({
     customerId: customer?.id,
     merchantId,
@@ -150,8 +150,7 @@ export function useUtilityPurchase({
         .filter(Boolean)
         .join(' ')
         .trim() || customer?.email || user?.email || 'Customer';
-    // Per-execution capture (a container, not a shared ref): concurrent
-    // submits can never redirect this attempt's completion.
+    // Per-execution capture: concurrent submits can't redirect completion.
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
     };
@@ -168,8 +167,7 @@ export function useUtilityPurchase({
     });
 
     if (latestIdentityRef.current !== submittingIdentity) {
-      // Shared browser switched mid-flight: finalize the SUBMITTER's
-      // entry, then drop the result instead of debiting the new display.
+      // Switched mid-flight: finalize the SUBMITTER's entry, drop the result.
       finalizeSwitchedAttempt(captured.attempt, result);
       toast({
         title: 'Account changed',
@@ -181,13 +179,10 @@ export function useUtilityPurchase({
     }
 
     if (result.kind === 'wallet-success') {
-      // Terminal success forgets the key for a fresh buy-again slot.
-      // 'processing' keeps it: Done unmounts the modal, and a resubmit with
-      // a fresh key would bypass the dedupe row and debit twice. The
-      // deferred debit still needs reconciling even if this transaction
-      // is never replayed, so refresh instead of decrementing: a stale
-      // HIGH balance would let the underfunded pre-check pass a purchase
-      // the server will reject.
+      // Terminal forgets (fresh buy-again); processing keeps (a fresh
+      // resubmit would bypass the dedupe row and debit twice). Refresh
+      // instead of decrementing: a stale HIGH balance would pass the
+      // underfunded pre-check for a purchase the server rejects.
       const scoped = captured.attempt?.scoped;
       const replayResolvesProcessing =
         !result.processing &&
@@ -195,9 +190,8 @@ export function useUtilityPurchase({
         isScopedReplay(scoped, result.reference);
       if (!result.processing) {
         if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
-          // The remembered purchase completed long ago: this replay
-          // answers a NEW intent with the old vend. Forget so the next
-          // tap mints fresh, and say so instead of presenting it.
+          // Stale replay answers a NEW intent with the old vend: forget
+          // so the next tap mints fresh, and say so.
           forgetScopedKey(scoped);
           toast({
             title: 'Purchase Already Completed',
@@ -229,10 +223,10 @@ export function useUtilityPurchase({
         submitAmount: payload.amount,
       });
       setTransactionRef(result.reference);
+      markAttemptShown(scoped ?? null);
       setSuccessAmount(result.amount);
       setTransactionVoucherPin(result.voucherPin ?? null);
-      // A 202 processing vend can still fail or be refunded — show the
-      // pending screen, never the success screen.
+      // A 202 can still fail or be refunded: never the success screen.
       setStep(result.processing ? 'processing' : 'success');
       toast({
         title: result.processing
@@ -243,12 +237,10 @@ export function useUtilityPurchase({
           : `Your ${activeTab} purchase was successful!`,
       });
     } else if (result.kind === 'error') {
-      // Definitive 4xx: outcome recorded, rotate so retry is fresh.
-      // Pre-route/5xx/unknown: keep the key so the retry dedupes.
+      // 4xx rotates (fresh retry); pre-route/5xx/unknown keeps (dedupes).
       if (captured.attempt && shouldRotateVtuKeyForStatus(result.status)) {
         forgetScopedKey(captured.attempt.scoped);
       }
-      // A failed vend may have restored the debit: refetch for the next check.
       refreshWallet();
       toast({
         title: 'Transaction Failed',
@@ -257,6 +249,13 @@ export function useUtilityPurchase({
       });
     }
     setLoading(false);
+  };
+
+  // Backfill proved the shown 202 terminal: forget its key (fresh
+  // buy-again) and refetch the wallet (debit/refund settled late).
+  const settleBackfilledAttempt = () => {
+    settleShownAttempt();
+    refreshWallet();
   };
 
   const handleAirtimeDataSubmit = (data: AirtimeDataSubmit) => {
@@ -292,6 +291,7 @@ export function useUtilityPurchase({
     handleBillSubmit,
     loading,
     setStep,
+    settleBackfilledAttempt,
     step,
     successAmount,
     transactionRef,

@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, Clock, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import {
   isUtilityVoucherBackfillTab,
   useUtilityVoucherBackfill,
@@ -11,6 +12,7 @@ interface UtilitySuccessViewProps {
   amount: number;
   merchantSlug?: string | null;
   onClose: () => void;
+  onSettled?: () => void;
   processing?: boolean;
   reference: string;
   voucherPin?: string | null;
@@ -21,6 +23,7 @@ export function UtilitySuccessView({
   amount,
   merchantSlug,
   onClose,
+  onSettled,
   processing = false,
   reference,
   voucherPin,
@@ -36,27 +39,57 @@ export function UtilitySuccessView({
     utilityTab: activeTab,
   });
   const resolvedPin = voucherPin ?? backfill.pin;
-  const failed = processing && backfill.failed;
-  const resolvedProcessing = processing && !resolvedPin && !failed;
+  const succeeded = !processing || backfill.successful || resolvedPin !== null;
+  // Failed is terminal only once the refund is confirmed: the failed
+  // status persists BEFORE the refund RPC runs, so an unconfirmed
+  // failure keeps polling and never claims the refund landed.
+  const failedTerminal =
+    processing && backfill.failed && backfill.refundConfirmed;
+  const failedPending =
+    processing && backfill.failed && !backfill.refundConfirmed;
+  const resolvedProcessing = processing && !succeeded && !failedTerminal;
   const polling =
-    processing &&
-    !voucherPin &&
-    !resolvedPin &&
-    !failed &&
+    resolvedProcessing &&
+    !failedPending &&
     isUtilityVoucherBackfillTab(activeTab);
 
-  if (failed) {
+  // Tell the purchase owner the shown 202 settled, exactly once, so it
+  // forgets the retained key (buy-again mints fresh instead of
+  // replaying this vend as a new success) and refetches the wallet.
+  // Immediate outcomes already finalized inline — only backfilled
+  // terminality fires this.
+  const settledFiredRef = useRef(false);
+  useEffect(() => {
+    if (!onSettled || settledFiredRef.current) {
+      return;
+    }
+    const backfilledTerminal =
+      backfill.pin !== null ||
+      backfill.successful ||
+      (backfill.failed && backfill.refundConfirmed);
+    if (backfilledTerminal) {
+      settledFiredRef.current = true;
+      onSettled();
+    }
+  }, [backfill, onSettled]);
+
+  if (failedTerminal || failedPending) {
+    const refundCopy =
+      failedTerminal && backfill.refundedAmount !== null
+        ? `₦${backfill.refundedAmount.toLocaleString()} was refunded to your wallet.`
+        : failedTerminal
+          ? 'Any debited amount was refunded to your wallet.'
+          : 'Your refund is being processed — check your wallet shortly.';
     return (
       <div className="text-center py-8">
-        <div className="size-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="size-16 bg-[var(--store-danger-bg,#fee2e2)] text-[var(--store-danger-text,#dc2626)] rounded-full flex items-center justify-center mx-auto mb-4">
           <X size={32} />
         </div>
         <h4 className="text-xl font-bold text-gray-900 mb-2">
           Purchase failed
         </h4>
         <p className="text-gray-500 mb-6">
-          The purchase failed. If your wallet was debited, the amount was
-          refunded.
+          The purchase failed. {refundCopy}
         </p>
         <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
           <div className="flex justify-between mb-2">

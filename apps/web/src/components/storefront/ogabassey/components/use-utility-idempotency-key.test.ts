@@ -367,3 +367,70 @@ describe('shouldRotateVtuKeyForStatus', () => {
     expect(shouldRotateVtuKeyForStatus(undefined)).toBe(false);
   });
 });
+
+describe('settleShownAttempt', () => {
+  beforeEach(() => {
+    clearPendingVtuKeys();
+  });
+
+  it('forgets the marked key once; a second call is a no-op', () => {
+    // Controlled clock: the tombstone kills same-ms re-remembers, so
+    // the post-settle capture must land in a later millisecond (as any
+    // real buy-again would).
+    let now = 1_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { result } = renderHook(() =>
+        useUtilityIdempotencyKey({ customerId: 'customer-a' })
+      );
+      let attempt = { key: '', scoped: '', recalled: false };
+      act(() => {
+        attempt = result.current.captureAttemptKey('SIG');
+      });
+      act(() => {
+        result.current.markAttemptShown(attempt.scoped);
+      });
+      act(() => {
+        result.current.settleShownAttempt();
+      });
+
+      now += 60_000;
+      let repeat = '';
+      act(() => {
+        repeat = result.current.captureAttemptKey('SIG').key;
+      });
+      expect(repeat).not.toBe(attempt.key);
+
+      act(() => {
+        result.current.settleShownAttempt();
+      });
+      let again = '';
+      act(() => {
+        again = result.current.captureAttemptKey('SIG').key;
+      });
+      expect(again).toBe(repeat);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('is a no-op when nothing was marked', () => {
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+    let attempt = { key: '', scoped: '', recalled: false };
+    act(() => {
+      attempt = result.current.captureAttemptKey('SIG');
+    });
+
+    act(() => {
+      result.current.settleShownAttempt();
+    });
+
+    let repeat = '';
+    act(() => {
+      repeat = result.current.captureAttemptKey('SIG').key;
+    });
+    expect(repeat).toBe(attempt.key);
+  });
+});

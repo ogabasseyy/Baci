@@ -56,4 +56,32 @@ describe('buildOrderIdempotencyPayload', () => {
       '\u{10000}',
     ]);
   });
+
+  it('treats a distinct submitted price as a different request', () => {
+    // Contract pin for the priceless replay key: the order RPC persists
+    // the live offer price while the hash covers the submitted price, so
+    // a stale-price retry must hash differently from a fresh one and can
+    // never replay as the same request.
+    const base = {
+      customer_email: 'buyer@example.com',
+      customer_name: 'Ada Okafor',
+      items: [
+        {
+          product_id: 'phone',
+          offer_id: 'offer-9',
+          price: 300000,
+          quantity: 1,
+          has_assurance: true,
+        },
+      ],
+      merchant_id: 'merchant-one',
+    };
+
+    expect(buildOrderIdempotencyPayload(base)).not.toEqual(
+      buildOrderIdempotencyPayload({
+        ...base,
+        items: [{ ...base.items[0], price: 320000 }],
+      })
+    );
+  });
 });

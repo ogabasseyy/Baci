@@ -25,6 +25,12 @@ SELECT public.submit_storefront_product_request(
 SELECT public.submit_storefront_product_request(
   'intake-canonical', 'need a charger', '2348012345678', '01c00000-0000-4000-8000-000000000011');
 
+-- Whitespace-only query variant: the query-key normalizer collapses runs.
+SELECT public.submit_storefront_product_request(
+  'intake-canonical', 'Need an iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012');
+SELECT public.submit_storefront_product_request(
+  'intake-canonical', 'Need   an   iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012');
+
 -- A genuinely different query under the same id still conflicts.
 DO $$ BEGIN
   BEGIN
@@ -36,10 +42,10 @@ DO $$ BEGIN
   RAISE EXCEPTION 'different query under same request id must raise 23505';
 END $$;
 
--- Exactly two rows persisted (retries returned, conflicts raised).
+-- Exactly three rows persisted (retries returned, conflicts raised).
 DO $$ BEGIN
   IF (SELECT count(*) FROM public.storefront_product_requests
-      WHERE merchant_id = '01c00000-0000-4000-8000-000000000001') <> 2 THEN
-    RAISE EXCEPTION 'expected exactly 2 intake rows';
+      WHERE merchant_id = '01c00000-0000-4000-8000-000000000001') <> 3 THEN
+    RAISE EXCEPTION 'expected exactly 3 intake rows';
   END IF;
 END $$;

@@ -36,7 +36,10 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_merchant::text, 0));
   SELECT id, merchant_id, query, contact, created_at, delivered_at, notification_id INTO v_existing FROM public.storefront_product_requests WHERE id = p_request_id;
   IF FOUND THEN
-    IF v_existing.merchant_id = v_merchant AND v_existing.query = v_query AND v_existing.contact = v_contact THEN RETURN; END IF;
+    -- A retry resubmits the same request under one id: compare by the same
+    -- canonical keys the 24h dedup uses, or a casing/whitespace-only
+    -- spelling variant surfaces as a conflict instead of success.
+    IF v_existing.merchant_id = v_merchant AND storefront_search_private.normalize_request_query_key(v_existing.query) = storefront_search_private.normalize_request_query_key(v_query) AND storefront_search_private.normalize_request_contact_key(v_existing.contact) = v_contact_key THEN RETURN; END IF;
     RAISE EXCEPTION 'Request conflict' USING ERRCODE = '23505';
   END IF;
   IF EXISTS (SELECT 1 FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND storefront_search_private.normalize_request_query_key(query) = storefront_search_private.normalize_request_query_key(v_query) AND created_at > now() - interval '24 hours') THEN RETURN; END IF;

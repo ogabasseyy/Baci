@@ -17,8 +17,13 @@ malformed, future-dated or older-than-14-day registers are not used as positive
 feature evidence. The prompt explicitly requires editorial verification instead
 of inferring feature absence from documentation gaps.
 
-Run `python3 -m unittest discover -s tests -p 'test*prompt*.py'` in the writer
-checkout, and its full suite before declaring the lane validated. Generate one
+Two suites exist: `test_platform_capabilities.py` is the in-repo suite (stdlib
+only, runs anywhere) covering register validation and prompt serialization;
+`test_platform_capability_prompt.py` is the deployable writer-checkout suite —
+copy it into the writer `tests/` directory, where it exercises the real
+`build_prompt`. Outside the writer checkout it skips instead of failing at
+import. Run `python3 -m unittest discover -s tests -p 'test*prompt*.py'` in the
+writer checkout, and its full suite before declaring the lane validated. Generate one
 prompt and verify its register hash, source revision, statuses and restrictions.
 Do not start paid writing/image jobs just to test context injection.
 

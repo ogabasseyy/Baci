@@ -66,11 +66,17 @@ class CapabilityContextTests(unittest.TestCase):
 
     def test_evidence_only_forwarded_for_production_verified(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
-        evidence = {"workflow": "deploy-prod", "deployed_revision": "b" * 40, "verified_at": now}
+        evidence = {"workflow": "deploy-prod", "deployed_revision": "b" * 40, "verified_at": now, "entitlement": "premium plan, payments enabled", "observation": "merchant checkout observed 2026-10-12"}
         leaked = self.render(_register([_row(production_evidence=evidence)]))
         self.assertNotIn("deploy-prod", leaked)
         kept = self.render(_register([_row(status="production_verified", production_evidence=evidence)]))
         self.assertIn("deploy-prod", kept)
+
+    def test_production_evidence_requires_entitlement_and_observation(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        partial = {"workflow": "deploy-prod", "deployed_revision": "b" * 40, "verified_at": now}
+        result = self.render(_register([_row(status="production_verified", production_evidence=partial)]))
+        self.assertIn("Register unavailable, invalid or stale", result)
 
     def test_production_status_without_evidence_fails_closed(self):
         result = self.render(_register([_row(status="production_verified")]))

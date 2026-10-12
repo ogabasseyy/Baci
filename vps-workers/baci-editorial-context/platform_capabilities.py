@@ -50,8 +50,9 @@ def capability_context(*, now=None):
                 evidence = row.get("production_evidence")
                 if not isinstance(evidence, dict):
                     raise ValueError("production evidence missing")
-                if not isinstance(evidence.get("workflow"), str) or not evidence["workflow"].strip():
-                    raise ValueError("production workflow missing")
+                for key in ("workflow", "entitlement", "observation"):
+                    if not isinstance(evidence.get(key), str) or not evidence[key].strip():
+                        raise ValueError("production evidence incomplete")
                 deployed = evidence.get("deployed_revision", "")
                 if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
                     raise ValueError("production revision missing")
@@ -66,7 +67,7 @@ def capability_context(*, now=None):
             if row["status"] == "production_verified" and isinstance(evidence, dict):
                 safe["production_evidence"] = {
                     key: evidence[key]
-                    for key in ("workflow", "deployed_revision", "verified_at")
+                    for key in ("workflow", "deployed_revision", "verified_at", "entitlement", "observation")
                     if key in evidence
                 }
             safe_rows.append(safe)

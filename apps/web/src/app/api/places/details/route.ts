@@ -4,12 +4,12 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { placesDetailsSchema } from '@/schemas/places-details';
 import { fetchLegacyPlacesJson } from '../legacy-places';
 import { reserveGooglePlacesRequest } from '../provider-budget';
 
 const LEGACY_PLACES_DETAILS_URL =
   'https://maps.googleapis.com/maps/api/place/details/json';
-const MAX_SESSION_TOKEN_LENGTH = 256;
 const ADDRESS_FIELDS = [
   'address_components',
   'formatted_address',
@@ -71,23 +71,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const placeId = searchParams.get('placeId');
-    const sessionToken = searchParams.get('sessionToken');
-
-    if (sessionToken && sessionToken.length > MAX_SESSION_TOKEN_LENGTH) {
+    // Validate with Zod before the paid-budget reservation can execute.
+    const params = request.nextUrl.searchParams;
+    const parsed = placesDetailsSchema.safeParse({
+      placeId: params.get('placeId') ?? undefined,
+      sessionToken: params.get('sessionToken') ?? undefined,
+    });
+    if (!parsed.success)
       return NextResponse.json(
-        { error: 'Invalid sessionToken format' },
+        {
+          error:
+            parsed.error.issues[0]?.message || 'Invalid place details request',
+        },
         { status: 400 }
       );
-    }
-
-    if (!placeId) {
-      return NextResponse.json(
-        { error: 'placeId is required' },
-        { status: 400 }
-      );
-    }
+    const { placeId, sessionToken } = parsed.data;
 
     if (placeId.startsWith('geoapify:')) {
       return NextResponse.json(

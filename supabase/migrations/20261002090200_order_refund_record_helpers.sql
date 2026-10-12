@@ -90,12 +90,15 @@ BEGIN
       IF NOT FOUND THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
+      -- A Paystack attestation must name an actual Paystack
+      -- capture: preflight only provider-verifies legs that
+      -- normalize to PAYSTACK, so pinning a Korapay, Credit
+      -- Direct, or unknown leg records an unverifiable row the
+      -- worker later quarantines. Reject it as invalid input.
       IF p_method='paystack' THEN
         SELECT id INTO v_pinned_leg FROM public.transactions leg
           WHERE leg.id=p_leg_id
-          AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
-            OR upper(btrim(leg.gateway)) NOT IN
-              ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'));
+          AND upper(btrim(leg.gateway))='PAYSTACK';
         IF NOT FOUND THEN
           RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
         END IF;
@@ -105,9 +108,7 @@ BEGIN
         FROM public.transactions leg
         WHERE leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
         AND leg.transaction_type='payment' AND leg.status='completed' AND leg.amount>0
-        AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
-          OR upper(btrim(leg.gateway)) NOT IN
-            ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
+        AND upper(btrim(leg.gateway))='PAYSTACK'
         AND leg.amount>(SELECT COALESCE(SUM(r.amount),0) FROM public.transactions r
           WHERE r.order_id=p_order_id AND r.transaction_type='refund'
           AND r.status IN ('completed','refunded')

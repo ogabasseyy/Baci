@@ -6,8 +6,21 @@ vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
 
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import { preflightCancellationRefundInitiation } from './preflight-cancellation-refund-initiation';
-import { preflightInput } from './preflight-cancellation-refund-initiation.test-support';
+import {
+  order as baseOrder,
+  preflightInput,
+} from './preflight-cancellation-refund-initiation.test-support';
 import { DeferredError } from './run-order-cancellation-side-effect';
+
+function fourPaystackLegs() {
+  return [1, 2, 3, 4].map((n) => ({
+    amount: 100,
+    currency: 'NGN',
+    gateway: 'paystack',
+    gateway_reference: `ref-${n}`,
+    id: `payment-${n}`,
+  }));
+}
 
 describe('preflightCancellationRefundInitiation budget deferral', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -77,5 +90,50 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
     ).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(DeferredError);
     expect(update).toHaveBeenCalledWith({ attempts: 0 });
+  });
+  it('verifies every leg when the window fits them all', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        deadlineMs: Date.now() + 500_000,
+        order: { ...baseOrder, amount_paid: 400 } as never,
+        transactions: fourPaystackLegs() as never,
+      })
+    );
+    expect(result.budgetDeferred).toBe(false);
+    expect(result.initiationTransactions.map((leg) => leg.id)).toEqual([
+      'payment-1',
+      'payment-2',
+      'payment-3',
+      'payment-4',
+    ]);
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(4);
+  });
+  it('returns the verified prefix when the window runs short mid-run', async () => {
+    // Four legs under a 90s workflow window: the first verification
+    // fits, the second does not. The run must initiate its verified
+    // prefix and resume the rest — never discard verified work by
+    // deferring before doing anything on every invocation.
+    const start = 1_000_000_000_000;
+    let nowCalls = 0;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
+      nowCalls += 1;
+      return nowCalls <= 2 ? start : start + 40_000;
+    });
+    try {
+      const result = await preflightCancellationRefundInitiation(
+        preflightInput({
+          deadlineMs: start + 90_000,
+          order: { ...baseOrder, amount_paid: 400 } as never,
+          transactions: fourPaystackLegs() as never,
+        })
+      );
+      expect(result.budgetDeferred).toBe(true);
+      expect(result.initiationTransactions.map((leg) => leg.id)).toEqual([
+        'payment-1',
+      ]);
+      expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

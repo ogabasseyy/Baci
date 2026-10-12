@@ -84,4 +84,24 @@ describe('settleCancellationRefundInitiation', () => {
       'cancellation_refund_awaiting_manual_completion'
     );
   });
+  it('defers after initiating a budget-short verified prefix', async () => {
+    // The subset initiated above; completing now would strand the
+    // unverified remainder behind a terminal row no drain reselects.
+    const error = await settleCancellationRefundInitiation(
+      input({
+        budgetDeferred: true,
+        initiationTransactions: [paystackPayment as never],
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_preflight_deferred_for_budget'
+    );
+    expect(initiatePaystackCancellationRefunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactions: [paystackPayment],
+      })
+    );
+    expect(tryResetCancellationSideEffectAttempts).toHaveBeenCalled();
+  });
 });

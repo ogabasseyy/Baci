@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import {
@@ -8,7 +7,7 @@ import {
 } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { deliverMerchantRefundNotification } from './deliver-merchant-refund-notification';
-import { normalizePaymentGateway } from './normalize-payment-gateway';
+import { isProviderBackedRefund } from './is-provider-backed-refund';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 export type RefundEmailSender = (message: {
@@ -166,65 +165,11 @@ export async function deliverClaimedRefundNotification({
     if (row.event_type === 'processed_customer_email') {
       if (!order.customer_email)
         throw new Error('refund_customer_email_missing');
-      // A manual-only refund (cash handed over, transfer already sent)
-      // must not promise a provider timeline: probe whether any
-      // terminal non-manual refund row exists. Failed provider
-      // attempts moved no money, so a failed Paystack row beside a
-      // manual cash completion must not select the provider copy.
-      // Unknown or blank gateways fail toward the provider copy.
-      // A verified manual Paystack attestation stays stored as
-      // gateway manual but is provider money, so its method
-      // metadata counts too; unverified claims must not promise a
-      // provider timeline. Self-terminal provider refunds (PayPal
-      // flips the payment row itself) leave no refund row at all,
-      // so refunded external payments count as well — internal
-      // legs reverse through their own ledgers, never bank/card.
-      const { data: refundGatewayRows, error: refundGatewayError } =
-        await supabase
-          .from('transactions')
-          .select('gateway, metadata')
-          .eq('order_id', order.id)
-          .eq('merchant_id', row.merchant_id)
-          .eq('transaction_type', 'refund')
-          .in('status', ['completed', 'refunded']);
-      if (refundGatewayError) {
-        throw new Error('refund_notification_ledger_lookup_failed');
-      }
-      const refundRowProviderBacked = (refundRow: unknown): boolean => {
-        const row = refundRow as {
-          gateway: unknown;
-          metadata?: {
-            method?: unknown;
-            provider_refund_status?: unknown;
-          } | null;
-        };
-        if (normalizePaymentGateway(row.gateway) !== 'MANUAL') return true;
-        return (
-          row.metadata?.method === 'paystack' &&
-          row.metadata?.provider_refund_status === 'processed'
-        );
-      };
-      let hasProviderRefund = (refundGatewayRows ?? []).some(
-        refundRowProviderBacked
-      );
-      if (!hasProviderRefund) {
-        const { data: flippedPaymentRows, error: flippedPaymentError } =
-          await supabase
-            .from('transactions')
-            .select('gateway')
-            .eq('order_id', order.id)
-            .eq('merchant_id', row.merchant_id)
-            .eq('transaction_type', 'payment')
-            .eq('status', 'refunded');
-        if (flippedPaymentError) {
-          throw new Error('refund_notification_ledger_lookup_failed');
-        }
-        hasProviderRefund = (flippedPaymentRows ?? []).some((paymentRow) =>
-          isExternalPaymentGateway(
-            (paymentRow as { gateway: string | null }).gateway
-          )
-        );
-      }
+      const hasProviderRefund = await isProviderBackedRefund({
+        merchantId: row.merchant_id,
+        orderId: order.id,
+        supabase,
+      });
       const contact = merchant.support_email || merchant.email;
       const arrivalText = hasProviderRefund
         ? `Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${contact}.`

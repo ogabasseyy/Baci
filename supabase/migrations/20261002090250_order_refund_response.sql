@@ -38,13 +38,14 @@ BEGIN
       FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=p_merchant_id AND transaction_type='refund'
       ORDER BY created_at DESC LIMIT 50) h;
-  -- Pin candidates for the manual form: completed external payment
-  -- legs with money still outstanding, mirroring the allocator's
-  -- candidate set (blank gateways included, internal ledgers out)
-  -- and its per-leg outstanding math, so the dashboard offers
-  -- exactly what the server accepts. Uncapped: unlike history,
-  -- hiding a leg would strand its capture behind an unpinnable
-  -- Paystack attestation, and legs are few per order.
+  -- Pin candidates for the manual form's Paystack selector:
+  -- completed Paystack captures with money still outstanding,
+  -- mirroring the allocator's per-leg outstanding math, so the
+  -- dashboard offers exactly what the server accepts (a Paystack
+  -- attestation pinned anywhere else is unverifiable and
+  -- rejected). Uncapped: unlike history, hiding a leg would
+  -- strand its capture behind an unpinnable attestation, and
+  -- legs are few per order.
   SELECT COALESCE(jsonb_agg(jsonb_build_object('id',l.id,'amount',l.amount,
     'outstanding',l.outstanding,'gateway',l.gateway,'reference',l.gateway_reference)
     ORDER BY l.created_at,l.id),'[]') INTO v_legs
@@ -58,9 +59,7 @@ BEGIN
       FROM public.transactions p
       WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
       AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
-      AND (p.gateway IS NULL OR btrim(p.gateway)=''
-        OR upper(btrim(p.gateway)) NOT IN
-          ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
+      AND upper(btrim(p.gateway))='PAYSTACK'
     ) l WHERE l.outstanding>0;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
@@ -72,15 +71,22 @@ BEGIN
     -- failed step with an error reports failed even under full
     -- coverage: the money is home but trusted finalization
     -- (settlement reversal, notifications) never ran, and only a
-    -- rerun completes it. A failed step WITHOUT an error stays a
-    -- drain-owned requeue: reporting it failed would strand the
-    -- zero-balance manual path behind a retry the branch rejects.
+    -- rerun completes it. A failed step WITHOUT an error is a
+    -- drain-owned requeue (every final manual re-arms one), so it
+    -- reports queued AHEAD of the money-only refunded label: the
+    -- panel treats refunded as terminal and stops polling, which
+    -- would hide a later async failure of settlement reversal or
+    -- notifications. A deferred step is the same shape (the drain
+    -- reselects it for finalization), so it queues too. Only a
+    -- completed (or absent) step lets full coverage report
+    -- refunded.
     'status',CASE WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
       WHEN p_pending>0 THEN 'processing'
       WHEN p_step_status='failed' AND p_step_error IS NOT NULL THEN 'failed'
+      WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
+      WHEN p_step_status='deferred' THEN 'queued'
       WHEN p_remaining=0 AND p_refunded>0 THEN 'refunded'
       WHEN p_step_status='claimed' THEN 'processing'
-      WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
       ELSE 'not_started' END,
     -- Raw worker/provider text never leaves the RPC: direct REST
     -- callers bypass the route masking, so map to the fixed labels

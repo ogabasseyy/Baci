@@ -20,6 +20,7 @@ import {
  */
 export async function settleCancellationRefundInitiation({
   auditBlockedTransactions,
+  budgetDeferred,
   deadlineMs,
   initiationTransactions,
   isLastAttempt,
@@ -33,6 +34,7 @@ export async function settleCancellationRefundInitiation({
   verifiedManualPaystackLegIds,
 }: {
   auditBlockedTransactions: GatewayPaymentTransaction[];
+  budgetDeferred?: boolean;
   deadlineMs?: number;
   initiationTransactions: GatewayPaymentTransaction[];
   isLastAttempt?: boolean;
@@ -68,6 +70,16 @@ export async function settleCancellationRefundInitiation({
     // land on a completed row no drain reselects, stranding finalization.
     await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
     throw new DeferredError('cancellation_refund_awaiting_manual_completion');
+  }
+  if (budgetDeferred === true) {
+    // A budget-short run initiated its verified prefix above:
+    // reselect for the unverified remainder instead of completing
+    // with legs outstanding. The reset keeps the resume on a fresh
+    // budget; initiated refunds persist, so every resume converges.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError(
+      'cancellation_refund_preflight_deferred_for_budget'
+    );
   }
   return { refundIds };
 }

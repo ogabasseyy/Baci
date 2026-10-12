@@ -265,6 +265,7 @@ export async function executeOrderCancellationSideEffect({
   // initiated for them, so terminalizing would only strand the rest.
   const {
     auditBlockedTransactions,
+    budgetDeferred,
     initiationTransactions,
     verifiedManualPaystackLegIds,
   } = await preflightCancellationRefundInitiation({
@@ -281,6 +282,7 @@ export async function executeOrderCancellationSideEffect({
   });
   return settleCancellationRefundInitiation({
     auditBlockedTransactions,
+    budgetDeferred,
     deadlineMs,
     initiationTransactions,
     isLastAttempt,

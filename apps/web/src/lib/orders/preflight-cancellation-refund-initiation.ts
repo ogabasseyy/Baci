@@ -13,14 +13,17 @@ import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gatewa
 // Worst-case sizing for one leg's provider preflight: a verify plus a
 // list page may take up to 30s (mirroring the provider precedent),
 // and the finish write reserves 8s after the last response
-// (mirroring the audit margin precedent). Starting a leg short of
-// both burns the window initiation needs, and every retry repeats
-// the same starvation — so admit per leg and defer when short.
+// (mirroring the audit margin precedent). Each verification starts
+// only when one initiation leg still fits after it, so the run
+// always converts its verified prefix into initiated refunds
+// instead of burning the attempt on checks alone.
 const PREFLIGHT_PROVIDER_CALL_WORST_MS = 30_000;
 const PREFLIGHT_FINISH_WRITE_RESERVE_MS = 8_000;
 // One initiation leg worst case, mirroring the initiation admission
-// (provider call plus its audit reserve): preflight leaves room for
-// every outstanding leg before verifying the first.
+// (provider call plus its audit reserve). Initiation paces itself
+// per leg, so preflight reserves a single leg — never the whole
+// outstanding set, which starves multi-leg orders behind windows
+// shorter than the full worst case on every invocation.
 const REFUND_INITIATION_LEG_WORST_MS = 38_000;
 
 interface CancellationRefundLedgerRow {
@@ -42,7 +45,11 @@ interface CancellationRefundLedgerRow {
  * separate set: they never initiate (merchant money plus a provider
  * refund would double-pay), but provider confirmation converts the
  * claim into stamped coverage instead of a blind quarantine.
- * Throws (never returns partial sets).
+ * When the window fits some verifications but not all, returns the
+ * verified prefix with budgetDeferred so the run initiates it and
+ * resumes the remainder next tick; only a window too short for any
+ * verification throws. Initiated refunds persist per leg, so every
+ * budget-deferred run still converges.
  */
 export async function preflightCancellationRefundInitiation({
   auditBlockedLegIds,
@@ -68,6 +75,7 @@ export async function preflightCancellationRefundInitiation({
   transactions: GatewayPaymentTransaction[];
 }): Promise<{
   auditBlockedTransactions: GatewayPaymentTransaction[];
+  budgetDeferred: boolean;
   initiationTransactions: GatewayPaymentTransaction[];
   verifiedManualPaystackLegIds: string[];
 }> {
@@ -173,24 +181,34 @@ export async function preflightCancellationRefundInitiation({
           isUnverifiedManualPaystackRefund(row)
       )
   );
-  const totalVerifyLegs = paystackLegs.length + manualVerifyLegs.length;
+  const verifiedPaystackLegIds = new Set<string>();
+  const verifiedManualPaystackLegIds: string[] = [];
+  let budgetShortfall = false;
   const verifyLeg = async (
-    transaction: GatewayPaymentTransaction & { gateway_reference: string },
-    verifyIndex: number
-  ): Promise<void> => {
-    // Reserve the full remaining worst case before starting another
-    // provider verification — this and later verifications plus the
-    // initiation legs that follow — or a slow-but-successful check
-    // consumes the window and initiation deadline-exceeds without
-    // sending a refund, burning an attempt on work never started.
+    transaction: GatewayPaymentTransaction & { gateway_reference: string }
+  ): Promise<boolean> => {
+    // Reserve this verification plus one initiation leg before
+    // starting another provider check: initiation paces itself per
+    // leg, so one leg of room guarantees this run converts its
+    // verified prefix into initiated refunds. Reserving the whole
+    // outstanding set instead starves multi-leg orders behind every
+    // window shorter than the full worst case.
     const remainingMs =
       deadlineMs === undefined
         ? undefined
         : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
     const requiredMs =
-      (totalVerifyLegs - verifyIndex) * PREFLIGHT_PROVIDER_CALL_WORST_MS +
-      outstandingTransactions.length * REFUND_INITIATION_LEG_WORST_MS;
+      PREFLIGHT_PROVIDER_CALL_WORST_MS + REFUND_INITIATION_LEG_WORST_MS;
     if (remainingMs !== undefined && remainingMs < requiredMs) {
+      if (
+        verifiedPaystackLegIds.size > 0 ||
+        verifiedManualPaystackLegIds.length > 0
+      ) {
+        // Verified a prefix: initiate it and resume the remainder
+        // next tick instead of discarding verified work.
+        budgetShortfall = true;
+        return false;
+      }
       // Starvation is not failure: reset the budget the claim
       // consumed so the resume retries fresh instead of mistaking
       // a short window for exhaustion.
@@ -234,18 +252,19 @@ export async function preflightCancellationRefundInitiation({
       }
       throw error;
     }
+    return true;
   };
-  for (const [index, transaction] of paystackLegs.entries()) {
-    await verifyLeg(transaction, index);
+  for (const transaction of paystackLegs) {
+    if (!(await verifyLeg(transaction))) break;
+    verifiedPaystackLegIds.add(transaction.id);
   }
   // A verified manual claim persists its proof before the caller
   // quarantines withheld legs: the stamp converts the merchant claim
   // into coverage, and the returned ids keep provider-confirmed legs
   // out of the blind quarantine. Check failures quarantine with
   // provider-specific evidence inside the check itself.
-  const verifiedManualPaystackLegIds: string[] = [];
-  for (const [offset, transaction] of manualVerifyLegs.entries()) {
-    await verifyLeg(transaction, paystackLegs.length + offset);
+  for (const transaction of manualVerifyLegs) {
+    if (!(await verifyLeg(transaction))) break;
     await stampVerifiedManualPaystackRefunds({
       linkedPaymentId,
       refundRows: refundRows ?? [],
@@ -254,9 +273,19 @@ export async function preflightCancellationRefundInitiation({
     });
     verifiedManualPaystackLegIds.push(transaction.id);
   }
+  // Without a shortfall every paystack leg verified and the filter
+  // below is identity; with one, unverified legs wait for the resume
+  // instead of initiating unchecked. Non-paystack legs never needed
+  // verification, so they ride along either way.
+  const paystackLegIds = new Set(paystackLegs.map((leg) => leg.id));
   return {
     auditBlockedTransactions,
-    initiationTransactions,
+    budgetDeferred: budgetShortfall,
+    initiationTransactions: initiationTransactions.filter(
+      (transaction) =>
+        !paystackLegIds.has(transaction.id) ||
+        verifiedPaystackLegIds.has(transaction.id)
+    ),
     verifiedManualPaystackLegIds,
   };
 }

@@ -21,11 +21,13 @@ jobs:
   smoke:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     outputs:
       version: ${{ steps.pin.outputs.version }}
+      install_sha: ${{ steps.stage.outputs.install_sha }}
+      pins_sha: ${{ steps.stage.outputs.pins_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,6 +36,27 @@ jobs:
       - name: Resolve latest public stable pin
         id: pin
         run: python3 .github/scripts/muse-pin-update.py
+
+      # Stage, hash, and upload the resolved pin files BEFORE the
+      # unreviewed binary is executed below, so it cannot tamper with
+      # the bytes that cross into the write job.
+      - name: Stage the resolved pin files
+        id: stage
+        if: steps.pin.outcome == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p pin-files/.github/scripts/muse-review
+          cp .github/scripts/muse-review/install.sh pin-files/.github/scripts/muse-review/install.sh
+          cp .github/scripts/semgrep_sarif_pins.py pin-files/.github/scripts/semgrep_sarif_pins.py
+          echo "install_sha=$(sha256sum pin-files/.github/scripts/muse-review/install.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "pins_sha=$(sha256sum pin-files/.github/scripts/semgrep_sarif_pins.py | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the resolved pin files
+        if: steps.pin.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: muse-pin-files
+          path: pin-files
 
       - name: Smoke-test the pinned installer against the real binary
         if: steps.pin.outcome == 'success'
@@ -66,15 +89,6 @@ jobs:
             exit 1
           fi
 
-      - name: Upload the smoke-verified pin files
-        if: steps.pin.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: muse-pin-files
-          path: |
-            .github/scripts/muse-review/install.sh
-            .github/scripts/semgrep_sarif_pins.py
-
   update-pin:
     needs: smoke
     if: github.ref == 'refs/heads/main'
@@ -93,6 +107,15 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: muse-pin-files
+
+      - name: Verify the downloaded pin files landed byte-identical
+        env:
+          INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
+        run: |
+          set -euo pipefail
+          test "$(sha256sum .github/scripts/muse-review/install.sh | awk '{print $1}')" = "$INSTALL_SHA"
+          test "$(sha256sum .github/scripts/semgrep_sarif_pins.py | awk '{print $1}')" = "$PINS_SHA"
 
       - name: Run Muse review and SARIF regression suites
         run: |
@@ -129,9 +152,14 @@ jobs:
             # ones just resolved and smoke-verified.
             gh api "repos/${REPO}/contents/.github/scripts/muse-review/install.sh?ref=${existing}" \
               --jq .content | base64 -d > "${RUNNER_TEMP}/existing-install.sh"
+            gh api "repos/${REPO}/contents/.github/scripts/semgrep_sarif_pins.py?ref=${existing}" \
+              --jq .content | base64 -d > "${RUNNER_TEMP}/existing-pins.py"
             if ! diff \
               <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' "${RUNNER_TEMP}/existing-install.sh") \
-              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' .github/scripts/muse-review/install.sh); then
+              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' .github/scripts/muse-review/install.sh) \
+              || ! diff \
+              <(grep -E 'MUSE_PINNED_VERSION|"[0-9a-f]{64}"' "${RUNNER_TEMP}/existing-pins.py") \
+              <(grep -E 'MUSE_PINNED_VERSION|"[0-9a-f]{64}"' .github/scripts/semgrep_sarif_pins.py); then
               echo "::error::Existing pin-update branch $existing carries different pins than the verified stable $VERSION; refusing to reuse it." >&2
               exit 1
             fi
@@ -139,7 +167,7 @@ jobs:
             # healthy open PR does not burn CI capacity every week.
             head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
             checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '.check_runs[].name')"
-            grep -qx 'Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
+            grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
             grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f trusted_changed=true
             grep -q '^Selftest (' <<<"$checks" || gh workflow run muse-review-selftest.yml --ref "$existing"
             exit 0

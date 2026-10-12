@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -95,6 +102,21 @@ test('loadGeneration rejects symlinked generation entries before reuse', async (
         stagingDir: retry.stagingDir,
       }),
     /not a directory/
+  );
+});
+
+test('loadGeneration rejects a symlinked generations root', async () => {
+  // generations/ itself swapped for a link to an outside tree holding
+  // a valid-looking generation dir: reuse must refuse the root instead
+  // of comparing children against the external target.
+  const outputRoot = await mkdtemp(join(tmpdir(), 'pilot-load-root-'));
+  const outside = await mkdtemp(join(tmpdir(), 'pilot-load-out-'));
+  const generationId = 'd'.repeat(64);
+  await mkdir(join(outside, generationId), { recursive: true });
+  await symlink(outside, join(outputRoot, 'generations'));
+  await assert.rejects(
+    () => loadGeneration(outputRoot, generationId),
+    /generations root escapes the output root/
   );
 });
 
@@ -225,4 +247,3 @@ test('loadGeneration rejects oversized manifests before parsing', async () => {
     /size ceiling/
   );
 });
-

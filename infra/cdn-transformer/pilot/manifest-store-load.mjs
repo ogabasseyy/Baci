@@ -33,12 +33,28 @@ export async function loadGeneration(outputRoot, generationId) {
     );
   }
   const generationsRoot = join(outputRoot, 'generations');
+  // Bind the root itself before trusting its children: a symlinked
+  // generations/ would otherwise resolve outside the output root and
+  // let reuse (or the quality sheet) accept external generations.
+  // Publication rejects the same nested-root symlink; loads must too.
+  const realOutput = await realpath(outputRoot).catch(() => {
+    throw new PilotManifestError(
+      'generation-missing',
+      'generation is not published'
+    );
+  });
   const realRoot = await realpath(generationsRoot).catch(() => {
     throw new PilotManifestError(
       'generation-missing',
       'generation is not published'
     );
   });
+  if (realRoot !== join(realOutput, 'generations')) {
+    throw new PilotManifestError(
+      'generation-corrupt',
+      'generations root escapes the output root'
+    );
+  }
   if ((await realpath(dir)) !== join(realRoot, generationId)) {
     throw new PilotManifestError(
       'generation-corrupt',

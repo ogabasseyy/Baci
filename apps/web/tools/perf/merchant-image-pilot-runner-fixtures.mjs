@@ -12,12 +12,18 @@ export const ROUTE =
 // InitSession RESPONSE capabilities (never caller text).
 export async function browserLog(dir, name, profileDir) {
   const path = join(dir, name);
+  // Session 60s before the call: inside the gate's freshness window,
+  // safely preceding any HAR the caller writes around this fixture.
+  const sessionMs = Date.now() - 60_000;
+  const stamp = `${Math.floor(sessionMs / 1000)}.${String(
+    sessionMs % 1000
+  ).padStart(3, '0')}`;
   await writeFile(
     path,
     [
       '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       `  --user-data-dir=${profileDir} --headless --no-first-run`,
-      '[1702635762.891][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "154.0.0.0" } } }',
+      `[${stamp}][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "154.0.0.0" } } }`,
       '[browsertime] Navigating to http://localhost:3000/pilot-lab/store/ogabassey?arm=pilot',
     ].join('\n')
   );
@@ -33,8 +39,10 @@ export function pngBuffer(width, height) {
 }
 
 // Multi-session verbose log: each session is { profileDir, version },
-// version null when that session records no capabilities line. Used to
-// prove version parsing binds to the prepared-profile launch segment.
+// version null when that session records no capabilities line, stamp
+// overriding the chromedriver epoch stamp when supplied. Used to prove
+// version and session-time parsing bind to the prepared-profile
+// launch segment.
 export async function browserLogSessions(dir, name, sessions) {
   const path = join(dir, name);
   const lines = [];
@@ -46,8 +54,9 @@ export async function browserLogSessions(dir, name, sessions) {
       `  --user-data-dir=${session.profileDir} --headless --no-first-run`
     );
     if (session.version) {
+      const stamp = session.stamp ?? '1702635762.891';
       lines.push(
-        `[1702635762.891][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "${session.version}" } } }`
+        `[${stamp}][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "${session.version}" } } }`
       );
     }
     lines.push(

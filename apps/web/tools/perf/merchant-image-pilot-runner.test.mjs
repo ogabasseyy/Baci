@@ -195,9 +195,14 @@ describe('merchant-image-pilot-runner', () => {
       browserLog: join(dir, 'caps.log'),
       outDir: join(dir, 'bound-caps'),
     });
-    expect(
-      JSON.parse(await readFile(caps.browserLaunch, 'utf8')).executableVersion
-    ).toBe('154.0.0.0');
+    const capsLaunch = JSON.parse(await readFile(caps.browserLaunch, 'utf8'));
+    expect(capsLaunch.executableVersion).toBe('154.0.0.0');
+    // No epoch stamp in the segment: launchedAt falls back to the reset
+    // time instead of refusing the unstamped log.
+    const resetAt = JSON.parse(
+      await readFile(join(dir, 'run', 'profile-reset.json'), 'utf8')
+    ).resetAt;
+    expect(capsLaunch.launchedAt).toBe(resetAt);
     // A restarted browser logs two sessions: the later (navigating)
     // session's version wins.
     await writeLog('restart.log', [

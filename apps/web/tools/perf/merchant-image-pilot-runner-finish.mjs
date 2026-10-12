@@ -3,6 +3,15 @@
 // screenshot by its OS-recorded mtime, and emit the screenshot-capture
 // and browser-launch records. Split from
 // merchant-image-pilot-runner.mjs under the repo line ceiling.
+//
+// Trust model: the HAR, log, and screenshot are operator-supplied
+// artifacts. Finish checks their mutual consistency (single launch,
+// single page, recorded version/session binding, time windows, PNG
+// geometry) and freezes the bound set for audit — it cannot prove a
+// malicious operator captured them honestly (mtime and file bytes are
+// equally forgeable), only refuse the inconsistent and the stale.
+// Capture authenticity is an operator responsibility, same as HAR
+// authorship; the recorded hashes freeze the pair the operator chose.
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -16,6 +25,10 @@ import {
   writeJson,
 } from './merchant-image-pilot-preflight-shared.mjs';
 import {
+  resolvePreparedLaunch,
+  SESSION_NAV_SLACK_MS,
+} from './merchant-image-pilot-runner-finish-log.mjs';
+import {
   parseDimensions,
   parsePositiveNumber,
 } from './merchant-image-pilot-settings-helpers.mjs';
@@ -27,31 +40,6 @@ const PROVENANCE_WINDOW_MS = 3_600_000;
 // capturedAt check exactly, so finish refuses what the gate would fail.
 const CLOCK_SKEW_MS = 5_000;
 
-// Recorded executable version: the WebDriver session capabilities line,
-// either the chromedriver InitSession RESPONSE JSON
-// ("browserVersion":"154.0.0.0") or the selenium Caps rendering
-// (browserVersion: 154.0.0.0). Dotted quad only — exactly what the
-// gate's browser-provenance check accepts. Parsed only inside the
-// prepared-profile launch segment (that launch through the next browser
-// launch): last match wins within the segment, so the session response
-// beats an earlier requested-capabilities line, while a later retry or
-// unrelated session can neither supply nor override the version.
-const BROWSER_VERSION_PATTERN =
-  /(?:"browserVersion"\s*:\s*"(\d+\.\d+\.\d+\.\d+)"|\bbrowserVersion:\s*(\d+\.\d+\.\d+\.\d+))/g;
-
-function executableVersionFromLog(launchSegment, browserLog) {
-  let found;
-  for (const match of launchSegment.matchAll(BROWSER_VERSION_PATTERN)) {
-    found = match[1] ?? match[2];
-  }
-  if (found === undefined) {
-    throw new Error(
-      `prepared-profile launch records no browserVersion (need its WebDriver session-capabilities line); refusing to bind: ${browserLog}`
-    );
-  }
-  return found;
-}
-
 export function required(value, flag) {
   if (value === undefined || value === '') {
     throw new Error(`missing required --${flag}`);
@@ -59,8 +47,24 @@ export function required(value, flag) {
   return value;
 }
 
-function escapeRegExp(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// PNG geometry without a decoder dependency: 8-byte signature plus the
+// IHDR chunk (length 13, width/height big-endian). A non-PNG file, or a
+// capture at the wrong size, refuses here instead of gaining the run's
+// id with geometry the gate would trust from the record alone.
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
+function pngDimensions(bytes, screenshot) {
+  if (
+    bytes.length < 24 ||
+    !bytes.subarray(0, 8).equals(PNG_SIGNATURE) ||
+    bytes.readUInt32BE(8) !== 13 ||
+    bytes.subarray(12, 16).toString('latin1') !== 'IHDR'
+  ) {
+    throw new Error(`screenshot is not a PNG file: ${screenshot}`);
+  }
+  return { height: bytes.readUInt32BE(20), width: bytes.readUInt32BE(16) };
 }
 
 export async function finishRun({
@@ -81,11 +85,11 @@ export async function finishRun({
     throw new Error(`run handle has no prepared profile dir: ${runJson}`);
   }
   // Profile binding: the browser's recorded command line (Browsertime
-  // --verbose log) must show a launch with the exact prepared profile
-  // dir. A default- or reused-profile accident leaves no such token and
-  // refuses here instead of stamping a warm navigation as cold. The
-  // match is delimiter-terminated so a sibling prefix (/a/prof vs the
-  // prepared /a/profile) cannot satisfy it.
+  // --verbose log) must show exactly one launch with the exact prepared
+  // profile dir, and the recorded version/session bind to that launch's
+  // segment only. Fail fast, before writing anything: without recorded
+  // values the launch record would carry caller text the gate cannot
+  // trust.
   const logRead = await readUpToBytes(
     required(browserLog, 'browser-log'),
     MAX_BROWSER_LOG_BYTES
@@ -95,46 +99,11 @@ export async function finishRun({
       `browser log exceeds ${MAX_BROWSER_LOG_BYTES} bytes: ${browserLog}`
     );
   }
-  const logText = logRead.bytes.toString('utf8');
-  const launched = new RegExp(
-    `user-data-dir=${escapeRegExp(handle.profileDir)}(?=["'\\s]|$)`,
-    'g'
+  const { executableVersion, sessionMs } = resolvePreparedLaunch(
+    logRead.bytes.toString('utf8'),
+    handle.profileDir,
+    browserLog
   );
-  const launches = logText.match(launched) ?? [];
-  if (launches.length === 0) {
-    throw new Error(
-      `browser log shows no launch with the prepared profile dir (${handle.profileDir}); refusing to bind: ${browserLog}`
-    );
-  }
-  // Exactly one launch: a retry with the same profile dir (warm-up run,
-  // then a second run whose single-page HAR is submitted) would
-  // otherwise stamp a warm navigation with the reset's cold run id.
-  // Together with the single-page HAR rule, one launch means the bound
-  // page is that profile's only recorded navigation.
-  if (launches.length > 1) {
-    throw new Error(
-      `browser log shows ${launches.length} launches with the prepared profile dir (${handle.profileDir}); re-prepare instead of binding a possibly warm navigation: ${browserLog}`
-    );
-  }
-  // Fail fast, before writing anything: without a recorded version the
-  // launch record would carry caller text the gate cannot trust. The
-  // version binds to the prepared-profile launch segment only — a
-  // retry or unrelated session later in the log must not supply it.
-  const launchMatch = launched.exec(logText);
-  // The segment ends at the next launch on a LATER line: a repeated
-  // flag on the launch's own command line must not truncate it.
-  const launchLineEnd = logText.indexOf('\n', launchMatch.index);
-  const nextLaunchIndex = logText.indexOf(
-    'user-data-dir=',
-    launchLineEnd === -1
-      ? launchMatch.index + launchMatch[0].length
-      : launchLineEnd
-  );
-  const launchSegment = logText.slice(
-    launchMatch.index,
-    nextLaunchIndex === -1 ? undefined : nextLaunchIndex
-  );
-  const executableVersion = executableVersionFromLog(launchSegment, browserLog);
   const out = required(outDir, 'out-dir');
   await mkdir(out, { recursive: true });
   // One reset certifies exactly one navigation: multi-page HARs (repeat
@@ -191,6 +160,15 @@ export async function finishRun({
       `HAR page predates the profile reset; re-run the navigation inside this run instead of binding older evidence: ${har}`
     );
   }
+  // The prepared session must precede the navigation it certifies: a
+  // foreign HAR captured before the prepared launch would otherwise
+  // gain that launch's version and profile binding. Unstamped segments
+  // skip this ordering check (no launch time to compare).
+  if (sessionMs !== null && startedMs + SESSION_NAV_SLACK_MS < sessionMs) {
+    throw new Error(
+      `HAR page predates the prepared-browser session; re-run the navigation inside this run instead of binding older evidence: ${har}`
+    );
+  }
   const boundHar = join(out, 'run.har');
   await writeFile(boundHar, `${JSON.stringify(harJson)}\n`);
   // Same-navigation screenshot binding: capturedAt is the file's
@@ -226,6 +204,17 @@ export async function finishRun({
     'viewport'
   );
   const deviceScaleFactor = parsePositiveNumber(required(dpr, 'dpr'), 'dpr');
+  // The claimed viewport/dpr are caller text: the capture's actual
+  // pixels must agree, or a wrong-size file gains a geometry the gate
+  // would trust from the record alone.
+  const expectedWidth = Math.round(width * deviceScaleFactor);
+  const expectedHeight = Math.round(height * deviceScaleFactor);
+  const actual = pngDimensions(shotRead.bytes, screenshot);
+  if (actual.width !== expectedWidth || actual.height !== expectedHeight) {
+    throw new Error(
+      `screenshot is ${actual.width}x${actual.height} but viewport ${width}x${height} at dpr ${deviceScaleFactor} requires ${expectedWidth}x${expectedHeight}: ${screenshot}`
+    );
+  }
   const capturePath = join(out, 'screenshot-capture.json');
   await writeJson(capturePath, {
     capturedAt: new Date(shotMtimeMs).toISOString(),
@@ -244,14 +233,19 @@ export async function finishRun({
   if (resolve(resetSource) !== resolve(resetDest)) {
     await writeFile(resetDest, resetRead.bytes);
   }
-  // Executable provenance for the gate: the log-recorded dotted build,
-  // bound to this run id inside the same window the HAR checks.
-  // Validated here (bind time), not at the gate.
+  // Executable provenance for the gate: the log-recorded dotted build
+  // and launch time, bound to this run id inside the same window the
+  // HAR checks. Validated here (bind time), not at the gate. launchedAt
+  // is the prepared session's own stamp when recorded; unstamped
+  // segments fall back to the reset time, which always precedes the
+  // navigation and keeps the gate's ordering check meaningful only for
+  // stamped logs.
   const launchPath = join(out, 'browser-launch.json');
   await writeJson(launchPath, {
     event: 'browser-launch',
     executableVersion,
-    launchedAt: reset.resetAt,
+    launchedAt:
+      sessionMs === null ? reset.resetAt : new Date(sessionMs).toISOString(),
     runId: handle.runId,
     tool: handle.tool,
   });

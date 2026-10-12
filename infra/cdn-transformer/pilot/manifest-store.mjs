@@ -17,6 +17,7 @@ import {
   isUnsupportedSyncError,
   readUpToBytes,
   removeOwnedStaging,
+  writeConfinedFile,
 } from './disk-guards.mjs';
 import { generationIdFor } from './generation-identity.mjs';
 import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
@@ -115,8 +116,28 @@ export async function commitGeneration({
     await rename(stagedByName.get(name), join(commitDir, name));
   }
   const serializedManifest = `${JSON.stringify(valid, null, 2)}\n`;
-  await writeFile(join(commitDir, 'manifest.json'), serializedManifest);
+  // Confined exclusive create: a plain writeFile would follow a
+  // commit/manifest.json symlink planted after the commit-dir check and
+  // overwrite its external target — and the byte re-read below would
+  // then pass against the attacker's file. 'wx' refuses the planted
+  // name instead. Sync-unsupported filesystems keep the degraded
+  // durability verdict instead of aborting the publish.
   let durability = 'synced';
+  try {
+    await writeConfinedFile(commitDir, 'manifest.json', serializedManifest);
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new PilotManifestError(
+        'manifest-replaced',
+        'commit manifest appeared before the write; refusing to publish'
+      );
+    }
+    if (isUnsupportedSyncError(error)) {
+      durability = 'sync-unsupported';
+    } else {
+      throw error;
+    }
+  }
   try {
     for (const name of [...uniquePaths, 'manifest.json']) {
       await fsyncFile(join(commitDir, name));

@@ -266,6 +266,7 @@ export async function executeOrderCancellationSideEffect({
   const {
     auditBlockedTransactions,
     budgetDeferred,
+    budgetSkippedManualLegIds,
     initiationTransactions,
     verifiedManualPaystackLegIds,
   } = await preflightCancellationRefundInitiation({
@@ -283,6 +284,7 @@ export async function executeOrderCancellationSideEffect({
   return settleCancellationRefundInitiation({
     auditBlockedTransactions,
     budgetDeferred,
+    budgetSkippedManualLegIds,
     deadlineMs,
     initiationTransactions,
     isLastAttempt,

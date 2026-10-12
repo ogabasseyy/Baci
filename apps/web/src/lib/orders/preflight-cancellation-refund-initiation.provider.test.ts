@@ -77,6 +77,17 @@ describe('preflightCancellationRefundInitiation provider guards', () => {
       )
     ).rejects.toThrow('Payment currency requires review before refund');
   });
+  it('defaults a legacy blank order currency to NGN like the manager', async () => {
+    for (const currency of [null, '', '   ']) {
+      await expect(
+        preflightCancellationRefundInitiation(
+          preflightInput({
+            order: { ...order, currency } as never,
+          })
+        )
+      ).resolves.toBeDefined();
+    }
+  });
 
   it('quarantines overfunded ledgers instead of retrying them', async () => {
     const client = preflightSupabase();

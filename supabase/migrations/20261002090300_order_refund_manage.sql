@@ -156,7 +156,15 @@ BEGIN
       AND r.metadata ? 'reversed_at'),0)
     INTO v_reversed_internal;
   v_refunded := v_refunded + v_reversed_internal;
-  v_remaining := GREATEST(COALESCE(v_order.amount_paid,0)-v_refunded,0);
+  -- A superseded capture (a refunded obsolete leg matching
+  -- amount_paid beside an outstanding one) zeroes the paid-minus-
+  -- coverage remainder while the executor still owes the uncovered
+  -- leg: floor at the per-leg uncovered obligation so recording
+  -- stays open and the status stays honest.
+  v_remaining := GREATEST(COALESCE(v_order.amount_paid,0)-v_refunded,
+    private.uncovered_refund_obligation_v1(p_order_id,
+      v_order.merchant_id, v_order.currency, v_reversed_internal,
+      COALESCE(v_order.amount_paid,0)),0);
   -- A partial manual record mismatches the worker's gateway matcher
   -- (gateway 'manual' never covers a Paystack leg), so retrying now
   -- would quarantine the step and hide further manual actions. Once a

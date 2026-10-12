@@ -104,4 +104,25 @@ describe('settleCancellationRefundInitiation', () => {
     );
     expect(tryResetCancellationSideEffectAttempts).toHaveBeenCalled();
   });
+  it('withholds budget-skipped manuals from the quarantine but still defers', async () => {
+    const skipped = { ...paystackPayment, id: 'payment-2' };
+    const error = await settleCancellationRefundInitiation(
+      input({
+        budgetDeferred: true,
+        budgetSkippedManualLegIds: ['payment-2'],
+        mismatchedTransactions: [paystackPayment, skipped] as never,
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_preflight_deferred_for_budget'
+    );
+    // The genuine mismatch still quarantines; the skipped claim
+    // resumes verification next run instead of terminalizing.
+    expect(quarantineWithheldCancellationRefundLegs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mismatchedTransactions: [paystackPayment],
+      })
+    );
+  });
 });

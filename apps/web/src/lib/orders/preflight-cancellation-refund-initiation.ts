@@ -76,6 +76,7 @@ export async function preflightCancellationRefundInitiation({
 }): Promise<{
   auditBlockedTransactions: GatewayPaymentTransaction[];
   budgetDeferred: boolean;
+  budgetSkippedManualLegIds: string[];
   initiationTransactions: GatewayPaymentTransaction[];
   verifiedManualPaystackLegIds: string[];
 }> {
@@ -104,11 +105,16 @@ export async function preflightCancellationRefundInitiation({
   // A direct throw would terminalize the step without evidence, so
   // file the reconciliation review first like the other terminal
   // preflight paths.
+  // Legacy orders may carry a null or blank currency while their
+  // legs price in NGN: default the order side exactly like the
+  // manager, or every automatic retry quarantines a perfectly
+  // ordinary NGN order. Legs keep strict matching — a blank leg
+  // currency is genuinely unevaluable, not legacy.
+  const orderCurrency = normalizeRefundMoneyField(order.currency) || 'NGN';
   const mismatchedCurrencyLegs = outstandingTransactions.filter(
     (transaction) =>
       !normalizeRefundMoneyField(transaction.currency) ||
-      normalizeRefundMoneyField(transaction.currency) !==
-        normalizeRefundMoneyField(order.currency)
+      normalizeRefundMoneyField(transaction.currency) !== orderCurrency
   );
   if (mismatchedCurrencyLegs.length > 0) {
     await quarantineRefund({
@@ -262,9 +268,17 @@ export async function preflightCancellationRefundInitiation({
   // quarantines withheld legs: the stamp converts the merchant claim
   // into coverage, and the returned ids keep provider-confirmed legs
   // out of the blind quarantine. Check failures quarantine with
-  // provider-specific evidence inside the check itself.
-  for (const transaction of manualVerifyLegs) {
-    if (!(await verifyLeg(transaction))) break;
+  // provider-specific evidence inside the check itself. Legs past a
+  // budget shortfall are named so the caller defers (not
+  // quarantines) their unverified claims next run.
+  const budgetSkippedManualLegIds: string[] = [];
+  for (const [manualIndex, transaction] of manualVerifyLegs.entries()) {
+    if (!(await verifyLeg(transaction))) {
+      budgetSkippedManualLegIds.push(
+        ...manualVerifyLegs.slice(manualIndex).map((skipped) => skipped.id)
+      );
+      break;
+    }
     await stampVerifiedManualPaystackRefunds({
       linkedPaymentId,
       refundRows: refundRows ?? [],
@@ -281,6 +295,7 @@ export async function preflightCancellationRefundInitiation({
   return {
     auditBlockedTransactions,
     budgetDeferred: budgetShortfall,
+    budgetSkippedManualLegIds,
     initiationTransactions: initiationTransactions.filter(
       (transaction) =>
         !paystackLegIds.has(transaction.id) ||

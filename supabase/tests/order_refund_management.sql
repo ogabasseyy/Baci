@@ -1221,7 +1221,13 @@ BEGIN
       200, 200, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000045',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-045',
-      200, 200, 'paid', 'cancelled', pg_catalog.now());
+      200, 200, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000046',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-046',
+      200, 200, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000047',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-047',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
   WHERE id = '9ef11000-0000-4000-8000-000000000040';
@@ -1301,7 +1307,30 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000062',
       '9ef10100-0000-4000-8000-000000000001',
       '9ef11000-0000-4000-8000-000000000045', 'payment', 100, 'NGN',
-      'completed', 'korapay', 'kp-45b', '{}'::jsonb);
+      'completed', 'korapay', 'kp-45b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000063',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000046', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-46a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000064',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000046', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-46b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000065',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000046', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777065',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000063',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000066',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000047', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-47a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000067',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000047', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-47b', '{}'::jsonb);
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1336,6 +1365,23 @@ BEGIN
     RAISE EXCEPTION 'null-currency self-terminal leg did not flip label, got %',
       v_label;
   END IF;
+  -- A self-terminal leg with a linked terminal refund row counts
+  -- once (payment side), not twice: the sibling leg is still
+  -- uncovered, so the label must stay paid.
+  UPDATE public.transactions SET status = 'refunded'
+  WHERE id = '9ef12000-0000-4000-8000-000000000063';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000046';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'self-terminal double count flipped label, got %',
+      v_label;
+  END IF;
+  -- Superseded capture: the obsolete leg's reversal already matches
+  -- amount_paid while the live capture sits outstanding. (The
+  -- payment label still flips on the payment-side sum — a known
+  -- trigger follow-up outside the manager remainder fix.)
+  UPDATE public.transactions SET status = 'refunded'
+  WHERE id = '9ef12000-0000-4000-8000-000000000066';
 END;
 $refund_round33_fixtures$;
 
@@ -1351,6 +1397,26 @@ DO $refund_round33_status$
 DECLARE
   v_result jsonb;
 BEGIN
+  -- The self-terminal leg's linked row counts once: the manager
+  -- still owes the uncovered sibling leg.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000046'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100
+    OR (v_result->>'refunded')::numeric <> 100 THEN
+    RAISE EXCEPTION 'self-terminal leg double counted, refunded % remaining %',
+      v_result->>'refunded', v_result->>'remaining';
+  END IF;
+  -- The superseded capture's reversal matches amount_paid, but the
+  -- live capture is still owed: recording stays open.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000047'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100
+    OR NOT (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'superseded capture stranded, remaining % recordable %',
+      v_result->>'remaining', v_result->>'canRecordManual';
+  END IF;
   -- A first manual record that leaves a balance behind is partial in
   -- the same response: the panel must not advertise a retry the
   -- next call rejects until the next poll.

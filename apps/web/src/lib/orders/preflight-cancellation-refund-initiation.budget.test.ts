@@ -108,6 +108,58 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
     ]);
     expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(4);
   });
+  it('names skipped manual legs so settle defers instead of quarantining them', async () => {
+    // A slow ordinary verification consumes the window before the
+    // manual claim verifies: the skipped leg must resume next run,
+    // never quarantine as mismatched this run.
+    const start = 1_000_000_000_000;
+    let nowCalls = 0;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
+      nowCalls += 1;
+      return nowCalls <= 2 ? start : start + 40_000;
+    });
+    try {
+      const result = await preflightCancellationRefundInitiation(
+        preflightInput({
+          deadlineMs: start + 90_000,
+          manualLinkedLegIds: new Set(['payment-2']),
+          mismatchedIds: new Set(['payment-2']),
+          refundRows: [
+            {
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'manual',
+              id: 'refund-2',
+              metadata: {
+                method: 'paystack',
+                payment_transaction_id: 'payment-2',
+              },
+              status: 'completed',
+            },
+          ],
+          transactions: [
+            ...(fourPaystackLegs().slice(0, 1) as never[]),
+            {
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paystack',
+              gateway_reference: 'ref-2',
+              id: 'payment-2',
+            } as never,
+          ],
+        })
+      );
+      expect(result.budgetDeferred).toBe(true);
+      expect(result.budgetSkippedManualLegIds).toEqual(['payment-2']);
+      expect(result.verifiedManualPaystackLegIds).toEqual([]);
+      expect(result.initiationTransactions.map((leg) => leg.id)).toEqual([
+        'payment-1',
+      ]);
+      expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
   it('returns the verified prefix when the window runs short mid-run', async () => {
     // Four legs under a 90s workflow window: the first verification
     // fits, the second does not. The run must initiate its verified

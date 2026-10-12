@@ -21,6 +21,7 @@ import {
 export async function settleCancellationRefundInitiation({
   auditBlockedTransactions,
   budgetDeferred,
+  budgetSkippedManualLegIds,
   deadlineMs,
   initiationTransactions,
   isLastAttempt,
@@ -35,6 +36,7 @@ export async function settleCancellationRefundInitiation({
 }: {
   auditBlockedTransactions: GatewayPaymentTransaction[];
   budgetDeferred?: boolean;
+  budgetSkippedManualLegIds?: string[];
   deadlineMs?: number;
   initiationTransactions: GatewayPaymentTransaction[];
   isLastAttempt?: boolean;
@@ -48,6 +50,10 @@ export async function settleCancellationRefundInitiation({
   verifiedManualPaystackLegIds: string[];
 }): Promise<{ refundIds: number[] }> {
   const verifiedLegIds = new Set(verifiedManualPaystackLegIds);
+  // Budget-skipped manual legs are unverified, not mismatched: their
+  // claims resume next run, so quarantining them now would
+  // permanently strand legitimate claims behind delivery_uncertain.
+  const skippedLegIds = new Set(budgetSkippedManualLegIds ?? []);
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -60,7 +66,9 @@ export async function settleCancellationRefundInitiation({
   await quarantineWithheldCancellationRefundLegs({
     auditBlockedTransactions,
     mismatchedTransactions: mismatchedTransactions.filter(
-      (transaction) => !verifiedLegIds.has(transaction.id)
+      (transaction) =>
+        !verifiedLegIds.has(transaction.id) &&
+        !skippedLegIds.has(transaction.id)
     ),
     order,
     supabase,

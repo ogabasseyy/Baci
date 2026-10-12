@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 try:
     from codex_content_agent.prompt_builder import build_prompt
-except ImportError:  # In-repo checkout without the VPS writer package.
+except ImportError as exc:  # Skip only when the writer package itself is absent.
+    if exc.name and exc.name.split(".")[0] != "codex_content_agent":
+        raise
     build_prompt = None
     capability_context = None
 else:

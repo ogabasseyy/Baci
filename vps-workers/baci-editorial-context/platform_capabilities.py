@@ -31,7 +31,7 @@ def capability_context(*, now=None):
                 obj[key] = value
             return obj
         data = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
-        if not isinstance(data, dict) or data.get("schema_version") != 1:
+        if not isinstance(data, dict) or type(data.get("schema_version")) is not int or data["schema_version"] != 1:
             raise ValueError("schema")
         revision = data.get("source_revision", "")
         if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):

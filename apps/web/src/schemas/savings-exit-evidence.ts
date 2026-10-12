@@ -86,6 +86,15 @@ const localStoreConfiguration = z
         /^\/(?:private\/)?tmp\/baci-(?:savings-exit-accounting|piggyvest-runtime)\.[A-Za-z0-9]+\/socket$/
       ),
     port: z.number().int().min(1).max(65535),
+    // Bounded secret from server-only runtime configuration. Never a
+    // literal: the local-test harness and deployments supply the value,
+    // exact (never trimmed or transformed) but with no surrounding
+    // whitespace and no NUL (mirrors provider-ID persistence hygiene).
+    password: z
+      .string()
+      .min(8)
+      .max(128)
+      .refine((value) => value.trim() === value && !value.includes('\0')),
   })
   .strict();
 

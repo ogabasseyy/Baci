@@ -4138,6 +4138,10 @@ describe('fulfillPendingVtuTransaction', () => {
       });
 
       const supabase = createPendingTransactionSupabaseMock({
+        claimData: {
+          id: 'vtu-debit-err',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
         transactionRow: {
           id: 'vtu-debit-err',
           merchant_id: 'merchant-1',
@@ -4151,6 +4155,7 @@ describe('fulfillPendingVtuTransaction', () => {
           status: 'pending',
           metadata: { paymentSplit: { wallet: 300, card: 700 } },
           error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
           merchant_commission: 10,
           customer_cashback: 0,
           biller_name: null,
@@ -4190,6 +4195,10 @@ describe('fulfillPendingVtuTransaction', () => {
       const updatePayloads: unknown[] = [];
       const supabase = createPendingTransactionSupabaseMock({
         updatePayloads,
+        claimData: {
+          id: 'vtu-debit-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
         transactionRow: {
           id: 'vtu-debit-restore',
           merchant_id: 'merchant-1',
@@ -4238,6 +4247,90 @@ describe('fulfillPendingVtuTransaction', () => {
       }
     });
 
+    it('restores with the post-claim token, not the stale fetch-time token', async () => {
+      // R41: the claim bumps updated_at, so the fetch-time token is
+      // stale by the time an inline restore runs — comparing against
+      // it would match zero rows and strand a pre-debit failure (no
+      // ledger entry, so the reconciler never recovers it) in
+      // processing forever. FAILS pre-fix (eqs the stale T0).
+      const FETCH_TOKEN = '2026-10-12T00:00:00.000Z';
+      const CLAIM_TOKEN = '2026-10-12T00:00:01.000Z';
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection terminated', code: '08006' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const supabase = createPendingTransactionSupabaseMock({
+        claimData: { id: 'vtu-claim-token', updated_at: CLAIM_TOKEN },
+        transactionRow: {
+          id: 'vtu-claim-token',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-CLAIMTOKEN',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          updated_at: FETCH_TOKEN,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+      // Record every updated_at eq across update chains.
+      type EqFn = (column: string, value: unknown) => unknown;
+      const stub = supabase as unknown as {
+        from: (table: string) => {
+          update: (payload: unknown) => { eq?: EqFn };
+        };
+      };
+      const origFrom = stub.from;
+      const observedTokens: unknown[] = [];
+      stub.from = (table: string) => {
+        const tableStub = origFrom(table);
+        if (table !== 'vtu_transactions') {
+          return tableStub;
+        }
+        const origUpdate = tableStub.update;
+        tableStub.update = (payload: unknown) => {
+          const chain = origUpdate(payload);
+          const origEq = chain.eq;
+          if (typeof origEq === 'function') {
+            chain.eq = (column: string, value: unknown) => {
+              if (column === 'updated_at') {
+                observedTokens.push(value);
+              }
+              return origEq(column, value);
+            };
+          }
+          return chain;
+        };
+        return tableStub;
+      };
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-claim-token',
+        })
+      ).rejects.toThrow(/Failed to debit VTU wallet/);
+
+      expect(observedTokens).toContain(CLAIM_TOKEN);
+      expect(observedTokens).not.toContain(FETCH_TOKEN);
+    });
+
     it('restores walletDebited write failures to marked pending (debit is kept, re-drive short-circuits)', async () => {
       // The debit RPC committed but the flag write failed: restore so
       // the retry re-drives (RPC short-circuits on the ledger row,
@@ -4247,6 +4340,10 @@ describe('fulfillPendingVtuTransaction', () => {
       const supabase = createPendingTransactionSupabaseMock({
         updatePayloads,
         updateErrors: { finalMetadata: { message: 'write failed' } },
+        claimData: {
+          id: 'vtu-debited-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
         transactionRow: {
           id: 'vtu-debited-restore',
           merchant_id: 'merchant-1',

@@ -2507,7 +2507,7 @@ export async function fulfillPendingVtuTransaction({
     .update({ error_message: null, status: 'processing' })
     .eq('id', transactionId)
     .eq('status', claimableStatus)
-    .select('id')
+    .select('id, updated_at')
     .maybeSingle();
 
   if (claimUpdateError) {
@@ -2528,6 +2528,15 @@ export async function fulfillPendingVtuTransaction({
       status: 'processing',
     };
   }
+
+  // Refresh the snapshot token: the claim above bumped `updated_at`
+  // (DB trigger), so the fetch-time value is stale. Downstream
+  // pre-vend restores compare-and-set on this token — using the
+  // pre-claim value would match zero rows and strand the purchase in
+  // processing with no ledger entry for the reconciler to recover
+  // (Codex R41 rmh1d). `updated_at` has no other downstream
+  // consumers, so the refresh is side-effect-free.
+  row.updated_at = claimed.updated_at ?? row.updated_at;
 
   const { data: merchant } = await supabase
     .from('merchants')

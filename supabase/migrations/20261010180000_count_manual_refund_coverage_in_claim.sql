@@ -24,7 +24,7 @@ BEGIN
     RAISE EXCEPTION 'invalid_cancellation_side_effect';
   END IF;
 
-  SELECT o.merchant_id
+  SELECT o.merchant_id, o.currency
     INTO v_order
     FROM public.orders o
    WHERE o.id = p_order_id
@@ -239,6 +239,34 @@ BEGIN
               OR refund.metadata->>'provider_refund_status' = 'processed'
             )
        ) < internal_leg.amount
+  ) AND NOT EXISTS (
+    -- Unverified merchant Paystack claims block aggregate
+    -- finalization even when verified rows cover their leg: the
+    -- executor must still pair-or-quarantine each claim, or a
+    -- genuine second provider refund escapes reconciliation while
+    -- the manager keeps reporting the claim as pending. Mirrors
+    -- the manager's pending population (currency-matched,
+    -- validated link or none, positive amounts only so zero rows
+    -- invisible to the pending sum cannot strand finalization).
+    SELECT 1 FROM public.transactions merchant_claim
+     WHERE merchant_claim.order_id = p_order_id
+       AND merchant_claim.merchant_id = v_order.merchant_id
+       AND merchant_claim.transaction_type = 'refund'
+       AND merchant_claim.status IN ('completed', 'refunded')
+       AND merchant_claim.amount > 0
+       AND UPPER(BTRIM(merchant_claim.currency))
+         = UPPER(BTRIM(COALESCE(NULLIF(BTRIM(v_order.currency), ''), 'NGN')))
+       AND public.normalized_gateway_name_v1(merchant_claim.gateway) = 'MANUAL'
+       AND merchant_claim.metadata->>'method' = 'paystack'
+       AND merchant_claim.metadata->>'provider_refund_status'
+         IS DISTINCT FROM 'processed'
+       AND (merchant_claim.metadata->>'payment_transaction_id' IS NULL
+         OR EXISTS (SELECT 1 FROM public.transactions leg
+           WHERE leg.id::text
+             = merchant_claim.metadata->>'payment_transaction_id'
+             AND leg.order_id = p_order_id
+             AND leg.merchant_id = v_order.merchant_id
+             AND leg.transaction_type = 'payment'))
   ) THEN
     -- Every funded leg has terminal refund evidence, but the last leg may
     -- have landed through a silent self-terminal refund no worker

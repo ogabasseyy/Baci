@@ -98,14 +98,15 @@ CREATE TABLE public.orders (
   id uuid PRIMARY KEY,
   merchant_id uuid NOT NULL,
   shipping_status text,
-  cancelled_at timestamptz
+  cancelled_at timestamptz,
+  currency text
 );
 SQL
   psql -X -q -v ON_ERROR_STOP=1 \
     -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"
   psql -X -q -v ON_ERROR_STOP=1 <<SQL
-INSERT INTO public.orders (id, merchant_id, shipping_status, cancelled_at)
-VALUES ('$ORDER_ID', '$MERCHANT_ID', 'cancelled', now());
+INSERT INTO public.orders (id, merchant_id, shipping_status, cancelled_at, currency)
+VALUES ('$ORDER_ID', '$MERCHANT_ID', 'cancelled', now(), 'NGN');
 SQL
 else
   if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then

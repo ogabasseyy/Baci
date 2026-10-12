@@ -160,6 +160,28 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
       nowSpy.mockRestore();
     }
   });
+  it('keeps the verified prefix when a later check defers', async () => {
+    // A deferred provider listing must not discard the already
+    // verified leg: settle initiates the prefix and resumes the
+    // rest instead of repeating the same checks every drain.
+    vi.mocked(checkCancellationRefundProvider)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new DeferredError('cancellation_refund_provider_verification_deferred')
+      );
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        deadlineMs: Date.now() + 500_000,
+        order: { ...baseOrder, amount_paid: 400 } as never,
+        transactions: fourPaystackLegs() as never,
+      })
+    );
+    expect(result.budgetDeferred).toBe(true);
+    expect(result.initiationTransactions.map((leg) => leg.id)).toEqual([
+      'payment-1',
+    ]);
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(2);
+  });
   it('returns the verified prefix when the window runs short mid-run', async () => {
     // Four legs under a 90s workflow window: the first verification
     // fits, the second does not. The run must initiate its verified

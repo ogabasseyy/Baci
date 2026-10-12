@@ -1227,6 +1227,9 @@ BEGIN
       200, 200, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000047',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-047',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000048',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-048',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
@@ -1330,7 +1333,26 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000067',
       '9ef10100-0000-4000-8000-000000000001',
       '9ef11000-0000-4000-8000-000000000047', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'pp-47b', '{}'::jsonb);
+      'completed', 'paystack', 'pp-47b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000068',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000048', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-48a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000069',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000048', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777048',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000068',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000070',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000048', 'refund', 100, 'NGN',
+      'completed', 'manual', 'claim-48#1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000068',
+        'method', 'paystack',
+        'recorded_by', '9ef10100-0000-4000-8000-000000000001'));
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1377,11 +1399,15 @@ BEGIN
       v_label;
   END IF;
   -- Superseded capture: the obsolete leg's reversal already matches
-  -- amount_paid while the live capture sits outstanding. (The
-  -- payment label still flips on the payment-side sum — a known
-  -- trigger follow-up outside the manager remainder fix.)
+  -- amount_paid while the live capture sits outstanding. Neither the
+  -- label nor the remainder may treat the order as refunded.
   UPDATE public.transactions SET status = 'refunded'
   WHERE id = '9ef12000-0000-4000-8000-000000000066';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000047';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'superseded capture flipped label, got %', v_label;
+  END IF;
 END;
 $refund_round33_fixtures$;
 
@@ -1676,6 +1702,19 @@ BEGIN
   IF v_link <> '9ef12000-0000-4000-8000-000000000061' THEN
     RAISE EXCEPTION 'cross-gateway pin linked %, want leg 061', v_link;
   END IF;
+  -- Stamping provider proof reassigns the same status to refire the
+  -- label sync: the audit must not log the record twice.
+  UPDATE public.transactions
+     SET status = status,
+         metadata = metadata || '{"provider_refund_status":"processed"}'::jsonb
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000035'
+     AND gateway_reference = 'implicit-pin-35#1';
+  SELECT count(*) INTO v_count FROM public.order_refund_events
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000035'
+     AND action = 'manual_recorded';
+  IF v_count <> 2 THEN
+    RAISE EXCEPTION 'proof stamp duplicated the audit, got % events', v_count;
+  END IF;
 END;
 $refund_round36_links$;
 
@@ -1914,6 +1953,17 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000027');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'unverified paystack manual finalized, got %', v_status;
+  END IF;
+  -- The guard holds even when a verified provider row covers the
+  -- same leg: the executor must still pair-or-quarantine the
+  -- merchant claim, or a second provider refund escapes
+  -- reconciliation.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000048', 'refund',
+    '9ef13000-0000-4000-8000-000000000048');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'covered-leg manual claim finalized, got %', v_status;
   END IF;
   -- The claim pins its orders-row lock explicitly: claim-vs-manual
   -- serialization must not rest on the incidental side-effect FK.

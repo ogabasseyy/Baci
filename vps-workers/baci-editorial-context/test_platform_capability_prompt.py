@@ -86,6 +86,12 @@ class CapabilityPromptTests(unittest.TestCase):
             self.assertNotIn("TOPSECRET", result)
             self.assertNotIn("ROWSECRET", result)
 
+    def test_helper_exception_degrades_to_unavailable_text(self):
+        with patch("codex_content_agent.platform_capabilities.capability_context", side_effect=MemoryError("boom")):
+            result = self.prompt()
+        self.assertIn("Register unavailable, invalid or stale", result)
+        self.assertIn("Documentation omission is not evidence of feature absence", result)
+
     def test_missing_register_does_not_turn_documentation_omissions_into_absence(self):
         with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": "/missing/register.json"}):
             self.assertIn("Documentation omission is not evidence of feature absence", self.prompt())

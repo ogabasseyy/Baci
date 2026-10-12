@@ -100,6 +100,10 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row()], review_scope="s" * 1001))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_non_string_dates_fail_closed(self):
+        result = self.render(_register([_row()], reviewed_at=20261012))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_naive_now_is_treated_as_utc(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"

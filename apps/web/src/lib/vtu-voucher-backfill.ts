@@ -1,6 +1,10 @@
 import { after } from 'next/server';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import {
+  isBackfillAttemptPaced,
+  VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY,
+} from '@/lib/vtu-backfill-pacing';
+import {
   backfillVtuVoucherPin,
   fulfillPendingVtuTransaction,
 } from '@/lib/vtu-fulfillment';
@@ -29,13 +33,14 @@ export const MAX_TOKEN_BACKFILL_SCHEDULES = 3;
 export const VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY =
   'voucherPinBackfillScheduledAt';
 export const VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY = 'voucherPinBackfillAttempts';
-// After a no-pin result, clear the timestamp so the next mobile poll can
-// retry immediately. Stop retrying successful no-pin rows after this many
-// Kuda BILL_TSQ calls.
+// After a no-pin result, clear the timestamp; the persisted
+// last-attempt marker then paces the next attempt (successful rows
+// only — see vtu-backfill-pacing). Stop retrying successful no-pin
+// rows after this many Kuda BILL_TSQ calls.
 export const MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS = 10;
 // Short dedupe window: only block a second concurrent attempt within the same
-// request burst. Once the after() callback clears the timestamp, the next poll
-// can schedule a fresh attempt.
+// request burst. Clearing the timestamp lifts this check, but successful rows
+// stay paced by the attempt interval until the next attempt is due.
 export const TOKEN_BACKFILL_DEDUPE_WINDOW_MS = 5_000;
 
 interface VoucherPinBackfillTransaction {
@@ -103,10 +108,16 @@ export function hasRecentBackfillSchedule(metadata: MetadataRecord): boolean {
     isString
   );
   const scheduledAtMs = scheduledAt ? Date.parse(scheduledAt) : Number.NaN;
-  return (
+  if (
     Number.isFinite(scheduledAtMs) &&
     Date.now() - scheduledAtMs < TOKEN_BACKFILL_DEDUPE_WINDOW_MS
-  );
+  ) {
+    return true;
+  }
+  // Pacing: 3s client polls would burn the 10-lookup budget in ~30s
+  // of a ~6min window. Only successful schedules write the marker,
+  // so processing rows are unaffected.
+  return isBackfillAttemptPaced(metadata);
 }
 
 async function markVoucherPinBackfillScheduled({
@@ -122,13 +133,17 @@ async function markVoucherPinBackfillScheduled({
   supabase: ReturnType<typeof createAdminClient>;
   transactionId: string;
 }): Promise<MetadataRecord | null> {
+  const nowIso = new Date().toISOString();
   const nextMetadata: MetadataRecord = {
     ...metadata,
-    [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date().toISOString(),
+    [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: nowIso,
   };
   if (consumeAttempt) {
     nextMetadata[VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY] =
       getBackfillAttempts(metadata) + 1;
+    // Persisted pacing marker (never cleared): spreads the 10-lookup
+    // budget across the client poll window.
+    nextMetadata[VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY] = nowIso;
   }
   let updateQuery = supabase
     .from('vtu_transactions')
@@ -159,13 +174,11 @@ async function markVoucherPinBackfillScheduled({
 }
 
 /**
- * After a no-pin result from Kuda, clear voucherPinBackfillScheduledAt so the
- * next mobile history poll can immediately schedule a fresh attempt (up to the
- * attempt cap).
- */
-/**
- * Clears voucherPinBackfillScheduledAt using compare-and-set so concurrent
- * metadata writes (e.g. webhooks) are not clobbered.
+ * After a no-pin result from Kuda, clear voucherPinBackfillScheduledAt using
+ * compare-and-set so concurrent metadata writes (e.g. webhooks) are not
+ * clobbered. Clearing lifts the 5s dedupe check; the persisted
+ * last-attempt marker still paces successful rows to one attempt per
+ * interval (up to the attempt cap).
  */
 async function clearVoucherPinBackfillTimestamp({
   currentMetadata,

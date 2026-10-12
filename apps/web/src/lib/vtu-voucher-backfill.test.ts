@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import {
+  VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS,
+  VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY,
+} from '@/lib/vtu-backfill-pacing';
+import {
   extractMetadataField,
   hasRecentBackfillSchedule,
   isString,
@@ -153,6 +157,50 @@ describe('vtu-voucher-backfill', () => {
     ).toBe(false);
   });
 
+  it('skips scheduling while a successful attempt is still paced', async () => {
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: {
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: new Date(
+          Date.now() - VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS + 1000
+        ).toISOString(),
+      },
+      originalMetadata: {},
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it('schedules again once the pacing interval elapses', async () => {
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: {
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: new Date(
+          Date.now() - VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS - 1000
+        ).toISOString(),
+      },
+      originalMetadata: {},
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+  });
+
   it('marks metadata (with attempt counter) and defers voucher-pin backfill for eligible transactions', async () => {
     const updateQuery = createUpdateQueryMock();
     const { supabase, update } = createSupabaseMock(updateQuery);
@@ -175,6 +223,7 @@ describe('vtu-voucher-backfill', () => {
         alpha: 'first',
         [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       },
     });
     expect(updateQuery.eq).toHaveBeenCalledWith('id', 'tx-1');
@@ -207,6 +256,7 @@ describe('vtu-voucher-backfill', () => {
         alpha: 'first',
         [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       },
       supabase,
       transactionId: 'tx-1',
@@ -216,7 +266,7 @@ describe('vtu-voucher-backfill', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the scheduled timestamp when backfill returns no pin so the next poll can retry', async () => {
+  it('clears the scheduled timestamp but keeps pacing state so retries spread across the window', async () => {
     const updateQuery = createUpdateQueryMock();
     const { supabase, update } = createSupabaseMock(updateQuery);
     mocks.backfillVtuVoucherPin.mockResolvedValue({
@@ -247,6 +297,14 @@ describe('vtu-voucher-backfill', () => {
     expect(update).toHaveBeenLastCalledWith({
       metadata: expect.objectContaining({
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+      }),
+    });
+    // The pacing marker survives the clear: an immediate next poll
+    // must NOT schedule (that would burn the 10-lookup budget in
+    // ~30s of a ~6min window).
+    expect(update).toHaveBeenLastCalledWith({
+      metadata: expect.objectContaining({
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       }),
     });
 

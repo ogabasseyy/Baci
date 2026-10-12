@@ -6,6 +6,8 @@ _inflight_lib_dir="${BASH_SOURCE[0]:-$0}"
 _inflight_lib_dir="${_inflight_lib_dir%/*}"
 # shellcheck source=promote-barrier.sh
 . "$_inflight_lib_dir/promote-barrier.sh"
+# shellcheck source=inflight-repo.sh
+. "$_inflight_lib_dir/inflight-repo.sh"
 #
 # Every function here RETURNS its status and never exits: deploy.sh
 # must complete the post-promote installation even when the promote
@@ -53,49 +55,6 @@ _inflight_repo=""
 PROMOTE_RECORD_BRANCH="ops/gigl-promote-record"
 PROMOTE_RECORD_FILE=".gigl-promote-record"
 
-_is_valid_repo_slug() {
-  # Exactly one slash, non-empty owner and repo. Two case stages: the
-  # first rejects empties and extras, the second requires the slash
-  # (a lone `*` fallback would accept a slash-less value and split it
-  # into owner=repo=itself).
-  case "$1" in
-    */*/* | /* | */ | "") return 1 ;;
-  esac
-  case "$1" in
-    */*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-_set_inflight_repo() {
-  # Resolve the repo explicitly: gh follows the checkout's remotes,
-  # so a fork-clone deploy would query the fork (no runs) and pass
-  # vacuously. Fail closed; the override covers exotic setups.
-  if [ -n "${BACI_DEPLOY_WORKFLOW_REPO:-}" ]; then
-    if ! _is_valid_repo_slug "$BACI_DEPLOY_WORKFLOW_REPO"; then
-      echo "Refusing worker promotion: BACI_DEPLOY_WORKFLOW_REPO must be 'owner/repo', got '$BACI_DEPLOY_WORKFLOW_REPO'." >&2
-      return 1
-    fi
-    _inflight_owner="${BACI_DEPLOY_WORKFLOW_REPO%%/*}"
-    _inflight_repo="${BACI_DEPLOY_WORKFLOW_REPO#*/}"
-    return 0
-  fi
-  inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
-  inflight_repo=""
-  case "$inflight_remote" in
-    https://github.com/* | http://github.com/* | git@github.com:* | ssh://git@github.com/*)
-      inflight_repo="${inflight_remote%.git}"
-      inflight_repo="${inflight_repo##*github.com[:/]}"
-      ;;
-  esac
-  if ! _is_valid_repo_slug "$inflight_repo"; then
-    echo "Refusing worker promotion: cannot resolve the deploy repo from origin '$inflight_remote'. Run from a clean clone of the production repo, or set BACI_DEPLOY_WORKFLOW_REPO=owner/repo." >&2
-    return 1
-  fi
-  _inflight_owner="${inflight_repo%%/*}"
-  _inflight_repo="${inflight_repo#*/}"
-}
-
 # Lists every non-completed main-branch deploy.yml run as TSV (id,
 # status, short-sha, event, url) with NO fixed recent-run window: a
 # `gh run list --limit N` filter applies AFTER the limit, hiding
@@ -114,9 +73,9 @@ _list_noncompleted_deploy_runs() {
   _list_pass=1
   while [ "$_list_pass" -le 3 ]; do
     _list_pass_tsv=""
-    for _list_status in queued in_progress waiting requested pending; do
+    for _list_status in queued in_progress waiting requested pending action_required; do
       if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
-        --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
+        --jq '.workflow_runs[] | select(.status != "completed" or .conclusion == "action_required") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
         2>"${_list_err_file:-/dev/null}")"; then
         return 1
       fi
@@ -277,7 +236,13 @@ record_deploy_workflow_promote() {
 _push_promote_record() {
   push_value="$1"
   push_ref="refs/baci-tmp/promote-record"
-  push_msg="record worker promote overlap ${push_value%%:*} [skip ci]"
+  # No [skip ci]: the pre-push hook is bypassable, so the Ops
+  # Promote Record workflow re-validates this branch from the last
+  # validated tip on a 15-minute schedule (a push trigger cannot work:
+  # the orphan branch never contains workflow files). Detection lags
+  # up to the schedule interval — a --no-verify push is NOT
+  # immediately server-validated.
+  push_msg="record worker promote overlap ${push_value%%:*}"
   # Plumbing only: no checkout touched. Committer identity rides on
   # the command line so a bare-bones operator clone (no user.name or
   # user.email configured) still records.

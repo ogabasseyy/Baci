@@ -1,0 +1,123 @@
+name: Ops Promote Record
+
+# Server-side backstop for the pre-push hook: `git push --no-verify`
+# or a machine without hooks installed bypasses client-side
+# validation. A `push` trigger cannot provide this: GitHub sources
+# push workflows from the pushed ref, and ops/gigl-promote-record is
+# an orphan operational tree that never contains this file. So the
+# default branch validates the operational branch on a schedule
+# instead (plus manual dispatch). The last validated tip persists in
+# the actions cache under a rotating key (an exact-key hit skips the
+# save, so the key must be unique per attempt — reruns reuse run_id);
+# validating from that tip
+# enforces fast-forward, so a force-push rewrite fails the check even
+# when every rewritten tree is shape-valid. A red check means the
+# branch holds an invalid or non-fast-forward record — reconcile the
+# branch, do not push more on top of it. Intended validation cadence
+# is the schedule interval; GitHub can delay or drop scheduled runs,
+# so the interval does not bound detection delay. Polling observes
+# states, not events: a promote plus a force-push rewrite inside one
+# interval collapses to the observed tip, so an erased record is
+# undetectable here. Keep a non_fast_forward ruleset on this branch
+# so rewrites are refused server-side. A cache miss (first run or
+# eviction)
+# fails closed WITHOUT re-seeding: silently re-seeding would launder
+# a rewritten history as the new fast-forward base. Recover by
+# verifying the branch history out-of-band, then running a manual
+# dispatch with confirm_reseed. Rotating keys (~100 bytes each, LRU'd
+# after 7 idle days) are negligible against the 10GB cache quota.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm_reseed:
+        description: 'Cache miss recovery only: re-seed the tip after out-of-band history verification'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Serialize scheduled runs: two overlapping runs would validate from
+# the same cached tip and race the re-seed.
+concurrency:
+  group: ops-promote-record
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # A tracked .ops-promote-last-tip would survive a cache miss and
+      # masquerade as the validated baseline, bypassing confirm_reseed
+      # recovery: clear the path so only a cache hit provides it.
+      - name: Clear workspace tip file before cache restore
+        run: rm -f .ops-promote-last-tip
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ops-promote-last-tip
+          key: ops-promote-last-tip-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ops-promote-last-tip-
+      - name: Validate promote-record history
+        run: |
+          # ls-remote separates a confirmed-missing ref (success, empty)
+          # from auth/transport/server failures (nonzero): only the
+          # former may exit green without validating anything.
+          if ! ref_info="$(git ls-remote --heads origin ops/gigl-promote-record 2>/dev/null)"; then
+            echo 'cannot reach origin to query ops/gigl-promote-record; failing closed.' >&2
+            exit 1
+          fi
+          if [ -z "$ref_info" ]; then
+            # A missing ref always fails closed: with a cached tip it
+            # means the branch was deleted, and without one an evicted
+            # cache is indistinguishable from a branch that never
+            # existed — either way there is no validated history to
+            # trust. If no promote has ever run, create the branch via
+            # a promote; otherwise investigate the deletion.
+            echo '::error::ops/gigl-promote-record is missing; failing closed without validation.' >&2
+            exit 1
+          fi
+          if ! git fetch origin ops/gigl-promote-record 2>/dev/null; then
+            echo 'ops/gigl-promote-record exists but cannot be fetched; failing closed.' >&2
+            exit 1
+          fi
+          tip="$(git rev-parse FETCH_HEAD)"
+          if [ ! -f .ops-promote-last-tip ] && [ "${{ inputs.confirm_reseed }}" != 'true' ]; then
+            echo '::error::no cached tip (first run or cache eviction); refusing to silently re-seed. Verify the branch history out-of-band, then re-run with confirm_reseed.'
+            # Report shape state for signal, but fail closed regardless.
+            node ci_scripts/validate-promote-record.mjs "$tip" '0000000000000000000000000000000000000000' || true
+            exit 1
+          fi
+          previous='0000000000000000000000000000000000000000'
+          if [ -f .ops-promote-last-tip ]; then
+            previous="$(cat .ops-promote-last-tip)"
+          fi
+          # Validate the cached tip BEFORE it reaches git fetch: quoting
+          # does not stop option parsing, so a dash-led cache value would
+          # parse as fetch options (--upload-pack= executes a command).
+          # The cache is written by this same workflow, so a malformed
+          # value means cache corruption or tampering — fail closed either
+          # way. All-zeros passes the shape check and skips the fetch
+          # below; the validator re-checks both identities afterwards.
+          stripped="$(printf '%s' "$previous" | tr -cd '0-9a-f')"
+          if [ "${#previous}" -ne 40 ] || [ "$stripped" != "$previous" ]; then
+            echo '::error::cached tip is not a 40-char hex SHA; refusing to fetch it.' >&2
+            exit 1
+          fi
+          # Best effort: after a rewrite the previous tip's objects may
+          # already be unreachable from every fetched ref. Missing
+          # objects still fail closed inside the validator. The '--'
+          # terminates option parsing as a second layer behind the shape
+          # check above.
+          if [ "$previous" != '0000000000000000000000000000000000000000' ]; then
+            git fetch origin -- "$previous" 2>/dev/null || true
+          fi
+          node ci_scripts/validate-promote-record.mjs "$tip" "$previous"
+          echo "$tip" > .ops-promote-last-tip

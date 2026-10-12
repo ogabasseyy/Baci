@@ -72,6 +72,37 @@ describe('pending-vtu-idempotency', () => {
     ).not.toBe(buildVtuPurchaseDescriptor(base));
   });
 
+  it('builds one descriptor for cosmetic phone/provider variants', () => {
+    // Same logical purchase after a reformat must reuse the key —
+    // a second descriptor would debit and vend twice.
+    const base = {
+      type: 'airtime',
+      amount: 500,
+      phoneNumber: '08031234567',
+      networkProvider: 'MTN',
+    };
+    const expected = buildVtuPurchaseDescriptor(base);
+    for (const phoneNumber of [
+      '+234 803 123 4567',
+      '2348031234567',
+      ' 08031234567 ',
+    ]) {
+      expect(buildVtuPurchaseDescriptor({ ...base, phoneNumber })).toBe(
+        expected
+      );
+    }
+    for (const networkProvider of ['mtn', ' MTN ', 'T2']) {
+      expect(buildVtuPurchaseDescriptor({ ...base, networkProvider })).toBe(
+        networkProvider === 'T2'
+          ? buildVtuPurchaseDescriptor({
+              ...base,
+              networkProvider: '9MOBILE',
+            })
+          : expected
+      );
+    }
+  });
+
   it('recalls a remembered key and forgets it on demand', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',

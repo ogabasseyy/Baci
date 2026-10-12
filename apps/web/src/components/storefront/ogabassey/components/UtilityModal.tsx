@@ -203,6 +203,8 @@ export const UtilityModal = ({
 
         <UtilityTabs
           activeTab={activeTab}
+          // Lock tabs in flight: result + poll read the live tab.
+          disabled={loading}
           onSelect={(tab) => {
             setActiveTab(tab);
             setStep('details');

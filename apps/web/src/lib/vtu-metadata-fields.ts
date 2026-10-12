@@ -41,3 +41,38 @@ export function extractMetadataField<T>(
   const value = metadata[key];
   return validator(value) ? value : null;
 }
+
+/**
+ * Allowlisted metadata snapshot for logs and error contexts.
+ * Everything else (pins, holder names) is dropped or redacted —
+ * raw metadata must never reach logs.
+ */
+export function getSafeMetadataDiagnostics(
+  metadata: Record<string, unknown>
+): Record<string, unknown> {
+  const safeKeys = [
+    'customerNewBalance',
+    'customerWalletCredited',
+    'dataPlanCode',
+    'gateway',
+    'merchantWalletCredited',
+    'paymentPending',
+    'paymentReference',
+  ] as const;
+  const diagnostics: Record<string, unknown> = {};
+
+  for (const key of safeKeys) {
+    if (key in metadata) {
+      diagnostics[key] = metadata[key];
+    }
+  }
+
+  if ('voucherPin' in metadata) {
+    diagnostics.voucherPin = '[REDACTED]';
+  }
+  if ('customerName' in metadata) {
+    diagnostics.customerName = '[REDACTED]';
+  }
+
+  return diagnostics;
+}

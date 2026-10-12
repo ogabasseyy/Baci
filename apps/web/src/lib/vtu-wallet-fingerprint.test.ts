@@ -38,6 +38,29 @@ describe('computeVtuWalletRequestFingerprint', () => {
     expect(a).not.toBe(b);
   });
 
+  it('hashes cosmetic phone/provider variants identically', () => {
+    // A reformat between attempts must attach to the same identity —
+    // otherwise the retry mints a fresh key and debits twice.
+    const a = computeVtuWalletRequestFingerprint(BASE_AIRTIME);
+    for (const phoneNumber of [
+      '+234 801 234 5678',
+      '2348012345678',
+      ' 08012345678 ',
+    ]) {
+      expect(
+        computeVtuWalletRequestFingerprint({ ...BASE_AIRTIME, phoneNumber })
+      ).toBe(a);
+    }
+    for (const networkProvider of ['mtn', ' MTN ', 'Mtn']) {
+      expect(
+        computeVtuWalletRequestFingerprint({
+          ...BASE_AIRTIME,
+          networkProvider,
+        })
+      ).toBe(a);
+    }
+  });
+
   it('produces a different hash when the type changes', () => {
     const a = computeVtuWalletRequestFingerprint(BASE_AIRTIME);
     const b = computeVtuWalletRequestFingerprint({

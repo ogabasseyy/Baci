@@ -15,6 +15,15 @@ import {
   purchaseBill as monnifyPurchaseBill,
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
+import { resolveConcurrentFailedVtuTransaction } from '@/lib/vtu-concurrent-failed-refund';
+import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
+import {
+  throwVtuPersistenceError,
+  VtuPersistenceError,
+} from '@/lib/vtu-persistence-error';
+
+export { VtuPersistenceError };
+
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
@@ -267,34 +276,6 @@ function setCustomerEmailNotificationResult({
     changed = setMetadataValue(metadata, state.attemptedKey, false) || changed;
   }
   return changed;
-}
-
-function getSafeMetadataDiagnostics(metadata: Record<string, unknown>) {
-  const safeKeys = [
-    'customerNewBalance',
-    'customerWalletCredited',
-    'dataPlanCode',
-    'gateway',
-    'merchantWalletCredited',
-    'paymentPending',
-    'paymentReference',
-  ] as const;
-  const diagnostics: Record<string, unknown> = {};
-
-  for (const key of safeKeys) {
-    if (key in metadata) {
-      diagnostics[key] = metadata[key];
-    }
-  }
-
-  if ('voucherPin' in metadata) {
-    diagnostics.voucherPin = '[REDACTED]';
-  }
-  if ('customerName' in metadata) {
-    diagnostics.customerName = '[REDACTED]';
-  }
-
-  return diagnostics;
 }
 
 function normalizeVoucherPin(value: unknown) {
@@ -750,24 +731,12 @@ async function refundCardOnly({
   return { metadataChanged, refundIssued: true, refundedAmount: totalAmount };
 }
 
-export class VtuPersistenceError extends Error {
-  constructor(message: string) {
-    super(message);
-    Object.setPrototypeOf(this, VtuPersistenceError.prototype);
-    this.name = 'VtuPersistenceError';
-  }
-}
-
 class VtuConcurrentUpdateError extends Error {
   constructor(message: string) {
     super(message);
     Object.setPrototypeOf(this, VtuConcurrentUpdateError.prototype);
     this.name = 'VtuConcurrentUpdateError';
   }
-}
-
-function throwVtuPersistenceError(message: string): never {
-  throw new VtuPersistenceError(message);
 }
 
 function isVtuConcurrentUpdateError(
@@ -1941,57 +1910,15 @@ async function resolveCurrentVtuTransactionState({
   }
 
   if (currentRow.status === 'failed') {
-    // Concurrent return (replay/cron overlap): the winner may have
-    // persisted failed but not yet confirmed the refund. Confirm it
-    // here — this response is terminal (the client rotates the key),
-    // and failed rows are cron-excluded, so an unconfirmed refund
-    // would strand the debit with no re-drive. Idempotent: a prior
-    // pass's flags short-circuit inside the helper.
-    const refundMetadata = { ...(currentRow.metadata ?? {}) };
-    const refund = await refundVtuToCustomerWallet({
-      metadata: refundMetadata,
+    // Concurrent return (replay/cron overlap): confirm the refund
+    // inline (terminal response + cron-excluded rows). Extracted per
+    // the Boy Scout Rule; the issuer is injected (module-private).
+    return await resolveConcurrentFailedVtuTransaction({
+      issueRefund: (metadata) =>
+        refundVtuToCustomerWallet({ metadata, row: currentRow, supabase }),
       row: currentRow,
       supabase,
     });
-    throwIfVtuRefundUnconfirmed({
-      row: currentRow,
-      refundIssued: refund.refundIssued,
-      refundedAmount: refund.refundedAmount,
-      failedMessage: currentRow.error_message ?? undefined,
-      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
-      message: `Unable to confirm VTU refund before returning concurrent failed purchase for ${currentRow.id}`,
-    });
-    if (refund.metadataChanged) {
-      const { error: refundMetadataUpdateError } = await supabase
-        .from('vtu_transactions')
-        .update({ metadata: refundMetadata })
-        .eq('id', currentRow.id)
-        .eq('status', 'failed');
-      if (refundMetadataUpdateError) {
-        // Same fail-closed shape as the direct failed branch: the
-        // wallet was credited but the row doesn't say so. Throw so
-        // the next request retries the metadata write (the RPC
-        // short-circuits on the existing ledger row).
-        console.error('Failed to persist concurrent VTU refund metadata:', {
-          error: refundMetadataUpdateError.message,
-          metadata: getSafeMetadataDiagnostics(refundMetadata),
-          transactionId: currentRow.id,
-        });
-        throwVtuPersistenceError(
-          `Failed to persist concurrent VTU refund metadata for ${currentRow.id}: ${refundMetadataUpdateError.message}`
-        );
-      }
-    }
-    return {
-      amount: Number(currentRow.amount) || 0,
-      error: currentRow.error_message || 'Purchase failed',
-      reference: currentRow.request_reference,
-      ...(refund.refundIssued &&
-        refund.refundedAmount > 0 && {
-          refundedToWallet: refund.refundedAmount,
-        }),
-      status: 'failed',
-    };
   }
 
   return {

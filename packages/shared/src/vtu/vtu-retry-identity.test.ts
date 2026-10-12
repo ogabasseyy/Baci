@@ -51,6 +51,58 @@ describe('vtu-retry-identity', () => {
     });
   });
 
+  it('converges cosmetic phone variants to one identity', () => {
+    // A reformat between attempts must NOT mint a fresh key: the
+    // descriptor is the only dedupe across an ambiguous timeout.
+    const variants = [
+      '08031234567',
+      '+234 803 123 4567',
+      '2348031234567',
+      '8031234567',
+      ' 08031234567 ',
+    ];
+    const canonical = variants.map((phoneNumber) =>
+      canonicalizeVtuRetryIdentity({
+        amount: 500,
+        phoneNumber,
+        type: 'airtime',
+      })
+    );
+    for (const entry of canonical) {
+      expect(entry.phoneNumber).toBe('08031234567');
+    }
+    expect(canonical[0]).toEqual(canonical[4]);
+  });
+
+  it('converges provider case, whitespace, and legacy aliases', () => {
+    for (const networkProvider of ['MTN', 'mtn', ' Mtn ', 'MTN ']) {
+      expect(
+        canonicalizeVtuRetryIdentity({ networkProvider }).networkProvider
+      ).toBe('MTN');
+    }
+    // Legacy Etisalat/T2 label (mirrors web normalization).
+    for (const networkProvider of ['T2', 't2', ' t2 ']) {
+      expect(
+        canonicalizeVtuRetryIdentity({ networkProvider }).networkProvider
+      ).toBe('9MOBILE');
+    }
+  });
+
+  it('trims other string fields and passes non-strings through', () => {
+    const canonical = canonicalizeVtuRetryIdentity({
+      amount: 500,
+      billerName: ' Ikeja Electric ',
+      customerIdentifier: ' 123456 ',
+      requireValidationRef: true,
+      walletAmount: 0,
+    });
+    expect(canonical.billerName).toBe('Ikeja Electric');
+    expect(canonical.customerIdentifier).toBe('123456');
+    expect(canonical.requireValidationRef).toBe(true);
+    expect(canonical.walletAmount).toBe(0);
+    expect(canonical.phoneNumber).toBeNull();
+  });
+
   it('drops non-identity fields (ephemeral refs, receipt metadata, bindings)', () => {
     const canonical = canonicalizeVtuRetryIdentity({
       amount: 500,

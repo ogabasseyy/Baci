@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -241,11 +242,16 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
     PurchaseSuccess: ({
       customerIdentifier,
       status,
+      type,
     }: {
       customerIdentifier?: string;
       status?: string;
+      type?: string;
     }) => (
-      <Text>{`Purchase success ${status ?? 'successful'} ${customerIdentifier ?? ''}`}</Text>
+      <>
+        <Text>{`Purchase success ${status ?? 'successful'} ${customerIdentifier ?? ''}`}</Text>
+        <Text>{`Purchase type ${type ?? 'none'}`}</Text>
+      </>
     ),
   };
 });
@@ -444,6 +450,36 @@ describe('UtilityPurchaseScreen', () => {
     expect(
       screen.getByText('Purchase success processing 43901766923')
     ).toBeOnTheScreen();
+  });
+
+  it('renders the submitted type when the pager swipes mid-flight', () => {
+    mockUseLocalSearchParams.mockReturnValue({ type: 'airtime' });
+    const { rerender } = render(<UtilityPurchaseScreen />);
+
+    // Airtime purchase completes in-session; the pager stamps its type.
+    const airtimeProps = mockAirtimeForm.mock.calls[0][0] as unknown as {
+      onSuccess: (result: {
+        amount: number;
+        customerIdentifier: string;
+        reference: string;
+        status: 'processing';
+      }) => void;
+    };
+    act(() => {
+      airtimeProps.onSuccess({
+        amount: 500,
+        customerIdentifier: '08031234567',
+        reference: 'ref-swipe',
+        status: 'processing',
+      });
+    });
+
+    // Pager swipes to data before settlement: the result + history
+    // poll must stay on airtime, not follow the live selection.
+    mockUseLocalSearchParams.mockReturnValue({ type: 'data' });
+    rerender(<UtilityPurchaseScreen />);
+
+    expect(screen.getByText('Purchase type airtime')).toBeOnTheScreen();
   });
 
   it('refreshes the wallet cache when a utility success includes cashback', async () => {

@@ -266,6 +266,30 @@ describe('UtilityModal checkout routing', () => {
     expect(screen.queryByText('Success!')).not.toBeInTheDocument();
   });
 
+  it('locks the utility tabs while a checkout is in flight', async () => {
+    harness.useWallet.mockReturnValue({
+      payWithWallet: true,
+      refreshWallet: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      walletLoading: false,
+    });
+    // Never resolves: the request stays in flight for the assertion.
+    harness.checkoutFetch.mockImplementation(() => new Promise(() => {}));
+
+    submitAirtimePurchase();
+
+    // A switch here would render the result + history poll under the
+    // wrong utility type (e.g. airtime polled as data, never settling).
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Data' })).toBeDisabled();
+    });
+    for (const name of ['Airtime', 'TV', 'Power', 'Betting']) {
+      expect(screen.getByRole('tab', { name })).toBeDisabled();
+    }
+  });
+
   it('rejects failed non-JSON checkout responses', async () => {
     harness.checkoutFetch.mockResolvedValue({
       ok: false,

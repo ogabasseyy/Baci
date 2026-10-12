@@ -248,7 +248,9 @@ export default function UtilityPurchaseScreen() {
             })
           }
           onCreateAccount={() => router.push('/auth/login')}
-          type={currentType}
+          // Submitted type wins: a mid-flight swipe must not repoint
+          // the result view + history poll at the newly selected type.
+          type={resolvedSuccessData.utilityType ?? currentType}
         />
       </StorefrontScreenShell>
     );

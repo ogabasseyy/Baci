@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractMetadataField,
+  getSafeMetadataDiagnostics,
   isMetadataRecord,
   isString,
   normalizeMetadata,
@@ -48,5 +49,23 @@ describe('vtu-metadata-fields', () => {
     expect(
       extractMetadataField({ gateway: 42 }, 'gateway', isString)
     ).toBeNull();
+  });
+
+  it('allow-lists safe keys and redacts secrets for diagnostics', () => {
+    expect(
+      getSafeMetadataDiagnostics({
+        gateway: 'paystack',
+        paymentReference: 'VTU-1',
+        voucherPin: '1234',
+        customerName: 'Ada',
+        internalToken: 'secret',
+      })
+    ).toEqual({
+      gateway: 'paystack',
+      paymentReference: 'VTU-1',
+      voucherPin: '[REDACTED]',
+      customerName: '[REDACTED]',
+    });
+    expect(getSafeMetadataDiagnostics({})).toEqual({});
   });
 });

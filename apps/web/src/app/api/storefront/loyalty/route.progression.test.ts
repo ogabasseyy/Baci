@@ -126,6 +126,34 @@ describe('GET /api/storefront/loyalty progression and catalog', () => {
     expect(body.tier_thresholds.vip).toBe(1000);
   });
 
+  it('drops nameless tiers before building progression', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        lifetime_points: 300,
+        current_tier: 'Starter',
+        tiers: [
+          { name: 'Starter', minPoints: 0 },
+          { minPoints: 500 },
+          { name: null, minPoints: 700 },
+          { name: '  ', minPoints: 800 },
+          { name: 'VIP', minPoints: 1000 },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.next_tier).toBe('vip');
+    expect(body.points_to_next_tier).toBe(700);
+    expect(body.tier_thresholds['']).toBeUndefined();
+  });
+
   it('clamps null tier thresholds to zero instead of failing', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {

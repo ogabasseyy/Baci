@@ -237,3 +237,23 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'foreign ledger rows moved the spendable projection'
 );
+
+SELECT pg_temp.assert_true(
+  (SELECT NOT EXISTS (
+     SELECT 1
+     FROM jsonb_array_elements(
+       COALESCE(
+         NULLIF(result -> 'transactions', 'null'::jsonb),
+         '[]'::jsonb
+       )
+     ) AS txn
+     WHERE txn ->> 'description' IN (
+       'VTU airtime earn', 'Wallet redemption'
+     )
+   )
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'foreign ledger rows leaked into storefront history'
+);

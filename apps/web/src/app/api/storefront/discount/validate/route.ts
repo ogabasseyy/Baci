@@ -68,7 +68,11 @@ export async function POST(request: NextRequest) {
     // Loyalty fallback (issue #3165): RDM-* codes live in
     // reward_redemptions, which the merchant-code lookup never reads. Only
     // attempted when the merchant lookup succeeded but found nothing — a
-    // lookup error keeps the existing invalid response below.
+    // lookup error keeps the existing invalid response below. State-
+    // distinguishing responses (used/expired/disabled) are intentional
+    // and match the merchant-code branch below; the 12-hex code space
+    // plus proxy rate limiting bound the probing oracle, and the order
+    // wrapper re-enforces every state authoritatively.
     if (!error && !discountCode) {
       const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
         'get_loyalty_redemption_for_checkout',

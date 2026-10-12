@@ -34,12 +34,8 @@ const DEFAULT_THRESHOLDS: Record<string, number> = {
   platinum: 10000,
 };
 
-// GET - Get customer's loyalty status.
-//
-// Reads through the get_loyalty_status RPC: the caller must own the
-// customer row, and the projection comes from the real schema (tiers JSONB,
-// points_cost/enabled rewards). The response shape is kept stable for the
-// use-loyalty.ts caller.
+// GET - Get customer's loyalty status through get_loyalty_status (caller
+// must own the row). The response shape is kept stable for use-loyalty.ts.
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -67,13 +63,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Resolve the caller's own live customer row for this merchant.
-    // A mismatch returns the same 404 as a missing customer so callers
-    // cannot probe which customer IDs exist. Soft-deleted rows are
-    // non-readable here. Unlinked guest rows also land here with no
-    // re-link hint (unlike enroll): enrollment is the only endpoint
-    // where linking is actionable, and a guest is correctly
-    // not-enrolled until they enroll, where the hint fires.
+    // Resolve the caller's own live customer row: mismatches return
+    // the same 404 as missing rows (no ID probing). Guests are
+    // not-enrolled until they enroll, where the re-link hint fires.
     const { data: customer, error: customerError } = await supabase
       .from('customers')
       .select('id')
@@ -139,7 +131,9 @@ export async function GET(request: NextRequest) {
     // digit-strings like calculate_loyalty_tier, else clamps to the 0 floor.
     // Multiplier/perks ride through for benefit display (null/empty when
     // the merchant never set them); non-arrays and non-strings are dropped
-    // rather than failing the whole status read.
+    // rather than failing the whole status read. Nameless entries are
+    // dropped too (SQL assignment skips them): kept as name: '' they
+    // would become a falsy next_tier and hide real progression.
     type RawTierEntry = {
       name?: unknown;
       minPoints?: unknown;
@@ -151,7 +145,10 @@ export async function GET(request: NextRequest) {
       : [];
     const rawTiers: RawTierEntry[] = candidates.filter(
       (entry): entry is RawTierEntry =>
-        typeof entry === 'object' && entry !== null
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as RawTierEntry).name === 'string' &&
+        ((entry as RawTierEntry).name as string).trim() !== ''
     );
     const normalizedResult = {
       ...result,

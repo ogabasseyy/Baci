@@ -83,7 +83,7 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
     );
   });
 
-  it('renders a generic label for a plain discount without a value', async () => {
+  it('directs a valueless plain discount to manual fulfillment, not checkout', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {
         ...createSuccessResult(),
@@ -104,9 +104,8 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.data.instructions).toBe(
-      'Apply this code at checkout to receive your discount.'
-    );
+    expect(body.data.instructions).toContain('Present this code');
+    expect(body.data.instructions).not.toContain('checkout');
   });
 
   it('directs free-shipping redemptions to manual fulfillment, not checkout', async () => {

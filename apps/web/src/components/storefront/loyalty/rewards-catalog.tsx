@@ -94,6 +94,7 @@ export function RewardsCatalog({
             instructions: result.instructions || '',
             expiresAt: result.expires_at || '',
             rewardType: result.reward_type,
+            discountValue: result.discount_value,
           });
           setShowSuccessDialog(true);
           onRedeemed?.();

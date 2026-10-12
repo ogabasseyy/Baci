@@ -17,6 +17,7 @@ export interface RedemptionSuccessResult {
   instructions: string;
   expiresAt: string;
   rewardType?: string;
+  discountValue?: number;
 }
 
 interface RedemptionSuccessDialogProps {
@@ -36,11 +37,16 @@ export function RedemptionSuccessDialog({
   const isStoreCredit = result?.rewardType === 'store_credit';
   // Manual-fulfillment types issue a presentable code but no online
   // checkout path: directing these customers to checkout is a dead end,
-  // so they get present-the-code copy instead.
+  // so they get present-the-code copy instead. Valueless discounts join
+  // them: neither checkout entry point bridges a code without a
+  // positive value.
+  const discountValue = result?.discountValue;
   const isManualFulfillment =
     result?.rewardType === 'free_product' ||
     result?.rewardType === 'exclusive_access' ||
-    result?.rewardType === 'free_shipping';
+    result?.rewardType === 'free_shipping' ||
+    (result?.rewardType === 'discount' &&
+      (discountValue == null || discountValue <= 0));
 
   const copyCode = () => {
     if (result?.code) {

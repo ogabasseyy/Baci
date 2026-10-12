@@ -127,4 +127,48 @@ describe('RedemptionSuccessDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it.each([
+    { discountValue: undefined },
+    { discountValue: 0 },
+  ])('shows present-the-code copy for a valueless discount (%o)', ({
+    discountValue,
+  }) => {
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={{
+          ...RESULT,
+          rewardType: 'discount',
+          discountValue,
+          instructions: 'Present this code to receive your discount.',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText(/Present the code below as instructed\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/at checkout/)).not.toBeInTheDocument();
+    expect(screen.getByText('RDM-ABC123')).toBeInTheDocument();
+  });
+
+  it('keeps the checkout direction for a valued discount', () => {
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={{
+          ...RESULT,
+          rewardType: 'discount',
+          discountValue: 1500,
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText(/Use the code below at checkout\./)
+    ).toBeInTheDocument();
+  });
 });

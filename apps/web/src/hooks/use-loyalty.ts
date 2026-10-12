@@ -10,6 +10,7 @@ interface RedemptionResult {
   redemption_code?: string;
   reward_name?: string;
   reward_type?: string;
+  discount_value?: number;
   points_spent?: number;
   new_balance?: number;
   expires_at?: string;
@@ -142,6 +143,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         redemption_code: result.data.redemption_code,
         reward_name: result.data.reward_name,
         reward_type: result.data.reward_type,
+        discount_value: result.data.discount_value,
         points_spent: result.data.points_spent,
         new_balance: result.data.new_balance,
         expires_at: result.data.expires_at,

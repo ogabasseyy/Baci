@@ -63,10 +63,11 @@ function getRedemptionInstructions(
   switch (reward.reward_type) {
     case 'discount':
       // Plain discounts without a positive value stay redeemable (the
-      // RPC's valued guard covers only the valued types), so render a
-      // generic label instead of "undefined"/zero off.
+      // RPC's valued guard covers only the valued types), but neither
+      // checkout entry point bridges them — so manual fulfillment, not
+      // a checkout promise the wrapper must reject as not_applicable.
       if (reward.discount_value == null || reward.discount_value <= 0) {
-        return 'Apply this code at checkout to receive your discount.';
+        return 'Present this code to receive your discount. Contact the store for details.';
       }
       if (reward.discount_type === 'percentage') {
         return `Apply this code at checkout to receive ${reward.discount_value}% off your order.`;

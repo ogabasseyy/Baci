@@ -50,9 +50,13 @@ AS $$
       -- FIFO lot positions or inflate consumption (a 100-point wallet
       -- redemption would otherwise make an expired 100-point purchase
       -- lot look fully spent). Every other source mutates
-      -- customer_loyalty.
-      AND points_transactions.source NOT IN (
-        'vtu_airtime_purchase', 'wallet_redemption'
+      -- customer_loyalty; NULL sources (legacy rows predate the
+      -- vocabulary no foreign writer omits) stay included.
+      AND (
+        points_transactions.source IS NULL
+        OR points_transactions.source NOT IN (
+          'vtu_airtime_purchase', 'wallet_redemption'
+        )
       )
   ),
   total_consumed AS (
@@ -231,6 +235,14 @@ BEGIN
     FROM public.points_transactions
     WHERE merchant_id = p_merchant_id
       AND customer_id = p_customer_id
+      -- Same source exclusion as the FIFO ledger: VTU/wallet rows
+      -- update customers.loyalty_points, so listing them beside the
+      -- customer_loyalty balance would show earnings that never
+      -- affected it. NULL sources stay included (see above).
+      AND (
+        source IS NULL
+        OR source NOT IN ('vtu_airtime_purchase', 'wallet_redemption')
+      )
     ORDER BY created_at DESC
     LIMIT 10
   ) AS txns;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  loyaltyCheckoutCodeRowSchema,
   storefrontDiscountCodeRowSchema,
   storefrontDiscountValidateSchema,
 } from './storefront-discount';
@@ -163,6 +164,68 @@ describe('storefront-discount schemas', () => {
 
       const result = storefrontDiscountCodeRowSchema.safeParse(payload);
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('loyaltyCheckoutCodeRowSchema', () => {
+    const validRow = {
+      redemption_id: '22222222-2222-4222-8222-222222222222',
+      reward_type: 'discount_fixed',
+      reward_value: 100,
+      minimum_order_amount: null,
+      reward_enabled: true,
+      expires_at: null,
+      used: false,
+      reward_name: 'Probe reward',
+    };
+
+    it('validates a valid row payload', () => {
+      const result = loyaltyCheckoutCodeRowSchema.safeParse(validRow);
+      expect(result.success).toBe(true);
+    });
+
+    it('coerces numeric strings and accepts null valued fields', () => {
+      const result = loyaltyCheckoutCodeRowSchema.safeParse({
+        ...validRow,
+        reward_value: '1500',
+        minimum_order_amount: '50000',
+        reward_name: null,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reward_value).toBe(1500);
+        expect(result.data.minimum_order_amount).toBe(50000);
+      }
+    });
+
+    it('rejects a non-UUID redemption id', () => {
+      const result = loyaltyCheckoutCodeRowSchema.safeParse({
+        ...validRow,
+        redemption_id: 'not-a-uuid',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-boolean state flags', () => {
+      expect(
+        loyaltyCheckoutCodeRowSchema.safeParse({
+          ...validRow,
+          used: 'yes',
+        }).success
+      ).toBe(false);
+      expect(
+        loyaltyCheckoutCodeRowSchema.safeParse({
+          ...validRow,
+          reward_enabled: 'true',
+        }).success
+      ).toBe(false);
+    });
+
+    it('rejects a row missing a resolver-selected column', () => {
+      const { reward_enabled: _dropped, ...rowWithoutFlag } = validRow;
+      expect(
+        loyaltyCheckoutCodeRowSchema.safeParse(rowWithoutFlag).success
+      ).toBe(false);
     });
   });
 });

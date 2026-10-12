@@ -54,6 +54,8 @@ export type StorefrontDiscountCodeRow = z.infer<
 export const loyaltyCheckoutCodeRowSchema = z.object({
   redemption_id: z.uuid(),
   reward_type: z.string(),
+  // nullable() (not nullish()): the resolve RPC always selects these
+  // columns, so a MISSING key is a contract break that must fail.
   reward_value: z.coerce.number().nullable(),
   minimum_order_amount: z.coerce.number().nullable(),
   reward_enabled: z.boolean().nullable(),

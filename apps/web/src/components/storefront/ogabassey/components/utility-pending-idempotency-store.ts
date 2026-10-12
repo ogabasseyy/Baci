@@ -23,6 +23,10 @@
  * only deter casual glances while risking the recall path. App-wide
  * sign-out storage clearing is the real fix for the shared-device
  * class (orders, drafts, and this snapshot alike); tracked separately.
+ * Deliberately NOT cleared on sign-out/switch: the signer's entries
+ * must survive their absence so a switch-back retry replays instead
+ * of minting fresh and double-debiting. The 24h TTL is the clearing
+ * mechanism (bounded retention without breaking recovery).
  */
 
 /**

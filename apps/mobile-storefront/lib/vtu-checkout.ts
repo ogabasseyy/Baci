@@ -72,7 +72,9 @@ export async function chargeWalletForVtu(
   }
 ) {
   const { expectedUserId, idempotencyKey, ...rest } = payload;
-  const accessToken = await getAccessToken(expectedUserId);
+  const accessToken = await getAccessToken(expectedUserId, {
+    requireSubmitterBinding: true,
+  });
   const normalized = normalizeVtuCheckoutPayload(rest);
   const response = await fetchWithTimeout(VTU_CHECKOUT_WALLET_ONLY_URL, {
     method: 'POST',

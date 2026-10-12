@@ -312,6 +312,7 @@ describe('vtu-checkout service', () => {
       type: 'airtime',
       walletAmount: 1000,
       idempotencyKey,
+      expectedUserId: 'user-1',
     });
 
     expect(result).toMatchObject({
@@ -357,26 +358,22 @@ describe('vtu-checkout service', () => {
     expect(parseMockRequestBody()).toMatchObject({ expectedUserId: 'user-1' });
   });
 
-  it('chargeWalletForVtu: omits expectedUserId from the body when uncaptured', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: 'successful',
-        reference: 'VTU-456',
+  it('chargeWalletForVtu: aborts pre-POST when the binding is uncaptured (hydration gap)', async () => {
+    // Session user exists but the store hadn't hydrated the id at
+    // submit: posting unbound would skip the server-side
+    // account-change guard. Abort instead (key untouched — no HTTP
+    // status — so the retry replays once hydration lands).
+    await expect(
+      chargeWalletForVtu({
         amount: 1000,
-      }),
-    });
-
-    await chargeWalletForVtu({
-      amount: 1000,
-      networkProvider: 'mtn',
-      phoneNumber: '08012345678',
-      type: 'airtime',
-      walletAmount: 1000,
-      idempotencyKey: '11111111-2222-3333-4444-555555555555',
-    });
-
-    expect(parseMockRequestBody()).not.toHaveProperty('expectedUserId');
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      })
+    ).rejects.toThrow('Account still loading. Please try again.');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it('chargeWalletForVtu: aborts before any POST when the token belongs to another user', async () => {

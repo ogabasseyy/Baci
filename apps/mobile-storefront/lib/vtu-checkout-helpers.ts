@@ -47,7 +47,10 @@ export function normalizeVtuCheckoutPayload<T extends object>(payload: T): T {
   };
 }
 
-export async function getAccessToken(expectedUserId?: string | null) {
+export async function getAccessToken(
+  expectedUserId?: string | null,
+  options?: { requireSubmitterBinding?: boolean }
+) {
   const {
     data: { user },
     error: userError,
@@ -62,6 +65,16 @@ export async function getAccessToken(expectedUserId?: string | null) {
 
   if (!session?.access_token) {
     throw new Error('Authentication required. Please sign in again.');
+  }
+
+  if (options?.requireSubmitterBinding && !expectedUserId) {
+    // A session user exists (proven above) but the caller captured
+    // none: the store hasn't hydrated the user id yet. Submitting
+    // unbound would skip the server-side account-change guard, so
+    // abort pre-POST instead of debiting an unverified account. The
+    // key is untouched (no HTTP status), so the retry replays safely
+    // once hydration lands.
+    throw new Error('Account still loading. Please try again.');
   }
 
   // Bind the token to the submitter when the caller captured one: an

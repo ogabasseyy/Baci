@@ -39,6 +39,48 @@ def _row(**overrides):
     return row
 
 
+def binding_failures(repo, data):
+    """Return binding failure strings for a register dict (empty = bound)."""
+    import subprocess
+
+    failures = []
+    refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
+    repo_root = str(Path(repo).resolve())
+    for ref in refs:
+        resolved = (Path(repo) / ref).resolve()
+        if not str(resolved).startswith(repo_root + os.sep):
+            failures.append(f"cited source escapes repo: {ref}")
+        elif not resolved.exists():
+            failures.append(f"cited source missing: {ref}")
+        else:
+            tracked = subprocess.run(
+                ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", ref],
+                capture_output=True, text=True,
+            )
+            if tracked.returncode != 0:
+                failures.append(f"cited source is not tracked: {ref}")
+    revision = data["source_revision"]
+    ancestor = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", revision, "HEAD"],
+        capture_output=True, text=True,
+    )
+    if ancestor.returncode != 0:
+        failures.append(f"source_revision {revision} is not an ancestor of HEAD or cannot be resolved; re-review and rebind the register")
+        return failures
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--name-only", "-z", f"{revision}..HEAD"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        failures.append(f"source_revision {revision} cannot be resolved in this checkout; re-review and rebind the register")
+        return failures
+    changed = {p for p in proc.stdout.split("\0") if p}
+    drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
+    if drift:
+        failures.append(f"cited paths changed since source_revision: {drift}")
+    return failures
+
+
 class CapabilityContextTests(unittest.TestCase):
     def render(self, value):
         with tempfile.TemporaryDirectory() as root:
@@ -143,23 +185,11 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertIn("Register unavailable, invalid or stale", result)
 
     def test_register_binding_matches_shipped_tree(self):
-        import subprocess
         repo = Path(__file__).resolve().parents[2]
         register_path = repo / "docs/product/baci-capabilities.json"
         if not (repo / ".git").exists() or not register_path.exists():
             self.skipTest("repo checkout unavailable")
         data = json.loads(register_path.read_text())
-        refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
-        repo_root = str(repo.resolve())
-        for ref in refs:
-            resolved = (repo / ref).resolve()
-            self.assertTrue(str(resolved).startswith(repo_root + os.sep), f"cited source escapes repo: {ref}")
-            self.assertTrue(resolved.exists(), f"cited source missing: {ref}")
-            tracked = subprocess.run(
-                ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", ref],
-                capture_output=True, text=True,
-            )
-            self.assertEqual(tracked.returncode, 0, f"cited source is not tracked: {ref}")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
         age = dt.datetime.now(dt.timezone.utc) - reviewed
         self.assertGreaterEqual(age, dt.timedelta(0), "register reviewed_at is future-dated; runtime would reject it")
@@ -173,21 +203,34 @@ class CapabilityContextTests(unittest.TestCase):
             self.assertNotIn("Register unavailable", rendered)
         if (repo / ".git" / "shallow").exists():
             self.skipTest("shallow checkout cannot verify the revision binding")
-        ancestor = subprocess.run(
-            ["git", "-C", str(repo), "merge-base", "--is-ancestor", data["source_revision"], "HEAD"],
-            capture_output=True, text=True,
-        )
-        if ancestor.returncode != 0:
-            self.fail(f"source_revision {data['source_revision']} is not an ancestor of HEAD (history rewritten or revision superseded); re-review and rebind the register")
-        proc = subprocess.run(
-            ["git", "-C", str(repo), "diff", "--name-only", f"{data['source_revision']}..HEAD"],
-            capture_output=True, text=True,
-        )
-        if proc.returncode != 0:
-            self.fail(f"source_revision {data['source_revision']} cannot be resolved in this checkout; re-review and rebind the register: {proc.stderr.strip()}")
-        changed = set(proc.stdout.split())
-        drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
-        self.assertEqual(drift, [], f"cited paths changed since source_revision: {drift}")
+        self.assertEqual(binding_failures(repo, data), [])
+
+    def test_binding_failures_are_detected_in_fixture_repo(self):
+        import subprocess
+
+        def git(repo, *args):
+            subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True,
+            )
+
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            git(repo, "init", "-q", ".")
+            (repo / "cited.txt").write_text("v1")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "one")
+            rev = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            data = {"source_revision": rev, "capabilities": [{"source_refs": ["cited.txt"]}]}
+            self.assertEqual(binding_failures(repo, data), [])
+            (repo / "cited.txt").write_text("v2")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "two")
+            self.assertTrue(binding_failures(repo, data), "drift must fail")
+            self.assertTrue(binding_failures(repo, {**data, "source_revision": "f" * 40}), "unresolvable revision must fail")
+            git(repo, "checkout", "-q", "--orphan", "other")
+            git(repo, "commit", "-q", "-m", "orphan", "--allow-empty")
+            self.assertTrue(binding_failures(repo, data), "non-ancestor revision must fail")
 
     def test_stale_register_fails_closed(self):
         old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=20)).isoformat()

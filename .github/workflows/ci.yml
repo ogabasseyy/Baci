@@ -49,6 +49,8 @@ jobs:
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      - name: Test capability register binding
+        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_platform_capabilities.py'
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3

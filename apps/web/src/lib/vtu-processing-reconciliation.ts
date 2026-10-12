@@ -76,6 +76,20 @@ function getReconciliationWindowNumber(now: Date) {
   return Math.floor(now.getTime() / RECONCILIATION_PAGE_WINDOW_MS);
 }
 
+function getReconciliationPageCount({
+  pageSize,
+  totalCandidates,
+}: {
+  pageSize: number;
+  totalCandidates: null | number;
+}) {
+  if (totalCandidates === null || totalCandidates <= pageSize) {
+    return 1;
+  }
+
+  return Math.ceil(totalCandidates / pageSize);
+}
+
 function getReconciliationPageOffset({
   now,
   pageSize,
@@ -85,11 +99,14 @@ function getReconciliationPageOffset({
   pageSize: number;
   totalCandidates: null | number;
 }) {
-  if (totalCandidates === null || totalCandidates <= pageSize) {
+  const pageCount = getReconciliationPageCount({
+    pageSize,
+    totalCandidates,
+  });
+  if (pageCount === 1) {
     return 0;
   }
 
-  const pageCount = Math.ceil(totalCandidates / pageSize);
   const pageIndex = getReconciliationWindowNumber(now) % pageCount;
   return pageIndex * pageSize;
 }
@@ -151,16 +168,23 @@ export async function reconcileProcessingVtuTransactions({
   }
 
   const fetched = (data ?? []) as ProcessingVtuCandidate[];
-  // Rotate the intra-page start by the window number: under a fixed
-  // order, slow head rows burn the deadline budget on every visit to
-  // the page and the same tail is deferred forever. Rotation moves the
-  // deferred set each window, so every row gets head-start turns.
-  // Stateless by design — no cursor table, and no per-attempt writes
-  // (any update bumps updated_at, invalidating in-flight CAS tokens).
-  const startIndex =
-    fetched.length === 0
-      ? 0
-      : getReconciliationWindowNumber(now) % fetched.length;
+  // Rotate the intra-page start by this page's VISIT number, not the
+  // window number: a page is revisited only every pageCount windows,
+  // so a window-derived start would advance by pageCount per visit
+  // and strand most positions forever. Windows visiting the same page
+  // are w = visit * pageCount + page, hence visit = floor(w / P):
+  // consecutive visits advance the start by exactly one, so every row
+  // eventually leads a pass. Stateless by design — no cursor table,
+  // and no per-attempt writes (any update bumps updated_at,
+  // invalidating in-flight CAS tokens).
+  const pageCount = getReconciliationPageCount({
+    pageSize,
+    totalCandidates: count,
+  });
+  const visitNumber = Math.floor(
+    getReconciliationWindowNumber(now) / pageCount
+  );
+  const startIndex = fetched.length === 0 ? 0 : visitNumber % fetched.length;
   const candidates = [
     ...fetched.slice(startIndex),
     ...fetched.slice(0, startIndex),

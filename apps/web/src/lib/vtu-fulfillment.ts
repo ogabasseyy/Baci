@@ -26,10 +26,10 @@ export { VtuPersistenceError };
 
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
+import { isFlaggedReferenceLessVtuRow } from '@/lib/vtu-flagged-recovery';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import {
-  isFlaggedReferenceLessVtuRow,
   isStrandedPreVendVtuRow,
   restoreInterruptedPreVendVtuRow,
 } from '@/lib/vtu-pre-vend-recovery';
@@ -2197,7 +2197,8 @@ function normalizeVtuProviderOrError(
 
 async function executeVtuPurchase(
   row: VtuTransactionRow,
-  merchantName: string
+  merchantName: string,
+  supabase: SupabaseClient
 ): Promise<VtuPurchaseResult> {
   const customerFirstName = getCustomerFirstName(row, merchantName);
 
@@ -2258,6 +2259,36 @@ async function executeVtuPurchase(
       return monnifyResult;
     }
 
+    const kudaFallbackPatch = {
+      fulfillmentProvider: 'kuda',
+      monnifyFallbackError:
+        monnifyResult.providerErrorDetail ?? monnifyResult.message,
+      originalProvider: 'monnify',
+      provider: 'kuda',
+      providerFallback: 'monnify_airtime_to_kuda',
+    };
+    // Persist the Kuda routing BEFORE the fallback call: if the final
+    // result persist exhausts, the stored row must still route Kuda
+    // TSQ by request_reference. Without this the row keeps
+    // provider=monnify with no vend reference — unreconcilable, and
+    // the customer stays charged with no terminal result. Fail closed:
+    // if the marker write fails, settle the Monnify failure without
+    // ever calling Kuda (nothing delivered → refund path).
+    const { error: fallbackMarkerError } = await supabase
+      .from('vtu_transactions')
+      .update({
+        metadata: { ...(row.metadata ?? {}), ...kudaFallbackPatch },
+      })
+      .eq('id', row.id);
+    if (fallbackMarkerError) {
+      console.error('Failed to persist Kuda fallback routing:', {
+        error: fallbackMarkerError.message,
+        transactionId: row.id,
+      });
+      return monnifyResult;
+    }
+    row.metadata = { ...(row.metadata ?? {}), ...kudaFallbackPatch };
+
     const kudaFallbackResult = await purchaseAirtime(
       row.phone_number,
       row.amount,
@@ -2268,14 +2299,7 @@ async function executeVtuPurchase(
 
     return {
       ...kudaFallbackResult,
-      metadataPatch: {
-        fulfillmentProvider: 'kuda',
-        monnifyFallbackError:
-          monnifyResult.providerErrorDetail ?? monnifyResult.message,
-        originalProvider: 'monnify',
-        provider: 'kuda',
-        providerFallback: 'monnify_airtime_to_kuda',
-      },
+      metadataPatch: kudaFallbackPatch,
     };
   }
 
@@ -2719,7 +2743,8 @@ export async function fulfillPendingVtuTransaction({
   try {
     result = await executeVtuPurchase(
       row,
-      merchant?.business_name || 'Customer'
+      merchant?.business_name || 'Customer',
+      supabase
     );
   } catch (error) {
     if (!isMonnifyTransientVendError(error)) {

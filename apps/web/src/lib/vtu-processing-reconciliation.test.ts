@@ -429,4 +429,53 @@ describe('reconcileProcessingVtuTransactions', () => {
       vi.useRealTimers();
     }
   });
+
+  it('advances the start by one on consecutive visits to the same page', async () => {
+    // Six rows in 2-row pages (3 pages): windows 1 and 4 both select
+    // page 1 (offset 2), and the visit numbers 0 and 1 start at c1
+    // then c2. A window-derived start would jump by pageCount (3)
+    // per revisit instead, stranding most positions forever.
+    fulfillPendingVtuTransactionMock.mockResolvedValue({
+      status: 'processing',
+    });
+    const buildSupabase = () => {
+      const dataQuery = createProcessingQuery({
+        data: [{ id: 'tx-c1' }, { id: 'tx-c2' }],
+      });
+      return {
+        dataQuery,
+        supabase: createSupabase({
+          countQuery: createProcessingQuery({ count: 6 }),
+          dataQuery,
+        }),
+      };
+    };
+
+    const first = buildSupabase();
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      limit: 2,
+      now: new Date(1 * 5 * 60 * 1000),
+      supabase: first.supabase as never,
+    });
+    expect(first.dataQuery.range).toHaveBeenCalledWith(2, 3);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(1, {
+      supabase: first.supabase,
+      transactionId: 'tx-c1',
+    });
+
+    fulfillPendingVtuTransactionMock.mockClear();
+    const second = buildSupabase();
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      limit: 2,
+      now: new Date(4 * 5 * 60 * 1000),
+      supabase: second.supabase as never,
+    });
+    expect(second.dataQuery.range).toHaveBeenCalledWith(2, 3);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenNthCalledWith(1, {
+      supabase: second.supabase,
+      transactionId: 'tx-c2',
+    });
+  });
 });

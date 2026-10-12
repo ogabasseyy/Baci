@@ -13,8 +13,12 @@
 // Requires BACI_IMAGE_PILOT_LAB=1. Always invoke via the pnpm script: it
 // pins a CLI-only tsconfig that stubs `server-only` (which throws outside
 // React Server Components) so this file can reuse the exact request-time
-// staging loader instead of duplicating its validation.
-import { join } from 'node:path';
+// staging loader instead of duplicating its validation. The public dir
+// must be the served Next public tree (<cwd>/public under the script):
+// staged bytes anywhere else are invisible to static /__pilot serving,
+// so an explicit divergent dir fails instead of printing ok:true.
+import { realpath } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { stageLabConfigFromText } from '@/app/pilot-lab/lab-route';
 import { readBoundedOperatorJson } from '@/app/pilot-lab/lab-route-operator-json';
 
@@ -54,6 +58,35 @@ export function parseStageArgs(argv: readonly string[]): {
   };
 }
 
+// Next serves /__pilot static bytes only from the app's public tree,
+// and the build/start gate checks that same tree: staging into any
+// other directory would validate green yet serve 404s (or stale bytes
+// from a previous stage). The pnpm script always runs with cwd at the
+// app root, so the served tree is <cwd>/public by construction.
+// Canonicalizes a possibly nonexistent path by resolving its nearest
+// existing ancestor: a lexical compare would false-reject equivalent
+// spellings across symlinked parents (/var vs /private/var on macOS).
+async function canonicalizeDir(dir: string): Promise<string> {
+  try {
+    return await realpath(dir);
+  } catch {
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return resolve(dir);
+    }
+    return join(await canonicalizeDir(parent), basename(dir));
+  }
+}
+
+export async function assertServedPublicDir(publicDir: string): Promise<void> {
+  const served = await canonicalizeDir(join(process.cwd(), 'public'));
+  if ((await canonicalizeDir(publicDir)) !== served) {
+    throw new Error(
+      `merchant image pilot: --public-dir must be the served Next public directory (${served}) — staged bytes elsewhere are not served`
+    );
+  }
+}
+
 export async function main(): Promise<void> {
   const flags = parseStageArgs(process.argv.slice(2));
   if (flags.inputRoot !== undefined) {
@@ -83,14 +116,20 @@ export async function main(): Promise<void> {
   // through the same byte budget as the request path: a corrupt or
   // swapped-in giant inventory/acceptances file rejects on size before
   // the loader parses it.
+  const acceptancesText = await readBoundedOperatorJson(
+    join(outputRoot, 'acceptances.json')
+  );
+  const inventoryText = await readBoundedOperatorJson(
+    join(inputRoot, 'inventory.json')
+  );
+  // Served-tree check after the bounded reads, before any staging write:
+  // malformed operator JSON keeps its own error, and nothing is staged
+  // into a tree Next would never serve.
+  await assertServedPublicDir(publicDir);
   const config = await stageLabConfigFromText({
-    acceptancesText: await readBoundedOperatorJson(
-      join(outputRoot, 'acceptances.json')
-    ),
+    acceptancesText,
     inputRoot,
-    inventoryText: await readBoundedOperatorJson(
-      join(inputRoot, 'inventory.json')
-    ),
+    inventoryText,
     outputRoot,
     publicDir,
   });

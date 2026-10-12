@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
-import { main, parseStageArgs } from './merchant-image-pilot-stage.cli';
+import {
+  assertServedPublicDir,
+  main,
+  parseStageArgs,
+} from './merchant-image-pilot-stage.cli';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -182,7 +186,11 @@ describe('stage main', () => {
     vi.restoreAllMocks();
   });
 
-  it('stages verified tiers plus originals before server start', async () => {
+  it('rejects an explicit public dir outside the served tree', async () => {
+    // Next serves /__pilot only from the app public tree: staging into
+    // an alternate dir would validate green yet serve 404s, so main()
+    // fails before writing anything there. (Library-level staging into
+    // tmpdirs stays covered by the lab-config suites.)
     const lab = await setupStageFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const argv = process.argv;
@@ -196,33 +204,33 @@ describe('stage main', () => {
       '--public-dir',
       lab.publicDir,
     ];
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      await main();
+      await expect(main()).rejects.toThrow(
+        /must be the served Next public directory/
+      );
     } finally {
       process.argv = argv;
     }
-    const summary = JSON.parse(String(log.mock.calls[0]?.[0] ?? '{}'));
-    expect(summary).toMatchObject({
-      acceptedBindings: 1,
-      baseUrl: '/__pilot',
-      generationIds: [lab.generationId],
-      ok: true,
-    });
-    for (const tier of lab.tiers) {
-      const staged = await readFile(
-        join(
-          lab.publicDir,
-          '__pilot',
-          lab.generationId,
-          `${tier.sha256}.${tier.format}`
-        )
-      );
-      expect(staged.length).toBe(tier.bytes);
-    }
-    const original = await readFile(
-      join(lab.publicDir, '__pilot', 'originals', `${MERCHANT}-logo-1.png`)
+    await expect(lstat(join(lab.publicDir, '__pilot'))).rejects.toThrow(
+      /ENOENT/
     );
-    expect(original.length).toBeGreaterThan(0);
+  });
+
+  it('assertServedPublicDir accepts the served tree only', async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-served-'));
+    const cwd = process.cwd();
+    try {
+      process.chdir(sandbox);
+      // The sandbox spells through the symlinked tmpdir parent, so this
+      // also proves the compare canonicalizes instead of matching text.
+      await expect(
+        assertServedPublicDir(join(sandbox, 'public'))
+      ).resolves.toBeUndefined();
+      await expect(assertServedPublicDir(sandbox)).rejects.toThrow(
+        /must be the served Next public directory/
+      );
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });

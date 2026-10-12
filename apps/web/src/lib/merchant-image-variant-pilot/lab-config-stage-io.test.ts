@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -152,6 +153,25 @@ describe('writeStagedBytesIfChanged', () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'pilot-stage-req-'));
     await symlink(elsewhere, join(dir, '__pilot'));
     await expect(ensureStageDir(dir, '__pilot')).rejects.toThrow(/escapes/);
+  });
+
+  it('replaces a hardlinked destination even when the bytes match', async () => {
+    // Matching bytes must not skip the write: the startup guard rejects
+    // multi-linked descendants, so skipping would stage ok:true for a lab
+    // that cannot boot. The rewrite unlinks first, leaving a fresh
+    // single-linked inode; the outside link keeps the old bytes.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-hardlink-'));
+    const stageRoot = await ensureStageDir(dir, '__pilot');
+    const bytes = Buffer.from('verified-tier-bytes');
+    const dest = join(stageRoot, 'staged.avif');
+    await writeFile(dest, bytes);
+    const outside = join(dir, 'outside.avif');
+    await link(dest, outside);
+    expect((await lstat(dest)).nlink).toBe(2);
+    await writeStagedBytesIfChanged(stageRoot, dest, bytes);
+    expect(await readFile(dest)).toEqual(bytes);
+    expect((await lstat(dest)).nlink).toBe(1);
+    expect(await readFile(outside)).toEqual(bytes);
   });
 
   it('replaces a giant destination without loading it fully', async () => {

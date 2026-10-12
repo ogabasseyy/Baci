@@ -255,8 +255,10 @@ export async function stageVerifiedTier(input: {
 }
 
 // Bytes-in-hand variant of the tier staging below: skips the write when
-// the destination already holds the verified bytes (idempotent stage,
-// no post-start mtime churn), otherwise confines and writes as above.
+// the destination already holds the verified bytes in a single-linked
+// file (idempotent stage, no post-start mtime churn), otherwise confines
+// and writes as above. Hardlinked destinations always rewrite: the
+// startup guard would refuse to boot them.
 export async function writeStagedBytesIfChanged(
   stageRoot: string,
   destPath: string,
@@ -270,9 +272,12 @@ export async function writeStagedBytesIfChanged(
 
 async function destMatches(destPath: string, bytes: Buffer): Promise<boolean> {
   // A symlink never "matches": skipping the write would leave the link
-  // in place and serve whatever it points at.
+  // in place and serve whatever it points at. A hardlink never matches
+  // either — the startup guard rejects multi-linked descendants, so
+  // skipping would stage ok:true for an unbootable lab. The write path
+  // unlinks first, leaving a fresh single-linked inode.
   const info = await lstat(destPath).catch(() => null);
-  if (!info || info.isSymbolicLink() || !info.isFile()) {
+  if (!info || info.isSymbolicLink() || !info.isFile() || info.nlink > 1) {
     return false;
   }
   // Reject size mismatches on metadata first: a corrupted or swapped-in

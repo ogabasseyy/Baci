@@ -31,19 +31,22 @@ const CLOCK_SKEW_MS = 5_000;
 // either the chromedriver InitSession RESPONSE JSON
 // ("browserVersion":"154.0.0.0") or the selenium Caps rendering
 // (browserVersion: 154.0.0.0). Dotted quad only — exactly what the
-// gate's browser-provenance check accepts. Last match wins, so the
-// session response beats an earlier requested-capabilities line.
+// gate's browser-provenance check accepts. Parsed only inside the
+// prepared-profile launch segment (that launch through the next browser
+// launch): last match wins within the segment, so the session response
+// beats an earlier requested-capabilities line, while a later retry or
+// unrelated session can neither supply nor override the version.
 const BROWSER_VERSION_PATTERN =
   /(?:"browserVersion"\s*:\s*"(\d+\.\d+\.\d+\.\d+)"|\bbrowserVersion:\s*(\d+\.\d+\.\d+\.\d+))/g;
 
-function executableVersionFromLog(logText, browserLog) {
+function executableVersionFromLog(launchSegment, browserLog) {
   let found;
-  for (const match of logText.matchAll(BROWSER_VERSION_PATTERN)) {
+  for (const match of launchSegment.matchAll(BROWSER_VERSION_PATTERN)) {
     found = match[1] ?? match[2];
   }
   if (found === undefined) {
     throw new Error(
-      `browser log records no browserVersion (need the WebDriver session-capabilities line); refusing to bind: ${browserLog}`
+      `prepared-profile launch records no browserVersion (need its WebDriver session-capabilities line); refusing to bind: ${browserLog}`
     );
   }
   return found;
@@ -114,8 +117,24 @@ export async function finishRun({
     );
   }
   // Fail fast, before writing anything: without a recorded version the
-  // launch record would carry caller text the gate cannot trust.
-  const executableVersion = executableVersionFromLog(logText, browserLog);
+  // launch record would carry caller text the gate cannot trust. The
+  // version binds to the prepared-profile launch segment only — a
+  // retry or unrelated session later in the log must not supply it.
+  const launchMatch = launched.exec(logText);
+  // The segment ends at the next launch on a LATER line: a repeated
+  // flag on the launch's own command line must not truncate it.
+  const launchLineEnd = logText.indexOf('\n', launchMatch.index);
+  const nextLaunchIndex = logText.indexOf(
+    'user-data-dir=',
+    launchLineEnd === -1
+      ? launchMatch.index + launchMatch[0].length
+      : launchLineEnd
+  );
+  const launchSegment = logText.slice(
+    launchMatch.index,
+    nextLaunchIndex === -1 ? undefined : nextLaunchIndex
+  );
+  const executableVersion = executableVersionFromLog(launchSegment, browserLog);
   const out = required(outDir, 'out-dir');
   await mkdir(out, { recursive: true });
   // One reset certifies exactly one navigation: multi-page HARs (repeat

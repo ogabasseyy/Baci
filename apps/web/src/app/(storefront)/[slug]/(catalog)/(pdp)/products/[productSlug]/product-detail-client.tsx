@@ -434,29 +434,59 @@ export default function ProductDetailClient({
                       {conditionLabels[product.condition || 'new'] || 'New'}
                     </button>
                     {product.offers.map(
-                      (offer: { id: string; condition: string }) => (
-                        <button
-                          key={offer.id}
-                          type="button"
-                          onClick={() =>
-                            handleConditionChange(
-                              offer.condition as ProductCondition,
-                              offer.id
-                            )
-                          }
-                          className={cn(
-                            'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                            selectedCondition ===
+                      (offer: {
+                        id: string;
+                        condition: string;
+                        price: number;
+                      }) => {
+                        // Two offers can share one displayed condition: the
+                        // selected style must follow the resolved offer id
+                        // (like the cart-item match below), or every
+                        // same-condition button lights up at once.
+                        const isOfferSelected =
+                          selectedOffer != null
+                            ? String(selectedOffer.id) === String(offer.id)
+                            : selectedCondition ===
                               normalizeCanonicalProductCondition(
                                 offer.condition
+                              );
+                        // Same-condition offers render identical labels, so
+                        // the shopper could not tell which one is selected:
+                        // disambiguate with the offer price when they collide.
+                        const sameConditionCount = (
+                          product.offers ?? []
+                        ).filter(
+                          (other: { condition: string }) =>
+                            normalizeCanonicalProductCondition(
+                              other.condition
+                            ) ===
+                            normalizeCanonicalProductCondition(offer.condition)
+                        ).length;
+                        const offerLabel =
+                          conditionLabels[offer.condition] || offer.condition;
+                        return (
+                          <button
+                            key={offer.id}
+                            type="button"
+                            onClick={() =>
+                              handleConditionChange(
+                                offer.condition as ProductCondition,
+                                offer.id
                               )
-                              ? 'border-store-primary text-store-primary bg-store-primary/5'
-                              : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                          )}
-                        >
-                          {conditionLabels[offer.condition] || offer.condition}
-                        </button>
-                      )
+                            }
+                            className={cn(
+                              'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
+                              isOfferSelected
+                                ? 'border-store-primary text-store-primary bg-store-primary/5'
+                                : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                            )}
+                          >
+                            {sameConditionCount > 1
+                              ? `${offerLabel} · ${formatCurrency(offer.price)}`
+                              : offerLabel}
+                          </button>
+                        );
+                      }
                     )}
                   </div>
                   {selectedOffer && selectedOffer.price != null && (

@@ -8,6 +8,10 @@
 -- returns checkout_idempotency_conflict instead of replaying. Return the
 -- stored discount_amount plus per-line assurance_fee alongside the tax
 -- and conditions so the route restores the exact hashed economics.
+-- Quantity, price, and has_assurance ride along so repeated product+offer
+-- lines match by fee-determining economics instead of request position:
+-- the idempotency hash sorts lines, so a reordered retry is hash-equivalent
+-- and positional restore would swap its fees into a false conflict.
 -- Same narrow grants as the probe this replaces (anon/authenticated);
 -- no other order fields cross the API boundary.
 DROP FUNCTION IF EXISTS public.get_storefront_order_replay_economics(uuid, text);
@@ -32,7 +36,10 @@ AS $$
             'product_id', oi.product_id,
             'offer_id', oi.offer_id,
             'condition', oi.condition,
-            'assurance_fee', oi.assurance_fee
+            'assurance_fee', oi.assurance_fee,
+            'quantity', oi.quantity,
+            'price', oi.price,
+            'has_assurance', oi.has_assurance
           )
           ORDER BY oi.line_id NULLS LAST, oi.id
         )
@@ -56,4 +63,4 @@ GRANT EXECUTE ON FUNCTION public.get_storefront_order_replay_economics(uuid, tex
   TO anon, authenticated;
 
 COMMENT ON FUNCTION public.get_storefront_order_replay_economics(uuid, text) IS
-  'Returns only the stored tax_amount, discount_amount, and per-line offer conditions plus assurance fees for a merchant-scoped checkout idempotency key, for guest-safe idempotent replay past changed offers. No other order fields are exposed.';
+  'Returns only the stored tax_amount, discount_amount, and per-line offer conditions plus assurance fees (with the fee-determining quantity, price, and has_assurance for repeated-line matching) for a merchant-scoped checkout idempotency key, for guest-safe idempotent replay past changed offers. No other order fields are exposed.';

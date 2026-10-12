@@ -33,21 +33,61 @@ export type ResolveIdempotentOfferReplayResult =
   | { ok: false; reason: 'invalid_offer' }
   | { ok: false; reason: 'verification_failed'; error: unknown };
 
+interface StoredReplayLine {
+  condition: string | null;
+  fee: number | null;
+}
+
 interface StoredReplayEconomics {
   taxAmount: number | null;
   discountAmount: number | null;
-  /** `${product_id}::${offer_id}` → stored line condition. */
-  conditions: Map<string, string>;
-  /** `${product_id}::${offer_id}` → stored canonical assurance fee. */
-  assuranceFees: Map<string, number>;
+  /** Fee-identity key → stored lines in projection order. */
+  lines: Map<string, StoredReplayLine[]>;
 }
 
 const EMPTY_REPLAY_ECONOMICS: StoredReplayEconomics = {
   taxAmount: null,
   discountAmount: null,
-  conditions: new Map<string, string>(),
-  assuranceFees: new Map<string, number>(),
+  lines: new Map<string, StoredReplayLine[]>(),
 };
+
+/**
+ * Fee-identity key shared by the stored projection and the retry payload.
+ * Mirrors the idempotency hash's normalization (trimmed/lowercased text,
+ * finite-number-or-0, strict boolean): the server recomputes the fee as
+ * `has_assurance ? round(price * quantity * RATE) : 0`, so lines that
+ * agree on this key carry interchangeable fees and any residual
+ * ambiguity (full duplicates) restores correctly under any assignment.
+ * Condition stays out of the key — the first attempt rewrites alias
+ * spellings to the live offer spelling before hashing, so the retry's
+ * client spelling must not gate the match.
+ */
+function replayLineIdentityKey(parts: {
+  productId: unknown;
+  offerId: unknown;
+  quantity: unknown;
+  price: unknown;
+  hasAssurance: unknown;
+}): string {
+  const text = (raw: unknown): string =>
+    typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  const num = (raw: unknown): number => {
+    const value =
+      typeof raw === 'number'
+        ? raw
+        : typeof raw === 'string' && raw.trim() !== ''
+          ? Number(raw)
+          : Number.NaN;
+    return Number.isFinite(value) ? value : 0;
+  };
+  return [
+    text(parts.productId),
+    text(parts.offerId),
+    num(parts.quantity),
+    num(parts.price),
+    parts.hasAssurance === true,
+  ].join('::');
+}
 
 async function readStoredReplayEconomics({
   merchantId,
@@ -95,43 +135,48 @@ async function readStoredReplayEconomics({
             : Number.NaN;
       return Number.isFinite(value) ? value : null;
     };
-    const conditions = new Map<string, string>();
-    const assuranceFees = new Map<string, number>();
+    const lines = new Map<string, StoredReplayLine[]>();
     const items = row?.items;
     if (Array.isArray(items)) {
       // An order can repeat one product+offer across lines (distinct
-      // quantities or assurance choices, hence distinct fees): a bare
-      // product::offer key collapses them and replays the last fee onto
-      // every line, so an identical retry hashes a different payload and
-      // trips checkout_idempotency_conflict. The RPC orders lines by
-      // line_id (payload insertion order), so suffix each key with its
-      // per-key occurrence ordinal and consume positionally below.
-      const seen = new Map<string, number>();
+      // quantities, prices, or assurance choices, hence distinct fees).
+      // The idempotency hash sorts lines, so a reordered retry is
+      // hash-equivalent and request position cannot pair stored fees to
+      // payload lines — match by fee-identity instead. Full duplicates
+      // queue behind one key and consume in order; their fees are
+      // interchangeable by construction.
       for (const entry of items as {
         product_id?: unknown;
         offer_id?: unknown;
         condition?: unknown;
         assurance_fee?: unknown;
+        quantity?: unknown;
+        price?: unknown;
+        has_assurance?: unknown;
       }[]) {
         if (entry?.product_id == null || entry?.offer_id == null) continue;
-        const key = `${String(entry.product_id)}::${String(entry.offer_id)}`;
-        const ordinal = seen.get(key) ?? 0;
-        seen.set(key, ordinal + 1);
-        const ordinalKey = `${key}::${ordinal}`;
-        if (typeof entry?.condition === 'string' && entry.condition !== '') {
-          conditions.set(ordinalKey, entry.condition);
-        }
-        const fee = coerceAmount(entry?.assurance_fee);
-        if (fee != null) {
-          assuranceFees.set(ordinalKey, fee);
-        }
+        const key = replayLineIdentityKey({
+          productId: entry.product_id,
+          offerId: entry.offer_id,
+          quantity: entry.quantity,
+          price: entry.price,
+          hasAssurance: entry.has_assurance,
+        });
+        const queue = lines.get(key) ?? [];
+        queue.push({
+          condition:
+            typeof entry?.condition === 'string' && entry.condition !== ''
+              ? entry.condition
+              : null,
+          fee: coerceAmount(entry?.assurance_fee),
+        });
+        lines.set(key, queue);
       }
     }
     return {
       taxAmount: coerceAmount(row?.tax_amount),
       discountAmount: coerceAmount(row?.discount_amount),
-      conditions,
-      assuranceFees,
+      lines,
     };
   } catch (readError) {
     logger.warn({
@@ -220,21 +265,26 @@ export async function resolveIdempotentOfferReplay({
   // retry would otherwise hash the client-derived fee. Repeated
   // product+offer lines consume their per-key ordinal in payload order
   // (a retry resubmits the identical payload, so ordinals line up);
-  // lines without a stored ordinal keep the client values (fail-open).
-  const consumed = new Map<string, number>();
+  // lines without a stored match keep the client values (fail-open per
+  // line). Each payload line pops one stored line with the same
+  // fee-identity, so reordered retries (hash-equivalent under the sorted
+  // idempotency hash) still pair correctly.
   for (const item of orderItemsPayload) {
     if (item.offer_id == null) continue;
-    const key = `${String(item.product_id)}::${String(item.offer_id)}`;
-    const ordinal = consumed.get(key) ?? 0;
-    consumed.set(key, ordinal + 1);
-    const ordinalKey = `${key}::${ordinal}`;
-    const storedCondition = stored.conditions.get(ordinalKey);
-    if (storedCondition != null) {
-      item.condition = storedCondition;
+    const key = replayLineIdentityKey({
+      productId: item.product_id,
+      offerId: item.offer_id,
+      quantity: item.quantity,
+      price: item.price,
+      hasAssurance: item.has_assurance,
+    });
+    const storedLine = stored.lines.get(key)?.shift();
+    if (storedLine == null) continue;
+    if (storedLine.condition != null) {
+      item.condition = storedLine.condition;
     }
-    const storedFee = stored.assuranceFees.get(ordinalKey);
-    if (storedFee != null) {
-      item.assurance_fee = storedFee;
+    if (storedLine.fee != null) {
+      item.assurance_fee = storedLine.fee;
     }
   }
   return {

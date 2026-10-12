@@ -320,4 +320,42 @@ describe('ProductDetailClient', () => {
       { condition: 'used', offerId: 'offer-used' }
     );
   });
+
+  it('selects exactly one same-condition offer button and prices the labels', async () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=new&offer_id=offer-cheaper')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      has_condition_offers: true,
+      offers: [
+        {
+          id: 'offer-expensive',
+          condition: 'new',
+          price: 500000,
+          stock_quantity: 5,
+        },
+        {
+          id: 'offer-cheaper',
+          condition: 'new',
+          price: 400000,
+          stock_quantity: 2,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+
+    await waitFor(() =>
+      expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedPrice: 400000 })
+      )
+    );
+
+    // Colliding labels disambiguate with the offer price ...
+    const cheaper = screen.getByRole('button', { name: 'New · ₦400000' });
+    const expensive = screen.getByRole('button', { name: 'New · ₦500000' });
+    // ... and only the resolved offer id carries the selected style.
+    expect(cheaper.className).toContain('border-store-primary');
+    expect(expensive.className).not.toContain('border-store-primary');
+  });
 });

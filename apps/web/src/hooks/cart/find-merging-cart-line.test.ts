@@ -168,4 +168,31 @@ describe('findMergingCartLineIndex', () => {
       0
     );
   });
+
+  it('keeps a color-bearing variant line separate from a color-less add', () => {
+    // Cross-platform parity pin (mirrored in mobile
+    // stores/cart-line.test.ts): native isSameCartLine wildcards a
+    // missing color/storage/condition on variant lines and merges here,
+    // while web matches the exact cart item id and stays separate.
+    // Alignment is a product decision; this pins the current web
+    // contract so either side drifting fails loudly.
+    const cart = [
+      makeCartItem({
+        id: 'p1',
+        cartItemId: 'p1::variant=v1::color=red',
+        variantId: 'v1',
+        selectedColor: 'red',
+      }),
+    ];
+
+    expect(
+      findMergingCartLineIndex(cart, makeProduct(), { variantId: 'v1' })
+    ).toBe(-1);
+    expect(
+      findMergingCartLineIndex(cart, makeProduct(), {
+        variantId: 'v1',
+        color: 'red',
+      })
+    ).toBe(0);
+  });
 });

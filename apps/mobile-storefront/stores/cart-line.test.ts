@@ -164,4 +164,19 @@ describe('cart-line helpers', () => {
       condition: 'New',
     });
   });
+
+  it('wildcards a missing color on variant lines where web stays exact', () => {
+    // Cross-platform parity pin (mirrored in web
+    // hooks/cart/find-merging-cart-line.test.ts): native merges a
+    // color-less add into a color-bearing variant line, while web
+    // matches the exact cart item id and stays separate. Alignment is
+    // a product decision; this pins the current native contract so
+    // either side drifting fails loudly.
+    expect(
+      isSameCartLine(baseItem, { ...incomingBaseItem, color: undefined })
+    ).toBe(true);
+    expect(
+      isSameCartLine(baseItem, { ...incomingBaseItem, color: 'Arctic White' })
+    ).toBe(false);
+  });
 });

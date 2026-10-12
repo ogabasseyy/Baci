@@ -9,6 +9,9 @@ export type ResolvableOrderOfferLine = {
   offer_id?: string | null;
   condition?: string | null;
   assurance_fee?: number | null;
+  quantity?: number | null;
+  price?: number | null;
+  has_assurance?: boolean | null;
 };
 
 export type ResolvedOrderOfferEconomics =

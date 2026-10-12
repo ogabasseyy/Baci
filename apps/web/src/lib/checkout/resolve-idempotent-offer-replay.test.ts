@@ -379,6 +379,69 @@ describe('resolveIdempotentOfferReplay', () => {
     expect(payload[1].assurance_fee).toBe(9000);
   });
 
+  it('pairs repeated lines by economics when the retry reorders them', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: null,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 4500,
+              quantity: 1,
+              price: '320000.00',
+              has_assurance: true,
+            },
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 9000,
+              quantity: 2,
+              price: 320000,
+              has_assurance: true,
+            },
+          ],
+        },
+      ],
+    });
+    // The idempotency hash sorts lines, so this reversed resend is
+    // hash-equivalent to the first attempt: positional restore would swap
+    // the fees (4500 onto the qty-2 line) into a false conflict.
+    const payload = [
+      {
+        ...offerLine,
+        quantity: 2,
+        price: 320000,
+        has_assurance: true,
+        assurance_fee: 0,
+      },
+      {
+        ...offerLine,
+        quantity: 1,
+        price: 320000,
+        has_assurance: true,
+        assurance_fee: 0,
+      },
+    ];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].assurance_fee).toBe(9000);
+    expect(payload[1].assurance_fee).toBe(4500);
+  });
+
   it('leaves extra repeated lines untouched when stored ordinals run out', async () => {
     const c = clients({
       probeHit: true,

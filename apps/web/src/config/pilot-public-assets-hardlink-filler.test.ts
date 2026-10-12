@@ -40,18 +40,20 @@ describe('hardlinked filler rejection', () => {
     );
   });
 
-  it('tolerates a multi-linked filler when lab is disabled', () => {
-    // Filler policing is lab-only: non-lab refuses staged merchant
-    // trees only, so an overlay nlink quirk can never take down an
-    // unrelated production boot. Nothing non-lab references filler
-    // bytes.
+  it('rejects a multi-linked filler when lab is disabled', () => {
+    // Only hash pinning is lab-only: confinement (symlink, hardlink,
+    // special-file) applies in both modes, since Next serves fillers/
+    // statically with no gate noticing. A multi-linked filler lets an
+    // outside writer mutate served bytes after the check.
     const dir = root();
     withFillers(dir);
     linkSync(
       join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
       join(dir, 'outside-mirror.png')
     );
-    expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /contains a hardlinked file/
+    );
   });
 
   it('accepts single-linked fillers in both modes', () => {

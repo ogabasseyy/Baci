@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { assertNoUnexpectedStagedFiles } from './lab-config-stage-guard';
+import {
+  assertNoUnexpectedStagedFiles,
+  resolveAllowlist,
+} from './lab-config-stage-guard';
 
 const GEN = 'a'.repeat(64);
 
@@ -123,6 +126,25 @@ describe('assertNoUnexpectedStagedFiles', () => {
     await expect(
       assertNoUnexpectedStagedFiles(staged(pilotStage))
     ).resolves.toBe(undefined);
+  });
+
+  it('resolves the allowlist once per stagedPaths identity', async () => {
+    // Fast-path pin: the frozen runtime passes the same array every
+    // request, so repeat requests must reuse the resolved verdict
+    // object (no re-resolution, straight to the fingerprint) — while a
+    // fresh array (new config load) re-resolves to an equal verdict.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    const allowlist = staged(pilotStage);
+    const first = await resolveAllowlist(allowlist, undefined);
+    expect(first).not.toBe(null);
+    await expect(assertNoUnexpectedStagedFiles(allowlist)).resolves.toBe(
+      undefined
+    );
+    await expect(resolveAllowlist(allowlist, undefined)).resolves.toBe(first);
+    const reloaded = await resolveAllowlist(staged(pilotStage), undefined);
+    expect(reloaded).not.toBe(first);
+    expect(reloaded).toEqual(first);
   });
 
   it('accepts a clean tree under an empty binding set', async () => {

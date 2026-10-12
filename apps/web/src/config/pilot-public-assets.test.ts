@@ -1,10 +1,7 @@
-import { execFileSync } from 'node:child_process';
 import {
   cpSync,
-  linkSync,
   mkdirSync,
   mkdtempSync,
-  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -12,11 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  assertPilotPublicAssets,
-  resolvePilotPublicDir,
-  resolveRoutePublicDir,
-} from './pilot-public-assets';
+import { assertPilotPublicAssets } from './pilot-public-assets';
 
 const roots: string[] = [];
 function root() {
@@ -68,6 +61,30 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, true)).not.toThrow();
   });
+  it('rejects a staged merchant file hiding under fillers without lab', () => {
+    const dir = root();
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
+    writeFileSync(
+      join(dir, '__pilot', 'fillers', 'merchant.png'),
+      'private fixture'
+    );
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /staged merchant pilot assets/
+    );
+  });
+  it('rejects a symlinked fillers entry without lab', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot'), { recursive: true });
+    mkdirSync(join(dir, 'outside'), { recursive: true });
+    symlinkSync(join(dir, 'outside'), join(dir, '__pilot', 'fillers'));
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /not a confined directory/
+    );
+  });
   it.each([
     'originals',
     'c'.repeat(64),
@@ -89,107 +106,6 @@ describe('non-lab public assets gate', () => {
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /contains a symlink/
     );
-  });
-  it('requires the fillers directory and exact set when lab is enabled', () => {
-    const staged = root();
-    mkdirSync(join(staged, '__pilot', 'originals'), { recursive: true });
-    expect(() => assertPilotPublicAssets(staged, true)).toThrow(
-      /missing the fillers directory/
-    );
-    // A subset of valid fillers still fails: the grid references all
-    // three URLs, so a packaging omission must fail startup.
-    const partial = root();
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(partial, '__pilot/fillers'),
-      { recursive: true }
-    );
-    rmSync(join(partial, '__pilot/fillers/grid-filler-600x400-b.png'));
-    rmSync(join(partial, '__pilot/fillers/grid-filler-600x400-c.png'));
-    expect(() => assertPilotPublicAssets(partial, true)).toThrow(
-      /missing pinned fillers.*grid-filler-600x400-b\.png/
-    );
-  });
-  it('tolerates any filler content when lab is disabled', () => {
-    // Filler policing is lab-only: non-lab builds/boots refuse staged
-    // merchant trees only. A packaging artifact (.DS_Store), a
-    // recompressed filler, or a partial set must never take down an
-    // unrelated production boot — the same function boot calls must
-    // pass here. Lab mode keeps the exact pinned set.
-    const dir = root();
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    writeFileSync(
-      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
-      'recompressed bytes'
-    );
-    writeFileSync(join(dir, '__pilot/fillers/.DS_Store'), 'packaging junk');
-    rmSync(join(dir, '__pilot/fillers/grid-filler-600x400-c.png'));
-    expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
-      /unapproved filler/
-    );
-  });
-  it('still pins filler hashes when lab is enabled', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot/fillers'), { recursive: true });
-    writeFileSync(
-      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
-      'merchant bytes'
-    );
-    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
-      /unapproved filler/
-    );
-  });
-  it('rejects non-generation junk directories even when lab is enabled', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', 'generation-hash'), { recursive: true });
-    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
-      /staged merchant pilot assets/
-    );
-  });
-  it('rejects symlinked staging roots', () => {
-    const dir = root();
-    symlinkSync(root(), join(dir, '__pilot'));
-    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
-      /unsafe pilot public directory/
-    );
-  });
-  it('rejects a file hardlinked from outside the managed entry', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
-    const outside = join(dir, 'outside-secret.txt');
-    writeFileSync(outside, 'not yours');
-    // Same inode, two names: realpath cannot expose the outside
-    // original, so only the link-count gate refuses to serve it.
-    linkSync(outside, join(dir, '__pilot', 'originals', 'merchant.avif'));
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    expect(() => assertPilotPublicAssets(dir, true)).toThrow(/hardlinked file/);
-  });
-  it('rejects a FIFO planted inside a managed entry', () => {
-    // A single-linked FIFO passes the symlink and hardlink gates; Next
-    // would then block serving it. mkfifo exists only on POSIX.
-    if (process.platform === 'win32') {
-      return;
-    }
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
-    execFileSync('mkfifo', [
-      join(dir, '__pilot', 'originals', 'merchant.avif'),
-    ]);
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    expect(() => assertPilotPublicAssets(dir, true)).toThrow(/special file/);
   });
   it('warns on stray files but boots when lab is disabled', () => {
     // Non-lab is fatal only on staged-merchant shapes and symlink
@@ -280,86 +196,5 @@ describe('non-lab public assets gate', () => {
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
       /staged merchant pilot assets/
     );
-  });
-});
-
-describe('resolvePilotPublicDir', () => {
-  const argv1 = process.argv[1];
-  afterEach(() => {
-    process.argv[1] = argv1;
-    vi.unstubAllEnvs();
-  });
-  it('prefers the config-stashed root', () => {
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/app/public');
-    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
-    expect(resolvePilotPublicDir()).toBe('/app/public');
-  });
-  it('anchors standalone boots to the server script, not cwd', () => {
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
-    process.argv[1] = '/srv/standalone/apps/web/server.js';
-    expect(resolvePilotPublicDir()).toBe('/srv/standalone/apps/web/public');
-  });
-  it('falls back to cwd otherwise', () => {
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
-    expect(resolvePilotPublicDir()).toBe(join(process.cwd(), 'public'));
-  });
-});
-
-describe('resolveRoutePublicDir', () => {
-  const argv1 = process.argv[1];
-  afterEach(() => {
-    process.argv[1] = argv1;
-    vi.unstubAllEnvs();
-  });
-  it('prefers the explicit route var, then the gate stash, then cwd', () => {
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/route/public');
-    expect(resolveRoutePublicDir()).toBe('/route/public');
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
-    expect(resolveRoutePublicDir()).toBe('/route/public');
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    expect(resolveRoutePublicDir()).toBe(join(process.cwd(), 'public'));
-  });
-  it('fails closed when the two roots disagree', () => {
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/gate/public');
-    expect(() => resolveRoutePublicDir()).toThrow(/disagrees/);
-  });
-  it('trusts an explicit route var with no anchored gate root', () => {
-    // Lab dev flow: explicit override, no stash, no standalone boot.
-    // A legacy cwd/public fallback is not a verified tree, so there
-    // is nothing to disagree with.
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
-    expect(resolveRoutePublicDir()).toBe('/route/public');
-  });
-  it('falls back to the standalone-aware gate root on a cold start', () => {
-    // No stash, no explicit var, standalone boot: the route must serve
-    // the tree beside the server (where the gate verified), not a bare
-    // cwd/public that diverges from the gate.
-    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
-    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '{}');
-    process.argv[1] = '/srv/standalone/apps/web/server.js';
-    expect(resolveRoutePublicDir()).toBe('/srv/standalone/apps/web/public');
-  });
-  it('accepts symlinked-ancestor aliases of the same tree', () => {
-    // The route var may spell the tree through a symlinked ancestor
-    // (/var/... on macOS) while the gate stashed the physical path:
-    // distinct spellings of one directory must not read as disagreement.
-    const physical = mkdtempSync(join(tmpdir(), 'pilot-public-alias-'));
-    const logical = `${physical}-link`;
-    symlinkSync(physical, logical);
-    try {
-      vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', logical);
-      vi.stubEnv('BACI_PILOT_PUBLIC_DIR', realpathSync(physical));
-      expect(resolveRoutePublicDir()).toBe(logical);
-    } finally {
-      rmSync(logical, { force: true, recursive: true });
-      rmSync(physical, { force: true, recursive: true });
-    }
   });
 });

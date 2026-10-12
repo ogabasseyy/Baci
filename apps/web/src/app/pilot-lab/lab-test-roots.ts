@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   copyFile,
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -251,5 +252,18 @@ export async function setupLabRoots(input: {
       process.env.BACI_IMAGE_PILOT_LAB = flagWas;
     }
   }
+  await seedCommittedFillers(publicDir);
   return { generationIds, inputRoot, outputRoot, publicDir };
+}
+
+// Copies the committed filler fixtures into a fixture public dir:
+// pilot:stage never writes fillers (they ship with the repo), but
+// request-time verification re-checks their pinned hashes, so every
+// fixture that serves lab routes must stage them too.
+export async function seedCommittedFillers(publicDir: string): Promise<void> {
+  await cp(
+    join(process.cwd(), 'public', '__pilot', 'fillers'),
+    join(publicDir, '__pilot', 'fillers'),
+    { recursive: true }
+  );
 }

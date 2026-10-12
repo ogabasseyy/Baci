@@ -40,12 +40,18 @@ async function assertParentConfined(
 // redirecting the bytes outside the lab tree. 'wx' alone is not enough
 // for the final component: it follows a symlink swapped in after the
 // lstat and creates the link's target. O_NOFOLLOW binds the final
-// component at open time (ELOOP on a link), the parent re-binds
-// immediately before the open, and the written file re-binds after the
-// close (handle identity vs path identity): a parent swapped for a link
-// mid-stage refuses loudly instead of publishing verified bytes outside
-// the stage root. The optional beforeOpen seam plants that mid-write
-// swap deterministically in tests; production passes no hooks.
+// component at open time (ELOOP on a link). The parent is pinned by a
+// held directory fd across the create: Node exposes no dirfd-relative
+// open, so path validation and creation cannot be one atomic step —
+// instead the confined parent's identity (dev+ino through the fd) is
+// captured before the open and re-compared after the close. A parent
+// swapped for an outside dir fails re-confinement; a parent swapped
+// for another inside dir (which re-confinement passes) fails the
+// identity check; a parent restored before the check fails the
+// handle/path comparison. Every ordering fails loudly with nothing
+// silently published outside the verified tree. The optional
+// beforeOpen seam plants that mid-write swap deterministically in
+// tests; production passes no hooks.
 export async function writeStagedFile(
   stageRoot: string,
   destPath: string,
@@ -63,38 +69,57 @@ export async function writeStagedFile(
     await unlink(destPath);
   }
   await assertParentConfined(stageRoot, destPath);
-  await hooks?.beforeOpen?.();
-  const handle = await open(destPath, STAGED_CREATE_FLAGS).catch((error) => {
-    throw new Error(
-      'merchant image pilot: staging destination is a symlink or appeared mid-write; refusing to write',
-      { cause: error }
-    );
-  });
-  let identity: { dev: number; ino: number } | undefined;
+  // Pin AFTER the final pre-open check: the fd must name the same
+  // directory object the confinement check just verified.
+  const parentHandle = await open(dirname(destPath), 'r');
   try {
-    await handle.writeFile(bytes);
-    identity = await handle.stat();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await assertParentConfined(stageRoot, destPath);
-    const written = await lstat(destPath).catch(() => null);
-    if (
-      !written ||
-      written.isSymbolicLink() ||
-      !written.isFile() ||
-      identity === undefined ||
-      written.dev !== identity.dev ||
-      written.ino !== identity.ino
-    ) {
+    const pinnedParent = await parentHandle.stat();
+    await hooks?.beforeOpen?.();
+    const handle = await open(destPath, STAGED_CREATE_FLAGS).catch((error) => {
       throw new Error(
-        'merchant image pilot: staged write no longer names the written file'
+        'merchant image pilot: staging destination is a symlink or appeared mid-write; refusing to write',
+        { cause: error }
       );
+    });
+    let identity: { dev: number; ino: number } | undefined;
+    try {
+      await handle.writeFile(bytes);
+      identity = await handle.stat();
+    } finally {
+      await handle.close();
     }
-  } catch (error) {
-    await unlink(destPath).catch(() => undefined);
-    throw error;
+    try {
+      await assertParentConfined(stageRoot, destPath);
+      // lstat, not stat: a symlink swapped in for the parent must
+      // mismatch even when it points back inside the stage root.
+      const currentParent = await lstat(dirname(destPath));
+      if (
+        currentParent.dev !== pinnedParent.dev ||
+        currentParent.ino !== pinnedParent.ino
+      ) {
+        throw new Error(
+          'merchant image pilot: staging parent changed during the write; refusing to publish'
+        );
+      }
+      const written = await lstat(destPath).catch(() => null);
+      if (
+        !written ||
+        written.isSymbolicLink() ||
+        !written.isFile() ||
+        identity === undefined ||
+        written.dev !== identity.dev ||
+        written.ino !== identity.ino
+      ) {
+        throw new Error(
+          'merchant image pilot: staged write no longer names the written file'
+        );
+      }
+    } catch (error) {
+      await unlink(destPath).catch(() => undefined);
+      throw error;
+    }
+  } finally {
+    await parentHandle.close();
   }
 }
 

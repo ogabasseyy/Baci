@@ -121,6 +121,28 @@ export async function verifyStagedBytes(
   }
 }
 
+// Request-time twin covering merchant bytes AND pinned fillers: the
+// lab grid renders committed filler images on every page, and an
+// in-place filler edit between control and pilot captures would skew
+// the comparison with merchant verification still green. Fillers ride
+// the same stat-fingerprint fast path (3 extra lstats per request);
+// their failure names the version-control restore, not re-staging
+// (pilot:stage never writes fillers).
+export async function verifyStagedBytesAndFillers(
+  paths: readonly { path: string; sha256: string }[],
+  fillers: readonly { path: string; sha256: string }[]
+): Promise<void> {
+  await verifyStagedBytes(paths);
+  try {
+    await verifyStagedBytes(fillers);
+  } catch (error) {
+    throw new Error(
+      'merchant image pilot: committed pilot filler bytes drifted; restore public/__pilot/fillers from version control and restart the origin',
+      { cause: error }
+    );
+  }
+}
+
 async function verifyUncached(
   unique: { path: string; sha256: string }[],
   sizes: ({ ctimeMs: number; mtimeMs: number; size: number } | null)[],

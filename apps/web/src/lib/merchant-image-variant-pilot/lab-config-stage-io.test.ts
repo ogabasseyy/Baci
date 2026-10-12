@@ -214,6 +214,32 @@ describe('writeStagedBytesIfChanged', () => {
     }
   });
 
+  it('refuses a staging parent replaced mid-write even inside the stage', async () => {
+    // The parent verified confined, then a contender renamed it away
+    // and planted a fresh directory at the same path BEFORE the open:
+    // path re-confinement passes (same spelling, inside the root), so
+    // only the pinned directory identity catches the swap. The write
+    // must fail loudly with nothing left at the destination spelling.
+    const { readdir, rename } = await import('node:fs/promises');
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-parent-swap-'));
+    const stageRoot = await ensureStageDir(dir, '__pilot');
+    const dest = join(stageRoot, 'staged.avif');
+    await expect(
+      writeStagedBytesIfChanged(
+        stageRoot,
+        dest,
+        Buffer.from('verified-tier-bytes'),
+        {
+          beforeOpen: async () => {
+            await rename(stageRoot, join(dir, '__pilot-moved'));
+            await mkdir(stageRoot, { recursive: true });
+          },
+        }
+      )
+    ).rejects.toThrow(/parent changed during the write/);
+    expect(await readdir(stageRoot)).toEqual([]);
+  });
+
   it('refuses a staging parent swapped for a symlink mid-stage', async () => {
     // The parent verified confined at ensureStageDir time, then a
     // contender renamed it away and planted a link: 'wx' alone would

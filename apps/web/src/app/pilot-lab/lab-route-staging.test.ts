@@ -22,6 +22,7 @@ import {
   parseRawAcceptances,
   parseRawInventoryRecords,
 } from './lab-route';
+import { seedCommittedFillers } from './lab-test-roots';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -147,6 +148,7 @@ async function stageRouteFiles(lab: {
     },
     { stage: true }
   );
+  await seedCommittedFillers(lab.publicDir);
 }
 
 async function setupRouteFiles() {

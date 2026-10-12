@@ -71,9 +71,12 @@ export async function register() {
       // Fail-loud, not fail-fatal (quiz gate below is the precedent):
       // the lab is one feature and must not take the storefront down.
       // A failed lab init logs loudly and skips the runtime publish,
-      // so lab routes fail closed while boot completes. The staged
-      // tree-shape assertion above stays fatal: it guards the static
-      // /__pilot namespace, which serves regardless of lab runtime.
+      // so lab routes fail closed while boot completes — UNLESS staged
+      // content sits under the static /__pilot namespace: Next serves
+      // it without invoking lab handlers, and with no runtime there is
+      // no binding set to check it against, so serving it would be
+      // silent unbound exposure. That boot refuses; a fillers-only (or
+      // absent) tree keeps the fail-loud behavior.
       let runtime = null;
       try {
         runtime = await initializeLabRuntime();
@@ -82,13 +85,18 @@ export async function register() {
           'merchant image pilot: lab runtime initialization failed during boot; lab routes will fail closed',
           error
         );
+        const { assertNoUnboundStagedContent } = await import(
+          '@/config/pilot-public-assets-triage'
+        );
+        assertNoUnboundStagedContent(pilotPublicDir);
       }
       // Static-namespace binding check, also fatal: Next serves
       // public/__pilot without invoking lab handlers, so unbound files
       // present at boot would stay publicly servable even though no lab
       // page validates them. A successful init with a drifting tree
-      // refuses boot with the re-stage fix; a failed init already
-      // degraded above with no runtime to compare against.
+      // refuses boot with the re-stage fix; a failed init was already
+      // refused above when staged content exists, so reaching here with
+      // no runtime means a fillers-only or absent tree.
       if (runtime) {
         const { assertNoUnexpectedStagedFiles } = await import(
           '@/lib/merchant-image-variant-pilot/lab-config-stage-guard'

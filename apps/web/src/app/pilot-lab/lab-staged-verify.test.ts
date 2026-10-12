@@ -11,7 +11,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { verifyStagedBytes } from './lab-staged-verify';
+import {
+  verifyStagedBytes,
+  verifyStagedBytesAndFillers,
+} from './lab-staged-verify';
 
 // Paths whose staged read the suite reports as grown past the statted
 // bound, deterministically reproducing a file that grows between the
@@ -216,5 +219,46 @@ describe('verifyStagedBytes', () => {
     await expect(verifyStagedBytes(entries)).rejects.toThrow(
       /257 staged lab asset\(s\) exceed the 256-entry/
     );
+  });
+});
+
+describe('verifyStagedBytesAndFillers', () => {
+  it('passes verified merchant bytes with pinned fillers', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-fillers-ok-'));
+    const tier = join(dir, 'tier.avif');
+    const filler = join(dir, 'filler.png');
+    const tierBytes = Buffer.from('tier');
+    const fillerBytes = Buffer.from('filler');
+    await writeFile(tier, tierBytes);
+    await writeFile(filler, fillerBytes);
+    const sha = (bytes: Buffer) =>
+      createHash('sha256').update(bytes).digest('hex');
+    await expect(
+      verifyStagedBytesAndFillers(
+        [{ path: tier, sha256: sha(tierBytes) }],
+        [{ path: filler, sha256: sha(fillerBytes) }]
+      )
+    ).resolves.toBeUndefined();
+  });
+
+  it('fails closed with the version-control fix when a filler drifts', async () => {
+    // Merchant bytes verify green while a filler was edited in place
+    // (e.g. between control and pilot captures): the comparison would
+    // skew silently without the filler leg. Re-staging cannot restore
+    // committed fillers, so the error names the VCS restore instead.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-fillers-drift-'));
+    const tier = join(dir, 'tier.avif');
+    const filler = join(dir, 'filler.png');
+    const tierBytes = Buffer.from('tier');
+    await writeFile(tier, tierBytes);
+    await writeFile(filler, 'edited bytes');
+    const sha = (bytes: Buffer) =>
+      createHash('sha256').update(bytes).digest('hex');
+    await expect(
+      verifyStagedBytesAndFillers(
+        [{ path: tier, sha256: sha(tierBytes) }],
+        [{ path: filler, sha256: sha(Buffer.from('filler')) }]
+      )
+    ).rejects.toThrow(/restore public\/__pilot\/fillers from version control/);
   });
 });

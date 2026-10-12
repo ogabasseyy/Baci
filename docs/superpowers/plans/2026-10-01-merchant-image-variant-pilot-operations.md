@@ -32,6 +32,11 @@ node pilot/quality-sheet.mjs --input-root .pilot-input \
 # roots in its own process, so next start needs them exported too —
 # otherwise the startup gate aborts on the staged non-lab assets.
 export BACI_IMAGE_PILOT_LAB=1
+# next start defaults to NODE_ENV=production, where the lab flag stays
+# off without this acknowledgement — and the startup gate then aborts
+# on the staged merchant tree as non-lab assets. Required for the
+# sequence below, not just for shared origins.
+export BACI_IMAGE_PILOT_ALLOW_PROD=1
 export BACI_IMAGE_PILOT_INPUT_ROOT=<dir>
 export BACI_IMAGE_PILOT_OUTPUT_ROOT=<dir>
 export BACI_IMAGE_PILOT_PUBLIC_DIR=<public>
@@ -54,13 +59,15 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # reachable box you would not publish the merchant catalog from.
 #
 # Recovery when a non-lab build/boot refuses a staged tree: the gate is
-# fatal only on staged-merchant shapes (image files under
-# originals/, generation dirs, or the __pilot root) and symlink
-# escapes; empty leftover dirs pass silently and unrelated strays
-# (.DS_Store, renamed leftovers) warn. To clear: re-run pilot:stage
-# with the intended inventory (reconcile removes unreferenced
-# generations), or delete public/__pilot/{originals,<64-hex-dirs>}
-# outright on a box that should never have staged.
+# fatal on staged-merchant shapes (image files under originals/,
+# generation dirs, fillers/, or the __pilot root) and confinement
+# breaks (symlinks, hardlinked or special files — Next would serve or
+# block on them); empty leftover dirs pass silently and unrelated
+# strays (.DS_Store, renamed leftovers) warn. Filler bytes are never
+# hash-checked outside lab mode. To clear: re-run pilot:stage with the
+# intended inventory (reconcile removes unreferenced generations), or
+# delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
+# that should never have staged.
 
 # Final validation (Task 7)
 pnpm turbo lint

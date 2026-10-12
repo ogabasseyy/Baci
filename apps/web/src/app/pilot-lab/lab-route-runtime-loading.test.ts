@@ -36,6 +36,7 @@ vi.mock(
 import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import { loadLabConfigAtStartup as getLabConfig } from './lab-route';
+import { seedCommittedFillers } from './lab-test-roots';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -255,5 +256,6 @@ async function setupRouteFiles() {
       },
     ])
   );
+  await seedCommittedFillers(publicDir);
   return { inputRoot, outputRoot, publicDir };
 }

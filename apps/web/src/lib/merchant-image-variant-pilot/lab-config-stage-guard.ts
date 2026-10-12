@@ -17,15 +17,36 @@ import { HEX64_PATTERN } from './lab-config-stage-reconcile';
 // through /__pilot with no traversal noticing. Stale dirs from a
 // crashed stage fail closed here with the re-stage fix.
 //
-// The full walk only runs when the tree drifts: repeat requests skip
-// to the directory fingerprint below (stats, no listings, no hashes),
-// so per-request verification stays on the stat fast path and cannot
-// contaminate lab timing. A failed scan never records, so drift keeps
-// failing until the operator re-stages.
-export async function assertNoUnexpectedStagedFiles(
+// The full walk only runs when the tree drifts, and the allowlist
+// resolution below runs once per stagedPaths array: repeat requests
+// skip straight to the directory fingerprint (a few lstats, no
+// listings, no hashes, no realpaths), so per-request verification
+// stays on the stat fast path and cannot contaminate lab timing. A
+// failed scan never records, so drift keeps failing until the
+// operator re-stages.
+
+// Resolved-allowlist cache, keyed by stagedPaths array identity: the
+// frozen lab runtime passes the SAME array on every request, so repeat
+// requests skip both realpath passes (2N syscalls) and go straight to
+// the fingerprint. A fresh array (new config load) re-resolves, and a
+// mixed-roots throw is never cached. Arrays are treated as immutable —
+// the loader builds them once and the runtime freezes the config
+// around them — so a hit can never disagree with the live allowlist.
+const resolvedAllowlistCache = new WeakMap<
+  readonly { path: string }[],
+  { expected: ReadonlySet<string>; realStage: string }
+>();
+
+// Exported for the fast-path pinning test: the per-request cost claim
+// (no realpaths after the first resolution) rests on this cache.
+export async function resolveAllowlist(
   stagedPaths: readonly { path: string }[],
-  stageRoot?: string
-): Promise<void> {
+  stageRoot: string | undefined
+): Promise<{ expected: ReadonlySet<string>; realStage: string } | null> {
+  const cached = resolvedAllowlistCache.get(stagedPaths);
+  if (cached) {
+    return cached;
+  }
   // The stage root derives from the allowlist itself (every staged path
   // sits two levels under it), so callers pass no second root that
   // could disagree with the allowlist. Mixed roots fail closed.
@@ -45,7 +66,7 @@ export async function assertNoUnexpectedStagedFiles(
     if (stageRoot) {
       await assertEmptyAllowlistTree(stageRoot);
     }
-    return;
+    return null;
   }
   if (stages.size > 1) {
     throw new Error(
@@ -60,6 +81,20 @@ export async function assertNoUnexpectedStagedFiles(
       expected.add(real);
     }
   }
+  const resolved = { expected, realStage };
+  resolvedAllowlistCache.set(stagedPaths, resolved);
+  return resolved;
+}
+
+export async function assertNoUnexpectedStagedFiles(
+  stagedPaths: readonly { path: string }[],
+  stageRoot?: string
+): Promise<void> {
+  const resolved = await resolveAllowlist(stagedPaths, stageRoot);
+  if (!resolved) {
+    return;
+  }
+  const { expected, realStage } = resolved;
   const currentGenDirs = new Set<string>();
   for (const file of expected) {
     const [top] = relative(realStage, file).split(sep);

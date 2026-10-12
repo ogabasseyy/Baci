@@ -2,7 +2,10 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { resolveRoutePublicDir } from '@/config/pilot-public-assets';
+import {
+  pinnedFillerEntries,
+  resolveRoutePublicDir,
+} from '@/config/pilot-public-assets';
 import {
   isPilotLabEnabled,
   loadLabConfig,
@@ -16,7 +19,7 @@ import {
 import { PILOT_SCHEMA_VERSION } from '@/schemas/merchant-image-variant-pilot-constants';
 import { readBoundedOperatorJson } from './lab-route-operator-json';
 import { isSafeRelativePath } from './lab-safe-path';
-import { verifyStagedBytes } from './lab-staged-verify';
+import { verifyStagedBytesAndFillers } from './lab-staged-verify';
 
 // Shared loader for the lab-only pilot routes (gallery + per-store pages).
 // Reads the operator's gitignored inventory/acceptances, validates the raw
@@ -136,9 +139,8 @@ function loadLabConfigFromText(
   } catch {
     throw new Error('merchant image pilot: acceptances.json is not valid JSON');
   }
-  // Read-only by default: staging runs exclusively in the pre-start CLI,
-  // so request rendering never writes to disk. Staged bytes are verified
-  // by the caller (getLabConfig fails closed when they drift or vanish).
+  // Read-only by default (staging runs only in the pre-start CLI);
+  // the caller verifies staged bytes and fails closed on drift.
   return loadLabConfig(
     {
       acceptances: parseRawAcceptances(acceptances),
@@ -174,9 +176,8 @@ async function statFingerprint(path: string): Promise<string> {
       `merchant image pilot: cannot stat ${basename(path)}; re-run pnpm pilot:stage and restart the origin`
     );
   }
-  // ctime closes the same-size same-mtime hole: utimens can pin mtime
-  // but every content write bumps ctime, so an in-place operator edit
-  // always invalidates the key. Same stat call, no added I/O.
+  // ctime defeats mtime pinning: every content write bumps ctime, so
+  // an in-place edit always invalidates the key. Same stat, no added I/O.
   return `${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }
 
@@ -184,17 +185,19 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   if (!isPilotLabEnabled())
     throw new Error('merchant image pilot: refusing to load outside lab mode');
   const config = getFrozenLabRuntime();
-  // The config is frozen, but the staged bytes it points at live on disk
-  // where Next serves them: a post-start deletion or swap would otherwise
-  // keep rendering URLs for 404s or wrong images until restart. Re-verify
-  // on the request path — the stat fingerprint fast-path makes repeat
-  // GETs cheap, and any drift fails closed with the operator fix. The
-  // known stage root covers the empty-allowlist branch (an empty binding
-  // set must not silently accept a populated tree).
-  await verifyStagedBytes(config.stagedPaths);
+  // Frozen config, live bytes: re-verify on the request path (not just
+  // startup) so mid-measurement drift fails closed instead of skewing
+  // the comparison. Steady-state cost is N+3 lstats per GET with no
+  // hashes (stat fingerprints, pinned by the fast-path tests); the
+  // known stage root covers the empty-allowlist branch.
+  const publicDir = resolveRoutePublicDir();
+  await verifyStagedBytesAndFillers(
+    config.stagedPaths,
+    pinnedFillerEntries(publicDir)
+  );
   await assertNoUnexpectedStagedFiles(
     config.stagedPaths,
-    join(resolveRoutePublicDir(), '__pilot')
+    join(publicDir, '__pilot')
   );
   return config;
 }
@@ -206,9 +209,8 @@ export async function initializeLabRuntime(): Promise<PilotLabConfig> {
 }
 
 export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
-  // Fail fast before any disk I/O: every caller gates on the flag today,
-  // but a future caller of this shared loader must not read operator
-  // roots with lab mode off.
+  // Fail fast before any disk I/O: no caller may read operator roots
+  // with lab mode off.
   if (!isPilotLabEnabled()) {
     throw new Error('merchant image pilot: refusing to load outside lab mode');
   }
@@ -223,15 +225,10 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
   const publicDir = resolveRoutePublicDir();
   const inventoryPath = join(inputRoot, 'inventory.json');
   const acceptancesPath = join(outputRoot, 'acceptances.json');
-  // The cache key commits to stat fingerprints, not content: re-reading
-  // and re-hashing both operator files on every request would put
-  // frozen-config I/O on the render path and contaminate arm timing
-  // comparisons. Content is fully read, parsed, and validated on every
-  // fingerprint change. The fingerprint binds size, mtime, AND ctime:
-  // utimens can pin mtime after an edit, but the write itself bumps
-  // ctime, so even a same-size same-mtime rewrite reloads. Concurrent
-  // first requests share one in-flight load per key; a failed load
-  // clears so the next request retries.
+  // Cache key commits to stat fingerprints (size+mtime+ctime — ctime
+  // defeats mtime pinning), not content: content fully reloads on any
+  // fingerprint change. Concurrent first requests share one in-flight
+  // load per key; a failed load clears so the next request retries.
   const inventoryFingerprint = await statFingerprint(inventoryPath);
   const acceptancesFingerprint = await statFingerprint(acceptancesPath);
   const key = createHash('sha256')
@@ -246,11 +243,12 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
     )
     .digest('hex');
   if (cachedConfig?.key === key) {
-    // The cache key commits to input fingerprints, not staged bytes:
-    // deleted, never-staged, or drifted public/__pilot files would
-    // otherwise keep serving bad URLs. Fail closed with the operator fix
-    // instead.
-    await verifyStagedBytes(cachedConfig.config.stagedPaths);
+    // Input fingerprints don't cover staged bytes: deleted or drifted
+    // files would otherwise keep serving bad URLs. Fail closed instead.
+    await verifyStagedBytesAndFillers(
+      cachedConfig.config.stagedPaths,
+      pinnedFillerEntries(publicDir)
+    );
     await assertNoUnexpectedStagedFiles(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
@@ -270,14 +268,14 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
     publicDir,
   }).then(
     async (config) => {
-      // Fresh loads verify too: the loader is read-only, so missing or
-      // drifted staged bytes (forgotten pre-start stage) fail here with
-      // the operator fix instead of rendering broken images. The finally
-      // clears poisoned in-flight loads: a verify throw must not pin the
-      // rejected promise, or every later request with the same key would
-      // replay the stale failure instead of retrying.
+      // Fresh loads verify too (forgotten pre-start stage fails here,
+      // not as broken images). The finally clears poisoned in-flight
+      // loads so a verify throw retries instead of replaying stale.
       try {
-        await verifyStagedBytes(config.stagedPaths);
+        await verifyStagedBytesAndFillers(
+          config.stagedPaths,
+          pinnedFillerEntries(publicDir)
+        );
         await assertNoUnexpectedStagedFiles(config.stagedPaths);
         cachedConfig = { config, key };
         return config;

@@ -21,6 +21,10 @@ const assertNoUnexpectedStagedFilesMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
   assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
 }));
+const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
+vi.mock('@/config/pilot-public-assets-triage', () => ({
+  assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
+}));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
@@ -61,9 +65,10 @@ describe('instrumentation pilot boot gate', () => {
   });
   it('degrades to lab-only failure when pilot startup validation fails', async () => {
     // The lab must not take the storefront down: a failed lab init
-    // logs loudly, skips the runtime publish (lab routes fail closed),
-    // and boot completes OTel setup. Only the staged tree-shape
-    // assertion above stays fatal.
+    // with no unbound staged content logs loudly, skips the runtime
+    // publish (lab routes fail closed), and boot completes OTel setup.
+    // The staged tree-shape assertion above and the unbound-content
+    // check below stay fatal.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     initializeLabRuntimeMock.mockRejectedValueOnce(
@@ -77,9 +82,29 @@ describe('instrumentation pilot boot gate', () => {
       });
     await expect(register()).resolves.toBe(undefined);
     expect(registerOTelMock).toHaveBeenCalledOnce();
+    expect(assertNoUnboundStagedContentMock).toHaveBeenCalledWith(
+      '/resolved/public'
+    );
     expect(errors).toHaveLength(1);
     expect(errors[0][0]).toMatch(/lab runtime initialization failed/);
     expect(errors[0][1]).toMatchObject({ message: 'invalid staged inputs' });
+    errorSpy.mockRestore();
+  });
+  it('refuses boot when lab init fails with staged content present', async () => {
+    // Failed init means no binding set — but Next still serves
+    // public/__pilot statically, so unbound staged content refuses
+    // boot instead of degrading into silent exposure.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    initializeLabRuntimeMock.mockRejectedValueOnce(
+      new Error('invalid staged inputs')
+    );
+    assertNoUnboundStagedContentMock.mockImplementationOnce(() => {
+      throw new Error('1 unbound entry under __pilot');
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(register()).rejects.toThrow(/unbound entry/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 
@@ -126,9 +151,9 @@ describe('instrumentation pilot boot gate', () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     await register();
     // The boot gate must inspect the same tree the build gate did: the
-    // shared resolver (config-stashed, standalone-anchored, or cwd),
-    // not a cwd-joined lookalike that diverges under `next start <dir>`
-    // or a standalone server run from elsewhere.
+    // shared resolver (config-stashed or standalone-anchored;
+    // unanchored throws), not a cwd-joined lookalike that diverges
+    // under `next start <dir>` or a standalone server run from elsewhere.
     expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
     expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
       '/resolved/public'

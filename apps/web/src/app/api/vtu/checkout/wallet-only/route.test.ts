@@ -511,7 +511,11 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
   });
 
-  it('idempotent replay: invalid phone returns the same 400 as attempt 1', async () => {
+  it('idempotent replay: invalid phone is ignored and the stored transaction replays', async () => {
+    // The row already carries attempt-1-validated state: an invalid
+    // incoming phone degrades to omitted instead of 400ing the replay
+    // — a 400 would rotate the clients' retained key, so the corrected
+    // retry would mint fresh and debit twice (Codex R37 rktSo).
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -524,18 +528,44 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       rpcCalls: [],
     };
     supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
 
-    const { status, body } = await callRoute(
-      makeRequest({
-        idempotencyKey: VALID_KEY,
-        body: { ...VALID_BODY, customerPhone: '12345' },
-      })
-    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { status } = await callRoute(
+        makeRequest({
+          idempotencyKey: VALID_KEY,
+          body: {
+            ...VALID_BODY,
+            customerPhone: '12345',
+            validationReference: 'VRF-9',
+          },
+        })
+      );
 
-    expect(status).toBe(400);
-    expect(body).toMatchObject({ error: 'Invalid customer phone number' });
-    expect(state.rpcCalls).toHaveLength(0);
-    expect(mockFulfill).not.toHaveBeenCalled();
+      expect(status).toBe(200);
+      expect(state.rpcCalls).toEqual([
+        {
+          fn: 'set_vtu_transaction_replay_attributes',
+          args: {
+            p_transaction_id: 'vtu-tx-existing',
+            p_customer_phone: null,
+            p_validation_reference: 'VRF-9',
+          },
+        },
+      ]);
+      expect(mockFulfill).toHaveBeenCalledWith({
+        supabase: expect.anything(),
+        transactionId: 'vtu-tx-existing',
+      });
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('changed-payload collision: same key with a different request fingerprint returns 409 instead of replaying', async () => {

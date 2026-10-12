@@ -51,6 +51,7 @@ describe('bill stale success replay', () => {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
       refetchWallet?: jest.Mock;
+      invalidateWallets?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
       getIsActive?: () => boolean;
     } = {}
@@ -85,7 +86,7 @@ describe('bill stale success replay', () => {
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
         captureSubmittingUserId: () => 'test-user',
-        invalidateWallets: jest.fn(),
+        invalidateWallets: overrides.invalidateWallets ?? jest.fn(),
         isSubmittingOwnerCurrent:
           overrides.isSubmittingOwnerCurrent ?? (() => true),
         resetWalletIdempotencyKey:
@@ -356,5 +357,42 @@ describe('bill stale success replay', () => {
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     expect(refetchWallet).not.toHaveBeenCalled();
     expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('suppresses the switch alert but still invalidates when off-screen', async () => {
+    // Navigated away AND switched accounts mid-flight: the discard +
+    // invalidate still run, but no Alert may fire over the new screen.
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 1000,
+      reference: 'WAL-SWITCH-OFFSCREEN-BILL',
+    });
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    const invalidateWallets = jest.fn();
+    await runPurchase({
+      onSuccess,
+      resetWalletIdempotencyKey,
+      invalidateWallets,
+      isSubmittingOwnerCurrent: () => false,
+      getIsActive: () => false,
+    });
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(invalidateWallets).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-SWITCH-OFFSCREEN-BILL',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 });

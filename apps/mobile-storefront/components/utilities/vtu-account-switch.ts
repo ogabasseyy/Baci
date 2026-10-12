@@ -12,19 +12,24 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
  * `latestIdentityRef` guard in `use-utility-purchase`. Also invalidates
  * cached wallets: the debit may have landed, and without this,
  * switching back within the stale window would serve the cached
- * pre-debit balance.
+ * pre-debit balance. When `getIsActive` reports off-screen, the alert
+ * is suppressed (no UI over the destination screen) but wallets are
+ * still invalidated and the result still discarded (Codex R37 rktSh).
  */
 export function shouldDiscardVtuResultForAccountSwitch(
   payment: PaymentState,
-  submittingOwner: string | undefined
+  submittingOwner: string | undefined,
+  getIsActive?: () => boolean
 ): boolean {
   if (payment.isSubmittingOwnerCurrent(submittingOwner)) {
     return false;
   }
   payment.invalidateWallets();
-  Alert.alert(
-    'Account Changed',
-    'The signed-in account changed while the purchase was processing. The result was discarded.'
-  );
+  if (!getIsActive || getIsActive()) {
+    Alert.alert(
+      'Account Changed',
+      'The signed-in account changed while the purchase was processing. The result was discarded.'
+    );
+  }
   return true;
 }

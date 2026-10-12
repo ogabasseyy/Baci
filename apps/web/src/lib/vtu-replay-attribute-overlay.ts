@@ -4,7 +4,7 @@ import { verifyBillCustomer } from '@/lib/monnify-bills';
 
 /**
  * Replay overlay for mutable VTU attempt attributes (Codex R31 fQGZ,
- * R32 f8Zk/f8Z0, R33 gtRN).
+ * R32 f8Zk/f8Z0, R33 gtRN, R37 rktSo).
  *
  * `metadata.customerPhone` feeds Monnify/Kuda bill calls and
  * `metadata.validationReference` is sent back on Monnify re-drives,
@@ -41,9 +41,13 @@ import { verifyBillCustomer } from '@/lib/monnify-bills';
  * biller/product/customer — so a reference is only ever stored
  * against the same bill identity the key was issued for.
  *
- * Phone normalize/validate mirrors `preparePendingVtuTransaction`
- * exactly, including the error message, so the route whitelist maps
- * an invalid replay phone to the same 400 as attempt 1.
+ * Phone normalize mirrors `preparePendingVtuTransaction`, but an
+ * invalid replay phone is IGNORED (never thrown): the row already
+ * carries attempt-1-validated state, and throwing would 400 the
+ * replay of an EXISTING transaction — rotating the clients' retained
+ * key so the corrected retry mints fresh and debits twice. The
+ * invalid value degrades to omitted (stored, then customers.phone,
+ * win); attempt-1 validation still rejects invalid phones.
  */
 export async function overlayReplayAttributes(args: {
   supabase: SupabaseClient;
@@ -54,9 +58,16 @@ export async function overlayReplayAttributes(args: {
   const rawPhone = args.customerPhone
     ? formatPhoneNumber(args.customerPhone)
     : '';
-  const normalizedPhone = rawPhone || undefined;
+  let normalizedPhone = rawPhone || undefined;
   if (normalizedPhone && !isValidPhoneNumber(normalizedPhone)) {
-    throw new Error('Invalid customer phone number');
+    // Invalid replay phone ≡ omitted phone (see doc above): the
+    // incoming value is only a freshening candidate for a row that
+    // already exists, so degrade instead of 400ing the replay. Warn
+    // with the transaction id only (no phone value — PII).
+    console.warn('VTU replay ignoring invalid customer phone:', {
+      transactionId: args.transactionId,
+    });
+    normalizedPhone = undefined;
   }
   // Opaque provider token: blank counts as absent, otherwise stored
   // verbatim like attempt 1 (no normalization — see doc above).

@@ -91,7 +91,13 @@ async function executeAirtimePurchase({
         expectedUserId: submittingUserId,
         idempotencyKey,
       });
-      if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+      if (
+        shouldDiscardVtuResultForAccountSwitch(
+          payment,
+          submittingOwner,
+          getIsActive
+        )
+      ) {
         // Finalize the SUBMITTER's entry (descriptor captured at submit)
         // before suppressing the UI: PRESERVE success (terminal and
         // processing) — the charge committed while their UI was
@@ -149,7 +155,13 @@ async function executeAirtimePurchase({
       });
       return;
     } catch (error) {
-      if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
+      if (
+        shouldDiscardVtuResultForAccountSwitch(
+          payment,
+          submittingOwner,
+          getIsActive
+        )
+      ) {
         // Still finalize status-bearing terminal errors for the
         // SUBMITTER (descriptor captured at submit): otherwise the
         // retained key replays the dead transaction when they retry.

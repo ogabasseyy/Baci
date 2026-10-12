@@ -267,17 +267,34 @@ describe('overlayReplayAttributes', () => {
     }
   });
 
-  it('throws the prepare-identical message on an invalid phone', async () => {
-    await expect(
-      overlayReplayAttributes({
+  it('ignores an invalid phone and still overlays the reference', async () => {
+    // Invalid replay phone ≡ omitted: the row already carries
+    // attempt-1-validated state, so degrade instead of 400ing the
+    // replay (which would rotate the clients' key and double-debit).
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await overlayReplayAttributes({
         supabase: buildSupabase(calls, monnifyRow()),
         transactionId: 'vtu-tx-1',
         customerPhone: '12345',
         validationReference: 'VRF-9',
-      })
-    ).rejects.toThrow('Invalid customer phone number');
-    expect(calls).toHaveLength(0);
-    expect(mockVerifyBillCustomer).not.toHaveBeenCalled();
+      });
+      expect(result).toEqual({ updated: true, refreshed: false });
+      expect(calls).toEqual([
+        {
+          fn: 'set_vtu_transaction_replay_attributes',
+          args: {
+            p_transaction_id: 'vtu-tx-1',
+            p_customer_phone: null,
+            p_validation_reference: 'VRF-9',
+          },
+        },
+      ]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(mockVerifyBillCustomer).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('wraps RPC failures without leaking them to the client contract', async () => {

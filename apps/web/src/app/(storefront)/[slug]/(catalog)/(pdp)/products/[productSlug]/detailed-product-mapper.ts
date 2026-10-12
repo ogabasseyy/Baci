@@ -198,6 +198,10 @@ export function mapDetailedCachedProductToProduct(
     inventory_tracking_policy:
       detailedProduct.inventory_tracking_policy ?? undefined,
     stock: getEffectiveStock(detailedProduct),
+    // Strict-pool aggregate cap reads stock_quantity (offer adds
+    // overwrite stock with the selected allocation): without the folded
+    // quantity here the cap disables itself on mapped PDP products.
+    stock_quantity: getEffectiveStock(detailedProduct),
     image: firstImage,
     imageLarge: firstImage,
     imageHint: detailedProduct.imageHint || detailedProduct.name,

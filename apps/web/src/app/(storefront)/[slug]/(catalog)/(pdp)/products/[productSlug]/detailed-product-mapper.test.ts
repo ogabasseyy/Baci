@@ -120,9 +120,37 @@ describe('mapDetailedCachedProductToProduct', () => {
       max_variant_price: 740000,
       manage_stock: true,
       stock: 7,
+      stock_quantity: 7,
       category: 'Smart Phones',
       category_slug: 'smart-phones',
     });
+  });
+
+  it('keeps the folded strict units on stock_quantity so the cart pool cap applies', async () => {
+    const { getStrictSerializedPool } = await import(
+      '@/hooks/cart/cart-stock-caps'
+    );
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'prod-strict',
+        merchant_id: 'merchant-1',
+        name: 'Strict Phone',
+        description: null,
+        status: 'active',
+        slug: 'strict-phone',
+        price: '600000',
+        manage_stock: true,
+        inventory_tracking_policy: 'serialized_strict',
+        stock: 0,
+        stock_quantity: 3,
+        images: [],
+        product_variants: [],
+      },
+      'merchant-1'
+    );
+
+    expect(product.inventory_tracking_policy).toBe('serialized_strict');
+    expect(getStrictSerializedPool(product)).toBe(3);
   });
 
   it('flattens embedded key-spec relation rows for detailed cached products', () => {

@@ -4,6 +4,7 @@ import {
   forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
   hasNotedPendingVtuReference,
+  hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
   markPendingVtuCompleted,
   notePendingVtuReference,
@@ -13,7 +14,11 @@ import {
   scopePendingVtuKey,
   serializePendingVtuPurchases,
 } from './pending-vtu-idempotency';
-import { PERSISTED_VTU_KEY_TTL_MS } from './pending-vtu-idempotency-store';
+import {
+  noteForgottenVtuScopes,
+  PERSISTED_VTU_KEY_TTL_MS,
+  parsePendingVtuSnapshot,
+} from './pending-vtu-idempotency-store';
 
 describe('pending-vtu-idempotency', () => {
   it('describes identical payloads identically regardless of key order', () => {
@@ -435,5 +440,73 @@ describe('pending-vtu-idempotency', () => {
 
     expect(fresh.recallPendingVtuKey(scoped)).toBe('restart-key');
     expect(fresh.isStalePendingVtuSuccess(scoped, 'REF-RESTART')).toBe(false);
+  });
+
+  it('does not resurrect a forgotten entry whose tombstone reached the snapshot', () => {
+    clearPendingVtuKeys();
+    const now = Date.now();
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', 'SIG-DEAD');
+    // A snapshot written while the deletion was still retrying: the
+    // stale entry row plus its tombstone. Hydrate must suppress the
+    // entry, or an identical purchase replays the old vend as new.
+    hydratePendingVtuPurchases(
+      JSON.stringify({
+        entries: [
+          [
+            scoped,
+            {
+              key: 'dead-key',
+              reference: 'REF-DEAD',
+              rememberedAt: now - 2000,
+              completedAt: now - 1000,
+            },
+          ],
+        ],
+        forgotten: [{ scoped, forgottenAt: now - 1000 }],
+      })
+    );
+
+    expect(recallPendingVtuKey(scoped)).toBeNull();
+  });
+
+  it('restores a re-remembered entry newer than its tombstone', () => {
+    clearPendingVtuKeys();
+    const now = Date.now();
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', 'SIG-REBORN');
+    hydratePendingVtuPurchases(
+      JSON.stringify({
+        entries: [
+          [
+            scoped,
+            {
+              key: 'new-key',
+              reference: null,
+              rememberedAt: now,
+              completedAt: null,
+            },
+          ],
+        ],
+        forgotten: [{ scoped, forgottenAt: now - 1000 }],
+      })
+    );
+
+    expect(recallPendingVtuKey(scoped)).toBe('new-key');
+  });
+
+  it('carries noted tombstones in the next snapshot', () => {
+    clearPendingVtuKeys();
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', 'SIG-NOTED');
+    rememberPendingVtuPurchase(scoped, 'noted-key');
+    forgetPendingVtuPurchase(scoped);
+
+    // The forget's own persist cleared its tombstone (MMKV is
+    // memory-only under jest, so the write trivially succeeds);
+    // re-note to prove the registry→snapshot plumbing directly.
+    noteForgottenVtuScopes([scoped], Date.now());
+    const snapshot = parsePendingVtuSnapshot(serializePendingVtuPurchases());
+
+    expect(snapshot.entries).toEqual([]);
+    expect(snapshot.forgotten).toHaveLength(1);
+    expect(recallPendingVtuKey(scoped)).toBeNull();
   });
 });

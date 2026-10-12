@@ -1,24 +1,17 @@
 /**
  * Cross-mount recall for wallet-only VTU idempotency keys.
  *
- * The key used to live in a `useUtilityPayment` ref, so navigating away
- * from a `202 processing` view ("Back to Home") and reopening Utilities
- * remounted the form with an empty key: resubmitting the same recipient
+ * The key used to live in a form ref, so remounting after "Back to Home"
  * minted a fresh UUID and the server debited a SECOND transaction. This
- * module-level registry survives remounts within the session, so a retry
- * of the same purchase reuses its key and the route's
- * `vtu_idempotency_keys` row dedupes (returning the live transaction
- * state) instead of double-charging.
+ * module-level registry survives remounts, so a retry reuses its key
+ * and the route's `vtu_idempotency_keys` row dedupes instead.
  *
  * Entries are keyed by a canonical purchase descriptor mirroring the
- * server fingerprint (`apps/web/src/lib/vtu-wallet-fingerprint.ts`),
- * additionally scoped to the authenticated owner + merchant (the
+ * server fingerprint, additionally owner+merchant scoped (the
  * descriptor itself omits identity, like the server hash): same
- * descriptor in means the same payload out, so recall can never
- * attach a key to a different purchase — and the server's 409 guard
- * stays the backstop if they ever diverge. Terminal outcomes
- * (success, key-rotating 4xx) MUST forget the descriptor, or a later
- * legitimate repeat purchase would reattach to a dead key.
+ * descriptor in means same payload out, and the server's 409 guard
+ * stays the backstop. Terminal outcomes MUST forget, or a later
+ * repeat would reattach to a dead key.
  *
  * Durability: entries persist in MMKV (device-scoped) so an app
  * restart between a timed-out submit and its retry still replays the
@@ -33,11 +26,14 @@
 
 import { canonicalizeVtuRetryIdentity } from '@baci/shared';
 import {
+  clearForgottenVtuScopes,
   clearPendingVtuSnapshot,
+  forgottenVtuScopes,
   loadPendingVtuSnapshot,
+  noteForgottenVtuScopes,
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
-  savePendingVtuSnapshot,
+  persistPendingVtuEntries,
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-store';
 
@@ -69,21 +65,29 @@ interface PendingVtuPurchase {
 
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
-/** Serializes live entries for MMKV (prunes TTL-expired). */
+/** Serializes live entries + tombstones for MMKV (prunes TTL-expired). */
 export function serializePendingVtuPurchases(now: number = Date.now()): string {
-  return serializePendingVtuEntries(pendingPurchases, now);
+  return serializePendingVtuEntries(
+    pendingPurchases,
+    [...forgottenVtuScopes].map(([s, f]) => ({ scoped: s, forgottenAt: f })),
+    now
+  );
 }
 
 /**
  * Restores entries from a snapshot (same code path as restart).
- * In-memory entries win over persisted ones so hydration never
- * clobbers a live attempt.
+ * In-memory entries win so hydration never clobbers a live attempt;
+ * snapshot tombstones are adopted to keep suppressing deletions.
  */
 export function hydratePendingVtuPurchases(
   serialized: string | null,
   now: number = Date.now()
 ): void {
-  for (const [scoped, entry] of parsePendingVtuSnapshot(serialized, now)) {
+  const snapshot = parsePendingVtuSnapshot(serialized, now);
+  for (const t of snapshot.forgotten) {
+    noteForgottenVtuScopes([t.scoped], t.forgottenAt);
+  }
+  for (const [scoped, entry] of snapshot.entries) {
     if (!pendingPurchases.has(scoped)) {
       // Legacy snapshots predate completion tracking: normalize the
       // absent field so restore never crashes on old rows.
@@ -96,18 +100,16 @@ export function hydratePendingVtuPurchases(
 }
 
 function persistPendingVtuPurchases(): void {
-  savePendingVtuSnapshot(serializePendingVtuPurchases());
+  persistPendingVtuEntries(pendingPurchases);
 }
 
 // Restart recovery: rehydrate before any submit runs in this launch.
 hydratePendingVtuPurchases(loadPendingVtuSnapshot());
 
 /**
- * Binds a purchase descriptor to the submitting owner + merchant (the
- * descriptor omits identity, mirroring the server fingerprint).
- * Callers MUST scope ONCE per submission: a module-global scope would
- * let an account switch mid-flight redirect one customer's completion
- * onto another customer's entry.
+ * Binds a descriptor to the submitting owner + merchant. Callers MUST
+ * scope ONCE per submission: a module-global scope would let an
+ * account switch redirect one customer's completion onto another's.
  */
 export function scopePendingVtuKey(
   ownerId: string | null | undefined,
@@ -263,24 +265,35 @@ export function isStalePendingVtuSuccess(
  * as the new purchase without delivering anything. (Marking is
  * reserved for UNSHOWN completions on the switched path.)
  */
-export function forgetPendingVtuByReference(reference: string): void {
-  let touched = false;
+export function forgetPendingVtuByReference(
+  reference: string,
+  now: number = Date.now()
+): void {
+  const scopes: string[] = [];
   for (const [descriptor, pending] of pendingPurchases) {
     if (pending.reference !== reference) continue;
     pendingPurchases.delete(descriptor);
-    touched = true;
+    scopes.push(descriptor);
   }
-  if (touched) persistPendingVtuPurchases();
+  if (scopes.length > 0) {
+    noteForgottenVtuScopes(scopes, now);
+    persistPendingVtuPurchases();
+  }
 }
 
 /** Drops the recall entry once its purchase reaches a terminal outcome. */
-export function forgetPendingVtuPurchase(descriptor: string): void {
+export function forgetPendingVtuPurchase(
+  descriptor: string,
+  now: number = Date.now()
+): void {
   pendingPurchases.delete(descriptor);
+  noteForgottenVtuScopes([descriptor], now);
   persistPendingVtuPurchases();
 }
 
 /** Test-only escape hatch: module state survives across test cases. */
 export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();
+  clearForgottenVtuScopes();
   clearPendingVtuSnapshot();
 }

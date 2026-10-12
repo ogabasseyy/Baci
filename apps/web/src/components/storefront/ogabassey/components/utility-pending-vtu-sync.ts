@@ -133,8 +133,13 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
 
 export function persistPendingVtuPurchases(): void {
   syncPendingVtuPurchasesFromSnapshot();
-  savePendingVtuSnapshot(serializePendingVtuPurchases());
-  forgottenScopedKeys.clear();
+  // Gate the tombstone clear on a durable write: if setItem throws
+  // (quota/private mode), the snapshot still holds the completed
+  // entries — clearing would resurrect them on the next sync.
+  // Retained tombstones ride along on the next persist instead.
+  if (savePendingVtuSnapshot(serializePendingVtuPurchases())) {
+    forgottenScopedKeys.clear();
+  }
 }
 
 // Reload recovery: rehydrate before any submit runs in this browser.

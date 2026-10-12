@@ -16,8 +16,10 @@ import {
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
 import {
+  forgottenScopedKeys,
   hydratePendingVtuPurchases,
   pendingVtuPurchases,
+  persistPendingVtuPurchases,
   serializePendingVtuPurchases,
 } from './utility-pending-vtu-sync';
 
@@ -276,5 +278,33 @@ describe('utility-pending-vtu-sync', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('retains tombstones when the persist write fails, retrying on the next persist', () => {
+    localStorage.clear();
+    getPendingVtuKey('SIG-QUOTA');
+    notePendingVtuReference('SIG-QUOTA', 'REF-QUOTA');
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('quota exceeded');
+      });
+    try {
+      // The forget drops the live entry but the write fails: the
+      // tombstone must stay in memory, suppressing the stale
+      // snapshot entry (which still holds the completed purchase).
+      forgetPendingVtuPurchase('SIG-QUOTA');
+      expect(forgottenScopedKeys.size).toBe(1);
+      expect(recallPendingVtuKey('SIG-QUOTA')).toBeUndefined();
+    } finally {
+      setItem.mockRestore();
+    }
+    // The next persist retries the write and now succeeds: the
+    // snapshot carries the tombstone and memory clears it.
+    persistPendingVtuPurchases();
+    expect(forgottenScopedKeys.size).toBe(0);
+    expect(
+      parsePendingVtuSnapshot(loadPendingVtuSnapshot()).forgotten
+    ).toHaveLength(1);
   });
 });

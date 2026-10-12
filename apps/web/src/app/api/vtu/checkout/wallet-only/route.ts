@@ -10,7 +10,7 @@ import {
   preparePendingVtuTransaction,
   resolveVtuCustomer,
 } from '@/lib/vtu-pending-transaction';
-import { overlayReplayCustomerPhone } from '@/lib/vtu-replay-phone-overlay';
+import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
@@ -133,12 +133,11 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const existing = await findExistingIdempotencyRow(supabase, idempotencyKey);
 
-    // Replay path: reuse the existing vtu_transaction_id after two
-    // guards: ownership (a stolen key must not replay against another
-    // customer/storefront — the fingerprint omits merchant binding, so
-    // the merchant id is asserted here) and payload fingerprint
-    // (changed intent → 409; replaying the original vend would charge
-    // the wrong recipient/amount).
+    // Replay path: reuse the existing vtu_transaction_id after the
+    // ownership guard (a stolen key must not replay cross-customer/
+    // storefront — the fingerprint omits merchant binding) and the
+    // payload-fingerprint guard (changed intent → 409, else we would
+    // charge the wrong recipient/amount).
     if (existing) {
       const requestingOwnership = await resolveRequestingOwnership(
         supabase,
@@ -169,12 +168,13 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      // Current-attempt contact overlay: the retry carries the
-      // freshest profile phone; attempt-1's snapshot must not win.
-      await overlayReplayCustomerPhone({
+      // Current-attempt overlay: the retry carries the freshest
+      // phone/reference; attempt-1's snapshot must not win.
+      await overlayReplayAttributes({
         supabase,
         transactionId: existing.vtu_transaction_id,
         customerPhone: input.customerPhone,
+        validationReference: input.validationReference,
       });
       const replayedFulfillment = await fulfillPendingVtuTransaction({
         supabase,
@@ -258,11 +258,12 @@ export async function POST(request: NextRequest) {
             409
           );
         }
-        // Same current-attempt contact overlay as the replay path.
-        await overlayReplayCustomerPhone({
+        // Same current-attempt overlay as the replay path.
+        await overlayReplayAttributes({
           supabase,
           transactionId: racedExisting.vtu_transaction_id,
           customerPhone: input.customerPhone,
+          validationReference: input.validationReference,
         });
         const replayedFulfillment = await fulfillPendingVtuTransaction({
           supabase,

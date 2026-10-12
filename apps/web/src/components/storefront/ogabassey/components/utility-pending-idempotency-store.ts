@@ -216,15 +216,20 @@ export function loadPendingVtuSnapshot(): string | null {
   }
 }
 
-export function savePendingVtuSnapshot(serialized: string): void {
+export function savePendingVtuSnapshot(serialized: string): boolean {
   try {
     if (typeof localStorage === 'undefined') {
-      return;
+      // No storage to fail (SSR): vacuously persisted.
+      return true;
     }
     localStorage.setItem(VTU_PENDING_KEYS_STORAGE_KEY, serialized);
+    return true;
   } catch {
     // Private-mode quota errors and friends: persistence is best
     // effort; the in-memory registry still dedupes this session.
+    // Callers MUST retain deletion tombstones on false so the next
+    // persist retries the write (see persistPendingVtuPurchases).
+    return false;
   }
 }
 

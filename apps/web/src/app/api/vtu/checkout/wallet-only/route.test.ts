@@ -73,8 +73,7 @@ interface IdempotencyRowState {
     request_fingerprint: string;
   } | null;
   insertCalls: number;
-  txnMetadata?: Record<string, unknown> | null;
-  txnUpdates?: Record<string, unknown>[];
+  rpcCalls?: Array<{ fn: string; args: Record<string, unknown> }>;
 }
 
 function buildSupabase(
@@ -136,29 +135,14 @@ function buildSupabase(
           })),
         };
       }
-      if (table === 'vtu_transactions') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue({
-                data: { metadata: state.txnMetadata ?? null },
-                error: null,
-              }),
-            })),
-          })),
-          update: vi.fn((patch: { metadata: Record<string, unknown> }) => ({
-            eq: vi.fn(() => {
-              state.txnUpdates?.push(patch.metadata);
-              return Promise.resolve({ data: null, error: null });
-            }),
-          })),
-        };
-      }
       return {
         select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
       };
     }),
-    rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+      state.rpcCalls?.push({ fn, args });
+      return Promise.resolve({ data: null, error: null });
+    }),
   };
 }
 
@@ -470,11 +454,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
   });
 
-  it('idempotent replay: overlays the current-attempt phone before re-driving', async () => {
-    // Attempt 1 stored no phone (profile not yet hydrated); the retry
-    // carries it. The phone is outside the fingerprint, so the replay
-    // proceeds — and the overlay must persist the fresh phone before
-    // fulfillment re-drives the Monnify/Kuda bill call.
+  it('idempotent replay: overlays the current-attempt phone and reference before re-driving', async () => {
+    // Attempt 1 stored no phone (profile not yet hydrated) and its
+    // validation reference has since expired; the retry carries
+    // fresh values for both. Both sit outside the fingerprint, so the
+    // replay proceeds — and the overlay must persist them (one atomic
+    // RPC, no read-modify-write) before fulfillment re-drives the
+    // Monnify/Kuda bill call.
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -484,11 +470,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
-      txnMetadata: {
-        customerPhone: null,
-        originalPhoneNumber: '08099999999',
-      },
-      txnUpdates: [],
+      rpcCalls: [],
     };
     supabaseMockRef.current = buildSupabase(state);
     mockFulfill.mockResolvedValue({
@@ -500,15 +482,23 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const { status } = await callRoute(
       makeRequest({
         idempotencyKey: VALID_KEY,
-        body: { ...VALID_BODY, customerPhone: '08012345678' },
+        body: {
+          ...VALID_BODY,
+          customerPhone: '08012345678',
+          validationReference: 'VRF-9',
+        },
       })
     );
 
     expect(status).toBe(200);
-    expect(state.txnUpdates).toEqual([
+    expect(state.rpcCalls).toEqual([
       {
-        customerPhone: '08012345678',
-        originalPhoneNumber: '08099999999',
+        fn: 'set_vtu_transaction_replay_attributes',
+        args: {
+          p_transaction_id: 'vtu-tx-existing',
+          p_customer_phone: '08012345678',
+          p_validation_reference: 'VRF-9',
+        },
       },
     ]);
     expect(mockFulfill).toHaveBeenCalledWith({
@@ -527,8 +517,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
-      txnMetadata: { customerPhone: '08011111111' },
-      txnUpdates: [],
+      rpcCalls: [],
     };
     supabaseMockRef.current = buildSupabase(state);
 
@@ -541,7 +530,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
 
     expect(status).toBe(400);
     expect(body).toMatchObject({ error: 'Invalid customer phone number' });
-    expect(state.txnUpdates).toHaveLength(0);
+    expect(state.rpcCalls).toHaveLength(0);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 

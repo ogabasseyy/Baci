@@ -214,6 +214,11 @@ function createPendingTransactionSupabaseMock({
               single: vi.fn().mockResolvedValue({
                 data:
                   columns === 'error_message, status' ||
+                  columns ===
+                    'customer_cashback, error_message, merchant_commission, metadata, status, transaction_id' ||
+                  // Pre-refresh re-read shape: kept so the
+                  // concurrent-settlement regression test fails
+                  // against code that does not refresh money columns.
                   columns === 'error_message, metadata, status, transaction_id'
                     ? (currentTransactionData ?? transactionRow)
                     : transactionRow,
@@ -2146,6 +2151,7 @@ describe('fulfillPendingVtuTransaction', () => {
           provider: 'kuda',
           providerFallback: 'monnify_airtime_to_kuda',
         }),
+        platform_commission: 22.5,
         status: 'successful',
         transaction_id: 'kuda-airtime-1',
       })
@@ -3123,6 +3129,7 @@ describe('fulfillPendingVtuTransaction', () => {
           commissionProvider: 'kuda',
           originalMerchantCommission: 22.5,
         }),
+        platform_commission: 22.5,
         status: 'successful',
       })
     );
@@ -3250,6 +3257,76 @@ describe('fulfillPendingVtuTransaction', () => {
       reference: 'VTU-123',
       status: 'successful',
     });
+  });
+
+  it('settles refreshed fallback credits when a concurrent worker persisted them first', async () => {
+    // Overlap: this worker read Monnify-derived credits (12.5/12.5),
+    // then worker A persisted the Kuda correction (11.25/11.25) with
+    // the terminal status. The re-read must refresh the money columns
+    // too, or this worker settles stale amounts that win the ledger.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      currentTransactionData: {
+        customer_cashback: 11.25,
+        error_message: null,
+        merchant_commission: 11.25,
+        metadata: {
+          commissionProvider: 'kuda',
+          originalMerchantCommission: 22.5,
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        status: 'successful',
+        transaction_id: 'kuda-airtime-1',
+      },
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: '9MOBILE',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-airtime-1',
+        status: 'processing',
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        error_message: null,
+        merchant_commission: 12.5,
+        customer_cashback: 12.5,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'credit_merchant_wallet',
+      expect.objectContaining({ p_amount: 11.25 })
+    );
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'credit_customer_wallet',
+      expect.objectContaining({ p_amount: 11.25 })
+    );
   });
 
   it('returns failed when processing reconciliation loses the claim to a non-refundable failed row', async () => {

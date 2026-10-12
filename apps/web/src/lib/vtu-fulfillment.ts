@@ -140,6 +140,7 @@ interface VtuFallbackCreditCorrection {
   customerCashback: number;
   merchantCommission: number;
   originalMerchantCommission: number;
+  platformCommission: number;
 }
 
 interface CreditWalletResult {
@@ -809,6 +810,25 @@ function calculateProviderMerchantEarning({
   return roundMoney(totalCommission * (merchantSplit / 100));
 }
 
+function calculateProviderTotalCommission({
+  amount,
+  provider,
+  providerSource,
+}: {
+  amount: number;
+  provider: string;
+  providerSource: 'kuda' | 'monnify';
+}) {
+  const { cap, rate } = getProviderVtuCommissionRate(
+    provider,
+    'AIRTIME',
+    providerSource
+  );
+  const totalCommission = cap ? Math.min(amount * rate, cap) : amount * rate;
+
+  return roundMoney(totalCommission);
+}
+
 function resolveKudaFallbackCreditCorrection({
   metadata,
   row,
@@ -869,10 +889,21 @@ function resolveKudaFallbackCreditCorrection({
       ? roundMoney(kudaMerchantEarning * (fallbackCashbackRate / 100))
       : 0;
 
+  // Platform share follows the same provider switch: it is the
+  // Kuda total minus the Kuda merchant earning (prepare persists the
+  // Monnify-derived value, which the merchant API would otherwise
+  // report alongside Kuda-corrected merchant figures).
+  const kudaTotalCommission = calculateProviderTotalCommission({
+    amount,
+    provider: row.network_provider,
+    providerSource: 'kuda',
+  });
+
   return {
     customerCashback,
     merchantCommission: roundMoney(kudaMerchantEarning - customerCashback),
     originalMerchantCommission: kudaMerchantEarning,
+    platformCommission: roundMoney(kudaTotalCommission - kudaMerchantEarning),
   };
 }
 
@@ -1858,7 +1889,9 @@ async function readCurrentVtuTransactionRow({
 }): Promise<VtuTransactionRow> {
   const { data, error } = await supabase
     .from('vtu_transactions')
-    .select('error_message, metadata, status, transaction_id')
+    .select(
+      'customer_cashback, error_message, merchant_commission, metadata, status, transaction_id'
+    )
     .eq('id', row.id)
     .single();
 
@@ -1869,18 +1902,41 @@ async function readCurrentVtuTransactionRow({
   }
 
   const snapshot = data as {
+    customer_cashback?: unknown;
     error_message?: unknown;
+    merchant_commission?: unknown;
     metadata?: unknown;
     status?: unknown;
     transaction_id?: unknown;
   };
+  // Money columns refresh alongside status: a concurrent worker may
+  // have persisted corrected fallback credits with the terminal
+  // status, and settling from this snapshot's stale Monnify values
+  // would let the wrong amounts win the ledger first. Absent values
+  // keep the snapshot's own.
+  const refreshedCashback =
+    snapshot.customer_cashback === undefined ||
+    snapshot.customer_cashback === null
+      ? Number.NaN
+      : Number(snapshot.customer_cashback);
+  const refreshedCommission =
+    snapshot.merchant_commission === undefined ||
+    snapshot.merchant_commission === null
+      ? Number.NaN
+      : Number(snapshot.merchant_commission);
 
   return {
     ...row,
+    customer_cashback: Number.isFinite(refreshedCashback)
+      ? refreshedCashback
+      : row.customer_cashback,
     error_message:
       typeof snapshot.error_message === 'string'
         ? snapshot.error_message
         : null,
+    merchant_commission: Number.isFinite(refreshedCommission)
+      ? refreshedCommission
+      : row.merchant_commission,
     metadata: readMetadataRecord(snapshot.metadata),
     status: normalizeDbVtuStatus(snapshot.status),
     transaction_id:
@@ -2044,6 +2100,7 @@ async function reconcileProcessingVtuTransaction({
           ...(fallbackCreditCorrection && {
             customer_cashback: fallbackCreditCorrection.customerCashback,
             merchant_commission: fallbackCreditCorrection.merchantCommission,
+            platform_commission: fallbackCreditCorrection.platformCommission,
           }),
           error_message: null,
           metadata: successMetadata,
@@ -2882,6 +2939,7 @@ export async function fulfillPendingVtuTransaction({
     error_message: string | null;
     merchant_commission?: number;
     metadata: Record<string, unknown>;
+    platform_commission?: number;
     status: 'successful' | 'failed';
     transaction_id: string | null;
   } = {
@@ -2901,6 +2959,8 @@ export async function fulfillPendingVtuTransaction({
       fallbackCreditCorrection.customerCashback;
     purchaseUpdatePayload.merchant_commission =
       fallbackCreditCorrection.merchantCommission;
+    purchaseUpdatePayload.platform_commission =
+      fallbackCreditCorrection.platformCommission;
     row.customer_cashback = fallbackCreditCorrection.customerCashback;
     row.merchant_commission = fallbackCreditCorrection.merchantCommission;
   }

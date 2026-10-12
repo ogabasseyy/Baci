@@ -1441,15 +1441,23 @@ describe('resolveVtuCustomer', () => {
   function createResolveCustomerSupabase({
     byEmail = null,
     byUserId = null,
+    linkData = { id: 'customer-1' },
     updateError = null,
   }: {
     byEmail?: Record<string, unknown> | null;
     byUserId?: Record<string, unknown> | null;
+    linkData?: Record<string, unknown> | null;
     updateError?: unknown;
   }) {
-    const customerUpdateEq = vi
+    const customerUpdateMaybeSingle = vi
       .fn()
-      .mockResolvedValue({ data: null, error: updateError });
+      .mockResolvedValue({ data: linkData, error: updateError });
+    const customerUpdateSelect = vi.fn(() => ({
+      maybeSingle: customerUpdateMaybeSingle,
+    }));
+    const customerUpdateEq = vi.fn(() => ({
+      select: customerUpdateSelect,
+    }));
     const customerUpdate = vi.fn(() => ({
       eq: customerUpdateEq,
     }));
@@ -1522,6 +1530,7 @@ describe('resolveVtuCustomer', () => {
     });
 
     expect(customer?.id).toBe('customer-1');
+    expect(customer?.user_id).toBe('user-1');
     expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
     expect(customerUpdateEq).toHaveBeenCalledWith('id', 'customer-1');
   });
@@ -1600,7 +1609,11 @@ describe('resolveVtuCustomer', () => {
     expect(customerUpdate).not.toHaveBeenCalled();
   });
 
-  it('still returns the email-matched customer when the opportunistic link update fails', async () => {
+  it('returns null when the opportunistic link update fails', async () => {
+    // Fail closed: the stale unlinked object must not be returned —
+    // checkout would vend against a customer history cannot show
+    // (history requires user_id equality). Retries self-heal via
+    // the byUserId hit if the link actually landed.
     const { customerUpdate, supabase } = createResolveCustomerSupabase({
       byEmail: {
         ...linkedCustomer,
@@ -1618,8 +1631,56 @@ describe('resolveVtuCustomer', () => {
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
 
-    expect(customer?.id).toBe('customer-1');
+    expect(customer).toBeNull();
     expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
+  });
+
+  it('throws when the link update fails under strict lookups', async () => {
+    const { supabase } = createResolveCustomerSupabase({
+      byEmail: {
+        ...linkedCustomer,
+        user_id: null,
+      },
+      updateError: { message: 'boom' },
+    });
+
+    await expect(
+      resolveVtuCustomer({
+        merchantId: 'merchant-1',
+        strictLookups: true,
+        supabase,
+        user: {
+          email: 'customer@example.com',
+          id: 'user-1',
+        } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+      })
+    ).rejects.toThrow('Failed to look up VTU customer: boom');
+  });
+
+  it('returns null when the linked row vanishes mid-checkout', async () => {
+    // Zero-row link match: the email-matched row was deleted between
+    // the select and the update — definitive miss in both modes.
+    for (const strictLookups of [false, true]) {
+      const { supabase } = createResolveCustomerSupabase({
+        byEmail: {
+          ...linkedCustomer,
+          user_id: null,
+        },
+        linkData: null,
+      });
+
+      const customer = await resolveVtuCustomer({
+        merchantId: 'merchant-1',
+        strictLookups,
+        supabase,
+        user: {
+          email: 'customer@example.com',
+          id: 'user-1',
+        } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+      });
+
+      expect(customer).toBeNull();
+    }
   });
 });
 

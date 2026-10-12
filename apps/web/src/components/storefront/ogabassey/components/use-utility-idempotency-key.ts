@@ -70,13 +70,15 @@ export function shouldRotateVtuKeyForStatus(status: unknown): boolean {
 
 /**
  * Finalizes a settled attempt whose owner switched mid-flight, before
- * the caller suppresses the result UI. Terminal success forgets the
- * submitter's key (their repeat mints fresh instead of replaying the
- * old vend as a new success); processing notes the reference (replays
- * recognized). Status-bearing terminal errors forget the key too —
- * otherwise the retained key replays the dead transaction when the
- * submitter retries. Ambiguous errors keep the key so the retry
- * dedupes.
+ * the caller suppresses the result UI. Success (terminal AND
+ * processing) is PRESERVED: the charge committed to the submitter
+ * while their UI was suppressed, so their switch-back repeat must
+ * replay the original outcome — forgetting would mint a fresh key
+ * and debit/vend a second time. A genuinely new intent stays safe
+ * via the stale-success guard ("Purchase Already Completed").
+ * Status-bearing terminal errors forget the key — otherwise the
+ * retained key replays the dead transaction when they retry.
+ * Ambiguous errors keep the key so the retry dedupes.
  */
 export function finalizeSwitchedAttempt(
   attempt: UtilityIdempotencyAttempt | null,
@@ -86,11 +88,7 @@ export function finalizeSwitchedAttempt(
     return;
   }
   if (result.kind === 'wallet-success') {
-    if (result.processing) {
-      notePendingVtuReference(attempt.scoped, result.reference);
-    } else {
-      forgetPendingVtuPurchase(attempt.scoped);
-    }
+    notePendingVtuReference(attempt.scoped, result.reference);
   } else if (
     result.kind === 'error' &&
     shouldRotateVtuKeyForStatus(result.status)

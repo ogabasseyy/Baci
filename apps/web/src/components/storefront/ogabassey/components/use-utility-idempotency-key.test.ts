@@ -225,7 +225,11 @@ describe('finalizeSwitchedAttempt', () => {
     clearPendingVtuKeys();
   });
 
-  it('forgets a terminal success so the returnee mints fresh', () => {
+  it('preserves a switched terminal success so the returnee replays it', () => {
+    // The charge committed to the submitter while their UI was
+    // suppressed: forgetting would mint a fresh key on their
+    // switch-back repeat and debit/vend a second time. The repeat
+    // must reuse the key AND recognize the completed reference.
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
@@ -245,7 +249,8 @@ describe('finalizeSwitchedAttempt', () => {
     act(() => {
       repeat = result.current.captureAttemptKey('SIG').key;
     });
-    expect(repeat).not.toBe(attempt.key);
+    expect(repeat).toBe(attempt.key);
+    expect(result.current.isScopedReplay(attempt.scoped, 'REF-1')).toBe(true);
   });
 
   it('notes the reference when the switched result is processing', () => {

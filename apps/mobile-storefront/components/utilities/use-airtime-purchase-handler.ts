@@ -84,13 +84,12 @@ async function executeAirtimePurchase({
       });
       if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
         // Finalize the SUBMITTER's entry (descriptor captured at submit)
-        // before suppressing the UI: terminal success forgets (repeat
-        // mints fresh); processing notes the reference (replays seen).
-        if (result.status === 'processing') {
-          notePendingVtuReference(descriptor, result.reference);
-        } else {
-          payment.resetWalletIdempotencyKey(descriptor);
-        }
+        // before suppressing the UI: PRESERVE success (terminal and
+        // processing) — the charge committed while their UI was
+        // suppressed, so their switch-back repeat must replay the
+        // original outcome, not mint fresh and debit twice. The
+        // stale-success guard still protects genuinely new intents.
+        notePendingVtuReference(descriptor, result.reference);
         return;
       }
       if (result.status === 'processing') {
@@ -119,6 +118,7 @@ async function executeAirtimePurchase({
       onSuccess({
         amount: result.amount ?? numericAmount,
         cashback: creditedVtuCashback(result.cashback),
+        customerIdentifier: phoneNumber,
         reference: result.reference,
         status: 'successful',
         voucherPin: result.voucherPin,

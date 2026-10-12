@@ -140,6 +140,7 @@ describe('airtime stale success replay', () => {
       expect.objectContaining({
         status: 'successful',
         reference: 'WAL-FRESH-AIR',
+        customerIdentifier: '08037654321',
       })
     );
     expect(Alert.alert).not.toHaveBeenCalled();
@@ -165,8 +166,25 @@ describe('airtime stale success replay', () => {
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
     );
-    // Terminal success finalizes the submitter's entry: repeat mints fresh.
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    // Switched terminal success is PRESERVED (not reset): the
+    // submitter's switch-back repeat must replay the original outcome,
+    // not mint fresh and debit twice.
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(isStalePendingVtuSuccess(descriptor, 'WAL-SWITCHED-AIR')).toBe(
+      false
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-SWITCHED-AIR',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 
   it('notes the processing reference when the account switched mid-flight', async () => {

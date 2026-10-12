@@ -434,18 +434,29 @@ export interface PreparedVtuTransaction {
 export async function resolveVtuCustomer({
   supabase,
   merchantId,
+  strictLookups = false,
   user,
 }: {
   supabase: SupabaseClient;
   merchantId: string;
+  /**
+   * Throw on transient lookup errors instead of resolving null. The
+   * wallet-only route opts in: a swallowed error surfaces as 400/404
+   * (key rotated) instead of 5xx (key kept), so a retry-after-recovery
+   * mints fresh and debits twice. Legacy callers keep null (404).
+   */
+  strictLookups?: boolean;
   user: User;
 }) {
-  const { data: byUserId } = await supabase
+  const { data: byUserId, error: byUserIdError } = await supabase
     .from('customers')
     .select('id, email, first_name, last_name, phone, user_id')
     .eq('merchant_id', merchantId)
     .eq('user_id', user.id)
     .maybeSingle();
+  if (byUserIdError && strictLookups) {
+    throw new Error(`Failed to look up VTU customer: ${byUserIdError.message}`);
+  }
 
   if (byUserId) {
     return byUserId as CustomerRecord;
@@ -455,12 +466,15 @@ export async function resolveVtuCustomer({
     return null;
   }
 
-  const { data: byEmail } = await supabase
+  const { data: byEmail, error: byEmailError } = await supabase
     .from('customers')
     .select('id, email, first_name, last_name, phone, user_id')
     .eq('merchant_id', merchantId)
     .eq('email', user.email)
     .maybeSingle();
+  if (byEmailError && strictLookups) {
+    throw new Error(`Failed to look up VTU customer: ${byEmailError.message}`);
+  }
 
   if (byEmail && !byEmail.user_id) {
     await supabase
@@ -478,6 +492,7 @@ export async function preparePendingVtuTransaction({
   input,
   source,
   requireCustomer = false,
+  strictLookups = false,
 }: {
   supabase: SupabaseClient;
   user: User;
@@ -490,6 +505,8 @@ export async function preparePendingVtuTransaction({
   input: PurchaseInput & { customerName?: string };
   source: PurchaseInput['source'];
   requireCustomer?: boolean;
+  /** Fail 5xx (not 400/404) on transient lookup errors; see resolver. */
+  strictLookups?: boolean;
 }): Promise<PreparedVtuTransaction> {
   const isTelco = input.type === 'airtime' || input.type === 'data';
   const formattedPhone =
@@ -521,17 +538,27 @@ export async function preparePendingVtuTransaction({
         .maybeSingle()
     );
 
+  // Strict: a transient merchant/settings lookup error must 500 (key
+  // kept), never masquerade as a terminal 400/404 (key rotated).
+  if (merchantError && strictLookups) {
+    throw new Error(`Failed to resolve VTU merchant: ${merchantError.message}`);
+  }
   if (merchantError || !merchant) {
     throw new Error('Merchant not found');
   }
 
-  const { data: settings } = await supabase
+  const { data: settings, error: settingsError } = await supabase
     .from('merchant_feature_settings')
     .select(
       'vtu_enabled, vtu_airtime_enabled, vtu_data_enabled, vtu_electricity_enabled, vtu_tv_enabled, vtu_betting_enabled, vtu_merchant_commission_rate, vtu_customer_cashback_enabled, vtu_customer_cashback_rate, paystack_enabled, korapay_enabled'
     )
     .eq('merchant_id', merchant.id)
     .single();
+  if (settingsError && strictLookups) {
+    throw new Error(
+      `Failed to load VTU merchant settings: ${settingsError.message}`
+    );
+  }
 
   const featureSettings = (settings ?? {}) as FeatureSettingsRecord;
   if (!featureSettings.vtu_enabled) {
@@ -553,6 +580,7 @@ export async function preparePendingVtuTransaction({
   const customer = await resolveVtuCustomer({
     supabase,
     merchantId: merchant.id,
+    strictLookups,
     user,
   });
 

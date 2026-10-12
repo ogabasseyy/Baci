@@ -735,4 +735,100 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
   });
+
+  it('replay: transient merchant lookup error 500s (key kept), never 400', async () => {
+    // A swallowed lookup error would collapse into the 400
+    // ownership-mismatch below and rotate the client's key; a retry
+    // after the database recovers would then mint fresh and debit
+    // twice. Errors must 500 so the key is kept for replay.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    const base = buildSupabase(state);
+    const baseFrom = base.from as unknown as (table: string) => unknown;
+    supabaseMockRef.current = {
+      ...base,
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'connection reset' },
+                }),
+              })),
+            })),
+          };
+        }
+        return baseFrom(table);
+      }),
+    };
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
+    expect(mockFulfill).not.toHaveBeenCalled();
+    expect(mockResolveVtuCustomer).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('replay: strict customer-resolver failure 500s without leaking DB text', async () => {
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockResolveVtuCustomer.mockRejectedValueOnce(
+      new Error('Failed to look up VTU customer: connection reset')
+    );
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(body).toMatchObject({ error: 'Wallet-only checkout failed.' });
+    expect(mockResolveVtuCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ strictLookups: true })
+    );
+    expect(mockFulfill).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('fresh path: prepare runs with strictLookups so transient errors 500', async () => {
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.objectContaining({ strictLookups: true })
+    );
+  });
 });

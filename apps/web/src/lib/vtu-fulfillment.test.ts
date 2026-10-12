@@ -4371,6 +4371,163 @@ describe('fulfillPendingVtuTransaction', () => {
       );
     });
   });
+
+  it('recovers a stranded pre-vend row to marked pending instead of limbo', async () => {
+    // The pre-vend restore failed while the database was down, so the
+    // row sits processing with no provider reference — the
+    // reconciliation claim declines it. Recovery flips it to marked
+    // pending (client retry AND cron re-drive it) and reports
+    // processing; the next pass re-drives claim → debit → vend.
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-STRANDED',
+          transaction_id: null,
+          status: 'processing',
+          metadata: { walletDebited: true },
+          error_message: null,
+          merchant_commission: null,
+          customer_cashback: null,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+          updated_at: staleAt,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          error_message: 'Reconciliation recovered stranded pre-vend row',
+          metadata: {
+            walletDebited: true,
+            preVendInterruptedAt: staleAt,
+          },
+          status: 'pending',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const updateEq = vi.fn();
+    const updateChain = Object.assign(Promise.resolve({ error: null }), {
+      eq: updateEq,
+    });
+    updateEq.mockReturnValue(updateChain);
+    const update = vi.fn(() => ({ eq: updateEq }));
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table !== 'vtu_transactions') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ single })),
+          })),
+          update,
+        };
+      }),
+      rpc: vi.fn(),
+    } as unknown as Parameters<
+      typeof fulfillPendingVtuTransaction
+    >[0]['supabase'];
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'pending',
+        metadata: expect.objectContaining({
+          walletDebited: true,
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('leaves a fresh reference-less processing row to the live worker', async () => {
+    // Same shape but written seconds ago: a worker may be mid-vend,
+    // so no flip — just report current state.
+    const freshAt = new Date(Date.now() - 1000).toISOString();
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-LIVE',
+          transaction_id: null,
+          status: 'processing',
+          metadata: {},
+          error_message: null,
+          merchant_commission: null,
+          customer_cashback: null,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+          updated_at: freshAt,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          error_message: null,
+          metadata: {},
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const update = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table !== 'vtu_transactions') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ single })),
+          })),
+          update,
+        };
+      }),
+      rpc: vi.fn(),
+    } as unknown as Parameters<
+      typeof fulfillPendingVtuTransaction
+    >[0]['supabase'];
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-LIVE',
+      status: 'processing',
+    });
+  });
 });
 
 // The wallet-race compensation hinges on isInsufficientWalletBalanceError

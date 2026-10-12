@@ -798,10 +798,12 @@ describe('useUtilityPurchase', () => {
     expect(setWalletBalance).toHaveBeenCalled();
   });
 
-  it('forgets the submitter key on switch-discard so the returnee mints fresh', async () => {
-    // P2: A's success settles after the switch to B. The entry must be
-    // finalized (terminal ⇒ forget) before the UI is suppressed — or A's
-    // repeat within the TTL would replay the old vend as a new success.
+  it('preserves the submitter key on switch-discard so the returnee replays it', async () => {
+    // P1: A's success settles after the switch to B. The entry must be
+    // PRESERVED before the UI is suppressed — forgetting would mint a
+    // fresh key on A's switch-back repeat and debit/vend a second time.
+    // The repeat replays the original outcome (REF-A); a genuinely new
+    // intent is still safe via the stale-success guard (separate test).
     type SubmitResult =
       | {
           kind: 'wallet-success';
@@ -822,9 +824,10 @@ describe('useUtilityPurchase', () => {
             resolveSubmit = resolve;
           });
         }
+        // Same key ⇒ the route replays A's original transaction.
         return {
           kind: 'wallet-success',
-          reference: 'REF-A2',
+          reference: 'REF-A',
           amount: 1000,
           processing: false,
         };
@@ -853,15 +856,16 @@ describe('useUtilityPurchase', () => {
       });
     });
 
-    // A switches back and repeats the same purchase: fresh key, new vend.
+    // A switches back and repeats the same purchase: same key, the
+    // original outcome reports — no second debit.
     rerender({ customer, user });
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
     expect(seenKeys).toHaveLength(2);
-    expect(seenKeys[1]).not.toBe(seenKeys[0]);
+    expect(seenKeys[1]).toBe(seenKeys[0]);
     expect(result.current.step).toBe('success');
-    expect(result.current.transactionRef).toBe('REF-A2');
+    expect(result.current.transactionRef).toBe('REF-A');
   });
 });

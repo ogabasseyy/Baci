@@ -153,13 +153,11 @@ export function createBillFormPurchaseHandler({
         });
         if (shouldDiscardVtuResultForAccountSwitch(payment, submittingOwner)) {
           // Finalize the SUBMITTER's entry (descriptor captured at
-          // submit) before suppressing the UI: terminal success forgets
-          // (repeat mints fresh); processing notes the reference.
-          if (result.status === 'processing') {
-            notePendingVtuReference(descriptor, result.reference);
-          } else {
-            payment.resetWalletIdempotencyKey(descriptor);
-          }
+          // submit) before suppressing the UI: PRESERVE success —
+          // their switch-back repeat must replay the original outcome,
+          // not mint fresh and debit twice (stale guard covers new
+          // intents).
+          notePendingVtuReference(descriptor, result.reference);
           return;
         }
         // 'processing' is non-terminal — the vend is still in flight

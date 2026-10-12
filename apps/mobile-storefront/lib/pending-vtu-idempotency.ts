@@ -31,6 +31,7 @@
  * `rememberedAt`.
  */
 
+import { canonicalizeVtuRetryIdentity } from '@baci/shared';
 import {
   clearPendingVtuSnapshot,
   loadPendingVtuSnapshot,
@@ -39,7 +40,6 @@ import {
   savePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-store';
-import { canonicalizeVtuRetryIdentity } from '@baci/shared';
 
 /** Sequential mobile UX never has more than a couple of pendings in flight. */
 const MAX_PENDING_PURCHASES = 32;

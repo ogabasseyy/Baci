@@ -18,7 +18,10 @@ import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provide
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
-import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
+import {
+  isStrandedPreVendVtuRow,
+  restoreInterruptedPreVendVtuRow,
+} from '@/lib/vtu-pre-vend-recovery';
 import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
@@ -115,6 +118,8 @@ interface VtuTransactionRow {
   status: 'pending' | 'processing' | 'successful' | 'failed';
   transaction_id: string | null;
   type: 'airtime' | 'data' | 'electricity' | 'cable_tv' | 'betting';
+  /** Last write; drives the stranded pre-vend staleness gate. */
+  updated_at?: string | null;
 }
 
 interface VtuFallbackCreditCorrection {
@@ -2423,7 +2428,7 @@ export async function fulfillPendingVtuTransaction({
   const { data: existing, error: existingError } = await supabase
     .from('vtu_transactions')
     .select(
-      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source'
+      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source, updated_at'
     )
     .eq('id', transactionId)
     .single();
@@ -2491,6 +2496,18 @@ export async function fulfillPendingVtuTransaction({
       supabase,
     });
     if (!reconciliationRow) {
+      // Reference-less pre-vend strand (the restore write failed
+      // while the database was down): flip back to marked pending so
+      // the next pass re-drives it instead of stranding the debit
+      // forever. The predicate requires proof no live worker holds
+      // the row; re-read after so a raced settle reports terminal.
+      if (isStrandedPreVendVtuRow(row)) {
+        await restoreInterruptedPreVendVtuRow({
+          errorMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,
+          row,
+          supabase,
+        });
+      }
       return resolveCurrentVtuTransactionState({ row, supabase });
     }
     return reconcileProcessingVtuTransaction({

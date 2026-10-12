@@ -27,13 +27,10 @@ interface ExistingIdempotencyRow {
 }
 
 /**
- * Merchant + customers row owned by the authed user under the slug.
- * Null customer = legitimate cross-customer signal (requester
- * doesn't own the recorded row). The merchant id backs the replay
- * storefront check: the fingerprint omits merchant binding, so
- * cross-storefront key reuse is rejected structurally. Uses shared
- * `resolveVtuCustomer` (same as prepare, incl. the email-fallback
- * backfill) so email-linked customers pass first replay.
+ * Merchant + customer owned by the authed user under the slug. Null =
+ * genuine not-found/mismatch (400); lookup ERRORS throw (500, key
+ * kept). Merchant id backs the replay storefront check (the
+ * fingerprint omits merchant binding).
  */
 async function resolveRequestingOwnership(
   supabase: SupabaseClient,
@@ -46,12 +43,18 @@ async function resolveRequestingOwnership(
     await withMerchantSlugAliasFallback(merchantSlug, (s) =>
       supabase.from('merchants').select('id').eq('slug', s).maybeSingle()
     );
-  if (merchantError || !merchant) {
+  if (merchantError) {
+    throw new Error(
+      `Failed to resolve VTU merchant ownership: ${merchantError.message}`
+    );
+  }
+  if (!merchant) {
     return { customerId: null, merchantId: null };
   }
   const customer = await resolveVtuCustomer({
     supabase,
     merchantId: merchant.id as string,
+    strictLookups: true,
     user,
   });
   return {
@@ -111,12 +114,9 @@ export async function POST(request: NextRequest) {
     const { idempotencyKey, input } = parsedRequest;
 
     // Bind the checkout to the submitting account before ANY database
-    // operation: a sign-in between the client's capture and this POST
-    // swaps the ambient cookie, so a mismatched session must fail
-    // closed instead of debiting the new account for the old payload.
-    // 403 (not 409): nothing was recorded, so clients must KEEP the
-    // key — 409 would rotate it and a retry-after-switch-back would
-    // mint fresh and debit twice. Fingerprint-collision 409s stay.
+    // operation: a sign-in between capture and POST swaps the ambient
+    // cookie. 403 (not 409): nothing was recorded, so clients KEEP
+    // the key — 409 would rotate it and debit twice after switch-back.
     if (input.expectedUserId && input.expectedUserId !== auth.user.id) {
       return createErrorResponse(
         'Account changed during checkout. Please try again.',
@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
       input: input,
       source: 'checkout',
       requireCustomer: true,
+      strictLookups: true,
     });
 
     if (!prepared.customer?.id) {

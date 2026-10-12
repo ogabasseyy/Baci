@@ -1591,3 +1591,224 @@ describe('resolveVtuCustomer', () => {
     expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
   });
 });
+
+describe('resolveVtuCustomer strictLookups', () => {
+  function supabaseWithCustomerErrors({
+    byEmailError = null,
+    byUserIdError = null,
+  }: {
+    byEmailError?: { message: string } | null;
+    byUserIdError?: { message: string } | null;
+  }) {
+    return {
+      from: vi.fn(() => ({
+        select: vi.fn(() => {
+          const filters = new Map<string, unknown>();
+          const builder = {
+            eq: vi.fn((field: string, value: unknown) => {
+              filters.set(field, value);
+              return builder;
+            }),
+            maybeSingle: vi.fn(() => {
+              if (filters.has('user_id')) {
+                return Promise.resolve({ data: null, error: byUserIdError });
+              }
+              return Promise.resolve({ data: null, error: byEmailError });
+            }),
+          };
+          return builder;
+        }),
+      })),
+    } as unknown as ResolveCustomerSupabase;
+  }
+
+  const strictUser = {
+    email: 'customer@example.com',
+    id: 'user-1',
+  } as Parameters<typeof resolveVtuCustomer>[0]['user'];
+
+  it('throws on user_id lookup error when strict (500, key kept)', async () => {
+    const supabase = supabaseWithCustomerErrors({
+      byUserIdError: { message: 'connection reset' },
+    });
+
+    await expect(
+      resolveVtuCustomer({
+        merchantId: 'merchant-1',
+        strictLookups: true,
+        supabase,
+        user: strictUser,
+      })
+    ).rejects.toThrow(/Failed to look up VTU customer/);
+  });
+
+  it('throws on email-fallback lookup error when strict', async () => {
+    const supabase = supabaseWithCustomerErrors({
+      byEmailError: { message: 'timeout' },
+    });
+
+    await expect(
+      resolveVtuCustomer({
+        merchantId: 'merchant-1',
+        strictLookups: true,
+        supabase,
+        user: strictUser,
+      })
+    ).rejects.toThrow(/Failed to look up VTU customer/);
+  });
+
+  it('resolves null on lookup errors when not strict (legacy callers)', async () => {
+    const supabase = supabaseWithCustomerErrors({
+      byEmailError: { message: 'timeout' },
+      byUserIdError: { message: 'connection reset' },
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: strictUser,
+    });
+
+    expect(customer).toBeNull();
+  });
+});
+
+describe('preparePendingVtuTransaction strictLookups', () => {
+  function supabaseWithLookupErrors({
+    customerError = null,
+    merchantError = null,
+    settingsError = null,
+  }: {
+    customerError?: { message: string } | null;
+    merchantError?: { message: string } | null;
+    settingsError?: { message: string } | null;
+  }) {
+    return {
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: merchantError ? null : { id: 'merchant-1' },
+                  error: merchantError,
+                }),
+                single: vi.fn().mockResolvedValue({
+                  data: merchantError ? null : { id: 'merchant-1' },
+                  error: merchantError,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'merchant_feature_settings') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: settingsError
+                    ? null
+                    : { vtu_enabled: true, vtu_airtime_enabled: true },
+                  error: settingsError,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: customerError,
+                }),
+              }),
+            }),
+          }),
+        };
+      }),
+    } as unknown as PrepareSupabase;
+  }
+
+  function prepareStrictAirtime(supabase: PrepareSupabase) {
+    return preparePendingVtuTransaction({
+      supabase,
+      user: {
+        id: 'user-1',
+        email: 'customer@example.com',
+      } as unknown as Parameters<
+        typeof preparePendingVtuTransaction
+      >[0]['user'],
+      input: {
+        merchantSlug: 'ogabassey',
+        type: 'airtime',
+        amount: 1000,
+        phoneNumber: '08012345678',
+        networkProvider: 'mtn',
+        source: 'checkout',
+      },
+      source: 'checkout',
+      requireCustomer: true,
+      strictLookups: true,
+    });
+  }
+
+  it('throws on transient merchant error instead of Merchant-not-found 400', async () => {
+    const supabase = supabaseWithLookupErrors({
+      merchantError: { message: 'connection reset' },
+    });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to resolve VTU merchant/
+    );
+  });
+
+  it('throws on transient settings error instead of VTU-disabled 400', async () => {
+    const supabase = supabaseWithLookupErrors({
+      settingsError: { message: 'timeout' },
+    });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to load VTU merchant settings/
+    );
+  });
+
+  it('throws on transient customer error instead of Customer-404', async () => {
+    const supabase = supabaseWithLookupErrors({
+      customerError: { message: 'connection reset' },
+    });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to look up VTU customer/
+    );
+  });
+
+  it('keeps legacy 400s on lookup errors when not strict', async () => {
+    const supabase = supabaseWithLookupErrors({
+      merchantError: { message: 'connection reset' },
+    });
+
+    await expect(
+      preparePendingVtuTransaction({
+        supabase,
+        user: {
+          id: 'user-1',
+          email: 'customer@example.com',
+        } as unknown as Parameters<
+          typeof preparePendingVtuTransaction
+        >[0]['user'],
+        input: {
+          merchantSlug: 'ogabassey',
+          type: 'airtime',
+          amount: 1000,
+          phoneNumber: '08012345678',
+          networkProvider: 'mtn',
+          source: 'checkout',
+        },
+        source: 'checkout',
+        requireCustomer: true,
+      })
+    ).rejects.toThrow('Merchant not found');
+  });
+});

@@ -3,7 +3,9 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
   buildVtuPurchaseDescriptor,
+  isStalePendingVtuSuccess,
   notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
@@ -176,7 +178,24 @@ describe('bill stale success replay', () => {
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
     );
-    // Terminal success finalizes the submitter's entry: repeat mints fresh.
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    // Switched terminal success is PRESERVED (not reset): the
+    // submitter's switch-back repeat must replay the original outcome,
+    // not mint fresh and debit twice.
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(isStalePendingVtuSuccess(descriptor, 'WAL-SWITCHED-BILL')).toBe(
+      false
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-SWITCHED-BILL',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 });

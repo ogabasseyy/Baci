@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +27,8 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 
 import { GET, POST } from './route';
 
-const SECRET = 'synthetic-staging-secret';
+// Per-run random key shared by signing and verification; no committed secret.
+const SECRET = randomBytes(32).toString('hex');
 
 function chainable(
   result: { data: unknown; error: unknown },

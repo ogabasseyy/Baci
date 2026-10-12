@@ -7132,7 +7132,7 @@ describe('POST /api/payments/webhook', () => {
     expect(await response.json()).toEqual({ message: 'Event ignored' });
   });
 
-  prefundedCardWebhookCases(POST);
+  prefundedCardWebhookCases(POST, 'test-paystack-secret');
 
   describe('primary card checkout webhook reconcile', () => {
     const primaryBody = {

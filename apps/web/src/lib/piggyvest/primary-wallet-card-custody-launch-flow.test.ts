@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
 import { runPrimaryCardCustodyLaunch } from './primary-wallet-card-custody-launch';
@@ -25,7 +25,8 @@ const bytes = Buffer.from(
     ],
   })
 );
-const issuerKey = 'mock-reviewed-internal-issuer-000000';
+// Per-run random key shared by signing and verification; no committed secret.
+const issuerKey = randomBytes(32).toString('hex');
 const environment = {
   ...fixture.environment,
   PIGGYVEST_PRIMARY_CARD_TRANSFER_PASSWORD: undefined,

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { primaryCardCustodyFixture as fixture } from './primary-wallet-card-custody.test-fixture';
 import { createPrimaryCardCustodyLaunchBinding } from './primary-wallet-card-custody-launch-binding';
@@ -17,7 +17,8 @@ const bytes = Buffer.from(
     ],
   })
 );
-const issuerKey = 'mock-issuer-delivery-key-0000000000';
+// Per-run random key shared by signing and verification; no committed secret.
+const issuerKey = randomBytes(32).toString('hex');
 const approval = {
   approved: 'true',
   path: '/fixture/crosswalk.json',

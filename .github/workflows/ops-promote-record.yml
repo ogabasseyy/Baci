@@ -66,6 +66,10 @@ jobs:
           key: ops-promote-last-tip-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ops-promote-last-tip-
       - name: Validate promote-record history
+        # Indirect the dispatch input through env so no ${{ }} interpolation
+        # reaches the run: script (run-shell-injection hardening).
+        env:
+          CONFIRM_RESEED: ${{ inputs.confirm_reseed }}
         run: |
           # ls-remote separates a confirmed-missing ref (success, empty)
           # from auth/transport/server failures (nonzero): only the
@@ -89,7 +93,7 @@ jobs:
             exit 1
           fi
           tip="$(git rev-parse FETCH_HEAD)"
-          if [ ! -f .ops-promote-last-tip ] && [ "${{ inputs.confirm_reseed }}" != 'true' ]; then
+          if [ ! -f .ops-promote-last-tip ] && [ "$CONFIRM_RESEED" != 'true' ]; then
             echo '::error::no cached tip (first run or cache eviction); refusing to silently re-seed. Verify the branch history out-of-band, then re-run with confirm_reseed.'
             # Report shape state for signal, but fail closed regardless.
             node ci_scripts/validate-promote-record.mjs "$tip" '0000000000000000000000000000000000000000' || true

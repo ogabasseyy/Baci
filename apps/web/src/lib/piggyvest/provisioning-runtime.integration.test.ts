@@ -70,6 +70,9 @@ describe.skipIf(process.env.PIGGYVEST_RUN_LOCAL_POSTGRES !== '1')(
       if (database.transport !== 'local_test')
         throw new Error('Local fixture required');
       execute = createPiggyvestPostgresExecutor(database);
+      // Local-test Postgres harness: synthetic password over an owned local
+      // socket, guarded by the local_test transport check above.
+      // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
       admin = new Client({
         host: database.socketDirectory,
         port: database.port,

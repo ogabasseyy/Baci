@@ -26,6 +26,9 @@ function database() {
 }
 async function admin() {
   const config = database();
+  // Local-test Postgres harness: empty password over an owned local socket
+  // (socket path allow-listed above); no credential material involved.
+  // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
   const client = new Client({
     host: config.socketDirectory,
     port: config.port,

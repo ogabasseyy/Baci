@@ -57,6 +57,10 @@ jobs:
         with:
           name: muse-pin-files
           path: pin-files
+          # The staged files live under pin-files/.github, a hidden
+          # directory that upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: error
 
       - name: Smoke-test the pinned installer against the real binary
         if: steps.pin.outcome == 'success'

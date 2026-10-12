@@ -13,15 +13,9 @@ INSERT INTO public.loyalty_rewards (
   ('01aa0000-0000-4000-8000-000000000001', 'Bridge credit', 100,
    'store_credit', 500, NULL, true);
 
-SELECT id AS fixed_reward_id FROM public.loyalty_rewards
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND name = 'Bridge fixed' \gset
-SELECT id AS percent_reward_id FROM public.loyalty_rewards
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND name = 'Bridge percent' \gset
-SELECT id AS credit_reward_id FROM public.loyalty_rewards
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND name = 'Bridge credit' \gset
+SELECT id AS fixed_reward_id FROM public.loyalty_rewards WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND name = 'Bridge fixed' \gset
+SELECT id AS percent_reward_id FROM public.loyalty_rewards WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND name = 'Bridge percent' \gset
+SELECT id AS credit_reward_id FROM public.loyalty_rewards WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND name = 'Bridge credit' \gset
 
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000113');
 
@@ -43,18 +37,9 @@ SELECT public.redeem_loyalty_reward(
   :'credit_reward_id',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3');
 
-SELECT discount_code AS fixed_code FROM public.reward_redemptions
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-  AND reward_id = :'fixed_reward_id' \gset
-SELECT discount_code AS percent_code FROM public.reward_redemptions
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-  AND reward_id = :'percent_reward_id' \gset
-SELECT discount_code AS credit_code FROM public.reward_redemptions
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-  AND reward_id = :'credit_reward_id' \gset
+SELECT discount_code AS fixed_code FROM public.reward_redemptions WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND customer_id = '01aa0000-0000-4000-8000-000000000024' AND reward_id = :'fixed_reward_id' \gset
+SELECT discount_code AS percent_code FROM public.reward_redemptions WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND customer_id = '01aa0000-0000-4000-8000-000000000024' AND reward_id = :'percent_reward_id' \gset
+SELECT discount_code AS credit_code FROM public.reward_redemptions WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND customer_id = '01aa0000-0000-4000-8000-000000000024' AND reward_id = :'credit_reward_id' \gset
 
 -- 24a. A discount-typed code resolves with its snapshot terms (no live
 -- reward state: issued codes are snapshot-governed).
@@ -137,6 +122,21 @@ SELECT pg_temp.assert_true(
 
 UPDATE public.loyalty_rewards SET enabled = true
 WHERE id = :'fixed_reward_id';
+
+-- 24g. A no-minimum mint survives a later merchant minimum: the mint
+-- stores explicit 0 (not NULL), so the snapshot governs, not live state.
+UPDATE public.loyalty_rewards SET minimum_order_amount = 5000
+WHERE id = :'percent_reward_id';
+SELECT pg_temp.assert_true(
+  (SELECT row.minimum_order_amount = 0
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001',
+     :'percent_code'
+   ) AS row),
+  'no-minimum code inherited the raised live minimum'
+);
+UPDATE public.loyalty_rewards SET minimum_order_amount = NULL
+WHERE id = :'percent_reward_id';
 
 -- 25a. The order wrapper rejects a NULL redemption id before touching
 -- the order RPC.

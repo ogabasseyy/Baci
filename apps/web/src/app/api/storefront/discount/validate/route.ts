@@ -184,10 +184,11 @@ export async function POST(request: NextRequest) {
           },
           cart_total
         );
-        // No redemption UUID: the order route re-resolves the code
-        // server-side, so the internal row id stays out of anon reach.
+        // Explicit null (not absent): no discount_codes row exists for a
+        // loyalty code, and the order route re-resolves server-side.
         return NextResponse.json({
           valid: true,
+          discount_code_id: null,
           code,
           discount_type: loyaltyDiscountType,
           discount_value: loyaltyValue,

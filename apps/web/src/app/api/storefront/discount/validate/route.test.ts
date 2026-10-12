@@ -125,7 +125,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
       discount_amount: 1000,
       description: 'Probe reward',
     });
-    expect(body.discount_code_id).toBeUndefined();
+    expect(body.discount_code_id).toBeNull();
     // The internal redemption UUID stays server-side: the order route
     // re-resolves the public code, so anon callers get no row handle.
     expect(body.loyalty_redemption_id).toBeUndefined();

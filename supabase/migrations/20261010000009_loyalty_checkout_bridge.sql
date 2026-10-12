@@ -57,7 +57,8 @@ BEGIN
     rr.reward_type::text,
     rr.reward_value,
     -- Issuance snapshot first: a merchant minimum raised after redeem
-    -- cannot strand the paid code (legacy rows fall back to live).
+    -- cannot strand the paid code (new mints store explicit 0 for no
+    -- minimum; only pre-fix NULL rows fall back to live).
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount),
     rr.expires_at,
     COALESCE(rr.used, false),

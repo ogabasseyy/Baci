@@ -263,3 +263,29 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET minimum_redemption_points = 100
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 26a. Cancelling an order releases its loyalty claim: the code becomes
+-- spendable again (points stay spent — they bought the code at redeem).
+-- Orders writes run as service_role like the adjustment seeds: the replay
+-- role holds no orders grant (42501), and projection re-binds JWT after.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.orders (id, merchant_id, order_number, customer_name, total)
+VALUES ('01aa0000-0000-4000-8000-000000000027', '01aa0000-0000-4000-8000-000000000001', 'LOYALTY-CANCEL-27', 'Cancel Probe', 10000);
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, reward_id, points_spent, reward_type,
+  reward_value, discount_code, used, used_on_order_id, used_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', '01aa0000-0000-4000-8000-000000000012',
+  (SELECT id FROM public.loyalty_rewards WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND name = 'Good fixed'),
+  50, 'discount_fixed', 500, 'RDM-CANCEL27',
+  true, '01aa0000-0000-4000-8000-000000000027', pg_catalog.now()
+);
+UPDATE public.orders SET shipping_status = 'cancelled'
+WHERE id = '01aa0000-0000-4000-8000-000000000027';
+RESET ROLE;
+SELECT pg_temp.assert_true(
+  (SELECT used IS FALSE AND used_on_order_id IS NULL AND used_at IS NULL
+   FROM public.reward_redemptions WHERE discount_code = 'RDM-CANCEL27'),
+  'cancelled order did not release its loyalty claim'
+);

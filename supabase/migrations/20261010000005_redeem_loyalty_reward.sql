@@ -1,8 +1,7 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
 --
--- SECURITY DEFINER: expiry, availability, caps, minimums, valued/NGN
--- guards, fulfillment, mint, deduction, ledger. Caller must own the
--- customer row. Drop the 3-arg signature (idempotency key arity).
+-- SECURITY DEFINER: expiry, availability, caps, minimums, valued/NGN guards,
+-- fulfillment, mint, deduction, ledger; caller owns the row; no 3-arg arity.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
@@ -62,9 +61,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- FOR UPDATE pins program state through settlement (same reason as the
-  -- enrollment read): a concurrent disable/minimum change blocks instead
-  -- of slipping under this read and spending points against stale policy.
+  -- FOR UPDATE pins program state through settlement: a concurrent
+  -- disable/minimum change blocks instead of slipping under this read.
   SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
@@ -131,10 +129,8 @@ BEGIN
     -- Non-positive costs would mint points: fail closed (mirrored in status).
     AND points_cost > 0
     -- Reject types with no fulfillment path before any mutation (same
-    -- allowlist as the status RPC; keep the two in sync): the checkout
-    -- bridge only honors discount-typed codes and no other route spends
-    -- them, so free_shipping/free_product/exclusive_access would burn
-    -- stock and points for an unspendable code.
+    -- allowlist as status; keep in sync): unspendable codes would burn
+    -- stock and points, as only the bridge honors discount-typed codes.
     AND reward_type IN (
       'discount', 'discount_fixed', 'discount_percentage',
       'store_credit'
@@ -171,9 +167,8 @@ BEGIN
     );
   END IF;
 
-  -- Valued rewards must carry a positive value (misconfigured
-  -- otherwise, failed closed before any write). Plain 'discount'
-  -- rewards without a value stay redeemable (zero label in catalog).
+  -- Valued rewards must carry a positive value (misconfigured otherwise,
+  -- failed closed before any write); valueless 'discount' stays redeemable.
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
@@ -181,10 +176,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit cannot be honored (no order context at
-  -- redeem time), and wallets are NGN-only (checkout skips redemption
-  -- off-NGN): fail closed instead of issuing unusable credit. Same
-  -- predicates as the status RPC; keep the two in sync.
+  -- Minimum-gated store credit cannot be honored (no order context here),
+  -- and wallets are NGN-only: fail closed. Same predicates as status; sync.
   IF v_reward.reward_type = 'store_credit'
      AND (
        (v_reward.minimum_order_amount IS NOT NULL
@@ -229,7 +222,7 @@ BEGIN
         ) VALUES (
           p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
           v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at,
-          v_reward.minimum_order_amount
+          COALESCE(v_reward.minimum_order_amount, 0)
         )
         RETURNING id INTO v_redemption_id;
         EXIT;
@@ -251,9 +244,15 @@ BEGIN
     WHERE id = p_reward_id;
   END IF;
 
-  -- store_credit fulfillment: credit the wallet ledger checkout actually
-  -- spends (redeem_wallet_for_order), not display-only customers.store_credit.
+  -- store_credit fulfillment: credit the wallet ledger checkout spends.
+  -- Revalidate currency under lock (the guard above is stale by now): a
+  -- committed flip fails closed on the fresh snapshot, an in-flight flip
+  -- blocks on this row until it commits or aborts.
   IF v_reward.reward_type = 'store_credit' THEN
+    PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
+    IF NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
+      RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+    END IF;
     PERFORM public.credit_customer_wallet(
       p_customer_id, p_merchant_id, v_reward.reward_value,
       'loyalty_redemption', v_redemption_id,

@@ -214,3 +214,21 @@ DROP EXTENSION IF EXISTS dblink;
 -- connstr reads server env, not the client session; socket peers still
 -- need SCRAM; the replay role cannot CREATE ROLE): the documented
 -- local default is the only credential-free path.
+
+-- Settlement revalidates currency under a merchants-row lock (the redeem
+-- guard is stale by settlement): a payout flip between them fails closed
+-- on the fresh snapshot or blocks on the row. The window sits inside one
+-- RPC call, so no live interleave can stage it; pin the mechanism here.
+DO $$
+DECLARE
+  v_def text;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+  ) INTO v_def;
+  IF v_def NOT LIKE '%FROM public.merchants WHERE id = p_merchant_id FOR UPDATE%'
+     OR (SELECT count(*) FROM regexp_matches(v_def, 'merchant_resolves_to_ngn', 'g')) <> 2 THEN
+    RAISE EXCEPTION 'redeem does not revalidate currency under lock at settlement';
+  END IF;
+END;
+$$;

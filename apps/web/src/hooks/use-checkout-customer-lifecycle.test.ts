@@ -267,6 +267,96 @@ describe('useCheckoutCustomerLifecycle', () => {
     });
   });
 
+  it('returns to the auth gate when a slug change finds no session', async () => {
+    getUser
+      .mockResolvedValueOnce({ data: { user: signedInUser } })
+      .mockResolvedValue({ data: { user: null } });
+    const customerA = {
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      email: 'buyer@example.com',
+      phone: '+2348012345678',
+      saved_addresses: [
+        {
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+          phone: '+2348098765432',
+          address: '12 Broad Street',
+          city: 'Lagos',
+          state: 'Lagos',
+          is_default: true,
+        },
+      ],
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      json: async () => ({ authenticated: true, customer: customerA }),
+    } as Response);
+
+    const { result, rerender } = renderHook(
+      ({ slug }: { slug: string }) => {
+        const form = useForm<CheckoutShippingValues>({
+          defaultValues: shippingDefaults,
+        });
+        const lifecycle = useCheckoutCustomerLifecycle(
+          slug,
+          form.setValue,
+          form.getValues
+        );
+        return { ...lifecycle, form };
+      },
+      { initialProps: { slug: 'store-a' } }
+    );
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+    expect(result.current.step).toBe(1);
+    expect(result.current.form.getValues('address')).toBe('12 Broad Street');
+
+    rerender({ slug: 'store-b' });
+
+    await waitFor(() => expect(result.current.step).toBe(0));
+    expect(result.current.form.getValues()).toMatchObject({
+      email: '',
+      firstName: '',
+      lastName: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+    });
+  });
+
+  it('keeps an OTP auth success that lands during an identity reload', async () => {
+    getUser.mockResolvedValue({
+      data: { user: makeUser({ first_name: 'MetaB' }) },
+    });
+    let resolveSession!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSession = resolve;
+        })
+    );
+
+    const { result } = setupLifecycle('store-b');
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+
+    const otpCustomer = {
+      first_name: 'Otp',
+      last_name: 'User',
+      email: 'otp@example.com',
+    };
+    act(() => result.current.handleAuthSuccess(signedInUser, otpCustomer));
+    expect(result.current.form.getValues('firstName')).toBe('Otp');
+
+    // The session endpoint has not observed the just-verified session yet.
+    resolveSession({
+      json: async () => ({ authenticated: false }),
+    } as Response);
+
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+    expect(result.current.form.getValues('firstName')).toBe('Otp');
+    expect(result.current.form.getValues('lastName')).toBe('User');
+  });
+
   it('drops the previous customer when auth succeeds without one', async () => {
     getUser.mockResolvedValue({ data: { user: null } });
     const { result } = setupLifecycle();

@@ -120,39 +120,62 @@ export function useCheckoutCustomerLifecycle(
   const [isGuestCheckout, setIsGuestCheckout] = useState(false);
   const [step, setStep] = useState(0);
 
+  // Bumped by handleAuthSuccess so an in-flight identity reload cannot
+  // overwrite a fresher OTP-verified user/customer when it resolves late.
+  const identityGenerationRef = useRef(0);
+
   useEffect(() => {
     let active = true;
     const supabase = createClient();
 
+    function clearIdentity() {
+      // No verified identity for this merchant: drop the previous
+      // merchant/user record so its prefill cannot leak, and return to
+      // the auth gate for a fresh sign-in or guest choice.
+      setUser(null);
+      setCustomerData(null);
+      setIsGuestCheckout(false);
+      setStep(0);
+    }
+
     async function loadIdentity() {
+      const generation = identityGenerationRef.current;
+      const isCurrent = () =>
+        active && generation === identityGenerationRef.current;
       try {
         const { data } = await supabase.auth.getUser();
-        if (!active) return;
+        if (!isCurrent()) return;
 
-        if (data.user) {
-          setUser(data.user);
-          // Default to no customer so a slug change (or a session that stops
-          // returning one) clears the previous merchant's record instead of
-          // re-applying it to the new merchant's form.
-          let loadedCustomer: CheckoutCustomerData | null = null;
-          if (merchantSlug) {
-            try {
-              const response = await fetch(
-                `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-              );
-              const sessionData = await response.json();
-              if (sessionData.authenticated && sessionData.customer) {
-                loadedCustomer = sessionData.customer;
-              }
-            } catch (error) {
-              console.error('Failed to fetch customer data:', error);
-            }
-          }
-          if (active) setCustomerData(loadedCustomer);
-          if (active) setStep(1);
+        if (!data.user) {
+          clearIdentity();
+          return;
         }
+        setUser(data.user);
+        // Default to no customer so a slug change (or a session that stops
+        // returning one) clears the previous merchant's record instead of
+        // re-applying it to the new merchant's form.
+        let loadedCustomer: CheckoutCustomerData | null = null;
+        if (merchantSlug) {
+          try {
+            const response = await fetch(
+              `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
+            );
+            const sessionData = await response.json();
+            if (sessionData.authenticated && sessionData.customer) {
+              loadedCustomer = sessionData.customer;
+            }
+          } catch (error) {
+            console.error('Failed to fetch customer data:', error);
+          }
+        }
+        if (!isCurrent()) return;
+        setCustomerData(loadedCustomer);
+        setStep(1);
       } catch (error) {
         console.error('Failed to load checkout identity:', error);
+        // Fail closed on unknown auth state — but never clobber an OTP
+        // success that landed while this load was in flight.
+        if (isCurrent()) clearIdentity();
       } finally {
         // A getUser() rejection must not strand checkout on the loading gate.
         if (active) setPageLoading(false);
@@ -200,6 +223,9 @@ export function useCheckoutCustomerLifecycle(
     authenticatedUser: SupabaseUser,
     customer?: CheckoutCustomerData
   ) => {
+    // Supersede any in-flight identity reload: its late resolution must
+    // not overwrite these OTP-verified values.
+    identityGenerationRef.current += 1;
     setUser(authenticatedUser);
     // An auth success without a customer record must drop the previous
     // record rather than pair it with the new user.

@@ -7,9 +7,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { fetchLegacyPlacesJson } from '../legacy-places';
 import { reserveGooglePlacesRequest } from '../provider-budget';
 
-const GOOGLE_API_KEY =
-  process.env.GOOGLE_PLACES_API_KEY?.trim() ||
-  process.env.GOOGLE_MAPS_API_KEY?.trim();
 const LEGACY_PLACES_DETAILS_URL =
   'https://maps.googleapis.com/maps/api/place/details/json';
 const MAX_SESSION_TOKEN_LENGTH = 256;
@@ -59,7 +56,12 @@ function getUpstreamStatusCode(status: string): number {
 
 export async function GET(request: NextRequest) {
   try {
-    if (!GOOGLE_API_KEY) {
+    // Read per request like the sibling provider modules: a rotated key
+    // takes effect without waiting on module-state recycling.
+    const googleApiKey =
+      process.env.GOOGLE_PLACES_API_KEY?.trim() ||
+      process.env.GOOGLE_MAPS_API_KEY?.trim();
+    if (!googleApiKey) {
       console.error(
         '[Places API] GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY not configured'
       );
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
     const detailsUrl = new URL(LEGACY_PLACES_DETAILS_URL);
     detailsUrl.searchParams.set('place_id', cleanPlaceId);
     detailsUrl.searchParams.set('fields', ADDRESS_FIELDS);
-    detailsUrl.searchParams.set('key', GOOGLE_API_KEY);
+    detailsUrl.searchParams.set('key', googleApiKey);
 
     if (sessionToken) {
       detailsUrl.searchParams.set('sessiontoken', sessionToken);

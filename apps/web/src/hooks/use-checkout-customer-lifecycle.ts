@@ -1,6 +1,6 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { useEffect, useRef, useState } from 'react';
-import type { UseFormSetValue } from 'react-hook-form';
+import type { UseFormGetValues, UseFormSetValue } from 'react-hook-form';
 import { createClient } from '@/lib/supabase/client';
 
 export interface CheckoutCustomerData {
@@ -109,7 +109,8 @@ function applyCheckoutCustomerPrefill(
 
 export function useCheckoutCustomerLifecycle(
   merchantSlug: string | null | undefined,
-  setValue: UseFormSetValue<CheckoutShippingValues>
+  setValue: UseFormSetValue<CheckoutShippingValues>,
+  getValues: UseFormGetValues<CheckoutShippingValues>
 ) {
   const [pageLoading, setPageLoading] = useState(true);
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -164,10 +165,11 @@ export function useCheckoutCustomerLifecycle(
     };
   }, [merchantSlug]);
 
-  // Values this hook wrote via prefill, so an identity switch can revert
-  // them instead of leaking the previous merchant/user record into the
-  // new form. Fields the shopper edited since are left alone unless the
-  // new identity's prefill writes them (prior overwrite behavior).
+  // Values this hook wrote via prefill. On an identity switch, fields
+  // still holding their applied value revert to blank so the previous
+  // merchant/user record cannot leak into the new form; fields the
+  // shopper edited since (current value differs) are left alone unless
+  // the new identity's prefill writes them (prior overwrite behavior).
   const appliedPrefillRef = useRef<
     Partial<Record<keyof CheckoutShippingValues, string>>
   >({});
@@ -178,7 +180,9 @@ export function useCheckoutCustomerLifecycle(
     for (const name of Object.keys(
       applied
     ) as (keyof CheckoutShippingValues)[]) {
-      setValue(name, '', { shouldValidate: true, shouldDirty: true });
+      if (getValues(name) === applied[name]) {
+        setValue(name, '', { shouldValidate: true, shouldDirty: true });
+      }
     }
     const setAndTrack: UseFormSetValue<CheckoutShippingValues> = (
       name,
@@ -190,7 +194,7 @@ export function useCheckoutCustomerLifecycle(
     };
     applyCheckoutCustomerPrefill({ user, customerData }, setAndTrack);
     appliedPrefillRef.current = next;
-  }, [user, customerData, setValue]);
+  }, [user, customerData, setValue, getValues]);
 
   const handleAuthSuccess = (
     authenticatedUser: SupabaseUser,

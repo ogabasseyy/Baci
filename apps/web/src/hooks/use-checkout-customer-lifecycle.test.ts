@@ -37,7 +37,11 @@ function setupLifecycle(merchantSlug: string | null = 'store') {
     const form = useForm<CheckoutShippingValues>({
       defaultValues: shippingDefaults,
     });
-    const lifecycle = useCheckoutCustomerLifecycle(merchantSlug, form.setValue);
+    const lifecycle = useCheckoutCustomerLifecycle(
+      merchantSlug,
+      form.setValue,
+      form.getValues
+    );
     return { ...lifecycle, form };
   });
 }
@@ -225,7 +229,11 @@ describe('useCheckoutCustomerLifecycle', () => {
         const form = useForm<CheckoutShippingValues>({
           defaultValues: shippingDefaults,
         });
-        const lifecycle = useCheckoutCustomerLifecycle(slug, form.setValue);
+        const lifecycle = useCheckoutCustomerLifecycle(
+          slug,
+          form.setValue,
+          form.getValues
+        );
         return { ...lifecycle, form };
       },
       { initialProps: { slug: 'store-a' } }
@@ -234,17 +242,25 @@ describe('useCheckoutCustomerLifecycle', () => {
     expect(result.current.form.getValues('firstName')).toBe('Ada');
     expect(result.current.form.getValues('address')).toBe('12 Broad Street');
 
+    // A shopper edit over prefill must survive the switch.
+    act(() => {
+      result.current.form.setValue('phone', '+9990001111', {
+        shouldDirty: true,
+      });
+    });
+
     rerender({ slug: 'store-b' });
 
     await waitFor(() =>
       expect(result.current.form.getValues('firstName')).toBe('Meta')
     );
     // Merchant A's saved-address prefill must not leak into merchant B's
-    // form: metadata supplies only first_name, the rest revert to blank.
+    // form: metadata supplies only first_name, untouched prefill reverts
+    // to blank, and the shopper-edited phone is preserved.
     expect(result.current.form.getValues()).toMatchObject({
       firstName: 'Meta',
       lastName: '',
-      phone: '',
+      phone: '+9990001111',
       address: '',
       city: '',
       state: '',

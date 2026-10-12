@@ -1254,7 +1254,11 @@ function CheckoutPageContent() {
   });
 
   const { handleAuthSuccess, handleGuestCheckout, pageLoading, setStep, step } =
-    useCheckoutCustomerLifecycle(merchantSlug, shippingForm.setValue);
+    useCheckoutCustomerLifecycle(
+      merchantSlug,
+      shippingForm.setValue,
+      shippingForm.getValues
+    );
 
   useEffect(() => {
     // Redirect if cart is empty after initial load

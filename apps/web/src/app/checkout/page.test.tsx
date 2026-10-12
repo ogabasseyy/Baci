@@ -78,7 +78,11 @@ describe('CheckoutPage customer lifecycle integration', () => {
   it('uses the merchant identity lifecycle to gate checkout rendering', () => {
     render(<CheckoutPage />);
 
-    expect(lifecycle).toHaveBeenCalledWith('store', expect.any(Function));
+    expect(lifecycle).toHaveBeenCalledWith(
+      'store',
+      expect.any(Function),
+      expect.any(Function)
+    );
     expect(
       screen.getByRole('status', { name: 'Loading checkout' })
     ).toBeInTheDocument();

@@ -50,6 +50,7 @@ describe('storefrontLoyaltyStatusResultSchema', () => {
           points_cost: 200,
           reward_type: 'free_shipping',
           reward_value: null,
+          minimum_order_amount: null,
         },
       ],
       transactions: [

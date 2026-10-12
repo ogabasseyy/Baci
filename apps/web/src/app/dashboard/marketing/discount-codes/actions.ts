@@ -5,18 +5,16 @@ import { cookies } from 'next/headers';
 import z from 'zod';
 import { ensurePermission } from '@/lib/merchant-server';
 import { createClient } from '@/lib/supabase/server';
+import { isReservedDiscountCodePrefix } from '@/schemas/discount-codes';
 
 // Zod validation schema for discount code
 const upsertDiscountCodeSchema = z
   .object({
     id: z.string().optional(),
-    // RDM- is reserved for loyalty redemptions (issue #3165):
-    // checkout resolves merchant codes first, so a merchant RDM-*
-    // code would shadow the loyalty redemption.
     code: z
       .string()
       .min(1, 'Code is required')
-      .refine((c) => !c.trim().toUpperCase().startsWith('RDM-'), {
+      .refine((c) => !isReservedDiscountCodePrefix(c), {
         message: 'Code prefix RDM- is reserved for loyalty redemptions',
       }),
     description: z.string().optional(),
@@ -142,10 +140,8 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
     discount_value: validatedInput.discount_value,
   };
 
-  // Helper to build payload: undefined inputs are ignored (preserving existing),
-  // but explicit values (including nulls if allowed) are applied.
-  // For creation, we apply defaults.
-  // For update, we only apply what's in validatedInput.
+  // Payload: undefined preserves existing, explicit values (incl. nulls)
+  // apply; creation fills defaults, update touches provided fields only.
 
   const buildPayload = (isUpdate: boolean) => {
     const payload: Record<string, unknown> = { ...baseData };

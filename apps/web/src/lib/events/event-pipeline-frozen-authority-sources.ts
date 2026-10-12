@@ -36,8 +36,11 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
+  // Re-pinned for the loyalty checkout bridge (issue #3165): unknown
+  // merchant codes now fall back to resolveLoyaltyCheckoutCode before the
+  // invalid-code rejection; notification and payment authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '33166c90e60c3d9d0a2648abe4ba31df243205376696e1ceae6f9bfb0d9398b0',
+    'c4975769332086347cb4cdcf8b2a6c4be00723c76f4b5a4babe4778a89fd3320',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

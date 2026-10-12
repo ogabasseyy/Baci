@@ -99,6 +99,10 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row()], review_scope="s" * 1001))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_non_string_review_scope_fails_closed(self):
+        result = self.render(_register([_row()], review_scope={"smuggled": "content"}))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_deeply_nested_register_fails_closed(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
@@ -125,9 +129,18 @@ class CapabilityContextTests(unittest.TestCase):
         refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
         for ref in refs:
             self.assertTrue((repo / ref).exists(), f"cited source missing: {ref}")
+        if (repo / ".git" / "shallow").exists():
+            self.skipTest("shallow checkout cannot verify the revision binding")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
         age = dt.datetime.now(dt.timezone.utc) - reviewed
+        self.assertGreaterEqual(age, dt.timedelta(0), "register reviewed_at is future-dated; runtime would reject it")
         self.assertLessEqual(age, dt.timedelta(days=14), "register reviewed_at is outside the 14-day evidence window")
+        ancestor = subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor", data["source_revision"], "HEAD"],
+            capture_output=True, text=True,
+        )
+        if ancestor.returncode != 0:
+            self.fail(f"source_revision {data['source_revision']} is not an ancestor of HEAD in this checkout")
         proc = subprocess.run(
             ["git", "-C", str(repo), "diff", "--name-only", f"{data['source_revision']}..HEAD"],
             capture_output=True, text=True,

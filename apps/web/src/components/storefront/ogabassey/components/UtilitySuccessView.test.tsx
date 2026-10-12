@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { UtilitySuccessView } from './UtilitySuccessView';
@@ -413,8 +413,10 @@ describe('UtilitySuccessView', () => {
       );
 
       expect(screen.getByText('Success!')).toBeInTheDocument();
-      // Let any would-be poll fire: none should.
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Flush effects and the fetch microtask chain. The first poll
+      // attempt (if any) fires unscheduled in the backfill effect, so
+      // no wall-clock wait is needed to observe a would-be poll.
+      await act(async () => {});
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
@@ -452,7 +454,11 @@ describe('UtilitySuccessView', () => {
       );
 
       expect(await screen.findByText('LATE-TOKEN-2')).toBeInTheDocument();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // The token commit (and any notify effect it could trigger) has
+      // already flushed; drain the queue so a deferred notify would
+      // have fired. No wall-clock wait: onSettled fires only from a
+      // commit effect, never a timer.
+      await act(async () => {});
       expect(onSettled).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();

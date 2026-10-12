@@ -71,9 +71,12 @@ function getPurchaseMessage({
         : `Your ${typeLabel} payment was received. We are ${action} now.`;
     }
     case 'failed':
+      // Wallet-only flow: failed only surfaces after the backfill
+      // observes refund_pending === false, so the refund is already
+      // confirmed — say so instead of suggesting another rail.
       return identifier
-        ? `Your ${typeLabel} purchase for ${identifier} failed. Please try again or use another payment method.`
-        : `Your ${typeLabel} purchase failed. Please try again or use another payment method.`;
+        ? `Your ${typeLabel} purchase for ${identifier} failed. Your wallet has been refunded — please try again.`
+        : `Your ${typeLabel} purchase failed. Your wallet has been refunded — please try again.`;
     case 'cancelled':
       return identifier
         ? `Your ${typeLabel} payment for ${identifier} was cancelled.`

@@ -306,6 +306,27 @@ describe('PurchaseSuccess', () => {
     ).not.toBeOnTheScreen();
   });
 
+  it('tells a failed wallet-only purchase the wallet was refunded', () => {
+    render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        status="failed"
+      />
+    );
+
+    // No "another payment method": wallet-only, refund confirmed.
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. Your wallet has been refunded — please try again.'
+      )
+    ).toBeOnTheScreen();
+  });
+
   it('shows the reference (not the slogan) while a purchase is still processing', () => {
     render(
       <PurchaseSuccess

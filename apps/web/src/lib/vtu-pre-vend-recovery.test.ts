@@ -112,18 +112,48 @@ describe('isStrandedPreVendVtuRow', () => {
   it('flags a stale reference-less processing row with no debit marker', () => {
     // No walletDebited flag: the debit-flag write never landed, so no
     // provider call ever ran (the flag persists first). Re-driving
-    // vends for the first time — it cannot double-credit.
+    // vends for the first time — it cannot double-credit. The wallet
+    // leg proves the wallet pre-vend flow (card rows lack it).
     expect(
       isStrandedPreVendVtuRow({
         id: 'vtu-1',
         status: 'processing',
         transaction_id: null,
         error_message: null,
-        metadata: {},
+        metadata: { paymentSplit: { wallet: 1000, card: 0 } },
         created_at: new Date().toISOString(),
         updated_at: staleAt,
       })
     ).toBe(true);
+  });
+
+  it('declines post-marker card-only rows that legitimately lack the flag', () => {
+    // fulfill writes walletDebited only when paymentSplit.wallet > 0,
+    // so a card-only row never carries the flag — even when its vend
+    // landed and only the result persistence failed. Flipping one
+    // would re-vend a card-funded delivery.
+    const base = {
+      id: 'vtu-1',
+      status: 'processing' as const,
+      transaction_id: null,
+      error_message: null,
+      created_at: new Date().toISOString(),
+      updated_at: staleAt,
+    };
+    expect(isStrandedPreVendVtuRow({ ...base, metadata: {} })).toBe(false);
+    expect(
+      isStrandedPreVendVtuRow({
+        ...base,
+        metadata: { paymentSplit: { wallet: 0, card: 1000 } },
+      })
+    ).toBe(false);
+    expect(
+      isStrandedPreVendVtuRow({
+        ...base,
+        metadata: { paymentSplit: { wallet: '1000', card: 0 } },
+      })
+    ).toBe(false);
+    expect(isStrandedPreVendVtuRow({ ...base, metadata: null })).toBe(false);
   });
 
   it('declines a flagged row: the vend may have landed (post-vend persist failure)', () => {

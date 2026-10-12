@@ -4408,7 +4408,7 @@ describe('fulfillPendingVtuTransaction', () => {
           request_reference: 'VTU-STRANDED',
           transaction_id: null,
           status: 'processing',
-          metadata: {},
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
           error_message: null,
           merchant_commission: null,
           customer_cashback: null,

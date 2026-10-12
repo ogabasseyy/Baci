@@ -48,15 +48,19 @@ export interface StrandedPreVendRowCandidate {
  * True for a processing row whose pre-vend restore failed while the
  * database was down: no provider reference, no provider message (so
  * the reconciliation claim declines it), no Monnify vend reference,
- * NO persisted walletDebited flag, created in the marker era, and
- * stale enough that no live worker can hold it. The flag absence is
- * the pre-vend proof: the flag persists before the first provider
- * call, so a post-vend persistence failure (vend landed, result write
- * exhausted — same reference-less shape) always carries the flag and
- * is declined. Flipping a flagged row would re-vend and
+ * NO persisted walletDebited flag, POSITIVE wallet-flow evidence (a
+ * wallet leg in the prepare-time paymentSplit), created in the marker
+ * era, and stale enough that no live worker can hold it. The flag
+ * absence is the pre-vend proof: the flag persists before the first
+ * provider call, so a post-vend persistence failure (vend landed,
+ * result write exhausted — same reference-less shape) always carries
+ * the flag and is declined. Flipping a flagged row would re-vend and
  * double-credit at the provider. Pre-marker rows are declined too:
- * their flag absence proves nothing. A flip re-drives claim →
- * idempotent debit → first vend.
+ * their flag absence proves nothing. The wallet leg is the flow
+ * proof: fulfill only writes walletDebited when the wallet leg is
+ * positive, so card-only rows (post-marker included) legitimately
+ * lack the flag — flipping one would re-vend a card-funded delivery.
+ * A flip re-drives claim → idempotent debit → first vend.
  */
 export function isStrandedPreVendVtuRow(
   row: StrandedPreVendRowCandidate,
@@ -77,6 +81,21 @@ export function isStrandedPreVendVtuRow(
   }
   // Pre-vend proof (see docblock): a landed vend always has the flag.
   if (row.metadata?.walletDebited === true) {
+    return false;
+  }
+  // Flow proof (see docblock): paymentSplit is written at prepare
+  // ONLY for checkout rows with walletAmount > 0. Fail closed on
+  // missing/malformed splits — absence is the card-only shape.
+  const split = row.metadata?.paymentSplit as
+    | { wallet?: unknown }
+    | null
+    | undefined;
+  const walletLeg = split?.wallet;
+  if (
+    typeof walletLeg !== 'number' ||
+    !Number.isFinite(walletLeg) ||
+    walletLeg <= 0
+  ) {
     return false;
   }
   // Legacy exclusion: pre-marker rows never knew the flag, so their

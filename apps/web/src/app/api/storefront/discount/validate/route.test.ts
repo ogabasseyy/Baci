@@ -14,12 +14,21 @@ import { POST } from './route';
 
 const mockCreateAnonClient = vi.mocked(createAnonClient);
 
+let merchantRow: unknown = null;
+
 function mockRpc(impl: (fn: string, args: Record<string, unknown>) => unknown) {
   const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
     data: impl(fn, args),
     error: null,
   }));
-  mockCreateAnonClient.mockReturnValue({ rpc } as never);
+  const from = vi.fn(() => ({
+    select: vi.fn(() => ({
+      eq: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({ data: merchantRow, error: null })),
+      })),
+    })),
+  }));
+  mockCreateAnonClient.mockReturnValue({ rpc, from } as never);
   return rpc;
 }
 
@@ -55,6 +64,7 @@ function loyaltyRow(overrides: Record<string, unknown> = {}) {
 describe('POST /api/storefront/discount/validate loyalty fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    merchantRow = null;
   });
 
   it('returns the merchant code without calling the loyalty resolve', async () => {
@@ -190,6 +200,68 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     const body = await (await POST(request(baseBody))).json();
 
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
+  it('rejects a code whose reward was disabled after redeem', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ reward_enabled: false })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({
+      valid: false,
+      error: 'This reward is no longer available',
+    });
+  });
+
+  it('rejects a code with an unknown reward-enabled state', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ reward_enabled: null })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body.valid).toBe(false);
+  });
+
+  it('bridges a plain discount code with fixed semantics', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ reward_type: 'discount', reward_value: 1500 })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toMatchObject({
+      valid: true,
+      discount_type: 'fixed',
+      discount_value: 1500,
+      discount_amount: 1500,
+    });
+  });
+
+  it('formats the loyalty minimum in the merchant currency', async () => {
+    merchantRow = { country: 'US', payout_currency: 'USD' };
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ minimum_order_amount: 50000 })]
+    );
+
+    const body = await (
+      await POST(request({ ...baseBody, cart_total: 10000 }))
+    ).json();
+
+    expect(body.valid).toBe(false);
+    expect(body.error).toContain('Minimum purchase of');
+    expect(body.error).toContain('$');
+    expect(body.error).not.toContain('₦');
   });
 
   it('rejects invalid input before any lookup', async () => {

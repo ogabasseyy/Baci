@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { logger } from '@/lib/logger';
+import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
   loyaltyCheckoutCodeRowSchema,
@@ -87,16 +88,30 @@ export async function POST(request: NextRequest) {
           ? (parsedLoyaltyArray.data[0] ?? null)
           : (parsedLoyaltySingle?.data ?? null);
         const loyaltyValue = Number(loyaltyCode?.reward_value);
-        // Bridgeable shape only: discount type + positive value. Other
-        // reward types fall through to the generic invalid response —
-        // they are honored through manual/fulfillment channels.
+        // Bridgeable shape only: discount types (plain 'discount' is
+        // fixed by convention, mirroring the order wrapper) + positive
+        // value. Other reward types fall through to the generic invalid
+        // response — they are honored through manual/fulfillment
+        // channels.
         if (
           loyaltyCode != null &&
-          (loyaltyCode.reward_type === 'discount_fixed' ||
+          (loyaltyCode.reward_type === 'discount' ||
+            loyaltyCode.reward_type === 'discount_fixed' ||
             loyaltyCode.reward_type === 'discount_percentage') &&
           Number.isFinite(loyaltyValue) &&
           loyaltyValue > 0
         ) {
+          // Match the order wrapper's policy gate: a code whose reward
+          // was disabled after redeem must not preflight as valid.
+          if (loyaltyCode.reward_enabled !== true) {
+            return NextResponse.json(
+              {
+                valid: false,
+                error: 'This reward is no longer available',
+              },
+              { status: 200 }
+            );
+          }
           if (loyaltyCode.used) {
             return NextResponse.json(
               { valid: false, error: 'Discount code has already been used' },
@@ -116,18 +131,34 @@ export async function POST(request: NextRequest) {
             loyaltyCode.minimum_order_amount != null &&
             cart_total < Number(loyaltyCode.minimum_order_amount)
           ) {
+            // Merchant currency for the threshold label (country and
+            // payout_currency are anon-granted published columns; an
+            // unreadable row falls back to the NGN default).
+            const { data: merchantRow } = await supabase
+              .from('merchants')
+              .select('country, payout_currency')
+              .eq('id', merchant_id)
+              .maybeSingle();
+            const minimumLabel = formatMerchantCurrency(
+              Number(loyaltyCode.minimum_order_amount),
+              {
+                country: merchantRow?.country ?? null,
+                payout_currency: merchantRow?.payout_currency ?? null,
+              },
+              { maximumFractionDigits: 0 }
+            );
             return NextResponse.json(
               {
                 valid: false,
-                error: `Minimum purchase of ₦${Number(loyaltyCode.minimum_order_amount).toLocaleString()} required`,
+                error: `Minimum purchase of ${minimumLabel} required`,
               },
               { status: 200 }
             );
           }
           const loyaltyDiscountType =
-            loyaltyCode.reward_type === 'discount_fixed'
-              ? 'fixed'
-              : 'percentage';
+            loyaltyCode.reward_type === 'discount_percentage'
+              ? 'percentage'
+              : 'fixed';
           const loyaltyDiscountAmount = computeDiscountAmountForSubtotal(
             {
               discount_type: loyaltyDiscountType,

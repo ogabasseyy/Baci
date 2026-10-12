@@ -1693,9 +1693,12 @@ export async function POST(request: NextRequest) {
             ? parsedLoyaltySingle.data
             : null;
         const loyaltyValue = Number(loyaltyRow?.reward_value);
+        // Plain 'discount' is fixed by convention (mirrors the order
+        // wrapper's allowlist; only discount_percentage is proportional).
         const loyaltyBridgeable =
           loyaltyRow != null &&
-          (loyaltyRow.reward_type === 'discount_fixed' ||
+          (loyaltyRow.reward_type === 'discount' ||
+            loyaltyRow.reward_type === 'discount_fixed' ||
             loyaltyRow.reward_type === 'discount_percentage') &&
           Number.isFinite(loyaltyValue) &&
           loyaltyValue > 0;
@@ -1707,7 +1710,9 @@ export async function POST(request: NextRequest) {
         }
         loyaltyRedemptionId = loyaltyRow.redemption_id;
         codeDiscountType =
-          loyaltyRow.reward_type === 'discount_fixed' ? 'fixed' : 'percentage';
+          loyaltyRow.reward_type === 'discount_percentage'
+            ? 'percentage'
+            : 'fixed';
         codeDiscountValue = loyaltyValue;
         codeMaximumDiscountAmount = null;
       }
@@ -2374,11 +2379,12 @@ export async function POST(request: NextRequest) {
         'discount_amount_mismatch',
         // Loyalty-code bridge client errors (issue #3165; → 400). The
         // loyalty wrapper RPC raises these for fresh orders; safe for
-        // the client to fix and retry.
+        // the client to fix and retry. (loyalty_code_already_used maps
+        // to 409 above as a race/state conflict.)
         'loyalty_redemption_not_found',
         'loyalty_code_not_applicable',
-        'loyalty_checkout_key_conflict',
-        'unsupported_loyalty_reward_type',
+        'loyalty_code_expired',
+        'loyalty_reward_inactive',
         // B3 (plan §5 B3): RPC raises when shipping_provider is set
         // without a quote id. Map to 4xx so the client gets the right
         // re-quote signal instead of a generic 500.

@@ -8794,6 +8794,77 @@ describe('POST /api/orders — discount code', () => {
     expect((await readJson(response)).code).toBe('loyalty_code_already_used');
   });
 
+  it('maps loyalty_code_expired to 400', async () => {
+    await setupDiscount(
+      {
+        get_storefront_discount_code: { data: [], error: null },
+        get_loyalty_redemption_for_checkout: {
+          data: [LOYALTY_CODE_ROW],
+          error: null,
+        },
+        create_storefront_order_with_loyalty_code: {
+          data: null,
+          error: { message: 'loyalty_code_expired' },
+        },
+      },
+      { productRows: PRODUCT_ROWS }
+    );
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).details).toBe('loyalty_code_expired');
+  });
+
+  it('maps loyalty_reward_inactive to 400', async () => {
+    await setupDiscount(
+      {
+        get_storefront_discount_code: { data: [], error: null },
+        get_loyalty_redemption_for_checkout: {
+          data: [LOYALTY_CODE_ROW],
+          error: null,
+        },
+        create_storefront_order_with_loyalty_code: {
+          data: null,
+          error: { message: 'loyalty_reward_inactive' },
+        },
+      },
+      { productRows: PRODUCT_ROWS }
+    );
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(400);
+    expect((await readJson(response)).details).toBe('loyalty_reward_inactive');
+  });
+
+  it('bridges a plain discount loyalty code with fixed semantics', async () => {
+    const supabase = await setupDiscount(
+      {
+        get_storefront_discount_code: { data: [], error: null },
+        get_loyalty_redemption_for_checkout: {
+          data: [
+            { ...LOYALTY_CODE_ROW, reward_type: 'discount', reward_value: 100 },
+          ],
+          error: null,
+        },
+        create_storefront_order_with_loyalty_code: {
+          data: [orderRowWithDiscount],
+          error: null,
+        },
+      },
+      { productRows: PRODUCT_ROWS }
+    );
+    const response = await POST(
+      discountRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBeLessThan(400);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_loyalty_code',
+      expect.objectContaining({ p_discount_amount: 100 })
+    );
+  });
+
   it('returns 400 discount_code_invalid for a non-discount loyalty type', async () => {
     await setupDiscount({
       get_storefront_discount_code: { data: [], error: null },

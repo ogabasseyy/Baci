@@ -41,8 +41,10 @@ def capability_context(*, now=None):
                 raise ValueError("status")
             if any(not isinstance(row.get(key), str) or not row[key].strip() for key in ("id", "title", "claim", "limitations")):
                 raise ValueError("fields")
+            if len(row["id"]) > 64 or len(row["title"]) > 200 or len(row["claim"]) > 1000 or len(row["limitations"]) > 1000:
+                raise ValueError("field size")
             refs = row.get("source_refs")
-            if not isinstance(refs, list) or not refs or any(not isinstance(ref, str) or not ref.strip() for ref in refs):
+            if not isinstance(refs, list) or not refs or len(refs) > 20 or any(not isinstance(ref, str) or not ref.strip() or len(ref) > 300 for ref in refs):
                 raise ValueError("refs")
             if row["status"] == "production_verified":
                 evidence = row.get("production_evidence")
@@ -82,6 +84,8 @@ def capability_context(*, now=None):
             .replace(">", "\\u003e")
             .replace("&", "\\u0026")
         )
+        if len(serialized) > 50_000:
+            raise ValueError("payload size")
         return (
             boundary
             + "Register SHA256: "

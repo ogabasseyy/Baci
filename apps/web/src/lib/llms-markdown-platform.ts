@@ -39,7 +39,7 @@ export function buildPlatformPricingMarkdown(origin: string): string {
     '## Plans',
     '- Free: NGN 0. Best for testing ideas and small hobby shops. Includes 1 store, up to 10 products, basic storefront, Baci subdomain, and standard support.',
     '- Pro: NGN 5,000 per month. For growing businesses. Includes unlimited products, custom domain, advanced analytics, priority support, marketing tools, and no transaction fees.',
-    '- Premium: NGN 15,000 per month. For scaling enterprises. Includes everything in Pro, multiple staff accounts, advanced reports, dedicated account management, API access, and wholesale features.',
+    '- Premium: NGN 15,000 per month. For scaling enterprises. Includes everything in Pro, multiple staff accounts, advanced reports, and dedicated account management.',
     '',
     '## Related Routes',
     `- ${baseUrl}/onboarding`,

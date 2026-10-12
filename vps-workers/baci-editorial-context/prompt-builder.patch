@@ -1,13 +1,15 @@
 --- a/codex_content_agent/prompt_builder.py
 +++ b/codex_content_agent/prompt_builder.py
-@@ -5,2 +5,4 @@
- from pathlib import Path
- from typing import Any
-+
-+from codex_content_agent.platform_capabilities import capability_context
-@@ -51,3 +53,5 @@
+@@ -51,3 +51,11 @@
          else ""
      )
 +    if task_type == "platform_marketing":
-+        platform_rules += capability_context()
++        try:
++            from codex_content_agent.platform_capabilities import capability_context
++        except ImportError:
++            capability_context = None
++        if capability_context is not None:
++            platform_rules += capability_context()
++        else:
++            platform_rules += "Baci capability evidence: Register unavailable, invalid or stale. Hold unsupported Baci capability comparisons for editorial verification.\n"
      if candidate and candidate.get("status") == "no_candidate":

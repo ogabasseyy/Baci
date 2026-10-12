@@ -76,6 +76,30 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row(status="production_verified")]))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_oversized_claim_fails_closed(self):
+        result = self.render(_register([_row(claim="x" * 1001)]))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_register_binding_matches_shipped_tree(self):
+        import subprocess
+        repo = Path(__file__).resolve().parents[2]
+        register_path = repo / "docs/product/baci-capabilities.json"
+        if not (repo / ".git").exists() or not register_path.exists():
+            self.skipTest("repo checkout unavailable")
+        data = json.loads(register_path.read_text())
+        refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
+        for ref in refs:
+            self.assertTrue((repo / ref).exists(), f"cited source missing: {ref}")
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "diff", "--name-only", f"{data['source_revision']}..HEAD"],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            self.skipTest("source revision not in local history")
+        changed = set(proc.stdout.split())
+        drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
+        self.assertEqual(drift, [], f"cited paths changed since source_revision: {drift}")
+
     def test_stale_register_fails_closed(self):
         old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=20)).isoformat()
         result = self.render(_register([_row()], reviewed_at=old))

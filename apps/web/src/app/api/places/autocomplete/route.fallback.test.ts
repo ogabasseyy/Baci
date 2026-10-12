@@ -157,24 +157,22 @@ describe('address provider fallback', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
   });
 
-  it('falls back on a Google transport failure', async () => {
+  it('falls back after a single Google timeout without stalling on retries', async () => {
     const timeout = new DOMException('Timed out', 'TimeoutError');
     mockFetch
       .mockRejectedValueOnce(timeout)
-      .mockRejectedValueOnce(timeout)
-      .mockRejectedValueOnce(timeout)
       .mockResolvedValueOnce(respond({ results: [geoResult] }));
-    expect(
-      (
-        await GET(
-          makeRequest({
-            fallback: 'geoapify',
-            input: 'Allen Avenue',
-            country: 'ng',
-          })
-        )
-      ).status
-    ).toBe(200);
+    const response = await GET(
+      makeRequest({
+        fallback: 'geoapify',
+        input: 'Allen Avenue',
+        country: 'ng',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).predictions[0].provider).toBe('geoapify');
+    // One Google attempt, then straight to the fallback: no 16.5s stall.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([

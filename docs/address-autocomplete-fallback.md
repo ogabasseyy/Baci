@@ -45,6 +45,11 @@ the same provider account. Automated tests mock provider requests and counters.
 - Before release, initialize the current Google month as exhausted when earlier
   usage is untracked. The next month's counter begins automatically at the Pacific
   month boundary. No existing cloud quotas are raised.
+- The shared monthly counter has no per-caller partition beyond the proxy's
+  per-IP minute throttle, so a sustained single-source burst can exhaust the
+  month for everyone. Guest checkout is intentionally unauthenticated; closing
+  this residual needs product-level controls (account binding, captcha, or
+  per-IP daily partitions) and is out of scope for this change.
 
 Geoapify requires its attribution and data-source credit. Both links appear in
 the dropdown and remain near the address after selection. Address fields remain

@@ -75,6 +75,31 @@ describe('distributed address provider budgets', () => {
       token: 'address-token',
     });
   });
+  it('trims a padded-but-valid pair instead of failing closed', async () => {
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
+      '  https://address.test  '
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', ' address-token ');
+    const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(true);
+    expect(redisConstructor).toHaveBeenCalledWith({
+      url: 'https://address.test',
+      token: 'address-token',
+    });
+  });
+  it('falls through a whitespace-only preferred pair to the next database', async () => {
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', '   ');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', '  ');
+    vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
+    vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
+    const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(true);
+    expect(redisConstructor).toHaveBeenCalledWith({
+      url: 'https://kv.test',
+      token: 'kv-token',
+    });
+  });
   it('fails closed without writing a malformed billing-month key', async () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');

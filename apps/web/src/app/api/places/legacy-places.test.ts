@@ -81,3 +81,36 @@ it('bounds repeated timeout retries at three upstream attempts', async () => {
   expect(mockFetch).toHaveBeenCalledTimes(3);
   expect(reserve).toHaveBeenCalledTimes(3);
 });
+
+it('fails fast on timeout without retrying when the caller has a fallback', async () => {
+  const reserve = vi.fn(async () => true);
+  const timeout = new DOMException('Timed out', 'TimeoutError');
+  mockFetch.mockRejectedValue(timeout);
+  const assertion = expect(
+    fetchLegacyPlacesJson('https://provider.test', reserve, {
+      retryTimeouts: false,
+    })
+  ).rejects.toBe(timeout);
+  await vi.runAllTimersAsync();
+  await assertion;
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  expect(reserve).toHaveBeenCalledTimes(1);
+});
+
+it('still retries fast failures when timeout retries are disabled', async () => {
+  const reserve = vi.fn(async () => true);
+  mockFetch
+    .mockRejectedValueOnce(new TypeError('fetch failed'))
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'OK' }),
+    });
+  const pending = fetchLegacyPlacesJson('https://provider.test', reserve, {
+    retryTimeouts: false,
+  });
+  await vi.runAllTimersAsync();
+  expect(await pending).toMatchObject({ ok: true });
+  expect(mockFetch).toHaveBeenCalledTimes(2);
+  expect(reserve).toHaveBeenCalledTimes(2);
+});

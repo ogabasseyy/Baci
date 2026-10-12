@@ -41,7 +41,10 @@ export async function fetchGoogleAutocomplete(
   try {
     const result = await fetchLegacyPlacesJson<LegacyAutocompleteResponse>(
       url.toString(),
-      () => reserveGooglePlacesRequest('autocomplete')
+      () => reserveGooglePlacesRequest('autocomplete'),
+      // One 5s stall then fall back to Geoapify: retrying timeouts here
+      // would delay suggestions ~16.5s during the stalls fallback covers.
+      { retryTimeouts: false }
     );
     if (!result.ok)
       return {

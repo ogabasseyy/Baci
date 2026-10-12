@@ -46,12 +46,22 @@ function getBudgetRedis(): Redis | null {
     [process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN],
     [process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN],
   ];
-  // A configured but incomplete preferred pair is an error. Switching to a
-  // different database would discard its usage history and reset the spend cap.
+  // Mirror env.ts normalization: trim each candidate and treat
+  // whitespace-only values as absent, so a padded-but-valid pair
+  // connects instead of failing closed, while a blank preferred pair
+  // falls through instead of shadowing the next database. A configured
+  // but incomplete preferred pair is still an error: switching to a
+  // different database would discard its usage history and reset the
+  // spend cap.
   const [url, token] =
-    configurations.find(([candidateUrl, candidateToken]) =>
-      Boolean(candidateUrl || candidateToken)
-    ) ?? [];
+    configurations
+      .map(([candidateUrl, candidateToken]) => [
+        candidateUrl?.trim() || undefined,
+        candidateToken?.trim() || undefined,
+      ])
+      .find(([candidateUrl, candidateToken]) =>
+        Boolean(candidateUrl || candidateToken)
+      ) ?? [];
   if (!url || !token) return null;
   budgetRedis = new Redis({ url, token });
   return budgetRedis;

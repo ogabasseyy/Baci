@@ -176,10 +176,11 @@ export default function UtilityPurchaseScreen() {
   }, [routeType]);
 
   useEffect(() => {
-    // Every wallet purchase debits the wallet, with or without cashback,
-    // so invalidate on any success/processing reference — otherwise the
-    // pre-debit balance stays cached as fresh and the next purchase can
-    // submit against a stale balance the server will reject.
+    // Invalidate on the resolved (session OR param) reference: every
+    // wallet purchase debits, so a cached pre-debit balance would let
+    // the next submit go stale. Params included on purpose — post-kill
+    // restores render from params against a persisted cache; a foreign
+    // shared URL costs one harmless refetch.
     if (!currentType || !successReference) {
       return;
     }

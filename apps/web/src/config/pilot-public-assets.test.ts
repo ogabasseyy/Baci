@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertPilotPublicAssets,
   resolvePilotPublicDir,
+  resolveRoutePublicDir,
 } from './pilot-public-assets';
 
 const roots: string[] = [];
@@ -212,5 +213,25 @@ describe('resolvePilotPublicDir', () => {
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
     vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
     expect(resolvePilotPublicDir()).toBe(join(process.cwd(), 'public'));
+  });
+});
+
+describe('resolveRoutePublicDir', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  it('prefers the explicit route var, then the gate stash, then cwd', () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/route/public');
+    expect(resolveRoutePublicDir()).toBe('/route/public');
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
+    expect(resolveRoutePublicDir()).toBe('/route/public');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+    expect(resolveRoutePublicDir()).toBe(join(process.cwd(), 'public'));
+  });
+  it('fails closed when the two roots disagree', () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/gate/public');
+    expect(() => resolveRoutePublicDir()).toThrow(/disagrees/);
   });
 });

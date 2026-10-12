@@ -125,4 +125,57 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       })
     ).rejects.toThrow(/2 launches with the prepared profile dir/);
   });
+
+  it('finish refuses one launch holding two navigations', async () => {
+    // Same-session warming: one launch, navigate to warm the cache,
+    // restart HAR recording, navigate again. The submitted HAR holds
+    // one page and the log holds one launch, so only the launch
+    // segment's navigation count exposes the warm retry.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    const harPath = join(dir, 'raw.har');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const twoNavLog = join(dir, 'two-nav.log');
+    await writeFile(
+      twoNavLog,
+      [
+        '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        `  --user-data-dir=${join(dir, 'profile')} --headless --no-first-run`,
+        `[${Math.floor(Date.now() / 1000)}.000][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "154.0.0.0" } } }`,
+        `[browsertime] Navigating to ${ROUTE}`,
+        `[browsertime] Navigating to ${ROUTE}`,
+      ].join('\n')
+    );
+    await expect(
+      finishRun({
+        browserLog: twoNavLog,
+        dpr: '2',
+        har: harPath,
+        outDir: join(dir, 'bound'),
+        runJson: join(dir, 'run', 'run.json'),
+        screenshot: shotPath,
+        viewport: '375x667',
+      })
+    ).rejects.toThrow(/2 navigations in the prepared-profile launch segment/);
+  });
 });

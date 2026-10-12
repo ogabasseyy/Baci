@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -206,4 +213,51 @@ test('a persistent reuse-path cleanup failure warns instead of stranding silentl
   assert.equal(second.reused, true);
   assert.match(second.cleanupWarning, /reuse-path staging cleanup failed/);
   assert.match(second.cleanupWarning, /post-commit cleanup failed/);
+});
+
+test('a failed job records stranded staging and the next job sweeps it', async () => {
+  const { inputRoot, outputRoot } = await setup();
+  // Garbage bytes with a truthful hash: the snapshot check passes, the
+  // encoder fails, so the job dies with staging already on disk.
+  const bad = await addSnapshot(inputRoot, 'garbage-not-an-image.bin', 'bad-a');
+  const good = await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a');
+  good.slot = 'product-card';
+  const inventoryPath = await writeInventory(inputRoot, [bad, good]);
+  const [badJob, goodJob] = await readInventoryJobs(inventoryPath);
+  await mkdir(outputRoot, { recursive: true });
+  const failed = await runJob({
+    deps: {
+      removeOwnedStaging: async () => {
+        throw Object.assign(new Error('staging busy'), { code: 'EBUSY' });
+      },
+    },
+    inputRoot,
+    job: badJob,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.stagingCleanupError, /EBUSY/);
+  assert.match(failed.stagingCleanupError, /staging-/);
+  // The claim still released: nothing blocks the immediate retry.
+  assert.deepEqual(await readdir(join(outputRoot, 'claims')), []);
+  // The stranded dir survives (removal failed)...
+  const stranded = (await readdir(outputRoot)).filter((name) =>
+    name.startsWith('staging-')
+  );
+  assert.equal(stranded.length, 1);
+  // ...and the next job's start sweep reaps it past the linger window.
+  const past = new Date(Date.now() - 60_000);
+  await utimes(join(outputRoot, stranded[0]), past, past);
+  const ok = await runJob({
+    inputRoot,
+    job: goodJob,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(ok.status, 'ok');
+  assert.deepEqual(
+    (await readdir(outputRoot)).filter((name) => name.startsWith('staging-')),
+    []
+  );
 });

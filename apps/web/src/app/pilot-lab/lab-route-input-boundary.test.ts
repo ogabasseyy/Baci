@@ -85,6 +85,18 @@ describe('getLabConfig', () => {
     }
   });
 
+  it('refuses divergent route and gate public dirs', async () => {
+    // The boot gate inspects the stashed tree; serving from a different
+    // route tree would verify one directory while serving another.
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', join(tmpdir(), 'pilot-gate-diverged'));
+    await expect(getLabConfig()).rejects.toThrow(/disagrees/);
+  });
+
   it('rejects operator JSON over the request-path byte budget', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

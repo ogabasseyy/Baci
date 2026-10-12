@@ -23,9 +23,13 @@ let queueTail = Promise.resolve();
 
 // Max worker RSS across completed ops since the last take. Ops are
 // process-serial, so a plain accumulator is race-free; each job takes
-// (and resets) at its start and end. Killed or failed ops report no
-// envelope and contribute nothing — the peak covers completed ops.
+// (and resets) at its start and end. Error envelopes still self-report
+// their peak, so only ops with NO envelope (timeout, crash, kill,
+// overflow, unparsable output) miss the accumulator — and those count
+// as failed, so the job marks its combined peak incomplete instead of
+// publishing a sum that silently omits the worst inputs.
 let peakWorkerRssBytes = 0;
+let failedWorkerOps = 0;
 
 export function takePeakWorkerRssBytes() {
   const peak = peakWorkerRssBytes;
@@ -33,11 +37,28 @@ export function takePeakWorkerRssBytes() {
   return peak;
 }
 
+export function takeFailedWorkerOps() {
+  const failed = failedWorkerOps;
+  failedWorkerOps = 0;
+  return failed;
+}
+
+// Combined take for job envelopes: peak plus the no-envelope failure
+// count, both reset. Kept beside the single takes the tests use.
+export function takeWorkerPeaks() {
+  return {
+    failedWorkerOps: takeFailedWorkerOps(),
+    peakWorkerRssBytes: takePeakWorkerRssBytes(),
+  };
+}
+
 function noteWorkerPeak(result) {
   const sample = result?.workerPeakRssBytes;
   if (typeof sample === 'number' && Number.isFinite(sample) && sample > 0) {
     peakWorkerRssBytes = Math.max(peakWorkerRssBytes, Math.floor(sample));
+    return true;
   }
+  return false;
 }
 
 export function enqueuePilotOp(task) {
@@ -113,10 +134,15 @@ async function spawnWorker(op, { signal, timeoutMs }) {
   if (signal) {
     if (signal.aborted) {
       await killAndWait();
+      failedWorkerOps += 1;
       throw new PilotEncodeError('op-cancelled', 'operation was cancelled');
     }
     signal.addEventListener('abort', onAbort, { once: true });
   }
+  // Every throw below without a recorded envelope peak counts the op
+  // failed, so the job's combined peak carries an incomplete marker
+  // instead of omitting the failed worker's memory.
+  let recorded = false;
   try {
     const outcome = await Promise.race([
       exited.then((end) => ({ end })),
@@ -157,14 +183,19 @@ async function spawnWorker(op, { signal, timeoutMs }) {
     if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
       throw new PilotEncodeError('worker-failed', 'worker returned a bad envelope');
     }
+    recorded = noteWorkerPeak(result);
     if (!result.ok) {
       throw new PilotEncodeError(
         result.code ?? 'worker-failed',
         result.message ?? 'worker op failed'
       );
     }
-    noteWorkerPeak(result);
     return result;
+  } catch (error) {
+    if (!recorded) {
+      failedWorkerOps += 1;
+    }
+    throw error;
   } finally {
     signal?.removeEventListener?.('abort', onAbort);
     if (timer) {

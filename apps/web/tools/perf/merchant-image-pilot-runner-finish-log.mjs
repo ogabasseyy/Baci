@@ -69,8 +69,8 @@ export function resolvePreparedLaunch(logText, profileDir, browserLog) {
   // Exactly one launch: a retry with the same profile dir (warm-up run,
   // then a second run whose single-page HAR is submitted) would
   // otherwise stamp a warm navigation with the reset's cold run id.
-  // Together with the single-page HAR rule, one launch means the bound
-  // page is that profile's only recorded navigation.
+  // One launch alone is not enough (see the navigation count below):
+  // it only rules out cross-session warming.
   if (launches.length > 1) {
     throw new Error(
       `browser log shows ${launches.length} launches with the prepared profile dir (${profileDir}); re-prepare instead of binding a possibly warm navigation: ${browserLog}`
@@ -90,6 +90,20 @@ export function resolvePreparedLaunch(logText, profileDir, browserLog) {
     launchMatch.index,
     nextLaunchIndex === -1 ? undefined : nextLaunchIndex
   );
+  // One launch can still hold two navigations: warm the target, restart
+  // HAR recording, navigate again — the submitted single-page HAR plus
+  // this one launch would then certify a warm retry as cold. The
+  // verbose log records each navigation, so a segment showing two or
+  // more refuses. Segments with no marker (Caps-style logs) cannot
+  // prove navigation count and bind as before.
+  const navigations = launchSegment
+    .split('\n')
+    .filter((line) => line.includes('Navigating to'));
+  if (navigations.length > 1) {
+    throw new Error(
+      `browser log shows ${navigations.length} navigations in the prepared-profile launch segment; only the first navigation of a prepared session binds (a later one may reuse a warmed cache): ${browserLog}`
+    );
+  }
   return {
     executableVersion: executableVersionFromLog(launchSegment, browserLog),
     sessionMs: sessionTimeFromSegment(launchSegment),

@@ -178,7 +178,7 @@ export async function handleEncodeOp(op, io = {}) {
   // bytes go out through the exclusively created descriptor, so the
   // predictable pathname is never reopened and no rename+symlink swap
   // can redirect the write outside the staging tree.
-  const claim = await claimEncodeOutput(op.output);
+  const claim = await claimEncodeOutput(op.output, op.stagingRoot);
   let encodedBytes = null;
   let overBudgetBytes = null;
   try {

@@ -11,6 +11,11 @@ import {
   recoverAbandonedClaim,
   releaseClaim,
 } from './claims.mjs';
+import {
+  cleanupCommittedAttempt,
+  cleanupFailedAttempt,
+  sweepOrphanedStaging,
+} from './claims-cleanup.mjs';
 import { JOB_TIMEOUT_MS } from './constants.mjs';
 import {
   assertMinFreeBytes,
@@ -28,7 +33,7 @@ import {
   generationIdFor,
 } from './manifest.mjs';
 import { commitGeneration } from './manifest-store.mjs';
-import { takePeakWorkerRssBytes } from './worker-pool.mjs';
+import { takeWorkerPeaks } from './worker-pool.mjs';
 
 export class PilotGenerateError extends Error {
   constructor(code, message) {
@@ -117,12 +122,15 @@ export async function runJob({
   // combined job peak — safe to size capacity, unlike the parent sample
   // alone. Missed: peaks between parent samples, and spikes inside one
   // native worker call (bounded by the worker's input pixel limits).
+  // Ops that die without an envelope (timeout/crash/kill) contribute no
+  // peak, so the envelope marks the sum incomplete instead of omitting
+  // the worst inputs from capacity evidence.
   const startedRss = process.memoryUsage().rss;
   let sampledParentRss = startedRss;
   const sampleRss = () => {
     sampledParentRss = Math.max(sampledParentRss, process.memoryUsage().rss);
   };
-  takePeakWorkerRssBytes();
+  takeWorkerPeaks();
   const runToken = createRunToken();
   let stagingDir = null;
   try {
@@ -131,6 +139,9 @@ export async function runJob({
     // successor. The per-attempt check in encodeVariant covers
     // evictions that land mid-job.
     await encoderLock?.assertHeld?.();
+    // Reap staging dirs stranded by earlier attempts whose removal
+    // failed after their claim released; best-effort, never fatal.
+    await sweepOrphanedStaging(outputRoot).catch(() => {});
     await assertMinFreeBytes(outputRoot, minFreeBytes);
     let claim;
     try {
@@ -211,38 +222,22 @@ export async function runJob({
     // rename and a directory fsync remain — a throw cannot interrupt them,
     // it would only report failed-but-published. elapsedMs stays visible.
     sampleRss();
-    // Post-commit cleanup must never report failed-but-published: the
-    // generation is durable and reusable past the visibility rename, so a
-    // claim-release or staging-removal failure is recorded as a warning
-    // (the operator clears the stranded claim via recovery) while the job
-    // still reports the true published outcome.
-    // A reuse-path removal failure inside commitGeneration seeds the
-    // warning and gets exactly one retry here: transient misses reclaim
-    // without operator action, persistent ones keep the warning.
-    let cleanupWarning = committed.stagingCleanupError ?? null;
-    try {
-      await releaseClaimFn(outputRoot, job, claim.runToken);
-      if (!committed.reused) {
-        await removeStagingFn(outputRoot, stagingDir);
-      } else if (cleanupWarning) {
-        await removeStagingFn(outputRoot, stagingDir);
-        cleanupWarning = null;
-      }
-    } catch (error) {
-      const fresh =
-        `post-commit cleanup failed (${error?.code ?? 'unknown'}): ` +
-        `${error instanceof Error ? error.message : String(error)}`.slice(
-          0,
-          200
-        ) +
-        `; generation ${generationId} is published and reusable`;
-      cleanupWarning = cleanupWarning ? `${cleanupWarning}; ${fresh}` : fresh;
-    }
+    const cleanupWarning = await cleanupCommittedAttempt({
+      committed,
+      generationId,
+      job,
+      outputRoot,
+      releaseClaimFn,
+      removeStagingFn,
+      runToken: claim.runToken,
+      stagingDir,
+    });
     stagingDir = null;
-    const peakWorkerRssBytes = takePeakWorkerRssBytes();
+    const { failedWorkerOps, peakWorkerRssBytes } = takeWorkerPeaks();
     return {
       assetId: job.assetId,
       ...(cleanupWarning ? { cleanupWarning } : {}),
+      ...(failedWorkerOps > 0 ? { workerPeakIncomplete: true } : {}),
       durability: committed.durability,
       elapsedMs: Date.now() - startedAt,
       generationId,
@@ -266,18 +261,20 @@ export async function runJob({
     };
   } catch (error) {
     sampleRss();
-    if (stagingDir) {
-      await removeStagingFn(outputRoot, stagingDir).catch(() => {
-        // Best-effort: the original error below is the actionable one.
-      });
-    }
-    await releaseClaimFn(outputRoot, job, runToken).catch(() => {
-      // Best-effort: claim release must not mask the job failure.
+    const stagingCleanupError = await cleanupFailedAttempt({
+      job,
+      outputRoot,
+      releaseClaimFn,
+      removeStagingFn,
+      runToken,
+      stagingDir,
     });
-    const peakWorkerRssBytes = takePeakWorkerRssBytes();
+    const { failedWorkerOps, peakWorkerRssBytes } = takeWorkerPeaks();
     return {
       assetId: job.assetId,
       code: error?.code ?? 'unknown',
+      ...(stagingCleanupError ? { stagingCleanupError } : {}),
+      ...(failedWorkerOps > 0 ? { workerPeakIncomplete: true } : {}),
       elapsedMs: Date.now() - startedAt,
       merchantId: job.merchantId,
       message: (error instanceof Error ? error.message : String(error)).slice(

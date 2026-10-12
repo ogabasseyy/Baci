@@ -156,6 +156,25 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
 // directory. Residual: a custom server with an inline conf object and a
 // cwd outside the app dir defeats every anchor — that boot keeps the
 // legacy cwd check.
+export function resolveRoutePublicDir(): string {
+  // Request-path twin of resolvePilotPublicDir below: the build/boot
+  // gate inspects the tree stashed in BACI_PILOT_PUBLIC_DIR while the
+  // lab routes historically read BACI_IMAGE_PILOT_PUBLIC_DIR. When both
+  // are set they must resolve to the SAME tree, or the gate and the
+  // request verifier inspect different directories (one passing while
+  // the other serves different bytes). Explicit route var wins; the
+  // stashed gate root is the fallback; cwd/public is last. Empty counts
+  // as unset everywhere, so '' never resolves '__pilot' against ''.
+  const explicit = process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || null;
+  const stashed = process.env.BACI_PILOT_PUBLIC_DIR || null;
+  if (explicit && stashed && resolve(explicit) !== resolve(stashed)) {
+    throw new Error(
+      'merchant image pilot: BACI_IMAGE_PILOT_PUBLIC_DIR disagrees with the build-gate public dir; refusing to serve from an unverified tree'
+    );
+  }
+  return explicit || stashed || join(process.cwd(), 'public');
+}
+
 export function resolvePilotPublicDir(): string {
   const stashed = process.env.BACI_PILOT_PUBLIC_DIR;
   if (stashed) {

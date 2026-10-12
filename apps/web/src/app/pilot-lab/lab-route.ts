@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { resolveRoutePublicDir } from '@/config/pilot-public-assets';
 import {
   isPilotLabEnabled,
   loadLabConfig,
@@ -209,11 +210,8 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
       'merchant image pilot: set BACI_IMAGE_PILOT_INPUT_ROOT and BACI_IMAGE_PILOT_OUTPUT_ROOT to serve the lab routes'
     );
   }
-  // Empty counts as unset (same falsy check as the required roots): an
-  // empty public dir must fall back to <cwd>/public, never resolve
-  // '__pilot' against '' into a CWD-relative root.
-  const publicDir =
-    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || join(process.cwd(), 'public');
+  // Unified with the build/boot gate root (fails closed on divergence).
+  const publicDir = resolveRoutePublicDir();
   const inventoryPath = join(inputRoot, 'inventory.json');
   const acceptancesPath = join(outputRoot, 'acceptances.json');
   // The cache key commits to stat fingerprints, not content: re-reading

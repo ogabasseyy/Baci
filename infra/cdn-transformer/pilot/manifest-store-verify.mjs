@@ -57,8 +57,23 @@ export async function assertTierBytes(tiers, resolve, stage) {
     // cannot become an unbounded allocation.
     let staged;
     try {
+      // A FIFO, socket, or device in place of a staged tier would block
+      // the bounded reader in open()/read() (the byte ceiling bounds
+      // reads, not waits), hanging publication past the point the job
+      // deadline can interrupt. Only regular files verify; anything
+      // else mismatches like any other corrupt entry.
+      const entry = await lstat(from).catch(() => null);
+      if (entry && !entry.isFile()) {
+        throw new PilotManifestError(
+          stage === 'commit' ? 'commit-bytes-mismatch' : 'staged-file-mismatch',
+          `staged entry is not a regular file: ${name}`
+        );
+      }
       staged = await readUpToBytes(from, tier.bytes + 1);
-    } catch {
+    } catch (error) {
+      if (error instanceof PilotManifestError) {
+        throw error;
+      }
       throw new PilotManifestError(
         stage === 'commit' ? 'commit-bytes-mismatch' : 'staged-file-mismatch',
         `cannot read ${stage} file: ${name}`

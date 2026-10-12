@@ -32,6 +32,12 @@ function parseOp(raw) {
   if (op.op === 'encode' && typeof op.output !== 'string') {
     throw new WorkerInputError('bad-request', 'encode requires an output path');
   }
+  if (op.op === 'encode' && typeof op.stagingRoot !== 'string') {
+    throw new WorkerInputError(
+      'bad-request',
+      'encode requires a staging root for output confinement'
+    );
+  }
   return op;
 }
 
@@ -64,8 +70,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       process.stdout.write(`${JSON.stringify(result)}\n`);
     } catch (error) {
       if (error instanceof WorkerInputError) {
+        // Rejected inputs still self-report: without the peak, the
+        // parent would mark every input-rejection job's memory evidence
+        // incomplete even though the worker measured it.
         process.stdout.write(
-          `${JSON.stringify({ code: error.code, message: error.message, ok: false })}\n`
+          `${JSON.stringify({ code: error.code, message: error.message, ok: false, workerPeakRssBytes: process.memoryUsage().rss })}\n`
         );
         return;
       }

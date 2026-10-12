@@ -81,6 +81,7 @@ export async function encodeVariant({
       op: 'encode',
       output,
       quality,
+      stagingRoot: stagingDir,
       width,
     },
     { deadlineMs, signal }

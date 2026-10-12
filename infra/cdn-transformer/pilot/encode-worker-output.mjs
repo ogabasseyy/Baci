@@ -1,7 +1,9 @@
 // Exclusive encode-output lifecycle for the Sharp worker: claim, publish
 // through the held descriptor, and post-write verification. Split from
 // encode-worker.mjs under the repo line ceiling.
-import { lstat, open, unlink } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { lstat, open, realpath, unlink } from 'node:fs/promises';
+import { dirname, sep } from 'node:path';
 
 export class WorkerInputError extends Error {
   constructor(code, message) {
@@ -23,7 +25,38 @@ export class WorkerInputError extends Error {
 // so no pathname reopen exists for a rename+symlink swap to exploit: an
 // open descriptor cannot be redirected, and the post-write identity
 // check below refuses to certify when the path no longer names it.
-export async function claimEncodeOutput(output) {
+async function assertParentConfined(stagingRoot, output) {
+  // The staging dir itself is the confinement root: a contender that
+  // renames it away and plants a link (the run token is predictable
+  // from the shared claim) would otherwise have 'wx' create the
+  // encoded file outside the tree, and the dev/ino check below would
+  // follow the same substituted parent and see the same inode. Both
+  // sides canonicalize, so a symlinked staging root still matches.
+  const realRoot = await realpath(stagingRoot).catch(() => {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode staging root is not accessible'
+    );
+  });
+  const realParent = await realpath(dirname(output)).catch(() => {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode output parent is not accessible'
+    );
+  });
+  if (realParent !== realRoot && !realParent.startsWith(realRoot + sep)) {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode output escapes the staging root'
+    );
+  }
+  return realParent;
+}
+
+export async function claimEncodeOutput(output, stagingRoot) {
+  const realParent = stagingRoot
+    ? await assertParentConfined(stagingRoot, output)
+    : null;
   // Quiescent plant first: 'wx' follows a dangling symlink and would
   // create its outside target, so links and non-regular entries refuse
   // before any open — not just on the EEXIST path below.
@@ -34,11 +67,25 @@ export async function claimEncodeOutput(output) {
       'encode output path is not a regular file'
     );
   }
+  const createFlags =
+    fsConstants.O_WRONLY |
+    fsConstants.O_CREAT |
+    fsConstants.O_EXCL |
+    fsConstants.O_NOFOLLOW;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let handle;
     try {
-      handle = await open(output, 'wx');
+      handle = await open(output, createFlags);
     } catch (error) {
+      // O_NOFOLLOW binds the final component at open time: a link
+      // swapped in after the lstat refuses instead of diverting the
+      // create through it.
+      if (error?.code === 'ELOOP') {
+        throw new WorkerInputError(
+          'output-unsafe',
+          'encode output is a symlink; refusing to write through it'
+        );
+      }
       if (error?.code !== 'EEXIST') {
         throw error;
       }
@@ -56,7 +103,7 @@ export async function claimEncodeOutput(output) {
       continue;
     }
     const identity = await handle.stat();
-    return { dev: identity.dev, handle, ino: identity.ino };
+    return { dev: identity.dev, handle, ino: identity.ino, realParent };
   }
   throw new WorkerInputError(
     'output-unsafe',
@@ -65,6 +112,18 @@ export async function claimEncodeOutput(output) {
 }
 
 export async function verifyEncodeOutput(output, pinned) {
+  // The pinned parent re-binds: a staging dir swapped for a link after
+  // the claim would otherwise pass the dev/ino check below, which
+  // traverses the same substituted parent and sees the same inode.
+  if (pinned?.realParent) {
+    const realParent = await realpath(dirname(output)).catch(() => null);
+    if (realParent !== pinned.realParent) {
+      throw new WorkerInputError(
+        'output-unsafe',
+        'encode output parent changed during the write'
+      );
+    }
+  }
   const info = await lstat(output).catch(() => null);
   if (
     !info ||

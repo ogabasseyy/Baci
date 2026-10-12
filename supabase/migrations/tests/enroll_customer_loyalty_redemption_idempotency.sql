@@ -1,14 +1,10 @@
--- Redemption-idempotency cases for the enroll_customer_loyalty suite
--- (cases 23a-23d). Runs after the redemption limits: a lost-response
--- retry replays the stored success instead of minting a second
--- redemption. Fresh member 024 stays out of every other case (case 20
--- needs member 018 at exactly 600).
-INSERT INTO public.customers (id, merchant_id, email, user_id)
-VALUES (
+-- Redemption-idempotency cases (23a-23j): a lost-response retry replays
+-- the stored success. Fresh member 024 stays out of every other case
+-- (case 20 needs member 018 at exactly 600).
+INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES (
   '01aa0000-0000-4000-8000-000000000024',
   '01aa0000-0000-4000-8000-000000000001',
-  'idempotent@example.com',
-  '01aa0000-0000-4000-8000-000000000113'
+  'idempotent@example.com', '01aa0000-0000-4000-8000-000000000113'
 );
 
 INSERT INTO public.loyalty_rewards (
@@ -201,9 +197,7 @@ SELECT pg_temp.assert_true(
   'post-delete retry did not replay the stored success'
 );
 
--- Every idempotency-table foreign key has a covering index: without a
--- merchant- or reward-leading index, merchant/reward deletes scan the
--- growing table to enforce their cascades.
+-- Every idempotency-table FK has a covering index (else deletes scan to enforce cascades).
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_indexdef(
     'public.loyalty_redemption_idempotency_keys_merchant_idx'::pg_catalog.regclass
@@ -256,9 +250,7 @@ UPDATE public.loyalty_settings
 SET enabled = true
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
--- 23j. The RDM trigger grandfathers legacy rows for non-code edits: a
--- pre-existing RDM-* code stays deactivatable, while writing an RDM-*
--- code (insert or code update) still fails.
+-- 23j. RDM trigger grandfathers legacy rows (editable), rejects new RDM writes.
 ALTER TABLE public.discount_codes
   DISABLE TRIGGER discount_codes_no_rdm_prefix;
 INSERT INTO public.discount_codes (
@@ -283,11 +275,25 @@ SELECT pg_temp.assert_true(
   'legacy RDM code was not deactivatable'
 );
 
+-- Resending the unchanged code (dashboard/mobile always include it)
+-- does not trip the reservation.
+UPDATE public.discount_codes SET code = 'RDM-LEGACY-01', is_active = false
+WHERE code = 'RDM-LEGACY-01';
+
 DO $$
 BEGIN
   UPDATE public.discount_codes
   SET code = 'RDM-LEGACY-02'
   WHERE code = 'RDM-LEGACY-01';
   RAISE EXCEPTION 'RDM code rewrite was not rejected';
+EXCEPTION WHEN check_violation THEN NULL;
+END $$;
+
+-- RDM inserts fail too (OLD is NULL there, so the change gate passes).
+DO $$
+BEGIN
+  INSERT INTO public.discount_codes (merchant_id, code, discount_type, discount_value)
+  VALUES ('01aa0000-0000-4000-8000-000000000001', 'RDM-NEW-01', 'fixed_amount', 100);
+  RAISE EXCEPTION 'RDM code insert was not rejected';
 EXCEPTION WHEN check_violation THEN NULL;
 END $$;

@@ -1,8 +1,7 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
 --
--- SECURITY DEFINER: expiry reconciliation, availability, usage cap,
--- program minimum, valued guard, store_credit fulfillment, balance
--- check, code mint, deduction, ledger row. Caller must own the
+-- SECURITY DEFINER: expiry, availability, caps, minimums, valued/NGN
+-- guards, fulfillment, mint, deduction, ledger. Caller must own the
 -- customer row. Drop the 3-arg signature (idempotency key arity).
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
@@ -131,14 +130,13 @@ BEGIN
     AND (stock_quantity IS NULL OR stock_quantity > 0)
     -- Non-positive costs would mint points: fail closed (mirrored in status).
     AND points_cost > 0
-    -- Reject unsupported reward types before any mutation (same
-    -- allowlist as the status RPC; keep the two in sync): the merchant
-    -- PATCH endpoint stores reward_type without an allowlist, and this
-    -- RPC has no fulfillment behavior for unknown types, so redeeming
-    -- one would burn stock and points for a meaningless code.
+    -- Reject types with no fulfillment path before any mutation (same
+    -- allowlist as the status RPC; keep the two in sync): the checkout
+    -- bridge only honors discount-typed codes and no other route spends
+    -- them, so free_shipping/free_product/exclusive_access would burn
+    -- stock and points for an unspendable code.
     AND reward_type IN (
       'discount', 'discount_fixed', 'discount_percentage',
-      'free_shipping', 'free_product', 'exclusive_access',
       'store_credit'
     )
   FOR UPDATE;
@@ -184,10 +182,15 @@ BEGIN
   END IF;
 
   -- Minimum-gated store credit cannot be honored (no order context at
-  -- redeem time), so fail closed instead of issuing it unconditionally.
+  -- redeem time), and wallets are NGN-only (checkout skips redemption
+  -- off-NGN): fail closed instead of issuing unusable credit. Same
+  -- predicates as the status RPC; keep the two in sync.
   IF v_reward.reward_type = 'store_credit'
-     AND v_reward.minimum_order_amount IS NOT NULL
-     AND v_reward.minimum_order_amount > 0 THEN
+     AND (
+       (v_reward.minimum_order_amount IS NOT NULL
+        AND v_reward.minimum_order_amount > 0)
+       OR NOT public.merchant_resolves_to_ngn(p_merchant_id)
+     ) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 

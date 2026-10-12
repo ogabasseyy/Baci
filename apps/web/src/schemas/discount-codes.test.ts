@@ -37,6 +37,16 @@ describe('discount code schemas', () => {
     expect(updateDiscountCodeSchema.parse({})).toEqual({});
   });
 
+  it('accepts a resent RDM code on update', () => {
+    // Grandfathering: the reservation is enforced on actual code
+    // changes (call site + DB trigger), not at update parse time.
+    const result = updateDiscountCodeSchema.safeParse({
+      code: 'RDM-LEGACY-01',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('still validates targeting relationships when applies_to changes', () => {
     const result = updateDiscountCodeSchema.safeParse({
       applies_to: 'specific_products',

@@ -173,7 +173,6 @@ describe('storefront-discount schemas', () => {
       reward_type: 'discount_fixed',
       reward_value: 100,
       minimum_order_amount: null,
-      reward_enabled: true,
       expires_at: null,
       used: false,
       reward_name: 'Probe reward',
@@ -213,16 +212,10 @@ describe('storefront-discount schemas', () => {
           used: 'yes',
         }).success
       ).toBe(false);
-      expect(
-        loyaltyCheckoutCodeRowSchema.safeParse({
-          ...validRow,
-          reward_enabled: 'true',
-        }).success
-      ).toBe(false);
     });
 
     it('rejects a row missing a resolver-selected column', () => {
-      const { reward_enabled: _dropped, ...rowWithoutFlag } = validRow;
+      const { used: _dropped, ...rowWithoutFlag } = validRow;
       expect(
         loyaltyCheckoutCodeRowSchema.safeParse(rowWithoutFlag).success
       ).toBe(false);

@@ -17,27 +17,40 @@
 
 -- Referral codes are matched case-insensitively, so uniqueness must be
 -- case-insensitive too. The mint loop retries on this constraint.
--- Pre-deploy: confirm no merchant has case-variant duplicates, or index
--- creation aborts:
---   SELECT merchant_id, upper(referral_code), count(*)
---   FROM public.customer_loyalty WHERE referral_code IS NOT NULL
---   GROUP BY 1, 2 HAVING count(*) > 1;
+-- Legacy duplicates are reminted below, so the index always applies.
 -- customer_loyalty is small (rows come only from purchase accrual), so a
 -- plain index build is used instead of CONCURRENTLY.
 DO $$
+DECLARE
+  loser record;
+  v_code text;
 BEGIN
-  -- Deduplicate legacy referral codes (the old 8-char generator had no
-  -- uniqueness guard): keep one row per merchant+code, NULL the rest so
-  -- the unique index below always applies. Balances are untouched.
-  UPDATE public.customer_loyalty AS target
-  SET referral_code = NULL
-  WHERE referral_code IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM public.customer_loyalty AS keeper
-      WHERE keeper.merchant_id = target.merchant_id
-        AND upper(keeper.referral_code) = upper(target.referral_code)
-        AND keeper.ctid < target.ctid
-    );
+  -- Remint duplicate legacy referral codes (the old 8-char generator had
+  -- no uniqueness guard): each loser gets a fresh merchant-unique code so
+  -- the unique index below always applies and nobody loses referrals.
+  FOR loser IN
+    SELECT target.ctid AS row_ctid, target.merchant_id AS merchant_id
+    FROM public.customer_loyalty AS target
+    WHERE target.referral_code IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM public.customer_loyalty AS keeper
+        WHERE keeper.merchant_id = target.merchant_id
+          AND upper(keeper.referral_code) = upper(target.referral_code)
+          AND keeper.ctid < target.ctid
+      )
+  LOOP
+    LOOP
+      v_code := UPPER(SUBSTRING(MD5(RANDOM()::TEXT || CLOCK_TIMESTAMP()::TEXT) FROM 1 FOR 8));
+      EXIT WHEN NOT EXISTS (
+        SELECT 1 FROM public.customer_loyalty
+        WHERE merchant_id = loser.merchant_id
+          AND upper(referral_code) = v_code
+      );
+    END LOOP;
+    UPDATE public.customer_loyalty
+    SET referral_code = v_code
+    WHERE ctid = loser.row_ctid;
+  END LOOP;
 END;
 $$;
 CREATE UNIQUE INDEX IF NOT EXISTS customer_loyalty_merchant_referral_code_key
@@ -88,11 +101,9 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
 
-  -- The customer must exist and belong to this merchant.
-  -- Existence, liveness, and ownership in one predicate: a single
-  -- customer_not_found avoids disclosing which customer IDs exist to direct
-  -- RPC callers. auth.uid() is NULL for callers without a JWT, which never
-  -- matches, so this fail-closes. Soft-deleted rows are non-writable.
+  -- Existence, liveness, and ownership in one predicate (single
+  -- customer_not_found discloses nothing; NULL auth.uid() never matches;
+  -- soft-deleted rows are non-writable).
   PERFORM 1
   FROM public.customers
   WHERE id = p_customer_id
@@ -101,13 +112,10 @@ BEGIN
     AND user_id = auth.uid();
 
   IF NOT FOUND THEN
-    -- Guest-checkout rows carry a NULL user_id, so a shopper whose row
-    -- predates their login misses the ownership check above. Shoppers
-    -- cannot read unlinked rows under RLS, so the re-link hint is
-    -- evaluated here with the definer's rights instead of the route.
-    -- Self-linkage only: the row must be unlinked, live, and email-match
-    -- the caller's own verified login address, else this stays a plain
-    -- customer_not_found (no oracle: the match key is server-side).
+    -- Guest rows (NULL user_id) predate login and miss the check above;
+    -- the re-link hint runs with definer rights (shoppers cannot read
+    -- unlinked rows). Self-linkage only: unlinked, live, email-matching
+    -- the verified login, else plain customer_not_found (no oracle).
     PERFORM 1
     FROM public.customers AS guest
     JOIN auth.users AS login ON login.id = auth.uid()
@@ -134,19 +142,15 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
   END IF;
 
-  -- Serialize account creation with purchase awards: award_purchase_points
-  -- takes this same key before its own check-then-insert, so a first
-  -- purchase racing enrollment cannot create a duplicate row or lose an
-  -- award to a unique violation. Released at transaction end.
+  -- Serialize creation with purchase awards (same advisory key), so a
+  -- racing first purchase cannot duplicate the row. Released at end.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext(p_merchant_id::text || ':' || p_customer_id::text)
   );
 
-  -- Post-lock recheck: a racing first purchase may have created the row
-  -- after the pre-lock check. Return already_enrolled explicitly (bonuses
-  -- attach only to rows this function creates, so the race resolves like
-  -- sequential award-then-enroll). The unique-violation handler below
-  -- stays as a net for writers that bypass the advisory lock.
+  -- Post-lock recheck: a racing purchase may have created the row; its
+  -- bonuses stay with the creator (sequential-equivalent). The handler
+  -- below stays as a net for lock bypassers.
   PERFORM 1
   FROM public.customer_loyalty
   WHERE merchant_id = p_merchant_id
@@ -156,12 +160,9 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'already_enrolled');
   END IF;
 
-  -- Resolve the referrer. Unknown codes are ignored so a bad code never
-  -- blocks enrollment (matches previous route behavior). A self-referral
-  -- cannot match: the enrolling customer has no loyalty row yet (double
-  -- enrollment is rejected above), so no self-row exists to resolve.
-  -- Soft-deleted referrers are treated as unknown: their code must not
-  -- credit a non-writable account.
+  -- Resolve the referrer (unknown codes ignored, matching the old route;
+  -- no self-match: no self row exists yet; soft-deleted referrers read
+  -- as unknown so no credit lands on a non-writable account).
   IF p_referral_code IS NOT NULL AND pg_catalog.btrim(p_referral_code) <> '' THEN
     SELECT referrer.customer_id, referrer.points_balance,
       referrer.lifetime_points
@@ -183,13 +184,10 @@ BEGIN
     v_referrer_lifetime := COALESCE(v_referrer_lifetime, 0);
   END IF;
 
-  -- Totals are computed in bigint and range-checked (mirroring
-  -- adjust_loyalty_points): the settings columns are unbounded integers,
-  -- so two individually valid bonuses can sum past 2147483647 and would
-  -- otherwise overflow mid-write into a 500 instead of a clean reject.
-  -- Bonuses clamp non-negative above, so only the upper bound needs
-  -- checking. The referrer row stays locked from the resolution above,
-  -- so these verified addends also cover the settlement below.
+  -- Bigint totals, range-checked (mirrors adjust_loyalty_points): the
+  -- unbounded settings columns could otherwise overflow mid-write into
+  -- a 500. Non-negative above, so only the upper bound needs checking;
+  -- the locked referrer row keeps these addends valid for settlement.
   IF v_referrer_customer_id IS NOT NULL THEN
     v_initial_total := v_signup_bonus::bigint + v_referral_bonus::bigint;
     v_referrer_new_balance :=
@@ -207,9 +205,8 @@ BEGIN
   v_initial_points := v_initial_total::integer;
   v_initial_tier := public.calculate_loyalty_tier(v_initial_points, p_merchant_id);
 
-  -- Mint a referral code for the new member. The probe avoids the exception
-  -- path in the common case; the insert retries on the unique index when
-  -- concurrent mints collide. Every iteration consumes one of 5 attempts.
+  -- Mint a referral code: probe first, retry the insert on unique
+  -- collisions (5 attempts).
   LOOP
     v_attempt := v_attempt + 1;
     v_referral_code := pg_catalog.upper(
@@ -282,13 +279,9 @@ BEGIN
 END;
 $$;
 
--- Authenticated storefront customers enroll through the route, which binds
--- the session to the customer; the function re-verifies ownership above.
--- Anonymous execution stays revoked so the RPC is never directly invocable
--- without a session.
--- Revoke from the named roles too: baseline default privileges grant new
--- functions directly to anon/authenticated (not via PUBLIC), so a
--- PUBLIC-only revoke would leave anon execution intact.
+-- The route binds the session; the function re-verifies ownership.
+-- Revoke named roles too (baseline defaults grant anon/authenticated
+-- directly, not via PUBLIC).
 REVOKE ALL ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.enroll_customer_loyalty(uuid, uuid, text)
   TO authenticated, service_role;

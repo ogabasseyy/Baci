@@ -50,7 +50,8 @@ export type StorefrontDiscountCodeRow = z.infer<
 // Row returned by get_loyalty_redemption_for_checkout (issue #3165). The
 // resolve RPC is type-agnostic; only discount_fixed/discount_percentage with
 // a positive value are bridgeable — the call sites filter, and the order
-// wrapper re-verifies authoritatively.
+// wrapper re-verifies authoritatively. Snapshot-governed: no live reward
+// state is selected, so a later disable cannot strand a paid code.
 export const loyaltyCheckoutCodeRowSchema = z.object({
   redemption_id: z.uuid(),
   reward_type: z.string(),
@@ -58,7 +59,6 @@ export const loyaltyCheckoutCodeRowSchema = z.object({
   // columns, so a MISSING key is a contract break that must fail.
   reward_value: z.coerce.number().nullable(),
   minimum_order_amount: z.coerce.number().nullable(),
-  reward_enabled: z.boolean().nullable(),
   expires_at: z.string().nullable(),
   used: z.boolean(),
   reward_name: z.string().nullable(),

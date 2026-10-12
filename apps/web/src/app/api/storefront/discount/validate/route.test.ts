@@ -59,7 +59,6 @@ function loyaltyRow(overrides: Record<string, unknown> = {}) {
     reward_type: 'discount_fixed',
     reward_value: 1000,
     minimum_order_amount: null,
-    reward_enabled: true,
     expires_at: null,
     used: false,
     reward_name: 'Probe reward',
@@ -208,28 +207,16 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Internal server error' });
   });
 
-  it('collapses a disabled-reward code to generic invalid', async () => {
+  it('validates a code whose reward was later disabled', async () => {
+    // Snapshot-governed: the resolver selects no live reward state, so
+    // validate cannot see a later disable and the paid code validates.
     mockRpc((fn) =>
-      fn === 'get_storefront_discount_code'
-        ? []
-        : [loyaltyRow({ reward_enabled: false })]
+      fn === 'get_storefront_discount_code' ? [] : [loyaltyRow()]
     );
 
     const body = await (await POST(request(baseBody))).json();
 
-    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
-  });
-
-  it('rejects a code with an unknown reward-enabled state', async () => {
-    mockRpc((fn) =>
-      fn === 'get_storefront_discount_code'
-        ? []
-        : [loyaltyRow({ reward_enabled: null })]
-    );
-
-    const body = await (await POST(request(baseBody))).json();
-
-    expect(body.valid).toBe(false);
+    expect(body).toMatchObject({ valid: true, code: 'RDM-ABCDEF12' });
   });
 
   it('bridges a plain discount code with fixed semantics', async () => {

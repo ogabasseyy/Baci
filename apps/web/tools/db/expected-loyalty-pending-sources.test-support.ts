@@ -2,11 +2,11 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000001_enroll_customer_loyalty.sql',
-    sha256: '5ce6916663ec5bbb871f26d46ed7bda3d0c0f38c8492f47f1a09127e072c8807',
+    sha256: 'df463c89ddefd337013a0e7922074fb7a4827801c94037913ec566fb006b698e',
   },
   {
     repositoryPath: 'supabase/migrations/20261010000002_loyalty_status.sql',
-    sha256: '89128237884a3bde63be9fc189000b6b12799c462f8f40ed925b11ad3a052d7f',
+    sha256: '01fd965ea294e4ca8366c120de48153b71b10018d8ddd321938f93086ddaf93a',
   },
   {
     repositoryPath:
@@ -21,7 +21,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000005_redeem_loyalty_reward.sql',
-    sha256: 'e96f6665382e41ac9cb95edd0e54bbf77a299fe79678cb4d12deaa6e3e355b31',
+    sha256: 'd797e92c8f2ace8ae0cd7ab7313cc5fe9bef77935ab152578546d976d4f5992a',
   },
   {
     repositoryPath:
@@ -41,12 +41,12 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000009_loyalty_checkout_bridge.sql',
-    sha256: '88e23abc1dea4f9acc8632fd1566715dc0ac43714ed2c2b8942e4e65ef376866',
+    sha256: 'cae517cab77fb911ec884e3dfb5a91e231530870b129a83f969f3bf96e18a7d6',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000010_reserve_rdm_discount_code_prefix.sql',
-    sha256: '8f270b581c8e3d28593b44db19c9a4ca7b9199c45ce994e607a9c977979ffbe6',
+    sha256: '0603619d29133b28d3169ae5e6d3b14d1e6ef68141e32278cfeb542299cf39b5',
   },
   {
     repositoryPath:
@@ -57,5 +57,10 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261010000012_wallet_credit_loyalty_redemption.sql',
     sha256: 'a71824a808360f85e7a2093e23f69e1e0e6246d16bcb2b4a11202cbcc2de5d14',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010000013_loyalty_ngn_merchant_guard.sql',
+    sha256: '7da46ccd25aca82233d9ae588210d0b4e047ceb38d8bcd96c49ea243d7c65ef8',
   },
 ] as const;

@@ -30,11 +30,14 @@ CREATE OR REPLACE FUNCTION public.get_loyalty_redemption_for_checkout(
   reward_type text,
   reward_value numeric,
   minimum_order_amount numeric,
-  reward_enabled boolean,
   expires_at timestamptz,
   used boolean,
   reward_name text
 )
+-- Snapshot-governed: issued codes never consult the live reward row, so
+-- a later disable or delete cannot strand an already-paid code. The
+-- redemption row carries every enforced term (type, value, minimum,
+-- expiry); the live join below supplies the name only.
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
@@ -56,7 +59,6 @@ BEGIN
     -- Issuance snapshot first: a merchant minimum raised after redeem
     -- cannot strand the paid code (legacy rows fall back to live).
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount),
-    rw.enabled,
     rr.expires_at,
     COALESCE(rr.used, false),
     rw.name::text
@@ -131,13 +133,12 @@ BEGIN
   -- checkouts racing the same single-use code serialize on the claim.
   -- Re-reads every field: a racing checkout may have claimed the code
   -- since the unlocked read above. The parent is already locked, so
-  -- the joined policy cannot change under the validation below; a
-  -- reward deleted before the parent lock reads back NULL, which the
-  -- policy gate treats as inactive.
+  -- the legacy minimum fallback cannot change under validation; a
+  -- deleted reward reads back NULL there and the issuance snapshot
+  -- governs (see the resolver).
   SELECT
     rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
-    rw.enabled AS reward_enabled,
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount)
       AS minimum_order_amount
   INTO v_redemption
@@ -189,8 +190,8 @@ BEGIN
   IF v_redemption.used THEN RAISE EXCEPTION 'loyalty_code_already_used'; END IF;
   IF v_redemption.expires_at IS NOT NULL AND v_redemption.expires_at < v_now THEN
     RAISE EXCEPTION 'loyalty_code_expired'; END IF;
-  IF v_redemption.reward_enabled IS DISTINCT FROM true THEN
-    RAISE EXCEPTION 'loyalty_reward_inactive'; END IF;
+  -- No live-enabled check: issued codes are snapshot-governed (see the
+  -- resolver), so a later disable or delete cannot strand a paid code.
   -- Only discount-typed codes with a positive value are
   -- checkout-applicable; other types are honored off-checkout.
   IF v_redemption.reward_type NOT IN ('discount', 'discount_fixed', 'discount_percentage')

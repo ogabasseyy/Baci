@@ -113,7 +113,6 @@ const LOYALTY_CODE_ROW = {
   reward_type: 'discount_fixed',
   reward_value: 100,
   minimum_order_amount: null,
-  reward_enabled: true,
   expires_at: null,
   used: false,
   reward_name: 'Probe reward',

@@ -15,7 +15,11 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF upper(NEW.code) LIKE 'RDM-%' THEN
+  -- Actual code changes only: UPDATE OF code fires even when the value is
+  -- resent unchanged, which would brick legacy-row edits from writers
+  -- (dashboard, mobile) that always include the code.
+  IF NEW.code IS DISTINCT FROM OLD.code
+     AND upper(NEW.code) LIKE 'RDM-%' THEN
     RAISE EXCEPTION 'discount code prefix RDM- is reserved for loyalty redemptions'
       USING ERRCODE = 'check_violation';
   END IF;

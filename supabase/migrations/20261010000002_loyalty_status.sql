@@ -190,13 +190,12 @@ BEGIN
         COALESCE(v_settings.minimum_redemption_points, 0) <= 0
         OR points_cost >= v_settings.minimum_redemption_points
       )
-      -- Hide unsupported reward types (same allowlist as the redemption
-      -- RPC; keep the two in sync): the catalog mapper folds unknowns
-      -- into discount rendering, but redemption has no fulfillment for
-      -- them and rejects every attempt.
+      -- Hide types with no fulfillment path (same allowlist as the
+      -- redemption RPC; keep the two in sync): checkout only honors
+      -- discount-typed codes, so the rest would advertise unspendable
+      -- rewards that redeem always rejects.
       AND reward_type IN (
         'discount', 'discount_fixed', 'discount_percentage',
-        'free_shipping', 'free_product', 'exclusive_access',
         'store_credit'
       )
       -- Hide valued rewards without a positive value (same predicate as
@@ -212,14 +211,16 @@ BEGIN
         )
         OR reward_value > 0
       )
-      -- Hide minimum-gated store credit (same predicate as the
-      -- redemption RPC's minimum guard; keep the two in sync): the
-      -- minimum is unenforceable without order context, so offering
-      -- it promises a purchase requirement that cannot be checked.
+      -- Hide unhonorable store credit (same predicates as the
+      -- redemption RPC; keep the two in sync): minimums are
+      -- unenforceable without order context, and the wallet ledger
+      -- is NGN-only.
       AND (
         reward_type <> 'store_credit'
-        OR minimum_order_amount IS NULL
-        OR minimum_order_amount <= 0
+        OR (
+          (minimum_order_amount IS NULL OR minimum_order_amount <= 0)
+          AND public.merchant_resolves_to_ngn(p_merchant_id)
+        )
       )
   ) AS rewards;
 

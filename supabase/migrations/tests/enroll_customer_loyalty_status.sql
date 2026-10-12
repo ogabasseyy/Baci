@@ -193,3 +193,102 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND source_id = '01aa0000-0000-4000-8000-00000000015c';
 DELETE FROM public.reward_redemptions
 WHERE id = '01aa0000-0000-4000-8000-00000000015c';
+
+-- 15d. Types with no fulfillment path are unredeemable and hidden:
+-- checkout honors discount-typed codes only, so Ship perk fails
+-- closed and never reaches the catalog (member 011, user 101).
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Ship perk')
+   ) AS result),
+  'fulfillment-less reward type redeemed'
+);
+
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000011'
+    ) AS result,
+    LATERAL jsonb_array_elements(result -> 'rewards') AS value
+    WHERE value ->> 'name' = 'Ship perk'
+  ),
+  'fulfillment-less reward type reached the catalog'
+);
+
+-- 15e. Store credit is NGN-only: the wallet ledger cannot spend it
+-- off-NGN, so a USD merchant's reward fails closed and stays hidden.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  -- Cost 100 meets the program minimum, so the attempt reaches the
+  -- NGN guard instead of failing minimum_not_met first.
+  '01aa0000-0000-4000-8000-000000000001', 'NGN probe', 100,
+  'store_credit', 500, true
+);
+
+SELECT id AS probe_reward_id FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'NGN probe' \gset
+
+-- merchants UPDATE is owner/staff-only under RLS: flip as the
+-- fixture owner, then drop back to member 011's owner for the calls.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
+UPDATE public.merchants SET payout_currency = 'USD'
+WHERE id = '01aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT payout_currency = 'USD'
+   FROM public.merchants
+   WHERE id = '01aa0000-0000-4000-8000-000000000001'),
+  'payout flip did not apply'
+);
+
+SELECT pg_temp.assert_true(
+  NOT public.merchant_resolves_to_ngn(
+    '01aa0000-0000-4000-8000-000000000001'
+  ),
+  'helper misresolved the USD merchant'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011',
+     :'probe_reward_id'
+   ) AS result),
+  'non-NGN store credit redeemed'
+);
+
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000011'
+    ) AS result,
+    LATERAL jsonb_array_elements(result -> 'rewards') AS value
+    WHERE value ->> 'name' = 'NGN probe'
+  ),
+  'non-NGN store credit reached the catalog'
+);
+
+-- Restore the NGN default and remove the probe: later files assume an
+-- NGN merchant and enumerate the catalog.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
+UPDATE public.merchants SET payout_currency = DEFAULT
+WHERE id = '01aa0000-0000-4000-8000-000000000001';
+DELETE FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'NGN probe';
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');

@@ -47,7 +47,16 @@ const discountCodeBaseFields = z.object({
   category_ids: discountCodeFields.category_ids.default([]),
 });
 
-const discountCodeUpdateFields = z.object(discountCodeFields).partial();
+// Updates resend the unchanged code, so the RDM- refine cannot apply at
+// parse time (it would brick legacy-row edits): the DB trigger rejects
+// actual code changes, and callers re-check the reservation on change.
+const { code: _createCode, ...updateableCodeFields } = discountCodeFields;
+const discountCodeUpdateFields = z
+  .object({
+    ...updateableCodeFields,
+    code: z.string().trim().min(1).max(50).toUpperCase(),
+  })
+  .partial();
 
 type DiscountCodeTargetingInput = {
   applies_to?: 'all' | 'specific_products' | 'specific_categories';

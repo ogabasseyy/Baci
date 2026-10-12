@@ -13,51 +13,60 @@ INSERT INTO public.loyalty_rewards (
   ('01aa0000-0000-4000-8000-000000000001', 'Bridge credit', 100,
    'store_credit', 500, NULL, true);
 
+SELECT id AS fixed_reward_id FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Bridge fixed' \gset
+SELECT id AS percent_reward_id FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Bridge percent' \gset
+SELECT id AS credit_reward_id FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Bridge credit' \gset
+
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000113');
 
 SELECT public.redeem_loyalty_reward(
   '01aa0000-0000-4000-8000-000000000001',
   '01aa0000-0000-4000-8000-000000000024',
-  (SELECT id FROM public.loyalty_rewards
-   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-     AND name = 'Bridge fixed'),
+  :'fixed_reward_id',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1');
 
 SELECT public.redeem_loyalty_reward(
   '01aa0000-0000-4000-8000-000000000001',
   '01aa0000-0000-4000-8000-000000000024',
-  (SELECT id FROM public.loyalty_rewards
-   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-     AND name = 'Bridge percent'),
+  :'percent_reward_id',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2');
 
 SELECT public.redeem_loyalty_reward(
   '01aa0000-0000-4000-8000-000000000001',
   '01aa0000-0000-4000-8000-000000000024',
-  (SELECT id FROM public.loyalty_rewards
-   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-     AND name = 'Bridge credit'),
+  :'credit_reward_id',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3');
 
--- 24a. A discount-typed code resolves with its snapshot terms plus the
--- live minimum and reward state.
+SELECT discount_code AS fixed_code FROM public.reward_redemptions
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
+  AND reward_id = :'fixed_reward_id' \gset
+SELECT discount_code AS percent_code FROM public.reward_redemptions
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
+  AND reward_id = :'percent_reward_id' \gset
+SELECT discount_code AS credit_code FROM public.reward_redemptions
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000024'
+  AND reward_id = :'credit_reward_id' \gset
+
+-- 24a. A discount-typed code resolves with its snapshot terms (no live
+-- reward state: issued codes are snapshot-governed).
 SELECT pg_temp.assert_true(
   (SELECT row.reward_type = 'discount_fixed'
      AND row.reward_value = 1000
      AND row.minimum_order_amount = 5000
-     AND row.reward_enabled IS TRUE
      AND row.used IS FALSE
      AND row.reward_name = 'Bridge fixed'
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
-     (SELECT discount_code FROM public.reward_redemptions
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-        AND reward_id = (
-          SELECT id FROM public.loyalty_rewards
-          WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-            AND name = 'Bridge fixed'
-        ))
+     :'fixed_code'
    ) AS row),
   'discount-typed loyalty code did not resolve with terms'
 );
@@ -77,14 +86,7 @@ SELECT pg_temp.assert_true(
   (SELECT count(*) = 1
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
-     lower((SELECT discount_code FROM public.reward_redemptions
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-        AND reward_id = (
-          SELECT id FROM public.loyalty_rewards
-          WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-            AND name = 'Bridge percent'
-        )))
+     lower(:'percent_code')
    )),
   'lowercase loyalty code did not resolve'
 );
@@ -95,14 +97,7 @@ SELECT pg_temp.assert_true(
   (SELECT row.reward_type = 'store_credit'
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
-     (SELECT discount_code FROM public.reward_redemptions
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-        AND reward_id = (
-          SELECT id FROM public.loyalty_rewards
-          WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-            AND name = 'Bridge credit'
-        ))
+     :'credit_code'
    ) AS row),
   'store_credit code did not resolve for layer filtering'
 );
@@ -113,27 +108,35 @@ UPDATE public.reward_redemptions
 SET used = true, used_at = pg_catalog.now()
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-  AND reward_id = (
-    SELECT id FROM public.loyalty_rewards
-    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-      AND name = 'Bridge percent'
-  );
+  AND reward_id = :'percent_reward_id';
 
 SELECT pg_temp.assert_true(
   (SELECT row.used IS TRUE
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
-     (SELECT discount_code FROM public.reward_redemptions
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-        AND reward_id = (
-          SELECT id FROM public.loyalty_rewards
-          WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-            AND name = 'Bridge percent'
-        ))
+     :'percent_code'
    ) AS row),
   'used loyalty code did not resolve with used=true'
 );
+
+-- 24f. A disabled reward does not void its issued codes: the resolver
+-- selects no live reward state, so the snapshot terms still resolve.
+UPDATE public.loyalty_rewards SET enabled = false
+WHERE id = :'fixed_reward_id';
+
+SELECT pg_temp.assert_true(
+  (SELECT row.reward_type = 'discount_fixed'
+     AND row.reward_value = 1000
+     AND row.minimum_order_amount = 5000
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001',
+     :'fixed_code'
+   ) AS row),
+  'disabled reward voided its issued code'
+);
+
+UPDATE public.loyalty_rewards SET enabled = true
+WHERE id = :'fixed_reward_id';
 
 -- 25a. The order wrapper rejects a NULL redemption id before touching
 -- the order RPC.
@@ -191,11 +194,13 @@ SELECT pg_temp.assert_true(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
   ) LIKE '%idempotency_replayed%'
   -- Parent lock precedes the child lock (reversed order deadlocks
-  -- against the rewards DELETE route's parent-first FK cascade).
+  -- against the rewards DELETE route's parent-first FK cascade), and
+  -- no live-enabled gate strands paid codes (snapshot governance).
   AND (
     SELECT strpos(def, 'FROM public.loyalty_rewards rw') > 0
        AND strpos(def, 'FROM public.loyalty_rewards rw')
          < strpos(def, 'FOR UPDATE OF rr')
+       AND strpos(def, 'loyalty_reward_inactive') = 0
     FROM pg_get_functiondef(
       'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
     ) AS def
@@ -248,35 +253,27 @@ SELECT pg_temp.assert_true(
 );
 
 -- A duplicate code (even in another case) is rejected, so checkout can
--- never resolve the wrong redemption.
+-- never resolve the wrong redemption. Staged through a temp table:
+-- psql variables do not interpolate inside DO blocks.
+CREATE TEMP TABLE probe_dup AS
+SELECT :'percent_reward_id'::uuid AS reward_id, :'fixed_code'::text AS code;
 DO $dup$
 BEGIN
   INSERT INTO public.reward_redemptions (
     merchant_id, customer_id, reward_id, points_spent,
     reward_type, discount_code
-  ) VALUES (
-    '01aa0000-0000-4000-8000-000000000001',
+  )
+  SELECT '01aa0000-0000-4000-8000-000000000001',
     '01aa0000-0000-4000-8000-000000000024',
-    (SELECT id FROM public.loyalty_rewards
-     WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-       AND name = 'Bridge percent'),
-    100, 'discount_percentage',
-    lower((SELECT discount_code FROM public.reward_redemptions
-     WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-       AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-       AND reward_id = (
-         SELECT id FROM public.loyalty_rewards
-         WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-           AND name = 'Bridge fixed')))
-  );
+    reward_id, 100, 'discount_percentage', lower(code)
+  FROM probe_dup;
   RAISE EXCEPTION 'duplicate redemption code was accepted';
 EXCEPTION WHEN unique_violation THEN
   -- Expected: the unique code index rejected the duplicate.
 END;
 $dup$;
 
--- The redeem RPC retries code generation on that constraint (probe +
--- insert-retry like the referral path) instead of surfacing a 500.
+-- The redeem RPC retries code generation on that constraint instead of a 500.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
@@ -290,7 +287,7 @@ SELECT pg_temp.assert_true(
 -- The order wrapper locks parent-before-child: the reward row first (via
 -- the unlocked id read), then FOR UPDATE OF rr. The DELETE route locks
 -- the same order, so inverting here deadlocks against its ON DELETE
--- SET NULL; the re-read also keeps enabled/minimum values fresh.
+-- SET NULL; the re-read also keeps the legacy minimum fallback fresh.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure

@@ -129,10 +129,15 @@ describe('discount code actions staff access', () => {
     const selectMock = vi.fn().mockReturnValue({ single: singleMock });
     const eqMerchantMock = vi.fn().mockReturnValue({ select: selectMock });
     const eqIdMock = vi.fn().mockReturnValue({ eq: eqMerchantMock });
+    // Current-code fetch for the change-aware RDM check (unchanged here).
+    const fetchSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { code: 'SAVE30' }, error: null });
 
     mockCreateClient.mockReturnValue({
       auth: { getUser: mockGetUser },
       from: vi.fn(() => ({
+        select: vi.fn(() => chainTo(fetchSingle)),
         update: vi.fn(() => ({ eq: eqIdMock })),
       })),
     });
@@ -204,6 +209,7 @@ function chainTo(single: ReturnType<typeof vi.fn>) {
     eq: vi.fn(() => c),
     select: vi.fn(() => c),
     single,
+    maybeSingle: single,
   };
   return c;
 }
@@ -249,10 +255,16 @@ describe('preserve used discount codes', () => {
       data: null,
       error: { code: 'P0001', message: 'discount_code_rename_not_allowed' },
     });
+    // The rename is a real change (OLDNAME -> NEWNAME), so the RDM
+    // check passes and the request reaches the DB rename guard.
+    const fetchSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { code: 'OLDNAME' }, error: null });
 
     mockCreateClient.mockReturnValue({
       auth: { getUser: mockGetUser },
       from: vi.fn(() => ({
+        select: vi.fn(() => chainTo(fetchSingle)),
         update: vi.fn(() => chainTo(updateSingle)),
       })),
     });

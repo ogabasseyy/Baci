@@ -119,11 +119,12 @@ export async function POST(request: NextRequest) {
         loyaltyValue > 0
       ) {
         // Dead codes collapse to the same generic invalid an unknown
-        // code gets: distinct used/expired/disabled messages would let
-        // anyone probe live codes without spending. The order wrapper
+        // code gets: distinct used/expired messages would let anyone
+        // probe live codes without spending. The order wrapper
         // re-enforces state and keeps the authoritative distinction.
+        // Snapshot-governed: a disabled reward no longer voids its
+        // issued codes (the resolver selects no live reward state).
         if (
-          loyaltyCode.reward_enabled !== true ||
           loyaltyCode.used ||
           (loyaltyCode.expires_at &&
             new Date(loyaltyCode.expires_at) < new Date())

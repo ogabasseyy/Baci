@@ -104,9 +104,14 @@ export function useUtilityPayment() {
         exact: false,
       });
     },
-    refetchWallet: () => {
-      void wallet.refetch();
-    },
+    /**
+     * Refetches the current wallet balance. Never rejects (a refetch
+     * failure resolves undefined instead) so rejection paths can
+     * safely await it without masking their own error — and must:
+     * `walletIsLoading` stays false during background refetches, so
+     * only awaiting guarantees the next readiness check is fresh.
+     */
+    refetchWallet: () => wallet.refetch().catch(() => undefined),
     /**
      * Binds a purchase descriptor to the submitting owner + merchant.
      * Handlers MUST scope once per submission and pass the scoped key

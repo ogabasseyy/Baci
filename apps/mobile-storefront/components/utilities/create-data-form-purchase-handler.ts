@@ -192,9 +192,12 @@ export function createDataFormPurchaseHandler({
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
           // The rejection may prove a stale balance (e.g. 400
-          // insufficient funds after another spend): refetch now so the
-          // next tap's readiness check sees the real balance.
-          payment.refetchWallet();
+          // insufficient funds after another spend): AWAIT the refetch
+          // (fire-and-forget would let a quick retry re-pass on the
+          // stale balance — `walletIsLoading` is false during
+          // background refetches). Never rejects, so the original
+          // error below always survives.
+          await payment.refetchWallet();
         }
         throw error;
       }

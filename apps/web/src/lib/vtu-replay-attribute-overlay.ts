@@ -103,10 +103,18 @@ async function tryRefreshServerValidationReference(
   try {
     const { data, error } = await supabase
       .from('vtu_transactions')
-      .select('metadata, customer_identifier')
+      .select('metadata, customer_identifier, status')
       .eq('id', transactionId)
       .single();
     if (error || !data) {
+      return undefined;
+    }
+    // Refresh only before a re-vend: successful rows short-circuit in
+    // fulfillment, processing rows requery by provider reference, and
+    // failed rows take the refund path — none consume a reference, so
+    // a 30s validation call here would only stall lost-response
+    // replays during a validation outage (Codex R34 hY3x).
+    if (data.status !== 'pending') {
       return undefined;
     }
     const stored: unknown = data.metadata;

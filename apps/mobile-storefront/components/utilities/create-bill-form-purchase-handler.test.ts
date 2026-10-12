@@ -43,7 +43,7 @@ function createPaymentState(
   return {
     canFundByBankTransfer: false,
     isAuthenticated: true,
-    refetchWallet: jest.fn(),
+    refetchWallet: jest.fn(() => Promise.resolve(undefined)),
     walletBalance: 5000,
     walletError: null,
     walletIsLoading: false,
@@ -431,7 +431,7 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(400, 'Bad Request')
       );
       const resetWalletIdempotencyKey = jest.fn();
-      const refetchWallet = jest.fn();
+      const refetchWallet = jest.fn(() => Promise.resolve(undefined));
       const invalidateWallets = jest.fn();
       const handlePurchase = createValidHandler({
         amount: '1000',
@@ -459,6 +459,45 @@ describe('createBillFormPurchaseHandler', () => {
       expect(invalidateWallets).not.toHaveBeenCalled();
     });
 
+    it('waits for the wallet refetch before surfacing the rejection', async () => {
+      // Fire-and-forget would let a quick retry re-pass readiness on
+      // the stale balance: the alert must come after refetch-done.
+      mockChargeWalletForVtu.mockRejectedValueOnce(
+        new HttpError(400, 'Bad Request')
+      );
+      const order: string[] = [];
+      let resolveRefetch!: () => void;
+      const refetchGate = new Promise<void>((resolve) => {
+        resolveRefetch = resolve;
+      });
+      const refetchWallet = jest.fn(() => {
+        order.push('refetch-start');
+        return refetchGate.then(() => {
+          order.push('refetch-done');
+          return undefined;
+        });
+      });
+      jest.mocked(Alert.alert).mockImplementation(() => {
+        order.push('alert');
+      });
+      const handlePurchase = createValidHandler({
+        amount: '1000',
+        numericAmount: 1000,
+        payment: createPaymentState({
+          walletBalance: 1000,
+          isSubmittingOwnerCurrent: () => true,
+          refetchWallet,
+        }),
+      });
+
+      const pending = handlePurchase();
+      await new Promise((r) => setImmediate(r));
+      expect(order).toEqual(['refetch-start']);
+      resolveRefetch();
+      await pending;
+      expect(order).toEqual(['refetch-start', 'refetch-done', 'alert']);
+    });
+
     it('keeps the idempotency key on a pre-route 429 (handler never ran)', async () => {
       // No outcome was recorded, so the retry must reuse the key and
       // dedupe against any already-committed attempt.
@@ -466,7 +505,7 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(429, 'Too many requests')
       );
       const resetWalletIdempotencyKey = jest.fn();
-      const refetchWallet = jest.fn();
+      const refetchWallet = jest.fn(() => Promise.resolve(undefined));
       const handlePurchase = createValidHandler({
         amount: '1000',
         numericAmount: 1000,
@@ -492,7 +531,7 @@ describe('createBillFormPurchaseHandler', () => {
         new HttpError(400, 'Insufficient funds')
       );
       const resetWalletIdempotencyKey = jest.fn();
-      const refetchWallet = jest.fn();
+      const refetchWallet = jest.fn(() => Promise.resolve(undefined));
       const invalidateWallets = jest.fn();
       const handlePurchase = createValidHandler({
         amount: '1000',

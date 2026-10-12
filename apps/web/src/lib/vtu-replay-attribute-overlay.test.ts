@@ -18,6 +18,7 @@ type RpcCall = {
 type VtuRow = {
   metadata: unknown;
   customer_identifier: unknown;
+  status: unknown;
 } | null;
 
 function buildSupabase(calls: RpcCall[], row: VtuRow): SupabaseClient {
@@ -36,7 +37,10 @@ function buildSupabase(calls: RpcCall[], row: VtuRow): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
-function monnifyRow(overrides: Record<string, unknown> = {}): VtuRow {
+function monnifyRow(
+  overrides: Record<string, unknown> = {},
+  status: unknown = 'pending'
+): VtuRow {
   return {
     metadata: {
       provider: 'monnify',
@@ -46,6 +50,7 @@ function monnifyRow(overrides: Record<string, unknown> = {}): VtuRow {
       ...overrides,
     },
     customer_identifier: '1234567890',
+    status,
   };
 }
 
@@ -188,6 +193,23 @@ describe('overlayReplayAttributes', () => {
       validationReference: undefined,
     });
     expect(result).toEqual({ updated: false, refreshed: false });
+    expect(calls).toHaveLength(0);
+    expect(mockVerifyBillCustomer).not.toHaveBeenCalled();
+  });
+
+  it('skips refresh for rows that will not re-vend', async () => {
+    // Successful rows short-circuit, processing rows requery by
+    // provider reference, failed rows take the refund path: none
+    // consume a reference, so no 30s validation call is warranted.
+    for (const status of ['successful', 'processing', 'failed']) {
+      const result = await overlayReplayAttributes({
+        supabase: buildSupabase(calls, monnifyRow({}, status)),
+        transactionId: 'vtu-tx-1',
+        customerPhone: undefined,
+        validationReference: undefined,
+      });
+      expect(result).toEqual({ updated: false, refreshed: false });
+    }
     expect(calls).toHaveLength(0);
     expect(mockVerifyBillCustomer).not.toHaveBeenCalled();
   });

@@ -165,4 +165,33 @@ describe('data form purchase cashback', () => {
     expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(invalidateWallets).not.toHaveBeenCalled();
   });
+
+  it('waits for the wallet refetch before surfacing the rejection', async () => {
+    // Fire-and-forget would let a quick retry re-pass readiness on
+    // the stale balance: the alert must come after refetch-done.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const order: string[] = [];
+    let resolveRefetch!: () => void;
+    const refetchGate = new Promise<void>((resolve) => {
+      resolveRefetch = resolve;
+    });
+    const refetchWallet = jest.fn(() => {
+      order.push('refetch-start');
+      return refetchGate.then(() => {
+        order.push('refetch-done');
+      });
+    });
+    jest.mocked(Alert.alert).mockImplementation(() => {
+      order.push('alert');
+    });
+
+    const pending = runPurchase(jest.fn(), { refetchWallet });
+    await new Promise((r) => setImmediate(r));
+    expect(order).toEqual(['refetch-start']);
+    resolveRefetch();
+    await pending;
+    expect(order).toEqual(['refetch-start', 'refetch-done', 'alert']);
+  });
 });

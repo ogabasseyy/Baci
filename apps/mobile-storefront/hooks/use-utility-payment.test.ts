@@ -64,7 +64,7 @@ describe('useUtilityPayment', () => {
       data: { wallet: { balance: 0 } },
       error: null,
       isLoading: false,
-      refetch: jest.fn(),
+      refetch: jest.fn(() => Promise.resolve({})),
     };
   });
 
@@ -73,7 +73,7 @@ describe('useUtilityPayment', () => {
       data: { wallet: { balance: 1500 } },
       error: null,
       isLoading: false,
-      refetch: jest.fn(),
+      refetch: jest.fn(() => Promise.resolve({})),
     };
     const { result } = renderHook(() => useUtilityPayment());
 
@@ -88,7 +88,7 @@ describe('useUtilityPayment', () => {
       data: undefined,
       error: walletError,
       isLoading: false,
-      refetch: jest.fn(),
+      refetch: jest.fn(() => Promise.resolve({})),
     };
 
     const { result } = renderHook(() => useUtilityPayment());
@@ -132,6 +132,16 @@ describe('useUtilityPayment', () => {
     mockAuthState.session = null;
     const { result: signedOut } = renderHook(() => useUtilityPayment());
     expect(signedOut.current.isAuthenticated).toBe(false);
+  });
+
+  it('refetchWallet never rejects so rejection paths can safely await it', async () => {
+    mockWalletQuery = {
+      ...mockWalletQuery,
+      refetch: jest.fn(() => Promise.reject(new Error('network down'))),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    await expect(result.current.refetchWallet()).resolves.toBeUndefined();
   });
 
   it('offers no gateway or saved-card state: wallet is the only payment method', () => {

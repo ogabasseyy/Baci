@@ -136,6 +136,7 @@ jobs:
           # PRs created with GITHUB_TOKEN do not trigger pull_request
           # workflows, so generated PRs would never get required checks.
           GH_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN || github.token }}
+          HAS_PIN_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN != '' }}
           VERSION: ${{ needs.smoke.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
@@ -166,7 +167,10 @@ jobs:
             # Re-dispatch only checks that are actually missing, so a
             # healthy open PR does not burn CI capacity every week.
             head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
-            checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '.check_runs[].name')"
+            # Skipped runs (e.g. pull_request CI with web=false on a pin
+            # branch) register the same names without running the gates;
+            # only a non-skipped run proves the gate exists.
+            checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | select(.conclusion != "skipped") | .name] | join("\n")')"
             grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
             grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f trusted_changed=true
             grep -q '^Selftest (' <<<"$checks" || gh workflow run muse-review-selftest.yml --ref "$existing"
@@ -186,8 +190,14 @@ jobs:
             # When the PR was created with GITHUB_TOKEN, GitHub suppresses
             # the pull_request workflows that produce the required checks.
             # Dispatch them explicitly against the new branch so the checks
-            # exist on the PR head commit.
-            gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
-            gh workflow run security.yml --ref "$branch" -f trusted_changed=true
-            gh workflow run muse-review-selftest.yml --ref "$branch"
+            # exist on the PR head commit. A PR created with the dedicated
+            # token triggers those workflows itself, so dispatching there
+            # would only duplicate them.
+            if [ "$HAS_PIN_TOKEN" = "true" ]; then
+              echo "Pin update PR created with the dedicated token; pull_request checks trigger normally."
+            else
+              gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
+              gh workflow run security.yml --ref "$branch" -f trusted_changed=true
+              gh workflow run muse-review-selftest.yml --ref "$branch"
+            fi
           fi

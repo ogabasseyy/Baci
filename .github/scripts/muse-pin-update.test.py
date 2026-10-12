@@ -173,6 +173,49 @@ class MusePinUpdateTests(unittest.TestCase):
             updater.update_files(root, pins, retrieved="2026-01-02")
             self.assertEqual((installer.read_text(), anchors.read_text()), before)
 
+    def test_version_only_change_refreshes_retrieval_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / ".github/scripts/muse-review/install.sh"
+            anchors = root / ".github/scripts/semgrep_sarif_pins.py"
+            installer.parent.mkdir(parents=True)
+            installer.write_text(
+                'MUSE_VERSION="1.4.6-R6000.1"\n'
+                '# From the stable-channel manifest (retrieved 2020-01-01 over TLS):\n'
+                'SHA_X86_LINUX="' + "c" * 64 + '"\n'
+                'SHA_AARCH64_LINUX="' + "d" * 64 + '"\n'
+            )
+            anchors.parent.mkdir(parents=True, exist_ok=True)
+            anchors.write_text(
+                'MUSE_PINNED_VERSION = "1.4.6-R6000.1"\n'
+                'MUSE_PINNED_SHA_X86 = (\n    "' + "c" * 64 + '"\n)\n'
+                'MUSE_PINNED_SHA_AARCH64 = (\n    "' + "d" * 64 + '"\n)\n'
+            )
+            pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
+            updater.update_files(root, pins, retrieved="2026-01-02")
+            self.assertIn("(retrieved 2026-01-02 over TLS)", installer.read_text())
+
+    def test_missing_retrieval_date_marker_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / ".github/scripts/muse-review/install.sh"
+            anchors = root / ".github/scripts/semgrep_sarif_pins.py"
+            installer.parent.mkdir(parents=True)
+            installer.write_text(
+                'MUSE_VERSION="1.4.6-R6000.1"\n'
+                'SHA_X86_LINUX="' + "a" * 64 + '"\n'
+                'SHA_AARCH64_LINUX="' + "b" * 64 + '"\n'
+            )
+            anchors.parent.mkdir(parents=True, exist_ok=True)
+            anchors.write_text(
+                'MUSE_PINNED_VERSION = "1.4.6-R6000.1"\n'
+                'MUSE_PINNED_SHA_X86 = (\n    "' + "a" * 64 + '"\n)\n'
+                'MUSE_PINNED_SHA_AARCH64 = (\n    "' + "b" * 64 + '"\n)\n'
+            )
+            pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
+            with self.assertRaisesRegex(ValueError, "exactly one manifest retrieval date"):
+                updater.update_files(root, pins, retrieved="2026-01-02")
+
     def test_validates_both_files_before_writing_either(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -181,6 +224,7 @@ class MusePinUpdateTests(unittest.TestCase):
             installer.parent.mkdir(parents=True)
             original_installer = (
                 'MUSE_VERSION="1.4.6-R6000.1"\n'
+                '# From the stable-channel manifest (retrieved 2020-01-01 over TLS):\n'
                 'SHA_X86_LINUX="' + "a" * 64 + '"\n'
                 'SHA_AARCH64_LINUX="' + "b" * 64 + '"\n'
             )

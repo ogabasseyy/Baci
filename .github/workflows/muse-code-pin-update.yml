@@ -62,6 +62,20 @@ jobs:
           mkdir -p "$HOME"
           export GITHUB_PATH="${RUNNER_TEMP}/muse-smoke-path"
           bash .github/scripts/muse-review/install.sh
+          # install.sh only verifies the runner's own architecture;
+          # verify the ARM64 checksum against the real artifact too.
+          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' .github/scripts/muse-review/install.sh)"
+          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' .github/scripts/muse-review/install.sh)"
+          arm_bin="$(mktemp)"
+          curl --disable --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 600 -fsSL -o "$arm_bin" \
+            "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${version}&file=muse-aarch64-linux"
+          got_arm="$(sha256sum "$arm_bin" | awk '{print $1}')"
+          rm -f "$arm_bin"
+          if [[ "$got_arm" != "$want_arm" ]]; then
+            echo "::error::Muse ARM64 checksum mismatch for ${version}; refusing to open a pin update." >&2
+            exit 1
+          fi
 
       - name: Create pin update pull request
         env:

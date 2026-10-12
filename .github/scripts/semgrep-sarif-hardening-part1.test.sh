@@ -83,6 +83,9 @@ assert_eq "relevant-hyphen" "yes" "$(stanza_has semgrep_relevant trusted_changed
 assert_eq "relevant-underscore" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/semgrep_sarif_*')"
 assert_eq "trusted-hyphen" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/semgrep-sarif*')"
 assert_eq "trusted-underscore" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/semgrep_sarif_*')"
+assert_eq "relevant-pin-updater" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/muse-pin-update*')"
+assert_eq "trusted-pin-updater" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/muse-pin-update*')"
+assert_eq "trusted-pin-workflow" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/workflows/muse-code-pin-update.yml')"
 
 # --- base-revision filter execution (head replacement is ignored) ---
 # Mirrors the security.yml base-filter steps against scratch repos: base

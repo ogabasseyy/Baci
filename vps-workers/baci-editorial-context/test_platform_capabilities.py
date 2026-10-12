@@ -112,6 +112,10 @@ class CapabilityContextTests(unittest.TestCase):
                 result = capability_context()
             self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_duplicate_source_refs_fail_closed(self):
+        result = self.render(_register([_row(source_refs=["x", "x"])]))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_non_integer_schema_version_fails_closed(self):
         for bad in (True, 1.0):
             with self.subTest(schema_version=bad):
@@ -134,8 +138,16 @@ class CapabilityContextTests(unittest.TestCase):
             self.skipTest("repo checkout unavailable")
         data = json.loads(register_path.read_text())
         refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
+        repo_root = str(repo.resolve())
         for ref in refs:
-            self.assertTrue((repo / ref).exists(), f"cited source missing: {ref}")
+            resolved = (repo / ref).resolve()
+            self.assertTrue(str(resolved).startswith(repo_root + os.sep), f"cited source escapes repo: {ref}")
+            self.assertTrue(resolved.exists(), f"cited source missing: {ref}")
+            tracked = subprocess.run(
+                ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", ref],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(tracked.returncode, 0, f"cited source is not tracked: {ref}")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
         age = dt.datetime.now(dt.timezone.utc) - reviewed
         self.assertGreaterEqual(age, dt.timedelta(0), "register reviewed_at is future-dated; runtime would reject it")

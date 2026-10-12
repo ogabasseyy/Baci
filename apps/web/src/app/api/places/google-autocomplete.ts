@@ -49,7 +49,8 @@ export async function fetchGoogleAutocomplete(
       // would delay suggestions ~16.5s during the stalls fallback covers.
       { retryTimeouts: false }
     );
-    if (!result.ok)
+    if (!result.ok) {
+      console.error('[Places API] Autocomplete HTTP error:', result.status);
       return {
         status: result.status === 429 ? 429 : 502,
         body: {
@@ -57,10 +58,15 @@ export async function fetchGoogleAutocomplete(
           code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
         },
       };
+    }
     const data = result.data;
     if (data.status === 'ZERO_RESULTS')
       return { status: 200, body: { predictions: [] } };
-    if (data.status !== 'OK')
+    if (data.status !== 'OK') {
+      // Status only, never the key or error_message body: a silent
+      // REQUEST_DENIED would otherwise mask a key misconfiguration
+      // behind Geoapify fallback with no server-side signal.
+      console.error('[Places API] Autocomplete returned:', data.status);
       return {
         status:
           data.status === 'INVALID_REQUEST'
@@ -74,6 +80,7 @@ export async function fetchGoogleAutocomplete(
           code: 'PLACES_AUTOCOMPLETE_UPSTREAM_ERROR',
         },
       };
+    }
     const predictions = (data.predictions || [])
       .filter(
         (prediction) =>

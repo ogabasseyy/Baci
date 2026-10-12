@@ -142,6 +142,25 @@ describe('Google autocomplete provider boundary', () => {
     expect(result.status).toBe(expected);
     expect(JSON.stringify(result)).not.toContain('provider secret');
   });
+  it('logs the upstream status without provider secrets for server-side signal', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.mocked(fetchLegacyPlacesJson).mockResolvedValue(
+        legacyResponse({ status: 'REQUEST_DENIED', error_message: 'key bad' })
+      );
+      await fetchGoogleAutocomplete('Lagos');
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[Places API] Autocomplete returned:',
+        'REQUEST_DENIED'
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('key bad');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+        'places-test-key'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
   it.each([
     [429, 429],
     [403, 502],

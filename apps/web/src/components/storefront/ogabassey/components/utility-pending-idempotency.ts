@@ -10,34 +10,21 @@ import {
 
 
 /**
- * Cross-mount recall for wallet-only VTU idempotency keys (web).
+ * Cross-mount recall for wallet-only VTU idempotency keys (web). The
+ * key used to live in a ref, so Done + resubmit minted fresh and the
+ * server debited a SECOND transaction. This module registry survives
+ * remounts, so retries reuse the key and the route's idempotency row
+ * dedupes instead of double-charging.
  *
- * The key used to live in a `useUtilityPurchase` ref, so closing the
- * processing screen with Done unmounted it: reopening Utilities and
- * resubmitting the same purchase minted a fresh key and the server
- * debited a SECOND transaction. This module-level registry survives
- * remounts within the session, so a retry of the same purchase reuses
- * its key and the route's `vtu_idempotency_keys` row dedupes (returning
- * the live transaction state) instead of double-charging.
+ * Entries key by canonical purchase signature (server-fingerprint
+ * mirror), scoped to owner + merchant: same signature in means the
+ * same payload out, with the server 409 guard as backstop. Terminal
+ * outcomes MUST forget, or a later repeat buy reattaches to a dead key.
  *
- * Entries are keyed by the canonical purchase signature (mirroring the
- * server fingerprint), additionally scoped to the authenticated owner +
- * merchant (the signature itself omits identity, like the server hash):
- * same signature in means the same payload out, so recall can never
- * attach a key to a different purchase — and the server's 409 guard
- * stays the backstop if they ever diverge. Terminal outcomes
- * (success, key-rotating 4xx) MUST forget the signature, or a later
- * legitimate repeat purchase would reattach to a dead key.
- *
- * Durability: entries persist in localStorage (cross-tab) so a page
- * reload — or a retry in a new tab after a timeout — still replays
- * the same key instead of minting a fresh one and debiting twice.
- * All entries expire after a uniform 24h horizon (persisted and live
- * recall alike, regardless of reference state): 24h dwarfs any
- * plausible processing duration, while infinite retention would
- * accumulate unboundedly. Within the TTL the 5-minute stale window
- * arbitrates success replays of noted references against
- * `rememberedAt`.
+ * Durability: localStorage (cross-tab) so reloads and new-tab
+ * retries replay the same key. Uniform 24h TTL everywhere
+ * (persisted + live, any reference state); within it the 5-minute
+ * stale window arbitrates success replays of noted references.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
@@ -62,16 +49,24 @@ interface PendingVtuPurchase {
 const pendingPurchases = new Map<string, PendingVtuPurchase>();
 
 /**
- * Scopes deliberately deleted since the last persist. The cross-tab
- * sync must skip them, or it would resurrect just-forgotten,
- * TTL-dropped, or evicted entries from the not-yet-rewritten snapshot.
- * Cleared on every persist (the snapshot then matches the map).
+ * Scopes deliberately deleted since the last persist (scope ->
+ * deletion time). Sync imports snapshot tombstones here too, so a
+ * completed key deleted in another tab is dropped locally instead
+ * of written back on the next persist. Cleared on every persist
+ * (the snapshot then carries the tombstones).
  */
-const forgottenScopedKeys = new Set<string>();
+const forgottenScopedKeys = new Map<string, number>();
 
 /** Serializes live entries for localStorage (prunes TTL-expired). */
 export function serializePendingVtuPurchases(now: number = Date.now()): string {
-  return serializePendingVtuEntries(pendingPurchases, now);
+  return serializePendingVtuEntries(
+    pendingPurchases,
+    [...forgottenScopedKeys].map(([scoped, forgottenAt]) => ({
+      scoped,
+      forgottenAt,
+    })),
+    now
+  );
 }
 
 /**
@@ -83,7 +78,8 @@ export function hydratePendingVtuPurchases(
   serialized: string | null,
   now: number = Date.now()
 ): void {
-  for (const [scoped, entry] of parsePendingVtuSnapshot(serialized, now)) {
+  for (const [scoped, entry] of parsePendingVtuSnapshot(serialized, now)
+    .entries) {
     if (!pendingPurchases.has(scoped)) {
       pendingPurchases.set(scoped, entry);
     }
@@ -99,12 +95,28 @@ export function hydratePendingVtuPurchases(
  * async lock) — same class as double-device submits.
  */
 function syncPendingVtuPurchasesFromSnapshot(): void {
-  for (const [scoped, entry] of parsePendingVtuSnapshot(
-    loadPendingVtuSnapshot()
-  )) {
-    if (!forgottenScopedKeys.has(scoped) && !pendingPurchases.has(scoped)) {
-      pendingPurchases.set(scoped, entry);
+  const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+  for (const { scoped, forgottenAt } of snapshot.forgotten) {
+    const live = pendingPurchases.get(scoped);
+    if (live && live.rememberedAt <= forgottenAt) {
+      pendingPurchases.delete(scoped);
     }
+    const known = forgottenScopedKeys.get(scoped);
+    if (known === undefined || forgottenAt > known) {
+      forgottenScopedKeys.set(scoped, forgottenAt);
+    }
+  }
+  for (const [scoped, entry] of snapshot.entries) {
+    if (pendingPurchases.has(scoped)) {
+      continue;
+    }
+    const tombstonedAt = forgottenScopedKeys.get(scoped);
+    // A re-remembered entry (newer than the tombstone) still merges:
+    // only the deleted generation is suppressed.
+    if (tombstonedAt !== undefined && entry.rememberedAt <= tombstonedAt) {
+      continue;
+    }
+    pendingPurchases.set(scoped, entry);
   }
 }
 
@@ -154,7 +166,7 @@ export function recallPendingVtuKey(
   if (!pending) return undefined;
   if (now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
     pendingPurchases.delete(payloadSignature);
-    forgottenScopedKeys.add(payloadSignature);
+    forgottenScopedKeys.set(payloadSignature, now);
     persistPendingVtuPurchases();
     return undefined;
   }
@@ -174,14 +186,14 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
     if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
       pendingPurchases.delete(scoped);
-      forgottenScopedKeys.add(scoped);
+      forgottenScopedKeys.set(scoped, now);
       return;
     }
   }
   const oldest = pendingPurchases.keys().next();
   if (!oldest.done) {
     pendingPurchases.delete(oldest.value);
-    forgottenScopedKeys.add(oldest.value);
+    forgottenScopedKeys.set(oldest.value, now);
   }
 }
 
@@ -259,7 +271,7 @@ export function isStalePendingVtuSuccess(
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {
   pendingPurchases.delete(payloadSignature);
-  forgottenScopedKeys.add(payloadSignature);
+  forgottenScopedKeys.set(payloadSignature, Date.now());
   persistPendingVtuPurchases();
 }
 

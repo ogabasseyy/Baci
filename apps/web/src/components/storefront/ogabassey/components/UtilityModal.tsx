@@ -81,6 +81,7 @@ export const UtilityModal = ({
     step,
     successAmount,
     transactionRef,
+    transactionVoucherPin,
   } = useUtilityPurchase({
     activeTab,
     canFundByBankTransfer,
@@ -284,6 +285,7 @@ export const UtilityModal = ({
               onClose={handleClose}
               processing={step === 'processing'}
               reference={transactionRef}
+              voucherPin={transactionVoucherPin}
             />
           )}
         </div>

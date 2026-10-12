@@ -25,6 +25,7 @@ export type UtilityCheckoutResult =
       amount: number;
       processing: boolean;
       cashback?: UtilityCheckoutCashback;
+      voucherPin?: string;
     }
   // `status` is the HTTP status when the server answered, and undefined for
   // network failures and malformed bodies. Callers rotate the idempotency
@@ -104,6 +105,7 @@ export const submitUtilityCheckout = async ({
       amount: data.amount ?? payload.amount,
       processing: data.status === 'processing',
       ...(cashback ? { cashback } : {}),
+      ...(data.voucherPin ? { voucherPin: data.voucherPin } : {}),
     };
   } catch (error) {
     return {

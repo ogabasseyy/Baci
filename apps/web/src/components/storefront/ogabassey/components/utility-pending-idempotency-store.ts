@@ -30,6 +30,23 @@ export interface PersistedPendingVtuEntry {
   rememberedAt: number;
 }
 
+/**
+ * Deletion tombstone: a scope another tab deliberately forgot. Without
+ * these, tab B keeps a deleted entry in memory and writes it back on
+ * its next persist, resurrecting a completed key (stale success replay
+ * without a new debit). `forgottenAt` arbitrates against re-remember:
+ * an entry remembered after the tombstone wins.
+ */
+export interface PersistedVtuTombstone {
+  scoped: string;
+  forgottenAt: number;
+}
+
+export interface ParsedPendingVtuSnapshot {
+  entries: [string, PersistedPendingVtuEntry][];
+  forgotten: PersistedVtuTombstone[];
+}
+
 export type PendingVtuEntryInput = [
   string,
   { key: string; reference: string | null; rememberedAt: number },
@@ -51,13 +68,29 @@ function isPersistedEntry(
   );
 }
 
+function isPersistedTombstone(
+  value: unknown
+): value is PersistedVtuTombstone {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const tombstone = value as PersistedVtuTombstone;
+  return (
+    typeof tombstone.scoped === 'string' &&
+    typeof tombstone.forgottenAt === 'number'
+  );
+}
+
 /**
- * Serializes live entries for storage (prunes TTL-expired entries of
- * any reference state — mirrors live recall, so a single uniform 24h
- * horizon governs retention everywhere).
+ * Serializes live entries + deletion tombstones for storage (prunes
+ * TTL-expired entries of any reference state — mirrors live recall,
+ * so a single uniform 24h horizon governs retention everywhere;
+ * tombstones past the horizon are dropped too since the entries they
+ * guard have expired regardless).
  */
 export function serializePendingVtuEntries(
   entries: Iterable<PendingVtuEntryInput>,
+  forgotten: Iterable<PersistedVtuTombstone>,
   now: number = Date.now()
 ): string {
   const live: [string, PersistedPendingVtuEntry][] = [];
@@ -73,31 +106,48 @@ export function serializePendingVtuEntries(
       ]);
     }
   }
-  return JSON.stringify(live);
+  const liveForgotten: PersistedVtuTombstone[] = [];
+  for (const tombstone of forgotten) {
+    if (now - tombstone.forgottenAt <= PERSISTED_VTU_KEY_TTL_MS) {
+      liveForgotten.push({
+        scoped: tombstone.scoped,
+        forgottenAt: tombstone.forgottenAt,
+      });
+    }
+  }
+  return JSON.stringify({ entries: live, forgotten: liveForgotten });
 }
 
 /**
- * Parses a snapshot back into entries. Corrupt snapshots and
- * TTL-expired entries are dropped (mirrors live recall).
+ * Parses a snapshot back into entries + tombstones. Corrupt snapshots
+ * and TTL-expired items are dropped (mirrors live recall). Legacy
+ * bare-array snapshots (entries only) still parse, with no tombstones.
  */
 export function parsePendingVtuSnapshot(
   serialized: string | null,
   now: number = Date.now()
-): [string, PersistedPendingVtuEntry][] {
+): ParsedPendingVtuSnapshot {
+  const empty: ParsedPendingVtuSnapshot = { entries: [], forgotten: [] };
   if (!serialized) {
-    return [];
+    return empty;
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(serialized);
   } catch {
-    return [];
+    return empty;
   }
-  if (!Array.isArray(parsed)) {
-    return [];
+  const rawEntries = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { entries?: unknown })?.entries;
+  const rawForgotten = Array.isArray(parsed)
+    ? []
+    : ((parsed as { forgotten?: unknown })?.forgotten ?? []);
+  if (!Array.isArray(rawEntries) || !Array.isArray(rawForgotten)) {
+    return empty;
   }
   const entries: [string, PersistedPendingVtuEntry][] = [];
-  for (const item of parsed) {
+  for (const item of rawEntries) {
     if (!isPersistedEntry(item)) {
       continue;
     }
@@ -114,7 +164,17 @@ export function parsePendingVtuSnapshot(
       },
     ]);
   }
-  return entries;
+  const forgotten: PersistedVtuTombstone[] = [];
+  for (const item of rawForgotten) {
+    if (!isPersistedTombstone(item)) {
+      continue;
+    }
+    if (now - item.forgottenAt > PERSISTED_VTU_KEY_TTL_MS) {
+      continue;
+    }
+    forgotten.push({ scoped: item.scoped, forgottenAt: item.forgottenAt });
+  }
+  return { entries, forgotten };
 }
 
 export function loadPendingVtuSnapshot(): string | null {

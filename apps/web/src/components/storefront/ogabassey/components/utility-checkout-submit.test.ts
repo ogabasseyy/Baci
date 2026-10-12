@@ -92,6 +92,27 @@ describe('submitUtilityCheckout', () => {
     expect(seenSignatures[0]).not.toContain('Test Customer');
   });
 
+  it('carries the prepaid voucher PIN into the success result', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({
+        amount: 100,
+        reference: 'REF-PIN',
+        status: 'successful',
+        voucherPin: '1234-5678-9012',
+      })
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF-PIN',
+      amount: 100,
+      processing: false,
+      voucherPin: '1234-5678-9012',
+    });
+  });
+
   it('reports a processing wallet purchase without failing', async () => {
     mockFetchWithCsrf.mockResolvedValue(
       jsonResponse({ amount: 100, reference: 'REF1', status: 'processing' })

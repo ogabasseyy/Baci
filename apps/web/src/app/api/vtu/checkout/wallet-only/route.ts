@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import {
@@ -15,34 +16,6 @@ import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fa
 
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
-}
-
-function isUserFacingCheckoutError(message: string) {
-  const userFacingErrors = new Set([
-    'Biller name or provider key is required for bill payment',
-    'Customer account not found for this storefront',
-    'Failed to initiate purchase',
-    'Invalid customer phone number',
-    'Invalid phone number',
-    'Merchant not found',
-    'Monnify validation reference is required but missing',
-    'VTU is not enabled for this merchant',
-  ]);
-
-  return (
-    userFacingErrors.has(message) ||
-    /purchases are not enabled$/.test(message) ||
-    /^Amount for .+ must be exactly /.test(message) ||
-    /^Data bundle (?:amount changed|not found)/.test(message) ||
-    /^Invalid network provider/.test(message) ||
-    /^Maximum amount for .+ is /.test(message) ||
-    /^Minimum amount for .+ is /.test(message) ||
-    /^Monnify airtime biller not found for /.test(message) ||
-    /^Monnify airtime product not found for /.test(message) ||
-    /^Monnify product not found for /.test(message) ||
-    /^Monnify validation failed: /.test(message) ||
-    /^Multiple data bundles match/.test(message)
-  );
 }
 
 interface ExistingIdempotencyRow {

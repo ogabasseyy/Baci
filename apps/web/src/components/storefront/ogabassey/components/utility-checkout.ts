@@ -33,6 +33,8 @@ export interface UtilityCheckoutResponse {
   error?: string;
   reference?: string;
   status?: string;
+  /** Prepaid token (electricity etc.) — absent for airtime/data. */
+  voucherPin?: string;
 }
 
 /**
@@ -77,7 +79,9 @@ export function isUtilityCheckoutResponse(
     (response.error === undefined || typeof response.error === 'string') &&
     (response.reference === undefined ||
       typeof response.reference === 'string') &&
-    (response.status === undefined || typeof response.status === 'string')
+    (response.status === undefined || typeof response.status === 'string') &&
+    (response.voucherPin === undefined ||
+      typeof response.voucherPin === 'string')
   );
 }
 

@@ -67,17 +67,15 @@ interface UseUtilityPurchaseReturn {
   step: UtilityPurchaseStep;
   successAmount: number;
   transactionRef: string;
+  transactionVoucherPin: string | null;
 }
 
 /**
- * Purchase orchestration extracted from `UtilityModal` to keep that component
- * under the 300-line modularity budget. Owns the checkout submit lifecycle
- * (loading/success step, transaction reference, wallet-only idempotency) so the
- * modal only wires props and renders. Wallet-only: blocks the submit when the
- * balance cannot cover the bill and notifies the caller so it can open the
- * funding panel. Loading/error wallet states block separately (never reported
- * as insufficient funds), and the idempotency key is retained while a purchase
- * is processing so a resubmit replays instead of double-charging.
+ * Purchase orchestration extracted from `UtilityModal` (300-line budget).
+ * Owns the submit lifecycle (loading/step/reference/amount/voucher,
+ * idempotency); blocks underfunded submits (funding-panel callback) and
+ * loading/error wallet states separately, and retains the key while
+ * processing so resubmits replay instead of double-charging.
  */
 export function useUtilityPurchase({
   activeTab,
@@ -100,16 +98,16 @@ export function useUtilityPurchase({
   const [step, setStep] = useState<UtilityPurchaseStep>('details');
   const [transactionRef, setTransactionRef] = useState('');
   const [successAmount, setSuccessAmount] = useState(0);
-  // References whose debit is already reflected in the displayed balance. A
-  // retained key replays the SAME transaction on resubmit, so without this
-  // guard every processing replay would decrement the balance again.
+  const [transactionVoucherPin, setTransactionVoucherPin] = useState<
+    string | null
+  >(null);
+  // Debits already reflected in the displayed balance: a retained key
+  // replays the SAME transaction, so replays must not decrement again.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-  // Latest signed-in identity, refreshed every render. Compared against
-  // the submitter when a checkout resolves so an account switch (or
-  // sign-out) mid-flight discards the stale result instead of writing
-  // one customer's balance update + reference into another's session.
-  // User-first: customer-first would flip on row hydration and
-  // misclassify it as a switch (discard + double-debit the retry).
+  // Latest identity per render; a mid-flight switch discards the stale
+  // result instead of writing one customer's update into another's
+  // session. User-first: customer-first flips on hydration (false
+  // switch → discard + double-debit the retry).
   const latestIdentityRef = useRef<string | null>(null);
   latestIdentityRef.current = user?.id ?? customer?.id ?? null;
   const {
@@ -232,6 +230,7 @@ export function useUtilityPurchase({
       });
       setTransactionRef(result.reference);
       setSuccessAmount(result.amount);
+      setTransactionVoucherPin(result.voucherPin ?? null);
       // A 202 processing vend can still fail or be refunded — show the
       // pending screen, never the success screen.
       setStep(result.processing ? 'processing' : 'success');
@@ -296,5 +295,6 @@ export function useUtilityPurchase({
     step,
     successAmount,
     transactionRef,
+    transactionVoucherPin,
   };
 }

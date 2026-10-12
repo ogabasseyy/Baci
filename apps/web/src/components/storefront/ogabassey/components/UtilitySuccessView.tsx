@@ -8,6 +8,7 @@ interface UtilitySuccessViewProps {
   onClose: () => void;
   processing?: boolean;
   reference: string;
+  voucherPin?: string | null;
 }
 
 export function UtilitySuccessView({
@@ -16,6 +17,7 @@ export function UtilitySuccessView({
   onClose,
   processing = false,
   reference,
+  voucherPin,
 }: UtilitySuccessViewProps) {
   return (
     <div className="text-center py-8">
@@ -45,10 +47,16 @@ export function UtilitySuccessView({
           <span className="text-gray-500">Amount</span>
           <span className="font-medium">₦{amount.toLocaleString()}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between mb-2">
           <span className="text-gray-500">Ref</span>
           <span className="font-mono text-xs">{reference}</span>
         </div>
+        {voucherPin ? (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Voucher / Token</span>
+            <span className="font-mono text-xs">{voucherPin}</span>
+          </div>
+        ) : null}
       </div>
       <button
         type="button"

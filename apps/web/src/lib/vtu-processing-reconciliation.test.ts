@@ -24,6 +24,7 @@ function createProcessingQuery(response: {
       error: response.error ?? null,
     })),
     lte: vi.fn(() => query),
+    or: vi.fn(() => query),
     order: vi.fn(() => query),
     range: vi.fn(async () => ({
       count: response.count ?? null,
@@ -78,7 +79,9 @@ describe('reconcileProcessingVtuTransactions', () => {
       count: 'exact',
       head: true,
     });
-    expect(countQuery.eq).toHaveBeenCalledWith('status', 'processing');
+    expect(countQuery.or).toHaveBeenCalledWith(
+      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)'
+    );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
       'data',
@@ -92,7 +95,9 @@ describe('reconcileProcessingVtuTransactions', () => {
     );
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
-    expect(dataQuery.eq).toHaveBeenCalledWith('status', 'processing');
+    expect(dataQuery.or).toHaveBeenCalledWith(
+      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)'
+    );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
       '2026-05-07T21:13:15.000Z'
@@ -120,6 +125,35 @@ describe('reconcileProcessingVtuTransactions', () => {
       processing: 1,
       successful: 1,
     });
+  });
+
+  it('selects transient-marked pending rows so debited timeouts re-vend', async () => {
+    // A Monnify vend that times out before returning a reference is
+    // restored to pending: requery without a vendReference is PENDING
+    // forever, so only the pending claim → re-vend flow can resolve
+    // it. Plain pending rows stay excluded (mapping-less orphans).
+    const countQuery = createProcessingQuery({ count: 1 });
+    const dataQuery = createProcessingQuery({ data: [{ id: 'tx-retry' }] });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockResolvedValueOnce({
+      status: 'successful',
+    });
+
+    const result = await reconcileProcessingVtuTransactions({
+      limit: 1,
+      now: new Date('2026-05-07T21:14:00.000Z'),
+      supabase: supabase as never,
+    });
+
+    const expectedFilter =
+      'status.eq.processing,and(status.eq.pending,metadata->>monnifyTransientVendError.not.is.null)';
+    expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
+    expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
+      supabase,
+      transactionId: 'tx-retry',
+    });
+    expect(result.successful).toBe(1);
   });
 
   it('rotates reconciliation pages through the processing backlog', async () => {

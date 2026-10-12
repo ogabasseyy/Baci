@@ -19,15 +19,21 @@ function entry(overrides: Record<string, unknown> = {}) {
 describe('utility-pending-idempotency-store', () => {
   it('round-trips live entries through serialize and parse', () => {
     const rememberedAt = Date.now();
-    const serialized = serializePendingVtuEntries([
-      ['a', entry({ key: 'key-a', reference: 'REF-A', rememberedAt })],
-      ['b', entry({ key: 'key-b', rememberedAt })],
-    ]);
+    const serialized = serializePendingVtuEntries(
+      [
+        ['a', entry({ key: 'key-a', reference: 'REF-A', rememberedAt })],
+        ['b', entry({ key: 'key-b', rememberedAt })],
+      ],
+      []
+    );
 
-    expect(parsePendingVtuSnapshot(serialized)).toEqual([
-      ['a', entry({ key: 'key-a', reference: 'REF-A', rememberedAt })],
-      ['b', entry({ key: 'key-b', rememberedAt })],
-    ]);
+    expect(parsePendingVtuSnapshot(serialized)).toEqual({
+      entries: [
+        ['a', entry({ key: 'key-a', reference: 'REF-A', rememberedAt })],
+        ['b', entry({ key: 'key-b', rememberedAt })],
+      ],
+      forgotten: [],
+    });
   });
 
   it('drops TTL-expired entries on serialize and parse', () => {
@@ -36,15 +42,16 @@ describe('utility-pending-idempotency-store', () => {
     expect(
       serializePendingVtuEntries(
         [['a', entry()]],
+        [],
         Date.now() + dayMs + 1
       )
-    ).toBe('[]');
+    ).toBe('{"entries":[],"forgotten":[]}');
 
     expect(
       parsePendingVtuSnapshot(
         JSON.stringify([['a', entry({ rememberedAt: 1 })]])
       )
-    ).toEqual([]);
+    ).toEqual({ entries: [], forgotten: [] });
   });
 
   it('drops TTL-expired entries of any reference state on serialize and parse', () => {
@@ -56,9 +63,13 @@ describe('utility-pending-idempotency-store', () => {
 
     expect(
       parsePendingVtuSnapshot(
-        serializePendingVtuEntries([['a', expired]], Date.now() + dayMs + 1)
+        serializePendingVtuEntries(
+          [['a', expired]],
+          [],
+          Date.now() + dayMs + 1
+        )
       )
-    ).toEqual([]);
+    ).toEqual({ entries: [], forgotten: [] });
 
     expect(
       parsePendingVtuSnapshot(
@@ -66,16 +77,70 @@ describe('utility-pending-idempotency-store', () => {
           ['a', entry({ reference: 'REF-A', rememberedAt: 1 })],
         ])
       )
-    ).toEqual([]);
+    ).toEqual({ entries: [], forgotten: [] });
   });
 
   it('ignores corrupt snapshots on parse', () => {
-    expect(parsePendingVtuSnapshot('{oops')).toEqual([]);
-    expect(parsePendingVtuSnapshot('"just-a-string"')).toEqual([]);
-    expect(parsePendingVtuSnapshot(null)).toEqual([]);
+    const empty = { entries: [], forgotten: [] };
+    expect(parsePendingVtuSnapshot('{oops')).toEqual(empty);
+    expect(parsePendingVtuSnapshot('"just-a-string"')).toEqual(empty);
+    expect(parsePendingVtuSnapshot(null)).toEqual(empty);
     expect(
       parsePendingVtuSnapshot(JSON.stringify([['nope'], [42, {}], null]))
-    ).toEqual([]);
+    ).toEqual(empty);
+    expect(parsePendingVtuSnapshot(JSON.stringify({ entries: {} }))).toEqual(
+      empty
+    );
+  });
+
+  it('round-trips deletion tombstones and parses legacy bare-array snapshots', () => {
+    const now = Date.now();
+    const serialized = serializePendingVtuEntries(
+      [],
+      [{ scoped: 'gone', forgottenAt: now }],
+      now
+    );
+
+    expect(parsePendingVtuSnapshot(serialized, now)).toEqual({
+      entries: [],
+      forgotten: [{ scoped: 'gone', forgottenAt: now }],
+    });
+    // Legacy format (entries only, no tombstones) still parses.
+    expect(
+      parsePendingVtuSnapshot(
+        JSON.stringify([['a', entry({ rememberedAt: now })]]),
+        now
+      )
+    ).toEqual({
+      entries: [['a', entry({ rememberedAt: now })]],
+      forgotten: [],
+    });
+  });
+
+  it('drops TTL-expired tombstones on serialize and parse', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    expect(
+      parsePendingVtuSnapshot(
+        serializePendingVtuEntries(
+          [],
+          [{ scoped: 'old', forgottenAt: now }],
+          now + dayMs + 1
+        ),
+        now + dayMs + 1
+      )
+    ).toEqual({ entries: [], forgotten: [] });
+
+    expect(
+      parsePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [],
+          forgotten: [{ scoped: 'old', forgottenAt: 1 }],
+        }),
+        now
+      )
+    ).toEqual({ entries: [], forgotten: [] });
   });
 });
 

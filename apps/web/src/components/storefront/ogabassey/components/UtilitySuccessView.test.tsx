@@ -46,4 +46,32 @@ describe('UtilitySuccessView', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Success!')).not.toBeInTheDocument();
   });
+
+  it('renders the prepaid voucher token when the vend returns one', () => {
+    render(
+      <UtilitySuccessView
+        activeTab="electricity"
+        amount={1000}
+        onClose={vi.fn()}
+        reference="VTU-456"
+        voucherPin="1234-5678-9012"
+      />
+    );
+
+    expect(screen.getByText('Voucher / Token')).toBeInTheDocument();
+    expect(screen.getByText('1234-5678-9012')).toBeInTheDocument();
+  });
+
+  it('omits the voucher row when no token was returned', () => {
+    render(
+      <UtilitySuccessView
+        activeTab="airtime"
+        amount={500}
+        onClose={vi.fn()}
+        reference="VTU-789"
+      />
+    );
+
+    expect(screen.queryByText('Voucher / Token')).not.toBeInTheDocument();
+  });
 });

@@ -12,6 +12,8 @@ import {
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import {
+  loadPendingVtuSnapshot,
+  parsePendingVtuSnapshot,
   PERSISTED_VTU_KEY_TTL_MS,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
@@ -245,6 +247,52 @@ describe('utility-pending-idempotency', () => {
     );
 
     expect(recallPendingVtuKey('SIG-XTAB')).toBe('key-tab-a');
+  });
+
+  it('drops a locally-held entry another tab deleted (tombstone sync)', () => {
+    // Tab B holds SIG-DEL in memory while tab A completes it: A's
+    // forget persists a snapshot WITHOUT the entry but WITH a
+    // tombstone. B's next recall must drop its in-memory copy — if B
+    // wrote it back, an identical purchase would replay the completed
+    // transaction as a new success without a new debit.
+    const key = getPendingVtuKey('SIG-DEL');
+    expect(recallPendingVtuKey('SIG-DEL')).toBe(key);
+
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [],
+        forgotten: [{ scoped: 'SIG-DEL', forgottenAt: Date.now() }],
+      })
+    );
+
+    expect(recallPendingVtuKey('SIG-DEL')).toBeUndefined();
+    // B's next persist carries the tombstone but not the entry.
+    getPendingVtuKey('SIG-OTHER');
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries.map(([scoped]) => scoped)).not.toContain(
+      'SIG-DEL'
+    );
+    expect(snapshot.forgotten.map((t) => t.scoped)).toContain('SIG-DEL');
+  });
+
+  it('merges a re-remembered entry newer than its tombstone', () => {
+    // A forget followed by a same-scope resubmit: the new generation
+    // (rememberedAt past the tombstone) must still merge in a third
+    // tab, or it would mint fresh and double-debit.
+    const now = Date.now();
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [
+          [
+            'SIG-NEW',
+            { key: 'key-new', reference: null, rememberedAt: now },
+          ],
+        ],
+        forgotten: [{ scoped: 'SIG-NEW', forgottenAt: now - 1000 }],
+      })
+    );
+
+    expect(recallPendingVtuKey('SIG-NEW')).toBe('key-new');
   });
 
   it('never flags reference-less entries as stale', () => {

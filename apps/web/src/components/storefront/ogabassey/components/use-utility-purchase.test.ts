@@ -135,6 +135,7 @@ describe('useUtilityPurchase', () => {
       reference: 'REF123',
       amount: 1000,
       processing: false,
+      voucherPin: 'TOKEN-1',
     });
     const clearIntent = vi.fn();
     const setWalletBalance = vi.fn();
@@ -150,6 +151,7 @@ describe('useUtilityPurchase', () => {
     expect(clearIntent).toHaveBeenCalledTimes(1);
     expect(result.current.transactionRef).toBe('REF123');
     expect(result.current.successAmount).toBe(1000);
+    expect(result.current.transactionVoucherPin).toBe('TOKEN-1');
     // Balance is debited via a functional update (5000 - 1000).
     const updater = setWalletBalance.mock.calls[0][0] as (n: number) => number;
     expect(updater(5000)).toBe(4000);

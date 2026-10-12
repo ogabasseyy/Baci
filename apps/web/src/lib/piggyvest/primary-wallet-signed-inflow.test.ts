@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { applyPrimaryWalletSignedInflow } from './primary-wallet-signed-inflow';
 
@@ -10,7 +10,12 @@ vi.mock('./primary-wallet-inflow-receipt', () => ({
     return { eventId: 'test-event', providerWalletId: 'test-wallet' };
   }),
 }));
-const secret = 'test-only-webhook-secret';
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
+const secret = createHash('sha256')
+  .update('test-only-webhook-secret')
+  .digest('hex');
 const rawBody = Buffer.from('{ "eventId": "test-event" }');
 const signature = createHmac('sha512', secret).update(rawBody).digest('hex');
 

@@ -4,7 +4,7 @@ import type { ValidUtilityType } from '@/components/utilities/utility-purchase.t
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
-import { settlePendingVtuByReference } from '@/lib/pending-vtu-idempotency';
+import { forgetPendingVtuByReference } from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { VtuHistoryResponseSchema } from '@/schemas/vtu-history';
 import { useAuthStore } from '@/stores/auth-store';
@@ -164,18 +164,16 @@ async function fetchVoucherPin({
   const status = typeof match?.status === 'string' ? match.status : null;
   const refundPending =
     typeof match?.refund_pending === 'boolean' ? match.refund_pending : null;
-  // Terminality learned from history settles the retained registry
-  // entry (success marks completion; failure forgets, but only once
-  // the refund is confirmed — settling on an unconfirmed failure
-  // would refresh the wallet against the still-debited balance with
-  // no later refresh when the refund lands). The response path never
-  // saw it, so without this the stale guard could never fire.
+  // Terminality learned from history forgets the retained registry
+  // entry: the success is shown, so an identical repeat is a new
+  // intent that must mint fresh — keeping the key would present the
+  // previous vend as the new purchase without delivering anything.
+  // Failure forgets only once the refund is confirmed, or the wallet
+  // would refresh against the still-debited balance with no later
+  // refresh when the refund lands.
   const failedTerminal = status === 'failed' && refundPending === false;
   if (reference && (status === 'successful' || failedTerminal)) {
-    settlePendingVtuByReference(
-      reference,
-      status === 'successful' ? 'successful' : 'failed'
-    );
+    forgetPendingVtuByReference(reference);
   }
   return { pin: pin || null, status, refundPending };
 }

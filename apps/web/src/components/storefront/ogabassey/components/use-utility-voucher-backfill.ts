@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { settlePendingVtuByReference } from './utility-pending-idempotency';
+import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 
 // Bill-style purchases (power, TV, betting) may receive their voucher /
 // token after the initial 202 returns, once the provider reports back.
@@ -221,18 +221,16 @@ export function useUtilityVoucherBackfill({
         if (parsed) {
           // Surface every observation (e.g. failed with a pending
           // refund) while polling continues. Settlement is decoupled
-          // from the pin hunt: success marks completion (and
-          // confirmed failure forgets) on first observation, while
-          // the loop may keep hunting a late token.
+          // from the pin hunt: terminality forgets the retained entry
+          // on first observation (the success is shown, so a repeat
+          // must mint fresh), while the loop may keep hunting a
+          // late token.
           setBackfill(parsed);
           if (
             parsed.successful ||
             (parsed.failed && parsed.refundConfirmed)
           ) {
-            settlePendingVtuByReference(
-              reference,
-              parsed.failed ? 'failed' : 'successful'
-            );
+            forgetPendingVtuByReference(reference);
           }
           if (isTerminalBackfill(parsed, tokenExpected)) {
             return;

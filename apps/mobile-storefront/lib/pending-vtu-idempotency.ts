@@ -255,30 +255,20 @@ export function isStalePendingVtuSuccess(
 }
 
 /**
- * Settles retained entries by NOTED server reference. The voucher
- * backfill learns terminality from history — not from a response — so
- * it knows the reference but not the descriptor. Success marks
- * completion (the stale guard then arbitrates replays); failure
- * forgets (a retry must mint fresh — replaying a dead row wedges the
- * customer on the old error). First mark wins.
+ * Forgets retained entries by NOTED server reference. The backfill
+ * learns terminality from history — not from a response — so it knows
+ * the reference but not the descriptor. Terminality always forgets:
+ * the success is SHOWN, so an identical repeat is a new intent that
+ * must mint fresh — keeping the key would present the previous vend
+ * as the new purchase without delivering anything. (Marking is
+ * reserved for UNSHOWN completions on the switched path.)
  */
-export function settlePendingVtuByReference(
-  reference: string,
-  status: 'successful' | 'failed',
-  now: number = Date.now()
-): void {
+export function forgetPendingVtuByReference(reference: string): void {
   let touched = false;
   for (const [descriptor, pending] of pendingPurchases) {
     if (pending.reference !== reference) continue;
-    if (status === 'successful') {
-      if (pending.completedAt === null) {
-        pending.completedAt = now;
-        touched = true;
-      }
-    } else {
-      pendingPurchases.delete(descriptor);
-      touched = true;
-    }
+    pendingPurchases.delete(descriptor);
+    touched = true;
   }
   if (touched) persistPendingVtuPurchases();
 }

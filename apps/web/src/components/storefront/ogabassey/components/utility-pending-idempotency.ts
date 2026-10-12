@@ -159,17 +159,18 @@ export function markPendingVtuCompleted(
 }
 
 /**
- * Settles retained entries by NOTED server reference. The settlement
+ * Forgets retained entries by NOTED server reference. The settlement
  * pollers learn terminality from history — not from a response — so
- * they know the reference but not the signature. Success marks
- * completion (the stale guard then arbitrates replays: present as a
- * retry briefly, "Already Completed" after); failure forgets instead
- * (a retry must mint fresh and attempt anew — replaying a dead row
- * would wedge the customer on the old error). First mark wins.
+ * they know the reference but not the signature. Terminality always
+ * forgets (mirroring the view's settle-on-success): the success is
+ * SHOWN, so an identical repeat is a new intent that must mint fresh
+ * and deliver anew — keeping the key would present the previous vend
+ * as the new purchase without delivering anything. (Marking is
+ * reserved for UNSHOWN completions on the switched path, where the
+ * stale guard arbitrates replays.)
  */
-export function settlePendingVtuByReference(
+export function forgetPendingVtuByReference(
   reference: string,
-  status: 'successful' | 'failed',
   now: number = Date.now()
 ): void {
   let touched = false;
@@ -177,16 +178,9 @@ export function settlePendingVtuByReference(
     if (pending.reference !== reference) {
       continue;
     }
-    if (status === 'successful') {
-      if (pending.completedAt === null) {
-        pending.completedAt = now;
-        touched = true;
-      }
-    } else {
-      pendingVtuPurchases.delete(scoped);
-      forgottenScopedKeys.set(scoped, now);
-      touched = true;
-    }
+    pendingVtuPurchases.delete(scoped);
+    forgottenScopedKeys.set(scoped, now);
+    touched = true;
   }
   if (touched) {
     persistPendingVtuPurchases();

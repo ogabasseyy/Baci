@@ -1,6 +1,7 @@
 import {
   buildVtuPurchaseDescriptor,
   clearPendingVtuKeys,
+  forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
@@ -11,7 +12,6 @@ import {
   rememberPendingVtuPurchase,
   scopePendingVtuKey,
   serializePendingVtuPurchases,
-  settlePendingVtuByReference,
 } from './pending-vtu-idempotency';
 import { PERSISTED_VTU_KEY_TTL_MS } from './pending-vtu-idempotency-store';
 
@@ -169,7 +169,7 @@ describe('pending-vtu-idempotency', () => {
     ).toBe(true);
   });
 
-  it('settles retained entries by noted reference on terminal history', () => {
+  it('forgets retained entries by noted reference on terminal history', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 4,
@@ -179,46 +179,14 @@ describe('pending-vtu-idempotency', () => {
     notePendingVtuReference(descriptor, 'REF-SETTLE');
 
     // Unknown references touch nothing.
-    settlePendingVtuByReference('REF-OTHER', 'successful');
-    expect(
-      isStalePendingVtuSuccess(
-        descriptor,
-        'REF-SETTLE',
-        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(false);
+    forgetPendingVtuByReference('REF-OTHER');
+    expect(recallPendingVtuKey(descriptor)).toBe('key-settle');
 
-    // Observed success marks completion: fresh replays present, old
-    // ones prompt a fresh submit. First observation wins.
-    const completedAt = Date.now();
-    settlePendingVtuByReference('REF-SETTLE', 'successful', completedAt);
-    settlePendingVtuByReference(
-      'REF-SETTLE',
-      'successful',
-      completedAt + 10_000
-    );
-    expect(isStalePendingVtuSuccess(descriptor, 'REF-SETTLE')).toBe(false);
-    expect(
-      isStalePendingVtuSuccess(
-        descriptor,
-        'REF-SETTLE',
-        completedAt + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(true);
-  });
-
-  it('forgets retained entries by noted reference on failed history', () => {
-    const descriptor = buildVtuPurchaseDescriptor({
-      type: 'data',
-      amount: 5,
-      phoneNumber: 'settle-fail-check',
-    });
-    rememberPendingVtuPurchase(descriptor, 'key-settle-fail');
-    notePendingVtuReference(descriptor, 'REF-FAIL');
-
-    // A retry must mint fresh and attempt anew — replaying a dead row
-    // would wedge the customer on the old error.
-    settlePendingVtuByReference('REF-FAIL', 'failed');
+    // Observed terminality forgets: the success is shown, so an
+    // identical repeat is a new intent that must mint fresh and
+    // deliver anew — keeping the key would present the previous vend
+    // as the new purchase without delivering anything.
+    forgetPendingVtuByReference('REF-SETTLE');
 
     expect(recallPendingVtuKey(descriptor)).toBeNull();
   });
@@ -296,10 +264,11 @@ describe('pending-vtu-idempotency', () => {
     // retrying it would mint fresh and double-debit. Only past-TTL
     // entries are eviction victims; live overflow is cheap and the
     // 7-day TTL bounds retention.
+    // Deterministic fixtures only (no Date.now/Math.random): the loop
+    // index already guarantees uniqueness.
     const descriptors = Array.from(
       { length: 40 },
-      (_, index) =>
-        `evict-${index}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      (_, index) => `evict-${index}-fixed`
     );
     for (const descriptor of descriptors) {
       rememberPendingVtuPurchase(descriptor, `key-${descriptor}`);

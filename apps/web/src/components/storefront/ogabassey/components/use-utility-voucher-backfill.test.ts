@@ -2,9 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
-  isStalePendingVtuSuccess,
   notePendingVtuReference,
-  PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
@@ -531,7 +529,7 @@ describe('useUtilityVoucherBackfill', () => {
     expect(url).toContain('type=electricity');
   });
 
-  it('marks the retained entry when history reports success', async () => {
+  it('forgets the retained entry when history reports success', async () => {
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"hook":true}', 'key-hook');
     notePendingVtuReference('{"hook":true}', 'VTU-1');
@@ -546,7 +544,9 @@ describe('useUtilityVoucherBackfill', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    // Airtime: no token can arrive, so success settles the loop.
+    // Airtime: no token can arrive, so success settles the loop. The
+    // success is shown, so the entry is forgotten: an identical
+    // repeat must mint fresh rather than replay the old vend.
     renderHook(() => useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
@@ -555,16 +555,7 @@ describe('useUtilityVoucherBackfill', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(
-      isStalePendingVtuSuccess('{"hook":true}', 'VTU-1')
-    ).toBe(false);
-    expect(
-      isStalePendingVtuSuccess(
-        '{"hook":true}',
-        'VTU-1',
-        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(true);
+    expect(recallPendingVtuKey('{"hook":true}')).toBeUndefined();
   });
 
   it('keeps hunting a token for pin-less bill successes', async () => {
@@ -582,21 +573,15 @@ describe('useUtilityVoucherBackfill', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    // Power: success settles the registry immediately, but the loop
-    // keeps polling while a late token may still arrive.
+    // Power: success forgets the retained entry immediately, but
+    // the loop keeps polling while a late token may still arrive.
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
 
     expect(result.current.successful).toBe(true);
-    expect(
-      isStalePendingVtuSuccess(
-        '{"hook-token":true}',
-        'VTU-1',
-        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(true);
+    expect(recallPendingVtuKey('{"hook-token":true}')).toBeUndefined();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS

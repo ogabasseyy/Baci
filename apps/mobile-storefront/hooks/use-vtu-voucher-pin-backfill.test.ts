@@ -201,7 +201,7 @@ describe('useVtuVoucherPinBackfill', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it('polls telco types for settlement and marks the retained entry', async () => {
+  it('polls telco types for settlement and forgets the retained entry', async () => {
     rememberPendingVtuPurchase('hook-telco', 'key-hook-telco');
     notePendingVtuReference('hook-telco', 'REF-001');
     mockFetchWithTimeout.mockResolvedValue(
@@ -226,15 +226,9 @@ describe('useVtuVoucherPinBackfill', () => {
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
     expect(result.current).toEqual({ pin: null, status: 'successful' });
-    // ...and settles the registry so the stale guard can fire later.
-    expect(isStalePendingVtuSuccess('hook-telco', 'REF-001')).toBe(false);
-    expect(
-      isStalePendingVtuSuccess(
-        'hook-telco',
-        'REF-001',
-        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(true);
+    // ...and forgets the retained entry so an identical repeat
+    // mints fresh instead of replaying the old vend.
+    expect(recallPendingVtuKey('hook-telco')).toBeNull();
   });
 
   it('forgets the retained entry when history reports failure', async () => {
@@ -312,18 +306,12 @@ describe('useVtuVoucherPinBackfill', () => {
       { wrapper }
     );
 
-    // Success settles the registry and reports immediately...
+    // Success forgets the retained entry and reports immediately...
     await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(result.current).toEqual({ pin: null, status: 'successful' })
     );
-    expect(
-      isStalePendingVtuSuccess(
-        'hook-token',
-        'REF-001',
-        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
-      )
-    ).toBe(true);
+    expect(recallPendingVtuKey('hook-token')).toBeNull();
     // ...but the pin hunt continues while a token may still arrive.
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
     await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(2));

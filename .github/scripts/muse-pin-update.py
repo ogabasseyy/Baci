@@ -129,8 +129,20 @@ def update_files(root, pins, retrieved=None):
                                r'(?s)^MUSE_PINNED_SHA_AARCH64 = \(\n.*?\n\)',
                                'MUSE_PINNED_SHA_AARCH64 = (\n    "' + pins["aarch64"] + '"\n)',
                                "auditor ARM checksum")
-    install.write_text(install_text)
-    anchors.write_text(anchor_text)
+    # Stage both files beside their targets first, then rename, so a
+    # failure before the renames leaves the pair untouched instead of
+    # desyncing the installer and auditor pins.
+    staged = []
+    try:
+        for target, text in ((install, install_text), (anchors, anchor_text)):
+            tmp = target.with_name(target.name + ".tmp")
+            tmp.write_text(text)
+            staged.append((tmp, target))
+        for tmp, target in staged:
+            os.replace(tmp, target)
+    finally:
+        for tmp, _ in staged:
+            tmp.unlink(missing_ok=True)
 
 
 def current_pinned_version(root):
@@ -139,6 +151,14 @@ def current_pinned_version(root):
                       anchors.read_text(), flags=re.MULTILINE)
     if not match:
         raise ValueError("could not read the current pinned version")
+    installer = root / ".github/scripts/muse-review/install.sh"
+    install_match = re.search(r'^MUSE_VERSION="([^"]+)"$',
+                              installer.read_text(), flags=re.MULTILINE)
+    if not install_match:
+        raise ValueError("could not read the current installer version")
+    if install_match.group(1) != match.group(1):
+        raise ValueError("installer and auditor pins disagree: "
+                         + install_match.group(1) + " vs " + match.group(1))
     return match.group(1)
 
 

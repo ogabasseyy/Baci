@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   PilotInventoryBinding,
@@ -34,10 +35,17 @@ export async function verifyOutputHashes(
     seen.add(tier.path);
     let bytes: Buffer;
     try {
-      const read = await readUpToBytes(
-        join(outputRoot, 'generations', generationId, tier.path),
-        tier.bytes
-      );
+      // A FIFO, socket, or device in place of a published tier would
+      // block the bounded reader in open()/read() (the byte ceiling
+      // bounds reads, not waits), hanging lab startup past any
+      // deadline instead of reporting a hash mismatch. Only regular
+      // files verify; links and special files fail like a mismatch.
+      const tierPath = join(outputRoot, 'generations', generationId, tier.path);
+      const entry = await lstat(tierPath).catch(() => null);
+      if (entry && (entry.isSymbolicLink() || !entry.isFile())) {
+        return `output is not a regular file: ${tier.path}`;
+      }
+      const read = await readUpToBytes(tierPath, tier.bytes);
       if (read.truncated) {
         return `byte size changed: ${tier.path}`;
       }

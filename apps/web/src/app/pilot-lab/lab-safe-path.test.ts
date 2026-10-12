@@ -19,6 +19,13 @@ describe('isSafeRelativePath', () => {
     expect(isSafeRelativePath('dir\\file.png')).toBe(false);
   });
 
+  it('rejects Windows drive-letter absolute paths', () => {
+    expect(isSafeRelativePath('C:/evil.png')).toBe(false);
+    expect(isSafeRelativePath('C:evil.png')).toBe(false);
+    expect(isSafeRelativePath('d:/evil.png')).toBe(false);
+    expect(isSafeRelativePath('snapshot:v2.png')).toBe(true);
+  });
+
   it('rejects dot segments and empty segments', () => {
     expect(isSafeRelativePath('../escape.png')).toBe(false);
     expect(isSafeRelativePath('dir/../escape.png')).toBe(false);

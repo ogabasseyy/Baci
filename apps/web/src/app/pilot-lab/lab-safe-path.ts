@@ -6,6 +6,9 @@
 // realpath confinement; this is the input-validation layer with lab
 // errors instead of incidental throws.
 const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
+// Windows drive-letter absolute paths ('C:/evil', 'C:evil') pass the
+// slash/backslash/segment checks, so the prefix rejects explicitly.
+const DRIVE_LETTER_PATTERN = /^[A-Za-z]:/;
 
 function hasControlCharacter(value: string): boolean {
   for (const character of value) {
@@ -53,6 +56,7 @@ export function isSafeRelativePath(value: string): boolean {
     if (
       layer.startsWith('/') ||
       layer.includes('\\') ||
+      DRIVE_LETTER_PATTERN.test(layer) ||
       hasControlCharacter(layer) ||
       ENCODED_SEPARATOR_PATTERN.test(layer)
     ) {

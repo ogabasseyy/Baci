@@ -133,3 +133,83 @@ export async function reconcileStagedTree(input: {
   }
   return removed;
 }
+
+// Startup/request twin of reconcileStagedTree (which only runs at
+// stage time): a regular file planted under originals/ or a current
+// generation AFTER staging passes the boot guard — links and
+// non-regular files are all it rejects — and sits in Next's static
+// /__pilot namespace with no inventory, manifest, or acceptance
+// binding, while verification only re-checks the expected stagedPaths.
+// Every file under originals/ and current generation dirs must be an
+// expected staged path; nested dirs, links, and special files refuse.
+// Stale generation dirs (previous runs, no current binding) stay
+// accepted: the startup guard serves them by design, and the next
+// stage reconciles them away.
+export async function assertNoUnexpectedStagedFiles(
+  stagedPaths: readonly { path: string }[]
+): Promise<void> {
+  // The stage root derives from the allowlist itself (every staged path
+  // sits two levels under it), so callers pass no second root that
+  // could disagree with the allowlist. Mixed roots fail closed.
+  const stages = new Set<string>();
+  for (const entry of stagedPaths) {
+    const real = await realpath(entry.path).catch(() => null);
+    if (real) {
+      stages.add(join(real, '..', '..'));
+    }
+  }
+  if (stages.size === 0) {
+    return;
+  }
+  if (stages.size > 1) {
+    throw new Error(
+      'merchant image pilot: staged paths span multiple stage roots'
+    );
+  }
+  const [realStage] = [...stages];
+  const expected = new Set<string>();
+  for (const entry of stagedPaths) {
+    const real = await realpath(entry.path).catch(() => null);
+    if (real) {
+      expected.add(real);
+    }
+  }
+  const currentGenDirs = new Set<string>();
+  for (const file of expected) {
+    const [top] = relative(realStage, file).split(sep);
+    if (top && HEX64_PATTERN.test(top)) {
+      currentGenDirs.add(join(realStage, top));
+    }
+  }
+  const checkDir = async (dir: string, label: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(
+      () => null
+    );
+    if (!entries) {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        throw new Error(
+          `merchant image pilot: unexpected staged directory "${entry.name}" under ${label}`
+        );
+      }
+      if (!entry.isFile()) {
+        throw new Error(
+          `merchant image pilot: staged entry "${entry.name}" under ${label} is not a regular file`
+        );
+      }
+      const real = await realpath(full);
+      if (!expected.has(real)) {
+        throw new Error(
+          `merchant image pilot: staged file "${entry.name}" under ${label} has no inventory binding`
+        );
+      }
+    }
+  };
+  await checkDir(join(realStage, 'originals'), 'originals');
+  for (const dir of currentGenDirs) {
+    await checkDir(dir, 'a current generation');
+  }
+}

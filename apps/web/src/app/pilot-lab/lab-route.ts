@@ -8,6 +8,7 @@ import {
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { assertNoUnexpectedStagedFiles } from '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile';
 import {
   getFrozenLabRuntime,
   publishLabRuntime,
@@ -189,6 +190,7 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   // on the request path — the stat fingerprint fast-path makes repeat
   // GETs cheap, and any drift fails closed with the operator fix.
   await verifyStagedBytes(config.stagedPaths);
+  await assertNoUnexpectedStagedFiles(config.stagedPaths);
   return config;
 }
 
@@ -242,6 +244,7 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
     // otherwise keep serving bad URLs. Fail closed with the operator fix
     // instead.
     await verifyStagedBytes(cachedConfig.config.stagedPaths);
+    await assertNoUnexpectedStagedFiles(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
   const inflight = inflightLoads.get(key);
@@ -268,6 +271,7 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
       // replay the stale failure instead of retrying.
       try {
         await verifyStagedBytes(config.stagedPaths);
+        await assertNoUnexpectedStagedFiles(config.stagedPaths);
         cachedConfig = { config, key };
         return config;
       } finally {

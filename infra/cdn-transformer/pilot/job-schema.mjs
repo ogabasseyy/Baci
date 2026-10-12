@@ -18,6 +18,9 @@ export class PilotInventoryError extends Error {
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ASSET_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
+// Windows drive-letter absolute paths ('C:/evil', 'C:evil') pass the
+// slash/backslash/segment checks, so the prefix rejects explicitly.
+const DRIVE_LETTER_PATTERN = /^[A-Za-z]:/;
 
 function hasControlCharacter(value) {
   for (const character of value) {
@@ -61,6 +64,7 @@ function isConfinedRelativePath(value) {
     if (
       layer.startsWith('/') ||
       layer.includes('\\') ||
+      DRIVE_LETTER_PATTERN.test(layer) ||
       hasControlCharacter(layer) ||
       ENCODED_SEPARATOR_PATTERN.test(layer)
     ) {

@@ -10,7 +10,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { reconcileStagedTree } from './lab-config-stage-reconcile';
+import {
+  assertNoUnexpectedStagedFiles,
+  reconcileStagedTree,
+} from './lab-config-stage-reconcile';
 
 const GEN = 'a'.repeat(64);
 
@@ -179,4 +182,70 @@ describe('reconcileStagedTree', () => {
       await expect(lstat(stale)).resolves.toBeDefined();
     }
   );
+});
+
+describe('assertNoUnexpectedStagedFiles', () => {
+  const staged = (pilotStage: string) => [
+    { path: join(pilotStage, GEN, 'tier-w800.avif') },
+    { path: join(pilotStage, 'originals', 'merchant.png') },
+  ];
+
+  async function seedExpected(pilotStage: string) {
+    await writeFile(join(pilotStage, GEN, 'tier-w800.avif'), 'tier');
+    await writeFile(join(pilotStage, 'originals', 'merchant.png'), 'orig');
+  }
+
+  it('accepts exactly the allowlisted staged files', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+  });
+
+  it('rejects regular files planted after staging', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await writeFile(join(pilotStage, 'originals', 'planted.png'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+  });
+
+  it('rejects plants inside current generations but not stale ones', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await writeFile(join(pilotStage, GEN, 'planted.avif'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+    // Stale generation dirs (previous runs) stay accepted by design.
+    const stale = join(pilotStage, 'b'.repeat(64));
+    await mkdir(stale, { recursive: true });
+    await writeFile(join(stale, 'old.avif'), 'stale');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/planted\.avif/);
+  });
+
+  it('rejects nested dirs, links, and special files', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await mkdir(join(pilotStage, 'originals', 'nested'), { recursive: true });
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/unexpected staged directory/);
+  });
+
+  it('rejects a symlink planted in originals', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await symlink(
+      join(pilotStage, 'originals', 'merchant.png'),
+      join(pilotStage, 'originals', 'link.png')
+    );
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/not a regular file/);
+  });
 });

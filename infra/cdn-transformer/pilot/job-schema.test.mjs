@@ -81,6 +81,8 @@ test('rejects absolute paths, traversal, and encoded separators', () => {
     '..%2fescape.png',
     'a\x00b.png',
     'a\nb.png',
+    'C:/evil.png',
+    'C:evil.png',
     '',
     'x'.repeat(257),
   ];

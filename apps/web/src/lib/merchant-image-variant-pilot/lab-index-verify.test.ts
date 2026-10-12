@@ -41,6 +41,21 @@ describe('verifyOutputHashes', () => {
     expect(error).toBeNull();
   });
 
+  it('rejects a FIFO tier instead of blocking on it', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const { execFileSync } = await import('node:child_process');
+    const outputRoot = await setupGeneration({});
+    execFileSync('mkfifo', [
+      join(outputRoot, 'generations', GENERATION_ID, 'stuck.avif'),
+    ]);
+    const error = await verifyOutputHashes(outputRoot, GENERATION_ID, {
+      tiers: [{ bytes: 4, path: 'stuck.avif', sha256: '0'.repeat(64) }],
+    } as never);
+    expect(error).toMatch(/output is not a regular file: stuck\.avif/);
+  });
+
   it('reports a missing tier file', async () => {
     const outputRoot = await setupGeneration({});
     const error = await verifyOutputHashes(outputRoot, GENERATION_ID, {

@@ -94,6 +94,9 @@ export function validInventoryRecord(record) {
 // empty/dot/dot-dot segments. Offline must never report ok for an
 // inventory the route rejects.
 const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
+// Windows drive-letter absolute paths ('C:/evil', 'C:evil') pass the
+// slash/backslash/segment checks, so the prefix rejects explicitly.
+const DRIVE_LETTER_PATTERN = /^[A-Za-z]:/;
 
 function hasControlCharacter(value) {
   for (const character of value) {
@@ -137,6 +140,7 @@ export function isSafeRelativePath(value) {
     if (
       layer.startsWith('/') ||
       layer.includes('\\') ||
+      DRIVE_LETTER_PATTERN.test(layer) ||
       hasControlCharacter(layer) ||
       ENCODED_SEPARATOR_PATTERN.test(layer)
     ) {

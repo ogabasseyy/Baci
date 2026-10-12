@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   realpath,
+  rename,
   unlink,
   writeFile,
 } from 'node:fs/promises';
@@ -163,28 +164,52 @@ export async function acquireClaim(outputRoot, job, runToken) {
 
 export async function releaseClaim(outputRoot, job, runToken) {
   const path = claimPath(outputRoot, job);
-  const text = await readClaimText(path).catch((error) => {
-    if (error?.code === 'ENOENT') {
-      return null;
+  // Atomic release, mirroring the encoder-lock protocol: move the
+  // pathname aside, then verify the MOVED file is our claim before
+  // deleting. Read-then-unlink would delete a successor's claim
+  // published between the read and the unlink, leaving its live
+  // staging dir claimless to recovery and sweep code. A foreign or
+  // corrupt moved-aside claim is restored (link fails closed when a
+  // successor already claimed the path; the stray .tmp then lingers
+  // inert — never read as a claim) before refusing.
+  const releasing = join(
+    outputRoot,
+    'claims',
+    `releasing-${runToken}-${process.pid}-${randomUUID()}.tmp`
+  );
+  try {
+    await rename(path, releasing);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
     }
-    throw error;
-  });
-  if (text === null) {
     return false;
   }
-  const existing = parseClaimFile(text);
-  if (existing.runToken !== runToken) {
+  let movedToken;
+  try {
+    movedToken = parseClaimFile(await readClaimText(releasing)).runToken;
+  } catch (error) {
+    await restoreReleasedClaim(releasing, path);
+    throw error;
+  }
+  if (movedToken !== runToken) {
+    await restoreReleasedClaim(releasing, path);
     throw new PilotClaimError(
       'claim-foreign',
       'refusing to release a foreign run token claim'
     );
   }
-  await unlink(path).catch((error) => {
-    if (error?.code !== 'ENOENT') {
-      throw error;
-    }
-  });
+  await unlink(releasing).catch(() => undefined);
   return true;
+}
+
+async function restoreReleasedClaim(releasing, path) {
+  const restored = await link(releasing, path)
+    .then(() => true)
+    .catch(() => false);
+  if (restored) {
+    await unlink(releasing).catch(() => undefined);
+  }
 }
 
 export async function recoverAbandonedClaim(outputRoot, job) {

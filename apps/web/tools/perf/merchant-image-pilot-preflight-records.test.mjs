@@ -95,6 +95,8 @@ describe('isSafeRelativePath', () => {
     for (const bad of [
       '',
       '/abs.png',
+      'C:/evil.png',
+      'C:evil.png',
       '../escape.png',
       'a/../../escape.png',
       'a/./b.png',

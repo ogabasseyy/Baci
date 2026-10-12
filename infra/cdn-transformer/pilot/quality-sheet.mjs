@@ -174,7 +174,8 @@ export async function buildQualitySheet({
     const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
     const rungRows = new Set(manifest.tiers.map((tier) => tier.requestedWidth))
       .size;
-    const originalPrefix = `data:${originalContentType(record)};base64,`.length;
+    const originalPrefix = `data:${originalContentType(manifest.source.format, record.assetId)};base64,`
+      .length;
     let recordBytes =
       (originalPrefix + base64Length(snapshot.bytes.length)) * rungRows;
     for (const tier of manifest.tiers) {
@@ -189,7 +190,7 @@ export async function buildQualitySheet({
         `quality sheet exceeds the ${maxEmbeddedBytes}-byte embed budget at asset "${record.assetId}"; split the inventory instead of rendering a partial sheet`
       );
     }
-    const originalUri = `data:${originalContentType(record)};base64,${snapshot.bytes.toString('base64')}`;
+    const originalUri = `data:${originalContentType(manifest.source.format, record.assetId)};base64,${snapshot.bytes.toString('base64')}`;
     const seenTiers = new Map();
     for (const tier of manifest.tiers) {
       if (!seenTiers.has(tier.requestedWidth)) {

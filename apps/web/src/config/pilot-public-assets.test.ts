@@ -1,5 +1,6 @@
 import {
   cpSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -140,6 +141,33 @@ describe('non-lab public assets gate', () => {
     symlinkSync(root(), join(dir, '__pilot'));
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
       /unsafe pilot public directory/
+    );
+  });
+  it('rejects a file hardlinked from outside the managed entry', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    const outside = join(dir, 'outside-secret.txt');
+    writeFileSync(outside, 'not yours');
+    // Same inode, two names: realpath cannot expose the outside
+    // original, so only the link-count gate refuses to serve it.
+    linkSync(outside, join(dir, '__pilot', 'originals', 'merchant.avif'));
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(/hardlinked file/);
+  });
+  it('requires the exact filler set in non-lab trees too', () => {
+    const dir = root();
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
+    rmSync(join(dir, '__pilot/fillers/grid-filler-600x400-c.png'));
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /non-lab public pilot tree is missing pinned fillers.*grid-filler-600x400-c\.png/
     );
   });
 });

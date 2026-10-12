@@ -17,23 +17,27 @@ export function escapeHtml(value) {
     .replaceAll('"', '&quot;');
 }
 
-// Source MIME allowlist, mirroring the keys of
-// EXTENSION_FOR_CONTENT_TYPE in acquire.mjs: the inventory value lands
-// inside an <img src> data URI, so anything outside the acquired-source
-// set (in particular a string with a quote) would break into
-// operator-executed markup.
-const ORIGINAL_CONTENT_TYPES = new Set([
-  'image/avif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-]);
+// Source MIME derivation from the VERIFIED manifest source format —
+// never from the inventory record's contentType label, which is
+// unvalidated metadata. A stale-but-allowlisted label (PNG bytes
+// marked image/jpeg) or a missing one (defaulting to PNG) would embed
+// the baseline under the wrong MIME and show a broken or
+// browser-sniffed original next to normally rendering derivatives.
+// The format comes from the schema-validated manifest source whose
+// sha256 the sheet already rebound to the verified snapshot bytes, so
+// the map is total; unknown values still fail closed.
+const MIME_FOR_SOURCE_FORMAT = {
+  avif: 'image/avif',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
 
-export function originalContentType(record) {
-  const contentType = record.contentType ?? 'image/png';
-  if (!ORIGINAL_CONTENT_TYPES.has(contentType)) {
+export function originalContentType(sourceFormat, assetId) {
+  const contentType = MIME_FOR_SOURCE_FORMAT[sourceFormat];
+  if (!contentType) {
     throw new PilotSheetError(
-      `unsupported original content-type for asset "${record.assetId}"`
+      `unsupported original source format for asset "${assetId}"`
     );
   }
   return escapeHtml(contentType);

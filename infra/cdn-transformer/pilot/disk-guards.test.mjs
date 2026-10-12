@@ -62,6 +62,25 @@ test('removeOwnedStaging removes only owned staging directories', async () => {
   await assert.rejects(() => removeOwnedStaging(base, nested), /owned/);
 });
 
+test('removeOwnedStaging refuses a symlink to a sibling staging directory', async () => {
+  const { lstat, readFile, symlink } = await import('node:fs/promises');
+  const base = await mkdtemp(join(tmpdir(), 'pilot-staging-link-'));
+  const sibling = join(base, 'staging-sibling1');
+  await mkdir(sibling, { recursive: true });
+  await writeFile(join(sibling, 'sentinel.txt'), 'other run bytes');
+  // The caller's own name is a link at a valid owned path: realpath
+  // resolves the sibling and the parent/prefix checks would pass, so
+  // only the lstat gate keeps rm from deleting the other run's tree.
+  const link = join(base, 'staging-mine1234');
+  await symlink(sibling, link);
+  await assert.rejects(() => removeOwnedStaging(base, link), /not a directory/);
+  assert.equal(
+    await readFile(join(sibling, 'sentinel.txt'), 'utf8'),
+    'other run bytes'
+  );
+  assert.equal((await lstat(link)).isSymbolicLink(), true);
+});
+
 test('readUpToBytes caps allocation at the claim plus one byte', async () => {
   const base = await mkdtemp(join(tmpdir(), 'pilot-read-capped-'));
   const small = join(base, 'small.bin');

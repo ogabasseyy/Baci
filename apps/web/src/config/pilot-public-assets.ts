@@ -61,6 +61,16 @@ function assertConfinedEntry(root: string, name: string): void {
           `lab public pilot tree entry "${name}" contains a symlink`
         );
       }
+      // Hardlinks have no separate target for realpath to expose: a
+      // file hardlinked from outside would pass confinement and be
+      // served, so every non-directory must be single-linked.
+      // Directories always carry extra links (. entries), hence the
+      // directory carve-out.
+      if (!childStat.isDirectory() && childStat.nlink > 1) {
+        throw new Error(
+          `lab public pilot tree entry "${name}" contains a hardlinked file`
+        );
+      }
       confined(childPath);
       if (childStat.isDirectory()) {
         pending.push(childPath);
@@ -100,19 +110,17 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
       );
     }
   }
-  if (labEnabled) {
-    // The store grid always references all three filler URLs: a subset
-    // of valid files would still start the lab with broken
-    // sibling-card images and contaminate the comparison, so lab mode
-    // requires the exact complete set after every present file checks.
-    const missing = Object.keys(FILLERS).filter(
-      (file) => !files.includes(file)
+  // The exact complete set is required in BOTH modes: the lab grid
+  // references all three filler URLs (a subset would start the lab
+  // with broken sibling-card images), and a partial set in a non-lab
+  // tree is a packaging anomaly or tamper, not a tolerated subset.
+  const missing = Object.keys(FILLERS).filter((file) => !files.includes(file));
+  if (missing.length > 0) {
+    throw new Error(
+      labEnabled
+        ? `lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
+        : `non-lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
     );
-    if (missing.length > 0) {
-      throw new Error(
-        `lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
-      );
-    }
   }
 }
 

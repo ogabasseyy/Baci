@@ -109,9 +109,29 @@ export async function removeOwnedStaging(outputRoot, stagingDir) {
   const realRoot = await realpath(outputRoot).catch(() => {
     throw new PilotDiskError(`disk: output root is not accessible`);
   });
+  // The pathname itself must be a real directory: realpath alone
+  // resolves a planted symlink to a sibling staging-* directory, and
+  // the parent/prefix checks below would then pass while rm deletes
+  // the other run's tree instead of the caller's link.
+  const owned = await lstat(stagingDir).catch(() => {
+    throw new PilotDiskError(`disk: staging directory is missing`);
+  });
+  if (!owned.isDirectory()) {
+    throw new PilotDiskError(`disk: staging path is not a directory`);
+  }
   const realTarget = await realpath(stagingDir).catch(() => {
     throw new PilotDiskError(`disk: staging directory is missing`);
   });
+  // Identity bind: the canonical target must still be the directory
+  // lstat just accepted, or a swap between the two calls redirected
+  // the removal. A swap after this bind but before rm is the residual
+  // window, same as the verified generation loader accepts.
+  const bound = await lstat(realTarget).catch(() => {
+    throw new PilotDiskError(`disk: staging directory is missing`);
+  });
+  if (bound.dev !== owned.dev || bound.ino !== owned.ino) {
+    throw new PilotDiskError(`disk: staging directory changed during cleanup`);
+  }
   if (!realTarget.startsWith(realRoot + sep)) {
     throw new PilotDiskError(`disk: staging path escapes the output root`);
   }

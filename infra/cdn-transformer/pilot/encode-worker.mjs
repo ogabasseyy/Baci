@@ -5,7 +5,7 @@
 // exit 0 with { ok: true|false }; protocol misuse or unexpected crashes exit
 // non-zero so the parent can distinguish rejection from worker failure.
 import { createHash } from 'node:crypto';
-import { stat, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 import sharp from 'sharp';
 import {
   ACCEPTED_INPUT_FORMATS,
@@ -14,7 +14,6 @@ import {
   MAX_DECODED_PIXELS,
   MAX_ENCODED_BYTES,
 } from './constants.mjs';
-import { sha256File } from './disk-guards.mjs';
 import {
   normalizeFormat,
   orientedDimensions,
@@ -180,6 +179,7 @@ export async function handleEncodeOp(op, io = {}) {
   // predictable pathname is never reopened and no rename+symlink swap
   // can redirect the write outside the staging tree.
   const claim = await claimEncodeOutput(op.output);
+  let encodedBytes = null;
   let overBudgetBytes = null;
   try {
     const bytes = await pipeline.toBuffer();
@@ -197,6 +197,7 @@ export async function handleEncodeOp(op, io = {}) {
     } else {
       await claim.handle.writeFile(bytes);
       await claim.handle.sync();
+      encodedBytes = bytes;
     }
   } catch (error) {
     if (error instanceof WorkerInputError) {
@@ -231,15 +232,19 @@ export async function handleEncodeOp(op, io = {}) {
       status: 'over-budget',
     };
   }
-  await verifyEncodeOutput(op.output, claim);
-  const info = await stat(op.output);
-  // Streamed, never buffered: the output is hashed without loading it
-  // whole, so a swapped-in giant hashes in constant memory instead of
-  // OOMing the worker before the parent's rung-ceiling comparison.
-  const outSha256 = await sha256File(op.output);
+  // The path identity check still fails closed on a rename swap, but
+  // the certified size/hash come from the in-memory buffer Sharp
+  // produced — never from a post-close path re-read. A replacement
+  // installed after this verify would otherwise be stat/hashed as the
+  // encode result and committed downstream; the parent's fresh
+  // decode-verify comparison plus the staging byte assertion catch any
+  // on-disk divergence from these memory-certified facts instead.
+  const verifyOutput = io.verifyEncodeOutput ?? verifyEncodeOutput;
+  await verifyOutput(op.output, claim);
+  const outSha256 = createHash('sha256').update(encodedBytes).digest('hex');
   const scale = Math.min(1, op.width / oriented.width);
   return {
-    bytes: info.size,
+    bytes: encodedBytes.length,
     height: Math.round(oriented.height * scale),
     ok: true,
     output: op.output,

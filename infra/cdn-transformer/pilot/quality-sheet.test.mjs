@@ -16,9 +16,9 @@ import { runPilotGeneration } from './generate.mjs';
 import { currentRecipeId } from './generation-identity.mjs';
 import {
   buildQualitySheet,
-  publishQualitySheet,
   readSlotsGeometry,
 } from './quality-sheet.mjs';
+import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import { parseMountCrop } from './quality-sheet-render.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));

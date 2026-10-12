@@ -1,6 +1,7 @@
 // Served gate orchestration: fetch each lab page in each arm and run the
 // agreement, mount-coverage, descriptor, response-bytes, and purity gates.
 
+import { MAX_SERVED_PAGE_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { assertServedAgreement } from './merchant-image-pilot-preflight-agreement.mjs';
 import { extractLabBindings } from './merchant-image-pilot-preflight-html.mjs';
 import { assertServedMountCoverage } from './merchant-image-pilot-preflight-mounts.mjs';
@@ -34,7 +35,42 @@ async function fetchPage(origin, pagePath, arm, timeoutMs) {
   if (!response.ok) {
     throw new Error(`GET ${url} -> ${response.status}`);
   }
-  return response.text();
+  return readBoundedPageText(response, url);
+}
+
+// Streams the response through the lab-page byte ceiling: response.text()
+// would buffer a multi-gigabyte body from a corrupted or compromised
+// origin before any marker check runs, and the fetch timeout bounds time,
+// not bytes — a fast local response could exhaust this process instead of
+// failing the gate.
+export async function readBoundedPageText(response, url) {
+  if (!response.body?.getReader) {
+    const text = await response.text();
+    if (text.length > MAX_SERVED_PAGE_BYTES) {
+      throw new Error(
+        `GET ${url} exceeds the ${MAX_SERVED_PAGE_BYTES} byte served-page ceiling`
+      );
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytesRead = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    bytesRead += value.byteLength;
+    if (bytesRead > MAX_SERVED_PAGE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(
+        `GET ${url} exceeds the ${MAX_SERVED_PAGE_BYTES} byte served-page ceiling`
+      );
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 // Check-name prefix per page. The gallery keeps the historical

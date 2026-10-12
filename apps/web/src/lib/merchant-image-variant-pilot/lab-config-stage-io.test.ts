@@ -179,6 +179,30 @@ describe('writeStagedBytesIfChanged', () => {
       )
     ).rejects.toThrow(/escapes the stage root/);
   });
+
+  it('refuses a staging parent swapped for a symlink mid-stage', async () => {
+    // The parent verified confined at ensureStageDir time, then a
+    // contender renamed it away and planted a link: 'wx' alone would
+    // create through the link outside the stage root. The destination
+    // routes through the planted name (not the stale canonical root)
+    // so the write must re-bind the parent instead of failing on a
+    // missing path.
+    const { readdir, rename } = await import('node:fs/promises');
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-swap-'));
+    const stageRoot = await ensureStageDir(dir, '__pilot');
+    const outside = join(dir, 'outside');
+    await mkdir(outside, { recursive: true });
+    await rename(join(dir, '__pilot'), join(dir, '__pilot-moved'));
+    await symlink(outside, join(dir, '__pilot'));
+    await expect(
+      writeStagedBytesIfChanged(
+        stageRoot,
+        join(dir, '__pilot', 'staged.avif'),
+        Buffer.from('verified-tier-bytes')
+      )
+    ).rejects.toThrow(/escapes the stage root/);
+    expect(await readdir(outside)).toEqual([]);
+  });
 });
 
 describe('readVerifiedSnapshot', () => {

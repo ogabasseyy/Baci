@@ -1,12 +1,11 @@
-import { open, rename } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCliArgs } from './cli-args.mjs';
 import {
   MAX_INVENTORY_BYTES,
   MAX_QUALITY_SHEET_EMBEDDED_BYTES,
 } from './constants.mjs';
-import { fsyncDir, isUnsupportedSyncError, readUpToBytes } from './disk-guards.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
+import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import {
   buildEncoderIdentity,
   currentRecipeId,
@@ -259,37 +258,6 @@ export async function readSlotsGeometry(slotsPath) {
     return JSON.parse(bytes.toString('utf8'));
   } catch {
     throw new PilotSheetError('slots file is not valid JSON');
-  }
-}
-
-// All-or-nothing sheet publish: a direct write truncates the final
-// path first, so an interruption or filesystem error leaves a
-// valid-looking HTML prefix showing only the early assets — and a
-// reviewer approves an incomplete sample. Temp + sync + atomic rename
-// (same pattern as the inventory publish) leaves the old sheet or the
-// new one, never a prefix.
-export async function publishQualitySheet(out, html, options = {}) {
-  const tmp = join(
-    dirname(out),
-    `.quality-sheet-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
-  );
-  const handle = await open(tmp, 'w');
-  try {
-    await handle.writeFile(html);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await rename(tmp, out);
-  const syncDir = options.fsyncDir ?? fsyncDir;
-  try {
-    await syncDir(dirname(out));
-  } catch (error) {
-    if (!isUnsupportedSyncError(error)) {
-      throw new PilotSheetError(
-        `sheet directory sync failed (${error?.code ?? 'unknown'})`
-      );
-    }
   }
 }
 

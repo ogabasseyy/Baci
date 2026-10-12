@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
+import { readUpToBytes } from './lab-config-stage-io-read';
+
+export { readUpToBytes };
 
 // Mirror of MAX_INPUT_BYTES in
 // infra/cdn-transformer/pilot/constants.mjs: the staged snapshot read
@@ -10,50 +13,6 @@ import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pil
 // lab-config-stage-io.test.mjs against the original; web runtime code
 // must not import infra directly.
 const MAX_STAGED_SNAPSHOT_BYTES = 10 * 1024 * 1024;
-
-// Bounded read: at most maxBytes + 1, looping to EOF-or-cap (a single
-// read may return short). Returns truncated: true when the file is
-// longer, so callers reject the size mismatch without ever allocating
-// the full file — a corrupted tier concatenated into a huge file must
-// fail closed, not exhaust the server. Throws when unreadable (callers
-// map that to their missing-input error).
-const READ_CHUNK_BYTES = 64 * 1024;
-
-export async function readUpToBytes(
-  path: string,
-  maxBytes: number
-): Promise<{ bytes: Buffer; truncated: boolean }> {
-  const handle = await open(path, 'r');
-  try {
-    // Chunked probe: stream 64 KiB at a time instead of allocating
-    // maxBytes + 1 upfront, so a large ceiling (per-entry staged sizes
-    // up to the 256 MiB set budget) never becomes a large allocation
-    // on its own — memory grows with actual file content, capped at
-    // maxBytes + 1 total.
-    const chunks: Buffer[] = [];
-    let bytesRead = 0;
-    for (;;) {
-      const want = Math.min(READ_CHUNK_BYTES, maxBytes + 1 - bytesRead);
-      if (want <= 0) {
-        break;
-      }
-      const probe = Buffer.alloc(want);
-      const chunk = await handle.read(probe, 0, want, bytesRead);
-      if (chunk.bytesRead === 0) {
-        break;
-      }
-      chunks.push(probe.subarray(0, chunk.bytesRead));
-      bytesRead += chunk.bytesRead;
-    }
-    const buffered = Buffer.concat(chunks);
-    return {
-      bytes: buffered.subarray(0, Math.min(bytesRead, maxBytes)),
-      truncated: bytesRead > maxBytes,
-    };
-  } finally {
-    await handle.close();
-  }
-}
 
 // Staged-original suffixes must describe the bytes: Next serves public/
 // files with a suffix-derived MIME type, and the served gate pins the
@@ -157,16 +116,9 @@ export async function readVerifiedSnapshot(
   return bytes;
 }
 
-// Writes staged bytes so a planted symlink can neither divert them nor
-// survive as the served file: the parent must confine under the stage
-// root, a symlink at the destination is refused (even when its target
-// coincidentally holds identical bytes), and the file is created
-// exclusively so a symlink swapped in mid-write fails instead of
-// redirecting the write outside the lab tree.
-export async function writeStagedFile(
+async function assertParentConfined(
   stageRoot: string,
-  destPath: string,
-  bytes: Buffer
+  destPath: string
 ): Promise<void> {
   const realParent = await realpath(dirname(destPath)).catch(() => {
     throw new Error(
@@ -178,6 +130,24 @@ export async function writeStagedFile(
       'merchant image pilot: staging destination escapes the stage root'
     );
   }
+}
+
+// Writes staged bytes so a planted symlink can neither divert them nor
+// survive as the served file: the parent must confine under the stage
+// root, a symlink at the destination is refused (even when its target
+// coincidentally holds identical bytes), and the file is created
+// exclusively so a symlink swapped in mid-write fails instead of
+// redirecting the write outside the lab tree. 'wx' guards only the
+// final component, so the parent re-binds immediately before the open
+// and the written file re-binds after the close (handle identity vs
+// path identity): a parent swapped for a link mid-stage refuses loudly
+// instead of publishing verified bytes outside the stage root.
+export async function writeStagedFile(
+  stageRoot: string,
+  destPath: string,
+  bytes: Buffer
+): Promise<void> {
+  await assertParentConfined(stageRoot, destPath);
   const existing = await lstat(destPath).catch(() => null);
   if (existing?.isSymbolicLink()) {
     throw new Error(
@@ -187,15 +157,37 @@ export async function writeStagedFile(
   if (existing) {
     await unlink(destPath);
   }
+  await assertParentConfined(stageRoot, destPath);
   const handle = await open(destPath, 'wx').catch(() => {
     throw new Error(
       'merchant image pilot: staging destination appeared mid-write; refusing to overwrite'
     );
   });
+  let identity: { dev: number; ino: number } | undefined;
   try {
     await handle.writeFile(bytes);
+    identity = await handle.stat();
   } finally {
     await handle.close();
+  }
+  try {
+    await assertParentConfined(stageRoot, destPath);
+    const written = await lstat(destPath).catch(() => null);
+    if (
+      !written ||
+      written.isSymbolicLink() ||
+      !written.isFile() ||
+      identity === undefined ||
+      written.dev !== identity.dev ||
+      written.ino !== identity.ino
+    ) {
+      throw new Error(
+        'merchant image pilot: staged write no longer names the written file'
+      );
+    }
+  } catch (error) {
+    await unlink(destPath).catch(() => undefined);
+    throw error;
   }
 }
 

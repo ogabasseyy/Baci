@@ -3,7 +3,7 @@
 // and atomic commit for one inventory job. Orchestration (inventory
 // fan-out, report writing) and the executable CLI stay in
 // generate.mjs.
-import { lstat, mkdir, realpath, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   acquireClaim,
@@ -17,6 +17,7 @@ import {
   createStagingBudget,
   ownedStagingPath,
   removeOwnedStaging,
+  writeConfinedFile,
 } from './disk-guards.mjs';
 import { encodeRoleLadder } from './encoder.mjs';
 import { buildDisposition } from './generate-disposition.mjs';
@@ -152,8 +153,13 @@ export async function runJob({
     }
     assertJobDeadline(deadlineMs, 'snapshot');
     stagingDir = await prepareOwnedStaging(outputRoot, claim.runToken);
+    // The run token is published in the claim, so a contender can race
+    // this freeze: a plain writeFile would follow a swapped-in parent
+    // symlink outside the output root ('wx' guards only the final
+    // component). The confined write re-binds the parent around the
+    // open and refuses when the binding breaks.
+    await writeConfinedFile(stagingDir, 'source.snapshot', snapshot.bytes);
     const frozenCopy = join(stagingDir, 'source.snapshot');
-    await writeFile(frozenCopy, snapshot.bytes, { flag: 'wx' });
     assertJobDeadline(deadlineMs, 'staging');
     const stagingBudget = createStagingBudget();
     stagingBudget.charge(snapshot.bytes.length);

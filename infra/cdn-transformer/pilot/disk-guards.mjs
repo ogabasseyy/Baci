@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { open, realpath, rm, statfs } from 'node:fs/promises';
+import { lstat, open, realpath, rm, statfs, unlink } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { MAX_STAGING_BYTES, MIN_FREE_BYTES } from './constants.mjs';
 
@@ -129,6 +129,67 @@ export function ownedStagingPath(outputRoot, runToken) {
     throw new PilotDiskError(`disk: unsafe run token`);
   }
   return join(outputRoot, `${STAGING_DIR_PREFIX}${runToken}`);
+}
+
+// Confined exclusive file write: 'wx' guards only the FINAL path
+// component, so a staging parent renamed away and replaced with a
+// symlink after setup would redirect a plain writeFile outside the
+// owned tree. Node has no openat, so the write binds to the checked
+// parent three ways: the parent resolves to canonical immediately
+// before the open (a day-long window becomes microseconds, and the
+// open itself goes through the canonical path with no symlink
+// components left to exploit), the bytes publish through the held
+// descriptor, and after the close the parent name must still resolve
+// to that same directory AND the pathname must still name the written
+// file (handle identity vs path identity). Any mismatch unlinks the
+// stray name best-effort and throws loudly. Residual: a swap won and
+// reverted entirely between the checks can still land bytes outside —
+// detection, not prevention, past the microsecond windows — so callers
+// treat this as the freeze binding, not a whole-run guarantee.
+async function canonicalConfinedDir(dir) {
+  const info = await lstat(dir).catch(() => {
+    throw new PilotDiskError(`disk: confined directory is not accessible`);
+  });
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new PilotDiskError(`disk: confined path is not a directory`);
+  }
+  return realpath(dir);
+}
+
+export async function writeConfinedFile(dir, name, bytes) {
+  const expected = await canonicalConfinedDir(dir);
+  const path = join(expected, name);
+  const handle = await open(path, 'wx');
+  let identity;
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+    identity = await handle.stat();
+  } finally {
+    await handle.close();
+  }
+  try {
+    if ((await canonicalConfinedDir(dir)) !== expected) {
+      throw new PilotDiskError(
+        `disk: confined directory changed during the write`
+      );
+    }
+    const info = await lstat(path).catch(() => null);
+    if (
+      !info ||
+      info.isSymbolicLink() ||
+      !info.isFile() ||
+      info.dev !== identity.dev ||
+      info.ino !== identity.ino
+    ) {
+      throw new PilotDiskError(
+        `disk: confined write no longer names the written file`
+      );
+    }
+  } catch (error) {
+    await unlink(path).catch(() => undefined);
+    throw error;
+  }
 }
 
 // Directory-entry durability for publish paths: a file fsync persists the

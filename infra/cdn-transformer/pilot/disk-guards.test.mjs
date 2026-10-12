@@ -12,6 +12,7 @@ import {
   readUpToBytes,
   removeOwnedStaging,
   sha256File,
+  writeConfinedFile,
 } from './disk-guards.mjs';
 
 test('reports available bytes and enforces the free-space floor', async () => {
@@ -135,4 +136,40 @@ test('isUnsupportedSyncError classifies only unsupported sync', () => {
   assert.equal(isUnsupportedSyncError({ code: 'EIO' }), false);
   assert.equal(isUnsupportedSyncError({ code: 'ENOSPC' }), false);
   assert.equal(isUnsupportedSyncError(undefined), false);
+});
+
+test('writeConfinedFile publishes exclusively inside the checked parent', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-confined-'));
+  await writeConfinedFile(dir, 'source.snapshot', Buffer.from('frozen'));
+  assert.equal(
+    await readFile(join(dir, 'source.snapshot'), 'utf8'),
+    'frozen'
+  );
+  // Exclusive: a second freeze at the same name refuses, never overwrites.
+  await assert.rejects(
+    () => writeConfinedFile(dir, 'source.snapshot', Buffer.from('again')),
+    /EEXIST/
+  );
+});
+
+test('writeConfinedFile refuses a parent swapped for a symlink', async () => {
+  // A staging parent renamed away and replaced with a link after setup:
+  // 'wx' alone would create through the link outside the owned tree.
+  const { lstat, readdir, rename, symlink } = await import(
+    'node:fs/promises'
+  );
+  const root = await mkdtemp(join(tmpdir(), 'pilot-confined-swap-'));
+  const dir = join(root, 'staging-x');
+  await mkdir(dir);
+  const outside = join(root, 'outside');
+  await mkdir(outside);
+  await rename(dir, join(root, 'staging-x-moved'));
+  await symlink(outside, dir);
+  await assert.rejects(
+    () => writeConfinedFile(dir, 'source.snapshot', Buffer.from('frozen')),
+    /not a directory/
+  );
+  assert.deepEqual(await readdir(outside), []);
+  assert.equal((await lstat(dir)).isSymbolicLink(), true);
 });

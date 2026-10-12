@@ -3,13 +3,17 @@ import {
   link,
   lstat,
   mkdir,
-  readFile,
   realpath,
   unlink,
   writeFile,
 } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { ownedStagingPath, removeOwnedStaging } from './disk-guards.mjs';
+import { MAX_CLAIM_BYTES } from './constants.mjs';
+import {
+  ownedStagingPath,
+  readUpToBytes,
+  removeOwnedStaging,
+} from './disk-guards.mjs';
 import { pilotJobKey } from './job-schema.mjs';
 
 export class PilotClaimError extends Error {
@@ -62,6 +66,22 @@ function parseClaimFile(text) {
 // the owner may be live OR the pid was reused by an unrelated process.
 // Only ESRCH (no such process) proves the owner exited. EPERM and every
 // other outcome fail closed as held.
+
+// Claim reads go through the byte ceiling: a corrupt or replaced
+// multi-gigabyte claim must reject as claim-corrupt instead of
+// exhausting the contender before the shape check runs. Read errors
+// propagate raw (like readFile's) so callers keep their ENOENT mapping.
+async function readClaimText(path) {
+  const { bytes, truncated } = await readUpToBytes(path, MAX_CLAIM_BYTES);
+  if (truncated) {
+    throw new PilotClaimError(
+      'claim-corrupt',
+      `claim file exceeds ${MAX_CLAIM_BYTES} bytes`
+    );
+  }
+  return bytes.toString('utf8');
+}
+
 function ownerExited(pid) {
   try {
     process.kill(pid, 0);
@@ -133,7 +153,7 @@ export async function acquireClaim(outputRoot, job, runToken) {
   if (linked) {
     return claim;
   }
-  const existing = parseClaimFile(await readFile(path, 'utf8'));
+  const existing = parseClaimFile(await readClaimText(path));
   throw new PilotClaimError(
     'claim-held',
     `job is claimed by run "${existing.runToken}" (pid ${existing.pid})`,
@@ -143,7 +163,7 @@ export async function acquireClaim(outputRoot, job, runToken) {
 
 export async function releaseClaim(outputRoot, job, runToken) {
   const path = claimPath(outputRoot, job);
-  const text = await readFile(path, 'utf8').catch((error) => {
+  const text = await readClaimText(path).catch((error) => {
     if (error?.code === 'ENOENT') {
       return null;
     }
@@ -169,7 +189,7 @@ export async function releaseClaim(outputRoot, job, runToken) {
 
 export async function recoverAbandonedClaim(outputRoot, job) {
   const path = claimPath(outputRoot, job);
-  const text = await readFile(path, 'utf8').catch((error) => {
+  const text = await readClaimText(path).catch((error) => {
     if (error?.code === 'ENOENT') {
       throw new PilotClaimError('claim-missing', 'no claim file to recover');
     }

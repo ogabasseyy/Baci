@@ -71,6 +71,17 @@ export const MAX_LIGHTHOUSE_BYTES = 64 * 1024 * 1024;
 // or hostile file — while the geometry check must read the artifact.
 export const MAX_SCREENSHOT_BYTES = 64 * 1024 * 1024;
 
+// Claim record: honest claims are ~200 bytes of JSON (tokens, pid, dir
+// name), so a 64 KiB ceiling only ever trips on a corrupt or replaced
+// file — while every contender must read the claim before parsing it.
+export const MAX_CLAIM_BYTES = 64 * 1024;
+
+// Served lab page HTML: pilot-lab pages render kilobytes of markup (no
+// inlined response bodies), so a 16 MiB ceiling only ever trips on a
+// corrupted, misconfigured, or compromised origin — while the served
+// gate must read the page before checking its route markers.
+export const MAX_SERVED_PAGE_BYTES = 16 * 1024 * 1024;
+
 // Merchant UUID predicate shared by every contract mirror. Zod 3's
 // .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
 // so both sides spell the rule explicitly instead: versions 1-8 plus the

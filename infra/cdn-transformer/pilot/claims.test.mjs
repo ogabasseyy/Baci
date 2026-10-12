@@ -266,3 +266,26 @@ test('non-positive pids fail as corrupt instead of blocking as held', async () =
     assert.equal(error.code, 'claim-corrupt', `pid ${pid}`);
   }
 });
+
+test('oversized claim files reject on size instead of exhausting the reader', async () => {
+  // Honest claims are ~200 bytes: a multi-ceiling file must fail as
+  // claim-corrupt on every read path (contend, release, recovery)
+  // without buffering the whole file first.
+  const { MAX_CLAIM_BYTES } = await import('./constants.mjs');
+  const root = await outputRoot();
+  await mkdir(join(root, 'claims'), { recursive: true });
+  const path = join(root, 'claims', `${claimKeyForJob(JOB)}.json`);
+  await writeFile(path, `{"runToken":"${'x'.repeat(MAX_CLAIM_BYTES)}"}`);
+  const contend = await acquireClaim(root, JOB, createRunToken()).catch(
+    (value) => value
+  );
+  assert.equal(contend.code, 'claim-corrupt');
+  const release = await releaseClaim(root, JOB, createRunToken()).catch(
+    (value) => value
+  );
+  assert.equal(release.code, 'claim-corrupt');
+  const recover = await recoverAbandonedClaim(root, JOB).catch(
+    (value) => value
+  );
+  assert.equal(recover.code, 'claim-corrupt');
+});

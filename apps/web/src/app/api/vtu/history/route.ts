@@ -357,9 +357,7 @@ export async function GET(request: NextRequest) {
             units,
             address,
             refund_pending:
-              transaction.status === 'failed' &&
-              walletDebited &&
-              !refundIssued,
+              transaction.status === 'failed' && walletDebited && !refundIssued,
             refunded_to_wallet: refundedToWallet,
           };
         }

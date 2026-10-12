@@ -106,14 +106,25 @@ BEGIN
         END LOOP;
     END IF;
 
-    -- Get tier multiplier (array containers only: a malformed object or
-    -- scalar falls back to 1.0 instead of raising, like the tier guard).
+    -- Tier multiplier follows the calculator's dedup (threshold order,
+    -- case-insensitive, first/lowest wins): a raw-first match could award
+    -- a higher duplicate's rate. Non-numeric multipliers fall back to 1.0
+    -- like malformed containers instead of raising mid-award.
     IF jsonb_typeof(v_settings.tiers) = 'array' THEN
-        SELECT (tier->>'multiplier')::DECIMAL INTO v_multiplier
+        SELECT CASE WHEN tier->>'multiplier' ~ '^-?[0-9]+(\.[0-9]+)?$'
+                 THEN (tier->>'multiplier')::DECIMAL END INTO v_multiplier
         FROM (
-            SELECT jsonb_array_elements(v_settings.tiers) as tier
-        ) t
-        WHERE tier->>'name' = v_loyalty.current_tier;
+            SELECT t.value AS tier
+            FROM jsonb_array_elements(v_settings.tiers) WITH ORDINALITY AS t(value, ord)
+            ORDER BY
+                CASE WHEN t.value->>'minPoints' ~ '^-?[0-9]+$'
+                  THEN (t.value->>'minPoints')::NUMERIC
+                  ELSE NULL
+                END ASC NULLS LAST,
+                t.ord
+        ) ordered
+        WHERE pg_catalog.lower(ordered.tier->>'name') = pg_catalog.lower(v_loyalty.current_tier)
+        LIMIT 1;
     END IF;
 
     v_multiplier := COALESCE(v_multiplier, 1.0);

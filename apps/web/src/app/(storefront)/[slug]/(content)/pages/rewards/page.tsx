@@ -70,7 +70,7 @@ export default function RewardsPage() {
   useEffect(() => {
     if (wasLoading.current && !loading) setLoadedIdentity(identity);
     wasLoading.current = loading;
-  });
+  }, [identity, loading]);
   // No loading term: same-identity refetches keep content (dialog
   // survives), while a new identity skeletons on the very first render.
   const showSkeleton = loadedIdentity !== identity;

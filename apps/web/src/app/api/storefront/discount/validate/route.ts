@@ -8,15 +8,15 @@ import {
   storefrontDiscountCodeRowSchema,
   storefrontDiscountValidateSchema,
 } from '@/schemas/storefront-discount';
+import { lookupErrorResponse } from './lookup-error-response';
 
 /**
  * POST /api/storefront/discount/validate
  * Validates a discount code for storefront customers.
  * Uses anon client with a SECURITY DEFINER RPC for anonymous access.
  *
- * CSRF exemption: Called by anonymous storefront visitors during checkout.
- * Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting
- * in proxy.ts and the RPC's read-only validation behavior.
+ * CSRF exemption: anonymous checkout visitors lack tokens; proxy rate
+ * limiting and the RPC's read-only behavior mitigate abuse.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -51,6 +51,15 @@ export async function POST(request: NextRequest) {
       p_code: code,
     });
 
+    // Errors are retryable 500s: fall-through would mislabel RDM-* codes.
+    if (error) {
+      return lookupErrorResponse(
+        'Discount code lookup failed',
+        error,
+        merchant_id
+      );
+    }
+
     const parsedArray = storefrontDiscountCodeRowSchema.array().safeParse(data);
     const parsedSingle = parsedArray.success
       ? null
@@ -67,13 +76,11 @@ export async function POST(request: NextRequest) {
 
     // Loyalty fallback (issue #3165): RDM-* codes live in
     // reward_redemptions, which the merchant-code lookup never reads. Only
-    // attempted when the merchant lookup succeeded but found nothing — a
-    // lookup error keeps the existing invalid response below. State-
-    // distinguishing responses (used/expired/disabled) are intentional
-    // and match the merchant-code branch below; the 12-hex code space
-    // plus proxy rate limiting bound the probing oracle, and the order
-    // wrapper re-enforces every state authoritatively.
-    if (!error && !discountCode) {
+    // attempted when the merchant lookup found nothing (its errors return
+    // 500 above). State-distinguishing responses are intentional; the
+    // 12-hex code space plus proxy rate limiting bound the probing
+    // oracle, and the order wrapper re-enforces every state.
+    if (!discountCode) {
       const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
         'get_loyalty_redemption_for_checkout',
         {
@@ -82,17 +89,12 @@ export async function POST(request: NextRequest) {
         }
       );
       // A failed lookup is a retryable server failure, not an invalid
-      // code (mirrors the order-path resolver): valid-code holders must
-      // not be told their issued code is invalid during an outage.
+      // code (mirrors the order path).
       if (loyaltyError) {
-        logger.error({
-          message: 'Loyalty code lookup failed',
-          error: loyaltyError,
-          merchantId: merchant_id,
-        });
-        return NextResponse.json(
-          { valid: false, error: 'Internal server error' },
-          { status: 500 }
+        return lookupErrorResponse(
+          'Loyalty code lookup failed',
+          loyaltyError,
+          merchant_id
         );
       }
       const parsedLoyaltyArray = loyaltyCheckoutCodeRowSchema
@@ -201,7 +203,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (error || !discountCode) {
+    if (!discountCode) {
       return NextResponse.json(
         { valid: false, error: 'Invalid discount code' },
         { status: 200 }

@@ -167,12 +167,13 @@ BEGIN
     );
   END IF;
 
-  -- Valued rewards must carry a positive value (misconfigured otherwise,
-  -- failed closed before any write); valueless 'discount' stays redeemable.
+  -- Valued rewards must carry positive value (percentages at most 100),
+  -- failed closed before any write; valueless 'discount' stays redeemable.
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
-     AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0) THEN
+     AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0
+       OR v_reward.reward_type = 'discount_percentage' AND v_reward.reward_value > 100) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 

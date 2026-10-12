@@ -201,15 +201,15 @@ BEGIN
       -- Hide valued rewards without a positive value (same predicate as
       -- the redemption RPC's valued guard; keep the two in sync): a
       -- null/zero/negative store_credit, discount_fixed, or
-      -- discount_percentage always fails closed at redeem time, so
-      -- advertising it only offers a permanently unredeemable reward.
-      -- Plain 'discount' without a value stays listed: it is redeemable
-      -- and renders a generic label.
+      -- discount_percentage (or one over 100%) always fails closed at
+      -- redeem time, so advertising it only offers a permanently
+      -- unredeemable reward. Plain 'discount' without a value stays
+      -- listed: it is redeemable and renders a generic label.
       AND (
         reward_type NOT IN (
           'store_credit', 'discount_fixed', 'discount_percentage'
         )
-        OR reward_value > 0
+        OR (reward_value > 0 AND (reward_type <> 'discount_percentage' OR reward_value <= 100))
       )
       -- Hide unhonorable store credit (same predicates as the
       -- redemption RPC; keep the two in sync): minimums are
@@ -224,35 +224,11 @@ BEGIN
       )
   ) AS rewards;
 
-  SELECT COALESCE(jsonb_agg(txn ORDER BY txn->>'created_at' DESC), '[]'::jsonb)
-  INTO v_transactions
-  FROM (
-    SELECT jsonb_build_object(
-      'id', pt.id,
-      'points', pt.points,
-      'type', pt.type,
-      'description', pt.description,
-      'created_at', pt.created_at,
-      -- Recovery receipt: a capped reward leaves the catalog once its
-      -- response is lost, so history carries the issued code.
-      'redemption_code', rr.discount_code
-    ) AS txn
-    FROM public.points_transactions AS pt
-    LEFT JOIN public.reward_redemptions AS rr
-      ON pt.source = 'redemption' AND pt.source_id = rr.id::text
-    WHERE pt.merchant_id = p_merchant_id
-      AND pt.customer_id = p_customer_id
-      -- Same source exclusion as the FIFO ledger: VTU/wallet rows
-      -- update customers.loyalty_points, so listing them beside the
-      -- customer_loyalty balance would show earnings that never
-      -- affected it. NULL sources stay included (see above).
-      AND (
-        pt.source IS NULL
-        OR pt.source NOT IN ('vtu_airtime_purchase', 'wallet_redemption')
-      )
-    ORDER BY pt.created_at DESC
-    LIMIT 10
-  ) AS txns;
+  -- Transactions live in get_loyalty_transactions (migration 15):
+  -- straight-line assembly, extracted because this file sits at the
+  -- repository's 300-line limit.
+  SELECT public.get_loyalty_transactions(p_merchant_id, p_customer_id)
+  INTO v_transactions;
 
   IF NOT v_enrolled THEN
     RETURN jsonb_build_object(

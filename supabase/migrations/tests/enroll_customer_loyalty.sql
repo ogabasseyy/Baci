@@ -12,7 +12,8 @@
 --  20261010000011_snapshot_redemption_minimum,
 --  20261010000012_wallet_credit_loyalty_redemption,
 --  20261010000013_loyalty_ngn_merchant_guard,
---  20261010000014_release_loyalty_claim_on_cancel).
+--  20261010000014_release_loyalty_claim_on_cancel,
+--  20261010000015_loyalty_transactions_receipts).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --
@@ -32,5 +33,7 @@
 \ir enroll_customer_loyalty_reconciliation.sql
 \ir enroll_customer_loyalty_projection.sql
 \ir enroll_customer_loyalty_adjustment.sql
+\ir enroll_customer_loyalty_redemption_guards.sql
+\ir enroll_customer_loyalty_status_receipts.sql
 
 ROLLBACK;

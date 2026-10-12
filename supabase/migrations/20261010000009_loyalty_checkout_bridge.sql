@@ -111,6 +111,7 @@ DECLARE
   v_order       record;
   v_now         timestamptz := pg_catalog.now();
   v_expected    numeric;
+  v_claim_order_status text;
 BEGIN
   IF p_loyalty_redemption_id IS NULL THEN
     RAISE EXCEPTION 'loyalty_redemption_required';
@@ -140,6 +141,7 @@ BEGIN
   SELECT
     rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
+    rr.used_on_order_id,
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount)
       AS minimum_order_amount
   INTO v_redemption
@@ -187,8 +189,18 @@ BEGIN
   END IF;
 
   -- FRESH claim: enforce the FULL policy in-DB. Any RAISE rolls the order
-  -- back atomically (no orphan order, no consumed code).
-  IF v_redemption.used THEN RAISE EXCEPTION 'loyalty_code_already_used'; END IF;
+  -- back atomically (no orphan order, no consumed code). A claim stamped
+  -- to a cancelled order is reusable: the release trigger skips rows
+  -- locked by an in-flight retry (SKIP LOCKED), and cancelled is terminal
+  -- (reopen clamp), so the status read below cannot go stale.
+  IF v_redemption.used THEN
+    SELECT o.shipping_status INTO v_claim_order_status
+    FROM public.orders o
+    WHERE o.id = v_redemption.used_on_order_id;
+    IF v_claim_order_status IS DISTINCT FROM 'cancelled' THEN
+      RAISE EXCEPTION 'loyalty_code_already_used';
+    END IF;
+  END IF;
   IF v_redemption.expires_at IS NOT NULL AND v_redemption.expires_at < v_now THEN
     RAISE EXCEPTION 'loyalty_code_expired'; END IF;
   -- No live-enabled check: issued codes are snapshot-governed (see the
@@ -221,11 +233,13 @@ BEGIN
   END IF;
 
   -- Claim the single-use code (the row lock makes the read-check-write
-  -- atomic; the used=false predicate keeps a racing claim from
-  -- double-marking).
+  -- atomic; the predicate keeps a racing claim from double-marking, while
+  -- still permitting the cancelled-order steal verified above: the lock
+  -- held since the claim check means the stamp cannot have moved).
   UPDATE public.reward_redemptions AS rr
   SET used = true, used_on_order_id = v_order.id, used_at = v_now
-  WHERE rr.id = v_redemption.id AND COALESCE(rr.used, false) = false;
+  WHERE rr.id = v_redemption.id
+    AND (COALESCE(rr.used, false) = false OR rr.used_on_order_id = v_redemption.used_on_order_id);
 
   RETURN QUERY SELECT
     v_order.id, v_order.order_number, v_order.tracking_token, v_order.subtotal,

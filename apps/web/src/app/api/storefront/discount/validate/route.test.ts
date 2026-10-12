@@ -18,11 +18,11 @@ let merchantRow: unknown = null;
 
 function mockRpc(
   impl: (fn: string, args: Record<string, unknown>) => unknown,
-  errors: { merchant?: unknown } = {}
+  errors: { merchant?: unknown; rpc?: Record<string, unknown> } = {}
 ) {
   const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
-    data: impl(fn, args),
-    error: null,
+    data: errors.rpc?.[fn] ? null : impl(fn, args),
+    error: errors.rpc?.[fn] ?? null,
   }));
   const from = vi.fn(() => ({
     select: vi.fn(() => ({
@@ -129,6 +129,20 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     // The internal redemption UUID stays server-side: the order route
     // re-resolves the public code, so anon callers get no row handle.
     expect(body.loyalty_redemption_id).toBeUndefined();
+  });
+
+  it('returns 500 when the merchant lookup fails instead of invalid', async () => {
+    mockRpc(() => [], {
+      rpc: { get_storefront_discount_code: new Error('boom') },
+    });
+
+    const response = await POST(request(baseBody));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      valid: false,
+      error: 'Internal server error',
+    });
   });
 
   it('returns invalid when neither lookup resolves', async () => {

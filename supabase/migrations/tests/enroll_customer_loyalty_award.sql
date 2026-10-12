@@ -235,3 +235,26 @@ SELECT pg_temp.assert_true(
   ),
   'zero award minted a bonus-less membership'
 );
+
+-- 5j. The purchase multiplier follows the tier calculator's dedup: with
+-- duplicate Silver rungs (5k at 2x stored before 1k at 1.25x) a
+-- 1500-point member earns at 1.25x, not the raw-first 2x.
+UPDATE public.customer_loyalty
+SET lifetime_points = 1500, current_tier = 'Silver'
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '02aa0000-0000-4000-8000-000000000011';
+UPDATE public.loyalty_settings
+SET tiers = '[{"name":"Silver","minPoints":5000,"multiplier":2},{"name":"Silver","minPoints":1000,"multiplier":1.25}]'::jsonb
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '02aa0000-0000-4000-8000-000000000011',
+    '02aa0000-0000-4000-8000-000000000001',
+    '02aa0000-0000-4000-8000-0000000000a7',
+    10000
+  ) = 125,
+  'award used the wrong duplicate tier multiplier'
+);
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';

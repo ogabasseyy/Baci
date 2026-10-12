@@ -15,9 +15,19 @@ AS $$
 BEGIN
   IF NEW.shipping_status = 'cancelled'
      AND OLD.shipping_status IS DISTINCT FROM 'cancelled' THEN
-    UPDATE public.reward_redemptions
+    -- SKIP LOCKED: a checkout retry can hold a claim row while waiting
+    -- on this order (redemption->order); waiting here would invert to
+    -- order->redemption and deadlock. Skipped rows stay stamped to a
+    -- terminally cancelled order, which the wrapper treats as released.
+    UPDATE public.reward_redemptions AS rr
     SET used = false, used_on_order_id = NULL, used_at = NULL
-    WHERE used_on_order_id = NEW.id;
+    WHERE rr.used_on_order_id = NEW.id
+      AND rr.id IN (
+        SELECT locked.id
+        FROM public.reward_redemptions AS locked
+        WHERE locked.used_on_order_id = NEW.id
+        FOR UPDATE SKIP LOCKED
+      );
   END IF;
   RETURN NEW;
 END;

@@ -26,7 +26,18 @@ export type ResolveIdempotentOfferReplayResult =
   | { ok: false; reason: 'invalid_offer' }
   | { ok: false; reason: 'verification_failed'; error: unknown };
 
-async function readStoredReplayTaxAmount({
+interface StoredReplayEconomics {
+  taxAmount: number | null;
+  /** `${product_id}::${offer_id}` → stored line condition. */
+  conditions: Map<string, string>;
+}
+
+const EMPTY_REPLAY_ECONOMICS: StoredReplayEconomics = {
+  taxAmount: null,
+  conditions: new Map<string, string>(),
+};
+
+async function readStoredReplayEconomics({
   merchantId,
   requestIdempotencyKey,
   supabase,
@@ -34,13 +45,13 @@ async function readStoredReplayTaxAmount({
   merchantId: string;
   requestIdempotencyKey: string;
   supabase: SupabaseClient;
-}): Promise<number | null> {
+}): Promise<StoredReplayEconomics> {
   // Narrowly scoped SECURITY DEFINER RPC on the caller's normal client:
   // user-facing routes must never use the service-role client, so the
-  // stored tax crosses the boundary as a single numeric projection.
+  // stored economics cross the boundary as one tax + line projection.
   try {
     const { data, error } = await supabase.rpc(
-      'get_storefront_order_replay_tax',
+      'get_storefront_order_replay_economics',
       {
         p_checkout_idempotency_key: requestIdempotencyKey,
         p_merchant_id: merchantId,
@@ -49,28 +60,59 @@ async function readStoredReplayTaxAmount({
     if (error) {
       logger.warn({
         message:
-          'Replay tax read failed; recomputing VAT instead of reusing stored tax',
+          'Replay economics read failed; recomputing instead of reusing stored economics',
         merchantId,
         error,
       });
-      return null;
+      return EMPTY_REPLAY_ECONOMICS;
     }
+    // TABLE functions decode as row arrays; zero rows means the keyed
+    // order vanished between the probe and this read — fail open.
+    const row = (Array.isArray(data) ? data[0] : data) as {
+      tax_amount?: unknown;
+      items?: unknown;
+    } | null;
     // PostgREST may decode numeric as a string; blank/null stays fail-open.
-    const stored =
-      typeof data === 'number'
-        ? data
-        : typeof data === 'string' && data.trim() !== ''
-          ? Number(data)
+    const rawTax = row?.tax_amount;
+    const tax =
+      typeof rawTax === 'number'
+        ? rawTax
+        : typeof rawTax === 'string' && rawTax.trim() !== ''
+          ? Number(rawTax)
           : Number.NaN;
-    return Number.isFinite(stored) ? stored : null;
+    const conditions = new Map<string, string>();
+    const items = row?.items;
+    if (Array.isArray(items)) {
+      for (const entry of items as {
+        product_id?: unknown;
+        offer_id?: unknown;
+        condition?: unknown;
+      }[]) {
+        if (
+          entry?.product_id != null &&
+          entry?.offer_id != null &&
+          typeof entry?.condition === 'string' &&
+          entry.condition !== ''
+        ) {
+          conditions.set(
+            `${String(entry.product_id)}::${String(entry.offer_id)}`,
+            entry.condition
+          );
+        }
+      }
+    }
+    return {
+      taxAmount: Number.isFinite(tax) ? tax : null,
+      conditions,
+    };
   } catch (readError) {
     logger.warn({
       message:
-        'Replay tax read threw; recomputing VAT instead of reusing stored tax',
+        'Replay economics read threw; recomputing instead of reusing stored economics',
       merchantId,
       error: readError,
     });
-    return null;
+    return EMPTY_REPLAY_ECONOMICS;
   }
 }
 
@@ -84,7 +126,8 @@ async function readStoredReplayTaxAmount({
  * and skip mutable offer verification on a hit — downstream preflights
  * fall back to parent prices, the discount/rate recomputes are bypassed
  * the same way, and the RPC's request-hash check remains the authority
- * for conflicts.
+ * for conflicts. The stored tax_amount and per-line conditions are
+ * restored from the keyed order so the retry hashes the identical payload.
  */
 export async function resolveIdempotentOfferReplay({
   merchantId,
@@ -130,20 +173,34 @@ export async function resolveIdempotentOfferReplay({
     };
   }
 
-  const storedReplayTaxAmount = requestIdempotencyKey
-    ? await readStoredReplayTaxAmount({
+  const stored = requestIdempotencyKey
+    ? await readStoredReplayEconomics({
         merchantId,
         requestIdempotencyKey,
         supabase,
       })
-    : null;
+    : EMPTY_REPLAY_ECONOMICS;
+  // The first attempt rewrote canonical-alias line conditions to the live
+  // offer spelling before hashing; restore the stored spelling per line so
+  // the identical retry hashes the same payload (mirrors the economics
+  // mutation above — item conditions are hash-significant). Lines without
+  // a stored match keep the client spelling (fail-open per line).
+  for (const item of orderItemsPayload) {
+    if (item.offer_id == null) continue;
+    const storedCondition = stored.conditions.get(
+      `${String(item.product_id)}::${String(item.offer_id)}`
+    );
+    if (storedCondition != null) {
+      item.condition = storedCondition;
+    }
+  }
   return {
     ok: true,
     value: {
       isIdempotentOfferOrderReplay: true,
       liveOfferConditions: new Map<string, string>(),
       liveOfferPrices: new Map<string, number>(),
-      storedReplayTaxAmount,
+      storedReplayTaxAmount: stored.taxAmount,
     },
   };
 }

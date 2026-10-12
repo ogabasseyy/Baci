@@ -279,4 +279,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261010110000_search_category_facets_scoped_precise.sql',
     sha256: '8907c5436f165cfe6850e8efb8a21b603defe13ad0a9de699a45a44bbc820a33',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261011230000_search_mobile_admin_transaction_review_item_condition.sql',
+    sha256: '41db6c11c93c86d718cae25e0380f1db1015a9297f83db75fbfae62fbfcf6788',
+  },
 ] as const;

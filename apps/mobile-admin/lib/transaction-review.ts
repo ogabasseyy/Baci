@@ -166,6 +166,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
           item.quantity,
           item.product_id,
           item.variant_id,
+          item.condition,
           item.offer_id,
           item.offer_grade,
           item.offer_condition_notes,

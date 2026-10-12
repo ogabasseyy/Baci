@@ -66,6 +66,7 @@ describe('search pending replay sources', () => {
       '20261009330000_storefront_order_offer_label_snapshot_marker.sql',
       '20261009340000_search_mobile_admin_transaction_review_offer_labels.sql',
       '20261010110000_search_category_facets_scoped_precise.sql',
+      '20261011230000_search_mobile_admin_transaction_review_item_condition.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

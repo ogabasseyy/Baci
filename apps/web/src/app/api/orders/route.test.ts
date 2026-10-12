@@ -303,7 +303,7 @@ interface RpcOverrides {
     error: unknown;
   };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
-  get_storefront_order_replay_tax?: { data: unknown; error: unknown };
+  get_storefront_order_replay_economics?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
   get_product_offers?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
@@ -508,7 +508,7 @@ function buildMockSupabase(
       finalize_store_credit_order_payment: { data: null, error: null },
       finalize_quiz_voucher_order_payment: { data: true, error: null },
       has_storefront_order_idempotency_key: { data: false, error: null },
-      get_storefront_order_replay_tax: { data: null, error: null },
+      get_storefront_order_replay_economics: { data: null, error: null },
       // B3.5 round 7 (CodeRabbit High): the helper's variant lookup
       // now routes through this SECURITY DEFINER RPC.
       get_order_variant_overrides: { data: [], error: null },
@@ -5318,7 +5318,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     expect(response.headers.get('x-idempotency-replayed')).toBe('true');
   });
 
-  it('reuses the stored VAT on an idempotent retry past a deleted offer', async () => {
+  it('reuses the stored VAT and line conditions on an idempotent retry past a deleted offer', async () => {
     const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
     const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
     // The stored order's VAT was computed from the offer price live at
@@ -5337,8 +5337,22 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         if (name === 'has_storefront_order_idempotency_key') {
           return Promise.resolve({ data: true, error: null });
         }
-        if (name === 'get_storefront_order_replay_tax') {
-          return Promise.resolve({ data: STORED_TAX_AMOUNT, error: null });
+        if (name === 'get_storefront_order_replay_economics') {
+          return Promise.resolve({
+            data: [
+              {
+                tax_amount: STORED_TAX_AMOUNT,
+                items: [
+                  {
+                    product_id: OFFER_PRODUCT_ID,
+                    offer_id: LIVE_OFFER_ID,
+                    condition: 'refurbished',
+                  },
+                ],
+              },
+            ],
+            error: null,
+          });
         }
         if (name === 'get_product_offers') {
           return Promise.resolve({ data: [], error: null });
@@ -5362,7 +5376,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
             quantity: 1,
             price: 400_000,
             name: 'Refurbished Phone',
-            condition: 'refurbished',
+            condition: 'open_box',
             offerId: LIVE_OFFER_ID,
           },
         ],
@@ -5372,6 +5386,15 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
 
     expect(createSpy).toHaveBeenCalledWith(
       expect.objectContaining({ p_tax_amount: STORED_TAX_AMOUNT })
+    );
+    // The retry carries the canonical alias, but the first attempt hashed
+    // the live offer spelling — the payload must be restored to match.
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: expect.arrayContaining([
+          expect.objectContaining({ condition: 'refurbished' }),
+        ]),
+      })
     );
     expect(response.status).toBe(200);
   });

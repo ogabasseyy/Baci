@@ -101,6 +101,11 @@ describe('transaction review helpers', () => {
     expect(order.items[0]).toMatchObject({ condition: 'used' });
     expect(order.items[0].searchText).toContain('offer-1');
     expect(order.searchText).toContain('offer-1');
+    // The displayed line condition must be searchable too: an
+    // offer-backed line identifiable only by its shown condition
+    // otherwise returns no result.
+    expect(order.items[0].searchText).toContain('used');
+    expect(order.searchText).toContain('used');
   });
 
   it('uses item-level fulfillment identifiers without repeating unrelated order serials', () => {

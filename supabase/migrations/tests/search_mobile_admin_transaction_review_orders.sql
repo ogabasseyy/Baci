@@ -261,7 +261,7 @@ INSERT INTO public.product_offers (
 
 INSERT INTO public.order_items (
   id, order_id, product_id, name, price, quantity, offer_id, offer_grade,
-  offer_condition_notes
+  offer_condition_notes, condition
 ) VALUES (
   'd0000000-0000-4000-8000-000000000003',
   'c0000000-0000-4000-8000-000000000001',
@@ -271,7 +271,8 @@ INSERT INTO public.order_items (
   1,
   '55555555-5555-4555-8555-555555555555',
   'B',
-  'Light wear, screen flawless'
+  'Light wear, screen flawless',
+  'refurbished'
 );
 
 -- Order-level IMEI in fulfillment_details.
@@ -864,6 +865,18 @@ BEGIN
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
     RAISE EXCEPTION 'offer multi-term search failed: %', v_ids;
+  END IF;
+
+  -- The displayed line condition is a client search token, so the server
+  -- must match it too; no other field carries this value.
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['refurbished']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'line condition search failed: %', v_ids;
   END IF;
 
   BEGIN

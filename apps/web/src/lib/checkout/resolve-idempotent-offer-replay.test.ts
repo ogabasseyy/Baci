@@ -27,7 +27,7 @@ function clients({
     if (name === 'has_storefront_order_idempotency_key') {
       return { data: probeHit, error: null };
     }
-    if (name === 'get_storefront_order_replay_tax') {
+    if (name === 'get_storefront_order_replay_economics') {
       return { data: storedTax, error: storedTaxError };
     }
     return { data: offers, error: null };
@@ -66,7 +66,7 @@ describe('resolveIdempotentOfferReplay', () => {
     );
     expect(result.value.storedReplayTaxAmount).toBeNull();
     expect(c.rpc).not.toHaveBeenCalledWith(
-      'get_storefront_order_replay_tax',
+      'get_storefront_order_replay_economics',
       expect.anything()
     );
   });
@@ -75,7 +75,7 @@ describe('resolveIdempotentOfferReplay', () => {
     const c = clients({
       probeHit: true,
       offers: [],
-      storedTax: 30000,
+      storedTax: [{ tax_amount: 30000, items: [] }],
     });
 
     const result = await resolveIdempotentOfferReplay({
@@ -95,16 +95,67 @@ describe('resolveIdempotentOfferReplay', () => {
       expect.anything()
     );
     expect(c.rpc).toHaveBeenCalledWith(
-      'get_storefront_order_replay_tax',
+      'get_storefront_order_replay_economics',
       expect.objectContaining({ p_checkout_idempotency_key: 'checkout-1' })
     );
+  });
+
+  it('restores the stored line condition on a replay hit', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+            },
+          ],
+        },
+      ],
+    });
+    // The retry carries the canonical alias; the first attempt hashed the
+    // live offer spelling, so the payload must be rewritten to match.
+    const payload = [{ ...offerLine, condition: 'open_box' }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].condition).toBe('refurbished');
+  });
+
+  it('leaves unmatched lines on a replay hit (fail-open per line)', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [{ tax_amount: 30000, items: [] }],
+    });
+    const payload = [{ ...offerLine, condition: 'open_box' }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].condition).toBe('open_box');
   });
 
   it('accepts a string-decoded stored tax from PostgREST numerics', async () => {
     const c = clients({
       probeHit: true,
       offers: [],
-      storedTax: '30000.00',
+      storedTax: [{ tax_amount: '30000.00', items: [] }],
     });
 
     const result = await resolveIdempotentOfferReplay({

@@ -156,6 +156,39 @@ describe('isStrandedPreVendVtuRow', () => {
     expect(isStrandedPreVendVtuRow({ ...base, metadata: null })).toBe(false);
   });
 
+  it('declines hybrid splits whose card leg may already be refunded', () => {
+    // Wallet race: wallet never debited (no flag), card leg credited
+    // by refundHybridWalletRace, then the failed-row write lands the
+    // row reference-less processing. Re-driving would vend after a
+    // partial refund — only exact-zero card legs flip.
+    const base = {
+      id: 'vtu-1',
+      status: 'processing' as const,
+      transaction_id: null,
+      error_message: null,
+      created_at: new Date().toISOString(),
+      updated_at: staleAt,
+    };
+    expect(
+      isStrandedPreVendVtuRow({
+        ...base,
+        metadata: { paymentSplit: { wallet: 300, card: 700 } },
+      })
+    ).toBe(false);
+    expect(
+      isStrandedPreVendVtuRow({
+        ...base,
+        metadata: { paymentSplit: { wallet: 1000 } },
+      })
+    ).toBe(false);
+    expect(
+      isStrandedPreVendVtuRow({
+        ...base,
+        metadata: { paymentSplit: { wallet: 1000, card: '0' } },
+      })
+    ).toBe(false);
+  });
+
   it('declines a flagged row: the vend may have landed (post-vend persist failure)', () => {
     // Same reference-less shape, but the persisted flag proves the
     // flow reached the provider call: flipping would re-vend and

@@ -80,7 +80,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,metadata->>walletDebited.eq.true,metadata->>refundIssued.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -96,7 +96,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,metadata->>walletDebited.eq.true,metadata->>refundIssued.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -132,9 +132,10 @@ describe('reconcileProcessingVtuTransactions', () => {
     // and pre-vend interruptions (no reference at all: the reconcile
     // claim declines them) restore to marked pending so the claim →
     // re-vend flow resolves them. Plain pending rows stay excluded
-    // (mapping-less orphans); failed+debited+unrefunded rows are
-    // selected so the failed branch confirms the refund even when
-    // the customer closes the client instead of retrying.
+    // (mapping-less orphans); failed+refund-required+unissued rows
+    // (including marker-less card-only) are selected so the failed
+    // branch confirms the refund even when the customer closes the
+    // client instead of retrying.
     const countQuery = createProcessingQuery({ count: 1 });
     const dataQuery = createProcessingQuery({ data: [{ id: 'tx-retry' }] });
     const supabase = createSupabase({ countQuery, dataQuery });
@@ -149,7 +150,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,metadata->>walletDebited.eq.true,metadata->>refundIssued.is.null)';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({

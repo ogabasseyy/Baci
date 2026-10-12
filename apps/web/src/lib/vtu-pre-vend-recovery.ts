@@ -60,6 +60,11 @@ export interface StrandedPreVendRowCandidate {
  * proof: fulfill only writes walletDebited when the wallet leg is
  * positive, so card-only rows (post-marker included) legitimately
  * lack the flag — flipping one would re-vend a card-funded delivery.
+ * The split must ALSO be wallet-only (card leg exactly 0): a hybrid
+ * wallet race can refund the card leg and then strand reference-less
+ * without the wallet flag, and re-driving THAT would vend after a
+ * partial refund. Genuine hybrid pre-vend strands stay processing
+ * (visible, support-recoverable) rather than risk double value.
  * A flip re-drives claim → idempotent debit → first vend.
  */
 export function isStrandedPreVendVtuRow(
@@ -87,7 +92,7 @@ export function isStrandedPreVendVtuRow(
   // ONLY for checkout rows with walletAmount > 0. Fail closed on
   // missing/malformed splits — absence is the card-only shape.
   const split = row.metadata?.paymentSplit as
-    | { wallet?: unknown }
+    | { wallet?: unknown; card?: unknown }
     | null
     | undefined;
   const walletLeg = split?.wallet;
@@ -95,6 +100,18 @@ export function isStrandedPreVendVtuRow(
     typeof walletLeg !== 'number' ||
     !Number.isFinite(walletLeg) ||
     walletLeg <= 0
+  ) {
+    return false;
+  }
+  // Wallet-only proof (see docblock): a hybrid race may have refunded
+  // the card leg before stranding. Fail closed on any nonzero or
+  // non-numeric card leg — prepare always writes card: 0 for
+  // wallet-only, so anything else is not a provable wallet-only row.
+  const cardLeg = split?.card;
+  if (
+    typeof cardLeg !== 'number' ||
+    !Number.isFinite(cardLeg) ||
+    cardLeg !== 0
   ) {
     return false;
   }

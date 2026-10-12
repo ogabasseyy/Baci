@@ -21,12 +21,16 @@ const RECONCILABLE_VTU_TYPES = [
 // them). Failed rows persist BEFORE their refund is attempted, so a
 // transient reversal failure would strand the debit when the customer
 // closes the client instead of retrying (the 500 keeps the key, but
-// only a retry re-drives it): failed+debited+unrefunded rows are
-// selected so the failed branch confirms the refund. Plain pending
-// rows (never debited: mapping-less orphans, PK-race leftovers) and
+// only a retry re-drives it): failed+refund-required+unissued rows
+// are selected so the failed branch confirms the refund. The failed
+// clause mirrors requiresVtuCustomerWalletRefund in PostgREST form —
+// gating on the wallet-debit marker instead would permanently exclude
+// card-only rows (no marker) whose refundCardOnly failed, leaving
+// history refund_pending with no background path retrying the credit.
+// Plain pending rows (mapping-less orphans, PK-race leftovers) and
 // already-refunded failures stay excluded.
 const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,metadata->>walletDebited.eq.true,metadata->>refundIssued.is.null)';
+  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)';
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

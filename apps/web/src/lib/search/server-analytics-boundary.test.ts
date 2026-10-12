@@ -18,11 +18,14 @@ function productionTypeScriptFiles(directory: string): string[] {
 
 describe('search analytics service-role boundary', () => {
   it('allows only the submissions route to import the ingestion edge', () => {
-    // Match any specifier resolving to the edge module: alias or relative,
-    // either quote style, static or dynamic import, including re-exports.
-    const edgeSpecifierPattern = /server-analytics-client['"`]/;
+    // Match real import specifiers: an import/from/require keyword must
+    // open the string, so governance allowlists holding the bare path
+    // (no import keyword) do not count — while an explicit extension
+    // spelling (@/.../server-analytics-client.ts) still matches.
+    const edgeImportPattern =
+      /(?:import|from|require)\s*\(?\s*['"`][^'"`]*server-analytics-client(\.(ts|tsx|js|mts|cts))?['"`]/;
     const importers = productionTypeScriptFiles(sourceRoot)
-      .filter((path) => edgeSpecifierPattern.test(readFileSync(path, 'utf8')))
+      .filter((path) => edgeImportPattern.test(readFileSync(path, 'utf8')))
       .map((path) => relative(sourceRoot, path));
 
     expect(importers).toEqual(['app/api/search/submissions/route.ts']);
@@ -39,5 +42,24 @@ describe('search analytics service-role boundary', () => {
       .map((path) => relative(sourceRoot, path));
 
     expect(constructors).toEqual(['lib/search/server-analytics-client.ts']);
+  });
+
+  it('forbids variable-sentinel constructions everywhere', () => {
+    // A non-literal first argument (identifier, template interpolation,
+    // member access) would evade the literal-construction pin above, so
+    // no production file may construct the factory that way. The factory
+    // definition itself is excluded: its implementation signature is not
+    // a call site.
+    const variableConstructionPattern = /createServiceClient\(\s*(?![)'"'])/;
+    const offenders = productionTypeScriptFiles(sourceRoot)
+      .filter(
+        (path) =>
+          relative(sourceRoot, path) !==
+            join('lib', 'supabase', 'service.ts') &&
+          variableConstructionPattern.test(readFileSync(path, 'utf8'))
+      )
+      .map((path) => relative(sourceRoot, path));
+
+    expect(offenders).toEqual([]);
   });
 });

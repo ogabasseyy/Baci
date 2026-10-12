@@ -9,7 +9,6 @@ import {
   mkdir,
   realpath,
   rm,
-  writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAX_MANIFEST_BYTES } from './constants.mjs';
@@ -244,9 +243,12 @@ export async function commitGeneration({
   // what publish proved. Best-effort and post-visibility: the durability
   // value is only final after the renames above, and a lost sidecar must
   // degrade reuse reports to 'unknown' — never fail an already-published
-  // job or print a false 'synced'.
-  await writeFile(
-    join(dir, 'durability.json'),
+  // job or print a false 'synced'. Exclusive confined create: a plain
+  // writeFile would follow a durability.json link planted in commit/
+  // before the rename and truncate its external target.
+  await writeConfinedFile(
+    dir,
+    'durability.json',
     JSON.stringify({ durability })
   ).catch(() => undefined);
   return { durability, path: dir, reused: false };

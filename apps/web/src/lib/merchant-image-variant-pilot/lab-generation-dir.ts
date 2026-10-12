@@ -46,11 +46,27 @@ export async function resolveLabGenerationDir(
     );
   }
   const generationsRoot = join(outputRoot, 'generations');
+  // Bind the root itself before trusting its children: a symlinked
+  // generations/ would otherwise resolve outside the output tree and
+  // let loads accept external generations as reusable.
+  const realOutput = await realpath(outputRoot).catch(() => null);
+  if (!realOutput) {
+    throw new LabGenerationConfinementError(
+      'generation-missing',
+      'generation is not published'
+    );
+  }
   const realRoot = await realpath(generationsRoot).catch(() => null);
   if (!realRoot) {
     throw new LabGenerationConfinementError(
       'generation-missing',
       'generation is not published'
+    );
+  }
+  if (realRoot !== join(realOutput, 'generations')) {
+    throw new LabGenerationConfinementError(
+      'generation-escape',
+      'generations root escapes the output root'
     );
   }
   if (

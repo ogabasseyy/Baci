@@ -3,7 +3,7 @@
 // knows about inventories, manifests, or served pages.
 import { createHash } from 'node:crypto';
 import { lstat, realpath, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { PILOT_UUID_PATTERN } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
 import { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
@@ -175,9 +175,19 @@ export async function resolveGenerationDir(outputRoot, generationId) {
     throw new Error('generation entry escapes the output root');
   }
   const generationsRoot = join(outputRoot, 'generations');
+  // Bind the root itself before trusting its children: a symlinked
+  // generations/ would otherwise resolve outside the output tree and
+  // let preflight certify external manifests and tiers.
+  const realOutput = await realpath(outputRoot).catch(() => null);
+  if (!realOutput) {
+    throw new Error('generation is not published');
+  }
   const realRoot = await realpath(generationsRoot).catch(() => null);
   if (!realRoot) {
     throw new Error('generation is not published');
+  }
+  if (realRoot !== join(realOutput, 'generations')) {
+    throw new Error('generations root escapes the output root');
   }
   if (
     (await realpath(dir).catch(() => null)) !== join(realRoot, generationId)
@@ -185,6 +195,20 @@ export async function resolveGenerationDir(outputRoot, generationId) {
     throw new Error('generation entry escapes the output root');
   }
   return dir;
+}
+
+// Confines a served-HTML-derived staged path beneath the public root:
+// the /__pilot/ prefix check alone lets /__pilot/<id>/../../.. escape
+// through join normalization, so resolve against the canonical root
+// and compare before any Sharp read. In-tree names are the operator's
+// own staged files (trusted); only escape is refused.
+export async function resolveStagedPath(publicDir, base) {
+  const realPublic = await realpath(publicDir);
+  const candidate = resolve(realPublic, `.${sep}${base}`);
+  if (candidate !== realPublic && !candidate.startsWith(realPublic + sep)) {
+    throw new Error(`staged path escapes the public directory: "${base}"`);
+  }
+  return candidate;
 }
 
 // Pretty-printed operator-artifact write: runner records stay

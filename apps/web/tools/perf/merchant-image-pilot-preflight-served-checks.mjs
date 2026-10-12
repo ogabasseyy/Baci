@@ -20,6 +20,7 @@ import {
 import { readBoundedBody } from './merchant-image-pilot-preflight-served-body.mjs';
 import {
   readUpToBytes,
+  resolveStagedPath,
   sha256Hex,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
@@ -73,11 +74,10 @@ export async function assertServedDescriptors(
         );
         continue;
       }
-      // Loader-param URLs (?w&q from the original renderers) name a
-      // REQUESTED width, not the encoded width — but only control
-      // originals are loader-rendered. A queried generation URL (a
-      // cache-buster) still claims its descriptor against the static
-      // staged file, so it falls through to verification below.
+      // Loader-param URLs (?w&q) name a REQUESTED width, not the
+      // encoded width — but only control originals are loader-rendered.
+      // A queried generation URL (cache-buster) still claims its
+      // descriptor against the static staged file, so it falls through.
       const loaderExempt =
         path !== base && base.startsWith('/__pilot/originals/');
       // A density descriptor names no encoded width (a DPR-2 browser can
@@ -89,7 +89,7 @@ export async function assertServedDescriptors(
         // Exempt, bare (no-op control srcSets, standalone img src), or
         // density-described: the staged file must exist and decode.
         try {
-          await sharp(join(publicDir, base)).metadata();
+          await sharp(await resolveStagedPath(publicDir, base)).metadata();
         } catch {
           failures.push(`${name}: staged file does not decode: "${base}"`);
         }
@@ -103,7 +103,7 @@ export async function assertServedDescriptors(
       }
       let meta;
       try {
-        meta = await sharp(join(publicDir, base)).metadata();
+        meta = await sharp(await resolveStagedPath(publicDir, base)).metadata();
       } catch {
         failures.push(
           `${name}: staged file does not decode: "${candidate.url}"`

@@ -24,7 +24,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: pilot-codec-${{ github.event.pull_request.number || github.ref }}
+  # Labeled events run in their own group: an unrelated label must
+  # neither cancel an in-flight automatic run nor take its slot and
+  # then skip the jobs (leaving the commit without coverage). The
+  # opt-in label still forces a suite run from the labeled group.
+  group: pilot-codec-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && '-labeled' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -32,9 +36,8 @@ jobs:
     # The pull_request paths filter already scopes this job to pilot
     # PRs, so opened/synchronize/reopened always run. Labeled runs
     # evaluate the PR's COMPLETE label set, not just the added label:
-    # an unrelated label restarts the concurrency group, and gating on
-    # the new label alone would skip the replacement while the opt-in
-    # label is still present.
+    # gating on the new label alone would skip while the opt-in label
+    # is still present.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.action != 'labeled' ||

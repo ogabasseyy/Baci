@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ACCEPTANCE_DATETIME,
@@ -9,6 +12,7 @@ import {
   isRouteDatetime,
   pass,
   positionalHashesMatch,
+  resolveGenerationDir,
   sha256Hex,
   TIER_FILE,
   UUID,
@@ -110,5 +114,18 @@ describe('small predicates', () => {
     expect(positionalHashesMatch(['a', 'a'], ['a'])).toBe(false);
     expect(positionalHashesMatch(['a'], ['a', 'b'])).toBe(false);
     expect(positionalHashesMatch(['a'], undefined)).toBe(false);
+  });
+});
+
+describe('resolveGenerationDir', () => {
+  it('rejects a symlinked generations root', async () => {
+    const outputRoot = await mkdtemp(join(tmpdir(), 'pilot-shared-root-'));
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-shared-out-'));
+    const generationId = 'e'.repeat(64);
+    await mkdir(join(outside, generationId), { recursive: true });
+    await symlink(outside, join(outputRoot, 'generations'));
+    await expect(
+      resolveGenerationDir(outputRoot, generationId)
+    ).rejects.toThrow(/generations root escapes the output root/);
   });
 });

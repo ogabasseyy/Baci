@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
@@ -57,6 +57,44 @@ describe('assertControlPurity', () => {
 });
 
 describe('assertServedDescriptors', () => {
+  it('refuses descriptor URLs traversing outside the public dir', async () => {
+    // A /__pilot/ URL with .. segments passes the prefix check but must
+    // never reach Sharp: the decoy outside matches the descriptor, so an
+    // unconfined read would pass while the confined gate fails closed.
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-trav-'));
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-served-out-'));
+    const decoy = join(outside, 'decoy.webp');
+    await writeFile(
+      decoy,
+      await sharp({
+        create: { background: '#1c1917', channels: 3, height: 10, width: 48 },
+      })
+        .webp()
+        .toBuffer()
+    );
+    const realPublic = await realpath(publicDir);
+    const realDecoy = await realpath(decoy);
+    const rel = relative(join(realPublic, '__pilot', GEN), realDecoy)
+      .split(sep)
+      .join('/');
+    const traversal = `/__pilot/${GEN}/${rel}`;
+    const html = section({
+      binding: `${MERCHANT}/logo-a`,
+      inner: `<picture><source srcSet="${traversal} 48w" type="image/webp"/><img src="${traversal}" alt="logo"/></picture><img src="${traversal}" alt="standalone"/>`,
+      slot: 'header-logo',
+    });
+    const failures = await assertServedDescriptors(html, {
+      arm: 'pilot',
+      origin: 'http://localhost:3000',
+      publicDir,
+    });
+    // Both the bare img src and the width-described source refuse.
+    expect(failures.length).toBe(2);
+    for (const failure of failures) {
+      expect(failure).toMatch(/does not decode/);
+    }
+  });
+
   it('skips reported sections without touching staged bytes', async () => {
     const html = section({
       binding: `${MERCHANT}/logo-a`,

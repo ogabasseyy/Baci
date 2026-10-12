@@ -80,4 +80,26 @@ describe('resolveLabGenerationDir', () => {
       'generation-escape'
     );
   });
+
+  it('rejects a symlinked generations root', async () => {
+    const outputRoot = join(
+      tmpdir(),
+      `pilot-gen-root-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    await mkdir(outputRoot, { recursive: true });
+    const outside = join(
+      tmpdir(),
+      `pilot-gen-rout-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    await mkdir(join(outside, GENERATION_ID), { recursive: true });
+    await symlink(outside, join(outputRoot, 'generations'));
+    const error = await resolveLabGenerationDir(
+      outputRoot,
+      GENERATION_ID
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LabGenerationConfinementError);
+    expect((error as LabGenerationConfinementError).code).toBe(
+      'generation-escape'
+    );
+  });
 });

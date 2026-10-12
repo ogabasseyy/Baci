@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import { stat, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { commitGeneration, loadGeneration } from './manifest-store.mjs';
@@ -131,3 +140,31 @@ test('commitGeneration re-verifies tiers inside commitDir before publishing', as
   );
 });
 
+test('commitGeneration never follows a planted durability sidecar link', async () => {
+  // durability.json planted as a link inside an existing commit dir: the
+  // best-effort sidecar write must refuse (leaving reuse to report
+  // 'unknown') instead of truncating the external target — and the
+  // already-published job must still report success.
+  const fixture = await commitFixture('pilot-r1-sidecar-link');
+  const outside = join(
+    await mkdtemp(join(tmpdir(), 'pilot-sidecar-out-')),
+    'precious.json'
+  );
+  await writeFile(outside, '{"precious":true}');
+  await mkdir(join(fixture.stagingDir, 'commit'), { recursive: true });
+  await symlink(outside, join(fixture.stagingDir, 'commit', 'durability.json'));
+  const result = await commitGeneration({
+    files: fixture.files,
+    generationId: fixture.generationId,
+    job: fixture.job,
+    manifest: fixture.manifest,
+    outputRoot: fixture.root,
+    stagingDir: fixture.stagingDir,
+  });
+  assert.equal(result.reused, false);
+  assert.equal(await readFile(outside, 'utf8'), '{"precious":true}');
+  assert.equal(
+    (await lstat(join(result.path, 'durability.json'))).isSymbolicLink(),
+    true
+  );
+});

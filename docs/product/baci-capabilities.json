@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-11T20:00:00+01:00",
-  "source_revision": "32e893bf99bb8060e55e7440d3288418efa43189",
+  "reviewed_at": "2026-10-12T22:54:56+01:00",
+  "source_revision": "7d0cbc48f114cda6eb3d1b7d8cac644e9610d56b",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {

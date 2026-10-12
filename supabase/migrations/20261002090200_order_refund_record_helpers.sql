@@ -209,7 +209,13 @@ BEGIN
     IF v_allocation<>0 THEN RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001'; END IF;
     v_refunded := v_refunded+p_amount;
     v_remaining := v_remaining-p_amount;
-    IF v_remaining=0 THEN
+    -- A Paystack attestation always needs provider verification, so it
+    -- requeues even when a balance remains: the row counts as pending
+    -- (blocking further records) while the drain only selects
+    -- failed, stale-claimed, or deferred rows — without the upsert, a
+    -- missing, completed, or exhausted row would strand the claim
+    -- unverified forever with recording disabled.
+    IF v_remaining=0 OR p_method='paystack' THEN
       -- Route through the trusted aggregate finalization instead of
       -- completing directly: the next service-role claim sees full
       -- coverage (manual rows count) and runs settlement reversal,

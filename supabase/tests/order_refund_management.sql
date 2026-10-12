@@ -1244,6 +1244,12 @@ BEGIN
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000049',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-049',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000050',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-050',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000051',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-051',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
@@ -1384,7 +1390,34 @@ BEGIN
       'completed', 'paystack', '777049',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000071',
-        'provider_refund_status', 'processed'));
+        'provider_refund_status', 'processed')),
+    -- A lone capture with no side-effect row: a partial Paystack
+    -- attestation must still requeue verification for it.
+    ('9ef12000-0000-4000-8000-000000000074',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000050', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-50', '{}'::jsonb),
+    -- A covered leg with anomalous extra evidence: the processed
+    -- Paystack row covers the leg, but the linked completed
+    -- Korapay row must still block aggregate finalization like
+    -- the manager's pending gate.
+    ('9ef12000-0000-4000-8000-000000000075',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000051', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-51', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000076',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000051', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777051',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000075',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000077',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000051', 'refund', 100, 'NGN',
+      'completed', 'korapay', 'kp-51',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000075'));
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1464,6 +1497,7 @@ DO $refund_round33_status$
 DECLARE
   v_result jsonb;
   v_label text;
+  v_attempts integer;
 BEGIN
   -- The self-terminal leg's linked row counts once: the manager
   -- still owes the uncovered sibling leg.
@@ -1509,6 +1543,46 @@ BEGIN
   IF v_label <> 'refunded' THEN
     RAISE EXCEPTION 'covered live capture did not flip label, got %',
       v_label;
+  END IF;
+  -- A partial Paystack attestation requeues verification even with a
+  -- balance left: the claim counts as pending (blocking further
+  -- records), so without a selectable side-effect row no worker
+  -- would ever verify it.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000050', 'manual', 30,
+    '2026-09-28T12:00:00Z', 'paystack', 'verify-queue-50', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100
+    OR (v_result->>'pending')::numeric <> 30 THEN
+    RAISE EXCEPTION 'partial paystack attestation miscounted, remaining % pending %',
+      v_result->>'remaining', v_result->>'pending';
+  END IF;
+  SELECT status, attempts INTO v_label, v_attempts
+    FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000050'
+     AND step = 'refund';
+  IF NOT FOUND OR v_label <> 'failed' OR v_attempts <> 0 THEN
+    RAISE EXCEPTION 'partial paystack attestation not requeued, %/%',
+      v_label, v_attempts;
+  END IF;
+  -- Recording stays blocked until the worker verifies the claim.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000050', 'manual', 30,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'verify-blocked-50', NULL, true);
+    RAISE EXCEPTION 'manual accepted beside unverified paystack claim';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+  -- A cross-gateway row beside a covered leg holds the manager
+  -- pending: the claim test below asserts the aggregate gate
+  -- agrees instead of finalizing past it.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000051'
+  ) INTO v_result;
+  IF (v_result->>'pending')::numeric <> 100 THEN
+    RAISE EXCEPTION 'cross-gateway row not held pending, got %',
+      v_result->>'pending';
   END IF;
   -- A first manual record that leaves a balance behind is partial in
   -- the same response: the panel must not advertise a retry the
@@ -2032,6 +2106,17 @@ BEGIN
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'covered-leg manual claim finalized, got %', v_status;
   END IF;
+  -- Anomalous terminal evidence blocks finalization like the
+  -- manager's pending gate: the processed row covers the leg, but
+  -- the linked Korapay row routes to the worker for quarantine
+  -- instead of completing past unreconciled evidence.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000051', 'refund',
+    '9ef13000-0000-4000-8000-000000000051');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'anomalous evidence finalized, got %', v_status;
+  END IF;
   -- The claim pins its orders-row lock explicitly: claim-vs-manual
   -- serialization must not rest on the incidental side-effect FK.
   IF pg_get_functiondef(
@@ -2315,6 +2400,11 @@ BEGIN
   IF private.describe_refund_worker_error_v1('RECONCILIATION pending')
     <> 'This refund needs review before it can continue.' THEN
     RAISE EXCEPTION 'uppercase reconciliation keyword missed';
+  END IF;
+  IF private.describe_refund_worker_error_v1(
+    'cancellation_refund_preflight_deferred_for_budget')
+    <> 'Refund in progress — queued to resume automatically.' THEN
+    RAISE EXCEPTION 'budget deferral mislabeled as failure';
   END IF;
 END;
 $refund_ledger_asserts$;

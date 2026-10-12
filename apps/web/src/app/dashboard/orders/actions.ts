@@ -30,7 +30,7 @@ import {
   ResendOrderConfirmationInputSchema,
 } from '@/schemas/dashboard-order-actions';
 import type { Order } from './dashboard-order';
-import type { Transaction } from './dashboard-transaction';
+import { fetchOrderTransactions } from './fetch-order-transactions';
 import { resolveJumiaDashboardOrderScope } from './jumia-dashboard-order-scope';
 import type { JumiaOrder } from './map-jumia-dashboard-order';
 import { mapJumiaDashboardOrder } from './map-jumia-dashboard-order';
@@ -523,37 +523,16 @@ export async function getOrder(
     (order.order_items || []).map((item) => item.product_id)
   );
 
-  // Fetch transactions (transaction_type lets the refund section tell
-  // funded pending orders from unfunded ones). Merchant-scoped like the
-  // order read above; RLS is not the only tenant boundary relied upon.
-  const { data: transactions, error: transactionsError } = await supabase
-    .from('transactions')
-    .select(
-      'id, gateway_reference, transaction_type, status, amount, currency, gateway, created_at'
-    )
-    .eq('merchant_id', authorizedMerchantId)
-    .eq('order_id', order.id)
-    .order('created_at', { ascending: false });
-
-  if (transactionsError) {
-    // Fail open on visibility: an empty list would hide the refund
-    // recovery panel exactly when it may be needed, so leave funding
-    // unknown (the section shows the panel) and log for operators.
-    logger.error({
-      message: 'Error fetching order transactions',
-      error: transactionsError,
-      merchantId: authorizedMerchantId,
-      orderId: order.id,
-      route: 'dashboard/orders/getOrder',
-    });
-  }
+  const transactions = await fetchOrderTransactions({
+    merchantId: authorizedMerchantId,
+    orderId: order.id,
+    supabase,
+  });
 
   return mapDashboardOrderRecord(order, {
     includeDetails: true,
     orderItemImageMap,
-    transactions: transactionsError
-      ? undefined
-      : ((transactions || []) as Transaction[]),
+    transactions,
   });
 }
 

@@ -19,10 +19,11 @@ vi.mock('@/components/platform/footer', () => ({ PlatformFooter: () => null }));
 
 describe('public pricing page claims', () => {
   it('does not present unverified API or wholesale access as included', () => {
-    render(<PricingPage />);
+    const { container } = render(<PricingPage />);
 
     expect(screen.getByText('Premium')).toBeInTheDocument();
-    expect(screen.queryByText('API Access')).not.toBeInTheDocument();
-    expect(screen.queryByText('Wholesale Features')).not.toBeInTheDocument();
+    const text = container.textContent?.toLowerCase() ?? '';
+    expect(text).not.toContain('api access');
+    expect(text).not.toContain('wholesale features');
   });
 });

@@ -130,4 +130,50 @@ describe('RewardsPage', () => {
 
     expect(catalogMock).toHaveBeenCalled();
   });
+
+  it('skeletons instead of showing the previous shopper after sign-in change', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    const authMock = vi.mocked(useCustomerAuth);
+    authMock.mockReturnValue({ customer: { id: 'customer-1' } } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    const settled = {
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    };
+    loyaltyMock.mockReturnValue(settled as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // New shopper while the new fetch is in flight (stale customer-1
+    // data still in the hook): the previous enrolled subtree must not
+    // paint. The gate keys on identity, not loading, so even the
+    // pre-fetch frame skeletons.
+    catalogMock.mockClear();
+    authMock.mockReturnValue({ customer: { id: 'customer-2' } } as never);
+    loyaltyMock.mockReturnValue({ ...settled, loading: true } as never);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).not.toHaveBeenCalled();
+  });
 });

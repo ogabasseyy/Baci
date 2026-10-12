@@ -54,13 +54,19 @@ export default function RewardsPage() {
     setRefreshToken((token) => token + 1);
   };
 
-  // The skeleton is for the initial fetch only. A background refetch
-  // (e.g. after onRedeemed) must not unmount the enrolled subtree: that
-  // would destroy the success dialog holding the just-issued code.
-  const [hasLoaded, setHasLoaded] = useState(false);
+  // The skeleton shows until the first settled fetch for THIS identity. A
+  // same-identity background refetch (e.g. after onRedeemed) keeps the
+  // enrolled subtree mounted so the success dialog survives; a merchant or
+  // customer change mismatches immediately (before the new fetch lands),
+  // so the previous shopper's data never paints.
+  const identity = `${merchantId ?? ''}:${customerId ?? ''}`;
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
   useEffect(() => {
-    if (!loading) setHasLoaded(true);
-  }, [loading]);
+    if (!loading) setLoadedIdentity(identity);
+  }, [loading, identity]);
+  // No loading term: same-identity refetches keep content (dialog
+  // survives), while a new identity skeletons on the very first render.
+  const showSkeleton = loadedIdentity !== identity;
 
   // Loading state
   if (!merchantId) {
@@ -95,7 +101,7 @@ export default function RewardsPage() {
         </p>
       </div>
 
-      {loading && !hasLoaded ? (
+      {showSkeleton ? (
         <div className="space-y-6">
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-64 w-full" />

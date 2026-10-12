@@ -70,9 +70,13 @@ BEGIN
     END IF;
   END IF;
 
+  -- FOR UPDATE pins program state through settlement (same reason as the
+  -- enrollment read): a concurrent disable/minimum change blocks instead
+  -- of slipping under this read and spending points against stale policy.
   SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
   FROM public.loyalty_settings
-  WHERE merchant_id = p_merchant_id;
+  WHERE merchant_id = p_merchant_id
+  FOR UPDATE;
 
   IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');

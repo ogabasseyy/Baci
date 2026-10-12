@@ -114,7 +114,6 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
 
     expect(body).toMatchObject({
       valid: true,
-      loyalty_redemption_id: '22222222-2222-4222-8222-222222222222',
       code: 'RDM-ABCDEF12',
       discount_type: 'fixed',
       discount_value: 1000,
@@ -122,6 +121,9 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
       description: 'Probe reward',
     });
     expect(body.discount_code_id).toBeUndefined();
+    // The internal redemption UUID stays server-side: the order route
+    // re-resolves the public code, so anon callers get no row handle.
+    expect(body.loyalty_redemption_id).toBeUndefined();
   });
 
   it('returns invalid when neither lookup resolves', async () => {

@@ -1,16 +1,12 @@
 -- Atomic loyalty enrollment (issue #3165).
 --
--- POST /api/storefront/loyalty/enroll was written against columns that do not
--- exist (loyalty_settings.welcome_bonus / referral_bonus_referee /
--- referral_bonus_referrer, customer_loyalty.tier / referred_by) and called a
--- non-existent increment_loyalty_points RPC, so it 500'd on the first SELECT
--- while the UI advertised signup/referral bonus points.
+-- POST /api/storefront/loyalty/enroll referenced nonexistent columns and a
+-- nonexistent increment RPC, so it 500'd while the UI advertised bonuses.
 --
--- This SECURITY DEFINER RPC performs the whole enrollment in one transaction
--- against the real schema (baseline 20260418000000):
---   loyalty_settings(signup_bonus_points, referral_bonus_points)
---   customer_loyalty(current_tier, referred_by_customer_id)
---   points_transactions(... balance_after NOT NULL, source NOT NULL)
+-- This SECURITY DEFINER RPC enrolls in one transaction against the real
+-- schema: loyalty_settings(signup/referral bonuses),
+-- customer_loyalty(current_tier, referred_by_customer_id),
+-- points_transactions(balance_after/source NOT NULL).
 --
 -- Product decision (issue #3165, option a): the single referral_bonus_points
 -- value is awarded to BOTH the referrer and the referee ("you both get X").
@@ -26,9 +22,8 @@
 --   SELECT merchant_id, upper(referral_code), count(*)
 --   FROM public.customer_loyalty WHERE referral_code IS NOT NULL
 --   GROUP BY 1, 2 HAVING count(*) > 1;
--- customer_loyalty is small (the enroll path never worked; rows come from
--- the purchase-accrual path with random codes), so a plain index build is
--- used instead of CONCURRENTLY.
+-- customer_loyalty is small (rows come only from purchase accrual), so a
+-- plain index build is used instead of CONCURRENTLY.
 DO $$
 BEGIN
   IF EXISTS (
@@ -74,12 +69,9 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  -- Fail closed when the program is missing or disabled. Clamp negative
-  -- merchant config to zero so balances can never go negative. FOR UPDATE
-  -- pins the row through settlement: a concurrent settings upsert (disable
-  -- or bonus change) blocks until this transaction commits instead of
-  -- slipping in under the stale read. No deadlock risk: the settings
-  -- endpoint never takes the advisory creation lock below.
+  -- Fail closed when the program is missing/disabled; clamp negatives to
+  -- zero. FOR UPDATE pins the row through settlement (no deadlock: the
+  -- settings endpoint never takes the advisory creation lock below).
   SELECT
     GREATEST(COALESCE(signup_bonus_points, 0), 0),
     GREATEST(COALESCE(referral_bonus_points, 0), 0)

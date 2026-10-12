@@ -2,7 +2,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000001_enroll_customer_loyalty.sql',
-    sha256: '42faa0089a2e89add00f2d8c0b0c4aa742a91bf1f14da05bbeca3b0bdec56399',
+    sha256: 'b67d71dcba9308b76505b83df70e05146effe1229f3a454469c8e8765c0af527',
   },
   {
     repositoryPath: 'supabase/migrations/20261010000002_loyalty_status.sql',
@@ -21,7 +21,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000005_redeem_loyalty_reward.sql',
-    sha256: '40f3722a7ffcc59f83c1c48957cea1f57277d12140a41271204c62b12fac0063',
+    sha256: '0c6bf91c52ca6bfeab041a2589922ffdfa1aa151c9b08645ed5dff5b61199f5c',
   },
   {
     repositoryPath:
@@ -42,5 +42,10 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261010000009_loyalty_checkout_bridge.sql',
     sha256: '86ae7ba324cff453379d3fbb2d0df545ae5bac25ec61fbeb36d080dd8a75c677',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010000010_reserve_rdm_discount_code_prefix.sql',
+    sha256: 'a1f31c954e23e502a943791924a0935ec78be8b64467fc4bccd1e02cd1fd39c3',
   },
 ] as const;

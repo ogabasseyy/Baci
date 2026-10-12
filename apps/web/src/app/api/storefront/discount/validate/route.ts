@@ -166,9 +166,10 @@ export async function POST(request: NextRequest) {
             },
             cart_total
           );
+          // No redemption UUID: the order route re-resolves the code
+          // server-side, so the internal row id stays out of anon reach.
           return NextResponse.json({
             valid: true,
-            loyalty_redemption_id: loyaltyCode.redemption_id,
             code,
             discount_type: loyaltyDiscountType,
             discount_value: loyaltyValue,

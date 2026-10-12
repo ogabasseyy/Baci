@@ -267,3 +267,13 @@ SELECT pg_temp.assert_true(
   ) LIKE '%FROM public.discount_codes%pg_catalog.upper(code) = v_redemption_code%',
   'code mint does not probe the merchant namespace'
 );
+
+-- Redemption pins the settings row (FOR UPDATE) through settlement like
+-- enrollment, so a concurrent disable/minimum change cannot slip under
+-- the stale read. (Single session here; pinned like case 10d.)
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%FROM public.loyalty_settings%FOR UPDATE%',
+  'redemption lost the settings-row lock'
+);

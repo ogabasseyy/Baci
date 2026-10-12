@@ -251,3 +251,34 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'minimum-gated store credit was honored, mutated, or advertised'
 );
+
+-- 23h. The RDM- reservation holds at the database boundary: a direct
+-- discount_codes insert (the unguarded mobile-admin path) with an RDM-*
+-- code fails, while an ordinary code still writes.
+DO $$
+BEGIN
+  INSERT INTO public.discount_codes (
+    merchant_id, code, discount_type, discount_value
+  ) VALUES (
+    '01aa0000-0000-4000-8000-000000000001', 'RDM-DB-PROBE-01',
+    'fixed_amount', 100
+  );
+  RAISE EXCEPTION 'RDM- merchant code was not rejected';
+EXCEPTION WHEN check_violation THEN NULL;
+END $$;
+
+INSERT INTO public.discount_codes (
+  merchant_id, code, discount_type, discount_value
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'DB-PROBE-OK-01',
+  'fixed_amount', 100
+);
+
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM public.discount_codes
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND code = 'DB-PROBE-OK-01'
+  ),
+  'ordinary merchant code was rejected by the RDM reservation'
+);

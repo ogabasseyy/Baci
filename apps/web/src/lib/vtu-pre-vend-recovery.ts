@@ -4,6 +4,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export interface PreVendRestoreRow {
   id: string;
   metadata?: Record<string, unknown> | null;
+  /**
+   * Snapshot token for the compare-and-set flip: the `updated_at`
+   * read with this snapshot. The DB trigger bumps it on EVERY
+   * update, so any concurrent write (another flip, a reclaim, a
+   * metadata overlay) invalidates the token.
+   */
+  updated_at?: string | null;
 }
 
 // Bounded retry mirrors vtu-fulfillment's purchase-result persistence
@@ -162,6 +169,20 @@ export function isStrandedPreVendVtuRow(
  * /api/vtu/history returns to the customer — it MUST be a fixed
  * template with NO raw provider/DB text. Log raw causes at the call
  * site (server logs only), never through here.
+ *
+ * Compare-and-set (Codex R40 rmLIg): the flip additionally matches
+ * the snapshot's `updated_at`, and confirms a row was actually
+ * updated. A status-only guard permits an ABA race — recovery A
+ * flips to pending, another pass reclaims to processing and begins
+ * vending, then stale recovery B matches `processing` and flips the
+ * NEW incarnation back, wiping the fresh metadata (including
+ * `walletDebited`) with its stale snapshot so the next pass vends
+ * again. The token closes this: any concurrent write bumps
+ * `updated_at` (DB trigger) and the stale flip matches zero rows.
+ * Zero-match is a benign lost race (the row progressed) — warn and
+ * stop, do NOT retry (the token can never become valid again). A
+ * missing token fails closed (no flip): without the snapshot value
+ * there is nothing to compare against.
  */
 export async function restoreInterruptedPreVendVtuRow({
   userSafeMessage,
@@ -172,13 +193,21 @@ export async function restoreInterruptedPreVendVtuRow({
   row: PreVendRestoreRow;
   supabase: SupabaseClient;
 }): Promise<void> {
+  const snapshotToken = row.updated_at ?? null;
+  if (!snapshotToken) {
+    // Fail closed (see docblock): nothing to compare against.
+    console.warn('VTU pre-vend restore skipped: no snapshot token:', {
+      transactionId: row.id,
+    });
+    return;
+  }
   let lastErrorMessage: string | null = null;
   for (
     let attempt = 1;
     attempt <= PRE_VEND_RESTORE_MAX_ATTEMPTS;
     attempt += 1
   ) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('vtu_transactions')
       .update({
         error_message: userSafeMessage,
@@ -189,8 +218,21 @@ export async function restoreInterruptedPreVendVtuRow({
         status: 'pending',
       })
       .eq('id', row.id)
-      .eq('status', 'processing');
+      .eq('status', 'processing')
+      .eq('updated_at', snapshotToken)
+      .select('id')
+      .maybeSingle();
     if (!error) {
+      if (!data) {
+        // Lost race: another worker flipped, settled, reclaimed, or
+        // touched metadata after our snapshot. Benign — the row
+        // progressed; stop without retrying (see docblock).
+        console.warn(
+          'VTU pre-vend restore skipped: row changed after snapshot:',
+          { transactionId: row.id }
+        );
+        return;
+      }
       return;
     }
     lastErrorMessage = error.message;

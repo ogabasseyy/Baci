@@ -4203,6 +4203,7 @@ describe('fulfillPendingVtuTransaction', () => {
           status: 'pending',
           metadata: { paymentSplit: { wallet: 300, card: 700 } },
           error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
           merchant_commission: 10,
           customer_cashback: 0,
           biller_name: null,
@@ -4259,6 +4260,7 @@ describe('fulfillPendingVtuTransaction', () => {
           status: 'pending',
           metadata: { paymentSplit: { wallet: 1000, card: 0 } },
           error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
           merchant_commission: 10,
           customer_cashback: 0,
           biller_name: null,
@@ -4426,8 +4428,12 @@ describe('fulfillPendingVtuTransaction', () => {
         error: null,
       });
     const updateEq = vi.fn();
+    const updateMaybeSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { id: 'vtu-1' }, error: null });
     const updateChain = Object.assign(Promise.resolve({ error: null }), {
       eq: updateEq,
+      select: vi.fn(() => ({ maybeSingle: updateMaybeSingle })),
     });
     updateEq.mockReturnValue(updateChain);
     const update = vi.fn(() => ({ eq: updateEq }));

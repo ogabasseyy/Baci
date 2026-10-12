@@ -5,21 +5,35 @@ import {
   STRANDED_PRE_VEND_STALE_MS,
 } from './vtu-pre-vend-recovery';
 
-function createSupabase(updateError: { message: string } | null = null) {
+function createAttemptChain(result: { data: unknown; error: unknown }) {
+  const maybeSingle = vi.fn().mockResolvedValue(result);
+  const select = vi.fn(() => ({ maybeSingle }));
   const eq = vi.fn();
-  const chain = Object.assign(Promise.resolve({ error: updateError }), {
-    eq,
-  });
+  const chain = Object.assign(Promise.resolve(result), { eq, select });
   eq.mockReturnValue(chain);
+  return { eq, select, maybeSingle, chain };
+}
+
+function createSupabase(
+  updateError: { message: string } | null = null,
+  matchedRow: unknown = { id: 'vtu-1' }
+) {
+  const { eq, select } = createAttemptChain({
+    data: updateError ? null : matchedRow,
+    error: updateError,
+  });
   const update = vi.fn(() => ({ eq }));
   return {
     eq,
+    select,
     update,
     supabase: {
       from: vi.fn(() => ({ update })),
     },
   };
 }
+
+const SNAPSHOT_TOKEN = '2026-10-01T00:00:00.000Z';
 
 describe('restoreInterruptedPreVendVtuRow', () => {
   it('flips the claimed row back to marked pending', async () => {
@@ -28,7 +42,11 @@ describe('restoreInterruptedPreVendVtuRow', () => {
     await restoreInterruptedPreVendVtuRow({
       userSafeMessage:
         'VTU wallet debit failed; the purchase will resume automatically.',
-      row: { id: 'vtu-1', metadata: { paymentSplit: { wallet: 300 } } },
+      row: {
+        id: 'vtu-1',
+        metadata: { paymentSplit: { wallet: 300 } },
+        updated_at: SNAPSHOT_TOKEN,
+      },
       supabase: supabase as never,
     });
 
@@ -44,6 +62,8 @@ describe('restoreInterruptedPreVendVtuRow', () => {
     });
     expect(eq).toHaveBeenCalledWith('id', 'vtu-1');
     expect(eq).toHaveBeenCalledWith('status', 'processing');
+    // Compare-and-set: only the exact snapshot incarnation flips.
+    expect(eq).toHaveBeenCalledWith('updated_at', SNAPSHOT_TOKEN);
   });
 
   it('logs (does not throw) when the restore write itself fails', async () => {
@@ -54,7 +74,7 @@ describe('restoreInterruptedPreVendVtuRow', () => {
       await expect(
         restoreInterruptedPreVendVtuRow({
           userSafeMessage: 'boom',
-          row: { id: 'vtu-1' },
+          row: { id: 'vtu-1', updated_at: SNAPSHOT_TOKEN },
           supabase: supabase as never,
         })
       ).resolves.toBeUndefined();
@@ -72,15 +92,14 @@ describe('restoreInterruptedPreVendVtuRow', () => {
   });
 
   it('recovers when a retry attempt succeeds', async () => {
-    const fail = Object.assign(
-      Promise.resolve({ error: { message: 'blip' } }),
-      { eq: vi.fn() }
-    );
-    fail.eq.mockReturnValue(fail);
-    const succeed = Object.assign(Promise.resolve({ error: null }), {
-      eq: vi.fn(),
+    const fail = createAttemptChain({
+      data: null,
+      error: { message: 'blip' },
     });
-    succeed.eq.mockReturnValue(succeed);
+    const succeed = createAttemptChain({
+      data: { id: 'vtu-1' },
+      error: null,
+    });
     const update = vi
       .fn()
       .mockReturnValueOnce({ eq: fail.eq })
@@ -91,7 +110,7 @@ describe('restoreInterruptedPreVendVtuRow', () => {
     try {
       await restoreInterruptedPreVendVtuRow({
         userSafeMessage: 'boom',
-        row: { id: 'vtu-1' },
+        row: { id: 'vtu-1', updated_at: SNAPSHOT_TOKEN },
         supabase: supabase as never,
       });
 
@@ -99,6 +118,56 @@ describe('restoreInterruptedPreVendVtuRow', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     } finally {
       consoleSpy.mockRestore();
+    }
+  });
+
+  it('stops without retrying when the row changed after the snapshot (lost race)', async () => {
+    // ABA guard: another worker flipped, settled, reclaimed, or
+    // touched metadata after our read — zero rows match, so the
+    // stale snapshot must NOT overwrite the newer incarnation. The
+    // token can never become valid again, so a single attempt runs.
+    const { supabase, update } = createSupabase(null, null);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        restoreInterruptedPreVendVtuRow({
+          userSafeMessage: 'boom',
+          row: { id: 'vtu-1', updated_at: SNAPSHOT_TOKEN },
+          supabase: supabase as never,
+        })
+      ).resolves.toBeUndefined();
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'VTU pre-vend restore skipped: row changed after snapshot:',
+        expect.objectContaining({ transactionId: 'vtu-1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('skips the flip when the snapshot has no updated_at (fail closed)', async () => {
+    const { supabase, update } = createSupabase();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        restoreInterruptedPreVendVtuRow({
+          userSafeMessage: 'boom',
+          row: { id: 'vtu-1' },
+          supabase: supabase as never,
+        })
+      ).resolves.toBeUndefined();
+
+      expect(update).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'VTU pre-vend restore skipped: no snapshot token:',
+        expect.objectContaining({ transactionId: 'vtu-1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 });

@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
 import { getRootDomain } from '@/env';
+import { isSafeClaimSlug } from './receipt-claim-slug';
 
 export interface ReceiptClaimMerchantUrlContext {
-  slug: string;
+  slug: string | null;
   custom_domain: string | null;
 }
 
@@ -53,6 +54,33 @@ export function normalizeClaimEmail(email: string | null | undefined) {
   return sanitizeCustomerLoginEmailHint(email) || null;
 }
 
+export function isSafeClaimDomain(domain: string): boolean {
+  // Mirrors the storefront custom-domain rules without importing the proxy
+  // host module (kept dependency-free so notification senders stay inside
+  // their audited import boundary): dotted hostname, no IPs, no userinfo or
+  // path tricks. A trailing-dot absolute FQDN is the same host, normalized.
+  // Strictly tighter than the proxy rule: every label must start and end
+  // alphanumeric, stay within the 63-octet DNS label limit, and the TLD
+  // must not be all-numeric, so malformed hosts fall back to the slug
+  // subdomain instead of landing in a token URL.
+  const host = domain
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.$/, '');
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+  const labels = host.split('.');
+  const topLabel = labels[labels.length - 1] ?? '';
+  return (
+    labels.length >= 2 &&
+    labels.every(
+      (label) =>
+        label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+    ) &&
+    !/^\d+$/.test(topLabel)
+  );
+}
+
 export function buildReceiptClaimUrl({
   merchant,
   token,
@@ -60,9 +88,23 @@ export function buildReceiptClaimUrl({
   merchant: ReceiptClaimMerchantUrlContext;
   token: string;
 }) {
-  const origin = merchant.custom_domain
-    ? `https://${merchant.custom_domain.replace(/\/+$/g, '')}`
-    : `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
+  const customDomain = merchant.custom_domain
+    ?.trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.$/, '');
+  if (customDomain && isSafeClaimDomain(customDomain)) {
+    return `https://${customDomain}${DEFAULT_RECEIPT_CLAIM_PATH}/${encodeURIComponent(token)}`;
+  }
+  // No safe fallback exists below the slug: the subdomain carries the
+  // storefront tenant, so a root-domain URL would not resolve the claim.
+  // The manual sender pre-validates through the schema and fails closed
+  // with re-arm instead; the import campaign surfaces this loudly rather
+  // than emailing links no customer could open.
+  if (typeof merchant.slug !== 'string' || !isSafeClaimSlug(merchant.slug)) {
+    throw new Error('Invalid merchant slug for receipt claim URL');
+  }
+  const origin = `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
 
   return `${origin}${DEFAULT_RECEIPT_CLAIM_PATH}/${encodeURIComponent(token)}`;
 }

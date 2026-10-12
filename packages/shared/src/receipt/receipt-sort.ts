@@ -23,9 +23,22 @@ function parseReceiptSortValue(value: string): number {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
+/**
+ * The manual-order document date every surface displays and sorts by:
+ * invoice_issue_date → transaction_date → created_at. Cards must render
+ * this — not created_at — so a backdated invoice or a receipt completed
+ * by a later payment shows the date the sort filed it under.
+ */
+export function selectReceiptDisplayDate(
+  order: ReceiptSortable
+): string | null {
+  return (
+    order.invoice_issue_date || order.transaction_date || order.created_at || null
+  );
+}
+
 function selectReceiptSortTimestamp(order: ReceiptSortable): number {
-  const value =
-    order.invoice_issue_date || order.transaction_date || order.created_at;
+  const value = selectReceiptDisplayDate(order);
   if (!value) return Number.NEGATIVE_INFINITY;
   return parseReceiptSortValue(value);
 }

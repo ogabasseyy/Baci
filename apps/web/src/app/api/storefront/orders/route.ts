@@ -2,46 +2,10 @@ import { compareReceiptListDesc } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
-import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
-import {
-  getCurrentDocumentKind,
-  isReceiptEligible,
-  normalizePaymentStatus,
-  normalizeShippingStatus,
-} from '@/lib/storefront-account-document-data';
+import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { resolveStorefrontOrderPaymentAccounts } from '@/lib/storefront-order-payment-accounts';
 import { storefrontAccountDocumentQuerySchema } from '@/schemas/storefront-account-document';
-
-interface JoinedProduct {
-  slug?: string;
-  category?: string | null;
-  category_slug?: string | null;
-  images?: unknown;
-  categories?:
-    | { name?: string; slug?: string }[]
-    | { name?: string; slug?: string }
-    | null;
-}
-
-function extractJoinedProduct(
-  products: JoinedProduct | JoinedProduct[] | null | undefined
-) {
-  return Array.isArray(products) ? products[0] || null : products || null;
-}
-
-function extractProductImages(product: JoinedProduct | null) {
-  if (!Array.isArray(product?.images)) {
-    return [];
-  }
-
-  return product.images.filter(
-    (image): image is string => typeof image === 'string' && image.trim() !== ''
-  );
-}
-
-function normalizeImageUrl(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
+import { transformStorefrontOrdersForDisplay } from './storefront-orders-transform';
 
 /** Customer orders for authenticated web and mobile customers. */
 
@@ -114,6 +78,7 @@ export async function GET(request: NextRequest) {
         currency,
         external_source,
         import_job_id,
+        recorded_by_user_id,
         payment_status,
         shipping_status,
         shipping_address,
@@ -121,9 +86,20 @@ export async function GET(request: NextRequest) {
         shipping_provider,
         payment_method,
         invoice_type_code,
+        invoice_note,
+        notes,
+        payment_due_date,
+        payment_terms,
+        buyer_reference,
+        firs_irn,
+        firs_csid,
         fulfillment_details,
+        customer_name,
+        customer_email,
+        customer_phone,
         order_items (
           id,
+          line_id,
           name,
           product_id,
           condition,
@@ -131,7 +107,15 @@ export async function GET(request: NextRequest) {
           image_url,
           quantity,
           price,
+          item_description,
+          line_extension_amount,
+          unit_code,
+          vat_category_code,
+          vat_rate,
+          vat_amount,
+          sellers_item_id,
           has_assurance,
+          assurance_fee,
           products:products!order_items_product_id_fkey (
             slug,
             category,
@@ -156,8 +140,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { paymentAccountsByOrderId, paymentAccountError, transactionError } =
-      await resolveStorefrontOrderPaymentAccounts(supabase, orders ?? []);
+    const {
+      paymentAccountsByOrderId,
+      paymentAccountError,
+      transactionError,
+      transactionsByOrderId,
+    } = await resolveStorefrontOrderPaymentAccounts(supabase, orders ?? []);
     if (paymentAccountError) {
       console.error('Orders payment-account fetch error:', paymentAccountError);
       return NextResponse.json(
@@ -167,91 +155,46 @@ export async function GET(request: NextRequest) {
     }
     if (transactionError) {
       console.error('Orders transaction fetch error:', transactionError);
+      return NextResponse.json(
+        { error: 'Failed to fetch order transactions' },
+        { status: 500 }
+      );
     }
 
-    // Transform to expected format
-    const transformedOrders = orders.map((order) => {
-      const paymentStatus = normalizePaymentStatus(order.payment_status);
-      const shippingStatus = normalizeShippingStatus(order.shipping_status);
+    // The tax table is merchant/staff-readable: the embedded relation
+    // returns [] under customer RLS, so the availability gate would
+    // validate an empty set and advertise invoices the sender rejects.
+    // Load the ownership-checked customer projection instead.
+    const { data: taxSubtotals, error: taxError } =
+      await loadStorefrontCustomerTaxSubtotals(
+        supabase,
+        (orders ?? []).map((order) => order.id)
+      );
+    if (taxError) {
+      console.error('Orders tax fetch error:', taxError);
+      return NextResponse.json(
+        { error: 'Failed to fetch order tax subtotals' },
+        { status: 500 }
+      );
+    }
+    const taxSubtotalsByOrderId = new Map<
+      string,
+      { vat_rate?: unknown; taxable_amount?: unknown; tax_amount?: unknown }[]
+    >();
+    for (const subtotal of taxSubtotals ?? []) {
+      const orderSubtotals = taxSubtotalsByOrderId.get(subtotal.order_id) ?? [];
+      orderSubtotals.push(subtotal);
+      taxSubtotalsByOrderId.set(subtotal.order_id, orderSubtotals);
+    }
 
-      return {
-        id: order.id,
-        order_number: order.order_number,
-        created_at: order.created_at,
-        transaction_date: order.transaction_date,
-        invoice_issue_date: order.invoice_issue_date,
-        total: order.total,
-        subtotal: order.subtotal,
-        shipping_fee: order.shipping_fee,
-        tax_amount: order.tax_amount,
-        discount_amount: order.discount_amount,
-        amount_paid: order.amount_paid,
-        currency: order.currency,
-        payment_status: paymentStatus,
-        shipping_status: shippingStatus,
-        shipping_address: order.shipping_address,
-        tracking_number: order.tracking_number,
-        shipping_provider: order.shipping_provider,
-        payment_method: order.payment_method,
-        fulfillment_details: order.fulfillment_details,
-        virtual_account: paymentAccountsByOrderId.get(order.id) ?? null,
-        balance: Math.max(
-          0,
-          Number(order.total || 0) - Number(order.amount_paid || 0)
-        ),
-        current_document_kind: getCurrentDocumentKind({
-          paymentStatus,
-          shippingStatus,
-          externalSource: order.external_source,
-          importJobId: order.import_job_id,
-        }),
-        invoice_type_code: resolveInvoiceTypeCode({
-          paymentMethod: order.payment_method,
-          isPaid: paymentStatus === 'paid',
-          wasPaid: paymentStatus === 'refunded',
-          paymentStatus,
-          amountPaid: order.amount_paid,
-          storedTypeCode: order.invoice_type_code,
-        }),
-        receipt_eligible: isReceiptEligible({
-          paymentStatus,
-          shippingStatus,
-          externalSource: order.external_source,
-          importJobId: order.import_job_id,
-        }),
-        items: (order.order_items || []).map((item) => {
-          const product = extractJoinedProduct(item.products);
-          const productImages = extractProductImages(product);
-          const itemImageUrl =
-            normalizeImageUrl(item.image_url) || productImages[0] || undefined;
-          const primaryCategory = Array.isArray(product?.categories)
-            ? product.categories[0] || null
-            : product?.categories || null;
-
-          return {
-            id: item.id,
-            product_id: item.product_id,
-            image_url: itemImageUrl,
-            product_images:
-              productImages.length > 0 ? productImages : undefined,
-            name: item.name,
-            condition: item.condition,
-            variant_name: item.variant_name,
-            quantity: item.quantity,
-            price: item.price,
-            has_assurance: item.has_assurance,
-            product_slug: product?.slug,
-            category: product?.category,
-            category_slug: primaryCategory?.slug,
-            categories: primaryCategory,
-          };
-        }),
-      };
+    const transformedOrders = transformStorefrontOrdersForDisplay(orders, {
+      transactionsByOrderId,
+      paymentAccountsByOrderId,
+      taxSubtotalsByOrderId,
     });
 
-    // The database pre-sort above cannot express the display-date fallback
-    // (Supabase orders by column), so file backdated invoices by the same
-    // issue → transaction → creation date the receipt list renders.
+    // Supabase cannot sort by the display-date fallback, so file backdated
+    // invoices by the same issue → transaction → creation date here.
     transformedOrders.sort(compareReceiptListDesc);
 
     return NextResponse.json({

@@ -14,16 +14,21 @@ import type {
   StorefrontAccountDocumentTaxSubtotalRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
+import {
+  getCurrentDocumentKind,
+  isManualOrder,
+  normalizePaymentStatus,
+  normalizeShippingStatus,
+} from '@/lib/storefront-account-document-eligibility';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
+import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
-
-const RECEIPT_READY_STATUSES = new Set(['shipped', 'delivered']);
 
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';
 
-const ORDER_SELECT = `${ORDER_COLUMNS}, transaction_date, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
+const ORDER_SELECT = `${ORDER_COLUMNS}, transaction_date, recorded_by_user_id, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
 
 interface StorefrontAccountDocumentParams {
   supabase: SupabaseClient;
@@ -41,49 +46,6 @@ export class StorefrontAccountDocumentError extends Error {
     super(message);
     this.name = 'StorefrontAccountDocumentError';
   }
-}
-
-export function normalizePaymentStatus(status: string | null | undefined) {
-  return status?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-}
-
-export function normalizeShippingStatus(status: string | null | undefined) {
-  return status?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-}
-
-function isImportedHistoricalOrder(input: {
-  externalSource?: string | null;
-  importJobId?: string | null;
-}) {
-  return Boolean(input.externalSource || input.importJobId);
-}
-
-export function isReceiptEligible(input: {
-  paymentStatus: string | null | undefined;
-  shippingStatus: string | null | undefined;
-  externalSource?: string | null;
-  importJobId?: string | null;
-}) {
-  if (normalizePaymentStatus(input.paymentStatus) !== 'paid') {
-    return false;
-  }
-
-  if (isImportedHistoricalOrder(input)) {
-    return true;
-  }
-
-  return RECEIPT_READY_STATUSES.has(
-    normalizeShippingStatus(input.shippingStatus)
-  );
-}
-
-export function getCurrentDocumentKind(input: {
-  paymentStatus: string | null | undefined;
-  shippingStatus: string | null | undefined;
-  externalSource?: string | null;
-  importJobId?: string | null;
-}) {
-  return isReceiptEligible(input) ? 'receipt' : 'invoice';
 }
 
 export async function getStorefrontAccountDocumentData({
@@ -147,17 +109,16 @@ export async function getStorefrontAccountDocumentData({
     supabase
       .from('order_items')
       .select(
-        'id, product_id, variant_id, condition, variant_name, name, quantity, price, assurance_fee, line_extension_amount, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
+        'id, product_id, variant_id, condition, variant_name, name, item_description, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
       )
       .eq('order_id', orderId),
     loadStorefrontCustomerTransactions(supabase, [orderId]),
     loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
-    supabase
-      .from('order_tax_subtotals')
-      .select(
-        'vat_category_code, vat_rate, taxable_amount, tax_amount, exemption_reason'
-      )
-      .eq('order_id', orderId),
+    // The tax table is merchant/staff-readable: a direct select returns []
+    // under customer RLS, so the download gate would validate an empty set
+    // and serve an invoice the sender rejects. Load the ownership-checked
+    // customer projection like transactions and payment accounts.
+    loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
     // Authoritative gate for the customer "Cancel Order" CTA. The customer-scoped
     // client cannot read the merchant-only transactions table, so this server RPC
     // is the source of truth. Fail-closed: any error means "not cancellable".
@@ -191,14 +152,47 @@ export async function getStorefrontAccountDocumentData({
 
   const paymentStatus = normalizePaymentStatus(order.payment_status);
   const shippingStatus = normalizeShippingStatus(order.shipping_status);
+  // Treat fully-covered manual orders as paid for Paystack DVA display: the
+  // balance was received even under a non-paid label. Imported and
+  // externally sourced orders are excluded like everywhere else: their
+  // historical DVAs must never print as payment instructions.
+  const paymentReceived =
+    paymentStatus === 'paid' ||
+    (isManualOrder({
+      externalSource: order.external_source,
+      importJobId: order.import_job_id,
+      recordedByUserId: order.recorded_by_user_id,
+    }) &&
+      order.total != null &&
+      order.amount_paid != null &&
+      Number.isFinite(Number(order.total)) &&
+      Number.isFinite(Number(order.amount_paid)) &&
+      Number(order.amount_paid) >= Number(order.total));
+  const transactionRows = (transactionsResult.data ||
+    []) as StorefrontAccountDocumentTransactionRow[];
+  // The kind gate is child-aware: a covered balance with a rejected
+  // payment classifies as invoice, matching the availability verdict, so
+  // the receipt route never serves a PDF the sender would skip.
   const currentDocumentKind = getCurrentDocumentKind({
     paymentStatus: order.payment_status,
     shippingStatus: order.shipping_status,
     externalSource: order.external_source,
     importJobId: order.import_job_id,
+    recordedByUserId: order.recorded_by_user_id,
+    total: order.total,
+    amountPaid: order.amount_paid,
+    money: {
+      total: order.total,
+      subtotal: order.subtotal,
+      shipping_fee: order.shipping_fee,
+      tax_amount: order.tax_amount,
+      discount_amount: order.discount_amount,
+      amount_paid: order.amount_paid,
+      currency: order.currency,
+    },
+    items: itemsResult.data || [],
+    payments: transactionRows,
   });
-  const transactionRows = (transactionsResult.data ||
-    []) as StorefrontAccountDocumentTransactionRow[];
 
   return buildStorefrontAccountDocumentBundle({
     merchant: merchant as StorefrontAccountDocumentMerchantRow,
@@ -212,11 +206,10 @@ export async function getStorefrontAccountDocumentData({
       ) as StorefrontAccountDocumentPaymentAccountRow[],
       new Date(),
       {
-        allowExpiredPaystackAccount: paymentStatus === 'paid',
-        preferredPaystackAccountNumber:
-          paymentStatus === 'paid'
-            ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
-            : null,
+        allowExpiredPaystackAccount: paymentReceived,
+        preferredPaystackAccountNumber: paymentReceived
+          ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
+          : null,
       }
     ),
     taxRows: (taxResult.data ||

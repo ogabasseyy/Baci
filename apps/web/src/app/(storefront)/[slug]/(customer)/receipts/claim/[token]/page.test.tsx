@@ -58,6 +58,7 @@ describe('ReceiptClaimPage server wrapper', () => {
         claimed: false,
         customerName: 'Bassey John',
         devices: ['iPhone 16 Pro Max'],
+        documentKind: 'receipt',
         merchantName: 'Ogabassey',
       },
       emailHint: 'bassey@example.com',

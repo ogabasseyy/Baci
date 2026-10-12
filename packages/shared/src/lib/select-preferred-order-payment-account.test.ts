@@ -35,6 +35,52 @@ describe('selectPreferredOrderPaymentAccount', () => {
     expect(selected?.account_number).toBe('2222222222');
   });
 
+  it('breaks created_at ties by account number descending like the RPC', () => {
+    const selected = selectPreferredOrderPaymentAccount(
+      [
+        account('paystack', '9990001111', '2026-08-24T12:00:00.000Z'),
+        account('paystack', '9990002222', '2026-08-24T12:00:00.000Z'),
+      ],
+      new Date('2026-08-24T12:30:00.000Z')
+    );
+
+    expect(selected?.account_number).toBe('9990002222');
+  });
+
+  it('breaks full ties by row id descending like the atomic recheck', () => {
+    const twin = (id: string, bankName: string) => ({
+      ...account('paystack', '9990001111', '2026-08-24T12:00:00.000Z'),
+      id,
+      bank_name: bankName,
+    });
+    const selected = selectPreferredOrderPaymentAccount(
+      [
+        twin('10000000-0000-4000-8000-000000000001', 'Old Bank'),
+        twin('90000000-0000-4000-8000-000000000001', 'New Bank'),
+      ],
+      new Date('2026-08-24T12:30:00.000Z')
+    );
+
+    expect(selected?.bank_name).toBe('New Bank');
+  });
+
+  it('sorts rows without an id after identified rows on full ties', () => {
+    const twin = (id: string | undefined, bankName: string) => ({
+      ...account('paystack', '9990001111', '2026-08-24T12:00:00.000Z'),
+      id,
+      bank_name: bankName,
+    });
+    const selected = selectPreferredOrderPaymentAccount(
+      [
+        twin(undefined, 'No Id Bank'),
+        twin('10000000-0000-4000-8000-000000000001', 'Id Bank'),
+      ],
+      new Date('2026-08-24T12:30:00.000Z')
+    );
+
+    expect(selected?.bank_name).toBe('Id Bank');
+  });
+
   it('returns null for an empty account list', () => {
     expect(selectPreferredOrderPaymentAccount([])).toBeNull();
   });

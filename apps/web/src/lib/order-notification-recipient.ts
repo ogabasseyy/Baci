@@ -29,3 +29,12 @@ export function resolveOrderNotificationRecipient(
 
   return { ok: true, email: parsedEmail.data };
 }
+
+// A malformed legacy support address degrades to the sender identity:
+// callers omit replyTo instead of failing the send.
+export function resolveNotificationReplyTo(
+  supportEmail: unknown
+): string | undefined {
+  const replyTo = resolveOrderNotificationRecipient(supportEmail);
+  return replyTo.ok ? replyTo.email : undefined;
+}

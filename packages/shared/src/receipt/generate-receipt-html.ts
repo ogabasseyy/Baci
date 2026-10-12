@@ -8,11 +8,12 @@
 
 import { normalizeReceiptColor } from './receipt-colors';
 import { renderReceiptDocument } from './receipt-document';
+import { renderItemRows } from './receipt-item-rows';
 import { createMoneyFormatter, hexToRgba } from './receipt-money';
 import { renderBankDetailsHtml } from './receipt-payment-instructions';
 import {
   renderFinancialSummaryLines,
-  renderItemRows,
+  renderInvoiceTermsHtml,
   renderLogoHtml,
   renderPaymentHistoryHtml,
   renderQrHtml,
@@ -184,8 +185,15 @@ export function generateReceiptHtml(
     docTitle,
     isPaid,
     isProforma,
-    itemRows: renderItemRows(order, formatMoney),
+    // The effective kind mirrors docTitle above: VAT detail lines render
+    // for invoices and proformas only, like the emailed PDF.
+    itemRows: renderItemRows(
+      order,
+      formatMoney,
+      isPaid ? 'receipt' : isProforma ? 'proforma' : 'invoice'
+    ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
+    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),
     socialItems: buildSocialItems(merchant.social_media),

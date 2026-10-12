@@ -1,3 +1,4 @@
+import { MANUAL_ORDER_CURRENCY_CODE_PATTERN } from '@baci/shared/receipt';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import type React from 'react';
@@ -6,6 +7,7 @@ import { BRAND, SHADOWS } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ReceiptListItem } from '@/types/receipt';
 import { formatReceiptDate } from './receipt-date';
+import { resolveReceiptCardKind } from './resolve-receipt-card-kind';
 
 const PAYMENT_STATUS_CONFIG: Record<
   string,
@@ -21,8 +23,10 @@ const PAYMENT_STATUS_CONFIG: Record<
   refunded: { label: 'Refunded', color: '#6B7280', icon: 'refresh-circle' },
 };
 
-export function getPaymentConfig(status: string) {
-  return PAYMENT_STATUS_CONFIG[status] ?? PAYMENT_STATUS_CONFIG.unpaid;
+export function getPaymentConfig(status: unknown) {
+  // Legacy spellings (Paid, Partially Paid) miss the map: normalize first.
+  const key = `${status ?? ''}`.trim().toLowerCase().replace(/\s+/g, '_');
+  return PAYMENT_STATUS_CONFIG[key] ?? PAYMENT_STATUS_CONFIG.unpaid;
 }
 
 const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
@@ -30,18 +34,42 @@ const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
 function getPriceFormatter(currency: string): Intl.NumberFormat {
   let formatter = PRICE_FORMATTER_CACHE.get(currency);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    });
+    try {
+      formatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+      });
+    } catch (error) {
+      // Malformed codes (legacy rows the sender would skip) degrade to
+      // NGN, cached under the bad key so they rethrow once. NGN rethrows
+      // so a broken default fails fast; well-formed-but-unassigned codes
+      // rethrow for formatPrice to render code-prefixed like the PDF.
+      if (currency === 'NGN') throw error;
+      if (MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(currency)) throw error;
+      const fallback = getPriceFormatter('NGN');
+      PRICE_FORMATTER_CACHE.set(currency, fallback);
+      return fallback;
+    }
     PRICE_FORMATTER_CACHE.set(currency, formatter);
   }
   return formatter;
 }
 
-export function formatPrice(price: number, currency: string = 'NGN') {
-  return getPriceFormatter(currency).format(price);
+export function formatPrice(
+  price: number,
+  currency: string | null | undefined = 'NGN'
+) {
+  // Non-finite renders a neutral placeholder, never a confident zero.
+  if (!Number.isFinite(price)) return '-';
+  const code = currency ?? 'NGN';
+  try {
+    return getPriceFormatter(code).format(price);
+  } catch (error) {
+    if (code === 'NGN') throw error;
+    // Unassigned on Hermes: prefix the code like Node's ICU and the PDF.
+    return `${code} ${price.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+  }
 }
 
 interface ReceiptCardProps {
@@ -57,13 +85,43 @@ export function ReceiptCard({
   onPress,
   onPrefetch,
 }: ReceiptCardProps) {
-  const config = getPaymentConfig(item.payment_status);
+  // A cached entry can outlive a terminal shipping flip: fail a stale
+  // receipt kind closed to invoice through the promotion gate.
+  const effectiveKind = resolveReceiptCardKind(item);
+  // Badge/action follow the effective kind both ways: covered manual
+  // opens receipt; explicit invoice never badges paid. Absent kind
+  // (legacy rows) falls back to the raw status; legacy casings (Paid,
+  // PAID) normalize like the list paid-shortcut, typeof guard included.
+  const paidLabel =
+    typeof item.payment_status === 'string' &&
+    item.payment_status.trim().toLowerCase() === 'paid';
+  let displayStatus = item.payment_status;
+  if (effectiveKind === 'receipt') {
+    displayStatus = 'paid';
+  } else if (effectiveKind === 'invoice' && paidLabel) {
+    displayStatus = 'unpaid';
+  }
+  // Money follows the ledger: a paid label on an invoice still reads Paid.
+  const moneyPaid = displayStatus === 'paid' || paidLabel;
+  // Invalid manual rows badge Invoice under paid: explain no receipt exists.
+  const invalidPaidInvoice = effectiveKind === 'invoice' && paidLabel;
+  const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
     ? `${firstItem.product_name}${
         item.items.length > 1 ? ` +${item.items.length - 1} more` : ''
       }`
     : `Order #${item.order_number}`;
+  // VoiceOver hears badge + money + explainer/balance, not kind alone.
+  const balance = item.total - item.amount_paid;
+  // Hide corrupt balances: formatPrice degrades non-finite input to NGN 0.
+  const showBalance =
+    displayStatus === 'partially_paid' && Number.isFinite(balance);
+  const accessibilityMoney = `${moneyPaid ? 'Paid' : 'Total'} ${formatPrice(item.total, item.currency)}`;
+  const accessibilityLabel =
+    `${config.label} for ${productTitle}, order ${item.order_number}, ${accessibilityMoney}` +
+    (showBalance ? `, balance ${formatPrice(balance, item.currency)}` : '') +
+    (invalidPaidInvoice ? ', payment recorded, invoice only, no receipt' : '');
 
   return (
     <TouchableOpacity
@@ -72,7 +130,7 @@ export function ReceiptCard({
       onPressIn={() => onPrefetch?.(item.id)}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`${config.label} for ${productTitle}, order ${item.order_number}`}
+      accessibilityLabel={accessibilityLabel}
     >
       <View style={styles.cardHeader}>
         <View style={[styles.thumb, { backgroundColor: `${BRAND.primary}12` }]}>
@@ -133,15 +191,21 @@ export function ReceiptCard({
       <View style={styles.cardFooter}>
         <View>
           <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {item.payment_status === 'paid' ? 'Paid' : 'Total'}
+            {moneyPaid ? 'Paid' : 'Total'}
           </Text>
           <Text style={[styles.totalAmount, { color: colors.text }]}>
             {formatPrice(item.total, item.currency)}
           </Text>
-          {item.payment_status === 'partially_paid' && (
+          {showBalance && (
             <Text style={[styles.balanceLabel, { color: '#D97706' }]}>
-              Balance:{' '}
-              {formatPrice(item.total - item.amount_paid, item.currency)}
+              Balance: {formatPrice(balance, item.currency)}
+            </Text>
+          )}
+          {invalidPaidInvoice && (
+            <Text
+              style={[styles.balanceLabel, { color: colors.textSecondary }]}
+            >
+              Payment recorded — invoice only, no receipt
             </Text>
           )}
         </View>

@@ -22,6 +22,7 @@ def _register(rows, **overrides):
         "schema_version": 1,
         "reviewed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "source_revision": "a" * 40,
+        "evidence_digest": "e" * 64,
         "capabilities": rows,
     }
     value.update(overrides)
@@ -142,6 +143,17 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row()], review_scope="s" * 1001))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_missing_or_malformed_evidence_digest_fails_closed(self):
+        for bad in (None, "xyz", "e" * 63):
+            with self.subTest(evidence_digest=bad):
+                value = _register([_row()])
+                if bad is None:
+                    del value["evidence_digest"]
+                else:
+                    value["evidence_digest"] = bad
+                result = self.render(value)
+                self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_non_string_dates_fail_closed(self):
         result = self.render(_register([_row()], reviewed_at=20261012))
         self.assertIn("Register unavailable, invalid or stale", result)
@@ -204,6 +216,24 @@ class CapabilityContextTests(unittest.TestCase):
         if stale and os.environ.get("BACI_REGISTER_REQUIRE_FRESH"):
             self.fail("register outside its 14-day evidence window; owner re-review required")
         self.assertEqual(binding_failures(repo, data), [])
+
+    def test_gate_decision_fails_closed(self):
+        import subprocess
+
+        gate_spec = importlib.util.spec_from_file_location(
+            "capability_gate", Path(__file__).parent / "capability_gate.py"
+        )
+        gate = importlib.util.module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        register = {"capabilities": [{"source_refs": ["apps/web/src/lib/feeds.ts"]}]}
+        self.assertTrue(gate.should_run("base", register, None), "unknown change set must run the suite")
+        self.assertFalse(gate.should_run("base", register, {"docs/other.md"}))
+        self.assertTrue(gate.should_run("base", register, {"apps/web/src/lib/feeds.ts"}))
+        self.assertTrue(gate.should_run("base", register, {"vps-workers/baci-editorial-context/README.md"}))
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            subprocess.run(["git", "-C", str(repo), "init", "-q", "."], check=True, capture_output=True)
+            self.assertIsNone(gate.changed_paths("f" * 40, cwd=repo), "unresolvable base must yield unknown, not empty")
 
     def test_binding_failures_are_detected_in_fixture_repo(self):
         import subprocess

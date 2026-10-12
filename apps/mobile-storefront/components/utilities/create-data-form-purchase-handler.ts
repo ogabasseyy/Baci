@@ -213,6 +213,12 @@ export function createDataFormPurchaseHandler({
           // error below always survives.
           await payment.refetchWallet();
         }
+        if (getIsActive && !getIsActive()) {
+          // Screen gone: rotation + refetch above already finalized the
+          // entry — suppress the failure UI (no Alert over the new
+          // screen).
+          return;
+        }
         throw error;
       }
     } catch (error) {
@@ -221,7 +227,9 @@ export function createDataFormPurchaseHandler({
         error instanceof Error ? error.message : 'Something went wrong.'
       );
     } finally {
-      setIsSubmitting(false);
+      if (!getIsActive || getIsActive()) {
+        setIsSubmitting(false);
+      }
     }
   };
 }

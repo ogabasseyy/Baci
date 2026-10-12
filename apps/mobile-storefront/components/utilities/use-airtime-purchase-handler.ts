@@ -168,6 +168,12 @@ async function executeAirtimePurchase({
         // error below always survives.
         await payment.refetchWallet();
       }
+      if (getIsActive && !getIsActive()) {
+        // Screen gone: rotation + refetch above already finalized the
+        // entry — suppress the failure UI (no Alert over the new
+        // screen).
+        return;
+      }
       throw error;
     }
   } catch (error) {
@@ -177,7 +183,9 @@ async function executeAirtimePurchase({
       error instanceof Error ? error.message : 'Something went wrong.'
     );
   } finally {
-    onSettled();
+    if (!getIsActive || getIsActive()) {
+      onSettled();
+    }
   }
 }
 

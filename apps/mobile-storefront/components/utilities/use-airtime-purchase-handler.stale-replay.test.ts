@@ -500,4 +500,43 @@ describe('airtime stale success replay', () => {
       )
     ).toBe(true);
   });
+
+  it('finalizes but suppresses an off-screen terminal rejection', async () => {
+    // Rotation + refetch must still run (the dead key must not replay
+    // when the customer retries), but no failure UI may fire over the
+    // destination screen.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    const { result } = renderHandler({
+      resetWalletIdempotencyKey,
+      refetchWallet,
+      getIsActive: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('suppresses an off-screen ambiguous rejection without rotating', async () => {
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(500, 'Gateway error')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    const { result } = renderHandler({
+      resetWalletIdempotencyKey,
+      refetchWallet,
+      getIsActive: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(refetchWallet).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
 });

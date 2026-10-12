@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { HttpError } from '@/lib/fetch-with-timeout';
 import {
   buildVtuPurchaseDescriptor,
   clearPendingVtuKeys,
@@ -49,6 +50,7 @@ describe('data stale success replay', () => {
     overrides: {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
+      refetchWallet?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
       getIsActive?: () => boolean;
     } = {}
@@ -62,7 +64,7 @@ describe('data stale success replay', () => {
       payment: {
         canFundByBankTransfer: false,
         isAuthenticated: true,
-        refetchWallet: jest.fn(),
+        refetchWallet: overrides.refetchWallet ?? jest.fn(),
         walletBalance: 5000,
         walletError: null,
         walletIsLoading: false,
@@ -291,5 +293,42 @@ describe('data stale success replay', () => {
     expect(onSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ reference: 'WAL-OFFSCREEN-DATA' })
     );
+  });
+
+  it('finalizes but suppresses an off-screen terminal rejection', async () => {
+    // Rotation + refetch must still run (the dead key must not replay
+    // when the customer retries), but no failure UI may fire over the
+    // destination screen.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(400, 'Insufficient funds')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    await runPurchase({
+      resetWalletIdempotencyKey,
+      refetchWallet,
+      getIsActive: () => false,
+    });
+
+    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('suppresses an off-screen ambiguous rejection without rotating', async () => {
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(500, 'Gateway error')
+    );
+    const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
+    await runPurchase({
+      resetWalletIdempotencyKey,
+      refetchWallet,
+      getIsActive: () => false,
+    });
+
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(refetchWallet).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 });

@@ -187,8 +187,8 @@ patchedDependencies:
   react-native-nitro-modules@0.35.9: 4389d08533b644ae94941500e6ef507bc1bcdf985e85a341b3b7cc193cb9f242
   react-native-phone-number-input@2.1.0: 71a74490981d221fea39af4c70a4475f1771909ebc246e8af30487833c2fe51e
   react-native-purchases@10.4.2: 15bf609389bd8c060f861a68f6581dbba67d6edf8ccbcd6c8c96a1d35c43a0ef
-  react-native-screens@4.26.2: f7a66029b240f604a2120fc67a584f029d1329d3bb7020272470f24010aa6bc5
   react-native-safe-area-context@5.8.0: 022d5666269cc6cf57103809a9f2731abf75f568e475b7fadf03dea4bea7595b
+  react-native-screens@4.26.2: f7a66029b240f604a2120fc67a584f029d1329d3bb7020272470f24010aa6bc5
   react-native-webview@13.16.1: 34b7961d6df97ee992e0d52e66df88c9b5de85d32572f999bb6654aaa8080199
   react-native@0.86.2: cf94882b1c91d0f63472e723a06a922f9dda1978461558c6fec627c682969ce5
 

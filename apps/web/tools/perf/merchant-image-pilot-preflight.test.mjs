@@ -7,19 +7,19 @@ import {
   runPreflight,
 } from './merchant-image-pilot-preflight.mjs';
 import {
-  MERCHANT,
   offlineOptions,
   setupOffline,
   setupOfflineAssets,
+  storeLogoControlPage,
+  storeLogoPilotPage,
 } from './merchant-image-pilot-preflight-fixtures.mjs';
 import {
   labHtml,
+  MERCHANT,
   notOptimizedSection,
   replaceHeroSection,
   serveStaged,
-  storeLogoControlPage,
-  storeLogoPilotPage,
-} from './merchant-image-pilot-preflight-pages.mjs';
+} from './merchant-image-pilot-preflight-served-fixtures.mjs';
 
 describe('preflight entry orchestration', () => {
   it('combines offline and served gates', async () => {

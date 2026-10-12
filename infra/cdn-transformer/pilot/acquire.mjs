@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { stat, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FOR_CONTENT_TYPE,
@@ -214,18 +214,27 @@ export async function acquireSnapshot(options) {
   // changes would then be rejected by the stale bytes. Only this call's
   // own file is removed, never a pre-existing snapshot.
   try {
-    // The snapshot must still exist when the append commits: a rival
-    // rollback that won the lock first unlinked it, so revalidating
-    // under the same lock fails loudly instead of publishing a record
-    // that points at a missing source.
+    // The snapshot must still be THE probed bytes when the append
+    // commits: a rival rollback that won the lock first unlinked it, and
+    // another process may have replaced it since the probe — so reread
+    // through the bounded reader and compare the hash under the same
+    // lock. Existence alone would publish the fetched SHA and geometry
+    // against a sourcePath that now names different bytes.
     const inventoryCount = await appendInventoryRecord(inventoryPath, record, {
       beforeAppend: async () => {
-        const present = await stat(target)
-          .then(() => true)
-          .catch(() => false);
-        if (!present) {
+        const reread = await readUpToBytes(target, maxBytes).catch(() => null);
+        const current =
+          reread && !reread.truncated
+            ? createHash('sha256').update(reread.bytes).digest('hex')
+            : null;
+        if (current === null) {
           throw new PilotAcquireError(
             `acquire: snapshot for "${assetId}" vanished before publish`
+          );
+        }
+        if (current !== sha256) {
+          throw new PilotAcquireError(
+            `acquire: snapshot for "${assetId}" changed before publish`
           );
         }
       },

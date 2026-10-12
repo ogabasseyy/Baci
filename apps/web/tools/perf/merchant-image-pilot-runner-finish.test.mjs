@@ -169,6 +169,58 @@ describe('merchant-image-pilot-runner finish binding', () => {
     );
   });
 
+  it('finish refuses a log with two launches of the prepared profile', async () => {
+    // A retry with the same profile dir (warm-up run, then a second run
+    // whose single-page HAR is submitted) must not stamp a warm
+    // navigation with the reset's cold run id. Refused before version
+    // parsing, so no version line is needed to reach it.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    const harPath = join(dir, 'raw.har');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const twoLaunchLog = join(dir, 'two-launch.log');
+    await writeFile(
+      twoLaunchLog,
+      [
+        '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        `  --user-data-dir=${join(dir, 'profile')} --headless --no-first-run`,
+        '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        `  --user-data-dir=${join(dir, 'profile')} --headless --no-first-run`,
+      ].join('\n')
+    );
+    await expect(
+      finishRun({
+        browserLog: twoLaunchLog,
+        dpr: '2',
+        har: harPath,
+        outDir: join(dir, 'bound'),
+        runJson: join(dir, 'run', 'run.json'),
+        screenshot: shotPath,
+        viewport: '375x667',
+      })
+    ).rejects.toThrow(/2 launches with the prepared profile dir/);
+  });
+
   it('binds the screenshot mtime and refuses out-of-window captures', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
     const prepared = await prepareRun({

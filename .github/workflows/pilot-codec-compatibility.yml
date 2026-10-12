@@ -6,6 +6,15 @@ on:
     # opened: a PR created with transformer changes must run change
     # detection immediately, not only on a later synchronize/reopen.
     types: [labeled, opened, synchronize, reopened]
+    # Codec coverage follows the code it protects: PRs touching pilot
+    # paths run automatically instead of waiting for the opt-in label.
+    # Anything else stays out of scope (manual dispatch is the hatch).
+    paths:
+      - 'apps/web/tools/perf/merchant-image-pilot-*'
+      - 'apps/web/src/lib/merchant-image-variant-pilot/**'
+      - 'apps/web/src/app/pilot-lab/**'
+      - 'infra/cdn-transformer/pilot/**'
+      - '.github/workflows/pilot-codec-compatibility.yml'
 
 permissions:
   contents: read
@@ -16,10 +25,16 @@ concurrency:
 
 jobs:
   native-no-avif-fixture:
+    # The pull_request paths filter already scopes this job to pilot
+    # PRs, so opened/synchronize/reopened always run. Labeled runs
+    # evaluate the PR's COMPLETE label set, not just the added label:
+    # an unrelated label restarts the concurrency group, and gating on
+    # the new label alone would skip the replacement while the opt-in
+    # label is still present.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check'))
+      github.event.action != 'labeled' ||
+      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')
     runs-on: windows-2022
     timeout-minutes: 15
     steps:

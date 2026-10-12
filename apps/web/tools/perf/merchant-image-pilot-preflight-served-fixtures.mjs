@@ -258,4 +258,4 @@ export async function serveStaged(res, publicDir, urlPath) {
     res.writeHead(404).end('missing');
   }
 }
-export { MERCHANT, RECIPE };
+export { GENERATOR_FIXTURES, MERCHANT, RECIPE };

@@ -104,15 +104,18 @@ export async function checkLighthouse(args, pass, fail, recorded) {
     ],
     ['lighthouse.viewport-width', emulation.width, viewport.width],
     ['lighthouse.viewport-height', emulation.height, viewport.height],
+    // Positive-number parsed like the network expectations: a blank,
+    // zero, or negative flag must reject at parse time instead of
+    // certifying a report under a nonsensical profile.
     [
       'lighthouse.dpr',
       emulation.deviceScaleFactor,
-      Number(args['expect-lh-dpr']),
+      parsePositiveNumber(args['expect-lh-dpr'], 'expect-lh-dpr'),
     ],
     [
       'lighthouse.cpu-slowdown',
       settings.throttling?.cpuSlowdownMultiplier,
-      Number(args['expect-cpu-slowdown']),
+      parsePositiveNumber(args['expect-cpu-slowdown'], 'expect-cpu-slowdown'),
     ],
   ];
   for (const [name, actual, expected] of scaled) {

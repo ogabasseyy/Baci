@@ -139,7 +139,21 @@ export async function fetchServedAgreement(
         const missing = pageBindings.filter(
           (binding) => !rendered.has(binding)
         );
-        if (missing.length > 0) {
+        // Both directions: an extra stale or foreign binding can carry
+        // a fully paired, hash-valid image and pass every remaining
+        // check while certifying the wrong route contents.
+        const expected = new Set(pageBindings);
+        const unexpected = [...rendered].filter(
+          (binding) => !expected.has(binding)
+        );
+        if (unexpected.length > 0) {
+          fail(
+            checks,
+            failures,
+            `${prefix}:${arm}:binding-coverage`,
+            `served page renders unexpected bindings: ${unexpected.join(', ')}`
+          );
+        } else if (missing.length > 0) {
           fail(
             checks,
             failures,

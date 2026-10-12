@@ -94,11 +94,23 @@ export async function finishRun({
   }
   const logText = logRead.bytes.toString('utf8');
   const launched = new RegExp(
-    `user-data-dir=${escapeRegExp(handle.profileDir)}(?=["'\\s]|$)`
+    `user-data-dir=${escapeRegExp(handle.profileDir)}(?=["'\\s]|$)`,
+    'g'
   );
-  if (!launched.test(logText)) {
+  const launches = logText.match(launched) ?? [];
+  if (launches.length === 0) {
     throw new Error(
       `browser log shows no launch with the prepared profile dir (${handle.profileDir}); refusing to bind: ${browserLog}`
+    );
+  }
+  // Exactly one launch: a retry with the same profile dir (warm-up run,
+  // then a second run whose single-page HAR is submitted) would
+  // otherwise stamp a warm navigation with the reset's cold run id.
+  // Together with the single-page HAR rule, one launch means the bound
+  // page is that profile's only recorded navigation.
+  if (launches.length > 1) {
+    throw new Error(
+      `browser log shows ${launches.length} launches with the prepared profile dir (${handle.profileDir}); re-prepare instead of binding a possibly warm navigation: ${browserLog}`
     );
   }
   // Fail fast, before writing anything: without a recorded version the

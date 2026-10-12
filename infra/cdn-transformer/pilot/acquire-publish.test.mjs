@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { acquireSnapshot } from './acquire.mjs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import test from 'node:test';
+import { acquireSnapshot } from './acquire.mjs';
 
 import {
-  makeInputRoot,
   MERCHANT,
+  makeInputRoot,
   PNG_BYTES,
   stubProbe,
   withServer,
@@ -76,6 +76,43 @@ test('publish fails loudly when the snapshot vanished before the append', async 
             url,
           }),
         /vanished before publish/
+      );
+    }
+  );
+  assert.equal(JSON.parse(await readFile(inventoryPath, 'utf8')).length, 0);
+});
+
+test('publish fails loudly when the snapshot changed before the append', async () => {
+  const inputRoot = await makeInputRoot();
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  await writeFile(inventoryPath, JSON.stringify([]));
+  // The probe replaces the snapshot this call just wrote: an
+  // existence-only check would still pass and publish the fetched SHA
+  // and geometry against a sourcePath that now names different bytes.
+  const swappingProbe = async (target) => {
+    await writeFile(target, Buffer.from('not the probed bytes'));
+    return { format: 'png', height: 1, width: 1 };
+  };
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'logo-1',
+            inputRoot,
+            inventoryPath,
+            merchantId: MERCHANT,
+            probe: swappingProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /changed before publish/
       );
     }
   );
@@ -205,7 +242,7 @@ test('a fresh snapshot is fsync-durable before the call returns', async () => {
   await scratch.close();
   const realSync = fileHandleProto.sync;
   let syncs = 0;
-  fileHandleProto.sync = async function (...args) {
+  fileHandleProto.sync = function (...args) {
     syncs += 1;
     return realSync.apply(this, args);
   };

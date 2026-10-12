@@ -76,6 +76,19 @@ export async function reconcileStagedTree(input: {
   const entries = await readdir(input.pilotStage, { withFileTypes: true });
   for (const entry of entries) {
     const entryPath = join(input.pilotStage, entry.name);
+    // Managed names are always directories (generation dirs, originals):
+    // a file or symlink squatting one is never legitimate. Unlink it
+    // (never following the link) instead of silently skipping — the
+    // startup guard rejects the same name as unsafe, so skipping would
+    // stage a lab that cannot start while reporting ok.
+    if (
+      !entry.isDirectory() &&
+      (entry.name === 'originals' || HEX64_PATTERN.test(entry.name))
+    ) {
+      await unlink(entryPath);
+      removed.push(entry.name);
+      continue;
+    }
     if (entry.isDirectory() && HEX64_PATTERN.test(entry.name)) {
       if (!currentGenerations.has(entry.name)) {
         const real = await confined(entryPath);

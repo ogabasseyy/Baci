@@ -66,6 +66,16 @@ describe('preflight served gate', () => {
       });
       expect(dropped.ok).toBe(false);
       expect(dropped.failures.join('\n')).toMatch(/binding-coverage/);
+      const extra = await fetchServedAgreement(origin, {
+        arms: ['pilot'],
+        expectedBindings: [`${MERCHANT}/hero-s0`],
+        publicDir: fixture.publicDir,
+        stagedHashes,
+      });
+      expect(extra.ok).toBe(false);
+      expect(extra.failures.join('\n')).toMatch(
+        /unexpected bindings: .*\/logo-a/
+      );
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }

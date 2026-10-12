@@ -3,6 +3,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -90,6 +91,34 @@ describe('reconcileStagedTree', () => {
     expect(removed).toEqual([`${GEN}/evil.avif`]);
     await expect(lstat(link)).rejects.toThrow(/ENOENT/);
     await expect(lstat(target)).resolves.toBeDefined();
+  });
+
+  it('removes files and symlinks squatting managed names', async () => {
+    const pilotStage = await stageTree();
+    const squatter = join(pilotStage, 'b'.repeat(64));
+    await writeFile(squatter, 'junk');
+    const outside = join(await mkdtemp(join(tmpdir(), 'lab-keep-')), 'keep');
+    await writeFile(outside, 'precious');
+    const linkSquatter = join(pilotStage, 'c'.repeat(64));
+    await symlink(outside, linkSquatter);
+    const originalsFile = join(pilotStage, 'originals');
+    await rm(originalsFile, { force: true, recursive: true });
+    await writeFile(originalsFile, 'junk');
+    const removed = await reconcileStagedTree({
+      generationIds: [GEN],
+      pilotStage,
+      stagedFiles: [],
+    });
+    // Managed names are always directories: the squatters unlink (the
+    // link itself, never its target) instead of silently surviving a
+    // stage the startup guard would then refuse to start.
+    expect(removed).toContain('b'.repeat(64));
+    expect(removed).toContain('c'.repeat(64));
+    expect(removed).toContain('originals');
+    await expect(lstat(squatter)).rejects.toThrow(/ENOENT/);
+    await expect(lstat(linkSquatter)).rejects.toThrow(/ENOENT/);
+    await expect(lstat(originalsFile)).rejects.toThrow(/ENOENT/);
+    await expect(lstat(outside)).resolves.toBeDefined();
   });
 
   // Root bypasses permission bits, so the unreadable-directory case is

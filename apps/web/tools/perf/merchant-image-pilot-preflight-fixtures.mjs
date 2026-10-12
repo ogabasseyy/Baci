@@ -1,33 +1,22 @@
-// Shared offline-asset fixtures for the merchant-image-pilot preflight entry
-// suites. Split out of the oversized preflight suite so the focused entry
-// files stay under the 300-line ceiling.
-import { createHash } from 'node:crypto';
+// Entry-only fixtures for the merchant-image-pilot preflight suite: the
+// offline builders derive real content IDs (the served suites pin fake
+// ones), plus the store-logo page shapes. Everything else comes from the
+// shared served fixtures. Split out of the oversized preflight suite so
+// the entry file stays under the 300-line ceiling.
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { generationIdFor } from '../../../../infra/cdn-transformer/pilot/generation-identity.mjs';
+import {
+  GENERATOR_FIXTURES,
+  MERCHANT,
+  RECIPE,
+  sha256,
+} from './merchant-image-pilot-preflight-served-fixtures.mjs';
 
-export const here = dirname(fileURLToPath(import.meta.url));
-export const GENERATOR_FIXTURES = join(
-  here,
-  '..',
-  '..',
-  '..',
-  '..',
-  'infra',
-  'cdn-transformer',
-  'pilot',
-  'fixtures'
-);
-export const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-export const RECIPE = RECIPE_ID;
-
-export function sha256(bytes) {
-  return createHash('sha256').update(bytes).digest('hex');
-}
+const here = dirname(fileURLToPath(import.meta.url));
 
 export async function setupOfflineAssets(assets) {
   const base = join(
@@ -256,4 +245,23 @@ export function offlineOptions(fixture, overrides = {}) {
     recipe: RECIPE,
     ...overrides,
   };
+}
+
+export function srcSetFor(asset, generationId, format) {
+  return asset.tiers
+    .filter((tier) => tier.format === format)
+    .map((tier) => `/__pilot/${generationId}/${tier.path} ${tier.width}w`)
+    .join(', ');
+}
+
+export function storeLogoPilotPage({ arm, asset, heroRow }) {
+  const avif = srcSetFor(asset, asset.generationId, 'avif');
+  const webp = srcSetFor(asset, asset.generationId, 'webp');
+  const fallback = asset.tiers.find((tier) => tier.format === 'webp');
+  return `<!doctype html><html><body><div data-pilot-lab-arm="${arm}"><main><section data-pilot-lab-binding="${asset.merchantId}/${asset.assetId}" data-pilot-lab-slot="header-logo"><header data-pilot-lab-store-header="Labstore"><a href="/pilot-lab/store/labstore/"><picture data-pilot-lab-header-logo="true"><source sizes="40px" srcSet="${avif}" type="image/avif"/><source sizes="40px" srcSet="${webp}" type="image/webp"/><img src="/__pilot/${asset.generationId}/${fallback.path}" alt="Labstore" width="40" height="40"/></picture><span>Labstore</span></a></header></section>${heroRow}</main></div></body></html>`;
+}
+
+export function storeLogoControlPage({ asset, heroRow }) {
+  const staged = asset.stagedOriginal;
+  return `<!doctype html><html><body><div data-pilot-lab-arm="control"><main><section data-pilot-lab-binding="${asset.merchantId}/${asset.assetId}" data-pilot-lab-slot="header-logo"><header data-pilot-lab-store-header="Labstore"><a href="/pilot-lab/store/labstore/"><img src="${staged}?w=48&q=75" srcSet="${staged}?w=48&q=75 1x, ${staged}?w=96&q=75 2x" alt="Labstore" width="40" height="40"/></a></header></section>${heroRow}</main></div></body></html>`;
 }

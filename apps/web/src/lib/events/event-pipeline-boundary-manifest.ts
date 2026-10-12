@@ -15,7 +15,7 @@ export const eventPipelineBoundaryManifest = {
       '4979380981132de46400971d9a626629db654df139f17321dceef7f4d0b6e713',
   },
   // biome-ignore format: compact allowlist preserves the 300-line verifier gate.
-  trustedWrapperImporters: ['apps/web/src/app/api/analytics/conversion/route.ts', 'apps/web/src/app/api/events/route.ts'],
+  trustedWrapperImporters: ['apps/web/src/app/api/analytics/conversion/route.ts', 'apps/web/src/app/api/events/route.ts', 'apps/web/src/app/api/search/submissions/route.ts'],
 } as const;
 export function memberName(expression: ts.Expression) {
   if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
@@ -165,6 +165,7 @@ const serviceSentinels: Readonly<Record<string, string>> = {
   'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts':
     'shipping-quote-booking-economics',
   'apps/web/src/lib/piggyvest/server-intake-client.ts': 'piggyvest-intake',
+  'apps/web/src/lib/search/server-analytics-client.ts': 'search-analytics',
 };
 // biome-ignore format: exact construction allowlist preserves the 300-line verifier gate.
 const privilegedRouteAdminConstructors = [] as const;

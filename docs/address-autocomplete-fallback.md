@@ -34,7 +34,9 @@ the same provider account. Automated tests mock provider requests and counters.
 
 - Google: **4,500 combined upstream attempts per Pacific calendar month**, counting
   autocomplete, Details and retries. New predictions stop at 4,400, leaving 100
-  attempts for outstanding selections. This is a conservative application cap,
+  attempts for outstanding selections. Each retry reserves its own unit, so one
+  keystroke under persistent transport failure or UNKNOWN_ERROR can spend up to
+  3 units (initial attempt plus 2 retries). This is a conservative application cap,
   not a measurement of all SKUs or other projects sharing the billing account.
 - Geoapify: **2,800 attempts per rolling 24 hours**, with at least 250 ms between
   admissions. This leaves headroom below the Free plan's 3,000 credits/day and

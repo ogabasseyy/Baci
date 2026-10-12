@@ -30,13 +30,19 @@ export async function GET(request: NextRequest) {
       google.body.code !== 'PLACES_AUTOCOMPLETE_NOT_CONFIGURED') ||
     google.body.predictions?.length
   ) {
-    return NextResponse.json(google.body, { status: google.status });
+    return NextResponse.json(google.body, {
+      status: google.status,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
   if (
     parsed.data.fallback !== 'geoapify' ||
     !process.env.GEOAPIFY_API_KEY?.trim()
   ) {
-    return NextResponse.json(google.body, { status: google.status });
+    return NextResponse.json(google.body, {
+      status: google.status,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
 
   try {

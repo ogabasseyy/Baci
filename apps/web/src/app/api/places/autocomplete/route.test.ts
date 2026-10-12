@@ -70,6 +70,7 @@ describe('GET /api/places/autocomplete', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(data.predictions).toHaveLength(2);
     expect(data.predictions[0]).toEqual({
       placeId: 'ChIJ1234',

@@ -58,7 +58,8 @@ def capability_context(*, now=None):
                     raise ValueError("production evidence stale")
         safe_rows = []
         for row in rows:
-            safe = {key: row[key] for key in ("id", "title", "claim", "limitations", "status", "source_refs")}
+            safe = {key: row[key] for key in ("id", "title", "claim", "limitations", "status")}
+            safe["source_ref_count"] = len(row["source_refs"])
             evidence = row.get("production_evidence")
             if row["status"] == "production_verified" and isinstance(evidence, dict):
                 safe["production_evidence"] = {

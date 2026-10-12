@@ -47,6 +47,9 @@ interface MockSupabase {
 }
 
 const supabaseMockRef: { current: MockSupabase | null } = { current: null };
+const userSupabaseMockRef: { current: MockSupabase | null } = {
+  current: null,
+};
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => supabaseMockRef.current,
@@ -193,9 +196,14 @@ function makeRequest({
 describe('POST /api/vtu/checkout/wallet-only', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    userSupabaseMockRef.current = buildSupabase({
+      row: null,
+      insertCalls: 0,
+    });
     mockAuthenticate.mockResolvedValue({
       user: { id: 'user-1', email: 'c@example.com' },
       error: null,
+      supabase: userSupabaseMockRef.current,
     });
     mockCheckCsrf.mockResolvedValue({ valid: true });
     mockPrepare.mockResolvedValue({
@@ -234,6 +242,25 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       error: expect.stringMatching(/idempotency/i),
     });
     expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 401 when authentication yields no user client', async () => {
+    // The replay overlay must run on the authenticated user client
+    // (ownership-enforced RPC) — never fall back to service role, so
+    // a missing user client fails the request instead.
+    mockAuthenticate.mockResolvedValue({
+      user: { id: 'user-1', email: 'c@example.com' },
+      error: null,
+      supabase: null,
+    });
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(401);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
   });
 
   it('rejects malformed JSON body with a 400 (not a generic 500)', async () => {
@@ -314,6 +341,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     mockAuthenticate.mockResolvedValue({
       user: { id: SUBMITTER, email: 'c@example.com' },
       error: null,
+      supabase: userSupabaseMockRef.current,
     });
 
     const { status } = await callRoute(
@@ -477,6 +505,18 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       rpcCalls: [],
     };
     supabaseMockRef.current = buildSupabase(state);
+    // The overlay runs on the AUTHENTICATED user client (ownership-
+    // enforced RPC), never the service-role client.
+    const userState: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      rpcCalls: [],
+    };
+    mockAuthenticate.mockResolvedValue({
+      user: { id: 'user-1', email: 'c@example.com' },
+      error: null,
+      supabase: buildSupabase(userState),
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -495,7 +535,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     );
 
     expect(status).toBe(200);
-    expect(state.rpcCalls).toEqual([
+    expect(userState.rpcCalls).toEqual([
       {
         fn: 'set_vtu_transaction_replay_attributes',
         args: {
@@ -505,6 +545,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         },
       },
     ]);
+    expect(state.rpcCalls).toEqual([]);
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: expect.anything(),
       transactionId: 'vtu-tx-existing',
@@ -528,6 +569,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       rpcCalls: [],
     };
     supabaseMockRef.current = buildSupabase(state);
+    const userState: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      rpcCalls: [],
+    };
+    mockAuthenticate.mockResolvedValue({
+      user: { id: 'user-1', email: 'c@example.com' },
+      error: null,
+      supabase: buildSupabase(userState),
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -548,7 +599,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       );
 
       expect(status).toBe(200);
-      expect(state.rpcCalls).toEqual([
+      expect(userState.rpcCalls).toEqual([
         {
           fn: 'set_vtu_transaction_replay_attributes',
           args: {
@@ -558,6 +609,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           },
         },
       ]);
+      expect(state.rpcCalls).toEqual([]);
       expect(mockFulfill).toHaveBeenCalledWith({
         supabase: expect.anything(),
         transactionId: 'vtu-tx-existing',

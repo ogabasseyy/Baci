@@ -95,7 +95,7 @@ async function findExistingIdempotencyRow(
 export async function POST(request: NextRequest) {
   try {
     const auth = await authenticateApiRequest(request);
-    if (auth.error || !auth.user) {
+    if (auth.error || !auth.user || !auth.supabase) {
       return createErrorResponse(auth.error || 'Unauthorized', 401);
     }
 
@@ -169,9 +169,13 @@ export async function POST(request: NextRequest) {
         );
       }
       // Current-attempt overlay: the retry carries the freshest
-      // phone/reference; attempt-1's snapshot must not win.
+      // phone/reference; attempt-1's snapshot must not win. Runs on
+      // the AUTHENTICATED user client (never service role for this
+      // user-facing write): the RPC enforces row ownership from the
+      // JWT, and the refresh pre-read resolves through the owner
+      // SELECT policy.
       await overlayReplayAttributes({
-        supabase,
+        supabase: auth.supabase,
         transactionId: existing.vtu_transaction_id,
         customerPhone: input.customerPhone,
         validationReference: input.validationReference,
@@ -258,9 +262,10 @@ export async function POST(request: NextRequest) {
             409
           );
         }
-        // Same current-attempt overlay as the replay path.
+        // Same current-attempt overlay as the replay path (user
+        // client, ownership-enforced RPC — see above).
         await overlayReplayAttributes({
-          supabase,
+          supabase: auth.supabase,
           transactionId: racedExisting.vtu_transaction_id,
           customerPhone: input.customerPhone,
           validationReference: input.validationReference,

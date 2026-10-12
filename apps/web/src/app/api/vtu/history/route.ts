@@ -1,13 +1,13 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasRecentBackfillSchedule } from '@/lib/vtu-backfill-pacing';
 import {
   getPaymentStatusKey,
   projectHistoryTransaction,
 } from '@/lib/vtu-history-transaction-projection';
 import {
   extractMetadataField,
-  hasRecentBackfillSchedule,
   isReferenceLessProcessingTransaction,
   isString,
   MAX_TOKEN_BACKFILL_SCHEDULES,

@@ -2,21 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import {
   VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS,
+  VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY,
   VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY,
+  VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY,
 } from '@/lib/vtu-backfill-pacing';
 import {
   extractMetadataField,
-  hasRecentBackfillSchedule,
   isReferenceLessProcessingTransaction,
   isString,
-  MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS,
   normalizeMetadata,
   scheduleVoucherPinBackfill,
   shouldBackfillForStatus,
   shouldBackfillForType,
-  TOKEN_BACKFILL_DEDUPE_WINDOW_MS,
-  VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY,
-  VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY,
 } from '@/lib/vtu-voucher-backfill';
 
 const mocks = vi.hoisted(() => ({
@@ -119,28 +116,13 @@ describe('vtu-voucher-backfill', () => {
     ).toBe(null);
   });
 
-  it('detects token-backed types and recent schedule windows', () => {
+  it('detects token-backed types and eligible statuses', () => {
     expect(shouldBackfillForType('electricity')).toBe(true);
     expect(shouldBackfillForType('cable_tv')).toBe(true);
     expect(shouldBackfillForType('airtime')).toBe(false);
     expect(shouldBackfillForStatus('successful')).toBe(true);
     expect(shouldBackfillForStatus('processing')).toBe(true);
     expect(shouldBackfillForStatus('failed')).toBe(false);
-
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date(
-          Date.now() - TOKEN_BACKFILL_DEDUPE_WINDOW_MS + 1000
-        ).toISOString(),
-      })
-    ).toBe(true);
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date(
-          Date.now() - TOKEN_BACKFILL_DEDUPE_WINDOW_MS - 1000
-        ).toISOString(),
-      })
-    ).toBe(false);
   });
 
   it('flags only processing rows with neither provider reference nor response', () => {
@@ -170,21 +152,6 @@ describe('vtu-voucher-backfill', () => {
         error_message: null,
         status: 'successful',
         transaction_id: null,
-      })
-    ).toBe(false);
-  });
-
-  it('reports a recent schedule when attempt cap is reached regardless of timestamp', () => {
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS,
-      })
-    ).toBe(true);
-    // One below the cap is still allowed
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]:
-          MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS - 1,
       })
     ).toBe(false);
   });

@@ -120,6 +120,12 @@ export async function POST(request: NextRequest) {
               { status: 200 }
             );
           }
+          // Accepted oracle (low): unlike the collapsed dead-code states
+          // above, the minimum message stays distinct. It discloses that a
+          // probed code is live, but the minimum itself is public catalog
+          // info, the message is actionable ("add more to unlock"), the
+          // 12-hex space plus proxy rate limiting bounds enumeration, and
+          // the order wrapper re-enforces state authoritatively.
           if (
             loyaltyCode.minimum_order_amount != null &&
             cart_total < Number(loyaltyCode.minimum_order_amount)

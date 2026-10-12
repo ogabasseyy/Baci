@@ -15,13 +15,43 @@ VERSION_RE = re.compile(r"\A[0-9]+\.[0-9]+\.[0-9]+-R[0-9]+\.[0-9]+\Z")
 SHA_RE = re.compile(r"\A[0-9a-f]{64}\Z")
 
 
+class TrustedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse a redirect before any request is issued to an untrusted host."""
+
+    def __init__(self, expected_host):
+        super().__init__()
+        self.expected_host = expected_host
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urllib.parse.urlparse(newurl)
+        if parsed.scheme != "https" or parsed.hostname != self.expected_host:
+            raise ValueError("metadata request redirected to an untrusted host")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def fetch_json(url, expected_host):
     request = urllib.request.Request(url, headers={"User-Agent": "Baci-Muse-Pin-Updater"})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    opener = urllib.request.build_opener(TrustedRedirectHandler(expected_host))
+    with opener.open(request, timeout=30) as response:
         final_url = urllib.parse.urlparse(response.geturl())
         if final_url.scheme != "https" or final_url.hostname != expected_host:
             raise ValueError("metadata request redirected to an untrusted host")
         return json.load(response)
+
+
+def parse_version(version):
+    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)-R([0-9]+)\.([0-9]+)", version or "")
+    if not match:
+        raise ValueError("version is not in the expected format: " + str(version))
+    return tuple(int(part) for part in match.groups())
+
+
+def ensure_not_downgrade(new_version, current_version, allow_downgrade=False):
+    if current_version and not allow_downgrade \
+            and parse_version(new_version) < parse_version(current_version):
+        raise ValueError(
+            "stable channel version " + new_version + " would downgrade the pinned "
+            + current_version + "; pass --allow-downgrade to override")
 
 
 def resolve_pins(channel):
@@ -82,9 +112,20 @@ def update_files(root, pins):
     anchors.write_text(anchor_text)
 
 
+def current_pinned_version(root):
+    anchors = root / ".github/scripts/semgrep_sarif_pins.py"
+    match = re.search(r'^MUSE_PINNED_VERSION = "([^"]+)"$',
+                      anchors.read_text(), flags=re.MULTILINE)
+    if not match:
+        raise ValueError("could not read the current pinned version")
+    return match.group(1)
+
+
 def main():
     root = Path(__file__).resolve().parents[2]
     pins = resolve_pins(fetch_json(CHANNEL_URL, "api.meta.ai"))
+    ensure_not_downgrade(pins["version"], current_pinned_version(root),
+                         allow_downgrade="--allow-downgrade" in sys.argv)
     update_files(root, pins)
     output_path = os.environ.get("GITHUB_OUTPUT")
     if output_path:

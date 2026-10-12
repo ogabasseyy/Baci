@@ -43,6 +43,47 @@ class MusePinUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "untrusted manifest URL"):
             updater.resolve_pins(channel)
 
+    def test_rejects_version_downgrade(self):
+        with self.assertRaisesRegex(ValueError, "would downgrade the pinned"):
+            updater.ensure_not_downgrade("1.4.6-R6000.1", "1.5.0-R6100.2")
+        updater.ensure_not_downgrade("1.5.0-R6100.2", "1.5.0-R6100.2")
+        updater.ensure_not_downgrade("1.5.1-R6100.2", "1.5.0-R6100.2")
+        updater.ensure_not_downgrade("1.4.6-R6000.1", "1.5.0-R6100.2",
+                                     allow_downgrade=True)
+
+    def test_main_rejects_downgrade_before_writing(self):
+        channel = {
+            "state": "public", "version": "1.4.6-R6000.1",
+            "manifest_url": "https://lookaside.facebook.com/muse/manifest.json",
+        }
+        manifest = {
+            "version": "1.4.6-R6000.1", "checksum_algorithm": "sha256",
+            "artifacts": {
+                "x86_linux": {"checksum": "a" * 64},
+                "aarch64_linux": {"checksum": "b" * 64},
+            },
+        }
+        with mock.patch.object(updater, "fetch_json", side_effect=[channel, manifest]), \
+                mock.patch.object(updater, "current_pinned_version",
+                                  return_value="1.5.0-R6100.2"), \
+                mock.patch.object(updater, "update_files") as update_files:
+            with self.assertRaisesRegex(ValueError, "would downgrade the pinned"):
+                updater.main()
+            update_files.assert_not_called()
+
+    def test_redirect_to_untrusted_host_is_refused_before_following(self):
+        handler = updater.TrustedRedirectHandler("api.meta.ai")
+        request = updater.urllib.request.Request("https://api.meta.ai/stable")
+        with self.assertRaisesRegex(ValueError, "untrusted host"):
+            handler.redirect_request(request, None, 302, "Found", {},
+                                     "https://evil.example/stable")
+        with self.assertRaisesRegex(ValueError, "untrusted host"):
+            handler.redirect_request(request, None, 302, "Found", {},
+                                     "http://api.meta.ai/stable")
+        followed = handler.redirect_request(request, None, 302, "Found", {},
+                                            "https://api.meta.ai/stable2")
+        self.assertEqual(followed.full_url, "https://api.meta.ai/stable2")
+
     def test_rejects_duplicate_pin_assignments(self):
         with self.assertRaisesRegex(ValueError, "expected exactly one installer version pin"):
             updater.replace_once(

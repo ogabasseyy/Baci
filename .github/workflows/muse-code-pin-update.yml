@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Serialize scheduled and manual runs so two overlapping executions cannot
+# both pass the existing-PR check and open duplicate pin-update PRs.
+concurrency:
+  group: muse-code-pin-update
+  cancel-in-progress: false
+
 jobs:
   update-pin:
     if: github.ref == 'refs/heads/main'
@@ -16,6 +22,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,7 +48,10 @@ jobs:
 
       - name: Create pin update pull request
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Prefer a dedicated automation token when configured: pushes and
+          # PRs created with GITHUB_TOKEN do not trigger pull_request
+          # workflows, so generated PRs would never get required checks.
+          GH_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN || github.token }}
           VERSION: ${{ steps.pin.outputs.version }}
         run: |
           set -euo pipefail
@@ -49,8 +59,8 @@ jobs:
             echo "Muse pin already matches stable $VERSION."
             exit 0
           fi
-          existing="$(gh pr list --state open --json headRefName,url \
-            --jq '.[] | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .url' | head -n1)"
+          existing="$(gh pr list --state open --limit 200 --json headRefName,url,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .url' | head -n1)"
           if [[ -n "$existing" ]]; then
             echo "An open Muse pin update already exists: $existing"
             exit 0
@@ -66,4 +76,11 @@ jobs:
             gh pr create --base main --head "$branch" \
               --title "chore: update Muse review CLI pin to $VERSION" \
               --body "Automated weekly update from Meta's public Muse stable channel. The updater verified the channel manifest, HTTPS host, version, and Linux SHA256 checksums, then passed the Muse review and SARIF regression suites before opening this PR. Please review the binary pin and trust-anchor change before merging."
+            # When the PR was created with GITHUB_TOKEN, GitHub suppresses
+            # the pull_request workflows that produce the required checks.
+            # Dispatch them explicitly against the new branch so the checks
+            # exist on the PR head commit.
+            gh workflow run ci.yml --ref "$branch"
+            gh workflow run security.yml --ref "$branch"
+            gh workflow run muse-review-selftest.yml --ref "$branch"
           fi

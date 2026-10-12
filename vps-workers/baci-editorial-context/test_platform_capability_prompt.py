@@ -6,10 +6,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from codex_content_agent.prompt_builder import build_prompt
-from codex_content_agent.platform_capabilities import capability_context
+try:
+    from codex_content_agent.prompt_builder import build_prompt
+    from codex_content_agent.platform_capabilities import capability_context
+except ImportError:  # In-repo checkout without the VPS writer package.
+    build_prompt = None
+    capability_context = None
 
 
+@unittest.skipUnless(build_prompt is not None, "requires the VPS writer checkout (codex_content_agent)")
 class CapabilityPromptTests(unittest.TestCase):
     def test_empty_source_references_are_rejected(self):
         with tempfile.TemporaryDirectory() as root:

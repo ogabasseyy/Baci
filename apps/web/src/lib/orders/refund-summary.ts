@@ -46,4 +46,15 @@ export interface RefundSummary {
     date: string;
     recorded_by: string | null;
   }>;
+  // Pin candidates for Paystack attestations: completed external
+  // payment legs with money still outstanding, oldest first. The
+  // manual form offers them when more than one exists; the RPC
+  // resolves a sole leg itself on live data (fresher than polling).
+  legs: Array<{
+    id: string;
+    amount: number;
+    outstanding: number;
+    gateway: string | null;
+    reference: string | null;
+  }>;
 }

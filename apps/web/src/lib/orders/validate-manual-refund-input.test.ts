@@ -55,4 +55,24 @@ describe('validateManualRefundInput', () => {
       'Confirm that the money already moved'
     );
   });
+  it('requires a capture choice only for ambiguous Paystack records', () => {
+    expect(
+      validateManualRefundInput({
+        ...valid,
+        method: 'paystack',
+        requirePaymentLeg: true,
+      })
+    ).toContain('Select which Paystack capture');
+    expect(
+      validateManualRefundInput({
+        ...valid,
+        method: 'paystack',
+        paymentLegId: 'leg-1',
+        requirePaymentLeg: true,
+      })
+    ).toBeNull();
+    expect(
+      validateManualRefundInput({ ...valid, method: 'paystack' })
+    ).toBeNull();
+  });
 });

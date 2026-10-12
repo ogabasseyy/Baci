@@ -3,18 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  orderRefundMethodLabels,
-  orderRefundStatusLabels,
-} from '@/config/order-refund';
+import { orderRefundStatusLabels } from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { buildManualRefundPayload } from '@/lib/orders/build-manual-refund-payload';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
-import { toLagosRefundInstant } from '@/lib/orders/to-lagos-refund-instant';
+import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-options';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
-import { formatRefundActivityInstant } from './format-refund-activity-instant';
 import { OrderRefundManualForm } from './order-refund-manual-form';
+import { OrderRefundTimeline } from './order-refund-timeline';
 import { useRefundStatusPolling } from './use-refund-status-polling';
 
 export function OrderRefundPanel({
@@ -35,6 +33,14 @@ export function OrderRefundPanel({
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [legId, setLegId] = useState('');
+  // Several outstanding captures force a Paystack pin choice; a
+  // sole leg stays unpinned for the RPC to resolve on live data.
+  const legOptions = selectRefundPinLegOptions(
+    summary?.legs ?? [],
+    summary?.currency ?? 'NGN'
+  );
+  const requireLeg = method === 'paystack' && legOptions.length > 1;
 
   // Only a refunded order is terminal: a failed row can still
   // transition asynchronously (drain retries, provider
@@ -77,8 +83,10 @@ export function OrderRefundPanel({
         confirmed,
         date,
         method,
+        paymentLegId: legId || null,
         reference,
         remaining: summary?.remaining ?? null,
+        requirePaymentLeg: requireLeg,
       });
       if (validationError) {
         setError(validationError);
@@ -92,15 +100,15 @@ export function OrderRefundPanel({
       const payload =
         action === 'retry'
           ? { action }
-          : {
-              action,
-              amount: Number(amount),
-              refundedAt: toLagosRefundInstant(date),
-              method,
-              reference,
-              note,
+          : buildManualRefundPayload({
+              amount,
               confirmed,
-            };
+              date,
+              method,
+              note,
+              paymentLegId: legId || null,
+              reference,
+            });
       const updated = await apiPost<RefundSummary>(
         `/api/orders/${encodeURIComponent(orderId)}/refund`,
         payload
@@ -115,6 +123,7 @@ export function OrderRefundPanel({
       setReference('');
       setDate('');
       setNote('');
+      setLegId('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to manage refund');
     } finally {
@@ -222,12 +231,18 @@ export function OrderRefundPanel({
                 confirmed={confirmed}
                 currency={summary.currency}
                 date={date}
+                legId={legId}
+                legOptions={requireLeg ? legOptions : []}
                 method={method}
                 note={note}
                 onAmountChange={setAmount}
                 onConfirmedChange={setConfirmed}
                 onDateChange={setDate}
-                onMethodChange={setMethod}
+                onLegIdChange={setLegId}
+                onMethodChange={(value) => {
+                  setMethod(value);
+                  setLegId('');
+                }}
                 onNoteChange={setNote}
                 onReferenceChange={setReference}
                 onSubmit={() => void submit('manual')}
@@ -235,55 +250,11 @@ export function OrderRefundPanel({
                 remaining={summary.remaining}
               />
             )}
-            {summary.events && summary.events.length > 0 && (
-              <details>
-                <summary>Refund activity</summary>
-                <ul className="space-y-2 text-sm" aria-label="Refund activity">
-                  {summary.events.map((event) => {
-                    // Event errors arrive pre-mapped at the API boundary,
-                    // so the panel renders them directly, never verbatim
-                    // worker text. When both are present and differ, the
-                    // previous error keeps its own line instead of being
-                    // silently dropped.
-                    const eventError =
-                      event.details.error || event.details.previousError;
-                    const eventPreviousError =
-                      event.details.error &&
-                      event.details.previousError !== event.details.error
-                        ? event.details.previousError
-                        : undefined;
-                    return (
-                      <li key={event.id}>
-                        <p>
-                          {orderRefundStatusLabels[event.action] ||
-                            'Refund activity'}{' '}
-                          · {formatRefundActivityInstant(event.date)}
-                        </p>
-                        {eventError && <p>{eventError}</p>}
-                        {eventPreviousError && (
-                          <p>Previously: {eventPreviousError}</p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-            )}
-            {summary.history.length > 0 && (
-              <ul className="space-y-2 text-sm" aria-label="Refund history">
-                {summary.history.map((item) => (
-                  <li key={item.id} className="border-t pt-2">
-                    <p>
-                      {money(item.amount)} ·{' '}
-                      {orderRefundStatusLabels[item.status] ?? item.status} ·{' '}
-                      {orderRefundMethodLabels[item.method] ?? item.method}
-                    </p>
-                    <p className="break-all">{item.reference}</p>
-                    <p>{formatRefundActivityInstant(item.date)}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <OrderRefundTimeline
+              currency={summary.currency}
+              events={summary.events ?? []}
+              history={summary.history}
+            />
           </>
         )}
       </CardContent>

@@ -24,6 +24,7 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_history jsonb;
+  v_legs jsonb;
 BEGIN
   -- Bound like the audit events: one row per partial manual with 30s
   -- status polling would otherwise grow every response unbounded.
@@ -37,6 +38,30 @@ BEGIN
       FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=p_merchant_id AND transaction_type='refund'
       ORDER BY created_at DESC LIMIT 50) h;
+  -- Pin candidates for the manual form: completed external payment
+  -- legs with money still outstanding, mirroring the allocator's
+  -- candidate set (blank gateways included, internal ledgers out)
+  -- and its per-leg outstanding math, so the dashboard offers
+  -- exactly what the server accepts. Uncapped: unlike history,
+  -- hiding a leg would strand its capture behind an unpinnable
+  -- Paystack attestation, and legs are few per order.
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',l.id,'amount',l.amount,
+    'outstanding',l.outstanding,'gateway',l.gateway,'reference',l.gateway_reference)
+    ORDER BY l.created_at,l.id),'[]') INTO v_legs
+    FROM (SELECT p.id,p.amount,p.gateway,p.gateway_reference,p.created_at,
+      GREATEST(p.amount-COALESCE((SELECT sum(r.amount)
+        FROM public.transactions r
+        WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+        AND r.status IN ('completed','refunded')
+        AND upper(btrim(r.currency))=upper(btrim(p.currency))
+        AND r.metadata->>'payment_transaction_id'=p.id::text),0),0) AS outstanding
+      FROM public.transactions p
+      WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
+      AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
+      AND (p.gateway IS NULL OR btrim(p.gateway)=''
+        OR upper(btrim(p.gateway)) NOT IN
+          ('WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
+    ) l WHERE l.outstanding>0;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
     'reversedInternal',p_reversed_internal,
@@ -66,6 +91,7 @@ BEGIN
     'needsPaystackCheck',COALESCE(POSITION('paystack' IN LOWER(p_step_error))>0,FALSE),
     'attempts',COALESCE(p_step_attempts,0),
     'retryRequests',COALESCE(p_step_retry_requests,0),'history',v_history,
+    'legs',v_legs,
     'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
       'details',x.details,'date',x.created_at,'actor',x.actor_id) ORDER BY x.created_at DESC)
       FROM (SELECT id,action,details,created_at,actor_id FROM public.order_refund_events

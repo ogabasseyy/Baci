@@ -8,15 +8,19 @@ export function validateManualRefundInput({
   confirmed,
   date,
   method,
+  paymentLegId,
   reference,
   remaining,
+  requirePaymentLeg,
 }: {
   amount: string;
   confirmed: boolean;
   date: string;
   method: string;
+  paymentLegId?: string | null;
   reference: string;
   remaining: number | null;
+  requirePaymentLeg?: boolean;
 }): string | null {
   const parsedAmount = Number(amount);
   if (!Number.isFinite(parsedAmount) || parsedAmount <= 0)
@@ -47,5 +51,10 @@ export function validateManualRefundInput({
   )
     return 'Select how the money moved.';
   if (!confirmed) return 'Confirm that the money already moved.';
+  // The RPC rejects an unpinned Paystack attestation when several
+  // captures are outstanding: surface the choice here instead of
+  // after a round trip. Sole legs resolve server-side on live data.
+  if (requirePaymentLeg && !paymentLegId)
+    return 'Select which Paystack capture this refund returns.';
   return null;
 }

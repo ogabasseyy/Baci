@@ -22,17 +22,30 @@ const row = {
   order_id: 'order-1',
 } as const;
 
-function buildSupabase(
-  refundGateways: Array<{ gateway: unknown; status: string }>
-) {
+type CopyRow = {
+  gateway: unknown;
+  metadata?: Record<string, unknown>;
+  status: string;
+};
+
+function buildSupabase(refundRows: CopyRow[], paymentRows: CopyRow[] = []) {
   const chains: Record<string, Record<string, unknown>> = {};
+  let transactionsCalls = 0;
   const from = vi.fn((table: string) => {
     const chain: Record<string, unknown> = {};
     chain.select = vi.fn().mockReturnValue(chain);
     chain.eq = vi.fn().mockReturnValue(chain);
+    // The first transactions probe lists terminal refund rows; the
+    // second (only when no refund row is provider-backed) lists
+    // self-terminal refunded payments.
+    transactionsCalls += table === 'transactions' ? 1 : 0;
+    const probeRows =
+      table === 'transactions' && transactionsCalls > 1
+        ? paymentRows
+        : refundRows;
     // Emulate the terminal-status filter so failed provider rows
     // never reach the worker, exactly like the database query.
-    let visible = refundGateways;
+    let visible = probeRows;
     chain.in = vi.fn((column: string, values: string[]) => {
       if (column === 'status') {
         visible = visible.filter((refund) => values.includes(refund.status));
@@ -73,17 +86,19 @@ function buildSupabase(
           error: null,
         }).then(resolve);
     }
-    chains[table] = chain;
+    // The status-filter assertion below targets the refund probe,
+    // so the later payment probe must not overwrite it.
+    chains[table] ??= chain;
     return chain;
   });
   return { chains, from };
 }
 
-function deliver(refundGateways: Array<{ gateway: unknown; status: string }>) {
+function deliver(refundRows: CopyRow[], paymentRows: CopyRow[] = []) {
   const sendEmail = vi
     .fn()
     .mockResolvedValue({ deliveryOutcome: undefined, success: true });
-  const client = buildSupabase(refundGateways);
+  const client = buildSupabase(refundRows, paymentRows);
   return {
     chains: client.chains,
     promise: deliverClaimedRefundNotification({
@@ -157,6 +172,63 @@ describe('deliverClaimedRefundNotification manual copy', () => {
       'completed',
       'refunded',
     ]);
+    const message = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(message.textContent).toContain('If you have any questions');
+    expect(message.textContent).not.toContain('business days');
+  });
+
+  it('treats a verified manual Paystack attestation as provider money', async () => {
+    const { promise, sendEmail } = deliver([
+      {
+        gateway: 'manual',
+        metadata: { method: 'paystack', provider_refund_status: 'processed' },
+        status: 'completed',
+      },
+    ]);
+
+    await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
+    expect(vi.mocked(sendEmail).mock.calls[0][0].textContent).toContain(
+      '10 business days'
+    );
+  });
+
+  it('keeps neutral copy for unverified manual Paystack claims', async () => {
+    const { promise, sendEmail } = deliver(
+      [
+        {
+          gateway: 'manual',
+          metadata: { method: 'paystack' },
+          status: 'completed',
+        },
+      ],
+      []
+    );
+
+    await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
+    const message = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(message.textContent).toContain('If you have any questions');
+    expect(message.textContent).not.toContain('business days');
+  });
+
+  it('counts self-terminal provider payments as provider money', async () => {
+    const { promise, sendEmail } = deliver(
+      [{ gateway: 'manual', status: 'completed' }],
+      [{ gateway: 'paypal', status: 'refunded' }]
+    );
+
+    await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
+    expect(vi.mocked(sendEmail).mock.calls[0][0].textContent).toContain(
+      '10 business days'
+    );
+  });
+
+  it('ignores internal-leg payment flips when choosing email copy', async () => {
+    const { promise, sendEmail } = deliver(
+      [{ gateway: 'manual', status: 'completed' }],
+      [{ gateway: 'wallet', status: 'refunded' }]
+    );
+
+    await expect(promise).resolves.toMatchObject({ outcome: 'sent' });
     const message = vi.mocked(sendEmail).mock.calls[0][0];
     expect(message.textContent).toContain('If you have any questions');
     expect(message.textContent).not.toContain('business days');

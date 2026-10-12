@@ -169,4 +169,71 @@ describe('OrderRefundPanel manual form', () => {
       '0.30'
     );
   });
+  it('pins the selected capture for ambiguous Paystack records', async () => {
+    const legs = [
+      {
+        amount: 100,
+        gateway: 'paystack',
+        id: 'leg-1',
+        outstanding: 100,
+        reference: 'pp-a',
+      },
+      {
+        amount: 100,
+        gateway: 'paystack',
+        id: 'leg-2',
+        outstanding: 100,
+        reference: 'pp-b',
+      },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, legs }),
+      })
+    );
+    vi.mocked(apiPost).mockResolvedValue({
+      ...summary,
+      legs,
+      status: 'queued',
+    });
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    fireEvent.change(screen.getByLabelText('Method'), {
+      target: { value: 'paystack' },
+    });
+    fireEvent.change(screen.getByLabelText(/Refund date and time/), {
+      target: { value: '2026-09-28T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText(/Amount/), {
+      target: { value: '100' },
+    });
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: 'pin-1' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    const form = screen
+      .getByRole('button', { name: 'Save manual refund' })
+      .closest('form');
+    if (!form) throw new Error('expected the manual refund form');
+    fireEvent.submit(form);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Select which Paystack capture'
+    );
+    expect(apiPost).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Paystack capture'), {
+      target: { value: 'leg-2' },
+    });
+    fireEvent.submit(form);
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/orders/order-1/refund',
+      expect.objectContaining({
+        action: 'manual',
+        paymentTransactionId: 'leg-2',
+      })
+    );
+  });
 });

@@ -1433,6 +1433,18 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
   END;
+  -- The status response names the pin candidates: both captures
+  -- with their outstanding amounts, oldest first.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000043'
+  ) INTO v_result;
+  IF pg_catalog.jsonb_array_length(v_result->'legs') <> 2
+    OR v_result->'legs'->0->>'id' <> '9ef12000-0000-4000-8000-000000000057'
+    OR (v_result->'legs'->0->>'outstanding')::numeric <> 100
+    OR v_result->'legs'->1->>'id' <> '9ef12000-0000-4000-8000-000000000058'
+    OR (v_result->'legs'->1->>'outstanding')::numeric <> 100 THEN
+    RAISE EXCEPTION 'pin candidates mislisted: %', v_result->'legs';
+  END IF;
   -- A pin to a missing leg is rejected as invalid input.
   BEGIN
     PERFORM public.manage_order_refund(
@@ -1466,6 +1478,11 @@ BEGIN
     OR (v_result->>'remaining')::numeric <> 200 THEN
     RAISE EXCEPTION 'pinned attestation left pending % remaining %',
       v_result->>'pending', v_result->>'remaining';
+  END IF;
+  -- The covered leg drops out of the pin candidates.
+  IF pg_catalog.jsonb_array_length(v_result->'legs') <> 1
+    OR v_result->'legs'->0->>'id' <> '9ef12000-0000-4000-8000-000000000057' THEN
+    RAISE EXCEPTION 'covered leg still listed: %', v_result->'legs';
   END IF;
   -- The unverified attestation pends further records until the
   -- provider confirms it: the processing guard layers over the pin.

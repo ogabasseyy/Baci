@@ -126,6 +126,24 @@ describe('order refund route', () => {
       expect.objectContaining({ needsPaystackCheck: false })
     );
   });
+  it('passes the pin-candidate legs through to the panel', async () => {
+    const legs = [
+      {
+        amount: 100,
+        gateway: 'paystack',
+        id: 'leg-1',
+        outstanding: 100,
+        reference: 'pp-a',
+      },
+    ];
+    mocks.rpc.mockResolvedValue({
+      data: { status: 'failed', legs },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(expect.objectContaining({ legs }));
+  });
   it('queues retries without invoking a payment provider', async () => {
     expect((await POST(request({ action: 'retry' }), context)).status).toBe(
       200

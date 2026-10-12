@@ -21,6 +21,7 @@ describe('savings exit evidence boundaries', () => {
       socketDirectory:
         '/private/tmp/baci-savings-exit-accounting.fixture/socket',
       port: 55454,
+      password: 'synthetic-local-only',
     };
     expect(
       schemas.localStoreConfiguration.safeParse(configuration).success
@@ -30,6 +31,11 @@ describe('savings exit evidence boundaries', () => {
       { port: 65536 },
       { port: 1.5 },
       { socketDirectory: '/tmp/elsewhere' },
+      { password: '' },
+      { password: 'x'.repeat(129) },
+      { password: ' '.repeat(8) },
+      { password: '  secret12  ' },
+      { password: 'secret\0word' },
       { role: 'service_role' },
     ]) {
       expect(

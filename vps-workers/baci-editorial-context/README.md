@@ -37,7 +37,11 @@ without inspection.
 
 Owner operations: re-review the register at least every 14 days — a stale
 register makes the lane fail closed to the "Register unavailable" prompt text,
-so watch for that fallback in writer output. At first apply, record the writer
+so watch for that fallback in writer output. Treat write access to the
+register path (`BACI_CAPABILITY_REGISTER_PATH`) as prompt control: the file is
+operator-reviewed evidence whose text reaches the writer prompt, so only
+trusted operators may write it, and the hash printed into each prompt is the
+editorial cross-check that the reviewed file is the one being used. At first apply, record the writer
 checkout revision this patch was verified against here (`Verified writer
 revision: <sha>`), and re-verify the `platform_marketing` task value on the
 VPS before every re-apply.

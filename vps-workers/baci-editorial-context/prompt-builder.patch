@@ -6,7 +6,7 @@
 +    if task_type == "platform_marketing":
 +        try:
 +            from codex_content_agent.platform_capabilities import capability_context
-+        except ImportError:
++        except Exception:
 +            capability_context = None
 +        if capability_context is not None:
 +            platform_rules += capability_context()

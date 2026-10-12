@@ -139,12 +139,14 @@ class CapabilityContextTests(unittest.TestCase):
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))
         age = dt.datetime.now(dt.timezone.utc) - reviewed
         self.assertGreaterEqual(age, dt.timedelta(0), "register reviewed_at is future-dated; runtime would reject it")
-        if age > dt.timedelta(days=14):
-            self.skipTest("register outside its 14-day evidence window; owner re-review required (runtime already fails closed)")
-        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path)}):
-            rendered = capability_context()
-        self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
-        self.assertNotIn("Register unavailable", rendered)
+        stale = age > dt.timedelta(days=14)
+        if not stale:
+            # Freshness and runtime acceptance are only asserted inside the
+            # evidence window; structural binding below is always enforced.
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path)}):
+                rendered = capability_context()
+            self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
+            self.assertNotIn("Register unavailable", rendered)
         if (repo / ".git" / "shallow").exists():
             self.skipTest("shallow checkout cannot verify the revision binding")
         ancestor = subprocess.run(

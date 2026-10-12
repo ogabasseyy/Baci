@@ -15,14 +15,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-pin:
+  # Resolve the pin and execute the unreviewed binary here, in a read-only
+  # job with no write credentials and no credential-bearing steps after it.
+  # Only the verified pin files cross into the write job, as an artifact.
+  smoke:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write
+      contents: read
+    outputs:
+      version: ${{ steps.pin.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,20 +34,6 @@ jobs:
       - name: Resolve latest public stable pin
         id: pin
         run: python3 .github/scripts/muse-pin-update.py
-
-      - name: Run Muse review and SARIF regression suites
-        if: steps.pin.outcome == 'success'
-        run: |
-          set -euo pipefail
-          python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
-          python3 .github/scripts/muse-pin-update.test.py
-          python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py .github/scripts/muse-pin-update.py
-          bash .github/scripts/muse-review/test.sh
-          bash .github/scripts/semgrep-sarif-filter.test.sh
-          for shard in 1 2 3 4; do
-            bash .github/scripts/semgrep-sarif-hardening-shard.test.sh "$shard"
-          done
-          for script in .github/scripts/muse-review/*.sh; do bash -n "$script"; done
 
       - name: Smoke-test the pinned installer against the real binary
         if: steps.pin.outcome == 'success'
@@ -77,13 +66,55 @@ jobs:
             exit 1
           fi
 
+      - name: Upload the smoke-verified pin files
+        if: steps.pin.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: muse-pin-files
+          path: |
+            .github/scripts/muse-review/install.sh
+            .github/scripts/semgrep_sarif_pins.py
+
+  update-pin:
+    needs: smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the smoke-verified pin files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: muse-pin-files
+
+      - name: Run Muse review and SARIF regression suites
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
+          python3 .github/scripts/muse-pin-update.test.py
+          python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py .github/scripts/muse-pin-update.py
+          bash .github/scripts/muse-review/test.sh
+          bash .github/scripts/semgrep-sarif-filter.test.sh
+          for shard in 1 2 3 4; do
+            bash .github/scripts/semgrep-sarif-hardening-shard.test.sh "$shard"
+          done
+          for script in .github/scripts/muse-review/*.sh; do bash -n "$script"; done
+
       - name: Create pin update pull request
         env:
           # Prefer a dedicated automation token when configured: pushes and
           # PRs created with GITHUB_TOKEN do not trigger pull_request
           # workflows, so generated PRs would never get required checks.
           GH_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN || github.token }}
-          VERSION: ${{ steps.pin.outputs.version }}
+          VERSION: ${{ needs.smoke.outputs.version }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if git diff --quiet; then
@@ -93,12 +124,24 @@ jobs:
           existing="$(gh pr list --state open --limit 200 --json headRefName,url,isCrossRepository \
             --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .headRefName' | head -n1)"
           if [[ -n "$existing" ]]; then
-            echo "An open Muse pin update already exists on $existing; re-dispatching its checks."
-            # A prior run may have created the PR but failed before
-            # dispatching checks; re-dispatch so it cannot stay checkless.
-            gh workflow run ci.yml --ref "$existing"
-            gh workflow run security.yml --ref "$existing" -f trusted_changed=true
-            gh workflow run muse-review-selftest.yml --ref "$existing"
+            echo "An open Muse pin update already exists on $existing; verifying its pins and checks."
+            # Never bless an existing branch whose pins drifted from the
+            # ones just resolved and smoke-verified.
+            gh api "repos/${REPO}/contents/.github/scripts/muse-review/install.sh?ref=${existing}" \
+              --jq .content | base64 -d > "${RUNNER_TEMP}/existing-install.sh"
+            if ! diff \
+              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' "${RUNNER_TEMP}/existing-install.sh") \
+              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' .github/scripts/muse-review/install.sh); then
+              echo "::error::Existing pin-update branch $existing carries different pins than the verified stable $VERSION; refusing to reuse it." >&2
+              exit 1
+            fi
+            # Re-dispatch only checks that are actually missing, so a
+            # healthy open PR does not burn CI capacity every week.
+            head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
+            checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '.check_runs[].name')"
+            grep -qx 'Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
+            grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f trusted_changed=true
+            grep -q '^Selftest (' <<<"$checks" || gh workflow run muse-review-selftest.yml --ref "$existing"
             exit 0
           fi
           branch="automation/muse-code-pin-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -116,7 +159,7 @@ jobs:
             # the pull_request workflows that produce the required checks.
             # Dispatch them explicitly against the new branch so the checks
             # exist on the PR head commit.
-            gh workflow run ci.yml --ref "$branch"
+            gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
             gh workflow run security.yml --ref "$branch" -f trusted_changed=true
             gh workflow run muse-review-selftest.yml --ref "$branch"
           fi

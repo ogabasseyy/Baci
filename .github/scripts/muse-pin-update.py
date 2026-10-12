@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Update the Muse CLI and SARIF auditor pins from Meta's public stable channel."""
 
+import datetime
 import json
 import os
 import re
@@ -90,11 +91,18 @@ def replace_once(text, pattern, replacement, label):
     return updated
 
 
-def update_files(root, pins):
+def update_files(root, pins, retrieved=None):
+    if retrieved is None:
+        retrieved = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
     install = root / ".github/scripts/muse-review/install.sh"
     install_text = install.read_text()
     install_text = replace_once(install_text, r'^MUSE_VERSION="[^"]+"$',
                                 'MUSE_VERSION="' + pins["version"] + '"', "installer version")
+    install_text, date_count = re.subn(
+        r"\(retrieved [0-9]{4}-[0-9]{2}-[0-9]{2} over TLS\)",
+        "(retrieved " + retrieved + " over TLS)", install_text)
+    if date_count > 1:
+        raise ValueError("expected at most one manifest retrieval date")
     install_text = replace_once(install_text, r'^SHA_X86_LINUX="[^"]+"$',
                                 'SHA_X86_LINUX="' + pins["x86"] + '"', "installer x86 checksum")
     install_text = replace_once(install_text, r'^SHA_AARCH64_LINUX="[^"]+"$',

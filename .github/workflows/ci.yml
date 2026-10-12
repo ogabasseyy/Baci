@@ -10,6 +10,11 @@ on:
   # that never start. See the `changes` job for merge_group handling.
   merge_group:
   workflow_dispatch:
+    inputs:
+      force_quality_gates:
+        description: 'Run lint, typecheck, and test gates even when no web paths changed (used by automation branches)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -65,6 +70,7 @@ jobs:
           FILTER_QUIZ_DB: ${{ steps.filter.outputs.quiz_db }}
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
+          FORCE_QUALITY_GATES: ${{ inputs.force_quality_gates }}
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = "merge_group" ]; then
@@ -81,6 +87,12 @@ jobs:
             quiz_db="${FILTER_QUIZ_DB:-false}"
             cwv_runner="${FILTER_CWV_RUNNER:-false}"
             deploy_scripts="${FILTER_DEPLOY_SCRIPTS:-false}"
+            # Dispatched automation branches (e.g. Muse pin updates)
+            # change no web paths but must still execute the mandated
+            # lint/typecheck/test gates when the dispatcher asks.
+            if [ "${FORCE_QUALITY_GATES:-false}" = "true" ]; then
+              web=true
+            fi
           fi
           {
             echo "mobile_admin=$mobile_admin"

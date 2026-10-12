@@ -50,7 +50,26 @@ jobs:
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       - name: Test capability register binding
-        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_platform_capabilities.py'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import json, os, subprocess, sys
+          base = os.environ.get("BASE_SHA", "")
+          if base and set(base) != {"0"}:
+              changed = subprocess.run(
+                  ["git", "diff", "--name-only", f"{base}...HEAD"],
+                  capture_output=True, text=True,
+              ).stdout.splitlines()
+              register = json.load(open("docs/product/baci-capabilities.json"))
+              refs = {r for c in register["capabilities"] for r in c["source_refs"]}
+              relevant = {"docs/product/baci-capabilities.json"} | refs
+              if not any(p in relevant or p.startswith("vps-workers/baci-editorial-context/") for p in changed):
+                  print("capability register and cited sources untouched; skipping binding suite")
+                  sys.exit(0)
+          sys.exit(subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "vps-workers/baci-editorial-context", "-p", "test_platform_capabilities.py"]).returncode)
+          PYEOF
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3

@@ -1,0 +1,28 @@
+name: Capability Register Freshness
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capability-register-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  register-freshness:
+    name: Capability Register Freshness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assert capability register is inside its evidence window
+        env:
+          BACI_REGISTER_REQUIRE_FRESH: '1'
+        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_platform_capabilities.py'

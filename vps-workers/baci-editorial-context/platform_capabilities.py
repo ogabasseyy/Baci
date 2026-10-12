@@ -88,7 +88,7 @@ def capability_context(*, now=None):
             if row["status"] == "production_verified" and isinstance(evidence, dict):
                 safe["production_evidence"] = {
                     key: evidence[key]
-                    for key in ("workflow", "deployed_revision", "verified_at", "entitlement", "observation")
+                    for key in ("deployed_revision", "verified_at")
                     if key in evidence
                 }
             safe_rows.append(safe)

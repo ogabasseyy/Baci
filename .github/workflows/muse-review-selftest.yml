@@ -43,6 +43,9 @@ on:
   schedule:
     # Weekly bump signal so the pinned CLI cannot go silently stale.
     - cron: '17 9 * * 1'
+  # Lets the pin-update workflow dispatch this suite for generated PRs,
+  # whose pull_request workflows are suppressed under GITHUB_TOKEN.
+  workflow_dispatch:
 
 permissions:
   contents: read

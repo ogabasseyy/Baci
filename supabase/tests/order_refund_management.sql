@@ -852,8 +852,11 @@ BEGIN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
   END;
 
-  -- Foreign-currency refund rows stay visible but out of coverage: the
-  -- full matching-money balance remains recordable.
+  -- Foreign-currency refund rows stay visible but out of coverage,
+  -- and block recording until reconciliation: the manager cannot
+  -- convert money, so an unexplained linked row leaves the full
+  -- balance owed but not recordable (recording beside it would
+  -- double-record if the row turns out to be matching money).
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000015'
   ) INTO v_result;
@@ -863,17 +866,25 @@ BEGIN
   IF (v_result->>'remaining')::numeric <> 100 THEN
     RAISE EXCEPTION 'foreign-currency row reduced remaining';
   END IF;
+  IF (v_result->>'pending')::numeric <> 30 THEN
+    RAISE EXCEPTION 'foreign-currency row not held pending, got %',
+      v_result->>'pending';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'manual recordable beside unreconciled foreign money';
+  END IF;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'foreign-currency row hidden from history';
   END IF;
-  SELECT public.manage_order_refund(
-    '9ef11000-0000-4000-8000-000000000015', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover',NULL,true
-  ) INTO v_result;
-  IF v_result->>'status' <> 'queued' THEN
-    RAISE EXCEPTION 'matching-money manual did not requeue, got %',
-      v_result->>'status';
-  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000015', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover',NULL,true
+    );
+    RAISE EXCEPTION 'manual accepted beside unreconciled foreign money';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
 
   -- An unverified Paystack row is in-flight, not returned: it must
   -- not reduce the remainder (the claim still sees the leg
@@ -1230,6 +1241,9 @@ BEGIN
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000048',
       '9ef10100-0000-4000-8000-000000000001', 'REFUND-048',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000049',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-049',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
   -- Legacy null-currency order: its NGN leg still prices in NGN.
   UPDATE public.orders SET currency = NULL
@@ -1352,7 +1366,25 @@ BEGIN
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000068',
         'method', 'paystack',
-        'recorded_by', '9ef10100-0000-4000-8000-000000000001'));
+        'recorded_by', '9ef10100-0000-4000-8000-000000000001')),
+    -- Two full captures against one recorded payment: the first
+    -- capture's processed refund must not erase the live
+    -- capture's gap via order-wide excess.
+    ('9ef12000-0000-4000-8000-000000000071',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000049', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-49a', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000072',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000049', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pp-49b', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000073',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000049', 'refund', 100, 'NGN',
+      'completed', 'paystack', '777049',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000071',
+        'provider_refund_status', 'processed'));
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
   ) VALUES
@@ -1408,6 +1440,15 @@ BEGIN
   IF v_label <> 'paid' THEN
     RAISE EXCEPTION 'superseded capture flipped label, got %', v_label;
   END IF;
+  -- Two full captures against one recorded payment: the covered
+  -- capture's refund matches amount_paid, but the live capture's
+  -- gap keeps the label paid — order-wide excess must not erase
+  -- an identified per-leg gap.
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000049';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'live-capture gap erased by excess, got %', v_label;
+  END IF;
 END;
 $refund_round33_fixtures$;
 
@@ -1422,6 +1463,7 @@ SELECT pg_catalog.set_config(
 DO $refund_round33_status$
 DECLARE
   v_result jsonb;
+  v_label text;
 BEGIN
   -- The self-terminal leg's linked row counts once: the manager
   -- still owes the uncovered sibling leg.
@@ -1442,6 +1484,31 @@ BEGIN
     OR NOT (v_result->>'canRecordManual')::boolean THEN
     RAISE EXCEPTION 'superseded capture stranded, remaining % recordable %',
       v_result->>'remaining', v_result->>'canRecordManual';
+  END IF;
+  -- Two full captures against one recorded payment: the live
+  -- capture's gap keeps the full remainder recordable, and
+  -- covering it finishes the order.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000049'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100
+    OR NOT (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'live-capture gap erased, remaining % recordable %',
+      v_result->>'remaining', v_result->>'canRecordManual';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000049', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'live-capture-49', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'live-capture manual left remaining %',
+      v_result->>'remaining';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000049';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'covered live capture did not flip label, got %',
+      v_label;
   END IF;
   -- A first manual record that leaves a balance behind is partial in
   -- the same response: the panel must not advertise a retry the

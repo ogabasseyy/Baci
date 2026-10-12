@@ -48,6 +48,47 @@ describe('preflightCancellationRefundInitiation manual verification', () => {
     );
     expect(result.verifiedManualPaystackLegIds).toEqual(['payment-1']);
   });
+  it('verifies the claim even when another row already covers the leg', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        manualLinkedLegIds: new Set(['payment-1']),
+        mismatchedIds: new Set(['payment-1']),
+        refundedPaymentIds: new Set(['payment-1']),
+        refundRows: [
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            id: 'refund-cover',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'processed',
+            },
+            status: 'completed',
+          },
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'manual',
+            id: 'refund-claim',
+            metadata: {
+              method: 'paystack',
+              payment_transaction_id: 'payment-1',
+            },
+            status: 'completed',
+          },
+        ],
+      })
+    );
+    // Coverage from the verified row must not swallow the unverified
+    // claim: without its own proof the manager keeps reporting it
+    // pending while settlement completes and no drain revisits it.
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+    expect(stampVerifiedManualPaystackRefunds).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'payment-1' })
+    );
+    expect(result.verifiedManualPaystackLegIds).toEqual(['payment-1']);
+  });
   it('skips verification when the manual claim already carries proof', async () => {
     const result = await preflightCancellationRefundInitiation(
       preflightInput({

@@ -200,6 +200,56 @@ describe('cancellation refund leg matching', () => {
     expect(from).toHaveBeenCalledTimes(3);
   });
 
+  it('accepts terminal refunds linked to self-terminal refunded legs', async () => {
+    const refundInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            ...payment('payment-1', 100, 'paystack-ref-1'),
+            status: 'refunded',
+          },
+          payment('payment-2', 100, 'paystack-ref-2'),
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: refundInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: 42,
+        status: 'pending',
+        transaction: { id: 123, reference: 'paystack-ref-2' },
+      },
+    });
+
+    await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    // The row linked to the refunded leg is legitimate evidence, not
+    // an outside-order link: the sibling still initiates instead of
+    // quarantining.
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.initiateRefund).toHaveBeenCalledWith(
+      'paystack-ref-2',
+      10000,
+      'Order cancelled',
+      undefined
+    );
+    expect(refundInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway_reference: '42',
+        status: 'refund_pending',
+      })
+    );
+  });
+
   it('initiates clean legs before quarantining mismatched ones', async () => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });

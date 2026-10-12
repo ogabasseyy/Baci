@@ -95,6 +95,13 @@ BEGIN
   -- helper: an overfunded leg's excess must not zero the remainder
   -- while sibling legs sit uncovered. Pending stays a global sum:
   -- over-counting in-flight money only blocks actions safely.
+  -- Nonmatching-currency rows (null or foreign) stay out of
+  -- coverage but count as pending: the manager cannot convert
+  -- money, so an unexplained linked row must block recording
+  -- until reconciliation instead of leaving the full balance
+  -- recordable beside it (double-record). The outer WHERE keeps
+  -- only the link-validated predicate for this reason: currency
+  -- filtering here would drop the row from both sums.
   SELECT private.capped_refund_coverage_v1(
       p_order_id, v_order.merchant_id, v_order.currency),
     COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
@@ -103,6 +110,9 @@ BEGIN
           OR (public.normalized_gateway_name_v1(gateway)='MANUAL'
             AND metadata->>'method'='paystack'))
         AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')
+      OR (status IN ('completed','refunded')
+        AND upper(btrim(currency)) IS DISTINCT FROM upper(btrim(
+          COALESCE(NULLIF(BTRIM(v_order.currency),''),'NGN'))))
       OR (status IN ('completed','refunded')
         AND NOT COALESCE((EXISTS (SELECT 1 FROM public.transactions leg
             WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
@@ -116,7 +126,6 @@ BEGIN
             AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway)),false))),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
-    AND upper(btrim(currency))=upper(btrim(v_order.currency))
     -- Count only validated links: a row claiming a leg outside this
     -- order (or otherwise unresolvable) is corrupt evidence the
     -- worker quarantines, so counting it would understate the

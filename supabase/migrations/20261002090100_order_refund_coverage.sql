@@ -153,37 +153,35 @@ END; $$;
 -- internal gaps net order-wide against the passed wallet/savings
 -- reversals, whose ledgers carry no per-leg link. Held money past
 -- amount_paid is an overfunded anomaly for review, not obligation,
--- so the total sheds that excess.
+-- but the shed is per leg, never order-wide: a leg exceeding the
+-- whole order's paid amount is unambiguously over-captured, while
+-- aggregate excess across several smaller captures cannot name
+-- which capture was superseded, so subtracting it would erase an
+-- identified gap on a live leg. Each leg's obligable base is
+-- therefore capped at the recorded paid amount, and the recorded
+-- paid amount ceilings the total on multi-capture ledgers.
 CREATE OR REPLACE FUNCTION private.uncovered_refund_obligation_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text,
   p_reversed_internal numeric, p_amount_paid numeric
 ) RETURNS numeric LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
-  v_gaps numeric;
-  v_live_total numeric;
+  v_paid numeric := GREATEST(COALESCE(p_amount_paid, 0), 0);
+  v_total numeric;
 BEGIN
   -- Membership gate runs inside the per-leg listing (same invoker,
   -- same merchant); no separate gate needed here.
   SELECT COALESCE(SUM(CASE WHEN per_leg.is_funded AND NOT per_leg.is_internal
-      THEN GREATEST(per_leg.leg_amount - per_leg.covered
+      THEN GREATEST(LEAST(per_leg.leg_amount, v_paid) - per_leg.covered
         - CASE WHEN per_leg.is_refunded THEN per_leg.leg_amount ELSE 0 END, 0)
       ELSE 0 END), 0)
     + GREATEST(COALESCE(SUM(CASE WHEN per_leg.is_funded AND per_leg.is_internal
-      THEN GREATEST(per_leg.leg_amount - per_leg.covered
+      THEN GREATEST(LEAST(per_leg.leg_amount, v_paid) - per_leg.covered
         - CASE WHEN per_leg.is_refunded THEN per_leg.leg_amount ELSE 0 END, 0)
       ELSE 0 END), 0) - COALESCE(p_reversed_internal, 0), 0)
-    INTO v_gaps
+    INTO v_total
     FROM private.refund_coverage_per_leg_v1(
       p_order_id, p_merchant_id, p_currency) per_leg;
-  SELECT COALESCE(SUM(GREATEST(leg.amount, 0)), 0) INTO v_live_total
-    FROM public.transactions leg
-   WHERE leg.order_id = p_order_id
-     AND leg.merchant_id = p_merchant_id
-     AND leg.transaction_type = 'payment'
-     AND leg.status = 'completed'
-     AND UPPER(BTRIM(leg.currency))
-       = UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')));
-  RETURN GREATEST(v_gaps - GREATEST(v_live_total - COALESCE(p_amount_paid, 0), 0), 0);
+  RETURN LEAST(v_total, v_paid);
 END; $$;
 REVOKE ALL ON FUNCTION private.capped_refund_coverage_v1(uuid,uuid,text)
   FROM PUBLIC,anon,authenticated;

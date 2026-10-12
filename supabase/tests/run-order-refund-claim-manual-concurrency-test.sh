@@ -71,9 +71,10 @@ if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
   # Self-provisioned throwaway postgres (CI mode): the Phase-1
   # blocking proof only reaches the claim's role gate and its
   # orders-row lock, so a bare orders table plus the working-tree
-  # claim file is the whole closure. The auth.role stub reads the
-  # JWT claim like the platform function (current_user would see
-  # the definer, not the caller, inside SECURITY DEFINER).
+  # claim and legs-covered helper files is the whole closure. The
+  # auth.role stub reads the JWT claim like the platform function
+  # (current_user would see the definer, not the caller, inside
+  # SECURITY DEFINER).
   docker run --name "$minimal_container" -e POSTGRES_PASSWORD=postgres \
     -d -p 127.0.0.1::5432 postgres:17-alpine >/dev/null
   PGPORT="$(docker port "$minimal_container" 5432 | head -n 1 | cut -d: -f2)"
@@ -91,6 +92,9 @@ if [ "${MINIMAL_PHASE1:-0}" = '1' ]; then
   fi
   psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE service_role NOLOGIN;
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE SCHEMA private;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS
   $$ SELECT current_setting('request.jwt.claim.role', true) $$;
@@ -103,6 +107,7 @@ CREATE TABLE public.orders (
 );
 SQL
   psql -X -q -v ON_ERROR_STOP=1 \
+    -f "$repo_root/supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql" \
     -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"
   psql -X -q -v ON_ERROR_STOP=1 <<SQL
 INSERT INTO public.orders (id, merchant_id, shipping_status, cancelled_at, currency)
@@ -127,6 +132,7 @@ if [ "${SKIP_REFRESH:-0}" != '1' ]; then
     -f "$repo_root/supabase/migrations/20261002090200_order_refund_record_helpers.sql" \
     -f "$repo_root/supabase/migrations/20261002090250_order_refund_response.sql" \
     -f "$repo_root/supabase/migrations/20261002090300_order_refund_manage.sql" \
+    -f "$repo_root/supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql" \
     -f "$repo_root/supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql"
 fi
 

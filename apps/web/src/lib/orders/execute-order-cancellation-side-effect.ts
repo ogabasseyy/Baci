@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertExternalCancellationRefundableAmount } from '@/lib/orders/assert-external-cancellation-refundable-amount';
 import { classifyCancellationRefundLinks } from '@/lib/orders/classify-cancellation-refund-links';
+import { collectAwaitingCancellationRefundLegs } from '@/lib/orders/collect-awaiting-cancellation-refund-legs';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
@@ -83,7 +84,12 @@ export async function executeOrderCancellationSideEffect({
     throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   const allLegs = actionableLegs as GatewayPaymentTransaction[];
-  // Link validity spans every funded leg (manuals allocate to cash legs).
+  // Link validity spans every funded leg, including self-terminal
+  // refunded ones: a terminal refund row linked to a refunded leg is
+  // legitimate evidence, not an outside-order link. Only initiation
+  // and outstanding-balance work scope to the actionable set.
+  const linkLegs = transactionRows as GatewayPaymentTransaction[];
+  // Only external legs initiate provider refunds or verify listings.
   const transactions = allLegs.filter((t) =>
     isExternalPaymentGateway(t.gateway)
   );
@@ -117,7 +123,7 @@ export async function executeOrderCancellationSideEffect({
     invalidLinkReason,
     linkedPaymentId,
     unlinkedRefunds,
-  } = classifyCancellationRefundLinks(refundRows ?? [], allLegs);
+  } = classifyCancellationRefundLinks(refundRows ?? [], linkLegs);
   const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
   const {
     manualLinkedLegIds,
@@ -194,27 +200,8 @@ export async function executeOrderCancellationSideEffect({
   // this preflight, and returns quietly for internal-only orders.
   await quarantineInvalidRefundAmountLegs({ order, supabase, transactions });
   assertExternalCancellationRefundableAmount(transactions);
-  // Legs with a provider-accepted audit row are still in flight: the
-  // reconciler completes them and the drain resumes the remaining legs.
-  // Only legs without provider evidence (failed or ambiguous rows) need a
-  // terminal quarantine review.
-  const awaitingRefundPaymentIds = new Set<string>();
-  const reviewRefundPaymentIds = new Set<string>();
-  for (const row of refundRows ?? []) {
-    // Terminal rows (completed or legacy refunded) are not in flight.
-    if (row.status === 'completed' || row.status === 'refunded') continue;
-    const paymentId = linkedPaymentId(row);
-    if (typeof paymentId !== 'string') continue;
-    if (
-      row.status === 'refund_pending' &&
-      typeof row.gateway_reference === 'string' &&
-      /^[1-9][0-9]*$/.test(row.gateway_reference)
-    ) {
-      awaitingRefundPaymentIds.add(paymentId);
-    } else {
-      reviewRefundPaymentIds.add(paymentId);
-    }
-  }
+  const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
+    collectAwaitingCancellationRefundLegs({ linkedPaymentId, refundRows });
   const pendingTransactions = transactions.filter((transaction) =>
     reviewRefundPaymentIds.has(transaction.id)
   );

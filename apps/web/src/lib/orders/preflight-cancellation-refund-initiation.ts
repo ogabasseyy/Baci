@@ -150,7 +150,10 @@ export async function preflightCancellationRefundInitiation({
   // and the withheld handling quarantines it even when the provider
   // holds an exactly matching processed refund. Reference-less and
   // non-Paystack manual legs stay out: with nothing to list, no
-  // provider proof can confirm them.
+  // provider proof can confirm them. A leg stays in even when other
+  // rows already cover it: the claim itself still needs provider
+  // proof, or settlement completes while the manager reports the
+  // claim pending and no drain revisits it.
   const manualVerifyLegs = transactions.filter(
     (
       transaction
@@ -158,7 +161,6 @@ export async function preflightCancellationRefundInitiation({
       gateway_reference: string;
     } =>
       manualLinkedLegIds.has(transaction.id) &&
-      !refundedPaymentIds.has(transaction.id) &&
       normalizePaymentGateway(transaction.gateway) === 'PAYSTACK' &&
       transaction.gateway_reference !== null &&
       transaction.gateway_reference !== '' &&

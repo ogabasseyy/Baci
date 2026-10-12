@@ -398,9 +398,15 @@ node pilot/quality-sheet.mjs --input-root .pilot-input \
   --slots slots.json --out /tmp/pilot-sheet.html
 
 # Lab serving (from apps/web; stage BEFORE starting Next — files added to
-# public/ after start are not served, verified 2026-10-03 on next start)
-BACI_IMAGE_PILOT_LAB=1 corepack pnpm pilot:stage \
-  --input-root <dir> --output-root <dir> --public-dir <public>
+# public/ after start are not served, verified 2026-10-03 on next start).
+# Export the lab env for BOTH commands: the stage CLI keeps flag-derived
+# roots in its own process, so next start needs them exported too —
+# otherwise the startup gate aborts on the staged non-lab assets.
+export BACI_IMAGE_PILOT_LAB=1
+export BACI_IMAGE_PILOT_INPUT_ROOT=<dir>
+export BACI_IMAGE_PILOT_OUTPUT_ROOT=<dir>
+export BACI_IMAGE_PILOT_PUBLIC_DIR=<public>
+corepack pnpm pilot:stage
 corepack pnpm exec next start -p 3122   # only after staging succeeds
 # Card image URLs are absolute (the original renderer rejects relative
 # ones) but Host headers are untrusted: only loopback Hosts are reflected.

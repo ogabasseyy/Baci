@@ -89,9 +89,9 @@ def capability_context(*, now=None):
             "reviewed_at": data["reviewed_at"],
             "capabilities": safe_rows,
         }
-        if isinstance(data.get("review_scope"), str):
-            if len(data["review_scope"]) > 1000:
-                raise ValueError("review scope size")
+        if "review_scope" in data:
+            if not isinstance(data["review_scope"], str) or len(data["review_scope"]) > 1000:
+                raise ValueError("review scope")
             payload["review_scope"] = data["review_scope"]
         serialized = (
             json.dumps(payload, sort_keys=True)

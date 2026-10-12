@@ -87,8 +87,13 @@ const localStoreConfiguration = z
       ),
     port: z.number().int().min(1).max(65535),
     // Bounded secret from server-only runtime configuration. Never a
-    // literal: the local-test harness and deployments supply the value.
-    password: z.string().min(8).max(128),
+    // literal: the local-test harness and deployments supply the value,
+    // non-blank and NUL-free (mirrors provider-ID persistence hygiene).
+    password: z
+      .string()
+      .min(8)
+      .max(128)
+      .refine((value) => value.trim().length > 0 && !value.includes('\0')),
   })
   .strict();
 

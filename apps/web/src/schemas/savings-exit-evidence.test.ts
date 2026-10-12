@@ -33,6 +33,8 @@ describe('savings exit evidence boundaries', () => {
       { socketDirectory: '/tmp/elsewhere' },
       { password: '' },
       { password: 'x'.repeat(129) },
+      { password: ' '.repeat(8) },
+      { password: 'secret\0word' },
       { role: 'service_role' },
     ]) {
       expect(

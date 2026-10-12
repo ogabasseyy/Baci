@@ -1,9 +1,7 @@
 import { createCipheriv, createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import {
-  decryptPrefundedCardLegacyReceipt,
-  decryptValidatedPrefundedCardLegacyReceipt,
-} from './prefunded-card-legacy-receipt';
+import { decryptPrefundedCardLegacyReceipt } from './prefunded-card-legacy-receipt';
+import { decryptValidatedPrefundedCardLegacyReceipt } from './prefunded-card-legacy-receipt-decrypt';
 
 const key = Buffer.alloc(32, 7);
 const raw = Buffer.from('{"synthetic":"original receipt"}');
@@ -12,11 +10,12 @@ const digest = createHash('sha256').update(raw).digest('hex');
 const cipher = createCipheriv('aes-256-gcm', key, nonce);
 cipher.setAAD(Buffer.from(`piggyvest-staging:staging-v1:${digest}`));
 const ciphertext = Buffer.concat([cipher.update(raw), cipher.final()]);
+const fullAuthTag = cipher.getAuthTag();
 const sealed = {
   payloadSha256: digest,
   ciphertext: ciphertext.toString('base64'),
   nonce: nonce.toString('base64'),
-  authTag: cipher.getAuthTag().toString('base64'),
+  authTag: fullAuthTag.toString('base64'),
   keyVersion: 'staging-v1',
 };
 
@@ -45,12 +44,14 @@ describe('stored original receipt decryption for owner reconciliation', () => {
     ).toThrow('Legacy receipt refused');
   });
   it('refuses truncated auth tags at the decipher boundary without schema parsing', () => {
+    // Valid 12-byte prefix of the real tag: Node accepts it without an
+    // explicit tag length, so this fails if authTagLength: 16 is removed.
     const truncated: Parameters<
       typeof decryptValidatedPrefundedCardLegacyReceipt
     >[0] = {
       ...sealed,
       keyVersion: 'staging-v1',
-      authTag: Buffer.alloc(12).toString('base64'),
+      authTag: fullAuthTag.subarray(0, 12).toString('base64'),
     };
     expect(() =>
       decryptValidatedPrefundedCardLegacyReceipt(

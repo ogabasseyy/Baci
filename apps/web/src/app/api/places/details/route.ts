@@ -4,13 +4,12 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { placesDetailsSchema } from '@/schemas/places-details';
 import { fetchLegacyPlacesJson } from '../legacy-places';
+import { reserveGooglePlacesRequest } from '../provider-budget';
 
-const GOOGLE_API_KEY =
-  process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 const LEGACY_PLACES_DETAILS_URL =
   'https://maps.googleapis.com/maps/api/place/details/json';
-const MAX_SESSION_TOKEN_LENGTH = 256;
 const ADDRESS_FIELDS = [
   'address_components',
   'formatted_address',
@@ -57,7 +56,12 @@ function getUpstreamStatusCode(status: string): number {
 
 export async function GET(request: NextRequest) {
   try {
-    if (!GOOGLE_API_KEY) {
+    // Read per request like the sibling provider modules: a rotated key
+    // takes effect without waiting on module-state recycling.
+    const googleApiKey =
+      process.env.GOOGLE_PLACES_API_KEY?.trim() ||
+      process.env.GOOGLE_MAPS_API_KEY?.trim();
+    if (!googleApiKey) {
       console.error(
         '[Places API] GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY not configured'
       );
@@ -67,20 +71,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const placeId = searchParams.get('placeId');
-    const sessionToken = searchParams.get('sessionToken');
-
-    if (sessionToken && sessionToken.length > MAX_SESSION_TOKEN_LENGTH) {
+    // Validate with Zod before the paid-budget reservation can execute.
+    const params = request.nextUrl.searchParams;
+    const parsed = placesDetailsSchema.safeParse({
+      placeId: params.get('placeId') ?? undefined,
+      sessionToken: params.get('sessionToken') ?? undefined,
+    });
+    if (!parsed.success)
       return NextResponse.json(
-        { error: 'Invalid sessionToken format' },
+        {
+          error:
+            parsed.error.issues[0]?.message || 'Invalid place details request',
+        },
         { status: 400 }
       );
-    }
+    const { placeId, sessionToken } = parsed.data;
 
-    if (!placeId) {
+    if (placeId.startsWith('geoapify:')) {
       return NextResponse.json(
-        { error: 'placeId is required' },
+        { error: 'Geoapify selections do not require place details' },
         { status: 400 }
       );
     }
@@ -102,14 +111,18 @@ export async function GET(request: NextRequest) {
     const detailsUrl = new URL(LEGACY_PLACES_DETAILS_URL);
     detailsUrl.searchParams.set('place_id', cleanPlaceId);
     detailsUrl.searchParams.set('fields', ADDRESS_FIELDS);
-    detailsUrl.searchParams.set('key', GOOGLE_API_KEY);
+    detailsUrl.searchParams.set('key', googleApiKey);
 
     if (sessionToken) {
       detailsUrl.searchParams.set('sessiontoken', sessionToken);
     }
 
     const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
-      detailsUrl.toString()
+      detailsUrl.toString(),
+      () => reserveGooglePlacesRequest('details'),
+      // Fail fast like autocomplete: the user can retry a 5s stall
+      // manually instead of waiting through ~16.5s of timeouts.
+      { retryTimeouts: false }
     );
 
     if (!fetched.ok) {

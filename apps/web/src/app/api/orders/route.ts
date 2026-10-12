@@ -2336,6 +2336,7 @@ export async function POST(request: NextRequest) {
         'loyalty_redemption_not_found',
         'loyalty_code_not_applicable',
         'loyalty_code_expired',
+        'loyalty_code_currency_mismatch',
         'loyalty_reward_inactive',
         // B3 (plan §5 B3): RPC raises when shipping_provider is set
         // without a quote id. Map to 4xx so the client gets the right

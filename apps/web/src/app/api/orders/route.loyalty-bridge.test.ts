@@ -233,6 +233,27 @@ describe('POST /api/orders loyalty-code bridge', () => {
     expect((await response.json()).details).toBe('loyalty_code_expired');
   });
 
+  it('maps loyalty_code_currency_mismatch to 400', async () => {
+    await setupLoyaltyBridge({
+      get_storefront_discount_code: { data: [], error: null },
+      get_loyalty_redemption_for_checkout: {
+        data: [LOYALTY_CODE_ROW],
+        error: null,
+      },
+      create_storefront_order_with_loyalty_code: {
+        data: null,
+        error: { message: 'loyalty_code_currency_mismatch' },
+      },
+    });
+    const response = await POST(
+      loyaltyRequest({ discount_code: 'RDM-ABCDEF12' })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).details).toBe(
+      'loyalty_code_currency_mismatch'
+    );
+  });
+
   it('maps loyalty_reward_inactive to 400', async () => {
     await setupLoyaltyBridge({
       get_storefront_discount_code: { data: [], error: null },

@@ -10,8 +10,8 @@ import {
   isStalePendingVtuSuccess,
   markPendingVtuCompleted,
   notePendingVtuReference,
-  recallPendingVtuKey,
   PENDING_VTU_STALE_AFTER_MS,
+  recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
 import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';

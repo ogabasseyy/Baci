@@ -394,7 +394,6 @@ describe('resolveIdempotentOfferReplay', () => {
               condition: 'refurbished',
               assurance_fee: 4500,
               quantity: 1,
-              price: '320000.00',
               has_assurance: true,
             },
             {
@@ -403,7 +402,6 @@ describe('resolveIdempotentOfferReplay', () => {
               condition: 'refurbished',
               assurance_fee: 9000,
               quantity: 2,
-              price: 320000,
               has_assurance: true,
             },
           ],
@@ -417,14 +415,12 @@ describe('resolveIdempotentOfferReplay', () => {
       {
         ...offerLine,
         quantity: 2,
-        price: 320000,
         has_assurance: true,
         assurance_fee: 0,
       },
       {
         ...offerLine,
         quantity: 1,
-        price: 320000,
         has_assurance: true,
         assurance_fee: 0,
       },
@@ -440,6 +436,52 @@ describe('resolveIdempotentOfferReplay', () => {
     expect(result.ok).toBe(true);
     expect(payload[0].assurance_fee).toBe(9000);
     expect(payload[1].assurance_fee).toBe(4500);
+  });
+
+  it('restores when the submitted price is stale relative to the live price', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          discount_amount: null,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: OFFER_ID,
+              condition: 'refurbished',
+              assurance_fee: 4500,
+              quantity: 1,
+              has_assurance: true,
+            },
+          ],
+        },
+      ],
+    });
+    // The order RPC persists the live offer price while the hash covers
+    // the submitted price: a days-old stale quote resubmits a price the
+    // stored row never carried, so price must not gate the match.
+    const payload = [
+      {
+        ...offerLine,
+        quantity: 1,
+        has_assurance: true,
+        assurance_fee: 0,
+        condition: 'open_box',
+      },
+    ];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].assurance_fee).toBe(4500);
+    expect(payload[0].condition).toBe('refurbished');
   });
 
   it('leaves extra repeated lines untouched when stored ordinals run out', async () => {

@@ -54,19 +54,22 @@ const EMPTY_REPLAY_ECONOMICS: StoredReplayEconomics = {
 /**
  * Fee-identity key shared by the stored projection and the retry payload.
  * Mirrors the idempotency hash's normalization (trimmed/lowercased text,
- * finite-number-or-0, strict boolean): the server recomputes the fee as
- * `has_assurance ? round(price * quantity * RATE) : 0`, so lines that
- * agree on this key carry interchangeable fees and any residual
- * ambiguity (full duplicates) restores correctly under any assignment.
- * Condition stays out of the key — the first attempt rewrites alias
- * spellings to the live offer spelling before hashing, so the retry's
- * client spelling must not gate the match.
+ * finite-number-or-0, strict boolean). Every field must be unchanged
+ * between the hashed request and the stored row: quantity and
+ * has_assurance pass through untouched, while price does not — the
+ * order RPC persists the live (or negotiated) price and the hash covers
+ * the submitted price, so a days-old stale quote would never match its
+ * stored row on price. Residual ambiguity (same key, different stored
+ * fees) requires distinct negotiated prices on otherwise identical
+ * lines, which both carts merge away — direct-API only, and a swap
+ * there fails closed into a conflict, never silent corruption.
+ * Condition stays out for the same reason: the first attempt rewrites
+ * alias spellings to the live offer spelling before hashing.
  */
 function replayLineIdentityKey(parts: {
   productId: unknown;
   offerId: unknown;
   quantity: unknown;
-  price: unknown;
   hasAssurance: unknown;
 }): string {
   const text = (raw: unknown): string =>
@@ -84,7 +87,6 @@ function replayLineIdentityKey(parts: {
     text(parts.productId),
     text(parts.offerId),
     num(parts.quantity),
-    num(parts.price),
     parts.hasAssurance === true,
   ].join('::');
 }
@@ -151,7 +153,6 @@ async function readStoredReplayEconomics({
         condition?: unknown;
         assurance_fee?: unknown;
         quantity?: unknown;
-        price?: unknown;
         has_assurance?: unknown;
       }[]) {
         if (entry?.product_id == null || entry?.offer_id == null) continue;
@@ -159,7 +160,6 @@ async function readStoredReplayEconomics({
           productId: entry.product_id,
           offerId: entry.offer_id,
           quantity: entry.quantity,
-          price: entry.price,
           hasAssurance: entry.has_assurance,
         });
         const queue = lines.get(key) ?? [];
@@ -275,7 +275,6 @@ export async function resolveIdempotentOfferReplay({
       productId: item.product_id,
       offerId: item.offer_id,
       quantity: item.quantity,
-      price: item.price,
       hasAssurance: item.has_assurance,
     });
     const storedLine = stored.lines.get(key)?.shift();

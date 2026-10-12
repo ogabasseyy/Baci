@@ -10,7 +10,6 @@ export type ResolvableOrderOfferLine = {
   condition?: string | null;
   assurance_fee?: number | null;
   quantity?: number | null;
-  price?: number | null;
   has_assurance?: boolean | null;
 };
 

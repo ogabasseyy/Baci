@@ -2,6 +2,11 @@
 -- casing/punctuation-only spelling variants must succeed, not raise
 -- 23505 Request conflict. A genuinely different query keeps conflicting.
 ALTER TABLE public.merchants DISABLE TRIGGER USER;
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES ('01c00000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'intake-canonical-owner@example.com', 'test',
+  now(), now(), now(), '{}', '{}');
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
 VALUES ('01c00000-0000-4000-8000-000000000001', '01c00000-0000-4000-8000-000000000002',
   'intake-canonical@example.com', 'Intake Canonical', 'intake-canonical', true);

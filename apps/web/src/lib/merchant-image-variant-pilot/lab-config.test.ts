@@ -155,6 +155,18 @@ describe('isPilotLabEnabled', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     expect(isPilotLabEnabled()).toBe(true);
   });
+
+  it('refuses lab mode on shared Vercel deployments even with the flag', () => {
+    // Staged merchant bytes are served as ordinary static assets, so a
+    // flag value copied onto production/preview must not enable the lab.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    expect(isPilotLabEnabled()).toBe(false);
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    expect(isPilotLabEnabled()).toBe(false);
+    vi.stubEnv('VERCEL_ENV', 'development');
+    expect(isPilotLabEnabled()).toBe(true);
+  });
 });
 
 describe('loadLabConfig', () => {

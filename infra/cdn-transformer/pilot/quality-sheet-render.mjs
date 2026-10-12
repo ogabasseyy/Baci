@@ -2,7 +2,10 @@
 // tier cells. Orchestration (generation lookup, sheet assembly, CLI)
 // stays in quality-sheet.mjs, which re-exports PilotSheetError.
 import sharp from 'sharp';
-import { normalizeFormat } from './encode-worker-formats.mjs';
+import {
+  normalizeFormat,
+  orientedDimensions,
+} from './encode-worker-formats.mjs';
 
 export class PilotSheetError extends Error {
   constructor(message) {
@@ -46,13 +49,16 @@ export function originalContentType(sourceFormat, assetId) {
 }
 
 // Bind the schema-blind source claims to the verified snapshot bytes:
-// the generation id covers the source hash but not its format or byte
-// count, so a schema-valid stored manifest mislabeling either would
-// otherwise embed a broken baseline or misjudge never-larger while its
-// derivatives render normally. (Dimensions need no decode check: the
-// ladder width and aspect bindings determine them — any dims lie fails
-// schema validation first.) Header-level metadata suffices — container
-// magic identifies the format without a pixel decode.
+// the generation id covers the source hash but not its format, byte
+// count, or dimensions, so a schema-valid stored manifest mislabeling
+// any of them would otherwise embed a broken baseline or misjudge
+// never-larger while its derivatives render normally. Dimensions need
+// the check too: the schema binds tiers RELATIVE to the source claims
+// (widths clamp via min(requested, oriented)), so a consistent
+// geometry lie — shrunken source plus shrunken tiers — passes schema.
+// Only the decode anchors the claims to reality. Header-level metadata
+// suffices — container magic identifies the format without a pixel
+// decode.
 export async function assertSnapshotSource(snapshotBytes, source, assetId) {
   let meta;
   try {
@@ -71,6 +77,49 @@ export async function assertSnapshotSource(snapshotBytes, source, assetId) {
   if (snapshotBytes.length !== source.bytes) {
     throw new PilotSheetError(
       `snapshot for asset "${assetId}" is ${snapshotBytes.length} bytes but the manifest claims ${source.bytes}`
+    );
+  }
+  // Exact: source claims are measured from these same bytes at
+  // acquisition, so any deviation is a misbound manifest, not rounding.
+  const oriented = orientedDimensions(meta);
+  if (
+    oriented.width !== source.orientedWidth ||
+    oriented.height !== source.orientedHeight
+  ) {
+    throw new PilotSheetError(
+      `snapshot for asset "${assetId}" decodes as ${oriented.width}x${oriented.height} but the manifest claims ${source.orientedWidth}x${source.orientedHeight}`
+    );
+  }
+}
+
+// Bind each tier's claimed geometry to its verified bytes before
+// rendering. Mirrors the encoder's own output tolerance (verifyVariant):
+// width exact, height ±1px for resampling rounding. Honest claims record
+// the encoder prediction exactly, so anything wider is a misbound
+// manifest — including ±1-stack lies the schema's own tolerance admits.
+export async function assertTierDecodedDimensions(tier, files, assetId) {
+  const bytes = files.get(tier.path);
+  if (!bytes) {
+    throw new PilotSheetError(
+      `tier "${tier.path}" for asset "${assetId}" has no verified bytes`
+    );
+  }
+  let meta;
+  try {
+    meta = await sharp(bytes).metadata();
+  } catch {
+    throw new PilotSheetError(
+      `tier "${tier.path}" for asset "${assetId}" does not decode`
+    );
+  }
+  // Encoded tiers are EXIF-normalized at encode time, so raw decoded
+  // dimensions are already oriented (same as the encoder's verify).
+  if (
+    meta.width !== tier.width ||
+    Math.abs((meta.height ?? -1) - tier.height) > 1
+  ) {
+    throw new PilotSheetError(
+      `tier "${tier.path}" for asset "${assetId}" decodes as ${meta.width}x${meta.height} but the manifest claims ${tier.width}x${tier.height}`
     );
   }
 }

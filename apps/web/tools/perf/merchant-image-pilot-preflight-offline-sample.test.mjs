@@ -21,6 +21,24 @@ describe('checkSamplePin', () => {
     expect(failures.join('\n')).toMatch(/byte budget/);
   });
 
+  it('rejects a pin with duplicate keys instead of collapsing them', async () => {
+    // [A, A] against inventory [A]: the Set comparison would pass while
+    // a planned binding went missing from the matrix.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-offline-sample-'));
+    const pin = join(dir, 'pin.json');
+    await writeFile(pin, JSON.stringify(['m/a/slot', 'm/a/slot']));
+    const checks = [];
+    const failures = [];
+    const ok = await checkSamplePin({
+      checks,
+      expectSample: pin,
+      failures,
+      inventory: [{ assetId: 'a', merchantId: 'm', slot: 'slot' }],
+    });
+    expect(ok).toBe(false);
+    expect(failures.join('\n')).toMatch(/duplicate bindings: m\/a\/slot/);
+  });
+
   it('fails closed on a missing expect-sample file', async () => {
     const checks = [];
     const failures = [];

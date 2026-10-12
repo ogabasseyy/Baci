@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
+import { isPilotLabEnabled } from './pilot-lab-enabled';
 
 // Only these committed synthetic fixtures may exist in a non-lab public
 // tree. Staged merchant originals and generations must never enter one.
@@ -150,7 +151,7 @@ export function resolvePilotPublicDir(): string {
 
 export function assertPilotPublicAssets(
   publicDir: string,
-  labEnabled = process.env.BACI_IMAGE_PILOT_LAB === '1'
+  labEnabled = isPilotLabEnabled()
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {

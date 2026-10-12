@@ -60,7 +60,8 @@ export async function register() {
       '@/config/pilot-public-assets'
     );
     assertPilotPublicAssets(resolvePilotPublicDir());
-    if (process.env.BACI_IMAGE_PILOT_LAB === '1') {
+    const { isPilotLabEnabled } = await import('@/config/pilot-lab-enabled');
+    if (isPilotLabEnabled()) {
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'
       );

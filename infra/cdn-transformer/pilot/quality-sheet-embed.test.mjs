@@ -173,24 +173,34 @@ test('rejects a stored manifest mislabeling the snapshot source', async () => {
   );
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   // Schema-valid flips: the generation id covers the source hash but
-  // not its format or byte count, so only a snapshot decode catches
-  // the lie. Each flip stays parse-clean (bytes flip down under the
-  // over-source tiers) so the decode check — not the schema — fires.
-  // (Dims need no case: ladder width/aspect bindings reject any dims
-  // lie at parse time, proven while writing this test.)
-  for (const [label, patch, pattern] of [
+  // not its format, byte count, or dimensions, so only a snapshot
+  // decode catches the lie. Each flip stays parse-clean (bytes flip
+  // down under the over-source tiers; dims flip source and tiers
+  // together, since the schema binds tiers relative to the source
+  // claims) so the decode check — not the schema — fires.
+  for (const [label, sourcePatch, tierPatch, pattern] of [
     [
       'format',
       { format: 'jpeg' },
+      null,
       /decodes as png but the manifest claims jpeg/,
     ],
-    ['bytes', { bytes: 84 }, /is 85 bytes but the manifest claims 84/],
+    ['bytes', { bytes: 84 }, null, /is 85 bytes but the manifest claims 84/],
+    [
+      'dims',
+      { orientedHeight: 1, orientedWidth: 1 },
+      { actualWidth: 1, height: 1, width: 1 },
+      /decodes as \d+x\d+ but the manifest claims 1x1/,
+    ],
   ]) {
     await writeFile(
       manifestPath,
       JSON.stringify({
         ...manifest,
-        source: { ...manifest.source, ...patch },
+        source: { ...manifest.source, ...sourcePatch },
+        tiers: tierPatch
+          ? manifest.tiers.map((tier) => ({ ...tier, ...tierPatch }))
+          : manifest.tiers,
       })
     );
     await assert.rejects(
@@ -205,6 +215,40 @@ test('rejects a stored manifest mislabeling the snapshot source', async () => {
       label
     );
   }
+});
+
+test('rejects tiers whose decoded geometry exceeds encoder rounding', async () => {
+  // The schema tolerates claimed height within ±1 of ideal and honest
+  // claims record the prediction exactly, so a claim stacked 2px from
+  // the decode is a misbound manifest, not resampling rounding.
+  const { assertTierDecodedDimensions } = await import(
+    './quality-sheet-render.mjs'
+  );
+  const sharp = (await import('sharp')).default;
+  const bytes = await sharp({
+    create: { background: '#ffffff', channels: 3, height: 751, width: 384 },
+  })
+    .png()
+    .toBuffer();
+  const files = new Map([['tier.avif', bytes]]);
+  await assert.rejects(
+    () =>
+      assertTierDecodedDimensions(
+        { height: 749, path: 'tier.avif', width: 384 },
+        files,
+        'asset-1'
+      ),
+    /decodes as 384x751 but the manifest claims 384x749/
+  );
+  await assertTierDecodedDimensions(
+    { height: 750, path: 'tier.avif', width: 384 },
+    files,
+    'asset-1'
+  );
+  await assert.rejects(
+    () => assertTierDecodedDimensions({ path: 'missing.avif' }, files, 'a'),
+    /has no verified bytes/
+  );
 });
 
 test('escapes inventory dimension metadata in captions', async () => {

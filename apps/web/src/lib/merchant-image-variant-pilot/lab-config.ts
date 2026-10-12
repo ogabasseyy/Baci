@@ -1,5 +1,6 @@
 import 'server-only';
 import { join } from 'node:path';
+import { isPilotLabEnabled } from '@/config/pilot-lab-enabled';
 import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
 import {
   ensureStageDir,
@@ -22,12 +23,8 @@ import {
 } from './lab-source-verify';
 import { parsePilotInventory } from './pilot-inventory';
 
-export const PILOT_LAB_FLAG = 'BACI_IMAGE_PILOT_LAB';
+export { isPilotLabEnabled, PILOT_LAB_FLAG } from '@/config/pilot-lab-enabled';
 export const PILOT_LAB_BASE_URL = '/__pilot';
-
-export function isPilotLabEnabled(): boolean {
-  return process.env[PILOT_LAB_FLAG] === '1';
-}
 
 export interface PilotLabConfig {
   baseUrl: string;

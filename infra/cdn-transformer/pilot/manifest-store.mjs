@@ -13,6 +13,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_MANIFEST_BYTES } from './constants.mjs';
 import {
   isUnsupportedSyncError,
   readUpToBytes,
@@ -182,10 +183,8 @@ export async function commitGeneration({
   for (const name of uniquePaths) {
     await rename(stagedByName.get(name), join(commitDir, name));
   }
-  await writeFile(
-    join(commitDir, 'manifest.json'),
-    `${JSON.stringify(valid, null, 2)}\n`
-  );
+  const serializedManifest = `${JSON.stringify(valid, null, 2)}\n`;
+  await writeFile(join(commitDir, 'manifest.json'), serializedManifest);
   let durability = 'synced';
   try {
     for (const name of [...uniquePaths, 'manifest.json']) {
@@ -219,16 +218,29 @@ export async function commitGeneration({
   // Re-verify every tier inside commitDir immediately before the
   // visibility rename: a staged file replaced after the pre-move check
   // would otherwise publish bytes the manifest never certified.
-  await assertTierBytes(
-    valid.tiers,
-    (name) => join(commitDir, name),
-    'commit'
-  );
+  await assertTierBytes(valid.tiers, (name) => join(commitDir, name), 'commit');
   // Recheck the job deadline immediately before the visibility rename:
   // verification and the fsync loop above can consume the remaining
   // budget, and publishing an overdue generation (then reporting the job
   // failed) would leave reusable output the gate never approved.
   assertDeadline();
+  // Re-verify the manifest bytes themselves last of all: a commit
+  // manifest replaced after the write/fsync above would otherwise
+  // publish metadata the job never validated (the tier recheck covers
+  // bytes, not the manifest describing them).
+  const manifestRead = await readUpToBytes(
+    join(commitDir, 'manifest.json'),
+    MAX_MANIFEST_BYTES
+  );
+  if (
+    manifestRead.truncated ||
+    manifestRead.bytes.toString('utf8') !== serializedManifest
+  ) {
+    throw new PilotManifestError(
+      'manifest-replaced',
+      'commit manifest changed after validation; refusing to publish'
+    );
+  }
   await rename(commitDir, dir);
   try {
     await fsyncDir(join(outputRoot, 'generations'));

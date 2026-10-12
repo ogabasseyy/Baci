@@ -3,8 +3,9 @@ import {
   link,
   lstat,
   mkdir,
-  realpath,
   readdir,
+  realpath,
+  rename,
   stat,
   unlink,
   writeFile,
@@ -87,13 +88,15 @@ async function hostEncoderLocksDir() {
   return assertConfinedLocksDir(dir);
 }
 
-// Crash orphans from interrupted publications and steal recoveries:
-// unique temp names, never the lock path. Swept best-effort past a
-// generous age so the locks directory cannot grow without bound.
+// Crash orphans from interrupted publications, steal recoveries, and
+// releases: unique temp names, never the lock path. Swept best-effort
+// past a generous age so the locks directory cannot grow without bound.
 async function sweepStaleClaimTemps(locksDir) {
   const entries = await readdir(locksDir).catch(() => []);
   for (const entry of entries) {
-    if (!/^(claim-\d+-[0-9a-f]+|recovering-.+)\.tmp$/.test(entry)) {
+    if (
+      !/^(claim-\d+-[0-9a-f]+|recovering-.+|releasing-.+)\.tmp$/.test(entry)
+    ) {
       continue;
     }
     const temp = join(locksDir, entry);
@@ -189,22 +192,39 @@ export async function acquireEncoderLock(outputRoot, options = {}) {
           return;
         }
         released = true;
-        // Ownership-checked: unlink only our own claim. A successor's
-        // claim (or an unreadable file) is left untouched.
-        const text = await readLockText(path).catch(() => null);
-        if (text === null) {
-          return;
-        }
-        let holder = null;
+        // Atomic release, mirroring the steal protocol: move the pathname
+        // aside, then verify the MOVED file is our claim before deleting.
+        // Read-then-unlink would delete a successor's claim published
+        // between the read and the unlink. A foreign moved-aside claim is
+        // restored (link fails closed when a successor already claimed
+        // the path); same documented residual as the steal path.
+        const releasing = join(
+          locksDir,
+          `releasing-${token}-${process.pid}.tmp`
+        );
         try {
-          holder = JSON.parse(text);
+          await rename(path, releasing);
         } catch {
+          // Already gone (stolen or released): nothing of ours to free.
           return;
         }
-        if (holder?.token !== token) {
+        const moved = await readLockText(releasing).catch(() => null);
+        let movedHolder = null;
+        try {
+          movedHolder = moved ? JSON.parse(moved) : null;
+        } catch {
+          movedHolder = null;
+        }
+        if (movedHolder?.token !== token) {
+          const restored = await link(releasing, path)
+            .then(() => true)
+            .catch(() => false);
+          if (restored) {
+            await unlink(releasing).catch(() => undefined);
+          }
           return;
         }
-        await unlink(path).catch(() => undefined);
+        await unlink(releasing).catch(() => undefined);
       },
     };
   }

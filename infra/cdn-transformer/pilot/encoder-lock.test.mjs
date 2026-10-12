@@ -1,9 +1,17 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, rename, symlink, utimes, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import test from 'node:test';
 import { acquireEncoderLock } from './encoder-lock.mjs';
 
 async function setupRoot() {
@@ -41,7 +49,10 @@ test('acquire, release, and re-acquire are exclusive', async () => {
   const outputRoot = await setupRoot();
   const locksDir = await setupLocks();
   const first = await acquireEncoderLock(outputRoot, { locksDir });
-  await assert.rejects(acquireEncoderLock(outputRoot, { locksDir }), /encoder lock/);
+  await assert.rejects(
+    acquireEncoderLock(outputRoot, { locksDir }),
+    /encoder lock/
+  );
   await first.release();
   const second = await acquireEncoderLock(outputRoot, { locksDir });
   await second.release();
@@ -119,7 +130,10 @@ test('a live holder is never evicted', async () => {
       token: 'live-holder-token',
     })
   );
-  await assert.rejects(acquireEncoderLock(outputRoot, { locksDir }), /encoder lock/);
+  await assert.rejects(
+    acquireEncoderLock(outputRoot, { locksDir }),
+    /encoder lock/
+  );
 });
 
 test('shapeless claims fail closed instead of stealing', async () => {
@@ -150,7 +164,10 @@ test('shapeless claims fail closed instead of stealing', async () => {
       `claim ${JSON.stringify(claim)} must fail closed`
     );
     // Fail-closed keeps the evidence for the operator: nothing reaped.
-    assert.equal(await readFile(lockPath(locksDir), 'utf8'), JSON.stringify(claim));
+    assert.equal(
+      await readFile(lockPath(locksDir), 'utf8'),
+      JSON.stringify(claim)
+    );
   }
 });
 
@@ -181,6 +198,9 @@ test('release unlinks only its own claim', async () => {
   await writeFile(path, successor);
   await lock.release();
   assert.equal(await readFile(path, 'utf8'), successor);
+  // The atomic release moves the pathname aside first: a foreign claim
+  // must be restored in place, leaving no releasing- temp behind.
+  assert.deepEqual(await readdir(locksDir), ['encoder.lock']);
 });
 
 test('oversized lock records classify corrupt without buffering', async () => {
@@ -246,7 +266,10 @@ test('assertHeld throws after a steal-race loser displaces the claim', async () 
   await holder.release();
   // The displaced release must not unlink the successor's claim.
   await successor.assertHeld();
-  await assert.rejects(acquireEncoderLock(outputRoot, { locksDir }), /encoder lock/);
+  await assert.rejects(
+    acquireEncoderLock(outputRoot, { locksDir }),
+    /encoder lock/
+  );
   await successor.release();
   // After the holder's own release the claim is gone: still held is false.
   await assert.rejects(successor.assertHeld(), /changed owner mid-run/);

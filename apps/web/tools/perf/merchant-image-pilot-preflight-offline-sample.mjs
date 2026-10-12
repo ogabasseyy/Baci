@@ -53,7 +53,24 @@ export async function checkSamplePin({
     );
     return false;
   }
+  // Duplicates collapse in the Set below: [A, A] against inventory [A]
+  // would report a full matrix while a planned binding went missing.
+  // Reject the pin itself instead of certifying a silently reduced one.
   const frozen = new Set(expected);
+  if (frozen.size !== expected.length) {
+    const duplicates = [
+      ...new Set(
+        expected.filter((entry, index) => expected.indexOf(entry) !== index)
+      ),
+    ];
+    fail(
+      checks,
+      failures,
+      'sample-pin',
+      `sample pin lists duplicate bindings: ${duplicates.join(', ')}`
+    );
+    return false;
+  }
   const actual = new Set(
     inventory.map(
       (record) => `${record.merchantId}/${record.assetId}/${record.slot}`

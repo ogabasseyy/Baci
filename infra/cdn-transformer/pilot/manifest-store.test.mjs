@@ -196,3 +196,68 @@ test('commitGeneration reuses validated generations and never overwrites', async
     /hash mismatch/
   );
 });
+
+test('commitGeneration refuses a manifest replaced after validation', async () => {
+  // The tier recheck covers bytes, not the manifest describing them: a
+  // commit manifest swapped after the write/fsync must fail publication.
+  // The injected deadline hook runs immediately before the pre-rename
+  // re-read, deterministically modeling the swap window.
+  const staging = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId: 'pilot-r1-0123456789abcdef',
+    sourceSha256: staging.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: staging.ladder.source.orientedHeight,
+      orientedWidth: staging.ladder.source.orientedWidth,
+      sha256: staging.expectedSha256,
+    },
+    tiers: staging.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          assertDeadline: async () => {
+            await writeFile(
+              join(staging.stagingDir, 'commit', 'manifest.json'),
+              '{"tampered":true}'
+            );
+          },
+        },
+        files: staging.ladder.tiers
+          .filter(
+            (tier, index, all) =>
+              all.findIndex((other) => other.path === tier.path) === index
+          )
+          .map((tier) => ({
+            from: tier.path,
+            name: outputFileName(tier.sha256, tier.format),
+          })),
+        generationId,
+        job: { ...JOB, expectedSha256: staging.expectedSha256 },
+        manifest,
+        outputRoot: staging.root,
+        stagingDir: staging.stagingDir,
+      }),
+    /commit manifest changed after validation/
+  );
+});

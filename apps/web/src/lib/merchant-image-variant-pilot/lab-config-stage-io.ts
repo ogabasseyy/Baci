@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
@@ -13,6 +14,17 @@ export { readUpToBytes };
 // lab-config-stage-io.test.mjs against the original; web runtime code
 // must not import infra directly.
 const MAX_STAGED_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+
+// Exclusive-create flags for staged writes: 'wx' plus O_NOFOLLOW so a
+// symlink swapped in after the destination lstat refuses at open time
+// instead of diverting the create outside the stage root. Pinned by
+// the flags test: O_NOFOLLOW is a zero bit where the platform lacks
+// it, so the open degrades to plain 'wx' there.
+export const STAGED_CREATE_FLAGS =
+  fsConstants.O_WRONLY |
+  fsConstants.O_CREAT |
+  fsConstants.O_EXCL |
+  fsConstants.O_NOFOLLOW;
 
 // Staged-original suffixes must describe the bytes: Next serves public/
 // files with a suffix-derived MIME type, and the served gate pins the
@@ -164,16 +176,21 @@ async function assertParentConfined(
 // survive as the served file: the parent must confine under the stage
 // root, a symlink at the destination is refused (even when its target
 // coincidentally holds identical bytes), and the file is created
-// exclusively so a symlink swapped in mid-write fails instead of
-// redirecting the write outside the lab tree. 'wx' guards only the
-// final component, so the parent re-binds immediately before the open
-// and the written file re-binds after the close (handle identity vs
-// path identity): a parent swapped for a link mid-stage refuses loudly
-// instead of publishing verified bytes outside the stage root.
+// exclusively so a contender racing the write fails instead of
+// redirecting the bytes outside the lab tree. 'wx' alone is not enough
+// for the final component: it follows a symlink swapped in after the
+// lstat and creates the link's target. O_NOFOLLOW binds the final
+// component at open time (ELOOP on a link), the parent re-binds
+// immediately before the open, and the written file re-binds after the
+// close (handle identity vs path identity): a parent swapped for a link
+// mid-stage refuses loudly instead of publishing verified bytes outside
+// the stage root. The optional beforeOpen seam plants that mid-write
+// swap deterministically in tests; production passes no hooks.
 export async function writeStagedFile(
   stageRoot: string,
   destPath: string,
-  bytes: Buffer
+  bytes: Buffer,
+  hooks?: { beforeOpen?: () => Promise<void> }
 ): Promise<void> {
   await assertParentConfined(stageRoot, destPath);
   const existing = await lstat(destPath).catch(() => null);
@@ -186,9 +203,11 @@ export async function writeStagedFile(
     await unlink(destPath);
   }
   await assertParentConfined(stageRoot, destPath);
-  const handle = await open(destPath, 'wx').catch(() => {
+  await hooks?.beforeOpen?.();
+  const handle = await open(destPath, STAGED_CREATE_FLAGS).catch((error) => {
     throw new Error(
-      'merchant image pilot: staging destination appeared mid-write; refusing to overwrite'
+      'merchant image pilot: staging destination is a symlink or appeared mid-write; refusing to write',
+      { cause: error }
     );
   });
   let identity: { dev: number; ino: number } | undefined;
@@ -229,6 +248,7 @@ export async function stageVerifiedTier(input: {
   destPath: string;
   expectedBytes: number;
   expectedSha256: string;
+  hooks?: { beforeOpen?: () => Promise<void> };
   sourcePath: string;
   stageRoot: string;
 }): Promise<void> {
@@ -251,7 +271,7 @@ export async function stageVerifiedTier(input: {
   if (await destMatches(input.destPath, bytes)) {
     return;
   }
-  await writeStagedFile(input.stageRoot, input.destPath, bytes);
+  await writeStagedFile(input.stageRoot, input.destPath, bytes, input.hooks);
 }
 
 // Bytes-in-hand variant of the tier staging below: skips the write when
@@ -262,12 +282,13 @@ export async function stageVerifiedTier(input: {
 export async function writeStagedBytesIfChanged(
   stageRoot: string,
   destPath: string,
-  bytes: Buffer
+  bytes: Buffer,
+  hooks?: { beforeOpen?: () => Promise<void> }
 ): Promise<void> {
   if (await destMatches(destPath, bytes)) {
     return;
   }
-  await writeStagedFile(stageRoot, destPath, bytes);
+  await writeStagedFile(stageRoot, destPath, bytes, hooks);
 }
 
 async function destMatches(destPath: string, bytes: Buffer): Promise<boolean> {

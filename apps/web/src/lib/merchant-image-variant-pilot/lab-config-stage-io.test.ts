@@ -18,6 +18,7 @@ import {
   ensureStageDir,
   readUpToBytes,
   readVerifiedSnapshot,
+  STAGED_CREATE_FLAGS,
   stageVerifiedTier,
   writeStagedBytesIfChanged,
 } from './lab-config-stage-io';
@@ -198,6 +199,47 @@ describe('writeStagedBytesIfChanged', () => {
         Buffer.from('x')
       )
     ).rejects.toThrow(/escapes the stage root/);
+  });
+
+  it('refuses a symlink swapped in after the destination check', async () => {
+    // The destination is absent when lstat runs, then a contender
+    // plants dest -> outside/target before the open: 'wx' alone would
+    // follow the link and create the outside target. O_NOFOLLOW must
+    // refuse at open time with nothing created through the link.
+    const { readdir } = await import('node:fs/promises');
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-raced-link-'));
+    const stageRoot = await ensureStageDir(dir, '__pilot');
+    const outside = join(dir, 'outside');
+    await mkdir(outside, { recursive: true });
+    const dest = join(stageRoot, 'staged.avif');
+    await expect(
+      writeStagedBytesIfChanged(
+        stageRoot,
+        dest,
+        Buffer.from('verified-tier-bytes'),
+        {
+          beforeOpen: async () => {
+            await symlink(join(outside, 'target.avif'), dest);
+          },
+        }
+      )
+    ).rejects.toThrow(/symlink or appeared mid-write/);
+    expect(await readdir(outside)).toEqual([]);
+    expect((await lstat(dest)).isSymbolicLink()).toBe(true);
+  });
+
+  it('pins O_NOFOLLOW in the staged-create flags', async () => {
+    // A revert to plain 'wx' would pass the race test on macOS (BSD
+    // O_EXCL already refuses symlinks) while reopening the
+    // create-through-link hole on Linux, so the flag bits are pinned
+    // directly. O_NOFOLLOW degrades to plain 'wx' on Windows.
+    const { constants } = await import('node:fs');
+    expect(STAGED_CREATE_FLAGS & constants.O_EXCL).toBe(constants.O_EXCL);
+    if (process.platform !== 'win32') {
+      expect(STAGED_CREATE_FLAGS & constants.O_NOFOLLOW).toBe(
+        constants.O_NOFOLLOW
+      );
+    }
   });
 
   it('refuses a staging parent swapped for a symlink mid-stage', async () => {

@@ -6,22 +6,17 @@ on:
     # opened: a PR created with transformer changes must run change
     # detection immediately, not only on a later synchronize/reopen.
     types: [labeled, opened, synchronize, reopened]
-    # Codec coverage follows the code it protects: PRs touching pilot
-    # paths run automatically instead of waiting for the opt-in label.
-    # Anything else stays out of scope (manual dispatch is the hatch).
-    paths:
-      - 'apps/web/tools/perf/merchant-image-pilot-*'
-      - 'apps/web/src/lib/merchant-image-variant-pilot/**'
-      - 'apps/web/src/app/pilot-lab/**'
-      - 'infra/cdn-transformer/pilot/**'
-      - 'infra/cdn-transformer/package.json'
-      - 'infra/cdn-transformer/pnpm-lock.yaml'
-      - 'infra/cdn-transformer/pnpm-workspace.yaml'
-      - '.github/fixtures/pilot-codec/**'
-      - '.github/workflows/pilot-codec-compatibility.yml'
+    # No paths filter: a workflow-level paths list rejects the
+    # pull_request:labeled event before job conditions evaluate, so the
+    # pilot-codec-check opt-in label could never request the suite on a
+    # PR outside the list. Change detection lives in the changes job
+    # instead, which every trigger reaches; jobs skip fast when neither
+    # the label nor pilot paths apply.
 
 permissions:
   contents: read
+  # The changes job lists the PR's files through the API.
+  pull-requests: read
 
 concurrency:
   # Labeled events run in their own group: an unrelated label must
@@ -33,15 +28,19 @@ concurrency:
 
 jobs:
   native-no-avif-fixture:
-    # The pull_request paths filter already scopes this job to pilot
-    # PRs, so opened/synchronize/reopened always run. Labeled runs
-    # evaluate the PR's COMPLETE label set, not just the added label:
-    # gating on the new label alone would skip while the opt-in label
-    # is still present.
+    needs: changes
+    # No paths filter scopes this job anymore (see the trigger above),
+    # so opened/synchronize/reopened run only when the PR touches pilot
+    # paths. Labeled runs evaluate the PR's COMPLETE label set, not
+    # just the added label: gating on the new label alone would skip
+    # while the opt-in label is still present. Fail closed like the
+    # transformer gate below: a broken detection run runs the suite.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.action != 'labeled' ||
-      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
+      needs.changes.outputs.pilot == 'true' ||
+      needs.changes.result != 'success')
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -81,31 +80,42 @@ jobs:
           # not a pass: fail when the smoke script produced nothing.
           if-no-files-found: error
 
-  # Change detection for the transformer suite: the label gate alone
-  # would let transformer-area PRs merge untested whenever the label is
-  # absent, so transformer code changes run the suite with no label.
+  # Change detection for both suites: the label gate alone would let
+  # pilot-area PRs merge untested whenever the label is absent, so
+  # pilot code changes run the suites with no label. Detection reads
+  # the PR's file list through the API (no checkout): a workflow-level
+  # paths filter cannot do this job because it rejects the labeled
+  # event itself.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      pilot: ${{ steps.diff.outputs.pilot }}
       transformer: ${{ steps.diff.outputs.transformer }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
       - id: diff
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          base="origin/${{ github.base_ref }}"
-          # Fail closed: a detection failure (missing base ref, shallow or
-          # fork fetch issue) must run the suite, never skip it silently.
-          if ! names=$(git diff --name-only "$base...HEAD" -- 'infra/cdn-transformer/**' 2>/dev/null); then
-            echo 'transformer=true' >> "$GITHUB_OUTPUT"
-          elif printf '%s' "$names" | grep -q .; then
+          # Fail closed: a detection failure must run the suites, never
+          # skip them silently. The pilot patterns mirror the
+          # pilot-owned tree, plus the pilot config modules the old
+          # paths filter missed (apps/web/src/config/pilot-*).
+          if ! names=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename' 2>/dev/null); then
+            echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
           else
-            echo 'transformer=false' >> "$GITHUB_OUTPUT"
+            if printf '%s\n' "$names" | grep -qE '^infra/cdn-transformer/'; then
+              echo 'transformer=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'transformer=false' >> "$GITHUB_OUTPUT"
+            fi
+            if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$'; then
+              echo 'pilot=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'pilot=false' >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   # The transformer package lives outside the pnpm workspace (infra-only),

@@ -106,6 +106,62 @@ describe('merchant-image-pilot-runner finish binding', () => {
     }
   });
 
+  it('leaves the earlier bound set untouched when a retry fails validation', async () => {
+    // A retry carries a new HAR for a new navigation: when its
+    // screenshot then fails validation, the earlier finish's HAR and
+    // screenshot must both survive byte-identical — never a new HAR
+    // stranded beside an old screenshot under one run id.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-atomic-'));
+    await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    const writeHar = (name) =>
+      writeFile(
+        name,
+        JSON.stringify({
+          log: {
+            entries: [],
+            pages: [
+              {
+                _url: ROUTE,
+                startedDateTime: new Date().toISOString(),
+                title: 'u run 1',
+              },
+            ],
+          },
+        })
+      );
+    const pngBytes = await pngBuffer(750, 1334);
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, pngBytes);
+    const firstHar = join(dir, 'first.har');
+    await writeHar(firstHar);
+    const outDir = join(dir, 'bound');
+    const base = {
+      browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
+      dpr: '2',
+      outDir,
+      runJson: join(dir, 'run', 'run.json'),
+      screenshot: shotPath,
+      viewport: '375x667',
+    };
+    await finishRun({ ...base, har: firstHar });
+    const harBefore = await readFile(join(outDir, 'run.har'));
+    const shotBefore = await readFile(join(outDir, 'screenshot.png'));
+    // New navigation, valid HAR — but a wrong-geometry screenshot.
+    const secondHar = join(dir, 'second.har');
+    await writeHar(secondHar);
+    const badShot = join(dir, 'bad.png');
+    await writeFile(badShot, await pngBuffer(100, 100));
+    await expect(
+      finishRun({ ...base, har: secondHar, screenshot: badShot })
+    ).rejects.toThrow(/requires 750x1334/);
+    expect(await readFile(join(outDir, 'run.har'))).toEqual(harBefore);
+    expect(await readFile(join(outDir, 'screenshot.png'))).toEqual(shotBefore);
+  });
+
   it('refuses a HAR whose browser never launched the prepared profile', async () => {
     // The default-profile accident: the operator captures with another
     // profile, so the recorded command line shows no launch with the

@@ -169,8 +169,14 @@ export async function finishRun({
       `HAR page predates the prepared-browser session; re-run the navigation inside this run instead of binding older evidence: ${har}`
     );
   }
+  // Publish nothing until every check below passes: when finish is
+  // retried into a directory holding an earlier finish of the same run,
+  // an early run.har write would strand the new HAR beside the old
+  // screenshot set on a later failure, and the shared run id plus
+  // overlapping timestamps would let a later run certify artifacts from
+  // different navigations. The bound set lands together, after all
+  // validation.
   const boundHar = join(out, 'run.har');
-  await writeFile(boundHar, `${JSON.stringify(harJson)}\n`);
   // Same-navigation screenshot binding: capturedAt is the file's
   // OS-recorded mtime, not finish time — and the capture must fall
   // inside the measured navigation's window. A stale file from another
@@ -215,6 +221,7 @@ export async function finishRun({
       `screenshot is ${actual.width}x${actual.height} but viewport ${width}x${height} at dpr ${deviceScaleFactor} requires ${expectedWidth}x${expectedHeight}: ${screenshot}`
     );
   }
+  await writeFile(boundHar, `${JSON.stringify(harJson)}\n`);
   const capturePath = join(out, 'screenshot-capture.json');
   await writeJson(capturePath, {
     capturedAt: new Date(shotMtimeMs).toISOString(),

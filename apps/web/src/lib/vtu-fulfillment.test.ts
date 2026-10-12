@@ -3053,6 +3053,81 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
+  it('applies Kuda fallback credit correction when a flagged fallback row settles', async () => {
+    // The recovered row still carries Monnify-derived commission
+    // columns; settling those would misallocate real wallet funds.
+    // Same inputs as the inline-path correction test, same corrected
+    // outputs (11.25/11.25 off the 22.5 Kuda earning).
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: '9MOBILE',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+          fulfillmentProvider: 'kuda',
+          originalProvider: 'monnify',
+          monnifyFallbackError: 'Monnify API error: 400',
+          customerCashbackEnabled: true,
+          customerCashbackRate: 50,
+          originalMerchantCommission: 25,
+          walletDebited: true,
+        },
+        error_message: null,
+        merchant_commission: 12.5,
+        customer_cashback: 12.5,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        customer_cashback: 11.25,
+        merchant_commission: 11.25,
+        metadata: expect.objectContaining({
+          commissionProvider: 'kuda',
+          originalMerchantCommission: 22.5,
+        }),
+        status: 'successful',
+      })
+    );
+  });
+
   it('fails and refunds a stale flagged row when Kuda definitively rejects it', async () => {
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Request successful. (biller status: k11)',

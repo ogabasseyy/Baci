@@ -28,6 +28,7 @@ import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { isFlaggedReferenceLessVtuRow } from '@/lib/vtu-flagged-recovery';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
+import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import {
   isStrandedPreVendVtuRow,
@@ -2019,8 +2020,31 @@ async function reconcileProcessingVtuTransaction({
       if (reconciledUnits) {
         successMetadata.units = reconciledUnits;
       }
+      // Kuda-fallback credit correction (mirrors the inline vend
+      // path): a fallback row recovered here still carries
+      // Monnify-derived commission/cashback columns, and settling
+      // those would misallocate real wallet funds. Self-gating: null
+      // for non-fallback rows. Covers flagged AND claimed fallback
+      // rows — both settle through this branch.
+      const fallbackCreditCorrection = resolveKudaFallbackCreditCorrection({
+        metadata: successMetadata,
+        row: currentRow,
+      });
+      if (fallbackCreditCorrection) {
+        successMetadata.originalMerchantCommission =
+          fallbackCreditCorrection.originalMerchantCommission;
+        successMetadata.commissionProvider = 'kuda';
+        currentRow.customer_cashback =
+          fallbackCreditCorrection.customerCashback;
+        currentRow.merchant_commission =
+          fallbackCreditCorrection.merchantCommission;
+      }
       const successPersistError = await updateVtuPurchaseResultWithRetry({
         payload: {
+          ...(fallbackCreditCorrection && {
+            customer_cashback: fallbackCreditCorrection.customerCashback,
+            merchant_commission: fallbackCreditCorrection.merchantCommission,
+          }),
           error_message: null,
           metadata: successMetadata,
           status: 'successful',
@@ -2259,48 +2283,13 @@ async function executeVtuPurchase(
       return monnifyResult;
     }
 
-    const kudaFallbackPatch = {
-      fulfillmentProvider: 'kuda',
-      monnifyFallbackError:
-        monnifyResult.providerErrorDetail ?? monnifyResult.message,
-      originalProvider: 'monnify',
-      provider: 'kuda',
-      providerFallback: 'monnify_airtime_to_kuda',
-    };
-    // Persist the Kuda routing BEFORE the fallback call: if the final
-    // result persist exhausts, the stored row must still route Kuda
-    // TSQ by request_reference. Without this the row keeps
-    // provider=monnify with no vend reference — unreconcilable, and
-    // the customer stays charged with no terminal result. Fail closed:
-    // if the marker write fails, settle the Monnify failure without
-    // ever calling Kuda (nothing delivered → refund path).
-    const { error: fallbackMarkerError } = await supabase
-      .from('vtu_transactions')
-      .update({
-        metadata: { ...(row.metadata ?? {}), ...kudaFallbackPatch },
-      })
-      .eq('id', row.id);
-    if (fallbackMarkerError) {
-      console.error('Failed to persist Kuda fallback routing:', {
-        error: fallbackMarkerError.message,
-        transactionId: row.id,
-      });
-      return monnifyResult;
-    }
-    row.metadata = { ...(row.metadata ?? {}), ...kudaFallbackPatch };
-
-    const kudaFallbackResult = await purchaseAirtime(
-      row.phone_number,
-      row.amount,
-      normalized.provider,
+    return executeMonnifyAirtimeKudaFallback({
       customerFirstName,
-      row.request_reference
-    );
-
-    return {
-      ...kudaFallbackResult,
-      metadataPatch: kudaFallbackPatch,
-    };
+      monnifyResult,
+      provider: normalized.provider,
+      row,
+      supabase,
+    });
   }
 
   if (row.type === 'airtime') {

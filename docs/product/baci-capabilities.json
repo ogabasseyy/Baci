@@ -20,13 +20,13 @@
       "id": "domains", "title": "Domain purchase and management", "status": "code_evidenced",
       "claim": "Baci implements domain search and paid registration, connecting existing domains, verification and primary-domain management.",
       "limitations": "Requires domain entitlement, registrar/payment completion and DNS verification. Android in-app domain purchasing is disabled; existing-domain connection is a separate workflow.",
-      "source_refs": ["apps/web/src/app/dashboard/domains/page.tsx", "apps/mobile-admin/app/(admin)/domains/buy.tsx", "apps/mobile-admin/app/(admin)/domains/connect.tsx", "apps/mobile-admin/config/domain-purchase-availability.ts"]
+      "source_refs": ["apps/web/src/app/dashboard/domains/page.tsx", "apps/mobile-admin/app/(admin)/domains/buy.tsx", "apps/mobile-admin/app/(admin)/domains/connect.tsx", "apps/mobile-admin/config/domain-purchase-availability.ts", "apps/web/src/app/dashboard/domains/components/domain-card.tsx", "apps/web/src/app/dashboard/domains/actions.ts", "apps/mobile-admin/hooks/useDomainActions.ts"]
     },
     {
       "id": "jumia", "title": "Jumia sales channel", "status": "code_evidenced",
       "claim": "Baci implements Jumia account connection and marketplace product/order synchronization workflows in the web dashboard and mobile sales-channel screen.",
       "limitations": "Marketplace entitlement, Vendor Center authorization and sync health must be verified. Konga and Amazon are not equivalent shipped channels. Do not claim continuous successful synchronization from connection UI alone.",
-      "source_refs": ["apps/web/src/app/dashboard/channels/client-page.tsx", "apps/mobile-admin/app/(admin)/sales-channels.tsx", "apps/mobile-admin/components/marketplace/JumiaChannelCard.tsx"]
+      "source_refs": ["apps/web/src/app/dashboard/channels/client-page.tsx", "apps/mobile-admin/app/(admin)/sales-channels.tsx", "apps/mobile-admin/components/marketplace/JumiaChannelCard.tsx", "apps/web/src/app/api/marketplace/jumia/orders/route.ts", "apps/web/src/app/api/marketplace/jumia/products/export/route.ts"]
     },
     {
       "id": "manual-orders", "title": "Staff-entered orders", "status": "code_evidenced",
@@ -56,7 +56,7 @@
       "id": "expenses", "title": "Expenses and profit reporting", "status": "code_evidenced",
       "claim": "Baci mobile-admin implements expense recording and merchant profit/reporting views.",
       "limitations": "Expense creation requires a valid branch and permissions. Profit calculations depend on complete cost/order inputs; these are not certified accounting or tax reports.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/expenses/index.tsx", "apps/mobile-admin/app/(admin)/expenses/new.tsx", "apps/mobile-admin/app/(admin)/analytics/index.tsx"]
+      "source_refs": ["apps/mobile-admin/app/(admin)/expenses/index.tsx", "apps/mobile-admin/app/(admin)/expenses/new.tsx", "apps/mobile-admin/app/(admin)/analytics/index.tsx", "apps/mobile-admin/hooks/useSaveExpense.ts", "apps/mobile-admin/hooks/useAnalyticsOverview.ts", "apps/web/src/app/api/analytics/route.ts", "packages/shared/src/lib/order-item-analytics-profit.ts"]
     },
     {
       "id": "followups", "title": "Customer follow-up workflows", "status": "code_evidenced",
@@ -74,7 +74,7 @@
       "id": "ai", "title": "AI-assisted commerce workflows", "status": "code_evidenced",
       "claim": "Baci implements AI-assisted storefront editing, content workflows and insight surfaces.",
       "limitations": "Assistance and agent status display are not proof of a general autonomous operator. Explain human approval, actual enabled tools and current scope; mission is not evidence of measured impact.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/customize.tsx", "apps/mobile-admin/hooks/useBuilderConfig.ts", "apps/web/src/lib/feature-flags.ts"]
+      "source_refs": ["apps/mobile-admin/app/(admin)/customize.tsx", "apps/mobile-admin/hooks/useBuilderConfig.ts", "apps/web/src/ai/flows/autofill-product-details.ts", "apps/mobile-admin/hooks/useBlogEditor.processAiRequest.ts", "apps/web/src/app/api/analytics/insights/route.ts"]
     },
     {
       "id": "agent-protocols", "title": "ACP and UCP commerce foundations", "status": "code_evidenced",

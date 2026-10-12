@@ -6,11 +6,17 @@
  * success view polls these fields to decide when a failed purchase
  * is truly settled.
  */
+import { requiresVtuCustomerWalletRefund } from '@/lib/vtu-refund-guard';
+
 export interface HistoryRefundProjection {
   /**
-   * Failed + debited + refund not yet issued. Failed persists BEFORE
-   * the refund RPC runs, so clients must keep polling (and never
-   * claim the refund) until this clears; the cron confirms it.
+   * Failed + refund-required + refund not yet issued. Failed persists
+   * BEFORE the refund RPC runs, so clients must keep polling (and
+   * never claim the refund) until this clears; the cron confirms it.
+   * Gated on requiresVtuCustomerWalletRefund — NOT on the wallet
+   * debit marker — so legacy card-only failures (no split, no marker)
+   * stay pending until refundCardOnly lands instead of reporting an
+   * explicit false the pollers read as refund proof.
    */
   refund_pending: boolean;
   /**
@@ -32,9 +38,16 @@ interface RefundMetadataShape {
 
 export function projectHistoryRefundFields({
   metadata,
+  row,
   status,
 }: {
   metadata: Record<string, unknown> | null | undefined;
+  row: {
+    amount: unknown;
+    customer_id: unknown;
+    id: unknown;
+    source: unknown;
+  };
   status: unknown;
 }): HistoryRefundProjection {
   const shape = (metadata ?? {}) as RefundMetadataShape;
@@ -50,8 +63,19 @@ export function projectHistoryRefundFields({
   const walletLeg =
     walletDebited && typeof split?.wallet === 'number' ? split.wallet : 0;
   const totalRestored = cardLeg + walletLeg;
+  // PostgREST returns numerics as strings; requires() needs a number.
+  const amount = Number(row.amount);
   return {
-    refund_pending: status === 'failed' && walletDebited && !refundIssued,
+    refund_pending:
+      status === 'failed' &&
+      !refundIssued &&
+      requiresVtuCustomerWalletRefund({
+        amount: Number.isFinite(amount) ? amount : 0,
+        customer_id:
+          typeof row.customer_id === 'string' ? row.customer_id : null,
+        id: typeof row.id === 'string' ? row.id : '',
+        source: typeof row.source === 'string' ? row.source : null,
+      }),
     refunded_to_wallet:
       refundIssued && totalRestored > 0 ? totalRestored : null,
   };

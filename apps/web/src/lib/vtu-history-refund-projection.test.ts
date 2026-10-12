@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { projectHistoryRefundFields } from './vtu-history-refund-projection';
 
+const CHECKOUT_ROW = {
+  amount: 1000,
+  customer_id: 'customer-1',
+  id: 'vtu-1',
+  source: 'checkout',
+};
+
 describe('projectHistoryRefundFields', () => {
   it('totals the reversed wallet leg plus the card leg', () => {
     // Hybrid: wallet leg reversed in full, card leg refunded via RPC.
@@ -12,6 +19,7 @@ describe('projectHistoryRefundFields', () => {
           refundAmount: 700,
           paymentSplit: { wallet: 300, card: 700 },
         },
+        row: CHECKOUT_ROW,
         status: 'failed',
       })
     ).toEqual({ refund_pending: false, refunded_to_wallet: 1000 });
@@ -29,6 +37,7 @@ describe('projectHistoryRefundFields', () => {
           refundAmount: 0,
           paymentSplit: { wallet: 1000, card: 0 },
         },
+        row: CHECKOUT_ROW,
         status: 'failed',
       })
     ).toEqual({ refund_pending: false, refunded_to_wallet: 1000 });
@@ -41,6 +50,64 @@ describe('projectHistoryRefundFields', () => {
           walletDebited: true,
           paymentSplit: { wallet: 1000, card: 0 },
         },
+        row: CHECKOUT_ROW,
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: true, refunded_to_wallet: null });
+  });
+
+  it('keeps card-only failures pending until refundCardOnly lands', () => {
+    // Legacy card-only rows have no split and no walletDebited marker,
+    // but refundCardOnly still owes the full amount: an explicit false
+    // here would read as refund proof and stop the pollers early.
+    expect(
+      projectHistoryRefundFields({
+        metadata: {},
+        row: CHECKOUT_ROW,
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: true, refunded_to_wallet: null });
+    // Wallet-race split rows without the debit marker: the card leg
+    // is still owed until the race refund issues.
+    expect(
+      projectHistoryRefundFields({
+        metadata: { paymentSplit: { wallet: 300, card: 700 } },
+        row: CHECKOUT_ROW,
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: true, refunded_to_wallet: null });
+  });
+
+  it('never flags rows that require no refund as pending', () => {
+    const metadata = {};
+    // Non-checkout sources never run refund handling.
+    expect(
+      projectHistoryRefundFields({
+        metadata,
+        row: { ...CHECKOUT_ROW, source: 'admin' },
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: false, refunded_to_wallet: null });
+    // Zero amounts and missing customers are refund-guard rejects.
+    expect(
+      projectHistoryRefundFields({
+        metadata,
+        row: { ...CHECKOUT_ROW, amount: 0 },
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: false, refunded_to_wallet: null });
+    expect(
+      projectHistoryRefundFields({
+        metadata,
+        row: { ...CHECKOUT_ROW, customer_id: null },
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: false, refunded_to_wallet: null });
+    // PostgREST numerics arrive as strings — still a real amount.
+    expect(
+      projectHistoryRefundFields({
+        metadata,
+        row: { ...CHECKOUT_ROW, amount: '1000' },
         status: 'failed',
       })
     ).toEqual({ refund_pending: true, refunded_to_wallet: null });
@@ -52,6 +119,7 @@ describe('projectHistoryRefundFields', () => {
     expect(
       projectHistoryRefundFields({
         metadata: { refundIssued: true, refundAmount: 0 },
+        row: CHECKOUT_ROW,
         status: 'failed',
       })
     ).toEqual({ refund_pending: false, refunded_to_wallet: null });
@@ -61,11 +129,16 @@ describe('projectHistoryRefundFields', () => {
     expect(
       projectHistoryRefundFields({
         metadata: { walletDebited: true },
+        row: CHECKOUT_ROW,
         status: 'successful',
       })
     ).toEqual({ refund_pending: false, refunded_to_wallet: null });
     expect(
-      projectHistoryRefundFields({ metadata: null, status: 'processing' })
+      projectHistoryRefundFields({
+        metadata: null,
+        row: CHECKOUT_ROW,
+        status: 'processing',
+      })
     ).toEqual({ refund_pending: false, refunded_to_wallet: null });
   });
 
@@ -78,6 +151,7 @@ describe('projectHistoryRefundFields', () => {
           refundAmount: 'lots',
           paymentSplit: { wallet: 'many' },
         },
+        row: CHECKOUT_ROW,
         status: 'failed',
       })
     ).toEqual({ refund_pending: false, refunded_to_wallet: null });

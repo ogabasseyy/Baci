@@ -67,7 +67,9 @@ export interface HistoryTransactionRow {
   id: unknown;
   amount: unknown;
   customer_cashback?: unknown;
+  customer_id?: unknown;
   metadata: unknown;
+  source?: unknown;
   status: unknown;
   transaction_id?: unknown;
   [key: string]: unknown;
@@ -127,6 +129,12 @@ export function projectHistoryTransaction({
   );
   const { refund_pending, refunded_to_wallet } = projectHistoryRefundFields({
     metadata: transactionMetadata as Record<string, unknown> | null,
+    row: {
+      amount: transaction.amount,
+      customer_id: transaction.customer_id,
+      id: transaction.id,
+      source: transaction.source,
+    },
     status: transaction.status,
   });
 

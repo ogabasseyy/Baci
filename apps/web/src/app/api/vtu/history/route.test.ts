@@ -819,6 +819,8 @@ describe('GET /api/vtu/history', () => {
         metadata: { walletDebited: true },
         request_reference: 'VTU-FAIL',
         customer_cashback: '0',
+        source: 'checkout',
+        customer_id: 'customer-1',
       },
     ];
 
@@ -922,7 +924,40 @@ describe('GET /api/vtu/history', () => {
     ]);
   });
 
-  it('never flags successful or never-debited rows as refund-pending', async () => {
+  it('flags a failed card-only checkout with no markers as refund-pending', async () => {
+    // Legacy card-only rows carry no split and no walletDebited marker,
+    // but refundCardOnly still owes the full amount — pending until
+    // refundIssued lands, never an explicit false.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-card-only',
+        created_at: '2026-04-08T12:00:00.000Z',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {},
+        request_reference: 'VTU-CARD-ONLY',
+        customer_cashback: '0',
+        source: 'checkout',
+        customer_id: 'customer-1',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-card-only',
+        refund_pending: true,
+        refunded_to_wallet: null,
+      }),
+    ]);
+  });
+
+  it('never flags successful or non-checkout rows as refund-pending', async () => {
     const { GET } = await import('./route');
     transactionsData = [
       {
@@ -936,14 +971,16 @@ describe('GET /api/vtu/history', () => {
         customer_cashback: '0',
       },
       {
-        id: 'tx-failed-nopay',
+        id: 'tx-failed-noncheckout',
         created_at: '2026-04-08T12:00:00.000Z',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
         metadata: {},
-        request_reference: 'VTU-NOPAY',
+        request_reference: 'VTU-NONCHECKOUT',
         customer_cashback: '0',
+        source: 'admin',
+        customer_id: 'customer-1',
       },
     ];
 
@@ -954,7 +991,7 @@ describe('GET /api/vtu/history', () => {
     expect(data.transactions).toEqual([
       expect.objectContaining({ id: 'tx-ok', refund_pending: false }),
       expect.objectContaining({
-        id: 'tx-failed-nopay',
+        id: 'tx-failed-noncheckout',
         refund_pending: false,
         refunded_to_wallet: null,
       }),

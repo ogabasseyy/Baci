@@ -41,14 +41,21 @@ jest.mock('@/lib/fetch-with-timeout', () => ({
   SHORT_TIMEOUT: 5000,
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (
-    selector: (state: { user?: { id: string } | null }) => string | null
-  ) => {
-    const id = mockUseAuthStore();
-    return selector(id ? { user: { id } } : { user: null });
-  },
-}));
+jest.mock('@/stores/auth-store', () => {
+  const hook = Object.assign(
+    (selector: (state: { user?: { id: string } | null }) => string | null) => {
+      const id = mockUseAuthStore();
+      return selector(id ? { user: { id } } : { user: null });
+    },
+    {
+      getState: () => {
+        const id = mockUseAuthStore();
+        return id ? { user: { id } } : { user: null };
+      },
+    }
+  );
+  return { useAuthStore: hook };
+});
 
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'http://localhost:3001' }));
 jest.mock('@/lib/config', () => ({
@@ -308,6 +315,55 @@ describe('useVtuVoucherPinBackfill', () => {
       refundConfirmed: false,
     });
     expect(recallPendingVtuKey('hook-failpend')).toBe('key-hook-failpend');
+  });
+
+  it('skips registry cleanup when the account switches mid-flight', async () => {
+    rememberPendingVtuPurchase('hook-switch', 'key-hook-switch');
+    notePendingVtuReference('hook-switch', 'REF-001');
+    let resolveFetch: (response: Response) => void = () => undefined;
+    mockFetchWithTimeout.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    // user-1's terminal response is in flight; the account switches
+    // before it lands. The landed rerender resubscribes to user-2's
+    // query, so the observation is asserted in user-1's cache entry.
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    mockUseAuthStore.mockReturnValue('user-2');
+    resolveFetch(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+            refund_pending: null,
+          },
+        ],
+      })
+    );
+
+    // The observation still lands (proving the continuation ran) but
+    // the superseded account must not mutate the global registry.
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData([
+          'vtu',
+          'voucher-pin-backfill',
+          'user-1',
+          'electricity',
+          'REF-001',
+        ])
+      ).toEqual({ pin: null, status: 'successful', refundPending: null })
+    );
+    expect(recallPendingVtuKey('hook-switch')).toBe('key-hook-switch');
   });
 
   it('keeps hunting a token for pin-less bill successes', async () => {

@@ -95,9 +95,12 @@ interface UseVtuVoucherPinBackfillInput {
 // component scope so React Compiler can still memoize the hook.
 async function fetchVoucherPin({
   apiType,
+  capturedUserId,
   reference,
 }: {
   apiType: BackfillApiType | null;
+  /** userId baked into the query key when this fetch started. */
+  capturedUserId: string | null;
   reference: string | null | undefined;
 }): Promise<BackfillObservation | null> {
   const { data: sessionData, error: sessionError } =
@@ -177,9 +180,17 @@ async function fetchVoucherPin({
   // previous vend as the new purchase without delivering anything.
   // Failure forgets only once the refund is confirmed, or the wallet
   // would refresh against the still-debited balance with no later
-  // refresh when the refund lands.
+  // refresh when the refund lands. Bound to the polling account: an
+  // account switch mid-flight must not let the old account's terminal
+  // response mutate the global registry for a result never shown.
   const failedTerminal = status === 'failed' && refundPending === false;
-  if (reference && (status === 'successful' || failedTerminal)) {
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  if (
+    reference &&
+    (status === 'successful' || failedTerminal) &&
+    capturedUserId !== null &&
+    capturedUserId === currentUserId
+  ) {
     forgetPendingVtuByReference(reference);
   }
   return { pin: pin || null, status, refundPending };
@@ -233,9 +244,13 @@ export function useVtuVoucherPinBackfill({
         ? POLL_INTERVAL_MS
         : POLL_SLOW_INTERVAL_MS;
     },
-    queryFn: () => {
+    queryFn: (context) => {
       fetchCountRef.current += 1;
-      return fetchVoucherPin({ apiType, reference });
+      // Capture the polling account from the key (index 2 is userId):
+      // the side effect below must not fire for a superseded account.
+      const rawUserId = context.queryKey[2];
+      const capturedUserId = typeof rawUserId === 'string' ? rawUserId : null;
+      return fetchVoucherPin({ apiType, capturedUserId, reference });
     },
   });
 

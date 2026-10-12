@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('vtu_transactions')
       .select(
-        'id, created_at, type, status, amount, network_provider, phone_number, biller_name, biller_item_code, customer_identifier, customer_name, request_reference, transaction_id, error_message, customer_cashback, metadata'
+        'id, created_at, type, status, amount, network_provider, phone_number, biller_name, biller_item_code, customer_identifier, customer_name, request_reference, transaction_id, error_message, customer_cashback, metadata, source, customer_id'
       )
       .eq('merchant_id', merchant.id)
       .eq('customer_id', customer.id);

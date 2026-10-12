@@ -55,14 +55,28 @@ describe('instrumentation pilot boot gate', () => {
     expect(registerOTelMock).not.toHaveBeenCalled();
     expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
   });
-  it('awaits pilot startup validation and rejects boot on invalid staged inputs', async () => {
+  it('degrades to lab-only failure when pilot startup validation fails', async () => {
+    // The lab must not take the storefront down: a failed lab init
+    // logs loudly, skips the runtime publish (lab routes fail closed),
+    // and boot completes OTel setup. Only the staged tree-shape
+    // assertion above stays fatal.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     initializeLabRuntimeMock.mockRejectedValueOnce(
       new Error('invalid staged inputs')
     );
-    await expect(register()).rejects.toThrow('invalid staged inputs');
-    expect(registerOTelMock).not.toHaveBeenCalled();
+    const errors: unknown[][] = [];
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...args: unknown[]) => {
+        errors.push(args);
+      });
+    await expect(register()).resolves.toBe(undefined);
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+    expect(errors).toHaveLength(1);
+    expect(errors[0][0]).toMatch(/lab runtime initialization failed/);
+    expect(errors[0][1]).toMatchObject({ message: 'invalid staged inputs' });
+    errorSpy.mockRestore();
   });
 
   it('initializes the enabled pilot before completing registration', async () => {

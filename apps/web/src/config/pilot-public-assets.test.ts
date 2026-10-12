@@ -110,14 +110,23 @@ describe('non-lab public assets gate', () => {
       /missing pinned fillers.*grid-filler-600x400-b\.png/
     );
   });
-  it('rejects merchant bytes disguised as a known filler', () => {
+  it('tolerates recompressed filler bytes when lab is disabled', () => {
+    // Hash-pinning is lab-only: a packaging step that recompresses
+    // PNGs must not fail unrelated non-lab builds. The name set,
+    // shape, and size checks still apply (see the tests around this
+    // one); nothing non-lab references filler bytes.
     const dir = root();
-    mkdirSync(join(dir, '__pilot/fillers'), { recursive: true });
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
     writeFileSync(
       join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
-      'merchant bytes'
+      'recompressed bytes'
     );
-    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+    expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /unapproved filler/
     );
   });

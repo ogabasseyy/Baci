@@ -101,7 +101,10 @@ jobs:
           # Fail closed: a detection failure must run the suites, never
           # skip them silently. The pilot patterns mirror the
           # pilot-owned tree, plus the pilot config modules the old
-          # paths filter missed (apps/web/src/config/pilot-*).
+          # paths filter missed (apps/web/src/config/pilot-*), plus the
+          # pilot-owned boot/build-gate and contract files outside that
+          # tree: without them a gate-only PR would skip both suites.
+          # Pinned by .github/scripts/pilot-change-detection-contract.test.mjs.
           if ! names=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename' 2>/dev/null); then
             echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
@@ -111,7 +114,7 @@ jobs:
             else
               echo 'transformer=false' >> "$GITHUB_OUTPUT"
             fi
-            if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^apps/web/src/schemas/merchant-image-variant-pilot|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$'; then
+            if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^apps/web/src/schemas/merchant-image-variant-pilot|^apps/web/src/instrumentation|^apps/web/next\.config\.ts$|^apps/web/src/components/storefront/product-card\.tsx$|^apps/web/src/lib/storefront-product-href\.ts$|^apps/web/package\.json$|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$'; then
               echo 'pilot=true' >> "$GITHUB_OUTPUT"
             else
               echo 'pilot=false' >> "$GITHUB_OUTPUT"

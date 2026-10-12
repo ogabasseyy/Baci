@@ -142,9 +142,11 @@ export async function reconcileStagedTree(input: {
 // binding, while verification only re-checks the expected stagedPaths.
 // Every file under originals/ and current generation dirs must be an
 // expected staged path; nested dirs, links, and special files refuse.
-// Stale generation dirs (previous runs, no current binding) stay
-// accepted: the startup guard serves them by design, and the next
-// stage reconciles them away.
+// Generation dirs with no current binding refuse too: the startup
+// guard serves every 64-hex directory by design, so a restored or
+// planted generation would otherwise leave unbound files reachable
+// through /__pilot with no traversal noticing. Stale dirs from a
+// crashed stage fail closed here with the re-stage fix.
 export async function assertNoUnexpectedStagedFiles(
   stagedPaths: readonly { path: string }[]
 ): Promise<void> {
@@ -211,5 +213,26 @@ export async function assertNoUnexpectedStagedFiles(
   await checkDir(join(realStage, 'originals'), 'originals');
   for (const dir of currentGenDirs) {
     await checkDir(dir, 'a current generation');
+  }
+  // Unreferenced generation dirs: current generations are the only
+  // ones with inventory bindings, so any other 64-hex directory —
+  // restored after staging, planted outright, or stale from a crashed
+  // stage — refuses instead of serving unbound files. A hex-named
+  // symlink refuses too: only real staged files build currentGenDirs,
+  // so a link name can never appear there.
+  const topEntries = await readdir(realStage, { withFileTypes: true }).catch(
+    () => null
+  );
+  if (topEntries) {
+    for (const entry of topEntries) {
+      if (!HEX64_PATTERN.test(entry.name)) {
+        continue;
+      }
+      if (!currentGenDirs.has(join(realStage, entry.name))) {
+        throw new Error(
+          `merchant image pilot: unreferenced generation directory "${entry.name}" — re-stage to reconcile`
+        );
+      }
+    }
   }
 }

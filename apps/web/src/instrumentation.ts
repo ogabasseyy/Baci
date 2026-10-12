@@ -65,7 +65,20 @@ export async function register() {
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'
       );
-      await initializeLabRuntime();
+      // Fail-loud, not fail-fatal (quiz gate below is the precedent):
+      // the lab is one feature and must not take the storefront down.
+      // A failed lab init logs loudly and skips the runtime publish,
+      // so lab routes fail closed while boot completes. The staged
+      // tree-shape assertion above stays fatal: it guards the static
+      // /__pilot namespace, which serves regardless of lab runtime.
+      try {
+        await initializeLabRuntime();
+      } catch (error) {
+        console.error(
+          'merchant image pilot: lab runtime initialization failed during boot; lab routes will fail closed',
+          error
+        );
+      }
     }
     // The Places Legacy routes must put the API key in the URL. Their fetch
     // calls opt out of @vercel/otel spans, so disable Next's separate fetch

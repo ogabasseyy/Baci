@@ -116,12 +116,21 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
           : 'non-lab public pilot tree contains a hardlinked filler'
       );
     }
+    // Hash-pinning is lab-only: the measurement grid compares against
+    // these exact bytes, but a packaging step that recompresses PNGs
+    // must not fail unrelated non-lab builds. Non-lab keeps the name
+    // set, shape, and size checks (nothing there references filler
+    // bytes, so recompressed fillers are harmless).
+    const hashMismatch =
+      labEnabled &&
+      createHash('sha256').update(readFileSync(path)).digest('hex') !==
+        expected;
     if (
       !expected ||
       !stat.isFile() ||
       stat.isSymbolicLink() ||
       stat.size > 2_000_000 ||
-      createHash('sha256').update(readFileSync(path)).digest('hex') !== expected
+      hashMismatch
     ) {
       throw new Error(
         labEnabled

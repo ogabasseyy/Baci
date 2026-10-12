@@ -212,20 +212,28 @@ describe('assertNoUnexpectedStagedFiles', () => {
     ).rejects.toThrow(/has no inventory binding/);
   });
 
-  it('rejects plants inside current generations but not stale ones', async () => {
+  it('rejects plants inside current generations', async () => {
     const pilotStage = await stageTree();
     await seedExpected(pilotStage);
     await writeFile(join(pilotStage, GEN, 'planted.avif'), 'evil');
     await expect(
       assertNoUnexpectedStagedFiles(staged(pilotStage))
     ).rejects.toThrow(/has no inventory binding/);
-    // Stale generation dirs (previous runs) stay accepted by design.
+  });
+
+  it('rejects generation dirs with no current binding', async () => {
+    // A stale, restored, or planted generation has no stagedPaths
+    // entries, so the per-file traversal never visits it — but the
+    // startup guard serves every 64-hex directory. The top-level
+    // enumeration closes that gap with the re-stage fix.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
     const stale = join(pilotStage, 'b'.repeat(64));
     await mkdir(stale, { recursive: true });
     await writeFile(join(stale, 'old.avif'), 'stale');
     await expect(
       assertNoUnexpectedStagedFiles(staged(pilotStage))
-    ).rejects.toThrow(/planted\.avif/);
+    ).rejects.toThrow(/unreferenced generation directory/);
   });
 
   it('rejects nested dirs, links, and special files', async () => {

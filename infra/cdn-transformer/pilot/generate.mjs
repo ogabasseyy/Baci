@@ -72,6 +72,11 @@ export async function runPilotGeneration({
   minFreeBytes,
   outputRoot,
 }) {
+  // Trust boundary: the inventory is trusted operator input. Record
+  // URLs are fetched from the operator workstation with only IP-literal
+  // SSRF guards (see fetch-policy.mjs) — plain hostnames resolve
+  // unchecked and DNS rebinding is out of scope. Never feed a
+  // merchant/CDN export here without reviewing every URL first.
   const floor = parseMinFreeBytes(minFreeBytes) ?? MIN_FREE_BYTES;
   const jobs = await readInventoryJobs(inventoryPath).catch((error) => {
     throw new PilotGenerateError('inventory-invalid', error.message);

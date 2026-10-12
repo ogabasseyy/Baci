@@ -102,6 +102,10 @@ export function projectHistoryTransaction({
   const {
     metadata: transactionMetadata,
     transaction_id: _transactionId,
+    // Internal refund inputs: selected for the projection below, never
+    // part of the customer-facing response contract.
+    source: _source,
+    customer_id: _customerId,
     ...publicTransaction
   } = transaction;
   const dataPlanCode = extractMetadataField(

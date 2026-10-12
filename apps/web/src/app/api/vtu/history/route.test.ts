@@ -955,6 +955,9 @@ describe('GET /api/vtu/history', () => {
         refunded_to_wallet: null,
       }),
     ]);
+    // The refund inputs that decided pending stay out of the response.
+    expect(data.transactions[0]).not.toHaveProperty('source');
+    expect(data.transactions[0]).not.toHaveProperty('customer_id');
   });
 
   it('never flags successful or non-checkout rows as refund-pending', async () => {

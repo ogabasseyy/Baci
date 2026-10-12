@@ -29,12 +29,15 @@ describe('vtu-history-transaction-projection', () => {
   it('strips internals and coerces numerics', () => {
     const projected = projectHistoryTransaction({
       paymentStatusByReference: new Map(),
-      transaction: row(),
+      transaction: row({ source: 'checkout', customer_id: 'customer-1' }),
       voucherPin: null,
     });
 
     expect(projected.transaction_id).toBeUndefined();
     expect(projected.metadata).toBeUndefined();
+    // Refund inputs stay private to the projection (no UUID/source leak).
+    expect(projected.source).toBeUndefined();
+    expect(projected.customer_id).toBeUndefined();
     expect(projected.amount).toBe(500);
     expect(projected.customer_cashback).toBe(25);
     expect(projected.type).toBe('airtime');

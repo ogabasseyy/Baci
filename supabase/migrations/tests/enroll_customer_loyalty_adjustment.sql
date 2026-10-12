@@ -267,3 +267,32 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000016'),
   'rejected out-of-range adjustment mutated state'
 );
+
+-- 31c. A negative first adjustment rejects without creating
+-- membership: the zero-balance row must not commit alongside the
+-- negative_balance failure, or signup and referral bonuses for this
+-- customer are blocked forever. (Fresh member 025; this file runs last.)
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES (
+  '01aa0000-0000-4000-8000-000000000025',
+  '01aa0000-0000-4000-8000-000000000001',
+  'debit-first@example.com'
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'negative_balance'
+   FROM public.adjust_loyalty_points(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000025',
+     -50, NULL, 'adjust'
+   ) AS result)
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000025'
+  ),
+  'rejected first debit created a membership row'
+);

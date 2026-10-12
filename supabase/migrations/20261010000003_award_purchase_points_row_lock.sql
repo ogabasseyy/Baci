@@ -91,12 +91,15 @@ BEGIN
         END LOOP;
     END IF;
 
-    -- Get tier multiplier
-    SELECT (tier->>'multiplier')::DECIMAL INTO v_multiplier
-    FROM (
-        SELECT jsonb_array_elements(v_settings.tiers) as tier
-    ) t
-    WHERE tier->>'name' = v_loyalty.current_tier;
+    -- Get tier multiplier (array containers only: a malformed object or
+    -- scalar falls back to 1.0 instead of raising, like the tier guard).
+    IF jsonb_typeof(v_settings.tiers) = 'array' THEN
+        SELECT (tier->>'multiplier')::DECIMAL INTO v_multiplier
+        FROM (
+            SELECT jsonb_array_elements(v_settings.tiers) as tier
+        ) t
+        WHERE tier->>'name' = v_loyalty.current_tier;
+    END IF;
 
     v_multiplier := COALESCE(v_multiplier, 1.0);
 

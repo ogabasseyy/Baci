@@ -26,7 +26,10 @@ BEGIN
     FROM public.loyalty_settings
     WHERE merchant_id = p_merchant_id;
 
-    IF v_tiers IS NULL THEN
+    -- Malformed containers (object/scalar: the settings field persists
+    -- without schema validation) fall back like NULL instead of raising
+    -- inside jsonb_array_elements and failing every tier call.
+    IF v_tiers IS NULL OR jsonb_typeof(v_tiers) <> 'array' THEN
         RETURN 'Bronze';
     END IF;
 

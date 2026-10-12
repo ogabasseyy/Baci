@@ -231,15 +231,55 @@ SELECT pg_temp.assert_true(
   'loyalty checkout bridge grants are incorrect'
 );
 
--- The checkout lookup index normalizes case like the resolver: a plain
--- (merchant_id, discount_code) index cannot serve the
--- upper(discount_code) predicate and would scan the merchant's
--- redemption rows per validation and checkout.
+-- The checkout lookup index normalizes case like the resolver and is
+-- merchant-scoped unique: a plain (merchant_id, discount_code) index
+-- could serve only the merchant prefix, and without uniqueness the
+-- resolver's LIMIT 1 could straddle two same-code redemptions.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_indexdef(
     'public.loyalty_redemption_checkout_code_idx'::pg_catalog.regclass
-  ) LIKE '%upper(%discount_code%)%',
-  'checkout code index does not normalize case'
+  ) LIKE 'CREATE UNIQUE INDEX%upper(%discount_code%)%',
+  'checkout code index is not unique or does not normalize case'
+);
+
+-- A duplicate code (even in another case) is rejected, so checkout can
+-- never resolve the wrong redemption.
+DO $dup$
+BEGIN
+  INSERT INTO public.reward_redemptions (
+    merchant_id, customer_id, reward_id, points_spent,
+    reward_type, discount_code
+  ) VALUES (
+    '01aa0000-0000-4000-8000-000000000001',
+    '01aa0000-0000-4000-8000-000000000024',
+    (SELECT id FROM public.loyalty_rewards
+     WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+       AND name = 'Bridge percent'),
+    100, 'discount_percentage',
+    lower((SELECT discount_code FROM public.reward_redemptions
+     WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+       AND customer_id = '01aa0000-0000-4000-8000-000000000024'
+       AND reward_id = (
+         SELECT id FROM public.loyalty_rewards
+         WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+           AND name = 'Bridge fixed')))
+  );
+  RAISE EXCEPTION 'duplicate redemption code was accepted';
+EXCEPTION WHEN unique_violation THEN
+  -- Expected: the unique code index rejected the duplicate.
+END;
+$dup$;
+
+-- The redeem RPC retries code generation on that constraint (probe +
+-- insert-retry like the referral path) instead of surfacing a 500.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%redemption_code_collision%'
+  AND pg_catalog.pg_get_functiondef(
+    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%EXCEPTION WHEN unique_violation%',
+  'redeem does not retry code collisions'
 );
 
 -- The order wrapper locks the reward policy row and re-reads it: FOR

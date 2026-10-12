@@ -79,6 +79,13 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN
+    -- A negative first adjustment can never succeed (0 + negative is
+    -- below zero), so reject before inserting: creating the row first
+    -- would commit a membership the failure return cannot roll back,
+    -- blocking later signup and referral bonuses.
+    IF p_points < 0 THEN
+      RETURN jsonb_build_object('success', false, 'error', 'negative_balance');
+    END IF;
     -- First award creates the row, retrying referral-code collisions
     -- like the enrollment RPC. On a unique violation the row is
     -- re-read: a concurrent writer that bypassed the advisory lock may

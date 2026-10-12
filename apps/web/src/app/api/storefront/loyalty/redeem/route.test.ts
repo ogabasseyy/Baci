@@ -279,4 +279,21 @@ describe('POST /api/storefront/loyalty/redeem', () => {
       error: 'Redemption limit reached for this reward',
     });
   });
+
+  it('maps redemption_code_collision to 503', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: { success: false, error: 'redemption_code_collision' },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+
+    expect(response.status).toBe(503);
+  });
 });

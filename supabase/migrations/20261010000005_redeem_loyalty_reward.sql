@@ -1,24 +1,13 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
 --
--- POST /api/storefront/loyalty/redeem was written against columns that do
--- not exist (loyalty_rewards.discount_value / discount_type /
--- points_required / min_tier / active, customer_loyalty.tier,
--- reward_redemptions.status, points_transactions.reference_id), had no
--- ownership check, and cannot touch the merchant-only RLS tables with a
--- customer session anyway — so every redemption 404'd or 500'd while the
--- status route advertises redeemable rewards.
---
--- This SECURITY DEFINER RPC performs the whole redemption in one
--- transaction against the real schema (baseline 20260418000000):
--- expiry reconciliation, availability (enabled, dates, finite stock with
--- atomic decrement, supported reward types), per-customer usage cap,
--- program minimum redemption amount, valued-reward guard, store_credit
--- fulfillment, balance check, redemption insert, points deduction, and
--- ledger row.
--- The caller must own the customer row (customers.user_id = auth.uid()).
--- Drop the 3-arg signature: the idempotency key below changes the
--- argument list, and CREATE OR REPLACE would otherwise leave the old
--- overload behind.
+-- SECURITY DEFINER RPC performing the whole redemption in one
+-- transaction: expiry reconciliation, availability (enabled, dates,
+-- finite stock, supported types), usage cap, program minimum,
+-- valued-reward guard, store_credit fulfillment, balance check,
+-- unique-code mint, deduction, and ledger row. The caller must own the
+-- customer row (customers.user_id = auth.uid()). Drop the 3-arg
+-- signature: the idempotency key changes the argument list, and
+-- CREATE OR REPLACE would leave the old overload behind.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
@@ -38,6 +27,7 @@ DECLARE
   v_balance integer := 0;
   v_reward record;
   v_new_balance integer := 0;
+  v_attempt integer := 0;
   v_redemption_id uuid;
   v_redemption_code text;
   v_expires_at timestamptz;
@@ -46,6 +36,33 @@ DECLARE
   v_replay jsonb := NULL;
   v_response jsonb := NULL;
 BEGIN
+  IF p_merchant_id IS NULL OR p_customer_id IS NULL OR p_reward_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
+  END IF;
+
+  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
+  FROM public.loyalty_settings
+  WHERE merchant_id = p_merchant_id;
+
+  IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
+    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
+  END IF;
+
+  -- Existence, liveness, and ownership in one predicate (see enrollment).
+  -- Runs before the replay lookup below: the stored success carries the
+  -- redemption code, and returning it before this check would expose it
+  -- to any authenticated caller who presents the key with matching IDs.
+  PERFORM 1
+  FROM public.customers
+  WHERE id = p_customer_id
+    AND merchant_id = p_merchant_id
+    AND deleted_at IS NULL
+    AND user_id = auth.uid();
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
+  END IF;
+
   -- Idempotency: a client retry replays the stored success instead of
   -- minting a second redemption. The key lock serializes concurrent
   -- same-key retries so the loser replays the winner (no orphans).
@@ -63,30 +80,6 @@ BEGIN
     END IF;
   END IF;
 
-  IF p_merchant_id IS NULL OR p_customer_id IS NULL OR p_reward_id IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
-  END IF;
-
-  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
-  FROM public.loyalty_settings
-  WHERE merchant_id = p_merchant_id;
-
-  IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
-    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
-  END IF;
-
-  -- Existence, liveness, and ownership in one predicate (see enrollment).
-  PERFORM 1
-  FROM public.customers
-  WHERE id = p_customer_id
-    AND merchant_id = p_merchant_id
-    AND deleted_at IS NULL
-    AND user_id = auth.uid();
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
-  END IF;
-
   -- Lock the member row: concurrent redemptions must serialize on the
   -- balance check below instead of double-spending.
   SELECT id, COALESCE(points_balance, 0)
@@ -100,14 +93,9 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'not_enrolled');
   END IF;
 
-  -- Reconcile expired purchase credits before the balance check: award
-  -- stamps expires_at on earn transactions but nothing ever subtracts
-  -- them, so without this expired points stay spendable forever. Only
-  -- each expired lot's unspent remainder is deducted (FIFO: spends
-  -- consume the oldest lots first), so partly-spent lots and newer
-  -- permanent points survive. The member-row lock above serializes
-  -- concurrent redemptions, so a second redeem sees expired = true
-  -- already committed and cannot double-count.
+  -- Reconcile expired purchase credits first (FIFO unspent remainder
+  -- only): without this expired points stay spendable, and the
+  -- member-row lock keeps concurrent redeems from double-counting.
   v_expired_points := public.calculate_unspent_expired_points(
     p_merchant_id, p_customer_id
   );
@@ -165,11 +153,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Per-customer usage cap: without this a limit-1 reward is redeemable
-  -- repeatedly and only global stock bounds it. Every row counts,
-  -- including codes that expire unused: points are deducted at redeem
-  -- time with no refund-on-expiry flow, so the cap counts purchases,
-  -- not checkout uses.
+  -- Per-customer usage cap counts purchases, not checkout uses: points
+  -- deduct at redeem time with no refund-on-expiry flow.
   IF v_reward.usage_limit_per_customer IS NOT NULL THEN
     SELECT COUNT(*) INTO v_redemption_count
     FROM public.reward_redemptions
@@ -181,11 +166,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- Program minimum: the dashboard's "Minimum Redemption Points" is the
-  -- smallest single redemption the merchant allows (a 100-point reward
-  -- cannot be redeemed when the minimum is 500, even with a 600-point
-  -- balance). Matches the sibling redeem_loyalty_points / redeem_points
-  -- contracts, which compare the requested amount, not the balance.
+  -- Program minimum compares the requested cost, not the balance
+  -- (matches the sibling redeem contracts).
   IF v_minimum IS NOT NULL AND v_minimum > 0
      AND v_reward.points_cost < v_minimum THEN
     RETURN jsonb_build_object(
@@ -197,13 +179,9 @@ BEGIN
     );
   END IF;
 
-  -- Valued rewards must carry a positive value: store_credit credits the
-  -- customer balance below, and discount_fixed / discount_percentage
-  -- redemptions advertise the value at checkout, so a missing or
-  -- non-positive value is a misconfigured reward, failed closed here
-  -- before any write (stock, redemption, deduction). Plain 'discount'
-  -- rewards without a value stay redeemable: the catalog renders them
-  -- with a zero label and the suite pins that behavior.
+  -- Valued rewards must carry a positive value (misconfigured
+  -- otherwise, failed closed before any write). Plain 'discount'
+  -- rewards without a value stay redeemable (zero label in catalog).
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
@@ -211,12 +189,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit cannot be honored: redemption carries no
-  -- order context and the credit lands in an unconditional balance, so
-  -- a minimum_order_amount promise is unenforceable here. Fail closed
-  -- instead of issuing credit without the required purchase. (Code-type
-  -- minimums ride with the checkout bridge: discount_codes carry
-  -- minimum_purchase_amount natively.)
+  -- Minimum-gated store credit cannot be honored (no order context at
+  -- redeem time), so fail closed instead of issuing it unconditionally.
   IF v_reward.reward_type = 'store_credit'
      AND v_reward.minimum_order_amount IS NOT NULL
      AND v_reward.minimum_order_amount > 0 THEN
@@ -233,7 +207,6 @@ BEGIN
   END IF;
 
   v_new_balance := v_balance - v_reward.points_cost;
-  v_redemption_code := 'RDM-' || pg_catalog.upper(pg_catalog.substring(pg_catalog.md5(pg_catalog.random()::text || pg_catalog.clock_timestamp()::text), 1, 12));
   v_expires_at := pg_catalog.now() + interval '30 days';
 
   IF v_reward.stock_quantity IS NOT NULL THEN
@@ -243,14 +216,35 @@ BEGIN
     WHERE id = p_reward_id;
   END IF;
 
-  INSERT INTO public.reward_redemptions (
-    merchant_id, customer_id, reward_id, points_spent,
-    reward_type, reward_value, discount_code, expires_at
-  ) VALUES (
-    p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
-    v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at
-  )
-  RETURNING id INTO v_redemption_id;
+  -- Mint a merchant-unique code (probe + insert-retry like the referral
+  -- path): without the retry a 12-hex collision would resolve the wrong
+  -- redemption at checkout.
+  LOOP
+    v_attempt := v_attempt + 1;
+    v_redemption_code := 'RDM-' || pg_catalog.upper(pg_catalog.substring(pg_catalog.md5(pg_catalog.random()::text || pg_catalog.clock_timestamp()::text), 1, 12));
+    IF NOT EXISTS (
+      SELECT 1 FROM public.reward_redemptions
+      WHERE merchant_id = p_merchant_id
+        AND pg_catalog.upper(discount_code) = v_redemption_code
+    ) THEN
+      BEGIN
+        INSERT INTO public.reward_redemptions (
+          merchant_id, customer_id, reward_id, points_spent,
+          reward_type, reward_value, discount_code, expires_at
+        ) VALUES (
+          p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
+          v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at
+        )
+        RETURNING id INTO v_redemption_id;
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        -- Concurrent mint collision on the code index: mint again below.
+      END;
+    END IF;
+    IF v_attempt >= 5 THEN
+      RETURN jsonb_build_object('success', false, 'error', 'redemption_code_collision');
+    END IF;
+  END LOOP;
 
   -- store_credit fulfillment: credit the spendable customer balance in
   -- the same transaction (row locked: concurrent credits serialize).

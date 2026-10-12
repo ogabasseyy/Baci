@@ -132,3 +132,48 @@ SELECT pg_temp.assert_true(
   ) LIKE '%FOR UPDATE%',
   'manual adjustments lost the member-row lock'
 );
+
+-- 5g. Malformed tier containers (object/scalar: the settings field
+-- persists without schema validation) fall back to Bronze instead of
+-- raising inside jsonb_array_elements and failing the award. (Case 5e
+-- leaves the currency divisor NULL, so restore it here.)
+UPDATE public.loyalty_settings
+SET tiers = '{"Silver": 100}'::jsonb, points_currency_unit = 100
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '02aa0000-0000-4000-8000-000000000011',
+    '02aa0000-0000-4000-8000-000000000001',
+    '02aa0000-0000-4000-8000-0000000000a4',
+    10000
+  ) = 100
+  AND (SELECT current_tier = 'Bronze'
+   FROM public.customer_loyalty
+   WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '02aa0000-0000-4000-8000-000000000011'),
+  'object tier container broke the purchase award'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT current_tier = 'Bronze'
+   FROM public.customer_loyalty
+   WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '02aa0000-0000-4000-8000-000000000011'),
+  'DBG object tiers: tier half failed'
+);
+
+UPDATE public.loyalty_settings
+SET tiers = '"just-a-string"'::jsonb
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    5000, '02aa0000-0000-4000-8000-000000000001'
+  ) = 'Bronze',
+  'scalar tier container did not fall back to Bronze'
+);
+
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';

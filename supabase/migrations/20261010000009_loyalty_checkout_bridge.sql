@@ -10,10 +10,12 @@
 -- codes stay outside the online bridge: they have no discount amount
 -- to apply and are honored through manual/fulfillment channels.
 -- Minimums on code types ARE honored here against the DB subtotal.
--- Expression index: the resolver compares upper(discount_code), so a
--- plain (merchant_id, discount_code) index could serve only the merchant
--- prefix and would scan that merchant's redemption rows per lookup.
-CREATE INDEX IF NOT EXISTS loyalty_redemption_checkout_code_idx
+-- Merchant-scoped case-insensitive code uniqueness, doubling as the
+-- checkout lookup index: the resolver compares upper(discount_code),
+-- so a plain (merchant_id, discount_code) index could serve only the
+-- merchant prefix and would scan that merchant's redemption rows per
+-- lookup. The redeem RPC retries code generation on this constraint.
+CREATE UNIQUE INDEX IF NOT EXISTS loyalty_redemption_checkout_code_idx
   ON public.reward_redemptions(merchant_id, pg_catalog.upper(discount_code));
 
 -- Resolve a loyalty code for checkout. Read-only; the order wrapper

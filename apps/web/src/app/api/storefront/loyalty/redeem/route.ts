@@ -30,6 +30,7 @@ const RPC_ERROR_STATUS: Record<string, number> = {
   invalid_input: 400,
   idempotency_key_mismatch: 400,
   idempotency_key_reused: 409,
+  redemption_code_collision: 503,
 };
 
 const UUID_PATTERN =
@@ -47,6 +48,8 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   idempotency_key_mismatch: 'Idempotency-Key does not belong to this customer',
   idempotency_key_reused:
     'Idempotency-Key already used for a different reward. Generate a fresh key for the new redemption.',
+  redemption_code_collision:
+    'Could not generate a redemption code. Please retry.',
 };
 
 function getRedemptionInstructions(
@@ -80,9 +83,7 @@ function getRedemptionInstructions(
         { maximumFractionDigits: 0 }
       )} off your order.`;
     case 'free_shipping':
-      // Manual fulfillment like free_product: the checkout bridge only
-      // accepts discount codes, so promising an online checkout path
-      // would issue a code the wrapper must reject as not_applicable.
+      // Manual fulfillment: the checkout bridge accepts discount codes only.
       return 'Present this code to receive free shipping on your order. Contact the store for details.';
     case 'free_product':
       return 'Present this code to claim your free product. Contact the store for details.';
@@ -95,13 +96,9 @@ function getRedemptionInstructions(
   }
 }
 
-// POST - Redeem a reward.
-//
-// The caller must own the customer row; the redeem_loyalty_reward RPC
-// re-verifies ownership and performs availability, balance, redemption,
-// deduction, and ledger writes atomically (the loyalty tables are
-// merchant-only under RLS, so the route cannot read them directly).
-// The response shape is kept stable for the use-loyalty.ts redeem caller.
+// POST - Redeem a reward. The RPC re-verifies ownership and redeems
+// atomically (loyalty tables are merchant-only under RLS); the response
+// shape is kept stable for the use-loyalty.ts redeem caller.
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();

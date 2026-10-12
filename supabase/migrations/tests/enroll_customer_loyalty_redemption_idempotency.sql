@@ -93,8 +93,8 @@ SELECT pg_temp.assert_true(
   'key reuse with a different reward was not rejected cleanly'
 );
 
--- 23c. A key replayed by a different customer is rejected before any
--- other check (the replay guard precedes ownership).
+-- 23c. A key replayed with mismatched IDs is rejected: ownership
+-- passes for the caller's own customer, then the replay guard mismatches.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
 
 SELECT pg_temp.assert_true(
@@ -223,4 +223,25 @@ SELECT pg_temp.assert_true(
     'public.loyalty_redemption_idempotency_keys_reward_idx'::pg_catalog.regclass
   ) LIKE '%(reward_id)%',
   'idempotency foreign keys lack covering indexes'
+);
+
+-- 23f. Ownership precedes the replay lookup: a caller presenting
+-- another customer's key with matching IDs gets customer_not_found,
+-- not the stored success — the replayed code must never leak across
+-- customers. (Pre-fix this returned 024's success to 105's session.)
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'customer_not_found'
+     AND result ->> 'redemption_code' IS NULL
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000024',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Too pricey'),
+     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+   ) AS result),
+  'cross-customer replay leaked the stored code'
 );

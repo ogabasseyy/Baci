@@ -151,7 +151,6 @@ export default function SearchScreen() {
     loadMore,
     products,
     refetch: refetchProducts,
-    total: totalCount,
   } = useProducts({
     search: hasSearchQuery ? debouncedQuery : undefined,
     limit: 20,
@@ -291,7 +290,6 @@ export default function SearchScreen() {
         showMinLengthHint={showSearchMinLengthHint}
         selectedCategory={selectedCategory}
         selectedCondition={selectedCondition}
-        totalCount={totalCount}
         viewMode={viewMode}
       />
     </>

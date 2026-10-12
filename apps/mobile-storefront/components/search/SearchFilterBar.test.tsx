@@ -88,8 +88,21 @@ describe('Search filter sheets', () => {
     expect(sheet.props.android_keyboardInputMode).toBe('adjustResize');
     const backdrop = sheet.props.backdropComponent({});
     expect(backdrop.props.pressBehavior).toBe('close');
-    act(() => backdrop.props.onPress());
+    // The backdrop carries no onPress of its own: pressBehavior="close"
+    // drives the sheet's onClose, which commits the draft exactly once.
+    expect(backdrop.props.onPress).toBeUndefined();
+    act(() => {
+      sheet.props.onClose();
+    });
     expect(props.onPriceChange).toHaveBeenCalledWith(0, 900000);
     expect(screen.queryByLabelText('Max')).toBeNull();
+  });
+  it('orders an inverted price draft before committing', () => {
+    render(<SearchFilterBar {...props} />);
+    fireEvent.press(screen.getByRole('button', { name: 'Price' }));
+    fireEvent.changeText(screen.getByLabelText('Min'), '900000');
+    fireEvent.changeText(screen.getByLabelText('Max'), '100000');
+    fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    expect(props.onPriceChange).toHaveBeenCalledWith(100000, 900000);
   });
 });

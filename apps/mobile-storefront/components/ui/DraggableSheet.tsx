@@ -4,7 +4,7 @@ import BottomSheet, {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import Feather from '@react-native-vector-icons/feather';
-import type { ReactNode } from 'react';
+import { type ReactNode, useCallback } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,10 @@ interface DraggableSheetProps {
   children: ReactNode;
 }
 
+// Hoisted so the sheet config keeps a stable identity while mounted;
+// recreating snap points per render can desync bottom-sheet gestures.
+const SHEET_SNAP_POINTS = ['45%', '80%'];
+
 export function DraggableSheet({
   visible,
   title,
@@ -27,14 +31,18 @@ export function DraggableSheet({
 }: DraggableSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const backdrop = (props: BottomSheetBackdropProps) => (
-    <BottomSheetBackdrop
-      {...props}
-      appearsOnIndex={0}
-      disappearsOnIndex={-1}
-      pressBehavior="close"
-      onPress={onClose}
-    />
+  // No onPress here: pressBehavior="close" already closes the sheet, which
+  // fires BottomSheet's onClose — an explicit onPress would invoke it twice.
+  const backdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
   );
   return (
     <Modal
@@ -48,7 +56,7 @@ export function DraggableSheet({
         {visible && (
           <BottomSheet
             index={0}
-            snapPoints={['45%', '80%']}
+            snapPoints={SHEET_SNAP_POINTS}
             enableDynamicSizing={false}
             enablePanDownToClose
             onClose={onClose}

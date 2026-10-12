@@ -35,6 +35,14 @@ function formatMaxPriceInput(value: number) {
   return value < MAX_PRICE_CEILING ? value.toString() : '';
 }
 
+/**
+ * Order a normalized (min, max) pair so the committed range is never
+ * inverted: both entered values are preserved, lowest first.
+ */
+function orderPriceRange(min: number, max: number): [number, number] {
+  return min <= max ? [min, max] : [max, min];
+}
+
 export function FilterPriceControls({
   minPrice,
   maxPrice,
@@ -64,8 +72,10 @@ export function FilterPriceControls({
   }
 
   const handlePriceBlur = () => {
-    const nextMinPrice = normalizePriceInput(tempMinPrice, 0);
-    const nextMaxPrice = normalizePriceInput(tempMaxPrice, MAX_PRICE_CEILING);
+    const [nextMinPrice, nextMaxPrice] = orderPriceRange(
+      normalizePriceInput(tempMinPrice, 0),
+      normalizePriceInput(tempMaxPrice, MAX_PRICE_CEILING)
+    );
 
     setTempMinPrice(formatMinPriceInput(nextMinPrice));
     setTempMaxPrice(formatMaxPriceInput(nextMaxPrice));
@@ -82,10 +92,11 @@ export function FilterPriceControls({
             value={tempMinPrice}
             onChangeText={(value) => {
               setTempMinPrice(value);
-              onPriceDraftChange?.(
+              const [draftMin, draftMax] = orderPriceRange(
                 normalizePriceInput(value, 0),
                 normalizePriceInput(tempMaxPrice, MAX_PRICE_CEILING)
               );
+              onPriceDraftChange?.(draftMin, draftMax);
             }}
             role="spinbutton"
             accessibilityLabel="Min"
@@ -103,10 +114,11 @@ export function FilterPriceControls({
             value={tempMaxPrice}
             onChangeText={(value) => {
               setTempMaxPrice(value);
-              onPriceDraftChange?.(
+              const [draftMin, draftMax] = orderPriceRange(
                 normalizePriceInput(tempMinPrice, 0),
                 normalizePriceInput(value, MAX_PRICE_CEILING)
               );
+              onPriceDraftChange?.(draftMin, draftMax);
             }}
             role="spinbutton"
             accessibilityLabel="Max"

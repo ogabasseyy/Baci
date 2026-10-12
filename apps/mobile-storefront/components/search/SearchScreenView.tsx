@@ -67,8 +67,6 @@ interface SearchScreenViewProps {
   showMinLengthHint?: boolean;
   selectedCategory: string;
   selectedCondition: string;
-  /** Total matches reported by the search backend. */
-  totalCount: number;
   viewMode: 'grid' | 'list';
 }
 
@@ -111,7 +109,6 @@ export default function SearchScreenView({
   selectedCategory,
   selectedCondition,
   showMinLengthHint = false,
-  totalCount,
   viewMode,
 }: SearchScreenViewProps) {
   const renderResults = () => {
@@ -190,7 +187,6 @@ export default function SearchScreenView({
     return (
       <SearchResultsList
         colors={colors}
-        committedQuery={committedQuery}
         isLoadingMore={isLoadingMore}
         isNextPageError={isNextPageError}
         isRetrying={isRetrying}
@@ -201,7 +197,6 @@ export default function SearchScreenView({
         onRetryNextPage={onRetryNextPage}
         products={products}
         resultsKey={resultsKey}
-        totalCount={totalCount}
       />
     );
   };

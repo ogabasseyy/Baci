@@ -7,7 +7,6 @@ import styles from './search-screen.styles';
 
 interface SearchResultsListProps {
   colors: (typeof Colors)['light'];
-  committedQuery: string;
   isLoadingMore: boolean;
   /** True when the footer error came from a next-page fetch (not a refetch). */
   isNextPageError: boolean;
@@ -28,7 +27,6 @@ interface SearchResultsListProps {
    * inheriting a previous query's scroll offset.
    */
   resultsKey: string;
-  totalCount: number;
 }
 
 export default function SearchResultsList({

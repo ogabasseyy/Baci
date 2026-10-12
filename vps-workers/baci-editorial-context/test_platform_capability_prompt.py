@@ -8,10 +8,13 @@ from unittest.mock import patch
 
 try:
     from codex_content_agent.prompt_builder import build_prompt
-    from codex_content_agent.platform_capabilities import capability_context
 except ImportError:  # In-repo checkout without the VPS writer package.
     build_prompt = None
     capability_context = None
+else:
+    # The writer package exists, so a missing/broken capability helper must
+    # fail this suite rather than silently skip the integration checks.
+    from codex_content_agent.platform_capabilities import capability_context
 
 
 @unittest.skipUnless(build_prompt is not None, "requires the VPS writer checkout (codex_content_agent)")

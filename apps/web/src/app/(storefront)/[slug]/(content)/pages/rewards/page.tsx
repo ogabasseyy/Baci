@@ -61,16 +61,28 @@ export default function RewardsPage() {
   // so the previous shopper's data never paints.
   const identity = `${merchantId ?? ''}:${customerId ?? ''}`;
   const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
-  // Mark loaded only on a true->false edge: a same-flush effect order
-  // could otherwise stamp the new identity while loading still shows
-  // the previous settled value, flashing stale shopper data.
-  // Assume in-flight until proven otherwise (the hook boots loading,
-  // and test doubles start settled): only a true->false edge stamps.
+  // Mark loaded only on a true->false edge, and never on the
+  // identity-change commit itself: the hook's data and loading still
+  // describe the previous identity there, so stamping would flash
+  // stale shopper data. Synchronous preview/demo loads settle inside
+  // the hook's effect (declared above) without a loading edge; the
+  // follow-up render carries the new identity's data with loading
+  // false, and the tracker reset lets that render stamp instead of
+  // leaving the skeleton up forever.
   const wasLoading = useRef(true);
+  const seenIdentity = useRef(identity);
+  // No dep array: the follow-up render that carries a synchronous
+  // load's data changes neither identity nor loading, so the stamp
+  // check must run on every commit.
   useEffect(() => {
+    if (seenIdentity.current !== identity) {
+      seenIdentity.current = identity;
+      wasLoading.current = true;
+      return;
+    }
     if (wasLoading.current && !loading) setLoadedIdentity(identity);
     wasLoading.current = loading;
-  }, [identity, loading]);
+  });
   // No loading term: same-identity refetches keep content (dialog
   // survives), while a new identity skeletons on the very first render.
   const showSkeleton = loadedIdentity !== identity;

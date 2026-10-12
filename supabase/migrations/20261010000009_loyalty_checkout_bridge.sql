@@ -32,6 +32,7 @@ CREATE OR REPLACE FUNCTION public.get_loyalty_redemption_for_checkout(
   minimum_order_amount numeric,
   expires_at timestamptz,
   used boolean,
+  issuance_currency text,
   reward_name text
 )
 -- Snapshot-governed: issued codes never consult the live reward row, so
@@ -66,6 +67,7 @@ BEGIN
     -- cancelled is terminal so the read cannot stale). The wrapper
     -- re-verifies under lock before claiming.
     COALESCE(rr.used, false) AND o.shipping_status IS DISTINCT FROM 'cancelled',
+    rr.issuance_currency,
     rw.name::text
   FROM public.reward_redemptions rr
   LEFT JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
@@ -117,6 +119,7 @@ DECLARE
   v_now         timestamptz := pg_catalog.now();
   v_expected    numeric;
   v_claim_order_status text;
+  v_order_currency text;
 BEGIN
   IF p_loyalty_redemption_id IS NULL THEN
     RAISE EXCEPTION 'loyalty_redemption_required';
@@ -146,7 +149,7 @@ BEGIN
   SELECT
     rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
-    rr.used_on_order_id,
+    rr.used_on_order_id, rr.issuance_currency,
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount)
       AS minimum_order_amount
   INTO v_redemption
@@ -220,6 +223,22 @@ BEGIN
   IF v_redemption.minimum_order_amount IS NOT NULL
      AND v_order.subtotal < v_redemption.minimum_order_amount THEN
     RAISE EXCEPTION 'minimum_purchase_not_met'; END IF;
+
+  -- Fixed codes are denominated in their issuance currency (stamped at
+  -- mint): a later merchant currency change must not re-denominate a
+  -- paid code against this order's currency. Percentage codes scale
+  -- with the subtotal and stay currency-agnostic; unstamped rows
+  -- (pre-snapshot mints) keep the legacy behavior.
+  IF v_redemption.reward_type IN ('discount', 'discount_fixed')
+     AND v_redemption.issuance_currency IS NOT NULL THEN
+    SELECT o.currency INTO v_order_currency
+    FROM public.orders o
+    WHERE o.id = v_order.id;
+    IF pg_catalog.upper(COALESCE(v_order_currency, '')) IS DISTINCT FROM
+       pg_catalog.upper(v_redemption.issuance_currency) THEN
+      RAISE EXCEPTION 'loyalty_code_currency_mismatch';
+    END IF;
+  END IF;
 
   -- Two-sided amount validation against the AUTHORITATIVE subtotal
   -- (mirror the discount wrapper; plain discounts are fixed by

@@ -13,11 +13,24 @@ const ROW = {
   minimum_order_amount: null,
   expires_at: null,
   used: false,
+  issuance_currency: 'NGN',
   reward_name: 'Probe reward',
 };
 
-function clientWith(rpcImpl: () => unknown): SupabaseClient {
-  return { rpc: vi.fn(async () => rpcImpl()) } as unknown as SupabaseClient;
+function clientWith(
+  rpcImpl: () => unknown,
+  merchantRow: unknown = { country: 'NG', payout_currency: 'NGN' }
+): SupabaseClient {
+  return {
+    rpc: vi.fn(async () => rpcImpl()),
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({ data: merchantRow, error: null })),
+        })),
+      })),
+    })),
+  } as unknown as SupabaseClient;
 }
 
 describe('resolveLoyaltyCheckoutCode', () => {
@@ -85,6 +98,51 @@ describe('resolveLoyaltyCheckoutCode', () => {
       })),
       merchantId: 'm',
       code: 'RDM-USED',
+    });
+
+    expect(resolution.ok).toBe(true);
+  });
+
+  it('rejects a fixed code whose issuance currency no longer matches', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({ data: [ROW], error: null }), {
+        country: 'US',
+        payout_currency: 'USD',
+      }),
+      merchantId: 'm',
+      code: 'RDM-ABCDEF12',
+    });
+
+    expect(resolution.ok).toBe(false);
+    if (!resolution.ok) {
+      expect(resolution.response.status).toBe(400);
+      expect(await resolution.response.json()).toMatchObject({
+        code: 'discount_code_invalid',
+      });
+    }
+  });
+
+  it('keeps percentage codes currency-agnostic after a currency change', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(
+        () => ({
+          data: [{ ...ROW, reward_type: 'discount_percentage' }],
+          error: null,
+        }),
+        { country: 'US', payout_currency: 'USD' }
+      ),
+      merchantId: 'm',
+      code: 'RDM-PCT',
+    });
+
+    expect(resolution.ok).toBe(true);
+  });
+
+  it('lets the wrapper decide when the merchant lookup finds no row', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({ data: [ROW], error: null }), null),
+      merchantId: 'm',
+      code: 'RDM-ABCDEF12',
     });
 
     expect(resolution.ok).toBe(true);

@@ -47,3 +47,51 @@ SELECT pg_temp.assert_true(
      AND value ->> 'description' = 'Redeemed: Old receipt perk'),
   'unused receipt fell out of the history window'
 );
+
+-- 34. Store-credit receipts hide the minted code: the value lands in
+-- the wallet at redeem, so the code is never presentable. The discount
+-- receipt above keeps its recovery code.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Wallet credit perk', 100,
+  'store_credit', 250, true
+);
+
+UPDATE public.customer_loyalty SET points_balance = 500
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';
+
+SELECT public.redeem_loyalty_reward(
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012',
+  (SELECT id FROM public.loyalty_rewards
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND name = 'Wallet credit perk')
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT count(*) = 1
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'transactions') AS value
+   WHERE value ->> 'type' = 'redemption'
+     AND value ->> 'description' = 'Redeemed: Wallet credit perk'
+     AND value ->> 'redemption_code' IS NULL),
+  'store-credit receipt exposed its minted code'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT count(*) = 1
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'transactions') AS value
+   WHERE value ->> 'type' = 'redemption'
+     AND value ->> 'description' = 'Redeemed: Old receipt perk'
+     AND value ->> 'redemption_code' LIKE 'RDM-%'),
+  'discount receipt lost its recovery code'
+);

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
+import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
 import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -12,11 +13,10 @@ import { lookupErrorResponse } from './lookup-error-response';
 
 /**
  * POST /api/storefront/discount/validate
- * Validates a discount code for storefront customers.
- * Uses anon client with a SECURITY DEFINER RPC for anonymous access.
- *
- * CSRF exemption: anonymous checkout visitors lack tokens; proxy rate
- * limiting and the RPC's read-only behavior mitigate abuse.
+ * Validates a discount code for storefront customers via the anon
+ * client and a SECURITY DEFINER RPC. CSRF exemption: anonymous
+ * checkout visitors lack tokens; proxy rate limiting and the RPC's
+ * read-only behavior mitigate abuse.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { merchant_id, code, cart_total } = parsed.data;
-
     const supabase = createAnonClient();
 
     const { data, error } = await supabase.rpc('get_storefront_discount_code', {
@@ -75,11 +74,8 @@ export async function POST(request: NextRequest) {
       : (parsedSingle?.data ?? null);
 
     // Loyalty fallback (issue #3165): RDM-* codes live in
-    // reward_redemptions, which the merchant-code lookup never reads. Only
-    // attempted when the merchant lookup found nothing (its errors return
-    // 500 above). State-distinguishing responses are intentional; the
-    // 12-hex code space plus proxy rate limiting bound the probing
-    // oracle, and the order wrapper re-enforces every state.
+    // reward_redemptions, which the merchant-code lookup never reads.
+    // Only attempted when that lookup found nothing (errors 500 above).
     if (!discountCode) {
       const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
         'get_loyalty_redemption_for_checkout',
@@ -88,8 +84,7 @@ export async function POST(request: NextRequest) {
           p_code: code,
         }
       );
-      // A failed lookup is a retryable server failure, not an invalid
-      // code (mirrors the order path).
+      // A failed lookup is a retryable server failure, not invalid.
       if (loyaltyError) {
         return lookupErrorResponse(
           'Loyalty code lookup failed',
@@ -109,9 +104,7 @@ export async function POST(request: NextRequest) {
       const loyaltyValue = Number(loyaltyCode?.reward_value);
       // Bridgeable shape only: discount types (plain 'discount' is
       // fixed by convention, mirroring the order wrapper) + positive
-      // value. Other reward types fall through to the generic invalid
-      // response — they are honored through manual/fulfillment
-      // channels.
+      // value. Other types fall through to the generic invalid.
       if (
         loyaltyCode != null &&
         (loyaltyCode.reward_type === 'discount' ||
@@ -120,12 +113,9 @@ export async function POST(request: NextRequest) {
         Number.isFinite(loyaltyValue) &&
         loyaltyValue > 0
       ) {
-        // Dead codes collapse to the same generic invalid an unknown
-        // code gets: distinct used/expired messages would let anyone
-        // probe live codes without spending. The order wrapper
-        // re-enforces state and keeps the authoritative distinction.
-        // Snapshot-governed: a disabled reward no longer voids its
-        // issued codes (the resolver selects no live reward state).
+        // Dead codes collapse to the generic invalid an unknown code
+        // gets (no probing oracle); the order wrapper re-enforces
+        // state. Snapshot-governed: disabling a reward voids nothing.
         if (
           loyaltyCode.used ||
           (loyaltyCode.expires_at &&
@@ -136,20 +126,15 @@ export async function POST(request: NextRequest) {
             { status: 200 }
           );
         }
-        // Accepted oracle (low): unlike the collapsed dead-code states
-        // above, the minimum message stays distinct. It discloses that a
-        // probed code is live, but the minimum itself is public catalog
-        // info, the message is actionable ("add more to unlock"), the
-        // 12-hex space plus proxy rate limiting bounds enumeration, and
-        // the order wrapper re-enforces state authoritatively.
+        // Accepted oracle (low): the minimum message stays distinct
+        // (public catalog info, actionable, rate-limit bounded); the
+        // order wrapper re-enforces state authoritatively.
         if (
           loyaltyCode.minimum_order_amount != null &&
           cart_total < Number(loyaltyCode.minimum_order_amount)
         ) {
-          // Merchant currency for the threshold label (anon-granted
-          // published columns). A failed lookup stays currency-neutral
-          // instead of mislabeling a non-NGN threshold as NGN; only a
-          // cleanly absent row falls back to the NGN default.
+          // Merchant currency for the threshold label. A failed
+          // lookup stays currency-neutral (no mislabeled threshold).
           const { data: merchantRow, error: merchantError } = await supabase
             .from('merchants')
             .select('country, payout_currency')
@@ -174,6 +159,22 @@ export async function POST(request: NextRequest) {
             { status: 200 }
           );
         }
+        // Fixed codes keep their issuance currency (generic-invalid
+        // collapse; the order wrapper enforces for real).
+        if (
+          loyaltyCode.reward_type !== 'discount_percentage' &&
+          loyaltyCode.issuance_currency &&
+          !(await isLoyaltyCodeCurrencyCurrent(
+            supabase,
+            merchant_id,
+            loyaltyCode.issuance_currency
+          ))
+        ) {
+          return NextResponse.json(
+            { valid: false, error: 'Invalid discount code' },
+            { status: 200 }
+          );
+        }
         const loyaltyDiscountType =
           loyaltyCode.reward_type === 'discount_percentage'
             ? 'percentage'
@@ -186,8 +187,7 @@ export async function POST(request: NextRequest) {
           },
           cart_total
         );
-        // Explicit null (not absent): no discount_codes row exists for a
-        // loyalty code, and the order route re-resolves server-side.
+        // Explicit null: no discount_codes row exists for loyalty codes.
         return NextResponse.json({
           valid: true,
           discount_code_id: null,

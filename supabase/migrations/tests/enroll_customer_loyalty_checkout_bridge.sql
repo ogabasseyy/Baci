@@ -1,7 +1,6 @@
 -- Checkout-bridge cases (24a-25c): discount RDM-* codes resolve and the
 -- order wrapper claims them atomically. Member 024 (balance 499) funds
--- fixtures; member-018 untouched. Grant asserts live here (setup is at
--- the 300-line limit).
+-- fixtures; member-018 untouched. Grant asserts live here.
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, reward_value,
   minimum_order_amount, enabled
@@ -48,6 +47,7 @@ SELECT pg_temp.assert_true(
      AND row.reward_value = 1000
      AND row.minimum_order_amount = 5000
      AND row.used IS FALSE
+     AND row.issuance_currency = 'NGN'
      AND row.reward_name = 'Bridge fixed'
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
@@ -104,8 +104,7 @@ SELECT pg_temp.assert_true(
   'used loyalty code did not resolve with used=true'
 );
 
--- 24f. A disabled reward does not void its issued codes: the resolver
--- selects no live reward state, so the snapshot terms still resolve.
+-- 24f. A disabled reward does not void its issued codes.
 UPDATE public.loyalty_rewards SET enabled = false
 WHERE id = :'fixed_reward_id';
 
@@ -123,8 +122,7 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_rewards SET enabled = true
 WHERE id = :'fixed_reward_id';
 
--- 24g. A no-minimum mint survives a later merchant minimum: the mint
--- stores explicit 0 (not NULL), so the snapshot governs, not live state.
+-- 24g. A no-minimum mint survives a later merchant minimum.
 UPDATE public.loyalty_rewards SET minimum_order_amount = 5000
 WHERE id = :'percent_reward_id';
 SELECT pg_temp.assert_true(
@@ -137,6 +135,14 @@ SELECT pg_temp.assert_true(
 );
 UPDATE public.loyalty_rewards SET minimum_order_amount = NULL
 WHERE id = :'percent_reward_id';
+
+-- 24h. The issuance stamp freezes at mint (a payout flip cannot move it).
+UPDATE public.merchants SET payout_currency = 'USD' WHERE id = '01aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true(
+  (SELECT public.merchant_resolved_currency('01aa0000-0000-4000-8000-000000000001') = 'USD')
+  AND (SELECT row.issuance_currency = 'NGN' FROM public.get_loyalty_redemption_for_checkout('01aa0000-0000-4000-8000-000000000001', :'fixed_code') AS row),
+  'issuance currency moved after a payout currency flip');
+UPDATE public.merchants SET payout_currency = 'NGN' WHERE id = '01aa0000-0000-4000-8000-000000000001';
 
 -- 25a. The order wrapper rejects a NULL redemption id before touching
 -- the order RPC.
@@ -173,10 +179,9 @@ EXCEPTION
     END IF;
 END $$;
 
--- 25c. The wrapper's claim mechanics are pinned on the definition (the
--- stub suite cannot model full orders; runtime proof is the bridge probe
--- plus route tests): row lock, used-marking, minimum, two-sided amount
--- check, replay-first branch, and parent-before-child lock order.
+-- 25c. Wrapper claim mechanics pinned on the definition (the stub
+-- suite cannot model full orders): lock, used-marking, minimum,
+-- amount check, replay-first, parent-before-child lock order.
 SELECT pg_temp.assert_true(
   pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
@@ -190,6 +195,9 @@ SELECT pg_temp.assert_true(
   AND pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
   ) LIKE '%discount_amount_mismatch%'
+  AND pg_get_functiondef(
+    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
+  ) LIKE '%loyalty_code_currency_mismatch%'
   AND pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
   ) LIKE '%idempotency_replayed%'
@@ -208,8 +216,7 @@ SELECT pg_temp.assert_true(
   'loyalty order wrapper is missing claim mechanics'
 );
 
--- Bridge grants: both functions are self-policing bearer endpoints
--- (mirroring the discount-code functions), so anon through
+-- Bridge grants: self-policing Bearer [REDACTED]; anon through
 -- service_role hold EXECUTE and PUBLIC holds nothing.
 SELECT pg_temp.assert_true(
   NOT EXISTS (
@@ -243,8 +250,7 @@ SELECT pg_temp.assert_true(
   'loyalty checkout bridge grants are incorrect'
 );
 
--- The lookup index normalizes case like the resolver and is
--- merchant-scoped unique, so LIMIT 1 cannot straddle two codes.
+-- The lookup index normalizes case and is merchant-scoped unique.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_indexdef(
     'public.loyalty_redemption_checkout_code_idx'::pg_catalog.regclass
@@ -252,9 +258,8 @@ SELECT pg_temp.assert_true(
   'checkout code index is not unique or does not normalize case'
 );
 
--- A duplicate code (even in another case) is rejected, so checkout can
--- never resolve the wrong redemption. Staged through a temp table:
--- psql variables do not interpolate inside DO blocks.
+-- A duplicate code (even in another case) is rejected. Staged
+-- through a temp table: psql variables skip DO blocks.
 CREATE TEMP TABLE probe_dup AS
 SELECT :'percent_reward_id'::uuid AS reward_id, :'fixed_code'::text AS code;
 DO $dup$
@@ -284,10 +289,8 @@ SELECT pg_temp.assert_true(
   'redeem does not retry code collisions'
 );
 
--- The order wrapper locks parent-before-child: the reward row first (via
--- the unlocked id read), then FOR UPDATE OF rr. The DELETE route locks
--- the same order, so inverting here deadlocks against its ON DELETE
--- SET NULL; the re-read also keeps the legacy minimum fallback fresh.
+-- The order wrapper locks parent-before-child (reward, then FOR
+-- UPDATE OF rr); inverting deadlocks against the DELETE route.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure

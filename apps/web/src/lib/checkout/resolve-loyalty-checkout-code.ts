@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
 import { loyaltyCheckoutCodeRowSchema } from '@/schemas/storefront-discount';
 
@@ -82,11 +83,35 @@ export async function resolveLoyaltyCheckoutCode({
       ),
     };
   }
+  const discountType =
+    loyaltyRow.reward_type === 'discount_percentage' ? 'percentage' : 'fixed';
+  // Fixed codes are denominated in their issuance currency (stamped at
+  // mint): if the merchant's currency has moved since, the numeric
+  // value no longer means what the customer paid for. Collapse to the
+  // generic invalid (no currency oracle); the order wrapper enforces
+  // the same gate authoritatively. A failed merchant lookup skips the
+  // preview gate and lets the wrapper decide.
+  if (
+    discountType === 'fixed' &&
+    loyaltyRow.issuance_currency &&
+    !(await isLoyaltyCodeCurrencyCurrent(
+      supabase,
+      merchantId,
+      loyaltyRow.issuance_currency
+    ))
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { code: 'discount_code_invalid', error: 'Invalid discount code' },
+        { status: 400 }
+      ),
+    };
+  }
   return {
     ok: true,
     redemptionId: loyaltyRow.redemption_id,
-    discountType:
-      loyaltyRow.reward_type === 'discount_percentage' ? 'percentage' : 'fixed',
+    discountType,
     discountValue: loyaltyValue,
   };
 }

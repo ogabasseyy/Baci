@@ -40,7 +40,10 @@ AS $$
       'created_at', pt.created_at,
       -- Recovery receipt: a capped reward leaves the catalog once its
       -- response is lost, so history carries the issued code.
-      'redemption_code', rr.discount_code
+      -- Store credit is fulfilled into the wallet at redeem, so its
+      -- minted code is never presentable and stays hidden.
+      'redemption_code', CASE WHEN rr.reward_type = 'store_credit'
+        THEN NULL ELSE rr.discount_code END
     ) AS txn
     FROM recent AS pt
     LEFT JOIN public.reward_redemptions AS rr
@@ -52,7 +55,8 @@ AS $$
       'type', pt.type,
       'description', pt.description,
       'created_at', pt.created_at,
-      'redemption_code', rr.discount_code
+      'redemption_code', CASE WHEN rr.reward_type = 'store_credit'
+        THEN NULL ELSE rr.discount_code END
     ) AS txn
     FROM public.points_transactions AS pt
     JOIN public.reward_redemptions AS rr

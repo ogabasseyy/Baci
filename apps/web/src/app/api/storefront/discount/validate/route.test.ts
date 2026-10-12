@@ -61,6 +61,7 @@ function loyaltyRow(overrides: Record<string, unknown> = {}) {
     minimum_order_amount: null,
     expires_at: null,
     used: false,
+    issuance_currency: 'NGN',
     reward_name: 'Probe reward',
     ...overrides,
   };
@@ -284,6 +285,17 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body.valid).toBe(false);
     expect(body.error).toBe('Minimum purchase of 50,000 required');
     expect(body.error).not.toMatch(/₦|₹|\$/);
+  });
+
+  it('collapses a fixed code to invalid after a merchant currency change', async () => {
+    merchantRow = { country: 'US', payout_currency: 'USD' };
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code' ? [] : [loyaltyRow()]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
   it('rejects invalid input before any lookup', async () => {

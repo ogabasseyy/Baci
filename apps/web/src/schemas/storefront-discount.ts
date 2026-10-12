@@ -61,6 +61,7 @@ export const loyaltyCheckoutCodeRowSchema = z.object({
   minimum_order_amount: z.coerce.number().nullable(),
   expires_at: z.string().nullable(),
   used: z.boolean(),
+  issuance_currency: z.string().nullable(),
   reward_name: z.string().nullable(),
 });
 

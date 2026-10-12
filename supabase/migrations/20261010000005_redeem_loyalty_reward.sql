@@ -1,5 +1,4 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
---
 -- SECURITY DEFINER: expiry, availability, caps, minimums, valued/NGN guards,
 -- fulfillment, mint, deduction, ledger; caller owns the row; no 3-arg arity.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
@@ -24,6 +23,7 @@ DECLARE
   v_attempt integer := 0;
   v_redemption_id uuid;
   v_redemption_code text;
+  v_currency text;
   v_expires_at timestamptz;
   v_expired_points integer := 0;
   v_redemption_count integer := 0;
@@ -208,8 +208,10 @@ BEGIN
   END IF;
 
   -- Mint a merchant-unique code (probe + insert-retry), excluding
-  -- merchant discount_codes too: checkout resolves merchant-first, so
-  -- a merchant RDM-* code would shadow the redemption.
+  -- merchant discount_codes too (checkout resolves merchant-first).
+  -- The issuance currency is stamped now: a later payout_currency
+  -- change must not re-denominate this already-paid fixed code.
+  v_currency := public.merchant_resolved_currency(p_merchant_id);
   LOOP
     v_attempt := v_attempt + 1;
     v_redemption_code := 'RDM-' || pg_catalog.upper(pg_catalog.substring(pg_catalog.md5(pg_catalog.random()::text || pg_catalog.clock_timestamp()::text), 1, 12));
@@ -226,11 +228,11 @@ BEGIN
         INSERT INTO public.reward_redemptions (
           merchant_id, customer_id, reward_id, points_spent,
           reward_type, reward_value, discount_code, expires_at,
-          minimum_order_amount
+          minimum_order_amount, issuance_currency
         ) VALUES (
           p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
           v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at,
-          COALESCE(v_reward.minimum_order_amount, 0)
+          COALESCE(v_reward.minimum_order_amount, 0), v_currency
         )
         RETURNING id INTO v_redemption_id;
         EXIT;
@@ -243,8 +245,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Stock decrements only after the insert: a RETURN rolls back
-  -- nothing, so decrementing first would leak a unit on exhaustion.
+  -- Stock decrements only after the insert (RETURN rolls nothing back).
   IF v_reward.stock_quantity IS NOT NULL THEN
     UPDATE public.loyalty_rewards
     SET stock_quantity = stock_quantity - 1,

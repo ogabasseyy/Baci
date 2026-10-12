@@ -115,6 +115,7 @@ const LOYALTY_CODE_ROW = {
   minimum_order_amount: null,
   expires_at: null,
   used: false,
+  issuance_currency: 'NGN',
   reward_name: 'Probe reward',
 };
 

@@ -176,6 +176,59 @@ describe('RewardsPage', () => {
     expect(catalogMock).not.toHaveBeenCalled();
   });
 
+  it('settles a synchronous preview identity instead of skeletoning forever', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    loyaltyMock.mockReturnValue({
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    } as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // Preview/demo identities settle synchronously inside the hook
+    // (data swapped, loading never flips): the change commit must not
+    // stamp, but the follow-up render carrying the preview data must.
+    catalogMock.mockClear();
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'demo-store',
+        business_name: 'Demo Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    rerender(<RewardsPage />);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).toHaveBeenCalled();
+  });
+
   it('shows the issued code beside redemption history entries', async () => {
     useMerchantSafeMock.mockReturnValue({
       merchant: {

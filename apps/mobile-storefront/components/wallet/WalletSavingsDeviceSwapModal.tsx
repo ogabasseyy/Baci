@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
@@ -21,6 +22,7 @@ type WalletSavingsDeviceSwapModalProps = {
   onSearchChange: (value: string) => void;
   onSelectDevice: (product: Product, variantId?: string | null) => void;
   products: Product[];
+  resolveProduct?: (product: Product) => Promise<Product>;
   searchValue: string;
   visible: boolean;
 };
@@ -91,9 +93,48 @@ export function WalletSavingsDeviceSwapModal({
   onSearchChange,
   onSelectDevice,
   products,
+  resolveProduct,
   searchValue,
   visible,
 }: WalletSavingsDeviceSwapModalProps) {
+  const [resolved, setResolved] = useState<{
+    query: string;
+    product: Product;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const request = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing query or closing the sheet invalidates an in-flight selection.
+  useEffect(() => {
+    setResolved(null);
+    setLoadingPreview(false);
+    setLoadError(null);
+    return () => {
+      request.current++;
+    };
+  }, [searchValue, visible]);
+  const displayedProducts =
+    resolved?.query === searchValue ? [resolved.product] : products;
+  const selectDevice = async (product: Product, variantId: string | null) => {
+    if (!product.searchPreview) {
+      onSelectDevice(product, variantId);
+      return;
+    }
+    if (!resolveProduct) return;
+    const version = ++request.current;
+    setLoadingPreview(true);
+    setLoadError(null);
+    try {
+      const current = await resolveProduct(product);
+      if (version === request.current)
+        setResolved({ query: searchValue, product: current });
+    } catch {
+      if (version === request.current)
+        setLoadError('Could not load current options. Please try again.');
+    } finally {
+      if (version === request.current) setLoadingPreview(false);
+    }
+  };
   return (
     <ModalSheet
       visible={visible}
@@ -146,17 +187,23 @@ export function WalletSavingsDeviceSwapModal({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {isLoading ? (
+        {loadError ? (
+          <Text accessibilityRole="alert" style={{ color: colors.text }}>
+            {loadError}
+          </Text>
+        ) : null}
+        {isLoading || loadingPreview ? (
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading devices...
           </Text>
-        ) : products.length === 0 ? (
+        ) : displayedProducts.length === 0 ? (
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             No matching devices found.
           </Text>
         ) : (
-          products.flatMap(getDeviceRows).map((row) => {
-            const isTooCheap = row.price < currentAmount;
+          displayedProducts.flatMap(getDeviceRows).map((row) => {
+            const isTooCheap =
+              !row.product.searchPreview && row.price < currentAmount;
             const accessibilityLabel = `Select ${row.title}${
               row.variantLabel ? ` ${row.variantLabel}` : ''
             }`;
@@ -170,7 +217,7 @@ export function WalletSavingsDeviceSwapModal({
                   busy: isPending,
                 }}
                 disabled={isPending || isTooCheap}
-                onPress={() => onSelectDevice(row.product, row.variantId)}
+                onPress={() => void selectDevice(row.product, row.variantId)}
                 style={[
                   styles.row,
                   {
@@ -215,7 +262,9 @@ export function WalletSavingsDeviceSwapModal({
                     </Text>
                   ) : null}
                   <Text style={styles.rowPrice}>
-                    {formatNgnCurrency(row.price)}
+                    {row.product.searchPreview
+                      ? ''
+                      : formatNgnCurrency(row.price)}
                   </Text>
                   {isTooCheap ? (
                     <Text

@@ -1,0 +1,100 @@
+import { describe, expect, it, vi } from 'vitest';
+import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-paystack-refund-review';
+import { reviewInput } from './file-reference-only-paystack-refund-review.test-support';
+
+describe('fileReferenceOnlyPaystackRefundReview', () => {
+  it('files a durable review when no completed linked row exists', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+    const rpc = vi.fn();
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc } as never,
+      reviewInput
+    );
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        merchant_id: 'merchant-1',
+        metadata: expect.objectContaining({
+          audit_record_failed: true,
+          payment_transaction_id: 'payment-1',
+          reference: 'PSK-1',
+          reference_only_refund_event: true,
+          refund_evidence: {
+            'reference:PSK-1': expect.objectContaining({
+              audit_record_failed: true,
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'failed',
+            }),
+          },
+        }),
+        order_id: 'order-1',
+        // The open-by-paystack-ref index is global: stamping the shared
+        // reference would let the first order's review collide every
+        // later order's insert, failing redelivery forever since the
+        // merge RPC only searches the colliding order.
+        paystack_ref: null,
+        reason: expect.stringContaining('PSK-1'),
+        txn_id: 'payment-1',
+      })
+    );
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('files even when settled rows already cover the payment', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc: vi.fn() } as never,
+      reviewInput
+    );
+
+    // The event carries no refund ID, so it can never be tied to a
+    // recorded row: suppressing on coverage would hide a second
+    // manual refund and its over-refund as a presumed duplicate.
+    // Redeliveries merge idempotently under the leg key instead.
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+      })
+    );
+  });
+
+  it('merges into the open review on redelivery instead of duplicating', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const from = vi.fn().mockReturnValue({ insert });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc } as never,
+      reviewInput
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_ambiguous: true,
+        p_merchant_id: 'merchant-1',
+        p_order_id: 'order-1',
+        p_payment_transaction_id: 'payment-1',
+        p_provider_refund_status: 'failed',
+      })
+    );
+  });
+
+  it('fails the webhook when the review cannot be persisted', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: 'ECONNRESET' } });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    await expect(
+      fileReferenceOnlyPaystackRefundReview(
+        { from, rpc: vi.fn() } as never,
+        reviewInput
+      )
+    ).rejects.toThrow('reference_only_refund_review_persistence_failed');
+  });
+});

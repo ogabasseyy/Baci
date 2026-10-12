@@ -6,10 +6,12 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import {
   type ProductPurgeCategoryRow,
@@ -120,10 +122,30 @@ export async function POST(request: NextRequest) {
           merchantId,
           publicPurgeEntries.map((entry) => entry.slug)
         );
+        // Relationship/category fallback reads can span many pages. Queue the
+        // article enrichment after the response so publishing cannot time out
+        // after the database update has already committed.
+        // Expire the merchant-scoped article enrichment before a URL or
+        // hostname purge can trigger a cache refill with the pre-publish
+        // product snapshot. The post-response enrichment also expires this
+        // tag, but it runs in a separate task and therefore cannot protect the
+        // purge scheduled immediately below.
+        expireProductBlogCache(merchantId);
         scheduleStorefrontProductPurge(
           merchantContext.merchantSlug,
           publicPurgeEntries
         );
+        scheduleProductBlogPurgeAfterResponse({
+          supabase,
+          merchantId,
+          merchantSlug: merchantContext.merchantSlug,
+          productIds: (updatedProducts ?? []).map((product) => product.id),
+          entries: publicPurgeEntries,
+          categorySlugs: publicPurgeEntries.map(
+            (entry) => entry.categorySegment
+          ),
+          skipProductPurge: true,
+        });
       } catch (purgeError) {
         console.warn('Skipped Cloudflare product purge after bulk publish', {
           purgeError,

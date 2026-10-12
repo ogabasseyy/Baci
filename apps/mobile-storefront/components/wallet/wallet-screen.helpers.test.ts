@@ -146,6 +146,7 @@ describe('wallet-screen.helpers', () => {
           title: 'Device goal',
         },
         balance: 10,
+        earnings_available: true,
         earnings_balance: 40,
         funding_account: {
           account_name: 'Jane Doe',
@@ -168,6 +169,7 @@ describe('wallet-screen.helpers', () => {
         target_amount: 100,
         title: 'Device goal',
       },
+      earningsAvailable: true,
       earningsBalance: 40,
       fundingAccount: {
         accountName: 'Jane Doe',
@@ -177,7 +179,8 @@ describe('wallet-screen.helpers', () => {
       },
       savingsBalance: 60,
       showQuickSave: true,
-      totalBalance: 100,
+      spendableBalance: 10,
+      totalBalance: 70,
     });
   });
 
@@ -306,20 +309,24 @@ describe('wallet-screen.helpers', () => {
         total_balance: null,
       })
     ).toEqual({
-      earningsBalance: 15,
       activeSavingsGoal: null,
+      earningsAvailable: false,
+      earningsBalance: null,
       fundingAccount: null,
       savingsBalance: 30,
       showQuickSave: false,
+      spendableBalance: 15,
       totalBalance: 45,
     });
 
     expect(deriveWalletDisplayData({})).toEqual({
-      earningsBalance: 0,
       activeSavingsGoal: null,
+      earningsAvailable: false,
+      earningsBalance: null,
       fundingAccount: null,
       savingsBalance: 0,
       showQuickSave: false,
+      spendableBalance: 0,
       totalBalance: 0,
     });
   });

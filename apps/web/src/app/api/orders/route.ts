@@ -28,9 +28,10 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
+import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
@@ -1917,6 +1918,31 @@ export async function POST(request: NextRequest) {
       (isIdempotentLocalAirportReplay ? null : localAirportShippingFee) ??
       shippingFeeValue;
 
+    // Pilot gate runs on the SERVER-verified shipping fee: validating the
+    // client value before merchant-rate verification would let a spoofed
+    // zero-fee payload pass the app layer and fail only at the DB guards.
+    // (Tax and assurance are already server-computed inputs; wrapping has
+    // no server-computed counterpart, and wallet/savings are rechecked
+    // from server records at initialization.)
+    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
+      redvaultRequested,
+      redvaultQuote,
+      userId: resolvedUserId,
+      merchantId: merchant_id,
+      currency: merchantResolvedCurrency,
+      shippingFee: effectiveShippingFee,
+      wrappingFee: giftWrappingFeeValue,
+      orderItems: orderItemsPayload,
+      useWalletCredit: use_wallet_credit,
+      walletAmount: wallet_amount,
+      useSavingsCredit: use_savings_credit,
+      savingsAmount: savings_amount,
+      taxAmount: orderTaxAmount,
+    });
+    if (pilotOrderRejection) {
+      return pilotOrderRejection;
+    }
+
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({
         canonicalAirportType,
@@ -2112,12 +2138,23 @@ export async function POST(request: NextRequest) {
       // revalidation as the standard branch so listings and PDP pages do
       // not keep advertising pre-reservation stock.
       if (redvaultCheckoutResponse.status === 201) {
-        await revalidateOrderProductCaches({
-          merchantId: merchant_id,
-          orderId: null,
-          productIds: orderItemsPayload.map((item) => item.product_id),
-          supabase,
-        });
+        try {
+          await scheduleCheckoutProductBlogPurge({
+            merchantId: merchant_id,
+            merchantSlug: merchant.slug,
+            orderId: null,
+            orderItems: orderItemsPayload,
+            supabase,
+          });
+        } catch (revalidateError) {
+          logger.error({
+            message:
+              'Failed to revalidate product caches after REDVAULT order creation',
+            error: revalidateError,
+            orderId: null,
+            merchantId: merchant_id,
+          });
+        }
         // First-time REDVAULT creations return before the shared platform
         // event call below, so emit the idempotent order-created event
         // here. Replays answer 200 and stay suppressed: the event keys
@@ -2595,12 +2632,22 @@ export async function POST(request: NextRequest) {
     // effects — so it is never gated on downstream success. Skip on
     // idempotent replay (no re-decrement). Best-effort: never breaks checkout.
     if (!idempotencyReplayed) {
-      await revalidateOrderProductCaches({
-        merchantId: merchant_id,
-        orderId: order.id,
-        productIds: orderItemsPayload.map((item) => item.product_id),
-        supabase,
-      });
+      try {
+        await scheduleCheckoutProductBlogPurge({
+          merchantId: merchant_id,
+          merchantSlug: merchant.slug,
+          orderId: order.id,
+          orderItems: orderItemsPayload,
+          supabase,
+        });
+      } catch (revalidateError) {
+        logger.error({
+          message: 'Failed to revalidate product caches after order creation',
+          error: revalidateError,
+          orderId: order.id,
+          merchantId: merchant_id,
+        });
+      }
     }
 
     const orderTotal = Number(order.total ?? 0);

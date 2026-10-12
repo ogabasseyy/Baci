@@ -1,0 +1,285 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
+import { isValidUuid } from '@/lib/sanitize-core';
+import {
+  fetchLinkedBlogPostRows,
+  type LinkedBlogPostRow,
+} from './fetch-linked-blog-post-rows';
+import { filterCategoryBlogPostRowsWithoutActiveLinks } from './filter-category-blog-post-rows';
+import { getBlogCategoryLookup } from './get-blog-category-lookup';
+
+const CATEGORY_FALLBACK_PAGE_SIZE = 256;
+
+interface BlogPostFields {
+  category?: string | null;
+  published_at?: string | null;
+  slug?: string | null;
+  status?: string | null;
+}
+interface CategoryBlogPostRow extends BlogPostFields {
+  id?: string | null;
+}
+function getBlogPostRow(value: LinkedBlogPostRow['blog_posts']): {
+  published_at?: string | null;
+  slug?: string | null;
+  status?: string | null;
+} | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+function getPublishedBlogPostSlug(post: BlogPostFields | null | undefined) {
+  if (
+    post?.status !== 'published' ||
+    typeof post.published_at !== 'string' ||
+    post.published_at.length === 0 ||
+    typeof post.slug !== 'string'
+  ) {
+    return null;
+  }
+
+  const slug = post.slug.trim();
+  return slug.length > 0 ? slug : null;
+}
+function getCanonicalCategoryPostRows(
+  rows: readonly CategoryBlogPostRow[],
+  canonicalCategorySlugs: readonly string[]
+) {
+  const canonicalCategories = new Set(canonicalCategorySlugs);
+  return rows.filter((post) => {
+    const category = normalizeStorefrontCategoryValue(post.category);
+    return category !== null && canonicalCategories.has(category);
+  });
+}
+
+type CategoryFallbackQuery = 'exact' | 'canonical';
+
+async function fetchCategoryFallbackRows(
+  supabase: SupabaseClient,
+  merchantId: string,
+  categoryCandidates: readonly string[],
+  canonicalCategoryFilters: readonly string[],
+  queryKind: CategoryFallbackQuery
+) {
+  const rows: CategoryBlogPostRow[] = [];
+
+  const filters =
+    queryKind === 'exact' ? [''] : Array.from(canonicalCategoryFilters);
+  for (const filter of filters) {
+    for (let page = 0; ; page += 1) {
+      let query = supabase
+        .from('blog_posts')
+        .select('id, slug, status, published_at, category')
+        .eq('merchant_id', merchantId)
+        .eq('status', 'published');
+
+      query =
+        queryKind === 'exact'
+          ? query.in('category', Array.from(categoryCandidates))
+          : query.or(filter);
+
+      let data: unknown;
+      let error: unknown;
+      try {
+        ({ data, error } = await query
+          .order('published_at', { ascending: false })
+          // Keep page boundaries stable when bulk-published posts share the same
+          // timestamp (a common outcome of imports and scheduled releases).
+          .order('slug', { ascending: true })
+          .range(
+            page * CATEGORY_FALLBACK_PAGE_SIZE,
+            (page + 1) * CATEGORY_FALLBACK_PAGE_SIZE - 1
+          ));
+      } catch (pageError) {
+        // A rejected page preserves the rows already fetched exactly like
+        // an `{ error }` result; the caller escalates when nothing survived.
+        return { error: pageError, rows };
+      }
+
+      if (error) {
+        return { error, rows };
+      }
+
+      const pageRows = (data as unknown as CategoryBlogPostRow[]) ?? [];
+      rows.push(...pageRows);
+
+      if (pageRows.length < CATEGORY_FALLBACK_PAGE_SIZE) {
+        break;
+      }
+    }
+  }
+
+  return { error: null, rows };
+}
+
+export interface PublishedBlogPostSlugs {
+  /** Deduplicated published article slugs resolved before any page failure. */
+  slugs: string[];
+  /**
+   * True when a later page/chunk failed and `slugs` may omit affected
+   * articles. Callers must escalate (hostname purge) rather than trusting
+   * the set as complete — purging only these URLs would leave the omitted
+   * Cloudflare-cached articles stale until TTL.
+   */
+  incomplete: boolean;
+}
+
+/**
+ * Find published storefront blog posts whose related-product rail can be
+ * affected by the changed products. Explicit product relationships are joined
+ * with a paginated category fallback for legacy posts that derive their rail
+ * from the product category instead of `blog_post_products`. Results are
+ * deduplicated before callers evict their edge-cached article URLs. A lookup
+ * that fails with zero rows preserved throws — whether the page returned
+ * `{ error }`, the query rejected, or the client threw — because an empty
+ * result would read as "no linked articles" and suppress the article purge.
+ * Callers catch that and fall back to their slug-independent purge so a
+ * product mutation never fails on best-effort CDN invalidation. Partial
+ * page failures (result errors and rejections alike) resolve with the rows
+ * already fetched plus `incomplete: true` so callers purge the known URLs
+ * and escalate for the unknown remainder instead of treating the partial
+ * set as complete.
+ */
+export async function getPublishedBlogPostSlugsForProducts(
+  supabase: SupabaseClient,
+  merchantId: string,
+  productIds: readonly string[],
+  categorySlugs: readonly string[] = []
+): Promise<PublishedBlogPostSlugs> {
+  const normalizedMerchantId = merchantId.trim();
+  const normalizedProductIds = Array.from(
+    new Set(
+      productIds
+        .map((productId) => productId.trim())
+        .filter((productId) => productId.length > 0 && isValidUuid(productId))
+    )
+  );
+  const {
+    candidates: categoryCandidates,
+    canonicalFilters: canonicalCategoryFilters,
+    canonicalSlugs: canonicalCategorySlugs,
+  } = getBlogCategoryLookup(categorySlugs);
+
+  if (
+    !normalizedMerchantId ||
+    (normalizedProductIds.length === 0 && categoryCandidates.length === 0)
+  ) {
+    return { slugs: [], incomplete: false };
+  }
+
+  const slugs = new Set<string>();
+  let incomplete = false;
+
+  if (normalizedProductIds.length > 0) {
+    // Page rejections are converted to partial results inside the fetcher;
+    // anything it still throws propagates (no rows could be preserved), so
+    // callers activate their fallback instead of reading an empty set as
+    // "no linked articles".
+    const { rows, lastError } = await fetchLinkedBlogPostRows(
+      supabase,
+      normalizedMerchantId,
+      normalizedProductIds
+    );
+    if (lastError && rows.length === 0) {
+      // Total lookup failure: returning [] here would read as "no linked
+      // articles" and suppress the article purge. Throw so callers fall back
+      // to their slug-independent purge instead of skipping it silently.
+      console.error(
+        'Failed to resolve published blog posts for product purge (no rows preserved):',
+        { merchantId: normalizedMerchantId, error: lastError }
+      );
+      throw new Error(
+        'Failed to resolve published blog posts for product purge with no rows to preserve',
+        { cause: lastError }
+      );
+    }
+    if (lastError) {
+      incomplete = true;
+      console.warn(
+        'Resolved a partial published-blog-post set for product purge (continuing with rows already fetched):',
+        { merchantId: normalizedMerchantId, error: lastError }
+      );
+    }
+    for (const row of rows) {
+      const slug = getPublishedBlogPostSlug(getBlogPostRow(row.blog_posts));
+      if (slug) slugs.add(slug);
+    }
+  }
+
+  if (categoryCandidates.length > 0) {
+    let categoryError: unknown = null;
+    try {
+      const { rows: exactRows, error: exactError } =
+        await fetchCategoryFallbackRows(
+          supabase,
+          normalizedMerchantId,
+          categoryCandidates,
+          [],
+          'exact'
+        );
+      categoryError ??= exactError;
+      const exactRowsWithoutActiveLinks =
+        await filterCategoryBlogPostRowsWithoutActiveLinks(
+          supabase,
+          normalizedMerchantId,
+          exactRows
+        );
+      for (const post of exactRowsWithoutActiveLinks) {
+        const slug = getPublishedBlogPostSlug(post);
+        if (slug) slugs.add(slug);
+      }
+
+      if (canonicalCategoryFilters.length > 0) {
+        const { rows: canonicalRows, error: canonicalError } =
+          await fetchCategoryFallbackRows(
+            supabase,
+            normalizedMerchantId,
+            categoryCandidates,
+            canonicalCategoryFilters,
+            'canonical'
+          );
+        categoryError ??= canonicalError;
+        const canonicalRowsWithoutActiveLinks =
+          await filterCategoryBlogPostRowsWithoutActiveLinks(
+            supabase,
+            normalizedMerchantId,
+            getCanonicalCategoryPostRows(canonicalRows, canonicalCategorySlugs)
+          );
+        for (const post of canonicalRowsWithoutActiveLinks) {
+          const slug = getPublishedBlogPostSlug(post);
+          if (slug) slugs.add(slug);
+        }
+      }
+    } catch (error) {
+      // A filter rejection also leaves the set partial: record it so the
+      // result below is flagged instead of reading as complete.
+      categoryError ??= error;
+      console.error(
+        'Failed to resolve category-fallback blog posts for product purge (continuing without category article purge):',
+        { merchantId: normalizedMerchantId, error }
+      );
+    }
+    if (categoryError && slugs.size === 0) {
+      // Total category lookup failure with nothing preserved: returning []
+      // would read as "no linked articles" and suppress the article purge
+      // (skipProductPurge callers get no fallback). Throw so the scheduler
+      // escalates to its conservative hostname purge instead.
+      console.error(
+        'Failed to resolve category-fallback blog posts for product purge (no rows preserved):',
+        { merchantId: normalizedMerchantId, error: categoryError }
+      );
+      throw new Error(
+        'Failed to resolve category-fallback blog posts for product purge with no rows to preserve',
+        { cause: categoryError }
+      );
+    }
+    if (categoryError) {
+      incomplete = true;
+      console.warn(
+        'Resolved a partial category-fallback blog-post set for product purge (continuing with rows already fetched):',
+        { merchantId: normalizedMerchantId, error: categoryError }
+      );
+    }
+  }
+
+  return { slugs: Array.from(slugs), incomplete };
+}

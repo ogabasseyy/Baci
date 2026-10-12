@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidateProducts } from '@/lib/cache-revalidation';
 import { logger } from '@/lib/logger';
+import { scheduleOrderBlogPurgeForOrderAfterResponse } from '@/lib/schedule-order-blog-purge-for-order-after-response';
 
 export class SerializedInventoryUnavailableError extends Error {
   constructor() {
@@ -71,6 +72,11 @@ export async function ensurePaidOrderInventoryConfirmed(
         orderId,
       });
     }
+    scheduleOrderBlogPurgeForOrderAfterResponse({
+      supabase,
+      merchantId,
+      orderId,
+    });
   }
 
   if (

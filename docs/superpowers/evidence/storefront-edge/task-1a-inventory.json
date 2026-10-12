@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "13b316d383f81097c57e61ee6c68860dc6d06b55",
+  "originMainSha": "68744c2dee3910faf3c0c04225455c047b38580d",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "ad3b8433e4ca0a6a8a2a5ba4242156d5fc7b22b230f939cf89a9f8c44c882164",
-  "routingProxyInputSha256": "ebd4169ce5c41f5ed6bf3a91cd2302a613b06c90b1a405b7b06a8c6a148eaec1",
+  "routeTreeSha256": "c57afc5150ed7301e00eba105f8485cf1b6afdcdcc0ed0cb5f8b731059a98a24",
+  "routingProxyInputSha256": "5d65a13cd3088130fb07a4e126eb2248566f772b8acce7ee70b4ae5881749fef",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -699,6 +699,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:search/submissions/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/search/submissions",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/search/submissions/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:shipping/locations/route.ts",
       "methods": [
         "GET",
@@ -899,6 +911,35 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/card-checkout/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/card-checkout",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/card-checkout/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/card-contributions/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/card-contributions",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/card-contributions/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/savings/contributions/manual/route.ts",
       "methods": [
         "OPTIONS",
@@ -908,6 +949,61 @@
       "routePattern": "/api/storefront/customer/savings/contributions/manual",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/contributions/manual/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/drafts/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/drafts",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/drafts/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/drafts/catalogue/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/drafts/catalogue",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/drafts/catalogue/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/drafts/policy/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/drafts/policy",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/drafts/policy/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/funding/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/funding",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/funding/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -949,6 +1045,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goals/resolve-variant/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goals/resolve-variant",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goals/resolve-variant/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/savings/goals/resume/route.ts",
       "methods": [
         "OPTIONS",
@@ -970,6 +1078,59 @@
       "routePattern": "/api/storefront/customer/savings/goals/swap-device",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goals/swap-device/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/notifications/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PATCH"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/notifications",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/notifications/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-provisioning/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-provisioning",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-transfer/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-transfer",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-transfer/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-transfer/pending/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-transfer/pending",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-transfer/pending/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1034,6 +1195,58 @@
       "routePattern": "/api/storefront/customer/wallet/order-funding-intents/{id}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/order-funding-intents/[id]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/piggyvest-plan/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/piggyvest-plan",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/piggyvest-plan/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/piggyvest-primary/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/piggyvest-primary",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/piggyvest-primary/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/primary-card/initialize/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/primary-card/initialize",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/primary-card/initialize/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet/primary-card/status/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet/primary-card/status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/primary-card/status/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8282,5 +8495,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "39b5c6b7b33370712fcbdb4ae9923c448c736673ec9ddcf788782317634c944c"
+  "inventorySha256": "f6c1a638109970c79a77d98491fca716d013f2823a4156b1698318e875f0908c"
 }

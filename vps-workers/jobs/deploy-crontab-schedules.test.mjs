@@ -187,15 +187,21 @@ describe('deploy crontab schedules', () => {
 
   it('restarts the drain receiver after promotion before installing cleanup cron', () => {
     const deployScript = readDeployScript();
-    const restartIndex = deployScript.indexOf(
-      'systemctl --user restart baci-vercel-log-drain-receiver.service'
+    const servicesScript = readFileSync(
+      join(workerRoot, 'lib', 'install-worker-services.sh'),
+      'utf8'
     );
+    const servicesIndex = deployScript.indexOf('install_worker_services');
     const crontabIndex = deployScript.indexOf(
       'Installing crontab entries on VPS'
     );
 
-    assert.notEqual(restartIndex, -1);
+    assert.notEqual(servicesIndex, -1);
     assert.notEqual(crontabIndex, -1);
-    assert.ok(restartIndex < crontabIndex);
+    assert.ok(servicesIndex < crontabIndex);
+    assert.match(
+      servicesScript,
+      /systemctl --user restart baci-vercel-log-drain-receiver\.service/
+    );
   });
 });

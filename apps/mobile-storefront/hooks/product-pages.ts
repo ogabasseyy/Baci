@@ -29,6 +29,13 @@ export async function fetchProductsPage(
     options.condition
   );
 
+  // An explicitly provided search that normalizes to nothing (e.g. "!!")
+  // matches nothing: fall through to the unfiltered branch would present
+  // the entire catalog as matches for the query.
+  if (options.search && !normalizedSearch) {
+    return { nextOffset: null, products: [], total: 0 };
+  }
+
   if (normalizedSearch) {
     const { data: rankedResults, error: rankedError } = await withSupabaseRetry(
       async () =>

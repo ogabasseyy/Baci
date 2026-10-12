@@ -30,7 +30,6 @@ export function paymentDispatchContext(): CheckoutPaymentDispatchContext {
     setIsProcessing: vi.fn(),
     isOrderInFlightRef: { current: true },
     setDvaData: vi.fn(),
-    setDvaCountdown: vi.fn(),
     setIsInitializingDva: vi.fn(),
     setRedvaultStatus: vi.fn(),
     setPendingCryptoOrder: vi.fn(),

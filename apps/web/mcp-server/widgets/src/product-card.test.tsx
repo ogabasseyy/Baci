@@ -34,6 +34,14 @@ describe('ProductCard', () => {
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/redmi' });
   });
 
+  it('opens the served option-aware URL instead of the slug-only page', () => {
+    const openExternal = vi.fn();
+    window.openai = { openExternal };
+    render(<ProductCard product={{ ...product, url: 'https://ogabassey.com/products/redmi?variantId=v1' }} isInCart={false} onAddToCart={vi.fn()} onViewCart={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Review on Ogabassey' }));
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/redmi?variantId=v1' });
+  });
+
   it('disables shopping-link preparation for confirmed sold-out products', () => {
     const onAddToCart = vi.fn();
     render(<ProductCard product={{ ...product, in_stock: false, stock_level: 'Out of Stock' }} isInCart={false} onAddToCart={onAddToCart} onViewCart={vi.fn()} />);

@@ -7,7 +7,12 @@ on:
       - "apps/web/mcp-server/**"
       - ".github/scripts/check-live-mcp-tools.mjs"
       - ".github/scripts/check-live-mcp-tools.test.mjs"
+      - ".github/scripts/mcp-tool-contracts.mjs"
+      - ".github/scripts/mcp-tool-contracts.test.mjs"
+      - ".github/scripts/mcp-checkout-tool-schema-contracts.*"
+      - ".github/scripts/mcp-tool-inventory.*"
       - ".github/workflows/mcp-production-smoke.yml"
+      - "apps/web/src/schemas/mcp-delivery-fee-info.*"
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -26,7 +31,11 @@ jobs:
     env:
       MCP_HEALTH_URL: ${{ vars.MCP_HEALTH_URL || 'https://mcp.ogabassey.com/health' }}
       MCP_SMOKE_URL: ${{ vars.MCP_SMOKE_URL || 'https://mcp.ogabassey.com/mcp' }}
-      MCP_REQUIRED_TOOLS: ${{ vars.MCP_REQUIRED_TOOLS || '' }}
+      # Repository variables do not affect this job: the empty value forces
+      # the versioned inventory, so do not reintroduce vars.MCP_REQUIRED_TOOLS
+      # here. Export MCP_REQUIRED_TOOLS explicitly when running
+      # check-live-mcp-tools.mjs standalone to override the inventory.
+      MCP_REQUIRED_TOOLS: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,6 +44,6 @@ jobs:
         with:
           node-version: "24"
       - name: Test smoke script contracts
-        run: node --test .github/scripts/check-live-mcp-tools.test.mjs
+        run: node --test .github/scripts/check-live-mcp-tools.test.mjs .github/scripts/mcp-tool-contracts.test.mjs .github/scripts/mcp-tool-inventory.test.mjs .github/scripts/mcp-checkout-tool-schema-contracts.test.mjs
       - name: Check live MCP tools
         run: node .github/scripts/check-live-mcp-tools.mjs

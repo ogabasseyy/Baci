@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletContent, type WalletContentProps } from './WalletContent';
 
@@ -27,8 +27,8 @@ jest.mock('@/hooks/use-debounce', () => ({
   useDebounce: (value: string) => value,
 }));
 
-jest.mock('@/hooks/use-products', () => ({
-  useProducts: () => ({ isLoading: false, products: [] }),
+jest.mock('@/hooks/use-product-search', () => ({
+  useProductSearch: () => ({ isLoading: false, products: [] }),
 }));
 
 function createProps(): WalletContentProps {
@@ -61,6 +61,7 @@ function createProps(): WalletContentProps {
     needsPhone: false,
     onAddSavingsContribution: jest.fn(),
     onChangeSavingsDevice: jest.fn(async () => true),
+    onResolveSavingsVariant: jest.fn(async () => true),
     onChangeFundAmount: jest.fn(),
     onChangeRedeemPoints: jest.fn(),
     onChangeSavingsContributionAmount: jest.fn(),
@@ -91,11 +92,78 @@ function createProps(): WalletContentProps {
 }
 
 describe('WalletContent completed savings goals', () => {
+  it('keeps variant resolution instead of device replacement when options exist', () => {
+    const props = createProps();
+    if (!props.activeSavingsGoal) throw new Error('Missing synthetic goal');
+    props.activeSavingsGoal.selection_unresolved = true;
+    props.activeSavingsGoal.variant_resolution_options = [
+      { id: 'variant-1', label: '256GB Black' },
+    ];
+    render(<WalletContent {...props} showSavingsProgress />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Change savings device' })
+    ).toBeNull();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Resolve savings device variant' })
+    );
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Resolve savings variant 256GB Black',
+      })
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByLabelText('Savings replacement device search')
+    ).toBeNull();
+    expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
+  });
+
+  it.each([
+    undefined,
+    [],
+  ])('opens device recovery for unresolved completed goals with options %j', (options) => {
+    const props = createProps();
+    if (!props.activeSavingsGoal) throw new Error('Missing synthetic goal');
+    props.activeSavingsGoal.selection_unresolved = true;
+    props.activeSavingsGoal.variant_resolution_options = options;
+    render(<WalletContent {...props} showSavingsProgress />);
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Change savings device' })
+    );
+
+    expect(
+      screen.getByLabelText('Savings replacement device search')
+    ).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
+  });
+
+  it('exposes recovery from the wallet for a completed unresolved goal', () => {
+    const props = createProps();
+    if (!props.activeSavingsGoal) throw new Error('Missing synthetic goal');
+    props.activeSavingsGoal.selection_unresolved = true;
+    render(<WalletContent {...props} />);
+
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: 'Choose exact variant for iPhone 15 Pro',
+      })
+    );
+
+    expect(props.onStartSavings).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add to Savings' })).toBeNull();
+  });
+
   it('keeps completed goals displayable without enabling top-up actions', () => {
     render(<WalletContent {...createProps()} showSavingsProgress />);
 
     expect(
-      screen.getByRole('button', { name: 'Start Savings' })
+      screen.getByRole('button', {
+        name: 'Start another plan for iPhone 15 Pro',
+      })
     ).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
     expect(

@@ -10,7 +10,7 @@ describe('MCP catalog claims', () => {
       const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 101,
         method: 'tools/call',
-        params: { name: 'search_products', arguments: { limit: 10 } },
+        params: { name: 'search_products', arguments: { intent: { alternatives: [{}] }, limit: 10 } },
       }));
       expect(result.structuredContent).toMatchObject({
         products: expect.arrayContaining([
@@ -30,7 +30,7 @@ describe('MCP catalog claims', () => {
     try {
       const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 111, method: 'tools/call',
-        params: { name: 'search_products', arguments: { limit: 10 } },
+        params: { name: 'search_products', arguments: { intent: { alternatives: [{}] }, limit: 10 } },
       }));
       expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
         expect.objectContaining({
@@ -50,15 +50,15 @@ describe('MCP catalog claims', () => {
       const search = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 102,
         method: 'tools/call',
-        params: { name: 'search_products', arguments: { limit: 10 } },
+        params: { name: 'search_products', arguments: { intent: { alternatives: [{}] }, limit: 10 } },
       }));
       expect(search.structuredContent).toMatchObject({
         products: expect.arrayContaining([
           expect.objectContaining({ id: 'condition-offer-product', in_stock: true, price: 80000, condition: 'used' }),
           expect.objectContaining({ id: 'variant-cheaper-than-parent', in_stock: true, price: 90000 }),
-          expect.objectContaining({ id: 'variant-empty-product', in_stock: false }),
         ]),
       });
+      expect(JSON.stringify(search.structuredContent)).not.toContain('variant-empty-product');
       expect(search.content).toEqual(expect.arrayContaining([
         expect.objectContaining({ text: expect.stringContaining('Used Offer Phone — ₦80,000') }),
       ]));
@@ -79,7 +79,7 @@ describe('MCP catalog claims', () => {
       const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 116,
         method: 'tools/call',
-        params: { name: 'search_products', arguments: {
+        params: { name: 'search_products', arguments: { intent: { alternatives: [{}] },
           max_price: 100000, sort: 'price_asc', limit: 2,
         } },
       }));
@@ -101,7 +101,7 @@ describe('MCP catalog claims', () => {
         await postMcpJsonRpc(server.baseUrl, {
           id: 12,
           method: 'tools/call',
-          params: { name: 'search_products', arguments: { limit: 2 } },
+          params: { name: 'search_products', arguments: { intent: { alternatives: [{}] }, limit: 2 } },
         })
       );
       expect(result.structuredContent).toMatchObject({
@@ -197,7 +197,7 @@ describe('MCP catalog claims', () => {
       const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 23,
         method: 'tools/call',
-        params: { name: 'search_products', arguments: { limit: 10 } },
+        params: { name: 'search_products', arguments: { intent: { alternatives: [{}] }, limit: 10 } },
       }));
       expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
         expect.objectContaining({

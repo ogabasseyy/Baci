@@ -5,7 +5,7 @@ import { getMcpProductStockSummary } from './product-stock-summary';
 type BrowseFacet = 'brand' | 'category';
 const OFFER_ID_BATCH_SIZE = 100;
 
-/** List public facet values from products that are not confirmed sold out. */
+/** List public facet values from products that are not confirmed sold out. Returns null when the catalog query fails so callers report an outage instead of an authoritative empty list. */
 export async function loadMcpBrowseFacetValues({
   supabase,
   merchantId,
@@ -16,7 +16,7 @@ export async function loadMcpBrowseFacetValues({
   merchantId: string;
   facet: BrowseFacet;
   category?: string;
-}): Promise<string[]> {
+}): Promise<string[] | null> {
   let query = supabase
     .from('products')
     .select('id, category, brand, manage_stock, stock_quantity, has_variants, has_condition_offers')
@@ -28,7 +28,7 @@ export async function loadMcpBrowseFacetValues({
   const { data, error } = await query;
   if (error) {
     console.error('Failed to load public catalog facets:', error);
-    return [];
+    return null;
   }
   const products = (data ?? []) as McpSearchProductRow[];
   const optionProducts = products.filter(

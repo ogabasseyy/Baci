@@ -83,6 +83,7 @@ export type ProductCondition = 'new' | 'used' | 'open_box' | 'refurbished';
 
 export interface ProductVariant {
   id: string;
+  inventory_tracking_policy?: string | null;
   product_id: string;
   merchant_id: string;
   attributes: Record<string, string>; // { color: 'Blue', storage: '128GB' }

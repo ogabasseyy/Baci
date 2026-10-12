@@ -65,6 +65,35 @@ describe('quiz route rate limits', () => {
     expect(result.limit).toBe(expectedLimit);
   });
 
+  it('throttles submission writes without consuming the autocomplete budget and recovers after the window', async () => {
+    vi.useFakeTimers();
+    try {
+      const request = new NextRequest(
+        'https://ogabassey.com/api/search/submissions',
+        { method: 'POST', headers: { 'x-real-ip': '192.0.2.10' } }
+      );
+      for (let index = 0; index < 20; index += 1) {
+        expect((await checkRateLimit(request)).allowed).toBe(true);
+      }
+      const blocked = await checkRateLimit(request);
+      expect(blocked.allowed).toBe(false);
+      expect(blocked.remaining).toBe(0);
+      expect(
+        (
+          await checkRateLimit(
+            new NextRequest('https://ogabassey.com/api/search/autocomplete', {
+              headers: { 'x-real-ip': '192.0.2.10' },
+            })
+          )
+        ).allowed
+      ).toBe(true);
+      vi.advanceTimersByTime(60_001);
+      expect((await checkRateLimit(request)).allowed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('blocks the expensive generate route after its 5-request budget', async () => {
     const url = 'http://localhost:3000/api/merchant/quiz/generate';
 

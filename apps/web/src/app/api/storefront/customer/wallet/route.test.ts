@@ -189,7 +189,8 @@ describe('GET /api/storefront/customer/wallet', () => {
     expect(body).toEqual({
       balance: 0,
       balances: { NGN: 0, USDT: 0 },
-      earningsBalance: 0,
+      earningsAvailable: false,
+      earningsBalance: null,
       fundingAccount: null,
       hasWallet: false,
       loyaltyPoints: 0,
@@ -324,7 +325,8 @@ describe('GET /api/storefront/customer/wallet', () => {
     expect(body).toMatchObject({
       balance: 5000,
       balances: { NGN: 5000, USDT: 25.5 },
-      earningsBalance: 5000,
+      earningsAvailable: false,
+      earningsBalance: null,
       fundingAccount: {
         accountName: 'Ogabassey/Jane Doe',
         accountNumber: '1234567890',
@@ -345,6 +347,96 @@ describe('GET /api/storefront/customer/wallet', () => {
     expect(body.transactions[0]).toMatchObject({
       id: 'wallet-txn-1',
       source_type: 'wallet_topup',
+    });
+  });
+
+  it('returns only settled interest earnings in naira and does not add them to wallet funding balance', async () => {
+    mockRpc.mockImplementation((rpcName: string) => {
+      if (rpcName === 'get_customer_savings_earnings') {
+        return Promise.resolve({
+          data: { credited_interest_kobo: 12_550 },
+          error: null,
+        });
+      }
+      return Promise.resolve({
+        data: [{ wallet_paystack_dva_enabled: true }],
+        error: null,
+      });
+    });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'merchants') return singleQuery({ id: 'merchant-1' });
+      if (table === 'customers') {
+        return singleQuery({ id: 'customer-1', loyalty_points: 0 });
+      }
+      if (table === 'customer_wallets') {
+        return singleQuery({
+          available_balance: '5000',
+          id: 'wallet-1',
+          total_earned: '5000',
+          total_redeemed: '0',
+        });
+      }
+      if (table === 'customer_wallet_transactions')
+        return transactionsQuery([]);
+      if (table === 'customer_savings_goals') return savingsQuery([]);
+      if (table === 'customer_wallet_payment_accounts')
+        return maybeSingleQuery(null);
+      if (table === 'customer_wallet_accounts')
+        return currencyAccountQuery(null);
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const response = await GET(request());
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      balance: 5000,
+      earningsAvailable: true,
+      earningsBalance: 125.5,
+    });
+    expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
+      p_merchant_id: 'merchant-1',
+    });
+  });
+
+  it('marks earnings unavailable when the savings-interest RPC cannot be read', async () => {
+    mockRpc.mockImplementation((rpcName: string) =>
+      Promise.resolve(
+        rpcName === 'get_customer_savings_earnings'
+          ? { data: null, error: { code: 'PGRST202' } }
+          : { data: [{ wallet_paystack_dva_enabled: true }], error: null }
+      )
+    );
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'merchants') return singleQuery({ id: 'merchant-1' });
+      if (table === 'customers') {
+        return singleQuery({ id: 'customer-1', loyalty_points: 0 });
+      }
+      if (table === 'customer_wallets') {
+        return singleQuery({
+          available_balance: '5000',
+          id: 'wallet-1',
+          total_earned: '5000',
+          total_redeemed: '0',
+        });
+      }
+      if (table === 'customer_wallet_transactions')
+        return transactionsQuery([]);
+      if (table === 'customer_savings_goals') return savingsQuery([]);
+      if (table === 'customer_wallet_payment_accounts')
+        return maybeSingleQuery(null);
+      if (table === 'customer_wallet_accounts')
+        return currencyAccountQuery(null);
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const response = await GET(request());
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      balance: 5000,
+      earningsAvailable: false,
+      earningsBalance: null,
     });
   });
 

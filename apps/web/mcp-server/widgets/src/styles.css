@@ -18,12 +18,20 @@
   --radius-full: 9999px;
 }
 
+.coverage-notice {
+  padding: 0 16px 16px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
 .cart-error {
   color: var(--warning);
   padding: 0 1rem;
 }
 
 /* Light theme override */
+html:has(.mode-fullscreen.theme-light),
+body:has(.mode-fullscreen.theme-light),
 .theme-light {
   --background: #fafafa;
   --surface: #ffffff;
@@ -43,8 +51,9 @@
 html,
 body {
   width: 100%;
-  min-height: 100%;
-  background: var(--background);
+  height: auto;
+  min-height: 0;
+  background: transparent;
 }
 
 body {
@@ -73,6 +82,13 @@ body {
 
 .ogabassey-widget.mode-fullscreen {
   max-width: none;
+  min-height: calc(100dvh - 36px);
+}
+
+html:has(.mode-fullscreen),
+body:has(.mode-fullscreen) {
+  min-height: 100dvh;
+  background: var(--background);
 }
 
 /* @include:styles-header.css */

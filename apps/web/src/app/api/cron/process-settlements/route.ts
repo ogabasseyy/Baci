@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
-import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notification-email';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
+import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
+import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
+import { processCancellationDrain } from './process-cancellation-drain';
+import { SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS } from './schedule-settlement-notification-retries';
+import { sendSettlementNotifications } from './send-settlement-notifications';
+import {
+  settlementDrainDeadlineMs,
+  settlementDrainLimit,
+} from './settlement-drain-budget';
 
 /**
  * POST /api/cron/process-settlements
@@ -19,7 +27,10 @@ import { sendEmail } from '@/lib/zeptomail';
  *
  * Security: Requires Authorization: Bearer <CRON_SECRET>
  */
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
+  const invocationStartedAt = Date.now();
   try {
     // Verify cron secret
     const authHeader = request.headers.get('Authorization');
@@ -36,17 +47,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Validate before any database work: a malformed flag must never
+    // silently fall through to the full settlement job.
+    const parsedQuery = processSettlementsQuerySchema.safeParse({
+      cancellationsOnly:
+        new URL(request.url).searchParams.get('cancellationsOnly') ?? undefined,
+    });
+    if (!parsedQuery.success) {
+      return NextResponse.json(
+        { error: 'Invalid cancellationsOnly value' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServiceClient();
-    if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
-      const cancellationSideEffectDrain =
-        await drainFailedOrderCancellationSideEffects({
-          sendCancellationEmail: sendEmail,
-          supabase,
-        });
-      return NextResponse.json({
-        success: true,
-        cancellationSideEffectDrain,
-      });
+    if (parsedQuery.data.cancellationsOnly === 'true') {
+      return processCancellationDrain(supabase, sendEmail, notifyMerchant);
     }
 
     // 1. Process due settlements
@@ -77,7 +93,14 @@ export async function POST(request: Request) {
       totalAmount: result.total_amount,
     });
 
-    // 2. Get settlements that need notifications
+    // 2. Get settlements that need notifications. Rejected rows
+    // carry backoff state: without the retry-due and attempt-cap
+    // filters, permanently failing rows would pin this bounded
+    // oldest-first queue and newer merchants would never send.
+    // Millis-free stamp for the or() filter below: fractional seconds
+    // inject a dot the OR parser reads as a condition separator (the
+    // same hazard the abandoned-attempt sweep strips millis for).
+    const retryDueStamp = `${new Date().toISOString().split('.')[0]}Z`;
     const { data: pendingNotifications, error: notifyError } = await supabase
       .from('merchant_settlements')
       // PostgREST cannot embed auth.users through merchants here; use the
@@ -91,6 +114,7 @@ export async function POST(request: Request) {
         source_type,
         description,
         actual_settlement_date,
+        notification_attempts,
         merchants (
           id,
           business_name,
@@ -100,6 +124,10 @@ export async function POST(request: Request) {
       )
       .eq('status', 'settled')
       .eq('settlement_notified', false)
+      .lt('notification_attempts', SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS)
+      .or(
+        `notification_next_retry_at.is.null,notification_next_retry_at.lte.${retryDueStamp}`
+      )
       .order('actual_settlement_date', { ascending: true })
       .limit(50); // Process in batches
 
@@ -111,102 +139,40 @@ export async function POST(request: Request) {
     }
 
     // 3. Send notifications
-    const notificationResults = {
-      sent: 0,
-      failed: 0,
-    };
+    const notificationResults = await sendSettlementNotifications({
+      pendingNotifications,
+      sendEmail,
+      supabase,
+    });
 
-    if (pendingNotifications && pendingNotifications.length > 0) {
-      // Group settlements by merchant for batch notifications
-      const merchantSettlements = new Map<
-        string,
-        {
-          merchantId: string;
-          businessName: string;
-          email: string;
-          settlements: Array<{
-            id: string;
-            amount: number;
-            gateway: string;
-            description: string;
-          }>;
-          totalAmount: number;
-        }
-      >();
-
-      for (const settlement of pendingNotifications) {
-        const merchant = settlement.merchants as unknown as {
-          id: string;
-          business_name: string;
-          email: string | null;
-        };
-
-        if (!merchant?.email) continue;
-
-        const key = merchant.id;
-        const existing = merchantSettlements.get(key);
-
-        if (existing) {
-          existing.settlements.push({
-            id: settlement.id,
-            amount: Number(settlement.net_amount),
-            gateway: settlement.gateway,
-            description: settlement.description || 'Payment',
-          });
-          existing.totalAmount += Number(settlement.net_amount);
-        } else {
-          merchantSettlements.set(key, {
-            merchantId: merchant.id,
-            businessName: merchant.business_name,
-            email: merchant.email,
-            settlements: [
-              {
-                id: settlement.id,
-                amount: Number(settlement.net_amount),
-                gateway: settlement.gateway,
-                description: settlement.description || 'Payment',
-              },
-            ],
-            totalAmount: Number(settlement.net_amount),
-          });
-        }
-      }
-
-      // Send one email per merchant
-      for (const [, data] of merchantSettlements) {
-        try {
-          const settlementIds = data.settlements.map((s) => s.id);
-
-          await sendEmail(buildSettlementNotificationEmail(data));
-
-          // Mark as notified
-          await supabase
-            .from('merchant_settlements')
-            .update({
-              settlement_notified: true,
-              notification_sent_at: new Date().toISOString(),
-            })
-            .in('id', settlementIds);
-
-          notificationResults.sent++;
-        } catch (emailError) {
-          logger.error({
-            message: 'Failed to send settlement notification',
-            merchantId: data.merchantId,
-            error: emailError,
-          });
-          notificationResults.failed++;
-        }
-      }
-    }
-
-    const cancellationSideEffectDrain =
-      await drainFailedOrderCancellationSideEffects({
-        sendCancellationEmail: sendEmail,
-        supabase,
+    // The settlement RPC and notification emails above burned through the
+    // shared 300s cron budget: bound the drain by what remains so provider
+    // refund calls stop before the platform abort, and skip it outright
+    // once the margin is gone rather than stranding an accepted refund
+    // without its audit row.
+    const drainElapsedMs = Date.now() - invocationStartedAt;
+    const drainLimit = settlementDrainLimit(drainElapsedMs);
+    const drainSkippedDueToBudget = drainLimit <= 0;
+    if (drainSkippedDueToBudget) {
+      logger.warn({
+        message:
+          'Skipping cancellation side-effect drain: cron budget exhausted',
+        elapsedMs: drainElapsedMs,
       });
+    }
+    const cancellationSideEffectDrain = drainSkippedDueToBudget
+      ? { drained: [], failed: [], skipped: [] }
+      : await drainFailedOrderCancellationSideEffects({
+          deadlineMs: settlementDrainDeadlineMs(invocationStartedAt),
+          limit: drainLimit,
+          sendCancellationEmail: sendEmail,
+          supabase,
+        });
     return NextResponse.json({
       success: true,
+      // A skipped drain is deferred work, not an idle system: pollers
+      // must distinguish 'nothing to do' from 'no time to do it'.
+      skippedDueToBudget: drainSkippedDueToBudget,
       cancellationSideEffectDrain,
       settlements: {
         processed: result.processed_count,

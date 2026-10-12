@@ -815,6 +815,21 @@ export type Database = {
           },
         ];
       };
+      blog_media_delete_tombstones: {
+        Row: {
+          created_at: string;
+          path: string;
+        };
+        Insert: {
+          created_at?: string;
+          path: string;
+        };
+        Update: {
+          created_at?: string;
+          path?: string;
+        };
+        Relationships: [];
+      };
       blog_post_products: {
         Row: {
           blog_post_id: string;
@@ -977,6 +992,8 @@ export type Database = {
           featured_image_width: number | null;
           focus_keyword: string | null;
           id: string;
+          intent: string | null;
+          intent_source: string | null;
           is_ai_generated: boolean | null;
           is_platform_post: boolean | null;
           keywords: string[] | null;
@@ -1012,6 +1029,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;
@@ -1047,6 +1066,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;
@@ -2442,6 +2463,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at: string | null;
           future_debits_cancelled_at: string | null;
+          goal_idempotency_key: string | null;
+          goal_request_fingerprint: string | null;
           id: string;
           initial_contribution_amount: number;
           maturity_date: string;
@@ -2475,6 +2498,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date: string;
@@ -2508,6 +2533,8 @@ export type Database = {
           customer_id?: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date?: string;
@@ -10902,6 +10929,7 @@ export type Database = {
           cost_price: number | null;
           created_at: string | null;
           default_variant_id: string | null;
+          discovery_metadata: Json | null;
           description: string | null;
           description_digital_source_type: string | null;
           description_provenance_sha256: string | null;
@@ -10983,6 +11011,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -11064,6 +11093,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -16107,6 +16137,26 @@ export type Database = {
       };
     };
     Functions: {
+      blog_media_objects_present_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+        }[];
+      };
+      claim_sweepable_blog_media_tombstones: {
+        Args: { p_cutoff: string; p_limit: number };
+        Returns: {
+          tombstone_claimed: boolean;
+          tombstone_path: string;
+        }[];
+      };
+      register_blog_media_references_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+          status: string;
+        }[];
+      };
       accept_staff_invite: {
         Args: { p_email: string; p_token: string };
         Returns: {
@@ -17054,6 +17104,7 @@ export type Database = {
           p_contribution_frequency: string;
           p_customer_id: string;
           p_early_end_fee_accepted_at: string;
+          p_goal_idempotency_key: string;
           p_initial_contribution_amount: number;
           p_initial_contribution_idempotency_key: string;
           p_maturity_date: string;
@@ -17063,6 +17114,7 @@ export type Database = {
           p_preferred_debit_time: string;
           p_product_id: string;
           p_product_snapshot: Json;
+          p_request_fingerprint: string;
           p_saved_payment_method_id: string;
           p_source_mode: string;
           p_start_date: string;
@@ -19354,6 +19406,7 @@ export type Database = {
       };
       mutate_merchant_blog_post_with_product_links: {
         Args: {
+          p_media_paths?: string[];
           p_merchant_id: string;
           p_post_data: Json;
           p_post_id: string;
@@ -19390,6 +19443,81 @@ export type Database = {
           slug: string;
           status: string;
           title: string;
+        }[];
+      };
+      mutate_platform_blog_post_atomic: {
+        Args: {
+          p_media_paths: string[];
+          p_post_data: Json;
+          p_post_id: string;
+        };
+        Returns: {
+          author_bio: string | null;
+          author_image_url: string | null;
+          author_name: string;
+          author_title: string | null;
+          category: string | null;
+          content: string;
+          created_at: string | null;
+          excerpt: string | null;
+          featured_image_alt: string | null;
+          featured_image_height: number | null;
+          featured_image_url: string | null;
+          featured_image_variants: Json;
+          featured_image_width: number | null;
+          focus_keyword: string | null;
+          id: string;
+          intent: string | null;
+          intent_source: string | null;
+          keywords: string[] | null;
+          published_at: string | null;
+          reading_time_minutes: number | null;
+          seo_description: string | null;
+          seo_title: string | null;
+          slug: string;
+          status: string | null;
+          tags: string[] | null;
+          title: string;
+          updated_at: string | null;
+          view_count: number | null;
+          word_count: number | null;
+        }[];
+      };
+      mutate_platform_blog_post_create_atomic: {
+        Args: {
+          p_media_paths: string[];
+          p_post_data: Json;
+        };
+        Returns: {
+          author_bio: string | null;
+          author_image_url: string | null;
+          author_name: string;
+          author_title: string | null;
+          category: string | null;
+          content: string;
+          created_at: string | null;
+          excerpt: string | null;
+          featured_image_alt: string | null;
+          featured_image_height: number | null;
+          featured_image_url: string | null;
+          featured_image_variants: Json;
+          featured_image_width: number | null;
+          focus_keyword: string | null;
+          id: string;
+          intent: string | null;
+          intent_source: string | null;
+          keywords: string[] | null;
+          published_at: string | null;
+          reading_time_minutes: number | null;
+          seo_description: string | null;
+          seo_title: string | null;
+          slug: string;
+          status: string | null;
+          tags: string[] | null;
+          title: string;
+          updated_at: string | null;
+          view_count: number | null;
+          word_count: number | null;
         }[];
       };
       normalize_inventory_identifier: {
@@ -20757,6 +20885,114 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      search_product_discovery_facts: {
+        Args: {
+          brand_filter?: string;
+          category_filter?: string;
+          condition_filter?: string;
+          excluded_types_filter?: Json;
+          merchant_id_param: string;
+          query_text: string;
+          result_limit?: number;
+          result_offset?: number;
+        };
+        Returns: {
+          product_id: string;
+          total_count: number;
+        }[];
+      };
+      get_mcp_search_product_offers: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          compare_at_price: number;
+          condition: string;
+          id: string;
+          price: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_product_variants: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          attributes: Json;
+          condition: string;
+          created_at: string;
+          effective_policy: string;
+          id: string;
+          price_override: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_serialized_anchor_policies: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          available_units: number;
+          effective_policy: string;
+          product_id: string;
+        }[];
+      };
+      search_product_variant_recall: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_filters?: Json;
+          p_identity?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+        };
+        Returns: {
+          attributes: Json;
+          product_id: string;
+        }[];
+      };
+      search_products_browse: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+          p_sort?: string;
+        };
+        Returns: {
+          available_conditions: string[];
+          brand: string;
+          category: string;
+          compare_at_price: number;
+          condition: string;
+          condition_detail: string;
+          created_at: string;
+          description: string;
+          discovery_metadata: Json;
+          has_condition_offers: boolean;
+          has_variants: boolean;
+          id: string;
+          images: Json;
+          inventory_tracking_policy: string;
+          manage_stock: boolean;
+          name: string;
+          price: number;
+          slug: string;
+          stock_quantity: number;
+          updated_at: string;
+        }[];
       };
       search_products_v2: {
         Args: {

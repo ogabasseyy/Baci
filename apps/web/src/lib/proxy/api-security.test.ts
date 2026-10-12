@@ -28,6 +28,32 @@ describe('API security stage', () => {
     ).toBe('/api/orders');
   });
 
+  it('enforces the submissions budget before the route handles the write', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      limit: 20,
+      remaining: 0,
+      resetTime: Date.now(),
+    });
+    const request = new NextRequest(
+      'https://ogabassey.com/api/search/submissions',
+      {
+        method: 'POST',
+        headers: {
+          origin: 'https://ogabassey.com',
+          'content-type': 'application/json',
+        },
+      }
+    );
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/search/submissions', 'ogabassey.com', 'POST')
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(request);
+    expect(response?.status).toBe(429);
+  });
+
   it('blocks unsafe cross-origin mutations before a route handles them', async () => {
     const request = new NextRequest('https://usebaci.com/api/orders', {
       method: 'POST',

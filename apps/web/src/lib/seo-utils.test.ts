@@ -19,27 +19,8 @@ import {
   getProductUrl,
   getValidatedProductUrl,
 } from './seo-utils';
+import { makeSeoProduct as makeProduct } from './seo-utils-product-schema-test-helper';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
-
-/** Helper to create a minimal Product for testing */
-function makeProduct(overrides: Partial<Product> = {}): Product {
-  return {
-    id: 'test-123',
-    name: 'Test Product',
-    description: 'A test product',
-    status: 'active',
-    price: 100,
-    manage_stock: true,
-    stock: 10,
-    image: 'https://example.com/img.jpg',
-    imageLarge: 'https://example.com/img-lg.jpg',
-    imageHint: 'test',
-    brand: 'TestBrand',
-    gtin: '',
-    mpn: '',
-    ...overrides,
-  };
-}
 
 function makeTrustProfile(
   overrides: Partial<MerchantTrustProfile> = {}
@@ -507,7 +488,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variants[0].sku).toBe('v1');
   });
 
-  it('includes brand, identifiers, description, color, and inferred size on variant product nodes', () => {
+  it('keeps group identifiers on the parent and omits them from identifier-free variant nodes', () => {
     const product = makeProduct({
       description: 'A flagship device with variant-specific merchandising.',
       brand: 'Samsung',
@@ -535,8 +516,10 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       '@type': 'Brand',
       name: 'Samsung',
     });
-    expect(variants[0]?.gtin).toBe('1234567890123');
-    expect(variants[0]?.mpn).toBe('SM-S25-256-JB');
+    expect(schema.gtin).toBe('1234567890123');
+    expect(schema.mpn).toBe('SM-S25-256-JB');
+    expect(variants[0]).not.toHaveProperty('gtin');
+    expect(variants[0]).not.toHaveProperty('mpn');
     expect(variants[0]?.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );

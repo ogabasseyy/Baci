@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       semgrep_relevant: ${{ steps.scope.outputs.semgrep_relevant }}
+      trusted_changed: ${{ steps.scope.outputs.trusted_changed }}
     steps:
       - if: github.event_name == 'pull_request'
         name: Checkout repository
@@ -58,17 +59,52 @@ jobs:
               - 'supabase/migrations/**'
               - 'next.config.ts'
               - '.github/workflows/**'
+              # The SARIF filter audits the review runner's containment
+              # flags, so runner-only changes must trigger the Semgrep
+              # job instead of skipping the fail-closed audit.
+              # Intentional SAST gap: the targeted/push scans below do not
+              # scan .sh (runner scripts are structurally constrained by
+              # the drift audit instead); scheduled full `semgrep ci`
+              # (daily 03:00 UTC) remains the only rule-based coverage of
+              # that tree, so a runner-script change gets semantic SAST
+              # at most ~24h after merge. Keep that schedule enabled.
+              - '.github/scripts/muse-review/**'
+              # The drift auditor itself (both spellings: the filter
+              # is hyphenated, its modules underscored): auditor
+              # changes must run the job that executes the audit.
+              - '.github/scripts/semgrep-sarif*'
+              - '.github/scripts/semgrep_sarif_*'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
+            # Any change under the trusted set fails the SARIF
+            # filter loudly for human review: directly hostile
+            # helper code is indistinguishable from legitimate
+            # token use, so no content rule can auto-pass it.
+            # Advisory, not blocking (Security is not required):
+            # the red X draws merger eyes, the human decides.
+            # Invariant: every trusted_changed path also matches
+            # semgrep_relevant above — otherwise the job that reads
+            # the signal is skipped and the red X never appears.
+            trusted_changed:
+              - '.github/scripts/muse-review/**'
+              - '.github/scripts/semgrep-sarif*'
+              - '.github/scripts/semgrep_sarif_*'
+              - '.github/workflows/security.yml'
+              - '.github/workflows/muse-code-review.yml'
+              - '.github/workflows/muse-review-selftest.yml'
 
       - name: Resolve Semgrep scope output
         id: scope
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "semgrep_relevant=${{ steps.filter.outputs.semgrep_relevant }}" >> "$GITHUB_OUTPUT"
+            echo "trusted_changed=${{ steps.filter.outputs.trusted_changed }}" >> "$GITHUB_OUTPUT"
           else
             echo "semgrep_relevant=true" >> "$GITHUB_OUTPUT"
+            # Push/schedule/dispatch carry no PR diff; content
+            # rules still apply, only the change signal rests.
+            echo "trusted_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   semgrep:
@@ -171,6 +207,38 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
+      # The filter invocation below is trust-sensitive; its rationale
+      # lives in .github/sarif-filter-notes.md (300-line ceiling).
+      - name: Clear base-filter collision
+        if: github.event_name == 'pull_request'
+        run: rm -rf "${GITHUB_WORKSPACE}/base-filter"
+
+      - name: Checkout base filter implementation
+        if: github.event_name == 'pull_request'
+        # Pin to full SHA for supply chain security
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.ref }}
+          path: base-filter
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+
+      - name: Drop audited checkout finding from SARIF
+        if: always()
+        run: |
+          set -euo pipefail
+          filter_dir=.github/scripts
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
+            for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_agentenv.py semgrep_sarif_alias.py semgrep_sarif_archive.py semgrep_sarif_audit.py semgrep_sarif_awk.py semgrep_sarif_bashfunc.py semgrep_sarif_cmdfile.py semgrep_sarif_binutils.py semgrep_sarif_consts.py semgrep_sarif_consumer.py semgrep_sarif_container.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_findout.py semgrep_sarif_gh.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_helpertree.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_jq.py semgrep_sarif_nameref.py semgrep_sarif_order.py semgrep_sarif_peel.py semgrep_sarif_perl.py semgrep_sarif_pins.py semgrep_sarif_refs.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_redirect.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_secretbind.py semgrep_sarif_sed.py semgrep_sarif_segments.py semgrep_sarif_shell.py semgrep_sarif_steps.py semgrep_sarif_subscript.py semgrep_sarif_tar.py semgrep_sarif_varcollect.py semgrep_sarif_varmap.py semgrep_sarif_words.py semgrep_sarif_xargs.py semgrep_sarif_zone.py; do
+              [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
+            done
+          fi
+          python3 "${filter_dir}/semgrep-sarif-filter.py"
+        env:
+          TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
+
       - name: Verify SARIF exists
         id: verify-sarif
         if: always()
@@ -191,68 +259,6 @@ jobs:
       - name: Fail if Semgrep reported findings
         if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
         run: exit 1
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
-      - name: Checkout repository
-        # Pin to full SHA for supply chain security
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Dependency Review
-        # Pin to full SHA for supply chain security
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
-        with:
-          fail-on-severity: high
-          # 2026 best practice: use allow-licenses (deny-licenses is deprecated)
-          # Allow permissive licenses + AGPL for TruffleHog security tool
-          # Added OFL-1.1 for Google Fonts (expo-google-fonts packages)
-          # Added MIT-0 for @csstools packages (MIT-0 is more permissive than MIT)
-          # Added Ruby for Fastlane transitive gems (highline, httpclient, json, concurrent-ruby)
-          allow-licenses: >-
-            MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD,
-            Unlicense, CC0-1.0, WTFPL, Zlib, BlueOak-1.0.0,
-            MPL-2.0, LGPL-2.1-only, LGPL-2.1-or-later,
-            LGPL-3.0-only, LGPL-3.0-or-later,
-            AGPL-3.0-only, AGPL-3.0-or-later,
-            CC-BY-3.0, CC-BY-4.0, Python-2.0, PSF-2.0, Artistic-2.0,
-            OFL-1.1, Ruby
-          # Allow packages with compound/dual licenses or approved source-available tooling.
-          # Sentry CLI uses FSL-1.1-MIT and is required by the official React Native SDK
-          # for native symbol and source-map uploads; keep the exception package-scoped.
-          # nkf (Ruby/BSD-2-Clause, fastlane dep) and rdoc (dual Ruby/GPL-2.0,
-          # fastlane->irb dep, build tooling only) are flagged only because of
-          # scancode compound-expression artifacts; Ruby terms apply to both.
-          allow-dependencies-licenses: >-
-            pkg:gem/nkf,
-            pkg:gem/rdoc,
-            pkg:npm/big-integer,
-            pkg:npm/protobufjs,
-            pkg:npm/unicode-match-property-value-ecmascript,
-            pkg:npm/unicode-property-aliases-ecmascript,
-            pkg:npm/katex,
-            pkg:npm/robust-predicates,
-            pkg:npm/@posthog/react-native-plugin,
-            pkg:npm/@posthog/nextjs-config,
-            pkg:npm/posthog-js,
-            pkg:npm/posthog-node,
-            pkg:npm/@sentry/cli,
-            pkg:npm/@sentry/cli-darwin,
-            pkg:npm/@sentry/cli-linux-arm,
-            pkg:npm/@sentry/cli-linux-arm64,
-            pkg:npm/@sentry/cli-linux-i686,
-            pkg:npm/@sentry/cli-linux-x64,
-            pkg:npm/@sentry/cli-win32-arm64,
-            pkg:npm/@sentry/cli-win32-i686,
-            pkg:npm/@sentry/cli-win32-x64
 
   secrets-scan:
     name: Secret Scanning

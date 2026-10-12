@@ -13,6 +13,7 @@ export interface Product {
   in_stock?: boolean | null;
   brand?: string;
   category?: string;
+  url?: string;
 }
 
 export interface CartItem {
@@ -23,6 +24,7 @@ export interface CartItem {
 export interface WidgetState {
   cart: CartItem[];
   cartUrl?: string;
+  cartToken?: string;
   [key: string]: unknown; // Index signature for type compatibility
 }
 

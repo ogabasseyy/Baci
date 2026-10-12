@@ -50,12 +50,20 @@ export async function initializeRedvaultCheckout({
   attemptAdapter,
   customerEmail,
   orderId,
+  preserveAttempts = false,
   provider,
   redirectUrl,
 }: {
   attemptAdapter: RedvaultPaymentAttemptAdapter;
   customerEmail: string;
   orderId: string;
+  /**
+   * Never void an ambiguous attempt and never run the fresh-replacement
+   * path: park for reconciliation instead. Required for the private live
+   * pilot, whose single-attempt cap rejects the replacement insert after
+   * the sole attempt was already voided, bricking the controlled test.
+   */
+  preserveAttempts?: boolean;
   provider: RedvaultCheckoutProvider;
   redirectUrl: string;
 }): Promise<RedvaultInitializationResult> {
@@ -163,6 +171,12 @@ export async function initializeRedvaultCheckout({
     id: string;
     reference: string;
   }): Promise<RedvaultInitializationResult> => {
+    if (preserveAttempts) {
+      // Pilot orders have no replacement path: the void would commit and
+      // the cap would reject the fresh insert. Preserve the attempt and
+      // park; a later probe can still reconcile a settled payment.
+      return { authorizationUrl: null, status: 'pending_reconciliation' };
+    }
     const probe = await probeSafely(stale.reference);
     if (probe.status === 'paid' || probe.status === 'unknown') {
       // Paid: the hosted checkout settled without a persisted URL and
@@ -240,6 +254,11 @@ export async function initializeRedvaultCheckout({
     return initializeWithClaim(claim);
   }
 
+  if (preserveAttempts) {
+    // Same no-void rule as above: park the initializing lease instead of
+    // voiding it into an unrecoverable cap rejection.
+    return { authorizationUrl: null, status: 'pending_reconciliation' };
+  }
   // The provider holds an unpaid transaction for this reference, but its
   // authorization URL is unrecoverable. Void the ambiguous claim and run
   // the normal fresh path once with a replacement reference.

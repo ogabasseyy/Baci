@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { mapKnownGiglStatus } from '@baci/shared/lib';
+// Direct leaf import, not the `@baci/shared/lib` barrel: the poller
+// runtime evaluates every barrel re-export, which would make each
+// shared-util edit a worker change. The leaf keeps the tracked worker
+// graph to exactly what the poller executes.
+import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
 import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';

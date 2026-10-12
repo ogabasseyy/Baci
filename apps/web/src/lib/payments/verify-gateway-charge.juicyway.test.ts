@@ -51,7 +51,24 @@ describe('verifyGatewayCharge Juicyway', () => {
       ok: true,
       response: juicywaySession(50_000).data,
     });
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('session-1');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'session-1',
+      undefined
+    );
+  });
+
+  it('forwards the abort signal to Juicyway session lookup', async () => {
+    mocks.getJuicywaySession.mockResolvedValue(juicywaySession(50_000));
+    const signal = AbortSignal.timeout(1000);
+
+    await verifyGatewayCharge(
+      'juicyway',
+      'BAC-JUICY',
+      verificationContext,
+      signal
+    );
+
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('session-1', signal);
   });
 
   it('keeps a processing session pending so the next sweep retries it', async () => {
@@ -141,7 +158,10 @@ describe('verifyGatewayCharge Juicyway', () => {
       ok: true,
       response: legacyResponse.data,
     });
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('legacy-session');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'legacy-session',
+      undefined
+    );
   });
 
   it('requires settlement metadata for sessions created after the cutoff', async () => {

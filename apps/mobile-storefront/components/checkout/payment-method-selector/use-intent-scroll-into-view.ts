@@ -38,6 +38,7 @@ export function useIntentScrollIntoView({
 }: UseIntentScrollIntoViewParams) {
   const insets = useSafeAreaInsets();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: expandedKey is intentionally unread — it retriggers the post-collapse scroll correction when the expanded card changes.
   useEffect(() => {
     if (!scrollRef?.current || !cardRef.current) return;
     // The window Y just under the stepper — where the card should sit.

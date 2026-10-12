@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { View } from 'react-native';
+import type { FetchImplementation } from '@/types/fetch';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { clearPredictionCache } from './AddressAutocomplete.api';
 import { AddressSuggestionsProvider } from './address-suggestions-portal';
@@ -25,7 +26,7 @@ const TEST_PREDICTION = {
   secondaryText: 'Lagos, Nigeria',
   description: '123 Main Street, Lagos, Nigeria',
 };
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = jest.fn<FetchImplementation>();
 
 const TEST_DETAILS_RESPONSE = {
   details: {

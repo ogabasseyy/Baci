@@ -92,6 +92,30 @@ describe('navigateFromPushScreen', () => {
     });
   });
 
+  it('forwards the reminder goal to the savings wallet panel', () => {
+    navigateFromPushScreen('wallet', {
+      action: 'savings',
+      savingsGoalId: 'goal-older',
+    });
+
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-older' },
+    });
+  });
+
+  it('drops a blank reminder goal before opening the savings panel', () => {
+    navigateFromPushScreen('wallet', {
+      action: 'savings',
+      savingsGoalId: '   ',
+    });
+
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/wallet',
+      params: { action: 'savings' },
+    });
+  });
+
   it('opens the plain wallet for non-savings wallet actions', () => {
     navigateFromPushScreen('wallet', {});
 

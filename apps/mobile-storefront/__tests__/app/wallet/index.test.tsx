@@ -1,3 +1,52 @@
+jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
+  useWalletSavedCards: () => false,
+}));
+// Controllable verdict (never a live probe: the real probe's network
+// timeouts hang this suite): DVA/legacy tests run with a resolved
+// legacy verdict so creation gating reflects only the axis under
+// test, while dedicated tests flip the verdict to cover the primary
+// fund rail. Cold-start probe-wait behavior is covered in the
+// funding-account controller tests.
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return {
+    ...actual,
+    usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockUsePrimaryCapability(...args),
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockGetPrimaryCapability(...args),
+  };
+});
+jest.mock('@/lib/piggyvest-primary-capability-cache', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability-cache'
+  ) as typeof import('@/lib/piggyvest-primary-capability-cache');
+  return {
+    ...actual,
+    readObservedPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockReadObservedCapability(...args),
+  };
+});
+// Controllable recovery lookup (never a live endpoint: the savings
+// recovery hook always drains durable state, so these legacy-merchant
+// tests answer a durable null and proceed to legacy submissions).
+jest.mock('@/lib/piggyvest-primary-savings-recovery', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-savings-recovery'
+  ) as typeof import('@/lib/piggyvest-primary-savings-recovery');
+  return {
+    ...actual,
+    recoverPiggyvestPrimarySavings: (...args: unknown[]) =>
+      mockRecoverPrimarySavings(...args),
+  };
+});
+jest.mock('@/components/wallet/fund-primary-wallet-card', () => ({
+  fundPrimaryWalletCard: (...args: unknown[]) =>
+    mockFundPrimaryWalletCard(...args),
+}));
+
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   act,
@@ -70,9 +119,11 @@ type MockWalletContentProps = {
 const mockRedirect = jest.fn<({ href }: { href: string }) => ReactNode>();
 const mockRouterPush = jest.fn();
 let mockSearchParams: {
-  action?: string;
-  requiredAmount?: string;
-  returnTo?: string;
+  action?: string | string[];
+  requiredAmount?: string | string[];
+  returnTo?: string | string[];
+  savingsAmount?: string | string[];
+  savingsGoalId?: string | string[];
 } = {};
 const mockStorefrontScreenShell =
   jest.fn<({ children, edges }: MockStorefrontScreenShellProps) => void>();
@@ -114,6 +165,14 @@ const mockUseMerchantPaymentSettings = jest.fn();
 const mockUseStorefrontInsets = jest.fn();
 let mockMerchantId = 'configured-merchant';
 let mockMerchantSlug = 'ogabassey';
+const mockUsePrimaryCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockGetPrimaryCapability =
+  jest.fn<(...args: unknown[]) => Promise<boolean>>();
+const mockReadObservedCapability = jest.fn<(...args: unknown[]) => unknown>();
+const mockRecoverPrimarySavings =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockFundPrimaryWalletCard =
+  jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockInitializeWalletTopUp =
   jest.fn<
     (input: unknown) => Promise<{
@@ -145,18 +204,22 @@ type MockAuthState = {
 };
 const mockUseAuthStore = jest.fn<() => MockAuthState>();
 
-function mockWalletSavingsGoal(activeSavingsGoal: unknown | null) {
+function mockWalletSavingsGoal(
+  activeSavingsGoal: unknown | null,
+  balance = 125000
+) {
   mockUseWallet.mockReturnValue({
     data: {
       wallet: {
         active_savings_goal: activeSavingsGoal,
-        balance: 125000,
+        balance,
+        earnings_available: true,
         earnings_balance: 125000,
         funding_account: null,
         loyalty_points: 2000,
         requires_funding_account_consent: true,
         savings_balance: activeSavingsGoal ? 120000 : 0,
-        total_balance: activeSavingsGoal ? 245000 : 125000,
+        total_balance: balance + (activeSavingsGoal ? 120000 : 0),
       },
       transactions: [],
     },
@@ -290,6 +353,11 @@ describe('WalletScreen', () => {
     mockSearchParams = {};
     mockMerchantId = 'configured-merchant';
     mockMerchantSlug = 'ogabassey';
+    mockUsePrimaryCapability.mockReturnValue(false);
+    mockGetPrimaryCapability.mockResolvedValue(false);
+    mockReadObservedCapability.mockReturnValue(false);
+    mockRecoverPrimarySavings.mockResolvedValue(null);
+    mockFundPrimaryWalletCard.mockResolvedValue(undefined);
     mockRefetch.mockResolvedValue(undefined);
     mockRedirect.mockImplementation(({ href }) => (
       <View testID="wallet-redirect" accessibilityLabel={href} />
@@ -420,6 +488,7 @@ describe('WalletScreen', () => {
       data: {
         wallet: {
           balance: 125000,
+          earnings_available: true,
           earnings_balance: 125000,
           funding_account: null,
           loyalty_points: 2000,
@@ -654,10 +723,10 @@ describe('WalletScreen', () => {
     await waitFor(() => {
       expect(mockCreateFundingAccountMutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Account Ready',
-      'Titan Paystack - 1234567890'
-    );
+    // No success dialog: the mutation invalidates the wallet query and the
+    // funding-account card shows the new number instead (asserted in
+    // use-wallet.test.ts > useCreateWalletFundingAccount).
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
   it('does not announce account details when the provider returns no account summary', async () => {
@@ -734,14 +803,14 @@ describe('WalletScreen', () => {
 
     render(<WalletScreen />);
 
-    expect(screen.getByText('earnings-balance:125000')).toBeOnTheScreen();
+    expect(screen.getByText('earnings-balance:0')).toBeOnTheScreen();
     expect(screen.getByText('savings-balance:0')).toBeOnTheScreen();
     expect(screen.getByText('total-balance:125000')).toBeOnTheScreen();
     expect(mockLogWarn).toHaveBeenCalledWith(
       expect.stringContaining('Wallet API balance contract warning'),
       expect.objectContaining({
         computedTotalBalance: 125000,
-        missingFields: ['earnings_balance', 'savings_balance', 'total_balance'],
+        missingFields: ['savings_balance', 'total_balance'],
       })
     );
   });
@@ -801,6 +870,7 @@ describe('WalletScreen', () => {
       data: {
         wallet: {
           balance: 125000,
+          earnings_available: true,
           earnings_balance: 125000,
           funding_account: null,
           loyalty_points: 2000,
@@ -944,6 +1014,60 @@ describe('WalletScreen', () => {
     );
   });
 
+  it('routes a wallet top-up through the primary card rail when capable', async () => {
+    mockUsePrimaryCapability.mockReturnValue(true);
+    mockGetPrimaryCapability.mockResolvedValue(true);
+    mockReadObservedCapability.mockReturnValue(true);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(mockFundPrimaryWalletCard).toHaveBeenCalledWith(
+        expect.objectContaining({ fundAmount: '2500' })
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+  });
+
+  it('retries funding from the wallet screen after a transient probe failure', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    mockReadObservedCapability.mockReturnValue(null);
+    mockGetPrimaryCapability
+      .mockRejectedValueOnce(new Error('transport down'))
+      .mockResolvedValueOnce(false);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByText('Open Fund Panel'));
+    fireEvent.press(screen.getByText('Set Valid Fund Amount'));
+    fireEvent.press(screen.getByText('Confirm Fund'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Unable to fund wallet',
+        'We could not confirm your wallet rail. Please try again.',
+        expect.arrayContaining([expect.objectContaining({ text: 'Try again' })])
+      );
+    });
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    const buttons = alertSpy.mock.calls[0][2] ?? [];
+    const retry = buttons.find((button) => button?.text === 'Try again');
+    expect(retry?.onPress).toEqual(expect.any(Function));
+
+    await act(async () => {
+      retry?.onPress?.();
+    });
+    await waitFor(() => {
+      expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 2500 })
+      );
+    });
+  });
+
   it('routes to start savings and manage cards screens', () => {
     render(<WalletScreen />);
 
@@ -952,6 +1076,106 @@ describe('WalletScreen', () => {
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/wallet/savings/start');
     expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/wallet/manage-cards');
+  });
+
+  it('opens the savings progress flow without starting wallet-only funding', () => {
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 0);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Open Start Savings' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Set Savings Contribution' })
+    );
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+    expect(mockRouterPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/payment-gateway' })
+    );
+  });
+
+  it('restores the entered contribution when payment returns to savings', () => {
+    mockSearchParams = {
+      action: 'savings',
+      savingsAmount: '500',
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+    expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    expect(
+      screen.getByText('savings-contribution-amount:500')
+    ).toBeOnTheScreen();
+  });
+
+  it('takes the first value when savings params repeat in the URL', () => {
+    mockSearchParams = {
+      action: ['savings', 'fund'],
+      savingsAmount: ['500', '999'],
+      savingsGoalId: ['goal-1', 'goal-2'],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(
+      screen.getByText('savings-contribution-amount:500')
+    ).toBeOnTheScreen();
+  });
+
+  it('treats empty-array params as absent like the funding route', () => {
+    mockSearchParams = {
+      action: [],
+      savingsAmount: [],
+      savingsGoalId: [],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(screen.getByText('savings-contribution-amount:')).toBeOnTheScreen();
+  });
+
+  it('keeps the savings plan open if its wallet payment cannot start', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 0);
+    mockInitializeWalletTopUp.mockRejectedValueOnce(
+      new Error('Payment unavailable')
+    );
+
+    try {
+      render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Open Start Savings' })
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Set Savings Contribution' })
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Fund Savings Wallet' })
+      );
+
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Top-up Failed',
+          'Payment unavailable'
+        );
+      });
+      expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+      expect(
+        screen.getByText('savings-contribution-amount:500')
+      ).toBeOnTheScreen();
+      expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    } finally {
+      alertSpy.mockRestore();
+    }
   });
 
   it('opens active savings progress and adds a manual contribution', async () => {
@@ -990,6 +1214,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
@@ -1064,6 +1291,9 @@ describe('WalletScreen', () => {
 
     try {
       render(<WalletScreen />);
+      // Drain the verdict-independent savings recovery lookup before
+      // pressing: contribution readiness now resolves asynchronously.
+      await act(async () => {});
 
       fireEvent.press(
         screen.getByRole('button', { name: 'Open Start Savings' })
@@ -1562,7 +1792,7 @@ describe('WalletScreen', () => {
     expect(screen.getByText('show-redeem-panel:true')).toBeOnTheScreen();
   });
 
-  it('blocks invalid wallet top-up amounts before calling the API', () => {
+  it('blocks invalid wallet top-up amounts before calling the API', async () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation(() => undefined);
@@ -1573,9 +1803,11 @@ describe('WalletScreen', () => {
     fireEvent.press(screen.getByText('Set Invalid Fund Amount'));
     fireEvent.press(screen.getByText('Confirm Fund'));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Invalid Amount',
-      'Wallet top-up amount must be between ₦100 and ₦500,000.'
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Invalid Amount',
+        'Wallet top-up amount must be between ₦100 and ₦500,000.'
+      )
     );
     expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
   });

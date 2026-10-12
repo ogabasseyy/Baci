@@ -18,6 +18,7 @@ describe('isStorefrontRequiredApiSourcePath', () => {
       'google-places/reviews',
       'places/autocomplete',
       'places/details',
+      'search/submissions',
     ]) {
       expect(
         isStorefrontRequiredApiSourcePath(

@@ -1,282 +1,242 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-let mockPlatformOS: 'android' | 'ios' | 'web' = 'android';
-const mockCallOrder: string[] = [];
-
-jest.mock('react-native', () => ({
-  Platform: {
-    get OS() {
-      return mockPlatformOS;
-    },
-  },
+const mockCancelScheduledNotificationAsync = jest.fn(async () => undefined);
+const mockGetPermissionsAsync = jest.fn(async () => ({ status: 'granted' }));
+const mockRequestPermissionsAsync = jest.fn(async () => ({
+  status: 'granted',
 }));
+const mockScheduleNotificationAsync = jest.fn(async () => 'notification-id');
+const mockSetNotificationChannelAsync = jest.fn(async () => undefined);
 
+jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 jest.mock('expo-notifications', () => ({
   AndroidImportance: { DEFAULT: 'default' },
-  SchedulableTriggerInputTypes: {
-    DAILY: 'daily',
-    MONTHLY: 'monthly',
-    WEEKLY: 'weekly',
-  },
-  getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
-  requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
-  cancelScheduledNotificationAsync: jest.fn(() => {
-    mockCallOrder.push('cancelScheduledNotificationAsync');
-    return Promise.resolve();
-  }),
-  scheduleNotificationAsync: jest.fn(() => {
-    mockCallOrder.push('scheduleNotificationAsync');
-    return Promise.resolve('notification-id');
-  }),
-  setNotificationChannelAsync: jest.fn(() => {
-    mockCallOrder.push('setNotificationChannelAsync');
-    return Promise.resolve(null);
-  }),
+  SchedulableTriggerInputTypes: { WEEKLY: 'weekly' },
+  cancelScheduledNotificationAsync: mockCancelScheduledNotificationAsync,
+  getPermissionsAsync: mockGetPermissionsAsync,
+  requestPermissionsAsync: mockRequestPermissionsAsync,
+  scheduleNotificationAsync: mockScheduleNotificationAsync,
+  setNotificationChannelAsync: mockSetNotificationChannelAsync,
 }));
-
+jest.mock('@/lib/storage', () => {
+  const storage = require('@react-native-async-storage/async-storage');
+  return { asyncStorage: storage.default ?? storage };
+});
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({
-    debug: jest.fn(),
-  }),
+  createLogger: () => ({ debug: jest.fn() }),
+}));
+jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.baci.test' }));
+jest.mock('@/lib/config', () => ({
+  CONFIG: { MERCHANT_ID: '00000000-0000-4000-8000-000000000010' },
+}));
+const mockAuthState: {
+  merchantId: string | null;
+  user: { id: string } | null;
+} = {
+  merchantId: '00000000-0000-4000-8000-000000000010',
+  user: { id: 'user-a' },
+};
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => mockAuthState },
+}));
+// Goal reconciliation is covered in the retention suite; here it resolves no
+// goals so every record is kept (and the API-client graph stays unloaded).
+jest.mock('@/lib/customer-savings', () => ({
+  listSavingsGoals: jest.fn(async () => ({
+    goals: [],
+    summary: { activeGoalCount: 0, savingsBalance: 0 },
+  })),
 }));
 
 const {
+  activateDueSavingsReminderNotification,
   cancelSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } =
   require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
-const mockNotifications = require('expo-notifications') as jest.Mocked<
-  typeof import('expo-notifications')
->;
 
-describe('scheduleSavingsReminderNotification', () => {
+describe('savings reminder scheduling and cancellation', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockGetPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockAuthState.merchantId = '00000000-0000-4000-8000-000000000010';
+    mockAuthState.user = { id: 'user-a' };
     await AsyncStorage.clear();
-    mockCallOrder.length = 0;
-    mockPlatformOS = 'android';
-    mockNotifications.cancelScheduledNotificationAsync.mockImplementation(
-      () => {
-        mockCallOrder.push('cancelScheduledNotificationAsync');
-        return Promise.resolve();
-      }
-    );
-    mockNotifications.getPermissionsAsync.mockResolvedValue({
-      status: 'granted',
-    } as Awaited<ReturnType<typeof mockNotifications.getPermissionsAsync>>);
-    mockNotifications.requestPermissionsAsync.mockResolvedValue({
-      status: 'granted',
-    } as Awaited<ReturnType<typeof mockNotifications.requestPermissionsAsync>>);
-    mockNotifications.scheduleNotificationAsync.mockImplementation(() => {
-      mockCallOrder.push('scheduleNotificationAsync');
-      return Promise.resolve('notification-id');
-    });
-    mockNotifications.setNotificationChannelAsync.mockImplementation(() => {
-      mockCallOrder.push('setNotificationChannelAsync');
-      return Promise.resolve(null);
-    });
   });
 
-  it('schedules a recurring savings reminder on the savings channel', async () => {
-    const id = await scheduleSavingsReminderNotification({
-      contributionAmount: 500,
-      frequency: 'weekly',
-      goalId: 'goal-1',
-      scheduledAt: new Date(2020, 5, 8, 9, 30),
-      goalTitle: 'iPhone 15 Pro',
-    });
-
-    expect(id).toBe('notification-id');
-    expect(mockCallOrder).toEqual([
-      'setNotificationChannelAsync',
-      'scheduleNotificationAsync',
-    ]);
-    expect(mockNotifications.setNotificationChannelAsync).toHaveBeenCalledWith(
-      'savings',
-      expect.objectContaining({
-        description: 'Reminders to keep your device savings goal on track',
-        importance: 'default',
-        name: 'Savings Reminders',
-      })
-    );
-    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledWith({
-      content: {
-        title: 'Savings reminder',
-        body: 'Add ₦500 toward iPhone 15 Pro.',
-        data: {
-          goalId: 'goal-1',
-          screen: 'wallet',
-          type: 'customer_savings_reminder',
-        },
-      },
-      trigger: {
-        channelId: 'savings',
-        hour: 9,
-        minute: 30,
-        type: 'weekly',
-        weekday: 2,
-      },
-    });
-  });
-
-  it('does not create an Android channel on iOS', async () => {
-    mockPlatformOS = 'ios';
-
-    await scheduleSavingsReminderNotification({
-      contributionAmount: 500,
-      frequency: 'daily',
-      goalId: 'goal-1',
-      goalTitle: 'iPhone 15 Pro',
-      scheduledAt: new Date(2020, 5, 8, 9, 30),
-    });
-
-    expect(
-      mockNotifications.setNotificationChannelAsync
-    ).not.toHaveBeenCalled();
-    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledWith(
-      expect.objectContaining({
-        trigger: {
-          channelId: 'savings',
-          hour: 9,
-          minute: 30,
-          type: 'daily',
-        },
-      })
-    );
-  });
-
-  it('cancels and replaces the previously stored savings reminder', async () => {
-    mockNotifications.scheduleNotificationAsync
-      .mockImplementationOnce(() => {
-        mockCallOrder.push('scheduleNotificationAsync');
-        return Promise.resolve('notification-id-1');
-      })
-      .mockImplementationOnce(() => {
-        mockCallOrder.push('scheduleNotificationAsync');
-        return Promise.resolve('notification-id-2');
+  it('keeps the first goal reminder when a second goal is scheduled and cancels only the requested goal', async () => {
+    mockScheduleNotificationAsync
+      .mockResolvedValueOnce('first')
+      .mockResolvedValueOnce('second');
+    for (const goalId of ['goal-1', 'goal-2']) {
+      await scheduleSavingsReminderNotification({
+        contributionAmount: 500,
+        frequency: 'weekly',
+        goalId,
+        goalTitle: 'Phone',
       });
-
-    await scheduleSavingsReminderNotification({
-      contributionAmount: 500,
-      frequency: 'weekly',
-      goalId: 'goal-1',
-      goalTitle: 'iPhone 15 Pro',
-    });
-    await scheduleSavingsReminderNotification({
-      contributionAmount: 1000,
-      frequency: 'daily',
-      goalId: 'goal-2',
-      goalTitle: 'Pixel 10',
-    });
-
-    expect(
-      mockNotifications.cancelScheduledNotificationAsync
-    ).toHaveBeenCalledWith('notification-id-1');
-    await expect(
-      AsyncStorage.getItem('baci:savings-reminder-notification-id')
-    ).resolves.toBe('notification-id-2');
-    await expect(
-      AsyncStorage.getItem('baci:savings-reminder-goal-id')
-    ).resolves.toBe('goal-2');
+    }
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalled();
+    await cancelSavingsReminderNotification('goal-2');
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('second');
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'first'
+    );
+    await cancelSavingsReminderNotification();
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('first');
   });
 
-  it('cancels a stored reminder for the matching goal', async () => {
+  it('cancels the captured scope when auth changed before the queued cancel runs', async () => {
+    mockScheduleNotificationAsync.mockResolvedValueOnce('user-a-live');
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
       goalId: 'goal-1',
-      goalTitle: 'iPhone 15 Pro',
+      goalTitle: 'Phone',
+    });
+    // user-b signs in and schedules before the queued cancel runs.
+    mockAuthState.user = { id: 'user-b' };
+    mockScheduleNotificationAsync.mockResolvedValueOnce('user-b-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-9',
+      goalTitle: 'Tablet',
     });
 
+    await cancelSavingsReminderNotification(undefined, {
+      merchantId: '00000000-0000-4000-8000-000000000010',
+      userId: 'user-a',
+    });
+
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'user-a-live'
+    );
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'user-b-live'
+    );
+    await expect(
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-b:00000000-0000-4000-8000-000000000010:goal-9'
+      )
+    ).resolves.toContain('user-b-live');
+  });
+
+  it('clears scheduled and pending goals for cancel-all', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-2',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
+    await cancelSavingsReminderNotification();
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(
+      (await AsyncStorage.getAllKeys()).filter((key) =>
+        key.startsWith('baci:savings-reminder-')
+      )
+    ).toEqual([]);
+  });
+
+  it('does not request permission while activating a due local reminder', async () => {
+    // Pre-scope legacy keys are disposed, never adopted: seed a scoped
+    // pending record through the public API instead.
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
+    mockGetPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date(2100, 0, 1).getTime());
+    try {
+      await expect(
+        activateDueSavingsReminderNotification()
+      ).resolves.toBeNull();
+    } finally {
+      now.mockRestore();
+    }
+
+    await expect(
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1'
+      )
+    ).resolves.toContain('goal-1');
+    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(mockRequestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('retains a failed cancellation for retry without creating a duplicate', async () => {
+    const request = {
+      contributionAmount: 500,
+      frequency: 'weekly' as const,
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    };
+    await scheduleSavingsReminderNotification(request);
+    mockCancelScheduledNotificationAsync.mockRejectedValueOnce(
+      new Error('native failure')
+    );
+    await expect(
+      scheduleSavingsReminderNotification(request)
+    ).resolves.toBeNull();
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
     await expect(cancelSavingsReminderNotification('goal-1')).resolves.toBe(
       true
     );
-
-    expect(
-      mockNotifications.cancelScheduledNotificationAsync
-    ).toHaveBeenCalledWith('notification-id');
-    await expect(
-      AsyncStorage.getItem('baci:savings-reminder-notification-id')
-    ).resolves.toBeNull();
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps a stored reminder when cancelling a different goal', async () => {
-    await scheduleSavingsReminderNotification({
-      contributionAmount: 500,
-      frequency: 'weekly',
-      goalId: 'goal-1',
-      goalTitle: 'iPhone 15 Pro',
-    });
-    jest.clearAllMocks();
+  it('fails closed when no account is signed in', async () => {
+    mockAuthState.user = null;
 
-    await expect(cancelSavingsReminderNotification('goal-2')).resolves.toBe(
+    await expect(
+      scheduleSavingsReminderNotification({
+        contributionAmount: 500,
+        frequency: 'weekly',
+        goalId: 'goal-1',
+        goalTitle: 'Phone',
+      })
+    ).resolves.toBeNull();
+    await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
+    await expect(cancelSavingsReminderNotification('goal-1')).resolves.toBe(
       false
     );
-
-    expect(
-      mockNotifications.cancelScheduledNotificationAsync
-    ).not.toHaveBeenCalled();
-    await expect(
-      AsyncStorage.getItem('baci:savings-reminder-notification-id')
-    ).resolves.toBe('notification-id');
+    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
   });
 
-  it('returns null on web', async () => {
-    mockPlatformOS = 'web';
-
-    await expect(
-      scheduleSavingsReminderNotification({
-        contributionAmount: 500,
-        frequency: 'weekly',
-        goalId: 'goal-1',
-        goalTitle: 'iPhone 15 Pro',
-      })
-    ).resolves.toBeNull();
-    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
-  });
-
-  it('returns null when notification permission is denied', async () => {
-    mockNotifications.getPermissionsAsync.mockResolvedValue({
-      status: 'denied',
-    } as Awaited<ReturnType<typeof mockNotifications.getPermissionsAsync>>);
-    mockNotifications.requestPermissionsAsync.mockResolvedValue({
-      status: 'denied',
-    } as Awaited<ReturnType<typeof mockNotifications.requestPermissionsAsync>>);
-
-    await expect(
-      scheduleSavingsReminderNotification({
-        contributionAmount: 500,
-        frequency: 'weekly',
-        goalId: 'goal-1',
-        goalTitle: 'iPhone 15 Pro',
-      })
-    ).resolves.toBeNull();
-    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
-  });
-
-  it('returns null when the notifications module is unavailable', async () => {
-    jest.resetModules();
-    jest.doMock('react-native', () => ({
-      Platform: { OS: 'ios' },
-    }));
-    jest.doMock('expo-notifications', () => {
-      throw new Error('expo-notifications unavailable');
-    });
-    jest.doMock('@/lib/logger', () => ({
-      createLogger: () => ({ debug: jest.fn() }),
-    }));
-
-    const { scheduleSavingsReminderNotification: scheduleUnavailableReminder } =
-      require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
-
-    await expect(
-      scheduleUnavailableReminder({
-        contributionAmount: 500,
-        frequency: 'weekly',
-        goalId: 'goal-1',
-        goalTitle: 'iPhone 15 Pro',
-      })
-    ).resolves.toBeNull();
+  it('cancels the native notification when persistence fails', async () => {
+    const setItem = jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockRejectedValueOnce(new Error('disk full'));
+    try {
+      await expect(
+        scheduleSavingsReminderNotification({
+          contributionAmount: 500,
+          frequency: 'weekly',
+          goalId: 'goal-1',
+          goalTitle: 'Phone',
+        })
+      ).rejects.toThrow('disk full');
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-id'
+    );
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
   });
 });

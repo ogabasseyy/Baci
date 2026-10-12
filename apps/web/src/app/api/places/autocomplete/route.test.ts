@@ -6,6 +6,11 @@ import {
   mockFetch,
 } from './route.test-helpers';
 
+vi.mock('../provider-budget', () => ({
+  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGeoapifyRequest: vi.fn(async () => true),
+}));
+
 describe('GET /api/places/autocomplete', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -22,6 +27,7 @@ describe('GET /api/places/autocomplete', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(data).toEqual({ predictions: [] });
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -65,6 +71,7 @@ describe('GET /api/places/autocomplete', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(data.predictions).toHaveLength(2);
     expect(data.predictions[0]).toEqual({
       placeId: 'ChIJ1234',
@@ -76,7 +83,7 @@ describe('GET /api/places/autocomplete', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=Lagos&key=test-api-key',
-      { opentelemetry: { ignore: true } }
+      expect.objectContaining({ opentelemetry: { ignore: true } })
     );
   });
 

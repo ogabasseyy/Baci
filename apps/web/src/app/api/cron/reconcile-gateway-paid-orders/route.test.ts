@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   drainFailedPaidOrderSideEffects: vi.fn(),
+  finalizeOrderGatewayPayment: vi.fn(),
+  fileWedgeReview: vi.fn(),
   getCronSecret: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn() },
+  reconcileAbandonedPaystackAttempts: vi.fn(),
   reconcileWedgedGatewayOrders: vi.fn(),
 }));
 
@@ -21,8 +24,14 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/payments/reconcile-wedged-gateway-orders', () => ({
   reconcileWedgedGatewayOrders: mocks.reconcileWedgedGatewayOrders,
 }));
+vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
+  reconcileAbandonedPaystackAttempts: mocks.reconcileAbandonedPaystackAttempts,
+}));
 vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
   drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
+}));
+vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
+  finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
 }));
 
 import { GET } from './route';
@@ -38,10 +47,27 @@ function buildRequest(authorization?: string) {
   );
 }
 
+function mockSweepResult(result: unknown) {
+  mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
+    await input.beforeSweep?.({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: mocks.fileWedgeReview,
+    });
+    return result;
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getCronSecret.mockReturnValue(CRON_SECRET);
   mocks.createServiceClient.mockReturnValue({});
+  mockSweepResult({ checked: 0, failed: [], healed: [], skipped: [] });
+  mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
+    checked: 0,
+    failed: false,
+    held: [],
+    retired: [],
+  });
   mocks.drainFailedPaidOrderSideEffects.mockResolvedValue({
     drained: [],
     failed: [],
@@ -59,6 +85,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'server_misconfigured' });
+    expect(mocks.reconcileAbandonedPaystackAttempts).not.toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).not.toHaveBeenCalled();
   });
 
@@ -68,6 +95,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     expect(missing.status).toBe(401);
     expect(wrong.status).toBe(401);
+    expect(mocks.reconcileAbandonedPaystackAttempts).not.toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).not.toHaveBeenCalled();
   });
 
@@ -79,13 +107,22 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
       healed: [{ orderId: 'order-1', orderNumber: 'ORD-1' }],
       skipped: [],
     };
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue(summary);
+    mockSweepResult(summary);
 
     const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject(summary);
+    expect(body.abandonedAttemptSweep).toEqual({
+      checked: 0,
+      failed: false,
+      held: [],
+      retired: [],
+    });
+    expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
+      expect.objectContaining({ supabase: expect.anything() })
+    );
     expect(body.sideEffectDrain).toEqual({
       drained: [],
       failed: [],
@@ -102,8 +139,29 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     );
   });
 
+  it('shares the invocation budget across the three passes', async () => {
+    mockSweepResult({ checked: 0 });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+
+      expect(response.status).toBe(200);
+      expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_090_000 })
+      );
+      expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_180_000 })
+      );
+      expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_270_000 })
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+    mockSweepResult({
       checked: 0,
       detectedUnhealable: [],
       failed: [],
@@ -135,6 +193,56 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sideEffectDrain })
     );
+  });
+
+  it('keeps the existing repair passes running if the Paystack attempt sweep fails', async () => {
+    mocks.reconcileAbandonedPaystackAttempts.mockRejectedValue(
+      new Error('candidate lookup failed')
+    );
+    mockSweepResult({
+      checked: 0,
+      detectedUnhealable: [],
+      failed: [],
+      healed: [],
+      skipped: [],
+    });
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.abandonedAttemptSweepFailed).toBe(true);
+    expect(mocks.logger.error).toHaveBeenCalled();
+    expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();
+    expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalled();
+  });
+
+  it('returns 503 with the partial sweep summary after a retirement write fails', async () => {
+    mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
+      checked: 2,
+      failed: true,
+      held: [{ id: 'attempt-1', reason: 'retirement_failed' }],
+      retired: ['attempt-2'],
+    });
+    mockSweepResult({
+      checked: 0,
+      detectedUnhealable: [],
+      failed: [],
+      healed: [],
+      skipped: [],
+    });
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.abandonedAttemptSweepFailed).toBe(true);
+    expect(body.abandonedAttemptSweep).toMatchObject({
+      checked: 2,
+      failed: true,
+      retired: ['attempt-2'],
+    });
+    expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();
   });
 
   it('returns 500 when the sweep itself throws', async () => {

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { getRateLimitConfig } from './rate-limit-routes';
 
 describe('rate-limit route matching', () => {
+  it('isolates submission writes from autocomplete and search reads', () => {
+    expect(getRateLimitConfig('/api/search/submissions')).toMatchObject({
+      pattern: '/api/search/submissions',
+      config: { maxRequests: 20, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/search/autocomplete').pattern).toBe(
+      'default'
+    );
+  });
   it('uses the polling bucket only for an exact quiz result route', () => {
     expect(
       getRateLimitConfig('/api/quiz/attempts/attempt-1/result')

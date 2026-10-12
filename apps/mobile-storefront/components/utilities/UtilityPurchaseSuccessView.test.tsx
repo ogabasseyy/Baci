@@ -254,6 +254,95 @@ describe('UtilityPurchaseSuccessView', () => {
     expect(onBackfillSettled).toHaveBeenCalledWith('failed');
   });
 
+  it('notifies exactly once across re-renders with an inline callback', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+    const onBackfillSettled = jest.fn();
+    // Mirror the parent: a fresh arrow identity on every render.
+    const renderView = (reference: string) =>
+      render(
+        <UtilityPurchaseSuccessView
+          bottomPadding={32}
+          colors={Colors.light}
+          data={{
+            amount: 500,
+            customerIdentifier: '08031234567',
+            reference,
+            status: 'processing',
+          }}
+          headerOffset={20}
+          isAuthenticated={true}
+          onBackfillSettled={(status) => onBackfillSettled(status)}
+          onCreateAccount={jest.fn()}
+          type="airtime"
+        />
+      );
+
+    const { rerender } = renderView('ref-once');
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-once',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={(status) => onBackfillSettled(status)}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies again for a buy-again purchase in the same mounted view', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+    const onBackfillSettled = jest.fn();
+
+    const { rerender } = render(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-first',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 700,
+          customerIdentifier: '08031234567',
+          reference: 'ref-second',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(2);
+  });
+
   it('does not notify when the backfill status matches the purchase', () => {
     mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
     const onBackfillSettled = jest.fn();

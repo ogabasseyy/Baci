@@ -1451,8 +1451,11 @@ describe('resolveVtuCustomer', () => {
     const customerUpdateSelect = vi.fn(() => ({
       maybeSingle: customerUpdateMaybeSingle,
     }));
-    const customerUpdateEq = vi.fn(() => ({
+    const customerUpdateIs = vi.fn(() => ({
       select: customerUpdateSelect,
+    }));
+    const customerUpdateEq = vi.fn(() => ({
+      is: customerUpdateIs,
     }));
     const customerUpdate = vi.fn(() => ({
       eq: customerUpdateEq,
@@ -1486,7 +1489,7 @@ describe('resolveVtuCustomer', () => {
       }),
     } as unknown as ResolveCustomerSupabase;
 
-    return { customerUpdate, customerUpdateEq, supabase };
+    return { customerUpdate, customerUpdateEq, customerUpdateIs, supabase };
   }
 
   it('resolves a customer directly by user_id without relinking', async () => {
@@ -1508,7 +1511,7 @@ describe('resolveVtuCustomer', () => {
   });
 
   it('links an email-matched guest customer before VTU checkout writes payment rows', async () => {
-    const { customerUpdate, customerUpdateEq, supabase } =
+    const { customerUpdate, customerUpdateEq, customerUpdateIs, supabase } =
       createResolveCustomerSupabase({
         byEmail: {
           ...linkedCustomer,
@@ -1529,6 +1532,7 @@ describe('resolveVtuCustomer', () => {
     expect(customer?.user_id).toBe('user-1');
     expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
     expect(customerUpdateEq).toHaveBeenCalledWith('id', 'customer-1');
+    expect(customerUpdateIs).toHaveBeenCalledWith('user_id', null);
   });
 
   it('does not relink an email-matched customer that already has a user_id', async () => {

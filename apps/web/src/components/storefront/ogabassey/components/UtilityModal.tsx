@@ -203,9 +203,18 @@ export const UtilityModal = ({
 
         <UtilityTabs
           activeTab={activeTab}
-          // Lock tabs in flight: result + poll read the live tab.
-          disabled={loading}
+          // Lock tabs in flight AND on the result views: loading flips
+          // false while step is still 'processing', and a switch there
+          // unmounts the settlement poll (key never settles, wallet never
+          // refetches, late token/refund never surfaces).
+          disabled={loading || step !== 'details'}
           onSelect={(tab) => {
+            // Belt-and-braces with `disabled` (native disabled is not
+            // enforced on programmatic/assisted activation paths): a
+            // switch off the result views must never unmount the poll.
+            if (step !== 'details') {
+              return;
+            }
             setActiveTab(tab);
             setStep('details');
           }}

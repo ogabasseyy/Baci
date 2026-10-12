@@ -22,14 +22,15 @@ describe('linkVtuCustomerByEmail', () => {
       Promise.resolve({ data: linkData, error: linkError })
     );
     const select = vi.fn(() => ({ maybeSingle }));
-    const eq = vi.fn(() => ({ select }));
+    const is = vi.fn(() => ({ select }));
+    const eq = vi.fn(() => ({ is }));
     const update = vi.fn(() => ({ eq }));
     const supabase = { from: vi.fn(() => ({ update })) };
-    return { eq, maybeSingle, select, supabase, update };
+    return { eq, is, maybeSingle, select, supabase, update };
   }
 
   it('links the row, confirms the write, and returns a fresh linked object', async () => {
-    const { eq, select, supabase, update } = createSupabase();
+    const { eq, is, select, supabase, update } = createSupabase();
 
     const customer = await linkVtuCustomerByEmail({
       byEmail,
@@ -40,8 +41,28 @@ describe('linkVtuCustomerByEmail', () => {
     expect(supabase.from).toHaveBeenCalledWith('customers');
     expect(update).toHaveBeenCalledWith({ user_id: 'user-1' });
     expect(eq).toHaveBeenCalledWith('id', 'customer-1');
+    expect(is).toHaveBeenCalledWith('user_id', null);
     expect(select).toHaveBeenCalledWith('id');
     expect(customer).toEqual({ ...byEmail, user_id: 'user-1' });
+  });
+
+  it('fails closed when a concurrent email claim wins the race', async () => {
+    // The rival UPDATE lands first, so this claim's
+    // .is('user_id', null) matches zero rows: the loser must not
+    // transact as a row it no longer owns.
+    for (const strictLookups of [false, true]) {
+      const { is, supabase } = createSupabase({ linkData: null });
+
+      const customer = await linkVtuCustomerByEmail({
+        byEmail,
+        strictLookups,
+        supabase: supabase as never,
+        userId: 'user-1',
+      });
+
+      expect(is).toHaveBeenCalledWith('user_id', null);
+      expect(customer).toBeNull();
+    }
   });
 
   it('returns null when the link write fails', async () => {

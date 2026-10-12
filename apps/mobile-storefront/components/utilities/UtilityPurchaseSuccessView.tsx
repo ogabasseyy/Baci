@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { PurchaseSuccess } from '@/components/utilities/PurchaseSuccess';
 import type Colors from '@/constants/Colors';
@@ -60,18 +60,27 @@ export function UtilityPurchaseSuccessView({
   // pin ever arrives to flip it).
   const status = backfilledStatus ?? data.status;
 
+  // Fires once per purchase: the transition condition stays true
+  // forever (data.status is frozen at submit time) and the parent
+  // passes an inline callback, so without this guard every render
+  // re-invalidates all wallet queries. Keyed by reference so a
+  // buy-again purchase in the same mounted view still notifies.
+  const settledFiredRef = useRef<string | null>(null);
   useEffect(() => {
     // Only on a transition (processing -> terminal): an already-
     // successful purchase already invalidated its wallet via the
     // success reference, so re-notifying would just double-refetch.
     if (
-      backfilledStatus &&
-      backfilledStatus !== data.status &&
-      onBackfillSettled
+      !backfilledStatus ||
+      backfilledStatus === data.status ||
+      !onBackfillSettled ||
+      settledFiredRef.current === data.reference
     ) {
-      onBackfillSettled(backfilledStatus);
+      return;
     }
-  }, [backfilledStatus, data.status, onBackfillSettled]);
+    settledFiredRef.current = data.reference;
+    onBackfillSettled(backfilledStatus);
+  }, [backfilledStatus, data.reference, data.status, onBackfillSettled]);
 
   return (
     <View

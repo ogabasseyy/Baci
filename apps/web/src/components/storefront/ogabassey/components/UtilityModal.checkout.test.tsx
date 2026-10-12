@@ -297,6 +297,35 @@ describe('UtilityModal checkout routing', () => {
     }
   });
 
+  it('keeps the utility tabs locked on the processing view after loading settles', async () => {
+    // loading flips false while step is still 'processing': an enabled
+    // tab switch would unmount the settlement poll (key never settles,
+    // wallet never refetches, late token/refund never surfaces).
+    harness.checkoutFetch.mockResolvedValue(
+      harness.createJsonResponse({
+        amount: 100,
+        reference: 'REF-PROC-2',
+        status: 'processing',
+      })
+    );
+
+    submitAirtimePurchase();
+
+    await waitFor(() => {
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
+    });
+    for (const name of ['Airtime', 'Data', 'TV', 'Power', 'Betting']) {
+      expect(screen.getByRole('tab', { name })).toBeDisabled();
+    }
+    // fireEvent bypasses native disabled, so this also exercises the
+    // onSelect step guard: the processing view must survive the click.
+    fireEvent.click(screen.getByRole('tab', { name: 'Data' }));
+
+    expect(screen.getByText('Processing…')).toBeInTheDocument();
+    expect(screen.queryByTestId('airtime-data-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bill-payment-form')).not.toBeInTheDocument();
+  });
+
   it('rejects failed non-JSON checkout responses', async () => {
     harness.checkoutFetch.mockResolvedValue({
       ok: false,

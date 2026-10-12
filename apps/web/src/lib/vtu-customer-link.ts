@@ -9,8 +9,9 @@ import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
  * history. A link error is indeterminate — 5xx under strict, null
  * otherwise (self-heals on retry via the byUserId hit if the link
  * actually landed). A zero-row match means the row vanished
- * mid-checkout — definitive miss, null in both modes. Extracted
- * from vtu-pending-transaction.ts per the Boy Scout Rule.
+ * mid-checkout or a concurrent email claim won the race —
+ * definitive miss, null in both modes. Extracted from
+ * vtu-pending-transaction.ts per the Boy Scout Rule.
  */
 export async function linkVtuCustomerByEmail<
   T extends { id: string; user_id: string | null },
@@ -29,6 +30,13 @@ export async function linkVtuCustomerByEmail<
     .from('customers')
     .update({ user_id: userId })
     .eq('id', byEmail.id)
+    // Atomic claim: the resolver read user_id=null in an earlier
+    // SELECT, so without this guard two concurrent checkouts for two
+    // auth accounts sharing an email both UPDATE — the second steals
+    // the link while the first still transacts as the row. The loser
+    // now matches zero rows and fails closed. No merchant scope: id
+    // is the primary key.
+    .is('user_id', null)
     .select('id')
     .maybeSingle();
 

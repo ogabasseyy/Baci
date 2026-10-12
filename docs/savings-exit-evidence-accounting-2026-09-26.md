@@ -17,7 +17,9 @@ branch, commit, deployment, provider account, or real money was changed.
   source wallet after both wallet identities, business and currency agree. Missing
   currency/business, wrong business, non-NGN currency or wrong wallet IDs defer.
   Only mocked HTTP was used. No provider response body or secret is logged.
-- `createSavingsExitEvidenceStore({ integrationId, socketDirectory, port })` is a
+- `createSavingsExitEvidenceStore({ integrationId, socketDirectory, port, password })`
+  takes `password` (8-128 chars, no surrounding whitespace, no NUL) from
+  server-only runtime configuration — never a source literal. It is a
   local-socket-only recorder using the separate `piggyvest_exit_evidence_writer`
   login. It admits only `record_evidence`, validates parameters, and acknowledges
   only after COMMIT. It does not use service-role credentials or the customer

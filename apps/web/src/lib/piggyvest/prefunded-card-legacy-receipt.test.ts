@@ -9,11 +9,12 @@ const digest = createHash('sha256').update(raw).digest('hex');
 const cipher = createCipheriv('aes-256-gcm', key, nonce);
 cipher.setAAD(Buffer.from(`piggyvest-staging:staging-v1:${digest}`));
 const ciphertext = Buffer.concat([cipher.update(raw), cipher.final()]);
+const fullAuthTag = cipher.getAuthTag();
 const sealed = {
   payloadSha256: digest,
   ciphertext: ciphertext.toString('base64'),
   nonce: nonce.toString('base64'),
-  authTag: cipher.getAuthTag().toString('base64'),
+  authTag: fullAuthTag.toString('base64'),
   keyVersion: 'staging-v1',
 };
 
@@ -26,6 +27,9 @@ describe('stored original receipt decryption for owner reconciliation', () => {
   it.each([
     { payloadSha256: '0'.repeat(64) },
     { authTag: Buffer.alloc(16).toString('base64') },
+    // Rejected at parse time (schema pins 16-byte tags); the decipher-layer
+    // refusal is covered in prefunded-card-legacy-receipt-decrypt.test.ts.
+    { authTag: Buffer.alloc(12).toString('base64') },
     { nonce: Buffer.alloc(12).toString('base64') },
     { keyVersion: 'staging-v2' },
     { ciphertext: 'not-base64' },

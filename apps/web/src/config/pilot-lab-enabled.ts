@@ -4,20 +4,18 @@
 // refusal below cannot drift between readers.
 export const PILOT_LAB_FLAG = 'BACI_IMAGE_PILOT_LAB';
 
-// Vercel environments where lab mode must never activate, even with the
-// flag set: staged merchant bytes under public/__pilot are served as
-// ordinary static assets, so a flag value copied onto a shared
-// deployment would publicly expose them. Only flag-local runs (no
-// VERCEL_ENV) and Vercel development can enable the lab.
-const LAB_BLOCKED_VERCEL_ENVS = new Set(['production', 'preview']);
-
-// Explicit acknowledgement for the standalone/VPS production case
-// below: deliberate, auditable, and never copied by accident with the
-// lab flag (or its env file) alone.
+// Exposure model: lab mode serves staged merchant bytes as ordinary
+// static files under public/__pilot (originals at predictable
+// <merchantId>-<assetId> names), bypassing every route gate — so the
+// lab must never run on a reachable deployment. Any Vercel deployment
+// blocks the lab unconditionally, including `development` (those URLs
+// can be publicly reachable): the lab runs flag-local (no VERCEL_ENV)
+// or on the operator's own standalone/VPS box, which acknowledges
+// production exposure explicitly below.
 export const PILOT_LAB_ALLOW_PROD_FLAG = 'BACI_IMAGE_PILOT_ALLOW_PROD';
 
 export function isPilotLabEnabled(): boolean {
-  if (LAB_BLOCKED_VERCEL_ENVS.has(process.env.VERCEL_ENV ?? '')) {
+  if ((process.env.VERCEL_ENV ?? '') !== '') {
     return false;
   }
   // The repo's standalone/VPS flow is the default production runner

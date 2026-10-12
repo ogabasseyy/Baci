@@ -91,7 +91,7 @@ export async function register() {
       // degraded above with no runtime to compare against.
       if (runtime) {
         const { assertNoUnexpectedStagedFiles } = await import(
-          '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile'
+          '@/lib/merchant-image-variant-pilot/lab-config-stage-guard'
         );
         await assertNoUnexpectedStagedFiles(
           runtime.stagedPaths,

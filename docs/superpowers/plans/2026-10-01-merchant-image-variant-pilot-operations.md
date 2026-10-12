@@ -41,6 +41,26 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # ones) but Host headers are untrusted: only loopback Hosts are reflected.
 # For a shared/staged lab origin, set BACI_IMAGE_PILOT_ORIGIN=https://… —
 # otherwise card URLs fall back to http://localhost:3000.
+#
+# Exposure model (read before enabling the lab anywhere but localhost):
+# staged merchant bytes serve as ordinary static files under
+# public/__pilot — originals at predictable
+# /__pilot/originals/<merchantId>-<assetId>.<ext> names — bypassing
+# every lab route gate, with no authentication. Any Vercel deployment
+# (production, preview, AND development) refuses the lab flag outright;
+# standalone/VPS production additionally requires
+# BACI_IMAGE_PILOT_ALLOW_PROD=1 as explicit acknowledgement. A shared
+# lab origin is operator opt-in only: never enable the lab on a
+# reachable box you would not publish the merchant catalog from.
+#
+# Recovery when a non-lab build/boot refuses a staged tree: the gate is
+# fatal only on staged-merchant shapes (image files under
+# originals/, generation dirs, or the __pilot root) and symlink
+# escapes; empty leftover dirs pass silently and unrelated strays
+# (.DS_Store, renamed leftovers) warn. To clear: re-run pilot:stage
+# with the intended inventory (reconcile removes unreferenced
+# generations), or delete public/__pilot/{originals,<64-hex-dirs>}
+# outright on a box that should never have staged.
 
 # Final validation (Task 7)
 pnpm turbo lint

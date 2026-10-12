@@ -191,6 +191,81 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(/special file/);
   });
+  it('warns on stray files but boots when lab is disabled', () => {
+    // Non-lab is fatal only on staged-merchant shapes and symlink
+    // escapes: OS artifacts and renamed leftovers warn instead of
+    // bricking the production build/boot.
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    writeFileSync(join(dir, '__pilot', 'originals', '.DS_Store'), 'junk');
+    writeFileSync(join(dir, '__pilot', '.DS_Store'), 'junk');
+    const warnings: unknown[][] = [];
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation((...args: unknown[]) => {
+        warnings.push(args);
+      });
+    try {
+      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect(warnings.join('\n')).toMatch(/stray file\(s\) under "originals"/);
+    expect(warnings.join('\n')).toMatch(/stray file ".DS_Store"/);
+  });
+
+  it('passes empty leftover dirs silently when lab is disabled', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    mkdirSync(join(dir, '__pilot', 'c'.repeat(64)), { recursive: true });
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('still refuses renamed and nested staging when lab is disabled', () => {
+    // Moving the tree aside does not evade the merchant-shape scan,
+    // at any depth or top-level name.
+    for (const setup of ['junk-dir', 'top-file', 'nested'] as const) {
+      const dir = root();
+      if (setup === 'junk-dir') {
+        mkdirSync(join(dir, '__pilot', 'backup'), { recursive: true });
+        writeFileSync(
+          join(dir, '__pilot', 'backup', 'merchant.png'),
+          'private fixture'
+        );
+      } else if (setup === 'top-file') {
+        mkdirSync(join(dir, '__pilot'), { recursive: true });
+        writeFileSync(join(dir, '__pilot', 'merchant.png'), 'private fixture');
+      } else {
+        mkdirSync(join(dir, '__pilot', 'originals', 'sub'), {
+          recursive: true,
+        });
+        writeFileSync(
+          join(dir, '__pilot', 'originals', 'sub', 'merchant.webp'),
+          'private fixture'
+        );
+      }
+      expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+        /staged merchant pilot assets/
+      );
+    }
+  });
+
+  it('still refuses symlink escapes when lab is disabled', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot'), { recursive: true });
+    symlinkSync(join(dir, 'outside.txt'), join(dir, '__pilot', 'evil'));
+    writeFileSync(join(dir, 'outside.txt'), 'not yours');
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(/is a symlink/);
+  });
+
   it('still refuses staged merchant trees when lab is disabled', () => {
     // The filler tolerance above must not weaken the actual non-lab
     // safety goal: generation/originals staging still refuses.

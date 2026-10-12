@@ -8,7 +8,7 @@ import {
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
-import { assertNoUnexpectedStagedFiles } from '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile';
+import { assertNoUnexpectedStagedFiles } from '@/lib/merchant-image-variant-pilot/lab-config-stage-guard';
 import {
   getFrozenLabRuntime,
   publishLabRuntime,

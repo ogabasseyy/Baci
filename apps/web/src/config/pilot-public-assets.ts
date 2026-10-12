@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import {
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  type Stats,
+} from 'node:fs';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
 
 // Only these committed synthetic fixtures may exist in a non-lab public
@@ -26,13 +32,15 @@ function directoryExists(path: string): boolean {
   }
 }
 
-function assertConfinedEntry(root: string, name: string): void {
+function assertConfinedEntry(
+  root: string,
+  name: string,
+  tree = 'lab public pilot tree'
+): void {
   const entry = join(root, name);
   const stat = lstatSync(entry);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error(
-      `lab public pilot tree entry "${name}" is not a confined directory`
-    );
+    throw new Error(`${tree} entry "${name}" is not a confined directory`);
   }
   const realRoot = realpathSync(root);
   const confined = (candidate: string): void => {
@@ -41,9 +49,7 @@ function assertConfinedEntry(root: string, name: string): void {
       realCandidate !== realRoot &&
       !realCandidate.startsWith(`${realRoot}${sep}`)
     ) {
-      throw new Error(
-        `lab public pilot tree entry "${name}" escapes the pilot root`
-      );
+      throw new Error(`${tree} entry "${name}" escapes the pilot root`);
     }
   };
   confined(entry);
@@ -58,9 +64,7 @@ function assertConfinedEntry(root: string, name: string): void {
       const childPath = join(current, child);
       const childStat = lstatSync(childPath);
       if (childStat.isSymbolicLink()) {
-        throw new Error(
-          `lab public pilot tree entry "${name}" contains a symlink`
-        );
+        throw new Error(`${tree} entry "${name}" contains a symlink`);
       }
       // Hardlinks have no separate target for realpath to expose: a
       // file hardlinked from outside would pass confinement and be
@@ -68,18 +72,14 @@ function assertConfinedEntry(root: string, name: string): void {
       // Directories always carry extra links (. entries), hence the
       // directory carve-out.
       if (!childStat.isDirectory() && childStat.nlink > 1) {
-        throw new Error(
-          `lab public pilot tree entry "${name}" contains a hardlinked file`
-        );
+        throw new Error(`${tree} entry "${name}" contains a hardlinked file`);
       }
       // Next serves every non-directory public entry: a FIFO, socket,
       // or device with one link would pass the checks above and then
       // block (or leak) on GET, so every descendant must be a regular
       // file or a directory.
       if (!childStat.isDirectory() && !childStat.isFile()) {
-        throw new Error(
-          `lab public pilot tree entry "${name}" contains a special file`
-        );
+        throw new Error(`${tree} entry "${name}" contains a special file`);
       }
       confined(childPath);
       if (childStat.isDirectory()) {
@@ -204,6 +204,102 @@ export function resolvePilotPublicDir(): string {
   return gateVerifiedRoot() ?? join(process.cwd(), 'public');
 }
 
+// Suffixes the pilot stages (tiers plus originals, from
+// lab-config-stage-read's format map): a non-lab tree holding one of
+// these is staged merchant content and refuses. Anything else there is
+// stray (OS artifacts, renamed leftovers) and warns. .jpeg rides along
+// although staging normalizes to .jpg: a .jpeg in the tree is
+// merchant-plausible, so it fails closed too.
+const STAGED_MERCHANT_SUFFIXES = new Set([
+  '.avif',
+  '.gif',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.svg',
+  '.webp',
+]);
+
+// Deep merchant-shape scan (names only, no hashing): any staged suffix
+// at any depth refuses. lstat never follows links, so symlinked dirs
+// are not traversed and loops cannot hang this; nested symlinks are
+// refused separately by the confinement walk.
+function findStagedMerchantShape(dir: string): string | null {
+  const pending = [dir];
+  while (pending.length > 0) {
+    const current = pending.pop() as string;
+    let entries: string[];
+    try {
+      entries = readdirSync(current);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(current, entry);
+      let stat: Stats | undefined;
+      try {
+        stat = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        pending.push(full);
+        continue;
+      }
+      if (STAGED_MERCHANT_SUFFIXES.has(extname(entry).toLowerCase())) {
+        return entry;
+      }
+    }
+  }
+  return null;
+}
+
+// Non-lab entry triage: staged-merchant shapes and symlink escapes are
+// fatal (the safety goal); unrelated strays warn and empty leftover
+// dirs pass silently, so a lab-only concern never bricks the
+// production storefront's build or boot. Managed and junk dirs share
+// the same treatment: a renamed staging tree (originals moved aside,
+// not deleted) still refuses.
+function assertNonLabEntry(root: string, name: string): void {
+  const full = join(root, name);
+  const stat = lstatSync(full);
+  if (stat.isSymbolicLink()) {
+    throw new Error(
+      `non-lab public pilot tree entry "${name}" is a symlink; remove it or stage into a clean tree`
+    );
+  }
+  if (!stat.isDirectory()) {
+    if (STAGED_MERCHANT_SUFFIXES.has(extname(name).toLowerCase())) {
+      throw new Error(
+        'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
+      );
+    }
+    console.warn(
+      `non-lab public pilot tree holds stray file "${name}" (no staged-merchant shape); continuing — remove it or ignore`
+    );
+    return;
+  }
+  assertConfinedEntry(root, name, 'non-lab public pilot tree');
+  const hit = findStagedMerchantShape(full);
+  if (hit) {
+    throw new Error(
+      'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
+    );
+  }
+  let count = 0;
+  try {
+    count = readdirSync(full).length;
+  } catch {
+    count = 0;
+  }
+  // Empty leftover dirs (crashed/old stages) serve nothing: silent.
+  if (count > 0) {
+    console.warn(
+      `non-lab public pilot tree holds ${count} stray file(s) under "${name}" (no staged-merchant shapes); continuing — remove them or ignore`
+    );
+  }
+}
+
 export function assertPilotPublicAssets(
   publicDir: string,
   labEnabled = isPilotLabEnabled()
@@ -222,16 +318,12 @@ export function assertPilotPublicAssets(
   }
   let sawFillers = false;
   for (const name of readdirSync(root)) {
-    // The approved filler set is hash-pinned in BOTH modes: a stale or
-    // locally replaced filler in lab mode would otherwise pass startup
-    // and compete unreviewed in the measurement while every gate that
-    // compares against the same local file reports green.
+    // Filler policing is lab-only: non-lab builds/boots refuse staged
+    // merchant trees only, so a packaging artifact (.DS_Store), a
+    // recompressed filler, or an overlay nlink quirk can never take
+    // down an unrelated production boot. Nothing non-lab references
+    // filler bytes.
     if (name === 'fillers') {
-      // Filler policing is lab-only: non-lab builds/boots refuse staged
-      // merchant trees only, so a packaging artifact (.DS_Store), a
-      // recompressed filler, or an overlay nlink quirk can never take
-      // down an unrelated production boot. Nothing non-lab references
-      // filler bytes.
       if (labEnabled) {
         assertFillers(join(root, name));
       }
@@ -248,9 +340,16 @@ export function assertPilotPublicAssets(
       assertConfinedEntry(root, name);
       continue;
     }
-    throw new Error(
-      'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
-    );
+    if (labEnabled) {
+      throw new Error(
+        'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
+      );
+    }
+    // Non-lab from here: fatal only on staged-merchant shapes or
+    // symlink escapes. Empty leftover dirs pass silently (nothing to
+    // serve); unrelated strays warn. A lab-only concern must never
+    // brick the production storefront's build or boot.
+    assertNonLabEntry(root, name);
   }
   // Lab mode additionally requires the fillers directory itself: the
   // grid renders all three sibling-card images, so an absent directory

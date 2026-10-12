@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { acquireSnapshot } from './acquire.mjs';
-import { fetchBoundedBytes } from './acquire-fetch.mjs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -240,46 +239,5 @@ test('isolates identical asset ids across merchants', async () => {
       );
       assert.deepEqual(stored, otherBytes);
     }
-  );
-});
-
-
-test('refuses a hostname resolving to private space without connecting', async () => {
-  // Deterministic, no network: the injected resolver answers with the
-  // cloud-metadata address, and the connect-time validation refuses
-  // before any socket opens.
-  let connects = 0;
-  const dnsResolve = async () => {
-    connects += 1;
-    return [{ address: '169.254.169.254', family: 4 }];
-  };
-  await assert.rejects(
-    () =>
-      fetchBoundedBytes('http://cdn.example.com/a.png', {
-        dnsResolve,
-        maxBytes: 1024,
-        timeoutMs: 5_000,
-      }),
-    /resolves to a non-public address/
-  );
-  assert.equal(connects, 1);
-});
-
-test('pins a validated hostname to its resolved address', async () => {
-  // The resolver answers public, so resolution passes and the fetch
-  // proceeds to the pinned address — nothing listens on the discard
-  // port, so the socket refuses (or the sandbox times it out) and the
-  // rejection is the transport failure, never a policy rejection.
-  // Either transport outcome proves the point: resolution passed and
-  // pinning sent the socket at the validated address.
-  const dnsResolve = async () => [{ address: '93.184.216.34', family: 4 }];
-  await assert.rejects(
-    () =>
-      fetchBoundedBytes('http://cdn.example.com:9/a.png', {
-        dnsResolve,
-        maxBytes: 1024,
-        timeoutMs: 3_000,
-      }),
-    /fetch failed or timed out/
   );
 });

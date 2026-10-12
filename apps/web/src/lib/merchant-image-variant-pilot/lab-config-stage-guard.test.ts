@@ -1,0 +1,139 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { assertNoUnexpectedStagedFiles } from './lab-config-stage-guard';
+
+const GEN = 'a'.repeat(64);
+
+async function stageTree() {
+  const pilotStage = await mkdtemp(join(tmpdir(), 'pilot-reconcile-'));
+  await mkdir(join(pilotStage, GEN), { recursive: true });
+  await mkdir(join(pilotStage, 'originals'), { recursive: true });
+  await mkdir(join(pilotStage, 'fillers'), { recursive: true });
+  return pilotStage;
+}
+
+describe('assertNoUnexpectedStagedFiles', () => {
+  const staged = (pilotStage: string) => [
+    { path: join(pilotStage, GEN, 'tier-w800.avif') },
+    { path: join(pilotStage, 'originals', 'merchant.png') },
+  ];
+
+  async function seedExpected(pilotStage: string) {
+    await writeFile(join(pilotStage, GEN, 'tier-w800.avif'), 'tier');
+    await writeFile(join(pilotStage, 'originals', 'merchant.png'), 'orig');
+  }
+
+  it('accepts exactly the allowlisted staged files', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+  });
+
+  it('rejects regular files planted after staging', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await writeFile(join(pilotStage, 'originals', 'planted.png'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+  });
+
+  it('rejects plants inside current generations', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await writeFile(join(pilotStage, GEN, 'planted.avif'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+  });
+
+  it('rejects generation dirs with no current binding', async () => {
+    // A stale, restored, or planted generation has no stagedPaths
+    // entries, so the per-file traversal never visits it — but the
+    // startup guard serves every 64-hex directory. The top-level
+    // enumeration closes that gap with the re-stage fix.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    const stale = join(pilotStage, 'b'.repeat(64));
+    await mkdir(stale, { recursive: true });
+    await writeFile(join(stale, 'old.avif'), 'stale');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/unreferenced generation directory/);
+  });
+
+  it('rejects nested dirs, links, and special files', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await mkdir(join(pilotStage, 'originals', 'nested'), { recursive: true });
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/unexpected staged directory/);
+  });
+
+  it('rejects a symlink planted in originals', async () => {
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await symlink(
+      join(pilotStage, 'originals', 'merchant.png'),
+      join(pilotStage, 'originals', 'link.png')
+    );
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/not a regular file/);
+  });
+
+  it('rejects staged content under an empty binding set', async () => {
+    // With zero allowlist entries the root cannot derive from staged
+    // paths — but callers pass their known root, and any generation
+    // or originals content there is unbound by definition.
+    const pilotStage = await stageTree();
+    const gen = join(pilotStage, 'c'.repeat(64));
+    await mkdir(gen, { recursive: true });
+    await writeFile(join(gen, 'evil.svg'), '<svg/>');
+    await expect(assertNoUnexpectedStagedFiles([], pilotStage)).rejects.toThrow(
+      /empty binding set/
+    );
+  });
+
+  it('re-scans the same tree after drift but skips when clean', async () => {
+    // The drift gate skips repeat walks while the tree is unchanged
+    // (per-request verification stays on stats, not listings), but a
+    // plant between two scans on the same root must still throw.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+    // Second scan, no drift: same verdict via the fingerprint gate.
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+    // Drift between scans: the gate misses and the full walk throws.
+    await writeFile(join(pilotStage, GEN, 'planted.avif'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+    // Failures never record: removing the plant passes again.
+    await rm(join(pilotStage, GEN, 'planted.avif'));
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+  });
+
+  it('accepts a clean tree under an empty binding set', async () => {
+    const pilotStage = await stageTree();
+    await writeFile(join(pilotStage, 'fillers', 'a.png'), 'committed');
+    // Empty managed dirs and committed fillers bind nothing and serve
+    // nothing unbound.
+    await expect(assertNoUnexpectedStagedFiles([], pilotStage)).resolves.toBe(
+      undefined
+    );
+    // Without a known root there is nothing to enumerate.
+    await expect(assertNoUnexpectedStagedFiles([])).resolves.toBe(undefined);
+  });
+});

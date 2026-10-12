@@ -20,6 +20,12 @@ const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 // write itself bumps ctime, so pinned-mtime drift always re-hashes.
 let lastVerified: { fingerprint: string; key: string } | null = null;
 
+// In-flight full check, shared by concurrent requests: after drift,
+// every lab GET would otherwise pay its own hashing pass (bounded at
+// 256 MiB each). Joiners must present the identical stat snapshot, so
+// a shared verdict is always the verdict they would have computed.
+let inflight: { flightKey: string; promise: Promise<void> } | null = null;
+
 function snapshotKey(paths: readonly { path: string; sha256: string }[]) {
   return JSON.stringify(paths.map((entry) => [entry.path, entry.sha256]));
 }
@@ -97,6 +103,31 @@ export async function verifyStagedBytes(
   ) {
     return;
   }
+  // Same stat snapshot (missing files included as nulls): joiners share
+  // this pass's verdict because it is byte-for-byte the pass they
+  // would have run — same inputs, same details on failure.
+  const flightKey = `${key}\n${JSON.stringify(sizes.map((info) => (info === null ? null : [info.size, info.mtimeMs, info.ctimeMs])))}`;
+  if (inflight?.flightKey === flightKey) {
+    return inflight.promise;
+  }
+  const promise = verifyUncached(unique, sizes, links, key, fingerprint);
+  inflight = { flightKey, promise };
+  try {
+    await promise;
+  } finally {
+    if (inflight?.promise === promise) {
+      inflight = null;
+    }
+  }
+}
+
+async function verifyUncached(
+  unique: { path: string; sha256: string }[],
+  sizes: ({ ctimeMs: number; mtimeMs: number; size: number } | null)[],
+  links: ReadonlySet<number>,
+  key: string,
+  fingerprint: string | null
+): Promise<void> {
   const bad = (
     await Promise.all(
       unique.map(async (entry, index) => {

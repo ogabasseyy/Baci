@@ -18,12 +18,9 @@ vi.mock('@/app/pilot-lab/lab-route', () => ({
   initializeLabRuntime: initializeLabRuntimeMock,
 }));
 const assertNoUnexpectedStagedFilesMock = vi.hoisted(() => vi.fn());
-vi.mock(
-  '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile',
-  () => ({
-    assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
-  })
-);
+vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
+  assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
+}));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());

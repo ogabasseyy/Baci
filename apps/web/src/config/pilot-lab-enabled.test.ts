@@ -15,13 +15,15 @@ describe('isPilotLabEnabled', () => {
     expect(isPilotLabEnabled()).toBe(false);
   });
 
-  it('refuses Vercel production and preview even with the flag', () => {
+  it('refuses every Vercel deployment even with the flag', () => {
+    // Development URLs can be publicly reachable, so no Vercel env —
+    // production, preview, or development — can enable the lab.
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    vi.stubEnv('VERCEL_ENV', 'production');
-    expect(isPilotLabEnabled()).toBe(false);
-    vi.stubEnv('VERCEL_ENV', 'preview');
-    expect(isPilotLabEnabled()).toBe(false);
+    for (const env of ['production', 'preview', 'development']) {
+      vi.stubEnv('VERCEL_ENV', env);
+      expect(isPilotLabEnabled()).toBe(false);
+    }
   });
 
   it('refuses standalone production without the explicit acknowledgement', () => {

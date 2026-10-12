@@ -15,9 +15,11 @@ import { verifyStagedBytes } from './lab-staged-verify';
 
 // Paths whose staged read the suite reports as grown past the statted
 // bound, deterministically reproducing a file that grows between the
-// budget stat and the read.
-const { grownPaths } = vi.hoisted(() => ({
+// budget stat and the read. readCalls counts staged reads so the
+// in-flight sharing test can prove concurrent requests hash once.
+const { grownPaths, readCalls } = vi.hoisted(() => ({
   grownPaths: new Set<string>(),
+  readCalls: { count: 0 },
 }));
 
 vi.mock(
@@ -30,6 +32,7 @@ vi.mock(
     return {
       ...actual,
       readUpToBytes: async (path: string, maxBytes: number) => {
+        readCalls.count += 1;
         if (grownPaths.has(path)) {
           return { bytes: Buffer.alloc(0), truncated: true };
         }
@@ -53,6 +56,28 @@ describe('verifyStagedBytes', () => {
         },
       ])
     ).resolves.toBeUndefined();
+  });
+
+  it('hashes once for concurrent requests after drift', async () => {
+    // Two GETs racing the same drifted set share one in-flight hashing
+    // pass: two staged files read once each (2 reads), not once per
+    // request (4). Both callers still get the full verdict.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-race-'));
+    const entries = [];
+    for (const name of ['a.avif', 'b.avif']) {
+      const file = join(dir, name);
+      const bytes = Buffer.from(`bytes-${name}`);
+      await writeFile(file, bytes);
+      entries.push({
+        path: file,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+      });
+    }
+    readCalls.count = 0;
+    await expect(
+      Promise.all([verifyStagedBytes(entries), verifyStagedBytes(entries)])
+    ).resolves.toEqual([undefined, undefined]);
+    expect(readCalls.count).toBe(2);
   });
 
   it('counts duplicated references once against the budgets', async () => {

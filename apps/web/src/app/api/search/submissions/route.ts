@@ -13,6 +13,10 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
+import {
+  recordSearchSubmission,
+  SearchSubmissionValidationError,
+} from '@/lib/search/server-analytics-client';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createClient } from '@/lib/supabase/server';
 import { searchSubmissionSchema } from '@/schemas/search-submission';
@@ -122,6 +126,14 @@ export async function POST(request: NextRequest) {
     const subdomain = isLocalhost(host)
       ? extractLocalhostSubdomain(host)
       : extractSubdomain(host, ROOT_DOMAIN);
+    // Platform-host tenant attribution is best-effort by necessity: the
+    // request URL carries no merchant identity, and every caller-controlled
+    // signal (body, Referer — settable same-origin via RequestInit.referrer —
+    // even Host for direct HTTP clients) is forgeable. No header check can
+    // prove which public page issued an anonymous same-origin request, so
+    // none is attempted: the enforced controls are the revoked direct
+    // writes, the bounded query/count, and the per-IP proxy budget,
+    // which bound the residual cross-slug pollution to noisy analytics.
     const identifier = isPlatformHost(host)
       ? parsed.data.pathPrefix.slice(1)
       : subdomain
@@ -156,13 +168,45 @@ export async function POST(request: NextRequest) {
       limit: 1,
       includeDidYouMean: false,
     });
-    const { error } = await supabase.from('search_analytics').insert({
-      merchant_id: merchant.id,
-      search_query: result.query,
-      results_count: result.count,
-      search_method: 'client',
-    });
-    if (error) return unavailable();
+    // Narrow ingestion edge: merchant from the snapshot lookup, count
+    // from the bounded search RPC, and the caller-supplied query only
+    // after sanitize/trim/cap; anon / authenticated table writes are
+    // revoked (#3581) so the endpoint gates cannot be bypassed with a
+    // direct table write. The wrapper's guards accept every value built
+    // here, so a branded throw means a programming error; anything else
+    // thrown is client-construction/transport infrastructure.
+    try {
+      const { error } = await recordSearchSubmission({
+        merchant_id: merchant.id,
+        search_query: result.query,
+        results_count: result.count,
+        search_method: 'client',
+      });
+      if (error) {
+        // Fixed classification only (PG error code, no payload): operators
+        // must be able to distinguish shedding from a DB outage.
+        logger.error({
+          message: 'Search submissions insert failed',
+          errorCode: error.code ?? 'unknown',
+        });
+        return unavailable();
+      }
+    } catch (thrown) {
+      // Branded validation throws mean a programming error in this sole
+      // caller; anything else (service-client construction, transport,
+      // config) is infrastructure. Log a fixed classification only: the
+      // caught object may carry provider details that must never reach
+      // application logs.
+      const isValidationError =
+        thrown instanceof SearchSubmissionValidationError;
+      logger.error({
+        message: isValidationError
+          ? 'Search submission row failed ingestion validation'
+          : 'Search submission ingestion infrastructure failure',
+        errorName: thrown instanceof Error ? thrown.name : 'UnknownError',
+      });
+      return unavailable();
+    }
     return new NextResponse(null, { status: 204 });
   } catch {
     return unavailable();

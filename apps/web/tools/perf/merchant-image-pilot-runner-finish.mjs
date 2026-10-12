@@ -99,11 +99,12 @@ export async function finishRun({
       `browser log exceeds ${MAX_BROWSER_LOG_BYTES} bytes: ${browserLog}`
     );
   }
-  const { executableVersion, sessionMs } = resolvePreparedLaunch(
-    logRead.bytes.toString('utf8'),
-    handle.profileDir,
-    browserLog
-  );
+  const { executableVersion, navigationCount, sessionMs } =
+    resolvePreparedLaunch(
+      logRead.bytes.toString('utf8'),
+      handle.profileDir,
+      browserLog
+    );
   const out = required(outDir, 'out-dir');
   await mkdir(out, { recursive: true });
   // One reset certifies exactly one navigation: multi-page HARs (repeat
@@ -120,6 +121,17 @@ export async function finishRun({
     );
   }
   const [page] = pages;
+  // A Browsertime HAR without a logged navigation cannot bind: that
+  // driver always records its navigations, so a markerless log for its
+  // HAR cannot rule out a warmed retry submitted as cold. Other
+  // drivers' markerless segments bind with the launch record flagged
+  // below (the Caps contract), never silently.
+  const harCreator = String(harJson?.log?.creator?.name ?? '').toLowerCase();
+  if (navigationCount === 0 && harCreator === 'browsertime') {
+    throw new Error(
+      `Browsertime HAR binds only with its verbose navigation record (found no 'Navigating to' line): ${browserLog}`
+    );
+  }
   const startedMs = Date.parse(page?.startedDateTime ?? '');
   if (!Number.isFinite(startedMs)) {
     throw new Error(`HAR page has no usable startedDateTime: ${har}`);
@@ -251,6 +263,10 @@ export async function finishRun({
   await writeJson(launchPath, {
     event: 'browser-launch',
     executableVersion,
+    // Markerless non-Browsertime segments (Caps-style drivers) bind
+    // with first navigation explicitly unverified: no silent cold
+    // certification, and downstream gates can fail on the flag.
+    ...(navigationCount === 0 ? { firstNavigationUnverified: true } : {}),
     launchedAt:
       sessionMs === null ? reset.resetAt : new Date(sessionMs).toISOString(),
     runId: handle.runId,

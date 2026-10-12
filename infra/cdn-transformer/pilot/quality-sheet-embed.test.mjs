@@ -251,6 +251,34 @@ test('rejects tiers whose decoded geometry exceeds encoder rounding', async () =
   );
 });
 
+test('accepts rotated passthrough tiers against oriented claims', async () => {
+  // Passthrough tiers carry the source EXIF bytes while the manifest
+  // records oriented axes: a 600x800 orientation-6 source claims
+  // 800x600, and raw-axes comparison would misreject it.
+  const { assertTierDecodedDimensions } = await import(
+    './quality-sheet-render.mjs'
+  );
+  const { dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const bytes = await readFile(join(here, 'fixtures', 'exif-rotated-600x800.jpg'));
+  const files = new Map([['tier.jpg', bytes]]);
+  await assertTierDecodedDimensions(
+    { height: 600, path: 'tier.jpg', width: 800 },
+    files,
+    'asset-1'
+  );
+  await assert.rejects(
+    () =>
+      assertTierDecodedDimensions(
+        { height: 800, path: 'tier.jpg', width: 600 },
+        files,
+        'asset-1'
+      ),
+    /decodes as 800x600 but the manifest claims 600x800/
+  );
+});
+
 test('escapes inventory dimension metadata in captions', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));

@@ -112,14 +112,18 @@ export async function assertTierDecodedDimensions(tier, files, assetId) {
       `tier "${tier.path}" for asset "${assetId}" does not decode`
     );
   }
-  // Encoded tiers are EXIF-normalized at encode time, so raw decoded
-  // dimensions are already oriented (same as the encoder's verify).
+  // Manifest tier claims are oriented dimensions: encoded tiers are
+  // EXIF-normalized at encode time (orientation 1, so oriented() is the
+  // raw axes), but original-passthrough tiers carry the source's own
+  // EXIF bytes and claim its oriented axes. Comparing raw axes would
+  // reject a valid rotated passthrough as a geometry mismatch.
+  const oriented = orientedDimensions(meta);
   if (
-    meta.width !== tier.width ||
-    Math.abs((meta.height ?? -1) - tier.height) > 1
+    oriented.width !== tier.width ||
+    Math.abs((oriented.height ?? -1) - tier.height) > 1
   ) {
     throw new PilotSheetError(
-      `tier "${tier.path}" for asset "${assetId}" decodes as ${meta.width}x${meta.height} but the manifest claims ${tier.width}x${tier.height}`
+      `tier "${tier.path}" for asset "${assetId}" decodes as ${oriented.width}x${oriented.height} but the manifest claims ${tier.width}x${tier.height}`
     );
   }
 }

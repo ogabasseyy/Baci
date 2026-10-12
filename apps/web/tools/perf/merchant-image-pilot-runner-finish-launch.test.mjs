@@ -178,4 +178,95 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       })
     ).rejects.toThrow(/2 navigations in the prepared-profile launch segment/);
   });
+
+  it('finish refuses a Browsertime HAR with a markerless log', async () => {
+    // That driver always logs its navigations: a markerless log for
+    // its HAR cannot rule out a warmed retry submitted as cold (e.g. a
+    // chromedriver log swapped in for the verbose one).
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    const harPath = join(dir, 'raw.har');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          creator: { name: 'Browsertime', version: '19.0.0' },
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const markerlessLog = join(dir, 'markerless.log');
+    await writeFile(
+      markerlessLog,
+      [
+        '[browsertime] Launching Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        `  --user-data-dir=${join(dir, 'profile')} --headless --no-first-run`,
+        `[${Math.floor(Date.now() / 1000)}.000][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "154.0.0.0" } } }`,
+      ].join('\n')
+    );
+    await expect(
+      finishRun({
+        browserLog: markerlessLog,
+        dpr: '2',
+        har: harPath,
+        outDir: join(dir, 'bound'),
+        runJson: join(dir, 'run', 'run.json'),
+        screenshot: shotPath,
+        viewport: '375x667',
+      })
+    ).rejects.toThrow(/binds only with its verbose navigation record/);
+  });
+
+  it('finish binds a logged navigation without the unverified flag', async () => {
+    // The proven path stays quiet: only markerless non-Browsertime
+    // segments (Caps-style drivers) carry firstNavigationUnverified.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-'));
+    await prepareRun({
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+    });
+    const harPath = join(dir, 'raw.har');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const bound = await finishRun({
+      browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
+      dpr: '2',
+      har: harPath,
+      outDir: join(dir, 'bound'),
+      runJson: join(dir, 'run', 'run.json'),
+      screenshot: shotPath,
+      viewport: '375x667',
+    });
+    const launch = JSON.parse(await readFile(bound.browserLaunch, 'utf8'));
+    expect(launch.firstNavigationUnverified).toBe(undefined);
+  });
 });

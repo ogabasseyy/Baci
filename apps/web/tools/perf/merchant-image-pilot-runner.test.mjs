@@ -197,6 +197,9 @@ describe('merchant-image-pilot-runner', () => {
     });
     const capsLaunch = JSON.parse(await readFile(caps.browserLaunch, 'utf8'));
     expect(capsLaunch.executableVersion).toBe('154.0.0.0');
+    // Markerless Caps segments bind (the documented fallback) with
+    // first navigation explicitly unverified — never silently cold.
+    expect(capsLaunch.firstNavigationUnverified).toBe(true);
     // No epoch stamp in the segment: launchedAt falls back to the reset
     // time instead of refusing the unstamped log.
     const resetAt = JSON.parse(

@@ -4,6 +4,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -233,5 +234,21 @@ describe('resolveRoutePublicDir', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '/route/public');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/gate/public');
     expect(() => resolveRoutePublicDir()).toThrow(/disagrees/);
+  });
+  it('accepts symlinked-ancestor aliases of the same tree', () => {
+    // The route var may spell the tree through a symlinked ancestor
+    // (/var/... on macOS) while the gate stashed the physical path:
+    // distinct spellings of one directory must not read as disagreement.
+    const physical = mkdtempSync(join(tmpdir(), 'pilot-public-alias-'));
+    const logical = `${physical}-link`;
+    symlinkSync(physical, logical);
+    try {
+      vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', logical);
+      vi.stubEnv('BACI_PILOT_PUBLIC_DIR', realpathSync(physical));
+      expect(resolveRoutePublicDir()).toBe(logical);
+    } finally {
+      rmSync(logical, { force: true, recursive: true });
+      rmSync(physical, { force: true, recursive: true });
+    }
   });
 });

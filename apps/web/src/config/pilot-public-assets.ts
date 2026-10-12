@@ -167,12 +167,24 @@ export function resolveRoutePublicDir(): string {
   // as unset everywhere, so '' never resolves '__pilot' against ''.
   const explicit = process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || null;
   const stashed = process.env.BACI_PILOT_PUBLIC_DIR || null;
-  if (explicit && stashed && resolve(explicit) !== resolve(stashed)) {
+  if (explicit && stashed && canonicalDir(explicit) !== canonicalDir(stashed)) {
     throw new Error(
       'merchant image pilot: BACI_IMAGE_PILOT_PUBLIC_DIR disagrees with the build-gate public dir; refusing to serve from an unverified tree'
     );
   }
   return explicit || stashed || join(process.cwd(), 'public');
+}
+
+// Canonical spelling for tree-identity comparison: lexical resolve()
+// treats a symlinked ancestor (/var/...) and its physical spelling
+// (/private/var/...) as different trees. Missing paths fall back to
+// lexical (nothing to canonicalize yet).
+function canonicalDir(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
 }
 
 export function resolvePilotPublicDir(): string {

@@ -94,8 +94,11 @@ export function resolvePreparedLaunch(logText, profileDir, browserLog) {
   // HAR recording, navigate again — the submitted single-page HAR plus
   // this one launch would then certify a warm retry as cold. The
   // verbose log records each navigation, so a segment showing two or
-  // more refuses. Segments with no marker (Caps-style logs) cannot
-  // prove navigation count and bind as before.
+  // more refuses. The count returns for the bind step: a zero count
+  // with a Browsertime HAR refuses there (that driver always logs its
+  // navigations, so a markerless log cannot rule out a warmed retry),
+  // while other drivers' markerless segments bind with the navigation
+  // explicitly flagged unverified in the launch record.
   const navigations = launchSegment
     .split('\n')
     .filter((line) => line.includes('Navigating to'));
@@ -105,6 +108,7 @@ export function resolvePreparedLaunch(logText, profileDir, browserLog) {
     );
   }
   return {
+    navigationCount: navigations.length,
     executableVersion: executableVersionFromLog(launchSegment, browserLog),
     sessionMs: sessionTimeFromSegment(launchSegment),
   };

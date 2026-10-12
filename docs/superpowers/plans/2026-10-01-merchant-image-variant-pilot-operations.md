@@ -76,6 +76,11 @@ coderabbit review --agent -t uncommitted
   delivery keeps `generated-over-source` (e.g. OgaBassey WebP fallback
   larger than its AVIF original). Disclosed; merchant-wide protection is
   a production follow-up, not a pilot change.
+- First-navigation binding is graded, not binary: Browsertime HARs bind
+  only with their verbose navigation record (that driver always logs
+  navigations); other drivers' markerless segments bind with
+  `firstNavigationUnverified: true` in the launch record (the Caps
+  contract preserved, never silently cold). Covered by tests.
 - (Log further deviations here as they occur; material design deviations
   return to the owner/reviewer instead of being assumed approved.)
 

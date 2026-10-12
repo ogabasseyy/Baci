@@ -113,7 +113,7 @@ const FEATURE_CARDS: readonly FeatureCard[] = [
     iconClassName: 'size-8 text-blue-500',
     title: 'Bulk catalog imports',
     description:
-      'Import supported product CSV files and manage product variants and inventory. Bulk import requires an eligible plan; import formats and validation apply.',
+      'Import supported product CSV files and manage product variants and inventory. Import formats and validation apply.',
   },
   {
     Icon: BarChart,

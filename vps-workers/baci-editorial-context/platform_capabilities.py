@@ -60,7 +60,7 @@ def capability_context(*, now=None):
         for row in rows:
             safe = {key: row[key] for key in ("id", "title", "claim", "limitations", "status", "source_refs")}
             evidence = row.get("production_evidence")
-            if isinstance(evidence, dict):
+            if row["status"] == "production_verified" and isinstance(evidence, dict):
                 safe["production_evidence"] = {
                     key: evidence[key]
                     for key in ("workflow", "deployed_revision", "verified_at")

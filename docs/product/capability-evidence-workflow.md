@@ -29,6 +29,9 @@ not imply every merchant can access every integration by default.
    Android purchase restrictions must remain visible.
 3. Update the register and date only after reviewing those paths. Resolve price
    and tier claims against actual billing contracts, not unrelated flag metadata.
+   A rebase or main advance that touches any cited `source_refs` path invalidates
+   the register binding: re-review the affected claims and record the new
+   `source_revision`/`reviewed_at` instead of carrying the old binding forward.
 4. Copy the reviewed register to the VPS writer's
    `data/baci-platform-research/capabilities.json`. The prompt records its SHA256,
    source revision and review date; after 14 days it is treated as stale.

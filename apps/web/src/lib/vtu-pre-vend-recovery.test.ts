@@ -206,6 +206,27 @@ describe('isStrandedPreVendVtuRow', () => {
     ).toBe(false);
   });
 
+  it('declines an insufficient-balance decline: terminal rejection, not an interruption', () => {
+    // The debit deterministically failed, so re-driving after a later
+    // top-up would auto-complete a purchase the customer was told
+    // failed — with no new submission (Codex R38 rlFA4). Stays
+    // processing (visible, support-recoverable) instead.
+    expect(
+      isStrandedPreVendVtuRow({
+        id: 'vtu-1',
+        status: 'processing',
+        transaction_id: null,
+        error_message: null,
+        metadata: {
+          paymentSplit: { wallet: 1000, card: 0 },
+          walletDebitDeclinedInsufficientBalanceAt: new Date().toISOString(),
+        },
+        created_at: new Date().toISOString(),
+        updated_at: staleAt,
+      })
+    ).toBe(false);
+  });
+
   it('declines rows a live worker could still hold', () => {
     expect(
       isStrandedPreVendVtuRow({

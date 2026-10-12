@@ -25,6 +25,10 @@ import {
 export { VtuPersistenceError };
 
 import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
+import {
+  markVtuWalletDebitDeclined,
+  VTU_DEBIT_DECLINED_MARKER_KEY,
+} from '@/lib/vtu-debit-decline-marker';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import {
@@ -2565,7 +2569,21 @@ export async function fulfillPendingVtuTransaction({
       // through refundVtuToCustomerWallet (refunds card portion only;
       // wallet was never debited).
       if (isInsufficientWalletBalanceError(debitError)) {
-        const raceMetadata = { ...preDebitMetadata };
+        // Stamp the durable decline marker FIRST (adjacent to the
+        // provably-live debit RPC, before refund + failed-persist):
+        // if that persistence later exhausts, the row would otherwise
+        // be indistinguishable from a crash strand and auto-re-driven
+        // after a later top-up (Codex R38 rlFA4). Never throws.
+        const declinedAt = new Date().toISOString();
+        await markVtuWalletDebitDeclined({
+          declinedAt,
+          supabase,
+          transactionId: row.id,
+        });
+        const raceMetadata = {
+          ...preDebitMetadata,
+          [VTU_DEBIT_DECLINED_MARKER_KEY]: declinedAt,
+        };
         const raceRefund = await refundVtuToCustomerWallet({
           metadata: raceMetadata,
           row,

@@ -7,7 +7,7 @@
  * stays a thin auth/query/schedule shell.
  */
 import { projectHistoryRefundFields } from '@/lib/vtu-history-refund-projection';
-import { extractMetadataField, isString } from '@/lib/vtu-voucher-backfill';
+import { extractMetadataField, isString } from '@/lib/vtu-metadata-fields';
 
 export type PaymentGateway = 'paystack' | 'korapay';
 

@@ -4,6 +4,21 @@ import {
   backfillVtuVoucherPin,
   fulfillPendingVtuTransaction,
 } from '@/lib/vtu-fulfillment';
+import {
+  extractMetadataField,
+  isMetadataRecord,
+  isString,
+  type MetadataRecord,
+  normalizeMetadata,
+} from '@/lib/vtu-metadata-fields';
+
+export {
+  extractMetadataField,
+  isMetadataRecord,
+  isString,
+  type MetadataRecord,
+  normalizeMetadata,
+};
 
 export const TOKEN_BACKFILL_TYPES = new Set([
   'electricity',
@@ -23,28 +38,12 @@ export const MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS = 10;
 // can schedule a fresh attempt.
 export const TOKEN_BACKFILL_DEDUPE_WINDOW_MS = 5_000;
 
-export type MetadataRecord = Record<string, unknown>;
-
 interface VoucherPinBackfillTransaction {
   id: unknown;
   request_reference: unknown;
   status: unknown;
   transaction_id: unknown;
   type: unknown;
-}
-
-export function isMetadataRecord(
-  metadata: unknown
-): metadata is MetadataRecord {
-  return (
-    typeof metadata === 'object' &&
-    metadata !== null &&
-    !Array.isArray(metadata)
-  );
-}
-
-export function normalizeMetadata(metadata: unknown): MetadataRecord {
-  return isMetadataRecord(metadata) ? metadata : {};
 }
 
 function toStableJsonValue(value: unknown): unknown {
@@ -77,23 +76,6 @@ function toStableJsonValue(value: unknown): unknown {
  */
 function stableJsonStringify(value: unknown): string {
   return JSON.stringify(toStableJsonValue(value)) ?? 'null';
-}
-
-export function isString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-export function extractMetadataField<T>(
-  metadata: unknown,
-  key: string,
-  validator: (value: unknown) => value is T
-): T | null {
-  if (!isMetadataRecord(metadata)) {
-    return null;
-  }
-
-  const value = metadata[key];
-  return validator(value) ? value : null;
 }
 
 export function shouldBackfillForType(type: unknown): boolean {

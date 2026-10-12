@@ -15,8 +15,8 @@ import {
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { calculateCommerce } from '@/lib/supabase/client';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
+import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
 import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
-import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
 import { COMMISSION_CATEGORY_MAP, type PurchaseInput } from '@/schemas/vtu';
 
@@ -526,33 +526,11 @@ export async function preparePendingVtuTransaction({
     throw new Error('Invalid customer phone number');
   }
 
-  // Alias-aware: VTU purchase flows POST the merchant slug in the body (the proxy
-  // can't rewrite bodies), so a stale tab on a just-renamed store resolves via the
-  // alias table instead of a spurious "Merchant not found". A live slug wins.
-  // Strict: an alias-DB failure throws (500, key kept) instead of a
-  // spurious "Merchant not found" terminal.
-  const { data: merchant, error: merchantError } =
-    await withMerchantSlugAliasFallback(
-      input.merchantSlug,
-      (s) =>
-        supabase
-          .from('merchants')
-          .select('id, slug, business_name, paystack_subaccount_code')
-          .eq('slug', s)
-          .maybeSingle(),
-      { strict: true }
-    );
-
-  // Strict: a transient lookup error must 500 (key kept), never
-  // masquerade as a terminal 400/404 (key rotated).
-  throwIfStrictVtuLookupError({
-    context: 'resolve VTU merchant',
-    error: merchantError,
+  const merchant = await resolveVtuMerchant({
+    merchantSlug: input.merchantSlug,
     strictLookups,
+    supabase,
   });
-  if (merchantError || !merchant) {
-    throw new Error('Merchant not found');
-  }
 
   const { data: settings, error: settingsError } = await supabase
     .from('merchant_feature_settings')

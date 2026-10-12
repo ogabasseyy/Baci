@@ -134,11 +134,19 @@ async function resolveAliasMapping(
   oldSlug: string,
   strict = false
 ): Promise<string | null> {
-  const cached = aliasMappingCache.get(oldSlug);
-  if (cached) {
-    const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
-    if (Date.now() - cached.timestamp < ttl) {
-      return cached.currentSlug;
+  // Strict callers bypass the cache read: a cached negative may have
+  // been produced by a failed LENIENT lookup (indistinguishable from
+  // a genuine miss), and trusting it would collapse a transient
+  // outage into a permanent 404/400 downstream. Strict paths only run
+  // on merchant misses, so the extra fetch is rare; the genuine
+  // result is still written back for lenient callers below.
+  if (!strict) {
+    const cached = aliasMappingCache.get(oldSlug);
+    if (cached) {
+      const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
+      if (Date.now() - cached.timestamp < ttl) {
+        return cached.currentSlug;
+      }
     }
   }
 
@@ -216,9 +224,14 @@ function handleAliasMappingError(
 }
 
 async function isSlugLive(slug: string, strict = false): Promise<boolean> {
-  const cached = livenessCache.get(slug);
-  if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
-    return cached.isLive;
+  // Strict callers bypass the cache read (same failure-negative
+  // reasoning as resolveAliasMapping: a cached live=true may be a
+  // fail-safe from a failed lenient liveness check).
+  if (!strict) {
+    const cached = livenessCache.get(slug);
+    if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
+      return cached.isLive;
+    }
   }
 
   const isLive = await fetchSlugIsLive(slug, strict);

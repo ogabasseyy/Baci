@@ -220,4 +220,43 @@ describe('getCurrentSlugForAliasStrict', () => {
     });
     expect(await getCurrentSlugForAliasStrict('strict-live')).toBeNull();
   });
+
+  it('bypasses a negative cached from a failed lenient lookup', async () => {
+    // The proxy hits a transient alias-table failure: lenient returns
+    // null and caches the negative. A strict replay reusing that
+    // cached negative would 400 and rotate the client's key — strict
+    // must re-fetch instead.
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    });
+    expect(await getCurrentSlugForAlias('strict-poison')).toBeNull();
+
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'strict-fresh' } },
+      error: null,
+    });
+    expect(await getCurrentSlugForAliasStrict('strict-poison')).toBe(
+      'strict-fresh'
+    );
+  });
+
+  it('bypasses liveness cached live from a failed lenient check', async () => {
+    // Lenient liveness fails safe (live=true) and caches it; strict
+    // must re-check, or a renamed store would never redirect.
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'strict-live-fresh' } },
+      error: null,
+    });
+    mockMerchantMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    });
+    expect(await getCurrentSlugForAlias('strict-live-poison')).toBeNull();
+
+    mockMerchantMaybeSingle.mockResolvedValue({ data: null, error: null });
+    expect(await getCurrentSlugForAliasStrict('strict-live-poison')).toBe(
+      'strict-live-fresh'
+    );
+  });
 });

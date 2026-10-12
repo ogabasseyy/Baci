@@ -100,8 +100,22 @@ describe('Geoapify address mapping', () => {
     const url = new URL(String(mockFetch.mock.calls[0][0]));
     expect(url.searchParams.get('filter')).toBe('countrycode:ng');
   });
-  it('rejects invalid upstream coordinates safely', async () => {
+  it('drops a malformed result without discarding the valid rest', async () => {
+    respond([{ ...result, lat: 91 }, result]);
+    const predictions = await fetchGeoapifyPredictions('Allen Avenue', 'ng');
+    expect(predictions).toHaveLength(1);
+    expect(predictions[0].details).toMatchObject({ city: 'Ikeja' });
+  });
+  it('returns no matches when every result is malformed', async () => {
     respond([{ ...result, lat: 91 }]);
+    expect(await fetchGeoapifyPredictions('Allen Avenue', 'ng')).toEqual([]);
+  });
+  it('rejects a malformed response envelope safely', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: null }),
+    });
     await expect(
       fetchGeoapifyPredictions('Allen Avenue', 'ng')
     ).rejects.toMatchObject({ status: 502 });

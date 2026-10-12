@@ -21,7 +21,11 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   const { input, sessionToken, country } = parsed.data;
-  if (input.length < 2) return NextResponse.json({ predictions: [] });
+  if (input.length < 2)
+    return NextResponse.json(
+      { predictions: [] },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
 
   const google = await fetchGoogleAutocomplete(input, sessionToken, country);
   if (

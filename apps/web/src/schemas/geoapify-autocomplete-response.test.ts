@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { geoapifyAutocompleteResponseSchema } from './geoapify-autocomplete-response';
+import {
+  geoapifyAutocompleteResponseSchema,
+  geoapifyAutocompleteResultSchema,
+} from './geoapify-autocomplete-response';
 
 describe('Geoapify response schema', () => {
   const place = { place_id: 'place', formatted: 'Lagos, Nigeria' };
-  it('allows empty results and optional address fields', () => {
+  it('allows empty results at the envelope level', () => {
     expect(geoapifyAutocompleteResponseSchema.parse({ results: [] })).toEqual({
       results: [],
     });
-    expect(
-      geoapifyAutocompleteResponseSchema.parse({ results: [place] })
-    ).toEqual({ results: [place] });
   });
   it('retains bounded coordinates and confidence used for delivery decisions', () => {
     const details = {
@@ -18,18 +18,15 @@ describe('Geoapify response schema', () => {
       lon: 180,
       rank: { confidence_street_level: 0.9, confidence_building_level: 1 },
     };
-    expect(
-      geoapifyAutocompleteResponseSchema.parse({ results: [details] })
-        .results[0]
-    ).toEqual(details);
+    expect(geoapifyAutocompleteResultSchema.parse(details)).toEqual(details);
   });
   it('strips unrelated provider fields from the safe projection', () => {
     expect(
-      geoapifyAutocompleteResponseSchema.parse({
-        results: [{ ...place, raw: { secret: 'ignored' } }],
-        apiKey: 'ignored',
+      geoapifyAutocompleteResultSchema.parse({
+        ...place,
+        raw: { secret: 'ignored' },
       })
-    ).toEqual({ results: [place] });
+    ).toEqual(place);
   });
   it.each([
     { ...place, place_id: '' },
@@ -43,10 +40,9 @@ describe('Geoapify response schema', () => {
     { ...place, lon: Number.POSITIVE_INFINITY },
     { ...place, rank: { confidence_building_level: 'high' } },
   ])('rejects malformed provider result %j', (result) => {
-    expect(
-      geoapifyAutocompleteResponseSchema.safeParse({ results: [result] })
-        .success
-    ).toBe(false);
+    expect(geoapifyAutocompleteResultSchema.safeParse(result).success).toBe(
+      false
+    );
   });
   it.each([
     {},

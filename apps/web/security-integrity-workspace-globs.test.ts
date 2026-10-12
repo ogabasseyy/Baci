@@ -78,6 +78,7 @@ describe('security-integrity-workspace-globs', () => {
     'apps/**',
     'apps\\..\\escape',
     'win\\dir',
+    'apps/[ab]*',
   ])('throws on unsupported workspace glob syntax %s', (glob) => {
     withWorkspace(`packages:\n  - "${glob}"\n`, (ws) => {
       expect(() => expandWorkspaces(ws)).toThrow(

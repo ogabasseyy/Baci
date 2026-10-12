@@ -15,8 +15,16 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   const denied = (path: string) =>
     typeof path === 'string' && path.includes('denied-dir');
+  const deniedProbe = (path: string) =>
+    typeof path === 'string' && path.includes('denied-probe');
   return {
     ...actual,
+    statSync: ((path: string) => {
+      if (deniedProbe(path)) {
+        throw Object.assign(new Error('simulated EACCES'), { code: 'EACCES' });
+      }
+      return actual.statSync(path);
+    }) as typeof actual.statSync,
     realpathSync: ((path: string) => {
       if (denied(path)) {
         throw Object.assign(new Error('simulated EACCES'), { code: 'EACCES' });
@@ -94,6 +102,48 @@ describe('security-integrity-find-installed-roots error paths', () => {
         JSON.stringify({ name: 'denied-dir', version: '0.0.0' })
       );
       expect(() => findInstalledRoots('denied-dir', ws)).toThrow(/EACCES/);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when a virtual-store probe itself is unreadable', () => {
+    // The exact probe failure: pathExists (statSync) throws EACCES
+    // instead of reporting the store entry absent. existsSync would
+    // have skipped this tree silently.
+    const ws = mkdtempSync(join(tmpdir(), 'ws-probe-fixture-'));
+    try {
+      writeFileSync(join(ws, 'pnpm-workspace.yaml'), 'packages: []\n');
+      mkdirSync(
+        join(
+          ws,
+          'node_modules',
+          '.pnpm',
+          'denied-probe-pkg@1.0.0',
+          'node_modules'
+        ),
+        { recursive: true }
+      );
+      expect(() => findInstalledRoots('dup', ws)).toThrow(/EACCES/);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when a sibling workspace modules probe itself is unreadable', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'ws-sibling-probe-fixture-'));
+    try {
+      writeFileSync(
+        join(ws, 'pnpm-workspace.yaml'),
+        'packages:\n  - "denied-probe-sibling"\n'
+      );
+      mkdirSync(join(ws, 'denied-probe-sibling', 'node_modules'), {
+        recursive: true,
+      });
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(() => findInstalledRoots('dup', join(ws, 'apps', 'web'))).toThrow(
+        /EACCES/
+      );
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }

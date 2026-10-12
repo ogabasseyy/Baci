@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { readdirSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isBenignFsError } from './security-integrity-benign-fs-error';
+import { pathExists } from './security-integrity-path-exists';
 import { expandWorkspaces } from './security-integrity-workspace-globs';
 
 // Enumerate EVERY installed copy of a package: the ancestor chain's
@@ -41,7 +42,7 @@ export function findInstalledRoots(
       roots.add(realpathSync(candidate));
     } catch (error) {
       // Only a dangling symlink or an install-time race between the
-      // existsSync check and resolution is safe to skip: an
+      // pathExists probe and resolution is safe to skip: an
       // unresolvable candidate cannot be loaded by Node either. Any
       // other resolution failure throws fail-closed.
       if (!isBenignFsError(error)) {
@@ -85,7 +86,7 @@ export function findInstalledRoots(
             continue;
           }
           const storeModules = join(full, storeEntry.name, 'node_modules');
-          if (existsSync(storeModules)) {
+          if (pathExists(storeModules)) {
             scan(storeModules, depth + 1, false);
           }
         }
@@ -97,12 +98,12 @@ export function findInstalledRoots(
         if (scoped !== null) {
           if (entry.name === scoped.scope) {
             const candidate = join(full, scoped.name);
-            if (existsSync(join(candidate, 'package.json'))) {
+            if (pathExists(join(candidate, 'package.json'))) {
               addRoot(candidate);
             }
           }
         } else if (entry.name === packageName) {
-          if (existsSync(join(full, 'package.json'))) {
+          if (pathExists(join(full, 'package.json'))) {
             addRoot(full);
           }
         }
@@ -113,7 +114,7 @@ export function findInstalledRoots(
         scan(full, depth + 1, true);
       } else {
         const nested = join(full, 'node_modules');
-        if (existsSync(nested)) {
+        if (pathExists(nested)) {
           scan(nested, depth + 1, false);
         }
       }
@@ -145,7 +146,7 @@ export function findInstalledRoots(
   const ancestors: string[] = [];
   for (let level = 0; level < 12; level += 1) {
     ancestors.push(join(dir, 'node_modules'));
-    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+    if (pathExists(join(dir, 'pnpm-workspace.yaml'))) {
       workspaceRoot = dir;
       capped = false;
       break;
@@ -166,14 +167,14 @@ export function findInstalledRoots(
     );
   }
   for (const modules of ancestors) {
-    if (existsSync(modules)) {
+    if (pathExists(modules)) {
       scanModules(modules);
     }
   }
   if (workspaceRoot !== null) {
     for (const workspace of expandWorkspaces(workspaceRoot)) {
       const modules = join(workspace, 'node_modules');
-      if (existsSync(modules)) {
+      if (pathExists(modules)) {
         scanModules(modules);
       }
     }

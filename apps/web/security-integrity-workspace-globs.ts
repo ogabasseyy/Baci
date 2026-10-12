@@ -109,7 +109,9 @@ export function expandWorkspaces(workspaceRoot: string): string[] {
       glob.includes('\\') ||
       glob.includes('**') ||
       glob.includes('?') ||
-      glob.includes('{')
+      glob.includes('{') ||
+      glob.includes('[') ||
+      glob.includes(']')
     ) {
       throw new Error(
         `findInstalledRoots: unsupported workspace glob syntax: ${glob}`

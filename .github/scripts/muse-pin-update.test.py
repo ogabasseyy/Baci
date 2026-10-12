@@ -150,6 +150,29 @@ class MusePinUpdateTests(unittest.TestCase):
                 self.assertIn(expected, installer_text)
                 self.assertIn(expected, anchors_text)
 
+    def test_unchanged_pin_is_a_noop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / ".github/scripts/muse-review/install.sh"
+            anchors = root / ".github/scripts/semgrep_sarif_pins.py"
+            installer.parent.mkdir(parents=True)
+            installer.write_text(
+                'MUSE_VERSION="1.5.0-R6100.2"\n'
+                '# From the stable-channel manifest (retrieved 2020-01-01 over TLS):\n'
+                'SHA_X86_LINUX="' + "c" * 64 + '"\n'
+                'SHA_AARCH64_LINUX="' + "d" * 64 + '"\n'
+            )
+            anchors.parent.mkdir(parents=True, exist_ok=True)
+            anchors.write_text(
+                'MUSE_PINNED_VERSION = "1.5.0-R6100.2"\n'
+                'MUSE_PINNED_SHA_X86 = (\n    "' + "c" * 64 + '"\n)\n'
+                'MUSE_PINNED_SHA_AARCH64 = (\n    "' + "d" * 64 + '"\n)\n'
+            )
+            before = (installer.read_text(), anchors.read_text())
+            pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
+            updater.update_files(root, pins, retrieved="2026-01-02")
+            self.assertEqual((installer.read_text(), anchors.read_text()), before)
+
     def test_validates_both_files_before_writing_either(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

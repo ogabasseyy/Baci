@@ -130,19 +130,24 @@ export function useCheckoutCustomerLifecycle(
 
         if (data.user) {
           setUser(data.user);
+          // Default to no customer so a slug change (or a session that stops
+          // returning one) clears the previous merchant's record instead of
+          // re-applying it to the new merchant's form.
+          let loadedCustomer: CheckoutCustomerData | null = null;
           if (merchantSlug) {
             try {
               const response = await fetch(
                 `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
               );
               const sessionData = await response.json();
-              if (active && sessionData.authenticated && sessionData.customer) {
-                setCustomerData(sessionData.customer);
+              if (sessionData.authenticated && sessionData.customer) {
+                loadedCustomer = sessionData.customer;
               }
             } catch (error) {
               console.error('Failed to fetch customer data:', error);
             }
           }
+          if (active) setCustomerData(loadedCustomer);
           if (active) setStep(1);
         }
       } catch (error) {
@@ -168,7 +173,9 @@ export function useCheckoutCustomerLifecycle(
     customer?: CheckoutCustomerData
   ) => {
     setUser(authenticatedUser);
-    if (customer) setCustomerData(customer);
+    // An auth success without a customer record must drop the previous
+    // record rather than pair it with the new user.
+    setCustomerData(customer ?? null);
     setIsGuestCheckout(false);
     setStep(1);
   };

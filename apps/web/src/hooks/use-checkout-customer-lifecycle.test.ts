@@ -22,18 +22,20 @@ function makeUser(userMetadata: Record<string, unknown> = {}) {
   return { ...signedInUser, user_metadata: userMetadata } as SupabaseUser;
 }
 
+const shippingDefaults: CheckoutShippingValues = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  address: '',
+  city: '',
+  state: '',
+};
+
 function setupLifecycle(merchantSlug: string | null = 'store') {
   return renderHook(() => {
     const form = useForm<CheckoutShippingValues>({
-      defaultValues: {
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        address: '',
-        city: '',
-        state: '',
-      },
+      defaultValues: shippingDefaults,
     });
     const lifecycle = useCheckoutCustomerLifecycle(merchantSlug, form.setValue);
     return { ...lifecycle, form };
@@ -184,6 +186,68 @@ describe('useCheckoutCustomerLifecycle', () => {
     expect(result.current.isGuestCheckout).toBe(false);
     await waitFor(() =>
       expect(result.current.form.getValues('email')).toBe('buyer@example.com')
+    );
+  });
+
+  it('clears the previous merchant customer when a slug change yields none', async () => {
+    getUser.mockResolvedValue({
+      data: { user: makeUser({ first_name: 'Meta' }) },
+    });
+    const customerA = {
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      email: 'buyer@example.com',
+      phone: '+2348012345678',
+    };
+    vi.mocked(fetch).mockImplementation(
+      async (url) =>
+        ({
+          json: async () =>
+            String(url).includes('store-b')
+              ? { authenticated: false }
+              : { authenticated: true, customer: customerA },
+        }) as Response
+    );
+
+    const { result, rerender } = renderHook(
+      ({ slug }: { slug: string }) => {
+        const form = useForm<CheckoutShippingValues>({
+          defaultValues: shippingDefaults,
+        });
+        const lifecycle = useCheckoutCustomerLifecycle(slug, form.setValue);
+        return { ...lifecycle, form };
+      },
+      { initialProps: { slug: 'store-a' } }
+    );
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+    expect(result.current.form.getValues('firstName')).toBe('Ada');
+
+    rerender({ slug: 'store-b' });
+
+    await waitFor(() =>
+      expect(result.current.form.getValues('firstName')).toBe('Meta')
+    );
+  });
+
+  it('drops the previous customer when auth succeeds without one', async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+    const { result } = setupLifecycle();
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+
+    const customerA = {
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      email: 'buyer@example.com',
+    };
+    act(() => result.current.handleAuthSuccess(signedInUser, customerA));
+    expect(result.current.form.getValues('firstName')).toBe('Ada');
+
+    act(() =>
+      result.current.handleAuthSuccess(makeUser({ first_name: 'Meta' }))
+    );
+
+    await waitFor(() =>
+      expect(result.current.form.getValues('firstName')).toBe('Meta')
     );
   });
 });

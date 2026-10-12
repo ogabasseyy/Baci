@@ -9,8 +9,10 @@ import { join, relative, sep } from 'node:path';
 // dirs and originals this run did not write. Everything removed resolves
 // under pilotStage first — a planted symlink inside the tree redirects
 // the removal nowhere. Returns removed paths relative to pilotStage.
-// Unknown top-level entries are left alone: only managed shapes are
-// reconciled. Staging writes flat files only, so any directory nested
+// Unknown top-level entries fail the stage: the startup guard refuses
+// every entry other than fillers, originals, and generation ids, so
+// leaving one would report ok for a lab that cannot boot. Only managed
+// shapes are reconciled. Staging writes flat files only, so any directory nested
 // inside a current generation or originals is stale or planted and goes
 // with its served descendants — skipping it would report completion
 // while obsolete merchant bytes stay reachable under /__pilot.
@@ -76,6 +78,21 @@ export async function reconcileStagedTree(input: {
   const entries = await readdir(input.pilotStage, { withFileTypes: true });
   for (const entry of entries) {
     const entryPath = join(input.pilotStage, entry.name);
+    // Mirror the startup guard's allowlist exactly: fillers (a real
+    // directory — a file or link there fails boot too), originals, and
+    // generation ids. Anything else fails the stage rather than
+    // reporting ok for a tree the guard will refuse to start.
+    const managed =
+      entry.name === 'originals' || HEX64_PATTERN.test(entry.name);
+    if (!managed) {
+      const fillersDir = entry.name === 'fillers' && entry.isDirectory();
+      if (!fillersDir) {
+        throw new Error(
+          `merchant image pilot: unknown staged entry "${entry.name}" — remove it or stage into a clean tree`
+        );
+      }
+      continue;
+    }
     // Managed names are always directories (generation dirs, originals):
     // a file or symlink squatting one is never legitimate. Unlink it
     // (never following the link) instead of silently skipping — the

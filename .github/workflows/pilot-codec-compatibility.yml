@@ -14,6 +14,9 @@ on:
       - 'apps/web/src/lib/merchant-image-variant-pilot/**'
       - 'apps/web/src/app/pilot-lab/**'
       - 'infra/cdn-transformer/pilot/**'
+      - 'infra/cdn-transformer/package.json'
+      - 'infra/cdn-transformer/pnpm-lock.yaml'
+      - 'infra/cdn-transformer/pnpm-workspace.yaml'
       - '.github/fixtures/pilot-codec/**'
       - '.github/workflows/pilot-codec-compatibility.yml'
 

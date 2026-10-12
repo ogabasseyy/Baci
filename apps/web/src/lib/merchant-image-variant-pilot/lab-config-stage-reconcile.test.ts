@@ -60,7 +60,7 @@ describe('reconcileStagedTree', () => {
     await expect(lstat(tierPath)).rejects.toThrow(/ENOENT/);
   });
 
-  it('keeps current files and unknown top-level entries', async () => {
+  it('keeps current files and the fillers directory', async () => {
     const pilotStage = await stageTree();
     const tierPath = join(pilotStage, GEN, 'tier.avif');
     await writeFile(tierPath, 'current');
@@ -119,6 +119,38 @@ describe('reconcileStagedTree', () => {
     await expect(lstat(linkSquatter)).rejects.toThrow(/ENOENT/);
     await expect(lstat(originalsFile)).rejects.toThrow(/ENOENT/);
     await expect(lstat(outside)).resolves.toBeDefined();
+  });
+
+  it('fails staging on unknown top-level entries', async () => {
+    const pilotStage = await stageTree();
+    await mkdir(join(pilotStage, 'old-assets'), { recursive: true });
+    await writeFile(join(pilotStage, 'old-assets', 'stale.png'), 'stale');
+    // The startup guard refuses every entry outside fillers, originals,
+    // and generation ids: staging must fail here, not report ok for a
+    // tree that cannot boot. The unknown entry is left for the operator.
+    await expect(
+      reconcileStagedTree({
+        generationIds: [GEN],
+        pilotStage,
+        stagedFiles: [],
+      })
+    ).rejects.toThrow(/unknown staged entry "old-assets"/);
+    await expect(
+      lstat(join(pilotStage, 'old-assets', 'stale.png'))
+    ).resolves.toBeDefined();
+  });
+
+  it('fails staging when fillers is not a directory', async () => {
+    const pilotStage = await stageTree();
+    await rm(join(pilotStage, 'fillers'), { force: true, recursive: true });
+    await writeFile(join(pilotStage, 'fillers'), 'junk');
+    await expect(
+      reconcileStagedTree({
+        generationIds: [GEN],
+        pilotStage,
+        stagedFiles: [],
+      })
+    ).rejects.toThrow(/unknown staged entry "fillers"/);
   });
 
   // Root bypasses permission bits, so the unreadable-directory case is

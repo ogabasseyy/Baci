@@ -15,6 +15,7 @@ import {
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { calculateCommerce } from '@/lib/supabase/client';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
+import { linkVtuCustomerByEmail } from '@/lib/vtu-customer-link';
 import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
 import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
@@ -477,30 +478,12 @@ export async function resolveVtuCustomer({
   });
 
   if (byEmail && !byEmail.user_id) {
-    const { data: linked, error: linkError } = await supabase
-      .from('customers')
-      .update({ user_id: user.id })
-      .eq('id', byEmail.id)
-      .select('id')
-      .maybeSingle();
-    // Fail closed: history only shows rows whose user_id equals the
-    // caller, so returning a silently unlinked row would vend into
-    // invisible history. A link error is indeterminate — 5xx under
-    // strict, null otherwise (self-heals on retry via the byUserId
-    // hit if the link actually landed). A zero-row match means the
-    // row vanished mid-checkout — definitive miss, null either way.
-    if (linkError) {
-      throwIfStrictVtuLookupError({
-        context: 'look up VTU customer',
-        error: linkError,
-        strictLookups,
-      });
-      return null;
-    }
-    if (!linked) {
-      return null;
-    }
-    return { ...byEmail, user_id: user.id } as CustomerRecord;
+    return linkVtuCustomerByEmail({
+      byEmail,
+      strictLookups,
+      supabase,
+      userId: user.id,
+    });
   }
 
   // Tenant isolation: an email-matched row linked to a DIFFERENT auth

@@ -207,6 +207,11 @@ export function useVtuVoucherPinBackfill({
   // dataUpdateCount only increments on referential change; null === null keeps
   // it at 1 forever. Track fetch attempts independently so the cap is reliable.
   const fetchCountRef = useRef(0);
+  // The budget is per query identity, not per mount: an account/type/
+  // reference switch starts a fresh query that deserves a fresh budget.
+  // Without the reset, the old query's spent count would starve the new
+  // one (e.g. switch away and back leaves one fetch before the cap).
+  const lastIdentityRef = useRef<string | null>(null);
 
   const { data } = useQuery<BackfillObservation | null>({
     queryKey: ['vtu', 'voucher-pin-backfill', userId, apiType, reference],
@@ -245,9 +250,19 @@ export function useVtuVoucherPinBackfill({
         : POLL_SLOW_INTERVAL_MS;
     },
     queryFn: (context) => {
+      // Key layout: ['vtu', 'voucher-pin-backfill', userId, apiType,
+      // reference]. A new identity resets the attempt budget; the
+      // polling account doubles as the side-effect guard below.
+      const identity = JSON.stringify([
+        context.queryKey[2],
+        context.queryKey[3],
+        context.queryKey[4],
+      ]);
+      if (lastIdentityRef.current !== identity) {
+        lastIdentityRef.current = identity;
+        fetchCountRef.current = 0;
+      }
       fetchCountRef.current += 1;
-      // Capture the polling account from the key (index 2 is userId):
-      // the side effect below must not fire for a superseded account.
       const rawUserId = context.queryKey[2];
       const capturedUserId = typeof rawUserId === 'string' ? rawUserId : null;
       return fetchVoucherPin({ apiType, capturedUserId, reference });

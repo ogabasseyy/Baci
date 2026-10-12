@@ -160,6 +160,54 @@ describe('useVtuVoucherPinBackfill', () => {
     });
   });
 
+  it('resets the poll budget when the query identity changes', async () => {
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+      })
+    );
+
+    const { rerender } = renderHook(
+      () => useVtuVoucherPinBackfill(BASE_INPUT),
+      { wrapper }
+    );
+
+    // Exhaust user-1's budget first.
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    for (let i = 1; i < FAST_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
+    for (let i = FAST_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
+
+    // Switching accounts starts a fresh query with a fresh budget —
+    // without the reset the new query inherits the spent count and
+    // starves after a single fetch.
+    mockUseAuthStore.mockReturnValue('user-2');
+    rerender(() => useVtuVoucherPinBackfill(BASE_INPUT));
+    await waitFor(() =>
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 1)
+    );
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() =>
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 2)
+    );
+
+    // And switching back resumes the original purchase too.
+    mockUseAuthStore.mockReturnValue('user-1');
+    rerender(() => useVtuVoucherPinBackfill(BASE_INPUT));
+    await waitFor(() =>
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 3)
+    );
+  });
+
   it('backs off to the slow interval after the fast attempts', async () => {
     mockFetchWithTimeout.mockResolvedValue(
       makeResponse({

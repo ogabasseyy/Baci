@@ -80,8 +80,11 @@ jobs:
           bash .github/scripts/muse-review/install.sh
           # install.sh only verifies the runner's own architecture;
           # verify the ARM64 checksum against the real artifact too.
-          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' .github/scripts/muse-review/install.sh)"
-          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' .github/scripts/muse-review/install.sh)"
+          # Read the expected values from the staged copies hashed
+          # before the unreviewed binary ran, never from the workspace
+          # files it could have modified.
+          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
+          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
           arm_bin="$(mktemp)"
           curl --disable --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
             --connect-timeout 15 --max-time 600 -fsSL -o "$arm_bin" \

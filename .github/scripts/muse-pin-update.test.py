@@ -226,6 +226,27 @@ class MusePinUpdateTests(unittest.TestCase):
                 updater.update_files(root, pins)
             self.assertEqual(installer.read_text(), original_installer)
 
+    def test_failed_second_write_leaves_both_files_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer, anchors = self._pin_tree(root, "1.4.6-R6000.1", "a" * 64, "b" * 64)
+            before = (installer.read_text(), anchors.read_text())
+            real_write = Path.write_text
+            calls = {"count": 0}
+
+            def flaky_write(self, data, *args, **kwargs):
+                calls["count"] += 1
+                if calls["count"] == 2:
+                    raise OSError("simulated write failure")
+                return real_write(self, data, *args, **kwargs)
+
+            pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
+            with mock.patch.object(Path, "write_text", flaky_write):
+                with self.assertRaises(OSError):
+                    updater.update_files(root, pins, retrieved="2026-01-02")
+            self.assertEqual((installer.read_text(), anchors.read_text()), before)
+            self.assertEqual(list(root.rglob("*.tmp")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

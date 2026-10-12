@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +27,24 @@ const GENERATOR_FIXTURES = join(
   'pilot',
   'fixtures'
 );
+const COMMITTED_FILLERS = join(
+  here,
+  '..',
+  '..',
+  'public',
+  '__pilot',
+  'fillers'
+);
+
+// The startup gate hash-pins the committed filler set: plant the real
+// bytes so sandbox stages satisfy the same gate staging now enforces.
+async function plantCommittedFillers(sandbox: string): Promise<void> {
+  const dest = join(sandbox, 'public', '__pilot', 'fillers');
+  await mkdir(dest, { recursive: true });
+  for (const file of await readdir(COMMITTED_FILLERS)) {
+    await copyFile(join(COMMITTED_FILLERS, file), join(dest, file));
+  }
+}
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
@@ -150,6 +175,7 @@ describe('stage main', () => {
   it('treats an empty public-dir env override as unset', async () => {
     const lab = await setupStageFiles();
     const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-pubdir-'));
+    await plantCommittedFillers(sandbox);
     const cwd = process.cwd();
     const argv = process.argv;
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
@@ -183,6 +209,7 @@ describe('stage main', () => {
   it("treats --public-dir '' as unset", async () => {
     const lab = await setupStageFiles();
     const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-pubflag-'));
+    await plantCommittedFillers(sandbox);
     const cwd = process.cwd();
     const argv = process.argv;
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
@@ -210,5 +237,30 @@ describe('stage main', () => {
       join(sandbox, 'public', '__pilot', 'originals', `${MERCHANT}-logo-1.png`)
     );
     expect(staged.length).toBeGreaterThan(0);
+  });
+
+  it('fails staging when the filler set is absent', async () => {
+    // No fillers planted: the startup gate would refuse this tree at
+    // Next start, so staging must fail here instead of printing ok.
+    const lab = await setupStageFiles();
+    const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-nofill-'));
+    const cwd = process.cwd();
+    const argv = process.argv;
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    process.argv = [
+      'node',
+      'merchant-image-pilot-stage.cli.ts',
+      '--input-root',
+      lab.inputRoot,
+      '--output-root',
+      lab.outputRoot,
+    ];
+    try {
+      process.chdir(sandbox);
+      await expect(main()).rejects.toThrow(/fillers directory/);
+    } finally {
+      process.chdir(cwd);
+      process.argv = argv;
+    }
   });
 });

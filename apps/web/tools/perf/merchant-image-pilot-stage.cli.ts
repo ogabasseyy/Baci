@@ -21,6 +21,7 @@ import { realpath } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { stageLabConfigFromText } from '@/app/pilot-lab/lab-route';
 import { readBoundedOperatorJson } from '@/app/pilot-lab/lab-route-operator-json';
+import { assertPilotPublicAssets } from '@/config/pilot-public-assets';
 
 const STAGE_FLAGS = new Set(['--input-root', '--output-root', '--public-dir']);
 
@@ -133,6 +134,11 @@ export async function main(): Promise<void> {
     outputRoot,
     publicDir,
   });
+  // Stage/boot agreement: run the exact Next startup gate before
+  // printing ok. The staged tree boots only in lab mode, so validate
+  // as lab unconditionally — absent, drifted, or extra fillers fail
+  // staging here instead of failing the subsequent Next start.
+  assertPilotPublicAssets(publicDir, true);
   const accepted = config.statuses.filter(
     (status) => status.status === 'accepted' && status.generationId
   );

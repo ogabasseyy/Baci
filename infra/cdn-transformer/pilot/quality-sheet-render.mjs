@@ -124,16 +124,20 @@ export async function assertTierDecodedDimensions(tier, files, assetId) {
   }
 }
 
-export function tierCells(tier, files, cssWidth, crop, boxWidth) {
+export function tierCells(tier, files, crop, boxWidth) {
   const file = files.get(tier.path);
   const dataUri = `data:${tier.contentType};base64,${file.toString('base64')}`;
-  // height:auto keeps the aspect ratio when the DPR-3 cap constrains
-  // the width: without it the browser stretches the tier to height=.
+  // height:auto keeps the aspect ratio at the row width: without it the
+  // browser stretches the tier to height=. Uncropped tiers render at the
+  // row's comparison width like the original — never at intrinsic width
+  // up to the DPR cap, which would overshoot compareWidth whenever the
+  // encoded-pixel ceiling binds below it (a wide passthrough beside a
+  // narrow sibling) and defeat the size-matched comparison.
   const overSource =
     tier.delivery === 'generated-over-source' ? ' · over-source' : '';
   const style =
     crop === null
-      ? `max-width:${cssWidth * 3}px;height:auto`
+      ? `width:${boxWidth}px;height:auto`
       : `width:${boxWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
   return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
 }

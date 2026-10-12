@@ -231,7 +231,7 @@ export async function buildQualitySheet({
             : `width:${compareWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
         return `<tr><td>${requestedWidth}px tier</td>
 <td><figure><img src="${originalUri}" style="${originalStyle}" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (${ceilingNote})${mountNote}</figcaption></figure></td>
-${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth, crop, compareWidth)}</td>`).join('\n')}</tr>`;
+${tiers.map((tier) => `<td>${tierCells(tier, files, crop, compareWidth)}</td>`).join('\n')}</tr>`;
       })
       .join('\n');
     sections.push(`<section><h2>${escapeHtml(record.assetId)} · ${escapeHtml(record.role)} · slot ${escapeHtml(record.slot)}</h2>

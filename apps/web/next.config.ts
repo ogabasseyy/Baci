@@ -7,7 +7,7 @@ import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-l
 import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
-import { assertPilotPublicAssets } from './src/config/pilot-public-assets';
+import { applyPilotPublicGate } from './src/config/pilot-next-gate';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -23,14 +23,9 @@ import {
   isPostHogSourceMapUploadEnabled,
 } from './src/lib/posthog/config';
 
-// Public assets bypass route guards; refuse non-lab builds with staged data.
-const pilotPublicDir = path.join(__dirname, 'public');
-assertPilotPublicAssets(pilotPublicDir);
-// The boot gate (instrumentation.ts) must inspect this same tree but has
-// no config-relative anchor at runtime: stash the config-anchored root in
-// this process's environment, where the boot gate reads it. Unconditional
-// overwrite — the config knows the truth, a stale preset never does.
-process.env.BACI_PILOT_PUBLIC_DIR = pilotPublicDir;
+// Public assets bypass route guards; refuse non-lab builds with staged
+// data (helper holds the gate: this file stays under no new weight).
+applyPilotPublicGate(__dirname);
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.

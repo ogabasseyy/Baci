@@ -6,6 +6,7 @@ import test from 'node:test';
 import { currentRecipeId } from './generation-identity.mjs';
 import { buildQualitySheet, readSlotsGeometry } from './quality-sheet.mjs';
 import { setupPilot } from './quality-sheet-fixtures.mjs';
+import { tierCells } from './quality-sheet-render.mjs';
 
 test('rejects an oversized slots file before parsing', async () => {
   const dir = join(
@@ -112,8 +113,37 @@ test('renders the original at the same capped width as the derivatives', async (
   });
   assert.match(narrowSheet, /<img src="data:image\/png[^>]*style="width:48px"/);
   assert.match(narrowSheet, /compared at 48px \(encoded-pixel ceiling\)/);
-  // Derivatives display at actual pixels capped to the DPR-3 ceiling.
-  assert.match(capped, /max-width:120px/);
+  // Uncropped derivatives render at the row comparison width like the
+  // original — never at intrinsic width up to the DPR cap.
+  assert.doesNotMatch(capped, /max-width:/);
+  assert.match(
+    capped,
+    /<img src="data:image\/avif[^>]*style="width:120px;height:auto"/
+  );
+});
+
+test('sizes an uncropped wide tier to the narrow row width', () => {
+  // Mixed row: a 2000px passthrough beside a 96px sibling binds the row
+  // to compareWidth 96 — the wide tier must display at 96px like the
+  // original, not at intrinsic width up to the DPR cap.
+  const files = new Map([['wide.avif', Buffer.from('wide-bytes')]]);
+  const cells = tierCells(
+    {
+      bytes: 10,
+      contentType: 'image/avif',
+      format: 'avif',
+      height: 500,
+      path: 'wide.avif',
+      quality: 70,
+      sha256: 'f'.repeat(64),
+      width: 2000,
+    },
+    files,
+    null,
+    96
+  );
+  assert.match(cells, /<img[^>]*style="width:96px;height:auto"/);
+  assert.doesNotMatch(cells, /max-width/);
 });
 
 test('ignores unrelated corrupt generations when locating assets', async () => {
@@ -175,4 +205,3 @@ test('renders current-recipe bytes when stale generations coexist', async () => 
   assert.match(html, new RegExp(currentRecipeId().replaceAll('/', '\\/')));
   assert.doesNotMatch(html, /recipe\/stale-test-only/);
 });
-

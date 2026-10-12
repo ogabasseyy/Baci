@@ -97,7 +97,25 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
     }
   }
   for (const [scoped, entry] of snapshot.entries) {
-    if (pendingVtuPurchases.has(scoped)) {
+    const live = pendingVtuPurchases.get(scoped);
+    if (live) {
+      // Same attempt, newer knowledge: another tab observed the
+      // reference or completion after this tab imported the key.
+      // Without this merge the local copy stays uncompleted forever
+      // and the stale guard presents the old vend as a new purchase
+      // instead of requiring a fresh submit. Different keys mean a
+      // different generation — the live one wins.
+      if (live.key === entry.key) {
+        if (live.reference === null && entry.reference != null) {
+          live.reference = entry.reference;
+        }
+        if (entry.completedAt != null) {
+          live.completedAt =
+            live.completedAt === null
+              ? entry.completedAt
+              : Math.min(live.completedAt, entry.completedAt);
+        }
+      }
       continue;
     }
     const tombstonedAt = forgottenScopedKeys.get(scoped);

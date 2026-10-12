@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type Href, Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type PagerView from 'react-native-pager-view';
 import { useEvent, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -151,20 +151,15 @@ export default function UtilityPurchaseScreen() {
     }
   }, [routeType]);
 
-  useEffect(() => {
-    // Every wallet purchase debits the wallet, with or without cashback,
-    // so invalidate on any success/processing reference — otherwise the
-    // pre-debit balance stays cached as fresh and the next purchase can
-    // submit against a stale balance the server will reject.
-    if (!currentType || !walletOwnerId || !successReference) {
+  // Deliberately omit userId: explicit exact:false prefix matching, so
+  // this {merchantId, ownerId} prefix clears stored keys both with and
+  // without the optional userId segment (sessions with a customer row but
+  // no auth user store the shorter key). Passing userId here would miss
+  // those sessions and leave stale balances cached.
+  const invalidateWalletBalance = useCallback(() => {
+    if (!walletOwnerId) {
       return;
     }
-
-    // Deliberately omit userId: explicit exact:false prefix matching, so
-    // this {merchantId, ownerId} prefix clears stored keys both with and
-    // without the optional userId segment (sessions with a customer row but
-    // no auth user store the shorter key). Passing userId here would miss
-    // those sessions and leave stale balances cached.
     void queryClient.invalidateQueries({
       queryKey: walletKeys.data({
         merchantId: activeMerchantId,
@@ -172,13 +167,18 @@ export default function UtilityPurchaseScreen() {
       }),
       exact: false,
     });
-  }, [
-    activeMerchantId,
-    currentType,
-    walletOwnerId,
-    queryClient,
-    successReference,
-  ]);
+  }, [activeMerchantId, queryClient, walletOwnerId]);
+
+  useEffect(() => {
+    // Every wallet purchase debits the wallet, with or without cashback,
+    // so invalidate on any success/processing reference — otherwise the
+    // pre-debit balance stays cached as fresh and the next purchase can
+    // submit against a stale balance the server will reject.
+    if (!currentType || !successReference) {
+      return;
+    }
+    invalidateWalletBalance();
+  }, [currentType, invalidateWalletBalance, successReference]);
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -223,6 +223,7 @@ export default function UtilityPurchaseScreen() {
           data={resolvedSuccessData}
           headerOffset={headerOffset}
           isAuthenticated={isAuthenticated}
+          onBackfillSettled={invalidateWalletBalance}
           onCreateAccount={() => router.push('/auth/login')}
           type={currentType}
         />

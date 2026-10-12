@@ -1,8 +1,12 @@
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 import { PurchaseSuccess } from '@/components/utilities/PurchaseSuccess';
 import type Colors from '@/constants/Colors';
-import { useVtuVoucherPinBackfill } from '@/hooks/use-vtu-voucher-pin-backfill';
+import {
+  useVtuVoucherPinBackfill,
+  type VtuBackfillTerminalStatus,
+} from '@/hooks/use-vtu-voucher-pin-backfill';
 import { utilityPurchaseStyles as styles } from './utility-purchase.styles';
 import type {
   UtilityPurchaseResult,
@@ -23,6 +27,8 @@ interface UtilityPurchaseSuccessViewProps {
   headerOffset: number;
   isAuthenticated: boolean;
   onCreateAccount: () => void;
+  /** Fires once when polling observes the purchase settle. */
+  onBackfillSettled?: (status: VtuBackfillTerminalStatus) => void;
   type: ValidUtilityType;
   bottomPadding: number;
 }
@@ -32,18 +38,37 @@ export function UtilityPurchaseSuccessView({
   data,
   headerOffset,
   isAuthenticated,
+  onBackfillSettled,
   onCreateAccount,
   type,
   bottomPadding,
 }: UtilityPurchaseSuccessViewProps) {
-  const backfilledVoucherPin = useVtuVoucherPinBackfill({
-    enabled:
-      (data.status === 'successful' || data.status === 'processing') &&
-      !data.voucherPin,
-    reference: data.reference,
-    utilityType: type,
-  });
+  const { pin: backfilledVoucherPin, status: backfilledStatus } =
+    useVtuVoucherPinBackfill({
+      enabled:
+        (data.status === 'successful' || data.status === 'processing') &&
+        !data.voucherPin,
+      reference: data.reference,
+      utilityType: type,
+    });
   const voucherPin = data.voucherPin || backfilledVoucherPin;
+  // A settled observation supersedes the submit-time status: without
+  // this a telco purchase stays on "Payment Received" forever (no
+  // pin ever arrives to flip it).
+  const status = backfilledStatus ?? data.status;
+
+  useEffect(() => {
+    // Only on a transition (processing -> terminal): an already-
+    // successful purchase already invalidated its wallet via the
+    // success reference, so re-notifying would just double-refetch.
+    if (
+      backfilledStatus &&
+      backfilledStatus !== data.status &&
+      onBackfillSettled
+    ) {
+      onBackfillSettled(backfilledStatus);
+    }
+  }, [backfilledStatus, data.status, onBackfillSettled]);
 
   return (
     <View
@@ -66,7 +91,7 @@ export function UtilityPurchaseSuccessView({
         cashback={data.cashback ?? null}
         isAuthenticated={isAuthenticated}
         onCreateAccount={onCreateAccount}
-        status={data.status}
+        status={status}
         voucherPin={voucherPin ?? null}
       />
     </View>

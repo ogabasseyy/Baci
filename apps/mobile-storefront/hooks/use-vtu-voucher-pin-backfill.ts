@@ -19,7 +19,9 @@ import { useAuthStore } from '@/stores/auth-store';
 // old vend as new — forever, since the stale guard only fires past an
 // OBSERVED completion.
 export const POLL_INTERVAL_MS = 3000;
-export const MAX_POLL_ATTEMPTS = 10;
+export const POLL_SLOW_INTERVAL_MS = 10_000;
+export const FAST_POLL_ATTEMPTS = 10;
+export const MAX_POLL_ATTEMPTS = 43;
 
 type BackfillApiType =
   | 'electricity'
@@ -41,6 +43,20 @@ const UTILITY_TYPE_TO_API_TYPE: Partial<
 interface BackfillObservation {
   pin: string | null;
   status: string | null;
+}
+
+export type VtuBackfillTerminalStatus = 'successful' | 'failed';
+
+export interface VtuVoucherPinBackfill {
+  pin: string | null;
+  /** Last terminal status observed; null while non-terminal. */
+  status: VtuBackfillTerminalStatus | null;
+}
+
+function toTerminalStatus(
+  status: string | null
+): VtuBackfillTerminalStatus | null {
+  return status === 'successful' || status === 'failed' ? status : null;
 }
 
 interface UseVtuVoucherPinBackfillInput {
@@ -127,7 +143,7 @@ export function useVtuVoucherPinBackfill({
   enabled,
   reference,
   utilityType,
-}: UseVtuVoucherPinBackfillInput) {
+}: UseVtuVoucherPinBackfillInput): VtuVoucherPinBackfill {
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const apiType = UTILITY_TYPE_TO_API_TYPE[utilityType] ?? null;
   const queryEnabled = Boolean(enabled && reference && apiType && userId);
@@ -145,8 +161,7 @@ export function useVtuVoucherPinBackfill({
       const observed = q.state.data;
       if (
         observed?.pin ||
-        observed?.status === 'successful' ||
-        observed?.status === 'failed' ||
+        toTerminalStatus(observed?.status ?? null) !== null ||
         q.state.status === 'error'
       ) {
         return false;
@@ -154,7 +169,13 @@ export function useVtuVoucherPinBackfill({
       if (fetchCountRef.current >= MAX_POLL_ATTEMPTS) {
         return false;
       }
-      return POLL_INTERVAL_MS;
+      // Backoff mirrors web: 3s for the first 10 attempts, then 10s.
+      // 43 attempts span ~6 minutes — reconciliation excludes rows
+      // younger than 45s and its worker runs every 5 minutes, so a
+      // 27s loop could never observe a normally delayed settlement.
+      return fetchCountRef.current <= FAST_POLL_ATTEMPTS
+        ? POLL_INTERVAL_MS
+        : POLL_SLOW_INTERVAL_MS;
     },
     queryFn: () => {
       fetchCountRef.current += 1;
@@ -162,5 +183,8 @@ export function useVtuVoucherPinBackfill({
     },
   });
 
-  return data?.pin ?? null;
+  return {
+    pin: data?.pin ?? null,
+    status: toTerminalStatus(data?.status ?? null),
+  };
 }

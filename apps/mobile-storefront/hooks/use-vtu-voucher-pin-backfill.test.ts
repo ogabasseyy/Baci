@@ -11,8 +11,10 @@ import {
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
 import {
+  FAST_POLL_ATTEMPTS,
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL_MS,
+  POLL_SLOW_INTERVAL_MS,
   useVtuVoucherPinBackfill,
 } from './use-vtu-voucher-pin-backfill';
 
@@ -109,7 +111,7 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    await waitFor(() => expect(result.current).toBe('1234-5678'));
+    await waitFor(() => expect(result.current.pin).toBe('1234-5678'));
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 
@@ -124,19 +126,54 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    // Drain initial fetch then advance one interval per remaining attempt
+    // Drain initial fetch, then one interval per remaining attempt:
+    // fast phase first, slow phase after.
     await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
-    for (let i = 1; i < MAX_POLL_ATTEMPTS; i++) {
+    for (let i = 1; i < FAST_POLL_ATTEMPTS; i++) {
       await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
       await waitFor(() =>
         expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
       );
     }
+    for (let i = FAST_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
 
-    // Advance two more intervals — cap must prevent any additional fetches
-    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    // Advance two more slow intervals — cap must prevent more fetches.
+    await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
+  });
+
+  it('backs off to the slow interval after the fast attempts', async () => {
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+      })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    for (let i = 1; i <= FAST_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
+    // Past the fast window a short advance fetches nothing...
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(FAST_POLL_ATTEMPTS + 1);
+    // ...while a full slow interval fires the next attempt.
+    await jest.advanceTimersByTimeAsync(
+      POLL_SLOW_INTERVAL_MS - POLL_INTERVAL_MS
+    );
+    await waitFor(() =>
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(FAST_POLL_ATTEMPTS + 2)
+    );
   });
 
   it('returns null and does not fetch when enabled is false', () => {
@@ -145,7 +182,7 @@ describe('useVtuVoucherPinBackfill', () => {
       { wrapper }
     );
 
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
@@ -159,7 +196,7 @@ describe('useVtuVoucherPinBackfill', () => {
       { wrapper }
     );
 
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
@@ -187,7 +224,7 @@ describe('useVtuVoucherPinBackfill', () => {
     // Terminal observation stops the loop (no pin expected for telco).
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: 'successful' });
     // ...and settles the registry so the stale guard can fire later.
     expect(isStalePendingVtuSuccess('hook-telco', 'REF-001')).toBe(false);
     expect(
@@ -214,11 +251,14 @@ describe('useVtuVoucherPinBackfill', () => {
       })
     );
 
-    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
 
     await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({ pin: null, status: 'failed' });
     expect(recallPendingVtuKey('hook-fail')).toBeNull();
   });
 
@@ -259,7 +299,7 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
@@ -275,7 +315,7 @@ describe('useVtuVoucherPinBackfill', () => {
 
     await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1));
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
   });
 
   it('halts polling immediately on a non-retriable HTTP error', async () => {
@@ -290,7 +330,7 @@ describe('useVtuVoucherPinBackfill', () => {
     // Two more intervals must not trigger additional fetches
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
   });
 
   it('halts polling immediately when fetchWithTimeout rejects (network/timeout)', async () => {
@@ -304,7 +344,7 @@ describe('useVtuVoucherPinBackfill', () => {
 
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
   });
 
   it('halts polling immediately when response.json() throws', async () => {
@@ -323,7 +363,7 @@ describe('useVtuVoucherPinBackfill', () => {
 
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
   });
 
   it('halts polling immediately when response schema does not match', async () => {
@@ -338,6 +378,6 @@ describe('useVtuVoucherPinBackfill', () => {
     // Schema mismatch now throws → error state → polling stops
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(result.current).toEqual({ pin: null, status: null });
   });
 });

@@ -15,9 +15,12 @@ vi.mock('@/lib/api-auth', () => ({
 }));
 
 const mockGetCurrentSlugForAlias = vi.fn();
+const mockGetCurrentSlugForAliasStrict = vi.fn();
 vi.mock('@/lib/slug-alias-cache', () => ({
   getCurrentSlugForAlias: (...args: unknown[]) =>
     mockGetCurrentSlugForAlias(...args),
+  getCurrentSlugForAliasStrict: (...args: unknown[]) =>
+    mockGetCurrentSlugForAliasStrict(...args),
 }));
 
 const mockAfter = vi.fn();
@@ -201,6 +204,8 @@ describe('GET /api/vtu/history', () => {
     merchantDataBySlug = {};
     mockGetCurrentSlugForAlias.mockReset();
     mockGetCurrentSlugForAlias.mockResolvedValue(null);
+    mockGetCurrentSlugForAliasStrict.mockReset();
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
     customerByUserIdData = { id: 'customer-1', user_id: 'user-1' };
     customerByEmailData = null;
     transactionsData = [
@@ -965,20 +970,21 @@ describe('GET /api/vtu/history', () => {
       'old-slug': null,
       'new-slug': { id: 'merchant-1' },
     };
-    mockGetCurrentSlugForAlias.mockResolvedValue('new-slug');
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue('new-slug');
     const { GET } = await import('./route');
 
     const response = await GET(makeRequest('?merchantSlug=old-slug'));
     const data = await response.json();
 
-    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledWith('old-slug');
+    expect(mockGetCurrentSlugForAliasStrict).toHaveBeenCalledWith('old-slug');
+    expect(mockGetCurrentSlugForAlias).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(data.transactions).toHaveLength(1);
   });
 
   it('returns 404 for an unknown slug with no alias', async () => {
     merchantData = null;
-    mockGetCurrentSlugForAlias.mockResolvedValue(null);
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
     const { GET } = await import('./route');
 
     const response = await GET(makeRequest('?merchantSlug=nope'));
@@ -986,5 +992,33 @@ describe('GET /api/vtu/history', () => {
 
     expect(response.status).toBe(404);
     expect(data.error).toBe('Merchant not found');
+  });
+
+  it('returns 500 (retryable) when the alias lookup fails', async () => {
+    merchantData = null;
+    mockGetCurrentSlugForAliasStrict.mockRejectedValue(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: old-slug')
+    );
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=old-slug'));
+    const data = await response.json();
+
+    // 404 would strand the backfill (it treats 4xx as terminal);
+    // 5xx keeps it retrying through the transient blip.
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the merchant lookup errors', async () => {
+    merchantData = null;
+    merchantError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
   });
 });

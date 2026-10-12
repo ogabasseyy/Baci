@@ -49,17 +49,32 @@ export async function GET(request: NextRequest) {
 
     // Alias-aware (mirrors checkout): a processing tab open across a
     // store rename polls with the stale slug; without the fallback the
-    // backfill 404s, treats it as permanent, and never settles.
+    // backfill 404s, treats it as permanent, and never settles. Strict:
+    // an alias-DB failure throws (retryable 5xx via the outer catch),
+    // never a 404 the backfill would treat as terminal.
     const { data: merchant, error: merchantError } =
-      await withMerchantSlugAliasFallback(merchantSlug, (resolvedSlug) =>
-        supabase
-          .from('merchants')
-          .select('id')
-          .eq('slug', resolvedSlug)
-          .maybeSingle()
+      await withMerchantSlugAliasFallback(
+        merchantSlug,
+        (resolvedSlug) =>
+          supabase
+            .from('merchants')
+            .select('id')
+            .eq('slug', resolvedSlug)
+            .maybeSingle(),
+        { strict: true }
       );
 
-    if (merchantError || !merchant) {
+    // A lookup ERROR is indeterminate (retryable), not "not found": a
+    // transient DB blip must not present as a permanent 404 either.
+    if (merchantError) {
+      console.error('Failed to resolve VTU history merchant:', merchantError);
+      return NextResponse.json(
+        { error: 'Failed to fetch history' },
+        { status: 500 }
+      );
+    }
+
+    if (!merchant) {
       return NextResponse.json(
         { error: 'Merchant not found' },
         { status: 404 }

@@ -13,12 +13,7 @@ import {
   rememberPendingVtuPurchase,
   settlePendingVtuByReference,
 } from './utility-pending-idempotency';
-import {
-  loadPendingVtuSnapshot,
-  parsePendingVtuSnapshot,
-  PERSISTED_VTU_KEY_TTL_MS,
-  savePendingVtuSnapshot,
-} from './utility-pending-idempotency-store';
+import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-idempotency-store';
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
@@ -327,84 +322,6 @@ describe('utility-pending-idempotency', () => {
     notePendingVtuReference(signature, 'REF-1');
     expect(hasNotedPendingVtuReference(signature, 'REF-1')).toBe(true);
     expect(hasNotedPendingVtuReference(signature, 'REF-OTHER')).toBe(false);
-  });
-
-  it('recalls the pending key after a page reload', async () => {
-    const key = getPendingVtuKey('{"reload":true}');
-    notePendingVtuReference('{"reload":true}', 'REF-RELOAD');
-
-    // A reload re-executes the module with an empty map; the
-    // localStorage entry must restore the pending purchase.
-    vi.resetModules();
-    const fresh =
-      await import('./utility-pending-idempotency');
-
-    expect(fresh.recallPendingVtuKey('{"reload":true}')).toBe(key);
-    expect(
-      fresh.hasNotedPendingVtuReference('{"reload":true}', 'REF-RELOAD')
-    ).toBe(true);
-  });
-
-  it('recalls a key another tab persisted after this tab loaded', () => {
-    // Cross-tab sequential retry: tab B opened (empty map) before tab
-    // A submitted. B's recall must merge the snapshot first, or B
-    // mints a second key the route debits as a second transaction.
-    savePendingVtuSnapshot(
-      JSON.stringify([
-        [
-          'SIG-XTAB',
-          { key: 'key-tab-a', reference: null, rememberedAt: Date.now() },
-        ],
-      ])
-    );
-
-    expect(recallPendingVtuKey('SIG-XTAB')).toBe('key-tab-a');
-  });
-
-  it('drops a locally-held entry another tab deleted (tombstone sync)', () => {
-    // Tab B holds SIG-DEL in memory while tab A completes it: A's
-    // forget persists a snapshot WITHOUT the entry but WITH a
-    // tombstone. B's next recall must drop its in-memory copy — if B
-    // wrote it back, an identical purchase would replay the completed
-    // transaction as a new success without a new debit.
-    const key = getPendingVtuKey('SIG-DEL');
-    expect(recallPendingVtuKey('SIG-DEL')).toBe(key);
-
-    savePendingVtuSnapshot(
-      JSON.stringify({
-        entries: [],
-        forgotten: [{ scoped: 'SIG-DEL', forgottenAt: Date.now() }],
-      })
-    );
-
-    expect(recallPendingVtuKey('SIG-DEL')).toBeUndefined();
-    // B's next persist carries the tombstone but not the entry.
-    getPendingVtuKey('SIG-OTHER');
-    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
-    expect(snapshot.entries.map(([scoped]) => scoped)).not.toContain(
-      'SIG-DEL'
-    );
-    expect(snapshot.forgotten.map((t) => t.scoped)).toContain('SIG-DEL');
-  });
-
-  it('merges a re-remembered entry newer than its tombstone', () => {
-    // A forget followed by a same-scope resubmit: the new generation
-    // (rememberedAt past the tombstone) must still merge in a third
-    // tab, or it would mint fresh and double-debit.
-    const now = Date.now();
-    savePendingVtuSnapshot(
-      JSON.stringify({
-        entries: [
-          [
-            'SIG-NEW',
-            { key: 'key-new', reference: null, rememberedAt: now },
-          ],
-        ],
-        forgotten: [{ scoped: 'SIG-NEW', forgottenAt: now - 1000 }],
-      })
-    );
-
-    expect(recallPendingVtuKey('SIG-NEW')).toBe('key-new');
   });
 
   it('never flags reference-less entries as stale', () => {

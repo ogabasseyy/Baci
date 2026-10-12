@@ -23,9 +23,11 @@ vi.mock('@/lib/supabase/anon', () => ({
   }),
 }));
 
-const { getCurrentSlugForAlias, invalidateAliasCacheForSlug } = await import(
-  './slug-alias-cache'
-);
+const {
+  getCurrentSlugForAlias,
+  getCurrentSlugForAliasStrict,
+  invalidateAliasCacheForSlug,
+} = await import('./slug-alias-cache');
 
 describe('getCurrentSlugForAlias', () => {
   beforeEach(() => {
@@ -152,5 +154,70 @@ describe('getCurrentSlugForAlias', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('getCurrentSlugForAliasStrict', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockMerchantMaybeSingle.mockResolvedValue({ data: null, error: null });
+  });
+
+  it('resolves aliases and nulls exactly like the lenient variant', async () => {
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'strict-new' } },
+      error: null,
+    });
+    expect(await getCurrentSlugForAliasStrict('strict-old')).toBe('strict-new');
+
+    mockAliasMaybeSingle.mockResolvedValue({ data: null, error: null });
+    expect(await getCurrentSlugForAliasStrict('strict-never')).toBeNull();
+    // Liveness ran once (for strict-old); the null mapping skips it.
+    expect(mockMerchantMaybeSingle).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws on an alias-lookup DB error instead of returning null', async () => {
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    });
+    await expect(getCurrentSlugForAliasStrict('strict-err')).rejects.toThrow(
+      /alias lookup failed/
+    );
+    // The failure is not cached as a negative: a retry re-fetches.
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'strict-recovered' } },
+      error: null,
+    });
+    expect(await getCurrentSlugForAliasStrict('strict-err')).toBe(
+      'strict-recovered'
+    );
+  });
+
+  it('throws on a liveness-lookup DB error when an alias mapping exists', async () => {
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'strict-live-new' } },
+      error: null,
+    });
+    mockMerchantMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'boom' },
+    });
+    await expect(
+      getCurrentSlugForAliasStrict('strict-live-err')
+    ).rejects.toThrow(/liveness lookup failed/);
+  });
+
+  it('still returns null when a live merchant owns the slug', async () => {
+    mockAliasMaybeSingle.mockResolvedValue({
+      data: { merchants: { slug: 'someone-else' } },
+      error: null,
+    });
+    mockMerchantMaybeSingle.mockResolvedValue({
+      data: { id: 'live-merchant' },
+      error: null,
+    });
+    expect(await getCurrentSlugForAliasStrict('strict-live')).toBeNull();
   });
 });

@@ -188,14 +188,21 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   // where Next serves them: a post-start deletion or swap would otherwise
   // keep rendering URLs for 404s or wrong images until restart. Re-verify
   // on the request path — the stat fingerprint fast-path makes repeat
-  // GETs cheap, and any drift fails closed with the operator fix.
+  // GETs cheap, and any drift fails closed with the operator fix. The
+  // known stage root covers the empty-allowlist branch (an empty binding
+  // set must not silently accept a populated tree).
   await verifyStagedBytes(config.stagedPaths);
-  await assertNoUnexpectedStagedFiles(config.stagedPaths);
+  await assertNoUnexpectedStagedFiles(
+    config.stagedPaths,
+    join(resolveRoutePublicDir(), '__pilot')
+  );
   return config;
 }
 
-export async function initializeLabRuntime(): Promise<void> {
-  publishLabRuntime(await loadLabConfigAtStartup());
+export async function initializeLabRuntime(): Promise<PilotLabConfig> {
+  const config = await loadLabConfigAtStartup();
+  publishLabRuntime(config);
+  return config;
 }
 
 export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {

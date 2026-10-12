@@ -1,12 +1,15 @@
+import { lookup as dnsLookup } from 'node:dns';
 import { PilotAcquireError } from './inventory-store.mjs';
 
 // SSRF guard for pilot fetches: deny loopback, private, link-local
 // (covers the 169.254.169.254 cloud-metadata address), and other
-// non-public IP literals, plus localhost names. Plain hostnames stay
-// operator-trusted — this is an offline operator CLI over
-// operator-supplied inventory URLs, so DNS rebinding is out of scope —
-// but a mistyped or malicious literal can no longer make the operator
-// workstation fetch internal endpoints.
+// non-public destinations. IP literals and localhost names are judged
+// before any request; plain hostnames resolve through
+// resolvePublicFetchAddresses at connect time, and the connection is
+// pinned to a validated address — a hostname resolving (or rebinding)
+// to private space can no longer make the operator workstation fetch
+// internal endpoints, even when inventory URLs come from merchant/CDN
+// exports rather than hand-typing.
 export function assertPublicFetchUrl(url) {
   let hostname;
   try {
@@ -29,7 +32,7 @@ export function assertPublicFetchUrl(url) {
   }
 }
 
-function isDeniedIpLiteral(host) {
+export function isDeniedIpLiteral(host) {
   const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (v4) {
     const octets = v4.slice(1).map(Number);
@@ -154,4 +157,67 @@ function expandIPv6(host) {
     return null;
   }
   return [...head, ...Array(missing).fill('0'), ...tail];
+}
+
+function defaultResolve(hostname) {
+  return new Promise((resolvePromise, reject) => {
+    dnsLookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolvePromise(addresses);
+      }
+    });
+  });
+}
+
+function isCanonicalLiteral(hostname) {
+  // Canonical literal spellings only: dotted quads and colon v6. The
+  // obfuscated numerics (decimal/short/octal/hex) never reach here —
+  // assertPublicFetchUrl fails them closed before any request.
+  return (
+    /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(':')
+  );
+}
+
+// Connect-time hostname resolution for the fetch path: every resolved
+// address must be public, or the whole set refuses — resolving then
+// connecting to "the first" would let a mixed answer (public + private)
+// or a rebinding name slip a private address past validation. The
+// caller pins its connection to a returned address, so validation and
+// use share one resolution with no rebinding window. Literals pass
+// through without DNS: assertPublicFetchUrl already judged them (denied
+// ones threw before any request), so resolving again is pure cost.
+export async function resolvePublicFetchAddresses(hostname, dnsResolve) {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+  if (isCanonicalLiteral(normalized)) {
+    return [
+      { address: normalized, family: normalized.includes(':') ? 6 : 4 },
+    ];
+  }
+  const resolve = dnsResolve ?? defaultResolve;
+  let addresses;
+  try {
+    addresses = await resolve(normalized);
+  } catch {
+    throw new PilotAcquireError(
+      `acquire: cannot resolve fetch destination "${hostname}"`
+    );
+  }
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new PilotAcquireError(
+      `acquire: fetch destination "${hostname}" resolves to no addresses`
+    );
+  }
+  for (const { address } of addresses) {
+    if (isDeniedIpLiteral(String(address).toLowerCase())) {
+      throw new PilotAcquireError(
+        `acquire: refusing fetch destination "${hostname}" (resolves to a non-public address)`
+      );
+    }
+  }
+  return addresses;
 }

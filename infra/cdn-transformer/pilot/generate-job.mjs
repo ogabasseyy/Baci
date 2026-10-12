@@ -265,19 +265,21 @@ export async function runJob({
     };
   } catch (error) {
     sampleRss();
-    const stagingCleanupError = await cleanupFailedAttempt({
-      job,
-      outputRoot,
-      releaseClaimFn,
-      removeStagingFn,
-      runToken,
-      stagingDir,
-    });
+    const { releaseCleanupError, stagingCleanupError } =
+      await cleanupFailedAttempt({
+        job,
+        outputRoot,
+        releaseClaimFn,
+        removeStagingFn,
+        runToken,
+        stagingDir,
+      });
     const { failedWorkerOps, peakWorkerRssBytes } = takeWorkerPeaks();
     return {
       assetId: job.assetId,
       code: error?.code ?? 'unknown',
       ...(stagingCleanupError ? { stagingCleanupError } : {}),
+      ...(releaseCleanupError ? { releaseCleanupError } : {}),
       ...(failedWorkerOps > 0 ? { workerPeakIncomplete: true } : {}),
       elapsedMs: Date.now() - startedAt,
       merchantId: job.merchantId,

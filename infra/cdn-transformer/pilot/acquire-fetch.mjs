@@ -1,4 +1,9 @@
-import { assertPublicFetchUrl } from './fetch-policy.mjs';
+import http from 'node:http';
+import https from 'node:https';
+import {
+  assertPublicFetchUrl,
+  resolvePublicFetchAddresses,
+} from './fetch-policy.mjs';
 import { PilotAcquireError } from './inventory-store.mjs';
 
 // Remote-fetch stage for acquisition, extracted from acquire.mjs so each
@@ -15,7 +20,7 @@ export const EXTENSION_FOR_CONTENT_TYPE = {
 
 export async function fetchBoundedBytes(
   url,
-  { allowPrivateHosts, maxBytes, timeoutMs }
+  { allowPrivateHosts, dnsResolve, maxBytes, timeoutMs }
 ) {
   let parsed;
   try {
@@ -31,55 +36,89 @@ export async function fetchBoundedBytes(
   if (!allowPrivateHosts) {
     assertPublicFetchUrl(url);
   }
+  // node:http(s) instead of global fetch: fetch offers no DNS hook, and
+  // resolving up front would reopen the rebinding window between
+  // validation and connect. The lookup override below resolves AND
+  // validates at connect time and pins the socket to a validated
+  // address; SNI and the Host header still use the URL hostname.
+  // Redirects are never followed (the old redirect:'error' behavior).
+  const transport = parsed.protocol === 'https:' ? https : http;
+  const lookup = allowPrivateHosts
+    ? undefined
+    : (hostname, _options, callback) => {
+        resolvePublicFetchAddresses(hostname, dnsResolve).then(
+          (addresses) => {
+            callback(null, addresses[0].address, addresses[0].family);
+          },
+          (error) => {
+            callback(
+              error instanceof Error ? error : new Error(String(error)),
+              null
+            );
+          }
+        );
+      };
   let response;
   try {
-    response = await fetch(url, {
-      redirect: 'error',
-      signal: AbortSignal.timeout(timeoutMs),
+    response = await new Promise((resolvePromise, reject) => {
+      const request = transport.get(
+        parsed,
+        { lookup, signal: AbortSignal.timeout(timeoutMs) },
+        resolvePromise
+      );
+      request.on('error', reject);
     });
   } catch (error) {
+    // Precise policy rejections (resolution failures) keep their own
+    // message; transport failures map to the fetch-failed contract.
+    if (error instanceof PilotAcquireError) {
+      throw error;
+    }
     throw new PilotAcquireError(
       `acquire: fetch failed or timed out after ${timeoutMs}ms (${error?.name ?? 'fetch'})`
     );
   }
-  if (!response.ok) {
+  if (response.statusCode < 200 || response.statusCode > 299) {
+    response.destroy();
     throw new PilotAcquireError(
-      `acquire: origin returned HTTP ${response.status}`
+      `acquire: origin returned HTTP ${response.statusCode}`
     );
   }
-  const contentType = (response.headers.get('content-type') ?? '')
+  const contentType = String(response.headers['content-type'] ?? '')
     .split(';', 1)[0]
     .trim()
     .toLowerCase();
   if (!Object.hasOwn(EXTENSION_FOR_CONTENT_TYPE, contentType)) {
-    await response.body?.cancel?.().catch(() => undefined);
+    response.destroy();
     throw new PilotAcquireError(
       `acquire: unsupported content-type "${contentType}"`
     );
   }
-  if (!response.body) {
-    throw new PilotAcquireError('acquire: origin returned an empty body');
-  }
   const chunks = [];
   let total = 0;
-  const reader = response.body.getReader();
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      total += value.length;
+    for await (const chunk of response) {
+      total += chunk.length;
       if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
+        response.destroy();
         throw new PilotAcquireError(
           `acquire: body exceeds ${maxBytes} byte limit`
         );
       }
-      chunks.push(value);
+      chunks.push(chunk);
     }
-  } finally {
-    reader.releaseLock();
+  } catch (error) {
+    if (error instanceof PilotAcquireError) {
+      throw error;
+    }
+    throw new PilotAcquireError(
+      `acquire: fetch failed or timed out after ${timeoutMs}ms (${error?.name ?? 'fetch'})`
+    );
+  }
+  // An empty body is never a valid image: fail here with the curated
+  // message instead of probing zero bytes downstream.
+  if (total === 0) {
+    throw new PilotAcquireError('acquire: origin returned an empty body');
   }
   return { bytes: Buffer.concat(chunks), contentType };
 }

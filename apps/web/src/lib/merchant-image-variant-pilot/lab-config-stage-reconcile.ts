@@ -147,8 +147,15 @@ export async function reconcileStagedTree(input: {
 // planted generation would otherwise leave unbound files reachable
 // through /__pilot with no traversal noticing. Stale dirs from a
 // crashed stage fail closed here with the re-stage fix.
+//
+// The full walk only runs when the tree drifts: repeat requests skip
+// to the directory fingerprint below (stats, no listings, no hashes),
+// so per-request verification stays on the stat fast path and cannot
+// contaminate lab timing. A failed scan never records, so drift keeps
+// failing until the operator re-stages.
 export async function assertNoUnexpectedStagedFiles(
-  stagedPaths: readonly { path: string }[]
+  stagedPaths: readonly { path: string }[],
+  stageRoot?: string
 ): Promise<void> {
   // The stage root derives from the allowlist itself (every staged path
   // sits two levels under it), so callers pass no second root that
@@ -161,6 +168,14 @@ export async function assertNoUnexpectedStagedFiles(
     }
   }
   if (stages.size === 0) {
+    // No allowlist entries: the stage root cannot derive from staged
+    // paths, but an empty binding set must not silently accept a
+    // populated tree — with nothing bound, any generation or originals
+    // content is unbound by definition. Callers pass their known root
+    // for this branch; without one there is nothing to enumerate.
+    if (stageRoot) {
+      await assertEmptyAllowlistTree(stageRoot);
+    }
     return;
   }
   if (stages.size > 1) {
@@ -182,6 +197,21 @@ export async function assertNoUnexpectedStagedFiles(
     if (top && HEX64_PATTERN.test(top)) {
       currentGenDirs.add(join(realStage, top));
     }
+  }
+  // Drift gate: the directory fingerprint (stats only) decides whether
+  // the full walk below runs. Sound because every drift this walk can
+  // catch moves a fingerprinted directory: new entries bump the parent
+  // dir's mtime/ctime, new top-level generations bump the root, and
+  // content-only swaps change no file set (per-file bytes stay on the
+  // verifyStagedBytes fast path, which always runs). ctime rides along
+  // because utimens can pin mtime but never ctime.
+  const fingerprint = await stageFingerprint(
+    realStage,
+    expected,
+    currentGenDirs
+  );
+  if (lastScan?.root === realStage && lastScan.fingerprint === fingerprint) {
+    return;
   }
   const checkDir = async (dir: string, label: string): Promise<void> => {
     const entries = await readdir(dir, { withFileTypes: true }).catch(
@@ -233,6 +263,62 @@ export async function assertNoUnexpectedStagedFiles(
           `merchant image pilot: unreferenced generation directory "${entry.name}" — re-stage to reconcile`
         );
       }
+    }
+  }
+  // Record only on success: a throw above skips this, so drift keeps
+  // failing on every request until the operator re-stages.
+  lastScan = { fingerprint, root: realStage };
+}
+
+// Last passing scan, keyed by stage root: the frozen runtime binds one
+// root per boot, so a single entry covers production; anything else
+// (tests, a re-rooted stage) simply misses and rescans.
+let lastScan: { fingerprint: string; root: string } | null = null;
+
+async function stageFingerprint(
+  realStage: string,
+  expected: ReadonlySet<string>,
+  currentGenDirs: ReadonlySet<string>
+): Promise<string> {
+  const parts = [realStage, ...[...expected].sort()];
+  for (const dir of [
+    realStage,
+    join(realStage, 'originals'),
+    ...currentGenDirs,
+  ]) {
+    const stat = await lstat(dir).catch(() => null);
+    parts.push(
+      stat ? `${dir}:${stat.mtimeMs}:${stat.ctimeMs}` : `${dir}:missing`
+    );
+  }
+  return parts.join('\n');
+}
+
+// Empty-allowlist twin of the enumeration above: with zero staged
+// paths, any content under a generation directory or originals/ is
+// unbound by definition. Name-based presence only (no traversal into
+// entries, so a symlinked name cannot redirect the check); fillers and
+// non-managed names are the boot shape guard's business, not this
+// binding check's. An unreadable root passes — there is nothing to
+// serve from it.
+async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
+  const topEntries = await readdir(stageRoot, { withFileTypes: true }).catch(
+    () => null
+  );
+  if (!topEntries) {
+    return;
+  }
+  for (const entry of topEntries) {
+    if (entry.name !== 'originals' && !HEX64_PATTERN.test(entry.name)) {
+      continue;
+    }
+    const children = await readdir(join(stageRoot, entry.name)).catch(
+      () => null
+    );
+    if (children && children.length > 0) {
+      throw new Error(
+        `merchant image pilot: staged content with an empty binding set under "${entry.name}" — re-stage to reconcile`
+      );
     }
   }
 }

@@ -7,6 +7,8 @@
  * This file is automatically loaded by Next.js 16 at startup.
  * See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
  */
+
+import { join } from 'node:path';
 import type { Instrumentation } from 'next';
 import { getNextErrorDigest } from '@/lib/errors/next-error-digest';
 
@@ -59,7 +61,8 @@ export async function register() {
     const { assertPilotPublicAssets, resolvePilotPublicDir } = await import(
       '@/config/pilot-public-assets'
     );
-    assertPilotPublicAssets(resolvePilotPublicDir());
+    const pilotPublicDir = resolvePilotPublicDir();
+    assertPilotPublicAssets(pilotPublicDir);
     const { isPilotLabEnabled } = await import('@/config/pilot-lab-enabled');
     if (isPilotLabEnabled()) {
       const { initializeLabRuntime } = await import(
@@ -71,12 +74,28 @@ export async function register() {
       // so lab routes fail closed while boot completes. The staged
       // tree-shape assertion above stays fatal: it guards the static
       // /__pilot namespace, which serves regardless of lab runtime.
+      let runtime = null;
       try {
-        await initializeLabRuntime();
+        runtime = await initializeLabRuntime();
       } catch (error) {
         console.error(
           'merchant image pilot: lab runtime initialization failed during boot; lab routes will fail closed',
           error
+        );
+      }
+      // Static-namespace binding check, also fatal: Next serves
+      // public/__pilot without invoking lab handlers, so unbound files
+      // present at boot would stay publicly servable even though no lab
+      // page validates them. A successful init with a drifting tree
+      // refuses boot with the re-stage fix; a failed init already
+      // degraded above with no runtime to compare against.
+      if (runtime) {
+        const { assertNoUnexpectedStagedFiles } = await import(
+          '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile'
+        );
+        await assertNoUnexpectedStagedFiles(
+          runtime.stagedPaths,
+          join(pilotPublicDir, '__pilot')
         );
       }
     }

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertPublicFetchUrl } from './fetch-policy.mjs';
+import {
+  assertPublicFetchUrl,
+  resolvePublicFetchAddresses,
+} from './fetch-policy.mjs';
 
 test('denies loopback, private, and link-local fetch destinations', () => {
   for (const host of [
@@ -90,4 +93,53 @@ test('rejects malformed URLs', () => {
     () => assertPublicFetchUrl('http://999.1.1.1/a.png'),
     /invalid URL/
   );
+});
+
+test('resolution refuses any non-public address in the answer', async () => {
+  // A mixed answer (public + private) refuses whole: resolving then
+  // connecting to "the first" would let a rebinding name slip a
+  // private address past validation.
+  const mixed = async () => [
+    { address: '93.184.216.34', family: 4 },
+    { address: '169.254.169.254', family: 4 },
+  ];
+  await assert.rejects(
+    () => resolvePublicFetchAddresses('cdn.example.com', mixed),
+    /resolves to a non-public address/
+  );
+  const loopback = async () => [{ address: '127.0.0.1', family: 4 }];
+  await assert.rejects(
+    () => resolvePublicFetchAddresses('cdn.example.com', loopback),
+    /resolves to a non-public address/
+  );
+  const failing = async () => {
+    throw new Error('ENOTFOUND');
+  };
+  await assert.rejects(
+    () => resolvePublicFetchAddresses('missing.example', failing),
+    /cannot resolve fetch destination/
+  );
+});
+
+test('resolution passes validated literals through without DNS', async () => {
+  let calls = 0;
+  const resolve = async () => {
+    calls += 1;
+    return [{ address: '93.184.216.34', family: 4 }];
+  };
+  // All-public answers pass with every address returned for pinning.
+  assert.deepEqual(await resolvePublicFetchAddresses('cdn.example.com', resolve), [
+    { address: '93.184.216.34', family: 4 },
+  ]);
+  assert.equal(calls, 1);
+  // Literals were already judged before any request; resolving again
+  // is pure cost, so the resolver is not consulted.
+  assert.deepEqual(await resolvePublicFetchAddresses('93.184.216.34', resolve), [
+    { address: '93.184.216.34', family: 4 },
+  ]);
+  assert.deepEqual(
+    await resolvePublicFetchAddresses('[2001:4860:4860::8888]', resolve),
+    [{ address: '2001:4860:4860::8888', family: 6 }]
+  );
+  assert.equal(calls, 1);
 });

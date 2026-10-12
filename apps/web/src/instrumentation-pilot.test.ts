@@ -17,6 +17,13 @@ vi.mock('@/config/pilot-public-assets', () => ({
 vi.mock('@/app/pilot-lab/lab-route', () => ({
   initializeLabRuntime: initializeLabRuntimeMock,
 }));
+const assertNoUnexpectedStagedFilesMock = vi.hoisted(() => vi.fn());
+vi.mock(
+  '@/lib/merchant-image-variant-pilot/lab-config-stage-reconcile',
+  () => ({
+    assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
+  })
+);
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
@@ -85,6 +92,39 @@ describe('instrumentation pilot boot gate', () => {
     await register();
     expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
   });
+  it('refuses boot when the staged tree drifts from the binding set', async () => {
+    // Static-namespace guard: Next serves public/__pilot without
+    // invoking lab handlers, so unbound files at boot stay fatal even
+    // though lab-runtime init failures degrade.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const stagedPaths = [{ path: '/resolved/public/__pilot/a.png' }];
+    initializeLabRuntimeMock.mockResolvedValueOnce({ stagedPaths });
+    assertNoUnexpectedStagedFilesMock.mockRejectedValueOnce(
+      new Error('staged content drifted — re-stage to reconcile')
+    );
+    await expect(register()).rejects.toThrow(/drifted/);
+    expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
+      stagedPaths,
+      '/resolved/public/__pilot'
+    );
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+
+  it('checks the staged binding set after a successful lab init', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const stagedPaths = [{ path: '/resolved/public/__pilot/a.png' }];
+    initializeLabRuntimeMock.mockResolvedValueOnce({ stagedPaths });
+    assertNoUnexpectedStagedFilesMock.mockResolvedValueOnce(undefined);
+    await expect(register()).resolves.toBe(undefined);
+    expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
+      stagedPaths,
+      '/resolved/public/__pilot'
+    );
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+
   it('boots the pilot gate against the resolved public dir, never bare cwd', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     await register();

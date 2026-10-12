@@ -110,11 +110,12 @@ describe('non-lab public assets gate', () => {
       /missing pinned fillers.*grid-filler-600x400-b\.png/
     );
   });
-  it('tolerates recompressed filler bytes when lab is disabled', () => {
-    // Hash-pinning is lab-only: a packaging step that recompresses
-    // PNGs must not fail unrelated non-lab builds. The name set,
-    // shape, and size checks still apply (see the tests around this
-    // one); nothing non-lab references filler bytes.
+  it('tolerates any filler content when lab is disabled', () => {
+    // Filler policing is lab-only: non-lab builds/boots refuse staged
+    // merchant trees only. A packaging artifact (.DS_Store), a
+    // recompressed filler, or a partial set must never take down an
+    // unrelated production boot — the same function boot calls must
+    // pass here. Lab mode keeps the exact pinned set.
     const dir = root();
     cpSync(
       join(process.cwd(), 'public/__pilot/fillers'),
@@ -125,6 +126,8 @@ describe('non-lab public assets gate', () => {
       join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
       'recompressed bytes'
     );
+    writeFileSync(join(dir, '__pilot/fillers/.DS_Store'), 'packaging junk');
+    rmSync(join(dir, '__pilot/fillers/grid-filler-600x400-c.png'));
     expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /unapproved filler/
@@ -188,16 +191,19 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(/special file/);
   });
-  it('requires the exact filler set in non-lab trees too', () => {
+  it('still refuses staged merchant trees when lab is disabled', () => {
+    // The filler tolerance above must not weaken the actual non-lab
+    // safety goal: generation/originals staging still refuses.
     const dir = root();
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    writeFileSync(
+      join(dir, '__pilot', 'originals', 'merchant.avif'),
+      'private fixture'
     );
-    rmSync(join(dir, '__pilot/fillers/grid-filler-600x400-c.png'));
+    mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
+    writeFileSync(join(dir, '__pilot', 'fillers', '.DS_Store'), 'junk');
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
-      /non-lab public pilot tree is missing pinned fillers.*grid-filler-600x400-c\.png/
+      /staged merchant pilot assets/
     );
   });
 });

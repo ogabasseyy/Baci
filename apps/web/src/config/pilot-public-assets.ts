@@ -89,17 +89,13 @@ function assertConfinedEntry(root: string, name: string): void {
   }
 }
 
-function assertFillers(fillersDir: string, labEnabled: boolean): void {
+function assertFillers(fillersDir: string): void {
   // The caller lists this entry, so it existed a moment ago — but a
   // file squatting the name (or a mid-boot deletion) is not the
   // directory: fail with the curated message, not a raw ENOTDIR/ENOENT
   // path leak from the read below.
   if (!directoryExists(fillersDir)) {
-    throw new Error(
-      labEnabled
-        ? 'lab public pilot tree is missing the fillers directory'
-        : 'non-lab public pilot tree is missing the fillers directory'
-    );
+    throw new Error('lab public pilot tree is missing the fillers directory');
   }
   const files = readdirSync(fillersDir);
   for (const file of files) {
@@ -110,45 +106,25 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
     // writer mutate the served bytes after the check: same nlink>1
     // multi-link rejection as the generation/original guard above.
     if (stat.nlink > 1) {
-      throw new Error(
-        labEnabled
-          ? 'lab public pilot tree contains a hardlinked filler'
-          : 'non-lab public pilot tree contains a hardlinked filler'
-      );
+      throw new Error('lab public pilot tree contains a hardlinked filler');
     }
-    // Hash-pinning is lab-only: the measurement grid compares against
-    // these exact bytes, but a packaging step that recompresses PNGs
-    // must not fail unrelated non-lab builds. Non-lab keeps the name
-    // set, shape, and size checks (nothing there references filler
-    // bytes, so recompressed fillers are harmless).
-    const hashMismatch =
-      labEnabled &&
-      createHash('sha256').update(readFileSync(path)).digest('hex') !==
-        expected;
     if (
       !expected ||
       !stat.isFile() ||
       stat.isSymbolicLink() ||
       stat.size > 2_000_000 ||
-      hashMismatch
+      createHash('sha256').update(readFileSync(path)).digest('hex') !== expected
     ) {
-      throw new Error(
-        labEnabled
-          ? 'lab public pilot tree contains an unapproved filler'
-          : 'non-lab public pilot tree contains an unapproved filler'
-      );
+      throw new Error('lab public pilot tree contains an unapproved filler');
     }
   }
-  // The exact complete set is required in BOTH modes: the lab grid
-  // references all three filler URLs (a subset would start the lab
-  // with broken sibling-card images), and a partial set in a non-lab
-  // tree is a packaging anomaly or tamper, not a tolerated subset.
+  // The lab grid references all three filler URLs: a subset would
+  // start the lab with broken sibling-card images, so a packaging
+  // omission must fail lab startup.
   const missing = Object.keys(FILLERS).filter((file) => !files.includes(file));
   if (missing.length > 0) {
     throw new Error(
-      labEnabled
-        ? `lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
-        : `non-lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
+      `lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
     );
   }
 }
@@ -251,7 +227,14 @@ export function assertPilotPublicAssets(
     // and compete unreviewed in the measurement while every gate that
     // compares against the same local file reports green.
     if (name === 'fillers') {
-      assertFillers(join(root, name), labEnabled);
+      // Filler policing is lab-only: non-lab builds/boots refuse staged
+      // merchant trees only, so a packaging artifact (.DS_Store), a
+      // recompressed filler, or an overlay nlink quirk can never take
+      // down an unrelated production boot. Nothing non-lab references
+      // filler bytes.
+      if (labEnabled) {
+        assertFillers(join(root, name));
+      }
       sawFillers = true;
       continue;
     }

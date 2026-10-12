@@ -44,6 +44,7 @@ export async function acquireSnapshot(options) {
   const {
     allowPrivateHosts = false,
     assetId,
+    dnsResolve,
     inputRoot,
     inventoryPath,
     maxBytes = MAX_INPUT_BYTES,
@@ -69,6 +70,7 @@ export async function acquireSnapshot(options) {
   }
   const { bytes, contentType } = await fetchBoundedBytes(url, {
     allowPrivateHosts,
+    dnsResolve,
     maxBytes,
     timeoutMs,
   });

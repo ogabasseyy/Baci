@@ -117,32 +117,30 @@ test('keeps a pre-existing snapshot when the probe rejects it', async () => {
   );
 });
 
-test('rejects a null response body as an acquire error', async () => {
+test('rejects an empty response body as an acquire error', async () => {
   const inputRoot = await makeInputRoot();
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({
-    body: null,
-    headers: { get: () => 'image/png' },
-    ok: true,
-  });
-  try {
-    await assert.rejects(
-      () =>
-        acquireSnapshot({
-          allowPrivateHosts: true,
-          assetId: 'logo-1',
-          inputRoot,
-          merchantId: MERCHANT,
-          probe: stubProbe,
-          role: 'logo',
-          slot: 'header-logo',
-          url: 'https://cdn.example.com/media/logo-1.png',
-        }),
-      /empty body/
-    );
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end();
+    },
+    async (url) => {
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'logo-1',
+            inputRoot,
+            merchantId: MERCHANT,
+            probe: stubProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /empty body/
+      );
+    }
+  );
 });
 
 test('rejects unsafe or over-long asset ids before fetching', async () => {

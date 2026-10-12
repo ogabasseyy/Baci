@@ -79,7 +79,11 @@ export async function cleanupCommittedAttempt({
 // break the immediate same-process retry, so a persistent removal
 // failure releases anyway and records the stranded dir name — the
 // claimless dir becomes sweepable at the next job start (below).
-// Returns the cleanup error text, or null when nothing stranded.
+// Returns both cleanup errors (each null when its step succeeded): a
+// failed release is recorded, never swallowed — a live claim breaks the
+// immediate same-process retry, and persistent failures block later
+// processes. Neither masks the job failure itself; the caller records
+// them alongside it in the failed result.
 export async function cleanupFailedAttempt({
   job,
   outputRoot,
@@ -102,10 +106,18 @@ export async function cleanupFailedAttempt({
         `; stranded ${basename(stagingDir)}`;
     }
   }
-  await releaseClaimFn(outputRoot, job, runToken).catch(() => {
-    // Best-effort: claim release must not mask the job failure.
-  });
-  return stagingCleanupError;
+  let releaseCleanupError = null;
+  try {
+    await releaseClaimFn(outputRoot, job, runToken);
+  } catch (error) {
+    releaseCleanupError =
+      `claim release failed (${error?.code ?? 'unknown'}): ` +
+      `${error instanceof Error ? error.message : String(error)}`.slice(
+        0,
+        200
+      );
+  }
+  return { releaseCleanupError, stagingCleanupError };
 }
 
 // Bounded cleanup for stranded staging dirs. Runs at job start under

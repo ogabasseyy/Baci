@@ -26,10 +26,7 @@ function withFillers(dir: string): void {
 }
 
 describe('hardlinked filler rejection', () => {
-  it.each([
-    true,
-    false,
-  ])('rejects a multi-linked filler when lab=%s', (labEnabled) => {
+  it('rejects a multi-linked filler when lab is enabled', () => {
     const dir = root();
     withFillers(dir);
     // Same inode, two names: the hash still matches, but an outside
@@ -38,9 +35,23 @@ describe('hardlinked filler rejection', () => {
       join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
       join(dir, 'outside-mirror.png')
     );
-    expect(() => assertPilotPublicAssets(dir, labEnabled)).toThrow(
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /hardlinked filler/
     );
+  });
+
+  it('tolerates a multi-linked filler when lab is disabled', () => {
+    // Filler policing is lab-only: non-lab refuses staged merchant
+    // trees only, so an overlay nlink quirk can never take down an
+    // unrelated production boot. Nothing non-lab references filler
+    // bytes.
+    const dir = root();
+    withFillers(dir);
+    linkSync(
+      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
+      join(dir, 'outside-mirror.png')
+    );
+    expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
   });
 
   it('accepts single-linked fillers in both modes', () => {

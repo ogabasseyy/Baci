@@ -32,41 +32,83 @@ test('staging removal retries transient failures, then throws', async () => {
 
 test('failed attempts record stranded dirs but still release the claim', async () => {
   let released = null;
-  const stagingCleanupError = await cleanupFailedAttempt({
-    job: { assetId: 'a', merchantId: 'm' },
-    outputRoot: 'root',
-    releaseClaimFn: async (root, job, runToken) => {
-      released = runToken;
-    },
-    removeStagingFn: async () => {
-      throw Object.assign(new Error('busy'), { code: 'EBUSY' });
-    },
-    runToken: 'token-1234',
-    stagingDir: join('root', 'staging-token-1234'),
-  });
+  const { releaseCleanupError, stagingCleanupError } =
+    await cleanupFailedAttempt({
+      job: { assetId: 'a', merchantId: 'm' },
+      outputRoot: 'root',
+      releaseClaimFn: async (root, job, runToken) => {
+        released = runToken;
+      },
+      removeStagingFn: async () => {
+        throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+      },
+      runToken: 'token-1234',
+      stagingDir: join('root', 'staging-token-1234'),
+    });
   // The retry still matters on this path (transient EBUSY clears), but
   // a persistent failure records the stranded NAME (not the full path)
   // while the claim releases so the immediate retry can acquire.
   assert.match(stagingCleanupError, /EBUSY/);
   assert.match(stagingCleanupError, /staging-token-1234/);
   assert.doesNotMatch(stagingCleanupError, /root/);
+  assert.equal(releaseCleanupError, null);
   assert.equal(released, 'token-1234');
 });
 
 test('failed attempts with clean removal record nothing', async () => {
   let released = null;
-  const stagingCleanupError = await cleanupFailedAttempt({
-    job: { assetId: 'a', merchantId: 'm' },
-    outputRoot: 'root',
-    releaseClaimFn: async (root, job, runToken) => {
-      released = runToken;
-    },
-    removeStagingFn: async () => {},
-    runToken: 'token-1234',
-    stagingDir: join('root', 'staging-token-1234'),
-  });
+  const { releaseCleanupError, stagingCleanupError } =
+    await cleanupFailedAttempt({
+      job: { assetId: 'a', merchantId: 'm' },
+      outputRoot: 'root',
+      releaseClaimFn: async (root, job, runToken) => {
+        released = runToken;
+      },
+      removeStagingFn: async () => {},
+      runToken: 'token-1234',
+      stagingDir: join('root', 'staging-token-1234'),
+    });
   assert.equal(stagingCleanupError, null);
+  assert.equal(releaseCleanupError, null);
   assert.equal(released, 'token-1234');
+});
+
+test('failed attempts record a failed claim release instead of swallowing it', async () => {
+  // A live claim reads as held-by-live-owner and breaks the immediate
+  // same-process retry, so the release failure joins the failed result
+  // alongside the job failure — never silently treated as complete.
+  const { releaseCleanupError, stagingCleanupError } =
+    await cleanupFailedAttempt({
+      job: { assetId: 'a', merchantId: 'm' },
+      outputRoot: 'root',
+      releaseClaimFn: async () => {
+        throw Object.assign(new Error('denied'), { code: 'EACCES' });
+      },
+      removeStagingFn: async () => {},
+      runToken: 'token-1234',
+      stagingDir: join('root', 'staging-token-1234'),
+    });
+  assert.match(releaseCleanupError, /claim release failed \(EACCES\)/);
+  assert.match(releaseCleanupError, /denied/);
+  assert.equal(stagingCleanupError, null);
+});
+
+test('failed attempts record both cleanup failures together', async () => {
+  const { releaseCleanupError, stagingCleanupError } =
+    await cleanupFailedAttempt({
+      job: { assetId: 'a', merchantId: 'm' },
+      outputRoot: 'root',
+      releaseClaimFn: async () => {
+        throw Object.assign(new Error('io error'), { code: 'EIO' });
+      },
+      removeStagingFn: async () => {
+        throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+      },
+      runToken: 'token-1234',
+      stagingDir: join('root', 'staging-token-1234'),
+    });
+  assert.match(stagingCleanupError, /EBUSY/);
+  assert.match(releaseCleanupError, /EIO/);
 });
 
 test('sweep reaps only old claimless staging dirs', async () => {

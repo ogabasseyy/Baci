@@ -256,4 +256,54 @@ describe('assertNoUnexpectedStagedFiles', () => {
       assertNoUnexpectedStagedFiles(staged(pilotStage))
     ).rejects.toThrow(/not a regular file/);
   });
+
+  it('rejects staged content under an empty binding set', async () => {
+    // With zero allowlist entries the root cannot derive from staged
+    // paths — but callers pass their known root, and any generation
+    // or originals content there is unbound by definition.
+    const pilotStage = await stageTree();
+    const gen = join(pilotStage, 'c'.repeat(64));
+    await mkdir(gen, { recursive: true });
+    await writeFile(join(gen, 'evil.svg'), '<svg/>');
+    await expect(assertNoUnexpectedStagedFiles([], pilotStage)).rejects.toThrow(
+      /empty binding set/
+    );
+  });
+
+  it('re-scans the same tree after drift but skips when clean', async () => {
+    // The drift gate skips repeat walks while the tree is unchanged
+    // (per-request verification stays on stats, not listings), but a
+    // plant between two scans on the same root must still throw.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+    // Second scan, no drift: same verdict via the fingerprint gate.
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+    // Drift between scans: the gate misses and the full walk throws.
+    await writeFile(join(pilotStage, GEN, 'planted.avif'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/has no inventory binding/);
+    // Failures never record: removing the plant passes again.
+    await rm(join(pilotStage, GEN, 'planted.avif'));
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+  });
+
+  it('accepts a clean tree under an empty binding set', async () => {
+    const pilotStage = await stageTree();
+    await writeFile(join(pilotStage, 'fillers', 'a.png'), 'committed');
+    // Empty managed dirs and committed fillers bind nothing and serve
+    // nothing unbound.
+    await expect(assertNoUnexpectedStagedFiles([], pilotStage)).resolves.toBe(
+      undefined
+    );
+    // Without a known root there is nothing to enumerate.
+    await expect(assertNoUnexpectedStagedFiles([])).resolves.toBe(undefined);
+  });
 });

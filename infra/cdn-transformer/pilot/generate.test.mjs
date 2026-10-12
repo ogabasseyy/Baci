@@ -21,8 +21,10 @@ async function setup() {
   const base = join(tmpdir(), `pilot-gen-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
+  const locksDir = join(base, 'locks');
   await mkdir(inputRoot, { recursive: true });
-  return { base, inputRoot, outputRoot };
+  await mkdir(locksDir, { recursive: true });
+  return { base, inputRoot, locksDir, outputRoot };
 }
 
 async function addSnapshot(inputRoot, fixtureName, assetId) {
@@ -54,14 +56,14 @@ async function writeInventory(inputRoot, records) {
 
 for (const child of ['claims', 'generations', 'reports']) {
   test(`rejects a symlinked ${child} directory before starting jobs`, async () => {
-    const { base, inputRoot, outputRoot } = await setup();
+    const { base, inputRoot, locksDir, outputRoot } = await setup();
     const outside = join(base, 'outside');
     await mkdir(outside);
     await mkdir(outputRoot);
     await symlink(outside, join(outputRoot, child));
     const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
     const inventoryPath = await writeInventory(inputRoot, records);
-    await assert.rejects(runPilotGeneration({ inputRoot, inventoryPath, outputRoot }), /symlink|confined/);
+    await assert.rejects(runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot }), /symlink|confined/);
     assert.deepEqual(await readdir(outside), []);
   });
 }
@@ -88,7 +90,7 @@ test('report re-confinement refuses a mid-run reports swap', async () => {
 });
 
 test('generates, commits, and reports two jobs end to end', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [
     await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a'),
     {
@@ -99,7 +101,7 @@ test('generates, commits, and reports two jobs end to end', async () => {
     },
   ];
   const inventoryPath = await writeInventory(inputRoot, records);
-  const summary = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const summary = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(summary.ok, 2);
   assert.equal(summary.failed, 0);
   assert.equal(summary.reused, 0);
@@ -125,39 +127,39 @@ test('generates, commits, and reports two jobs end to end', async () => {
 });
 
 test('reruns reuse validated generations', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = await writeInventory(inputRoot, records);
-  const first = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const first = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(first.ok, 1);
-  const second = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const second = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(second.ok, 1);
   assert.equal(second.reused, 1);
 });
 
 test('a run on a lock-held root fails fast instead of overlapping', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = await writeInventory(inputRoot, records);
   // Pre-create the confined output layout the run expects, then hold the
-  // root lock the way an overlapping generate.mjs invocation would.
+  // host lock the way an overlapping generate.mjs invocation would.
   await mkdir(outputRoot, { recursive: true });
-  const held = await acquireEncoderLock(outputRoot);
+  const held = await acquireEncoderLock(outputRoot, { locksDir });
   try {
     await assert.rejects(
-      runPilotGeneration({ inputRoot, inventoryPath, outputRoot }),
+      runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot }),
       /encoder lock/
     );
   } finally {
     await held.release();
   }
   // The failed contender leaves the root usable: the next run proceeds.
-  const summary = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const summary = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(summary.ok, 1);
 });
 
 test('a failing job does not block the batch', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const good = await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-good');
   const animatedTarget = join(inputRoot, 'anim-bad.png');
   await copyFile(fixture('anim-2frame.webp'), animatedTarget);
@@ -172,7 +174,7 @@ test('a failing job does not block the batch', async () => {
     url: 'https://example.com/anim-bad.png',
   };
   const inventoryPath = await writeInventory(inputRoot, [bad, good]);
-  const summary = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const summary = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(summary.ok, 1);
   assert.equal(summary.failed, 1);
   const reports = await readdir(join(outputRoot, 'reports'));
@@ -185,7 +187,7 @@ test('a failing job does not block the batch', async () => {
 });
 
 test('memory evidence combines sampled parent RSS with worker peaks', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const good = await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-good');
   const animatedTarget = join(inputRoot, 'anim-bad.png');
   await copyFile(fixture('anim-2frame.webp'), animatedTarget);
@@ -200,7 +202,7 @@ test('memory evidence combines sampled parent RSS with worker peaks', async () =
     url: 'https://example.com/anim-bad.png',
   };
   const inventoryPath = await writeInventory(inputRoot, [bad, good]);
-  await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   const reports = await readdir(join(outputRoot, 'reports'));
   const report = JSON.parse(
     await readFile(join(outputRoot, 'reports', reports[0]), 'utf8')
@@ -230,11 +232,11 @@ test('memory evidence combines sampled parent RSS with worker peaks', async () =
 });
 
 test('source hash mismatch fails the job without encoding', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const record = await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a');
   record.sha256 = 'f'.repeat(64);
   const inventoryPath = await writeInventory(inputRoot, [record]);
-  const summary = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  const summary = await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   assert.equal(summary.failed, 1);
   const reports = await readdir(join(outputRoot, 'reports'));
   const report = JSON.parse(
@@ -257,7 +259,7 @@ test('parseMinFreeBytes rejects fail-open floor values', () => {
 });
 
 test('over-cap inventories and exhausted disks fail fast', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [];
   for (let index = 0; index < 21; index += 1) {
     const record = await addSnapshot(inputRoot, 'tiny-48x48.png', `asset-${index}`);
@@ -265,7 +267,7 @@ test('over-cap inventories and exhausted disks fail fast', async () => {
   }
   const inventoryPath = await writeInventory(inputRoot, records);
   await assert.rejects(
-    () => runPilotGeneration({ inputRoot, inventoryPath, outputRoot }),
+    () => runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot }),
     /at most 20/
   );
 
@@ -275,6 +277,7 @@ test('over-cap inventories and exhausted disks fail fast', async () => {
   const summary = await runPilotGeneration({
     inputRoot: single.inputRoot,
     inventoryPath: singleInventory,
+    locksDir: single.locksDir,
     minFreeBytes: Number.MAX_SAFE_INTEGER,
     outputRoot: single.outputRoot,
   });
@@ -282,10 +285,10 @@ test('over-cap inventories and exhausted disks fail fast', async () => {
 });
 
 test('empty inventories are rejected instead of reporting green', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const inventoryPath = await writeInventory(inputRoot, []);
   await assert.rejects(
-    () => runPilotGeneration({ inputRoot, inventoryPath, outputRoot }),
+    () => runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot }),
     (error) => {
       assert.equal(error.code, 'inventory-empty');
       assert.match(error.message, /no jobs/);
@@ -295,7 +298,7 @@ test('empty inventories are rejected instead of reporting green', async () => {
 });
 
 test('a post-commit claim-release failure still reports the published job ok', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = await writeInventory(inputRoot, records);
   const [job] = await readInventoryJobs(inventoryPath);
@@ -321,7 +324,7 @@ test('a post-commit claim-release failure still reports the published job ok', a
 });
 
 test('a transient reuse-path cleanup failure retries without stranding staging', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = await writeInventory(inputRoot, records);
   const [job] = await readInventoryJobs(inventoryPath);
@@ -360,7 +363,7 @@ test('a transient reuse-path cleanup failure retries without stranding staging',
 });
 
 test('a persistent reuse-path cleanup failure warns instead of stranding silently', async () => {
-  const { inputRoot, outputRoot } = await setup();
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = await writeInventory(inputRoot, records);
   const [job] = await readInventoryJobs(inventoryPath);

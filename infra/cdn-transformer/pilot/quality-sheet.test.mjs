@@ -35,7 +35,9 @@ async function setupPilot(
   );
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
+  const locksDir = join(base, 'locks');
   await mkdir(inputRoot, { recursive: true });
+  await mkdir(locksDir, { recursive: true });
   await copyFile(fixture(source.fixture), join(inputRoot, 'tiny-a.png'));
   const bytes = await readFile(join(inputRoot, 'tiny-a.png'));
   const record = {
@@ -55,7 +57,7 @@ async function setupPilot(
   };
   const inventoryPath = join(inputRoot, 'inventory.json');
   await writeFile(inventoryPath, JSON.stringify([record]));
-  await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  await runPilotGeneration({ inputRoot, inventoryPath, locksDir, outputRoot });
   return { base, inputRoot, inventoryPath, outputRoot };
 }
 

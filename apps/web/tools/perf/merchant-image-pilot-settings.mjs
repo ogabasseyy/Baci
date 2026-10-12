@@ -25,6 +25,8 @@
 // --cache-provenance takes a PATH to a runner profile-reset artifact
 // (event/freshProfile/profileDir/resetAt/runId/tool), bound <=1h before
 // the run and to the navigation via the single-use _meta.runId.
+// Operators produce these artifacts with merchant-image-pilot-runner.mjs
+// (prepare before navigating, finish after) — never by hand.
 
 import { checkHar } from './merchant-image-pilot-settings-har.mjs';
 import { parseArgs } from './merchant-image-pilot-settings-helpers.mjs';

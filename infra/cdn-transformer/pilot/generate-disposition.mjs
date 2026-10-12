@@ -1,6 +1,6 @@
-import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { applyDeliveryGuard } from './delivery.mjs';
+import { writeConfinedFile } from './disk-guards.mjs';
 import { outputFileName } from './manifest.mjs';
 
 // Delivery disposition + manifest assembly for one encoded ladder:
@@ -37,8 +37,12 @@ export async function buildDisposition({
     if (cached) {
       return cached;
     }
+    // Same parent-swap exposure as the snapshot freeze ('wx' guards
+    // only the final name): reuse the confined held-descriptor path so
+    // a substituted staging parent refuses instead of publishing the
+    // merchant snapshot outside the output root.
+    await writeConfinedFile(stagingDir, `passthrough.${format}`, snapshot.bytes);
     const from = join(stagingDir, `passthrough.${format}`);
-    await writeFile(from, snapshot.bytes, { flag: 'wx' });
     stagingBudget.charge(snapshot.bytes.length);
     stagedPassthrough.set(format, from);
     return from;

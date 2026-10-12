@@ -183,13 +183,16 @@ describe('preflight served agreement', () => {
     expect(
       assertServedAgreement(contaminated, { arm: 'pilot' }).join('\n')
     ).toMatch(/pairs with no mounted hero section/);
-    // Arm scoping: the same extra link marked for the control arm is
-    // invisible to the pilot verdict.
+    // Arm rejection: the same extra link marked for the control arm
+    // must fail, not filter away — the browser fetches it regardless of
+    // the data attribute, contaminating the pilot comparison.
     const foreign = contaminated.replace(
       `data-pilot-lab-preload="pilot" data-pilot-lab-binding="${MERCHANT}/stale-s0"`,
       `data-pilot-lab-preload="control" data-pilot-lab-binding="${MERCHANT}/stale-s0"`
     );
-    expect(assertServedAgreement(foreign, { arm: 'pilot' })).toEqual([]);
+    expect(assertServedAgreement(foreign, { arm: 'pilot' }).join('\n')).toMatch(
+      /marks arm "control" on the pilot page/
+    );
   });
 
   it('rejects a lab-marked preload with no binding identity', () => {

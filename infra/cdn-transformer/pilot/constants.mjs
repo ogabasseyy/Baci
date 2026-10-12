@@ -82,6 +82,12 @@ export const MAX_CLAIM_BYTES = 64 * 1024;
 // gate must read the page before checking its route markers.
 export const MAX_SERVED_PAGE_BYTES = 16 * 1024 * 1024;
 
+// Encoder lock record: honest claims are ~100 bytes of JSON (pid,
+// token, timestamp), so a 64 KiB ceiling only ever trips on a corrupt
+// or replaced file — while every contender, holder check, and release
+// must read the record before classifying it.
+export const MAX_ENCODER_LOCK_BYTES = 64 * 1024;
+
 // Merchant UUID predicate shared by every contract mirror. Zod 3's
 // .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
 // so both sides spell the rule explicitly instead: versions 1-8 plus the

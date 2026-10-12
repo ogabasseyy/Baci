@@ -65,6 +65,7 @@ export async function assertConfinedChild(outputRoot, child) {
 export async function runPilotGeneration({
   inputRoot,
   inventoryPath,
+  locksDir,
   minFreeBytes,
   outputRoot,
 }) {
@@ -88,10 +89,11 @@ export async function runPilotGeneration({
     await assertConfinedChild(outputRoot, child);
   }
   // Cross-process encode serialization: the worker pool only serializes
-  // within this process, so the run holds the output-root-wide encoder
-  // lock for its whole duration. A contender on the same root fails
-  // fast instead of encoding concurrently.
-  const encoderLock = await acquireEncoderLock(outputRoot);
+  // within this process, so the run holds the host-wide encoder lock
+  // for its whole duration — across all output roots, not just this
+  // one. A contender fails fast instead of encoding concurrently.
+  // locksDir isolates test runs so parallel suites never contend.
+  const encoderLock = await acquireEncoderLock(outputRoot, { locksDir });
   const results = [];
   try {
     for (const job of jobs) {

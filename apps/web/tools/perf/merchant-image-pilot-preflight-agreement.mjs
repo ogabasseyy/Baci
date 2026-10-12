@@ -24,7 +24,20 @@ export function assertServedAgreement(html, { arm }) {
   const heroSections = extractLabSections(html).filter(
     (section) => section.binding != null && !section.status
   );
-  const docLinks = extractLabPreloads(html).filter((link) => link.arm === arm);
+  const allLinks = extractLabPreloads(html);
+  // Arm rejection before filtering: the browser ignores the data
+  // attribute and fetches every link, so a lab-marked preload naming
+  // another arm would contaminate this comparison arm while the orphan
+  // and pairing checks below — which only see this arm's links — stay
+  // green. Every marked link must name the requested page.
+  for (const link of allLinks) {
+    if (link.arm !== arm) {
+      failures.push(
+        `${name}: lab preload link marks arm "${link.arm ?? 'missing'}" on the ${arm} page`
+      );
+    }
+  }
+  const docLinks = allLinks.filter((link) => link.arm === arm);
   // Hero pictures per section, shared by the orphan check and the pairing
   // loop: only hero-kind pictures (lab slides, gallery and original
   // heroes) can consume a hero preload — product-card and header-logo

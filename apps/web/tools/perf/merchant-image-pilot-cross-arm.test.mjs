@@ -38,4 +38,27 @@ describe('mounted image geometry parity', () => {
       crossArmProblems(geometry(hidden), geometry(hidden), [mount])
     ).toEqual([]);
   });
+  it('rejects a crop-mode change inside identical boxes', () => {
+    // Same image box on both arms, but the pilot paints contain where
+    // the control paints cover: the visible logo crop differs while
+    // decode, resolution, and box checks all pass.
+    const withFit = (fit) => ({
+      selected: box,
+      slots: [
+        {
+          binding: mount.binding,
+          rect: { ...box, width: 390 },
+          img: { box: { ...box }, objectFit: fit },
+        },
+      ],
+    });
+    expect(
+      crossArmProblems(withFit('cover'), withFit('cover'), [mount])
+    ).toEqual([]);
+    expect(
+      crossArmProblems(withFit('cover'), withFit('contain'), [mount])
+    ).toContain(
+      'slot "header-logo" object-fit differs between arms (control cover, pilot contain)'
+    );
+  });
 });

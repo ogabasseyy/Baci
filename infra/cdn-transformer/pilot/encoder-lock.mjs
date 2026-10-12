@@ -3,24 +3,25 @@ import {
   link,
   lstat,
   mkdir,
-  readFile,
   realpath,
   readdir,
-  rename,
   stat,
   unlink,
   writeFile,
 } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readLockText, stealWhenStale } from './encoder-lock-steal.mjs';
 import { PilotGenerateError } from './generate-job.mjs';
 
-// Output-root-wide encoder lock: the worker pool serializes encodes
-// in-process, but two overlapping `generate.mjs` invocations on the same
-// output root own independent queues and would encode concurrently,
-// defeating the one-encoding-at-a-time resource bound and contaminating
-// memory/capacity evidence. The generation run holds this lock for its
-// whole duration; a contender on the same root fails fast instead of
-// overlapping. Different output roots lock independently.
+// Host-wide encoder lock: the worker pool serializes encodes
+// in-process, but two overlapping `generate.mjs` invocations own
+// independent queues and would encode concurrently — defeating the
+// one-encoding-at-a-time resource bound and contaminating
+// memory/capacity evidence — even on different output roots. The lock
+// therefore lives at a shared host location, not beneath the
+// caller-selected output root. The generation run holds it for its
+// whole duration; a contender fails fast instead of overlapping.
 //
 // Atomic publication: the claim is written complete to a unique temp
 // file, then hard-linked to the lock path — link() either publishes the
@@ -34,51 +35,38 @@ import { PilotGenerateError } from './generate-job.mjs';
 // however old the claim, and corrupt content (external tampering only,
 // since publication is atomic) fails closed for the operator. Release
 // is ownership-checked: a resumed original never unlinks a successor's
-// claim.
-// Steal safety: the dead claim is moved aside with an atomic rename
-// and re-verified before replacement — a live claim that replaced it
-// between the read and the rename is restored (when the path is still
-// free) instead of silently deleted. Residual: a third linker inside
-// the microsecond verify window keeps the path while the moved live
-// claim is preserved as evidence; both live processes then hold until
-// one releases. Closing that needs flock, which Node does not expose.
+// claim. Steal protocol lives in encoder-lock-steal.mjs.
 const LOCK_FILE = 'encoder.lock';
 const ACQUIRE_ATTEMPTS = 3;
 const CLAIM_TEMP_MAX_AGE_MS = 3_600_000;
 
-function holderAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // ESRCH: no such process (dead). Anything else (notably EPERM for
-    // an unowned live pid) counts as alive — never steal on doubt.
-    return error?.code !== 'ESRCH';
-  }
-}
-
-async function confinedLocksDir(outputRoot) {
-  const root = await realpath(outputRoot);
-  const locksDir = join(root, 'locks');
-  await mkdir(locksDir, { recursive: true });
-  // A pre-existing symlink would sail through recursive mkdir and push
-  // every lock op outside the output tree (same confinement as the
-  // claims/generations/reports directories in generate.mjs).
-  const info = await lstat(locksDir);
-  if (
-    info.isSymbolicLink() ||
-    !info.isDirectory() ||
-    (await realpath(locksDir)) !== locksDir
-  ) {
+// A lock directory — host default or injected — must be a real
+// directory, never a symlink: recursive mkdir would sail through a
+// planted link and push every lock op outside the intended tree.
+// Canonicalized before use (the tmpdir itself may resolve through a
+// system link).
+async function assertConfinedLocksDir(dir) {
+  const info = await lstat(dir).catch(() => null);
+  const real = info ? await realpath(dir).catch(() => null) : null;
+  if (!real || !info || info.isSymbolicLink() || !info.isDirectory()) {
     throw new PilotGenerateError(
       'unsafe-output-directory',
-      'locks must be a confined directory, not a symlink'
+      'encoder locks must be a confined directory, not a symlink'
     );
   }
-  return locksDir;
+  return real;
+}
+
+// Shared host lock directory, scoped to the effective uid: another
+// user's records would classify EPERM-held forever (a cross-user DoS)
+// or invite cross-user steals, while same-user concurrent roots — the
+// bound that matters — still serialize.
+async function hostEncoderLocksDir() {
+  const euid =
+    typeof process.geteuid === 'function' ? process.geteuid() : 'shared';
+  const dir = join(tmpdir(), `pilot-encoder-locks-${euid}`);
+  await mkdir(dir, { recursive: true });
+  return assertConfinedLocksDir(dir);
 }
 
 // Crash orphans from interrupted publications and steal recoveries:
@@ -101,12 +89,19 @@ async function sweepStaleClaimTemps(locksDir) {
 function lockHeldError(outputRoot, path) {
   return new PilotGenerateError(
     'encoder-lock-held',
-    `another pilot generation holds the encoder lock for ${outputRoot}; refusing to encode concurrently (crashed-run locks reclaim automatically once their pid exits — if no generation is running, verify with ps and remove ${path})`
+    `another pilot generation (output root ${outputRoot}) holds the host encoder lock; refusing to encode concurrently (crashed-run locks reclaim automatically once their pid exits — if no generation is running, verify with ps and remove ${path})`
   );
 }
 
-export async function acquireEncoderLock(outputRoot) {
-  const locksDir = await confinedLocksDir(outputRoot);
+export async function acquireEncoderLock(outputRoot, options = {}) {
+  // Host-global by default (one encoding at a time per host, across all
+  // output roots). options.locksDir isolates test acquisitions so
+  // parallel suites never contend for the shared host lock; injected
+  // dirs confine exactly like the default.
+  const locksDir =
+    options.locksDir === undefined
+      ? await hostEncoderLocksDir()
+      : await assertConfinedLocksDir(options.locksDir);
   const path = join(locksDir, LOCK_FILE);
   await sweepStaleClaimTemps(locksDir);
   for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
@@ -147,15 +142,15 @@ export async function acquireEncoderLock(outputRoot) {
     let released = false;
     return {
       // Mid-run ownership check: a steal-race loser can rename this
-      // run's live claim away and admit a second encoder on the same
-      // root (see stealWhenStale). The run calls this before encoding —
+      // run's live claim away and admit a second encoder on the host
+      // (see encoder-lock-steal.mjs). The run calls this before encoding —
       // at job start and before every variant attempt — so a displaced
       // run aborts loudly within one encode instead of encoding
       // concurrently and contaminating the resource evidence. Residual:
       // the check-then-encode window itself is unchecked, bounding any
       // silent overlap to a single variant attempt.
       async assertHeld() {
-        const text = await readFile(path, 'utf8').catch(() => null);
+        const text = await readLockText(path).catch(() => null);
         let holder = null;
         if (text !== null) {
           try {
@@ -167,7 +162,7 @@ export async function acquireEncoderLock(outputRoot) {
         if (holder?.token !== token) {
           throw new PilotGenerateError(
             'encoder-lock-evicted',
-            `encoder lock ${path} changed owner mid-run; another encoder holds this output root — aborting instead of encoding concurrently`
+            `encoder lock ${path} changed owner mid-run; another encoder holds the host lock — aborting instead of encoding concurrently`
           );
         }
       },
@@ -178,7 +173,7 @@ export async function acquireEncoderLock(outputRoot) {
         released = true;
         // Ownership-checked: unlink only our own claim. A successor's
         // claim (or an unreadable file) is left untouched.
-        const text = await readFile(path, 'utf8').catch(() => null);
+        const text = await readLockText(path).catch(() => null);
         if (text === null) {
           return;
         }
@@ -197,86 +192,6 @@ export async function acquireEncoderLock(outputRoot) {
   }
   throw new PilotGenerateError(
     'encoder-lock-held',
-    `could not acquire the encoder lock for ${outputRoot} after ${ACQUIRE_ATTEMPTS} attempts`
+    `could not acquire the host encoder lock for ${outputRoot} after ${ACQUIRE_ATTEMPTS} attempts`
   );
-}
-
-// Returns true when the caller may retry publication, false when the
-// lock is held, or 'corrupt' when the file is unparseable or shapeless
-// (atomic publication makes a mid-write corrupt read impossible, and
-// the writer always records a pid plus a token).
-async function stealWhenStale(path, locksDir) {
-  let text;
-  try {
-    text = await readFile(path, 'utf8');
-  } catch {
-    // Vanished between EEXIST and read: the holder released; retry.
-    return true;
-  }
-  let holder = null;
-  try {
-    holder = JSON.parse(text);
-  } catch {
-    holder = null;
-  }
-  if (!holder || typeof holder !== 'object') {
-    return 'corrupt';
-  }
-  // Shape before liveness: atomic publication means our writer's claims
-  // always carry a positive integer pid and a token string, so a
-  // well-formed-JSON-but-shapeless file ({}, [], a pid without a token)
-  // is tampering or disk fault — never a holder mid-write. Treating it
-  // as a dead claim would delete the lock and admit a second encoder
-  // alongside a possibly live original; fail closed for the operator.
-  if (
-    !Number.isInteger(holder.pid) ||
-    holder.pid <= 0 ||
-    typeof holder.token !== 'string' ||
-    holder.token.length === 0
-  ) {
-    return 'corrupt';
-  }
-  if (holderAlive(holder.pid)) {
-    // Live pid: held, at any age. Never evict on elapsed time.
-    return false;
-  }
-  // Dead claim: move it aside atomically, then verify the moved file is
-  // the claim just read. A plain unlink-then-create would silently
-  // delete a live claim that replaced the dead one between the read
-  // and the removal, leaving two live processes believing they hold
-  // the lock.
-  const recovery = join(
-    locksDir,
-    `recovering-${holder.token ?? 'untokened'}-${process.pid}-${randomBytes(8).toString('hex')}.tmp`
-  );
-  try {
-    await rename(path, recovery);
-  } catch (error) {
-    // Already stolen or released between the read and the rename.
-    if (error?.code === 'ENOENT') {
-      return true;
-    }
-    throw error;
-  }
-  const moved = await readFile(recovery, 'utf8').catch(() => null);
-  let movedHolder = null;
-  try {
-    movedHolder = moved ? JSON.parse(moved) : null;
-  } catch {
-    movedHolder = null;
-  }
-  if (movedHolder?.token !== holder.token || movedHolder?.pid !== holder.pid) {
-    // A live claim replaced the dead one mid-steal: restore it when the
-    // path is still free, then stand down. If a third linker already
-    // claimed the path, the moved file stays as operator evidence.
-    const restored = await link(recovery, path)
-      .then(() => true)
-      .catch(() => false);
-    if (restored) {
-      await unlink(recovery).catch(() => undefined);
-    }
-    return false;
-  }
-  await unlink(recovery).catch(() => undefined);
-  return true;
 }

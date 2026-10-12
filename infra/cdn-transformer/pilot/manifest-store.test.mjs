@@ -1084,6 +1084,44 @@ test('commitGeneration rejects a swapped-in giant staged tier on size', async ()
   );
 });
 
+test('commitGeneration re-verifies tiers inside commitDir before publishing', async () => {
+  const fixture = await commitFixture('pilot-r1-commit-recheck');
+  const { rename: realRename } = await import('node:fs/promises');
+  // A staged tier replaced AFTER the pre-move hash check: the injected
+  // rename plants same-length foreign bytes at the commit destination,
+  // proving the pre-publish recheck compares hashes, not just lengths.
+  const commitDir = join(fixture.stagingDir, 'commit');
+  let tampered = false;
+  const swappingRename = async (from, to) => {
+    await realRename(from, to);
+    if (from !== commitDir && !tampered) {
+      tampered = true;
+      const size = (await stat(to)).size;
+      await writeFile(to, Buffer.alloc(size, 7));
+    }
+  };
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: { rename: swappingRename },
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) =>
+      error.code === 'commit-bytes-mismatch' &&
+      /commit bytes differ/.test(error.message)
+  );
+  assert.equal(tampered, true);
+  await assert.rejects(
+    () => loadGeneration(fixture.root, fixture.generationId),
+    /not published/
+  );
+});
+
 test('commitGeneration quarantines when unpublish removal fails', async () => {
   const fixture = await commitFixture('pilot-r1-quarantine');
   // Post-rename fsync fails AND the unpublish rm fails (read-only

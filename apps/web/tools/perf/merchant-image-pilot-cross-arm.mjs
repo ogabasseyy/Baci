@@ -45,6 +45,25 @@ export function crossArmProblems(left, right, expectedMounts) {
     } else if (!boxesMatch(l.img.box, r.img.box)) {
       problems.push(`slot "${mount.slotId}" image boxes differ between arms`);
     }
+    // Crop-mode equality per mount: identical boxes can still paint
+    // different crops when one arm's image uses another object-fit (a
+    // contain pilot logo against a cover control, for example). The
+    // single-arm check pins only the primary selected image to the
+    // surface fit; every other mount compares against its own control
+    // rendering, since merchant CSS sets fit per slot, not per surface.
+    // Absent images stay silent here: the geometry problems above own
+    // that verdict.
+    const leftFit = l?.img?.objectFit;
+    const rightFit = r?.img?.objectFit;
+    if (
+      typeof leftFit === 'string' &&
+      typeof rightFit === 'string' &&
+      leftFit !== rightFit
+    ) {
+      problems.push(
+        `slot "${mount.slotId}" object-fit differs between arms (control ${leftFit}, pilot ${rightFit})`
+      );
+    }
   }
   return problems;
 }

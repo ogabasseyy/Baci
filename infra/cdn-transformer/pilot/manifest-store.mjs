@@ -52,6 +52,52 @@ async function assertOwnedDir(dir, expectedReal, label) {
   }
 }
 
+// Tier byte verification against the validated manifest, resolved
+// through an injected path map so both commit phases share it: the
+// staged paths before the move, and the commitDir paths immediately
+// before the visibility rename. A staged tier replaced after the first
+// check would otherwise publish unverified bytes — the rename and the
+// fsyncs verify nothing themselves.
+async function assertTierBytes(tiers, resolve, stage) {
+  const uniquePaths = [...new Set(tiers.map((tier) => tier.path))];
+  for (const name of uniquePaths) {
+    const from = resolve(name);
+    if (!from) {
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `missing staged file: ${name}`
+      );
+    }
+    const tier = tiers.find((entry) => entry.path === name);
+    // Bounded by the manifest claim + 1: a corrupted staged tier
+    // replaced with a huge file rejects on truncation instead of
+    // exhausting the generator ahead of the length comparison. The
+    // claim is schema-capped (MAX_INPUT_BYTES), so the +1 probe
+    // cannot become an unbounded allocation.
+    let staged;
+    try {
+      staged = await readUpToBytes(from, tier.bytes + 1);
+    } catch {
+      throw new PilotManifestError(
+        stage === 'commit' ? 'commit-bytes-mismatch' : 'staged-file-mismatch',
+        `cannot read ${stage} file: ${name}`
+      );
+    }
+    if (
+      staged.truncated ||
+      staged.bytes.length !== tier.bytes ||
+      createHash('sha256').update(staged.bytes).digest('hex') !== tier.sha256
+    ) {
+      throw new PilotManifestError(
+        stage === 'commit' ? 'commit-bytes-mismatch' : 'staged-file-mismatch',
+        stage === 'commit'
+          ? `commit bytes differ: ${name}`
+          : `staged bytes differ: ${name}`
+      );
+    }
+  }
+}
+
 export async function commitGeneration({
   deps = {},
   files,
@@ -86,40 +132,11 @@ export async function commitGeneration({
   // Every manifest tier needs a staged file with identical bytes.
   const stagedByName = new Map(files.map((file) => [file.name, file.from]));
   const uniquePaths = [...new Set(valid.tiers.map((tier) => tier.path))];
-  for (const name of uniquePaths) {
-    const from = stagedByName.get(name);
-    if (!from) {
-      throw new PilotManifestError(
-        'staged-file-mismatch',
-        `missing staged file: ${name}`
-      );
-    }
-    const tier = valid.tiers.find((entry) => entry.path === name);
-    // Bounded by the manifest claim + 1: a corrupted staged tier
-    // replaced with a huge file rejects on truncation instead of
-    // exhausting the generator ahead of the length comparison. The
-    // claim is schema-capped (MAX_INPUT_BYTES), so the +1 probe
-    // cannot become an unbounded allocation.
-    let staged;
-    try {
-      staged = await readUpToBytes(from, tier.bytes + 1);
-    } catch {
-      throw new PilotManifestError(
-        'staged-file-mismatch',
-        `cannot read staged file: ${name}`
-      );
-    }
-    if (
-      staged.truncated ||
-      staged.bytes.length !== tier.bytes ||
-      createHash('sha256').update(staged.bytes).digest('hex') !== tier.sha256
-    ) {
-      throw new PilotManifestError(
-        'staged-file-mismatch',
-        `staged bytes differ: ${name}`
-      );
-    }
-  }
+  await assertTierBytes(
+    valid.tiers,
+    (name) => stagedByName.get(name),
+    'staged'
+  );
   const expectedId = generationIdFor({
     encoderIdentity: valid.encoder,
     job,
@@ -199,6 +216,14 @@ export async function commitGeneration({
     'generations'
   );
   await assertOwnedDir(commitDir, join(realStaging, 'commit'), 'commit');
+  // Re-verify every tier inside commitDir immediately before the
+  // visibility rename: a staged file replaced after the pre-move check
+  // would otherwise publish bytes the manifest never certified.
+  await assertTierBytes(
+    valid.tiers,
+    (name) => join(commitDir, name),
+    'commit'
+  );
   // Recheck the job deadline immediately before the visibility rename:
   // verification and the fsync loop above can consume the remaining
   // budget, and publishing an overdue generation (then reporting the job

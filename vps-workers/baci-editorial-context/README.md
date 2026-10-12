@@ -8,8 +8,10 @@ from `docs/product/baci-capabilities.json` to
 `data/baci-platform-research/capabilities.json`.
 
 After checking the exact captured source hash, validate and apply the focused
-patch with `git apply --check --unidiff-zero prompt-builder.patch` and
-`git apply --unidiff-zero prompt-builder.patch`.
+patch with `git apply --check prompt-builder.patch` and
+`git apply prompt-builder.patch`. Do not use `--unidiff-zero`: the patch's
+context lines must match the live writer file, and a failed `--check` aborts
+the deploy instead of inserting the context block at a shifted location.
 
 Only platform-marketing prompts receive this context. The immutable publisher,
 owner approval, source capture and Ogabassey lanes are unchanged. Missing,

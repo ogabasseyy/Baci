@@ -82,6 +82,18 @@ class CapabilityContextTests(unittest.TestCase):
         result = self.render(_register([_row(status="production_verified")]))
         self.assertIn("Register unavailable, invalid or stale", result)
 
+    def test_deeply_nested_register_fails_closed(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "capabilities.json"
+            path.write_text("[" * 5000 + "]" * 5000)
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
+                result = capability_context()
+            self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_duplicate_capability_ids_fail_closed(self):
+        result = self.render(_register([_row(), _row(claim="Contradictory second claim")]))
+        self.assertIn("Register unavailable, invalid or stale", result)
+
     def test_oversized_claim_fails_closed(self):
         result = self.render(_register([_row(claim="x" * 1001)]))
         self.assertIn("Register unavailable, invalid or stale", result)

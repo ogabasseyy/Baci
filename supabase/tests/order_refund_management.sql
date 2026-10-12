@@ -149,7 +149,9 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000027', v_merchant_id, 'REFUND-027',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000034', v_merchant_id, 'REFUND-034',
-      200, 200, 'paid', 'cancelled');
+      200, 200, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000052', v_merchant_id, 'REFUND-052',
+      100, 100, 'paid', 'cancelled');
     -- Per-leg coverage fixtures (028+) live in
     -- order_refund_management_per_leg_coverage.sql per the 300-line
     -- boundary.
@@ -185,7 +187,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000025',
       '9ef11000-0000-4000-8000-000000000026',
       '9ef11000-0000-4000-8000-000000000027',
-      '9ef11000-0000-4000-8000-000000000034');
+      '9ef11000-0000-4000-8000-000000000034',
+      '9ef11000-0000-4000-8000-000000000052');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -273,11 +276,6 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000023', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000017', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-17', '{}'::jsonb),
-    -- A failed row never counts as coverage, but its ledger identifier
-    -- still collides: the twin-race rescue reports the conflict.
-    ('9ef12000-0000-4000-8000-000000000024', v_merchant_id,
-      '9ef11000-0000-4000-8000-000000000017', 'refund', 5, 'NGN',
-      'failed', 'paystack', 'race-17#1', '{}'::jsonb),
     -- A completed row claiming another order's leg: corrupt evidence
     -- the worker quarantines, never coverage.
     ('9ef12000-0000-4000-8000-000000000025', v_merchant_id,
@@ -385,7 +383,15 @@ BEGIN
         'provider_refund_status', 'processed')),
     ('9ef12000-0000-4000-8000-000000000047', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000034', 'payment', 100, 'NGN',
-      'completed', 'cash', 'cash-34', '{}'::jsonb);
+      'completed', 'cash', 'cash-34', '{}'::jsonb),
+    -- A failed row never counts as coverage, but its ledger identifier
+    -- still collides: the twin-race rescue reports the conflict.
+    ('9ef12000-0000-4000-8000-000000000078', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000052', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-52', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000079', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000052', 'refund', 5, 'NGN',
+      'failed', 'paystack', 'race-52#1', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -762,23 +768,38 @@ BEGIN
   -- reports the reference conflict instead of a raw unique violation.
   BEGIN
     PERFORM public.manage_order_refund(
-      '9ef11000-0000-4000-8000-000000000017', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'race-17',NULL,true);
+      '9ef11000-0000-4000-8000-000000000052', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'race-52',NULL,true);
     RAISE EXCEPTION 'racing reference accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
 
-  -- Corrupt links never count: a completed row claiming another
-  -- order's leg is excluded from the remainder and cannot flip the
-  -- payment label (the worker quarantines it separately).
+  -- The failed row above never counts as coverage or pending.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000052'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'remaining')::numeric <> 100
+    OR (v_result->>'pending')::numeric <> 0 THEN
+    RAISE EXCEPTION 'failed row counted, refunded % remaining % pending %',
+      v_result->>'refunded', v_result->>'remaining', v_result->>'pending';
+  END IF;
+
+  -- Corrupt links never count as coverage, but they hold pending: a
+  -- completed row claiming another order's leg is excluded from the
+  -- remainder and cannot flip the payment label, while recording
+  -- beside it stays blocked until reconciliation (the row may be
+  -- real provider money under a malformed link — recording past it
+  -- would double-pay).
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000017'
   ) INTO v_result;
   IF (v_result->>'refunded')::numeric <> 0
-    OR (v_result->>'remaining')::numeric <> 100 THEN
-    RAISE EXCEPTION 'corrupt link counted in coverage, got %/%',
-      v_result->>'refunded', v_result->>'remaining';
+    OR (v_result->>'remaining')::numeric <> 100
+    OR (v_result->>'pending')::numeric <> 100 THEN
+    RAISE EXCEPTION 'corrupt link miscounted, refunded % remaining % pending %',
+      v_result->>'refunded', v_result->>'remaining', v_result->>'pending';
   END IF;
   SELECT payment_status INTO v_label FROM public.orders
   WHERE id = '9ef11000-0000-4000-8000-000000000017';
@@ -786,24 +807,22 @@ BEGIN
     RAISE EXCEPTION 'corrupt link flipped payment label to %', v_label;
   END IF;
 
-  -- Full manual coverage creates the claimable row when the worker
-  -- never started one (cash-only/legacy): the drain only enumerates
-  -- existing rows, so without creation nothing would ever invoke the
-  -- claim and finalization would never run.
-  SELECT public.manage_order_refund(
-    '9ef11000-0000-4000-8000-000000000017', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'norow-1',NULL,true
-  ) INTO v_result;
-  IF v_result->>'status' <> 'queued' THEN
-    RAISE EXCEPTION 'full manual did not requeue, got %',
-      v_result->>'status';
-  END IF;
-  IF NOT EXISTS (
+  -- Recording beside the corrupt link stays blocked, and the block
+  -- precedes any side-effect write: no claimable row is created.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000017', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'norow-1',NULL,true);
+    RAISE EXCEPTION 'manual accepted beside a corrupt link';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+  IF EXISTS (
     SELECT 1 FROM public.order_cancellation_side_effects
     WHERE order_id = '9ef11000-0000-4000-8000-000000000017'
-      AND step = 'refund' AND status = 'failed' AND attempts = 0
+      AND step = 'refund'
   ) THEN
-    RAISE EXCEPTION 'full manual did not create a claimable row';
+    RAISE EXCEPTION 'blocked manual created a claimable row';
   END IF;
 
   -- Legacy rows without a cancellation timestamp route to review: the
@@ -2058,13 +2077,16 @@ BEGIN
   IF v_status <> 'completed' THEN
     RAISE EXCEPTION 'refunded-row coverage did not finalize, got %', v_status;
   END IF;
-  -- The created claimable row finalizes through the trusted claim.
+  -- A corrupt link routes to the worker instead of finalizing: the
+  -- claim takes the worker branch (where the executor quarantines
+  -- the row for reconciliation) rather than completing past
+  -- evidence that may be real provider money.
   SELECT we_won, current_status INTO v_won, v_status
   FROM public.claim_order_cancellation_side_effect(
     '9ef11000-0000-4000-8000-000000000017', 'refund',
     '9ef13000-0000-4000-8000-000000000017');
-  IF v_status <> 'completed' THEN
-    RAISE EXCEPTION 'created row did not finalize, got %', v_status;
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'corrupt link finalized past evidence, got %', v_status;
   END IF;
   -- A cash-only order with full manual coverage passes the claim
   -- guard on that coverage alone and runs the trusted finalization.

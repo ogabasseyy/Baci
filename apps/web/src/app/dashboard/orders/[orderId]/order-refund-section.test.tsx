@@ -136,6 +136,31 @@ describe('OrderRefundSection', () => {
     );
     expect(await screen.findByText('Refund')).toBeInTheDocument();
   });
+  it('shows the refund panel for self-terminalized pending cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Pending',
+          transactions: [
+            {
+              id: 'leg-1',
+              transaction_type: 'payment',
+              status: 'refunded',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paypal',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+          ],
+        })}
+        setOrder={setOrder}
+      />
+    );
+    // The claim finalizes self-terminal legs, so a failed or
+    // exhausted legacy row still needs its status and retry action.
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
   it('hides the refund panel for unfunded pending cancelled orders', async () => {
     const setOrder = vi.fn();
     render(

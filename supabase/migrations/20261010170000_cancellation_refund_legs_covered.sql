@@ -170,27 +170,20 @@ BEGIN
              AND leg.transaction_type = 'payment'))
   ) AND NOT EXISTS (
     -- Anomalous terminal evidence blocks finalization exactly like
-    -- the manager's pending gate: a currency-mismatched or
-    -- link/gateway-mismatched row keeps the manager reporting
-    -- pending with recording disabled, so finalizing here would
-    -- complete the side effect while the dashboard stays stuck on
-    -- Processing and no drain revisits the row. Mirrors the
-    -- manager's terminal anomaly branches verbatim (validated
-    -- links only, like the manager's outer WHERE): matching
-    -- merchant-attested manuals pass; currency, link, or gateway
-    -- mismatches block.
+    -- the manager's pending gate: a currency-mismatched,
+    -- link/gateway-mismatched, or invalid-link row keeps the
+    -- manager reporting pending with recording disabled, so
+    -- finalizing here would complete the side effect while the
+    -- dashboard stays stuck on Processing and no drain revisits
+    -- the row. Mirrors the manager's terminal anomaly branches
+    -- verbatim over the same unfiltered universe: matching
+    -- merchant-attested manuals pass; anything else blocks.
     SELECT 1 FROM public.transactions anomaly
      WHERE anomaly.order_id = p_order_id
        AND anomaly.merchant_id = p_merchant_id
        AND anomaly.transaction_type = 'refund'
        AND anomaly.status IN ('completed', 'refunded')
        AND anomaly.amount > 0
-       AND (anomaly.metadata->>'payment_transaction_id' IS NULL
-         OR EXISTS (SELECT 1 FROM public.transactions leg
-           WHERE leg.id::text = anomaly.metadata->>'payment_transaction_id'
-             AND leg.order_id = p_order_id
-             AND leg.merchant_id = p_merchant_id
-             AND leg.transaction_type = 'payment'))
        AND (
          UPPER(BTRIM(anomaly.currency))
            IS DISTINCT FROM UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')))

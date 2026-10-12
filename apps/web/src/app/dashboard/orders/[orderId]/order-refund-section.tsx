@@ -19,8 +19,9 @@ export function OrderRefundSection({
   // fails or needs manual recording. A Pending order can still be
   // funded (completed gateway legs the sweep never flipped to paid):
   // the server admits recovery whenever amount_paid > 0, so a payment
-  // leg with moved money (completed, or refund_pending mid-flight)
-  // keeps the panel visible and only truly unfunded orders hide it.
+  // leg with moved money (completed, refund_pending mid-flight, or a
+  // self-terminalized refunded leg the claim still finalizes) keeps
+  // the panel visible and only truly unfunded orders hide it.
   if (!['Canceled', 'Cancelled'].includes(order.shippingStatus)) return null;
   // Unknown funding (transactions read failed server-side and was
   // logged) fails open: the panel's RPC is the real gate, and hiding
@@ -30,7 +31,9 @@ export function OrderRefundSection({
     order.transactions.some(
       (leg) =>
         leg.transaction_type === 'payment' &&
-        (leg.status === 'completed' || leg.status === 'refund_pending') &&
+        (leg.status === 'completed' ||
+          leg.status === 'refund_pending' ||
+          leg.status === 'refunded') &&
         leg.amount > 0
     );
   if (

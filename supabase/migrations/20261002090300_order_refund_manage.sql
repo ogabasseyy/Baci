@@ -125,17 +125,15 @@ BEGIN
             AND v_sole_external_leg
             AND public.normalized_gateway_name_v1(gateway)=v_sole_leg_gateway)),false))),0)
     INTO v_refunded,v_pending FROM public.transactions
-    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
-    -- Count only validated links: a row claiming a leg outside this
-    -- order (or otherwise unresolvable) is corrupt evidence the
-    -- worker quarantines, so counting it would understate the
-    -- remainder while the order flips refunded. Compared as text so
-    -- a malformed link excludes instead of raising.
-    AND (metadata->>'payment_transaction_id' IS NULL
-      OR EXISTS (SELECT 1 FROM public.transactions leg
-        WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
-          AND leg.order_id=p_order_id AND leg.merchant_id=v_order.merchant_id
-          AND leg.transaction_type='payment'));
+    WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund';
+    -- No link predicate above: a row claiming a leg outside this
+    -- order (or otherwise unresolvable) must reach the FILTER's
+    -- mismatch branch and hold pending, not vanish from both sums.
+    -- Excluding it would leave the full balance recordable beside
+    -- possibly real provider money (double-record) while the claim
+    -- finalizes past evidence nothing ever reconciles. The mismatch
+    -- test compares links as text so a malformed link blocks
+    -- instead of raising.
   -- Self-terminal payment legs (e.g. PayPal flips the payment row
   -- itself instead of inserting a refund row) count toward their side:
   -- refunded legs are returned money, refund_pending legs are

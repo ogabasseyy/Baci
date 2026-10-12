@@ -32,6 +32,14 @@ not imply every merchant can access every integration by default.
    A rebase or main advance that touches any cited `source_refs` path invalidates
    the register binding: re-review the affected claims and record the new
    `source_revision`/`reviewed_at` instead of carrying the old binding forward.
+   The enforceable binding is the register's `evidence_digest`: a SHA256 over
+   every cited `source_refs` path and its content hash, recomputed by the
+   binding test (`evidence_digest_for` in
+   `vps-workers/baci-editorial-context/test_platform_capabilities.py`). Any
+   cited-file content change — on a branch, on main, or through a squash
+   merge — fails the check until the claims are re-reviewed and the digest is
+   regenerated. `source_revision` records the reviewed tree for provenance;
+   it is not itself the enforcement mechanism.
 4. Copy the reviewed register to the VPS writer's
    `data/baci-platform-research/capabilities.json`. The prompt records its SHA256,
    source revision and review date; after 14 days it is treated as stale.

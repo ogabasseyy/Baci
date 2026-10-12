@@ -1,5 +1,6 @@
 """In-repo tests for platform_capabilities (stdlib only, no writer checkout needed)."""
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import os
@@ -39,6 +40,17 @@ def _row(**overrides):
     return row
 
 
+def evidence_digest_for(repo, refs):
+    """Content digest over cited paths and their file contents."""
+    digest = hashlib.sha256()
+    for ref in sorted(refs):
+        digest.update(ref.encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 def binding_failures(repo, data):
     """Return binding failure strings for a register dict (empty = bound)."""
     import subprocess
@@ -59,25 +71,10 @@ def binding_failures(repo, data):
             )
             if tracked.returncode != 0:
                 failures.append(f"cited source is not tracked: {ref}")
-    revision = data["source_revision"]
-    ancestor = subprocess.run(
-        ["git", "-C", str(repo), "merge-base", "--is-ancestor", revision, "HEAD"],
-        capture_output=True, text=True,
-    )
-    if ancestor.returncode != 0:
-        failures.append(f"source_revision {revision} is not an ancestor of HEAD or cannot be resolved; re-review and rebind the register")
-        return failures
-    proc = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--name-only", "-z", f"{revision}..HEAD"],
-        capture_output=True, text=True,
-    )
-    if proc.returncode != 0:
-        failures.append(f"source_revision {revision} cannot be resolved in this checkout; re-review and rebind the register")
-        return failures
-    changed = {p for p in proc.stdout.split("\0") if p}
-    drift = [ref for ref in refs if ref in changed or any(p.startswith(ref.rstrip("/") + "/") for p in changed)]
-    if drift:
-        failures.append(f"cited paths changed since source_revision: {drift}")
+    if not failures:
+        expected = data.get("evidence_digest")
+        if not isinstance(expected, str) or evidence_digest_for(repo, refs) != expected:
+            failures.append("cited evidence content changed since review; re-review the claims and update evidence_digest")
     return failures
 
 
@@ -112,7 +109,10 @@ class CapabilityContextTests(unittest.TestCase):
         leaked = self.render(_register([_row(production_evidence=evidence)]))
         self.assertNotIn("deploy-prod", leaked)
         kept = self.render(_register([_row(status="production_verified", production_evidence=evidence)]))
-        self.assertIn("deploy-prod", kept)
+        self.assertIn("b" * 40, kept)
+        self.assertNotIn("deploy-prod", kept)
+        self.assertNotIn("premium plan, payments enabled", kept)
+        self.assertNotIn("merchant checkout observed", kept)
 
     def test_production_evidence_requires_entitlement_and_observation(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -201,8 +201,8 @@ class CapabilityContextTests(unittest.TestCase):
                 rendered = capability_context()
             self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
             self.assertNotIn("Register unavailable", rendered)
-        if (repo / ".git" / "shallow").exists():
-            self.skipTest("shallow checkout cannot verify the revision binding")
+        if stale and os.environ.get("BACI_REGISTER_REQUIRE_FRESH"):
+            self.fail("register outside its 14-day evidence window; owner re-review required")
         self.assertEqual(binding_failures(repo, data), [])
 
     def test_binding_failures_are_detected_in_fixture_repo(self):
@@ -220,17 +220,13 @@ class CapabilityContextTests(unittest.TestCase):
             (repo / "cited.txt").write_text("v1")
             git(repo, "add", ".")
             git(repo, "commit", "-q", "-m", "one")
-            rev = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-            data = {"source_revision": rev, "capabilities": [{"source_refs": ["cited.txt"]}]}
+            refs = ["cited.txt"]
+            data = {"capabilities": [{"source_refs": refs}], "evidence_digest": evidence_digest_for(repo, refs)}
             self.assertEqual(binding_failures(repo, data), [])
             (repo / "cited.txt").write_text("v2")
-            git(repo, "add", ".")
-            git(repo, "commit", "-q", "-m", "two")
-            self.assertTrue(binding_failures(repo, data), "drift must fail")
-            self.assertTrue(binding_failures(repo, {**data, "source_revision": "f" * 40}), "unresolvable revision must fail")
-            git(repo, "checkout", "-q", "--orphan", "other")
-            git(repo, "commit", "-q", "-m", "orphan", "--allow-empty")
-            self.assertTrue(binding_failures(repo, data), "non-ancestor revision must fail")
+            self.assertTrue(binding_failures(repo, data), "changed cited content must fail the digest binding")
+            self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["missing.txt"]}], "evidence_digest": "x"}), "missing cited source must fail")
+            self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["../escape.txt"]}], "evidence_digest": "x"}), "escaping cited source must fail")
 
     def test_stale_register_fails_closed(self):
         old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=20)).isoformat()

@@ -32,3 +32,66 @@ export const cartValidateSchema = z.object({
   productIds: z.array(z.string()).max(50).optional(),
   cartItems: z.array(cartItemSchema).max(50).optional(),
 });
+
+const cartItemIdentitySchema = z.strictObject({
+  condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
+  options: z.record(z.string().min(1), z.string()).optional(),
+  productId: z.uuid(),
+  variantId: z.uuid().optional(),
+});
+
+const cartLineAttachmentsSchema = z.strictObject({
+  negotiatedUnitPriceMinor: z.number().int().positive().optional(),
+  negotiationStatus: z.enum(['pending', 'accepted', 'rejected']).optional(),
+  voucherAwardId: z.string().trim().min(1).max(128).optional(),
+  voucherToken: z.string().trim().min(1).max(256).optional(),
+});
+
+const cartInputLineSchema = z
+  .strictObject({
+    item: cartItemIdentitySchema,
+    quantity: z.number().int().min(1).max(10),
+  })
+  .extend(cartLineAttachmentsSchema.shape);
+
+const cartCommandSchema = z.discriminatedUnion('type', [
+  z
+    .strictObject({
+      item: cartItemIdentitySchema,
+      quantity: z.number().int().min(1).max(10),
+      type: z.literal('add'),
+    })
+    .extend(cartLineAttachmentsSchema.shape),
+  z.strictObject({
+    lineId: z.string().trim().min(1).max(64),
+    quantity: z.number().int().min(1).max(10),
+    type: z.literal('set_quantity'),
+  }),
+  z.strictObject({
+    lineId: z.string().trim().min(1).max(64),
+    type: z.literal('remove'),
+  }),
+  z.strictObject({ type: z.literal('clear') }),
+  z.strictObject({
+    lines: z.array(cartInputLineSchema).max(20),
+    type: z.literal('replace'),
+  }),
+]);
+
+const operationIdSchema = z.string().trim().min(1).max(128);
+
+export const sharedCartMutationRequestSchema = z.strictObject({
+  command: cartCommandSchema,
+  expectedVersion: z.number().int().min(1),
+  operationId: operationIdSchema,
+});
+
+export const createCartRequestSchema = z.strictObject({
+  currency: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{3}$/, 'currency must be an ISO 4217 code')
+    .optional(),
+  lines: z.array(cartInputLineSchema).max(20).optional(),
+  operationId: operationIdSchema,
+});

@@ -33,15 +33,44 @@ function validateIdentity(item: CartItemIdentity): CartCommandIssue | null {
   return null;
 }
 
+function validateAttachments(
+  line: CartInputLine | Extract<CartCommand, { type: 'add' }>
+): CartCommandIssue | null {
+  if (
+    (line.voucherToken !== undefined &&
+      line.voucherToken.trim().length === 0) ||
+    (line.voucherAwardId !== undefined &&
+      line.voucherAwardId.trim().length === 0)
+  ) {
+    return issue('Voucher references must not be blank.');
+  }
+  if (
+    line.negotiatedUnitPriceMinor !== undefined &&
+    (!Number.isInteger(line.negotiatedUnitPriceMinor) ||
+      line.negotiatedUnitPriceMinor <= 0)
+  ) {
+    return issue('Negotiated prices must be positive minor-unit integers.');
+  }
+  if (
+    line.negotiationStatus !== undefined &&
+    line.negotiationStatus !== 'pending' &&
+    line.negotiationStatus !== 'accepted' &&
+    line.negotiationStatus !== 'rejected'
+  ) {
+    return issue('Unknown negotiation status.');
+  }
+  return null;
+}
+
 function validateInputLine(line: CartInputLine): CartCommandIssue | null {
-  return (
-    validateIdentity(line.item) ??
-    (isValidQuantity(line.quantity)
-      ? null
-      : issue(
-          `Quantity must be an integer from 1 to ${SHARED_CART_MAX_QUANTITY_PER_LINE}.`
-        ))
-  );
+  const identityIssue = validateIdentity(line.item);
+  if (identityIssue) return identityIssue;
+  if (!isValidQuantity(line.quantity)) {
+    return issue(
+      `Quantity must be an integer from 1 to ${SHARED_CART_MAX_QUANTITY_PER_LINE}.`
+    );
+  }
+  return validateAttachments(line);
 }
 
 /**
@@ -63,7 +92,7 @@ export function validateCartCommand(
           `Quantity must be an integer from 1 to ${SHARED_CART_MAX_QUANTITY_PER_LINE}.`
         );
       }
-      return null;
+      return validateAttachments(command);
     }
     case 'set_quantity': {
       if (!command.lineId || command.lineId.trim().length === 0) {

@@ -133,3 +133,38 @@ worker connection wiring under `SET ROLE` (Task 8); the ES256 JWK
 signing path against a full local Supabase stack (HS256 legacy path
 proven; full `supabase start` was skipped because a peer stack holds
 the default ports).
+
+## Task 3 command and pricing rules
+
+- One RPC per write (`commerce_cart_create`, `commerce_cart_mutate`)
+  plus a read-only `commerce_cart_snapshot`; definer with empty search
+  path, shopper-only EXECUTE, claim and grant-liveness rechecks inside.
+  Lock order everywhere: advisory op-key lock, then cart rows FOR UPDATE
+  in `(merchant_id, id)` order.
+- Replay before version evaluation. Receipts store the full committed
+  raw state with offers; replays return it plus the live
+  `currentVersion`. Same key plus different body conflicts; a pruned
+  body (digest tombstone) conflicts with the current snapshot rather
+  than re-executing. Receipts retained 7 days with the cart.
+- No-ops (absent removal, empty clear, same quantity) succeed, preserve
+  the version, and still write receipts. Stale versions conflict with
+  the current snapshot; the service never rebases.
+- Offer resolution mirrors `/api/cart/validate`: active status,
+  merchant ownership, variant belonging; unit price is variant override
+  else product price, in minor units (`round(major * 100)`). No
+  inventory reservation; stock is reported, never blocking.
+- Removals and reductions skip availability checks and succeed during
+  catalog outages; additions and increases fail `invalid_item`.
+  Unavailable lines keep their last known price with `estimatedTotals`
+  and a stale-total warning.
+- Voucher lines pin quantity 1 and stay distinct per voucher identity;
+  quiz voucher lines price at zero (checkout verifies the token).
+  Negotiated prices apply only while below the live catalog price;
+  otherwise the line reprices to catalog with an invalidation warning.
+  A supplied negotiated price without status stores as `accepted`.
+- Option values are stored verbatim; variant/condition existence is
+  enforced, value-level option validity at checkout (existing
+  behavior). `replace` keeps stable line IDs for unchanged identities.
+- TS service/repository/pricing import no Next.js runtime modules and
+  take an injected client, so the standalone MCP worker can reuse them
+  (Task 4 proves the worker boundary separately).

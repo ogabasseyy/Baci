@@ -14,8 +14,9 @@ ChatGPT, web and mobile. No merge, deploy or live orders from this work.
 
 - [x] Task 1: baseline + shared contract (see evidence below)
 - [x] Task 2: scoped guest access + canonical schema (see evidence below)
-- [ ] Tasks 3–14 per dependency order
-  (1 → 2 → 3 → 4 → 5 → 6 → 7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
+- [x] Task 3: atomic commands + authoritative pricing (see evidence below)
+- [ ] Tasks 4–14 per dependency order
+  (4 → 5 → 6 → 7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
 
 ## Task 1 evidence
 
@@ -100,5 +101,46 @@ Decisions:
   auth calls, use a separate `baci-cart-<slug>` cookie namespace, and
   cart roles hold no grants on customers/orders (proven in SQL §13).
 
-Review handoffs: Phase A packet after Task 2 (Task 1 commits stay
-reviewable per task; coordinator reviews per phase).
+## Task 3 evidence
+
+New modules: `apps/web/src/lib/cart/{service,repository,pricing,
+mutation-errors}.ts` (injected client, no Next.js runtime imports) with
+colocated tests; `apps/web/src/schemas/cart.ts` extended with strict
+command/mutation/create Zod schemas (+5 tests); shared `CartInputLine`
+and `add` commands accept optional voucher/negotiation attachments
+(+2 shared tests); migration `20261012050200_commerce_cart_commands.sql`
+(create/mutate/snapshot RPCs, offer helpers, `last_unit_price_minor`
+column); `supabase/tests/commerce_cart_commands.sql` (20 sections) and
+`supabase/tests/commerce_cart_concurrency.sql` (3 two-session
+scenarios with a Python overlap runner under `/tmp/baci-cart-conc/`).
+
+TDD:
+- JS RED: 25 behavioral failures on canned stubs. JS GREEN: 27/27 new
+  service-side tests (82/82 incl. neighbors), 10/10 schema tests, 21/21
+  shared cart tests.
+- SQL RED: §1 creation failed under RPC shells returning canned
+  `temporarily_unavailable`.
+- SQL GREEN: 20/20 command sections on disposable PG 18.6 (create,
+  replay, key/body conflicts, stale versions, sequential no-lost-update,
+  response-loss reconcile, foreign rejection, exact variant price,
+  old-op replay with `currentVersion`, pruned-body conflict, outage
+  removal/reduction vs increase, no-ops, rollback cleanliness, locked
+  cart readable, voucher pinning/distinctness, negotiation
+  invalidation, expired grant).
+- Concurrency GREEN: replay (loser waited 5998ms, qty added once),
+  conflict (loser waited 5952ms, `version_conflict`, version stayed 2),
+  create (converged on one cart, loser replayed after 5946ms).
+- `pnpm --filter @baci/web typecheck` clean (incl. tools-workers, mcp);
+  `@baci/shared` typecheck clean; Biome clean.
+- CodeRabbit unavailable for Task 3 (org quota exhausted, 3/3 reviews
+  used, no seat assigned; retried after the wait window). All other
+  gates green; flagging for the packet reviewer instead.
+
+Decisions: see `docs/architecture/shared-cart-contract.md` §Task 3
+(replay/currentVersion, tombstone conflicts, no-op receipts, offer and
+outage rules, voucher/negotiation handling, verbatim options with
+checkout-time value enforcement, stable `replace` IDs, 7-day receipt
+retention, standalone-worker-safe TS boundary).
+
+Review handoffs: Phase A packet delivered (Tasks 1–2). Phase B packet
+after Task 4; commits stay reviewable per task.

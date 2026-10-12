@@ -32,8 +32,12 @@ export interface CartItemIdentity {
   options?: Record<string, string>;
 }
 
-/** One line of cart input: identity plus desired quantity. */
-export interface CartInputLine {
+/**
+ * One line of cart input: identity plus desired quantity.
+ * Voucher and negotiation references are optional attachments; the service
+ * validates them against the catalog and pins voucher lines to quantity 1.
+ */
+export interface CartInputLine extends CartLineAttachments {
   item: CartItemIdentity;
   quantity: number;
 }
@@ -58,8 +62,19 @@ export interface CartLine {
   assuranceRate?: number;
 }
 
+export interface CartLineAttachments {
+  voucherToken?: string;
+  voucherAwardId?: string;
+  negotiatedUnitPriceMinor?: number;
+  negotiationStatus?: CartNegotiationStatus;
+}
+
 export type CartCommand =
-  | { type: 'add'; item: CartItemIdentity; quantity: number }
+  | ({
+      type: 'add';
+      item: CartItemIdentity;
+      quantity: number;
+    } & CartLineAttachments)
   | { type: 'set_quantity'; lineId: string; quantity: number }
   | { type: 'remove'; lineId: string }
   | { type: 'clear' }

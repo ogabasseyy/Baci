@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { cartValidateSchema } from './cart';
+import {
+  cartValidateSchema,
+  createCartRequestSchema,
+  sharedCartMutationRequestSchema,
+} from './cart';
 
 const PRODUCT_ID = 'product-1';
 const VARIANT_ID = '33333333-3333-4333-8333-333333333333';
@@ -85,5 +89,100 @@ describe('cartValidateSchema', () => {
     const result = cartValidateSchema.safeParse({ productIds });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('sharedCartMutationRequestSchema', () => {
+  it('accepts a versioned add command with an operation id', () => {
+    const result = sharedCartMutationRequestSchema.safeParse({
+      command: {
+        item: { productId: '11111111-1111-4111-8111-111111111111' },
+        quantity: 2,
+        type: 'add',
+      },
+      expectedVersion: 3,
+      operationId: 'op-1',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects unknown commands and missing versions', () => {
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: { type: 'explode' },
+        expectedVersion: 1,
+        operationId: 'op-1',
+      }).success
+    ).toBe(false);
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: { type: 'clear' },
+        operationId: 'op-1',
+      }).success
+    ).toBe(false);
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: { type: 'clear' },
+        expectedVersion: 0,
+        operationId: 'op-1',
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects blank operation ids and client-supplied prices', () => {
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: { type: 'clear' },
+        expectedVersion: 1,
+        operationId: '   ',
+      }).success
+    ).toBe(false);
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          price: 100,
+          quantity: 1,
+          type: 'add',
+        },
+        expectedVersion: 1,
+        operationId: 'op-1',
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe('createCartRequestSchema', () => {
+  it('accepts creation with optional initial lines and currency', () => {
+    const result = createCartRequestSchema.safeParse({
+      currency: 'NGN',
+      lines: [
+        {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          quantity: 1,
+        },
+      ],
+      operationId: 'create-1',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects over-limit lines and non-ISO currencies', () => {
+    const lines = Array.from({ length: 21 }, (_, index) => ({
+      item: { productId: `product-${index}` },
+      quantity: 1,
+    }));
+    expect(
+      createCartRequestSchema.safeParse({ lines, operationId: 'create-1' })
+        .success
+    ).toBe(false);
+    expect(
+      createCartRequestSchema.safeParse({
+        currency: 'naira',
+        operationId: 'create-1',
+      }).success
+    ).toBe(false);
   });
 });

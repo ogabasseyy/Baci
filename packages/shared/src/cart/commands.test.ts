@@ -94,4 +94,56 @@ describe('validateCartCommand', () => {
 
     expect(issue?.code).toBe('invalid_item');
   });
+
+  it('accepts voucher and negotiation attachments on add and replace', () => {
+    const attachments = {
+      negotiatedUnitPriceMinor: 2000,
+      negotiationStatus: 'accepted' as const,
+      voucherAwardId: 'award-1',
+      voucherToken: 'token-1',
+    };
+
+    expect(
+      validateCartCommand({
+        item: { productId: '11111111-1111-4111-8111-111111111111' },
+        quantity: 1,
+        type: 'add',
+        ...attachments,
+      })
+    ).toBeNull();
+    expect(
+      validateCartCommand({
+        lines: [
+          {
+            item: { productId: '11111111-1111-4111-8111-111111111111' },
+            quantity: 1,
+            ...attachments,
+          },
+        ],
+        type: 'replace',
+      })
+    ).toBeNull();
+  });
+
+  it('rejects blank vouchers and non-positive negotiated prices', () => {
+    const blank = validateCartCommand({
+      item: { productId: '11111111-1111-4111-8111-111111111111' },
+      quantity: 1,
+      type: 'add',
+      voucherToken: '  ',
+    });
+    expect(blank?.code).toBe('invalid_item');
+
+    const badPrice = validateCartCommand({
+      lines: [
+        {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          negotiatedUnitPriceMinor: 0,
+          quantity: 1,
+        },
+      ],
+      type: 'replace',
+    });
+    expect(badPrice?.code).toBe('invalid_item');
+  });
 });

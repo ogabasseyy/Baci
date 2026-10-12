@@ -56,6 +56,7 @@ describe('airtime stale success replay', () => {
       refetchWallet?: jest.Mock;
       invalidateWallets?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
+      getIsActive?: () => boolean;
     } = {}
   ) {
     return renderHook(() =>
@@ -92,6 +93,7 @@ describe('airtime stale success replay', () => {
         customer: null,
         onSuccess: overrides.onSuccess ?? jest.fn(),
         dismissKeyboard: jest.fn(),
+        getIsActive: overrides.getIsActive,
       })
     );
   }
@@ -402,5 +404,100 @@ describe('airtime stale success replay', () => {
     resolveRefetch();
     await pending;
     expect(order).toEqual(['refetch-start', 'refetch-done', 'alert']);
+  });
+
+  it('preserves an off-screen success for replay instead of resetting', async () => {
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-OFFSCREEN-AIR',
+    });
+    const { result } = renderHandler({
+      onSuccess,
+      resetWalletIdempotencyKey,
+      getIsActive: () => false,
+    });
+    await result.current.handlePurchase();
+
+    // Back-navigated mid-flight: no UI on the gone screen, and the key
+    // is PRESERVED — a reset here would mint fresh on reopen and debit
+    // twice.
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(isStalePendingVtuSuccess(descriptor, 'WAL-OFFSCREEN-AIR')).toBe(
+      false
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-OFFSCREEN-AIR',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+
+    // Reopen replay: SAME key, original outcome presented.
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-OFFSCREEN-AIR',
+    });
+    const second = renderHandler({ onSuccess, resetWalletIdempotencyKey });
+    await second.result.current.handlePurchase();
+    const replayed = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(replayed.idempotencyKey).toBe('stale-airtime-key');
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ reference: 'WAL-OFFSCREEN-AIR' })
+    );
+  });
+
+  it('preserves success when the screen unmounts mid-flight', async () => {
+    // Default wiring (no injected probe): the hook's own mount state
+    // drives the guard.
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    let resolveCharge!: (value: unknown) => void;
+    mockChargeWalletForVtu.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCharge = resolve;
+      })
+    );
+    const { result, unmount } = renderHandler({
+      onSuccess,
+      resetWalletIdempotencyKey,
+    });
+    const purchase = result.current.handlePurchase();
+    unmount();
+    resolveCharge({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-UNMOUNT-AIR',
+    });
+    await purchase;
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-UNMOUNT-AIR',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import {
   type Dispatch,
   type SetStateAction,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -40,6 +41,14 @@ interface UseWalletReturn {
   walletTransactions: StorefrontWalletTransaction[];
   setFundingAccount: (account: StorefrontWalletFundingAccount | null) => void;
   refreshWallet: () => void;
+  /**
+   * Synchronous refresh gate (Codex R35 hyTr): true from the
+   * refreshWallet() call until the fetch settles. Read it at submit
+   * time — unlike walletLoading (flipped by the fetch effect after
+   * render), it has no commit/effect gap for a click to slip
+   * through on a stale balance.
+   */
+  isWalletRefreshPending: () => boolean;
 }
 
 export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWalletReturn {
@@ -56,6 +65,9 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     StorefrontWalletTransaction[]
   >([]);
   const [refreshToken, setRefreshToken] = useState(0);
+  // Set synchronously in refreshWallet; cleared when the fetch
+  // settles (aborted successors leave it for the winning fetch).
+  const refreshPendingRef = useRef(false);
 
   // Clear the previous identity's wallet + funding account SYNCHRONOUSLY
   // (render-phase) when the customer or storefront changes, so consumers
@@ -80,7 +92,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     const abortController = new AbortController();
 
     const fetchWalletBalance = () => {
-      if (!userId || !merchantSlug) return;
+      if (!userId || !merchantSlug) {
+        refreshPendingRef.current = false;
+        return;
+      }
 
       setWalletLoading(true);
       setWalletError(false);
@@ -121,6 +136,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
         .finally(() => {
           if (!abortController.signal.aborted) {
             setWalletLoading(false);
+            refreshPendingRef.current = false;
           }
         });
     };
@@ -145,6 +161,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
       setFundingAccount(account);
       setRequiresFundingAccountConsent(!account);
     },
-    refreshWallet: () => setRefreshToken((token) => token + 1),
+    refreshWallet: () => {
+      refreshPendingRef.current = true;
+      setRefreshToken((token) => token + 1);
+    },
+    isWalletRefreshPending: () => refreshPendingRef.current,
   };
 }

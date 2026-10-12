@@ -39,6 +39,7 @@ export const UtilityModal = ({
   const user = auth?.user ?? null;
   const {
     fundingAccount,
+    isWalletRefreshPending,
     refreshWallet,
     requiresFundingAccountConsent,
     setFundingAccount,
@@ -93,6 +94,7 @@ export const UtilityModal = ({
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug,
     onInsufficientWalletBalance: openForInsufficientBalance,
+    isWalletRefreshPending,
     refreshWallet,
     setWalletBalance,
     user,
@@ -106,10 +108,8 @@ export const UtilityModal = ({
     ? `${intent.tab}|${intent.amount}|${intent.phoneNumber}|${intent.networkProvider ?? ''}`
     : null;
 
-  // Render-time prev-prop comparison (no stale-frame effect round-trip) that
-  // seeds the form. `prevIsOpen` inits `false` so the seed also runs when the
-  // modal is rendered already-open (reload / backgrounded-tab eviction — the
-  // case the resume feature exists for).
+  // Render-time prev-prop comparison seeding the form. `prevIsOpen` inits
+  // `false` so the seed also runs when the modal renders already-open.
   const [prevIsOpen, setPrevIsOpen] = useState(false);
   const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
   // Owned intent already applied to the form; also part of the form remount key.

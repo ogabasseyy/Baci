@@ -43,6 +43,7 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     isAuthenticated: true,
     merchantId: 'merchant-1',
     merchantSlug: 'ogabassey',
+    isWalletRefreshPending: () => false,
     refreshWallet: vi.fn(),
     setWalletBalance: vi.fn(),
     user,
@@ -935,6 +936,67 @@ describe('useUtilityPurchase', () => {
     expect(seenKeys[1]).toBe(seenKeys[0]);
     expect(result.current.step).toBe('success');
     expect(result.current.transactionRef).toBe('REF-A');
+  });
+
+  it('retains the key when the modal unmounts before a terminal success resolves', async () => {
+    // Closing the modal mid-flight preserves the completed attempt
+    // like a suppressed switch: forgetting would mint fresh on
+    // reopen and debit/vend a second time.
+    type SubmitResult = {
+      kind: 'wallet-success';
+      reference: string;
+      amount: number;
+      processing: boolean;
+    };
+    const seenKeys: string[] = [];
+    let resolveSubmit!: (value: SubmitResult) => void;
+    mockSubmit.mockImplementation(
+      async (request: {
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        if (seenKeys.length === 1) {
+          return new Promise<SubmitResult>((resolve) => {
+            resolveSubmit = resolve;
+          });
+        }
+        // Same key ⇒ the route replays the original transaction.
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-A',
+          amount: 1000,
+          processing: false,
+        };
+      }
+    );
+    const { result, unmount } = renderHook(() =>
+      useUtilityPurchase(baseParams())
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    unmount();
+    await act(async () => {
+      resolveSubmit({
+        kind: 'wallet-success',
+        reference: 'REF-A',
+        amount: 1000,
+        processing: false,
+      });
+    });
+
+    // Reopen (fresh hook instance, same module registry) and repeat
+    // the apparently unanswered purchase: same key, original outcome.
+    const reopened = renderHook(() => useUtilityPurchase(baseParams()));
+    await act(async () => {
+      reopened.result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[1]).toBe(seenKeys[0]);
+    expect(reopened.result.current.step).toBe('success');
+    expect(reopened.result.current.transactionRef).toBe('REF-A');
   });
 
   it('settleBackfilledAttempt forgets the shown 202 key and refetches the wallet', async () => {

@@ -37,6 +37,7 @@ export function createBillFormPurchaseHandler({
   customer,
   customerId,
   dismissKeyboard,
+  getIsActive,
   getIsSubmitting,
   numericAmount,
   onSuccess,
@@ -159,6 +160,17 @@ export function createBillFormPurchaseHandler({
           // not mint fresh and debit twice. Terminal observations also
           // record completion (processing notes must NOT): the stale
           // guard keys off completion time.
+          notePendingVtuReference(descriptor, result.reference);
+          if (result.status !== 'processing') {
+            markPendingVtuCompleted(descriptor);
+          }
+          return;
+        }
+        if (getIsActive && !getIsActive()) {
+          // Back-navigated mid-flight: PRESERVE the entry (reference +
+          // completion) so a reopen retries with the SAME key and replays
+          // this outcome instead of minting fresh and debiting twice.
+          // Suppress onSuccess/Alert: the screen is gone.
           notePendingVtuReference(descriptor, result.reference);
           if (result.status !== 'processing') {
             markPendingVtuCompleted(descriptor);

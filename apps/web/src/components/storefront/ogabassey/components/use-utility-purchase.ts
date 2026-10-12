@@ -1,16 +1,13 @@
 'use client';
 
 import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
-import type {
-  Customer,
-  CustomerUser,
-} from '@/contexts/customer-auth-context';
+import type { Customer, CustomerUser } from '@/contexts/customer-auth-context';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
 import {
-  finalizeSwitchedAttempt,
+  finalizeSuppressedAttempt,
   shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
   type UtilityIdempotencyAttempt,
@@ -28,6 +25,7 @@ interface UseUtilityPurchaseParams {
   merchantId: string | undefined;
   merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
+  isWalletRefreshPending: () => boolean;
   refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
@@ -72,11 +70,9 @@ interface UseUtilityPurchaseReturn {
 }
 
 /**
- * Purchase orchestration extracted from `UtilityModal` (300-line budget).
- * Owns the submit lifecycle (loading/step/reference/amount/voucher,
- * idempotency); blocks underfunded submits (funding-panel callback) and
- * loading/error wallet states separately, and retains the key while
- * processing so resubmits replay instead of double-charging.
+ * Purchase orchestration: submit lifecycle + idempotency. Blocks
+ * underfunded/loading/error submits; retains the key while processing
+ * so resubmits replay instead of double-charging.
  */
 export function useUtilityPurchase({
   activeTab,
@@ -88,6 +84,7 @@ export function useUtilityPurchase({
   merchantId,
   merchantSlug,
   onInsufficientWalletBalance,
+  isWalletRefreshPending,
   refreshWallet,
   setWalletBalance,
   user,
@@ -104,13 +101,13 @@ export function useUtilityPurchase({
   >(null);
   // Replays reuse the SAME transaction: never decrement twice.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-  // Per-render identity; user-first (customer-first flips on hydration
-  // → false switch → double-debit). A stale result is discarded.
+  // Per-render identity; user-first (customer-first flips on hydration).
   const latestIdentityRef = useRef<string | null>(null);
   latestIdentityRef.current = user?.id ?? customer?.id ?? null;
   const {
     captureAttemptKey,
     forgetScopedKey,
+    isResultViewActive,
     isScopedReplay,
     isScopedStale,
     markAttemptShown,
@@ -136,6 +133,7 @@ export function useUtilityPurchase({
         walletBalance,
         walletError,
         walletLoading,
+        walletRefreshPending: isWalletRefreshPending(),
       })
     ) {
       return;
@@ -143,13 +141,10 @@ export function useUtilityPurchase({
 
     setLoading(true);
     const submittingIdentity = user?.id ?? customer?.id ?? null;
-    // Raw auth user id for route-side binding (no customer fallback).
-    const submittingUserId = user?.id ?? null;
+    const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
+    const names = [customer?.first_name, customer?.last_name].filter(Boolean);
     const customerName =
-      [customer?.first_name, customer?.last_name]
-        .filter(Boolean)
-        .join(' ')
-        .trim() || customer?.email || user?.email || 'Customer';
+      names.join(' ').trim() || customer?.email || user?.email || 'Customer';
     // Per-execution capture: concurrent submits can't redirect completion.
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
@@ -166,9 +161,16 @@ export function useUtilityPurchase({
       },
     });
 
+    if (!isResultViewActive()) {
+      // Modal closed mid-flight: preserve like a suppressed switch —
+      // forgetting here would mint fresh on reopen and debit twice.
+      finalizeSuppressedAttempt(captured.attempt, result);
+      return;
+    }
+
     if (latestIdentityRef.current !== submittingIdentity) {
       // Switched mid-flight: finalize the SUBMITTER's entry, drop the result.
-      finalizeSwitchedAttempt(captured.attempt, result);
+      finalizeSuppressedAttempt(captured.attempt, result);
       toast({
         title: 'Account changed',
         description:
@@ -190,8 +192,8 @@ export function useUtilityPurchase({
         isScopedReplay(scoped, result.reference);
       if (!result.processing) {
         if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
-          // Stale replay answers a NEW intent with the old vend: forget
-          // so the next tap mints fresh, and say so.
+          // Stale replay answers a NEW intent with the old vend: forget so
+          // the next tap mints fresh, and say so.
           forgetScopedKey(scoped);
           toast({
             title: 'Purchase Already Completed',
@@ -229,9 +231,7 @@ export function useUtilityPurchase({
       // A 202 can still fail or be refunded: never the success screen.
       setStep(result.processing ? 'processing' : 'success');
       toast({
-        title: result.processing
-          ? 'Purchase Processing'
-          : 'Purchase Successful',
+        title: result.processing ? 'Purchase Processing' : 'Purchase Successful',
         description: result.processing
           ? `Your ${activeTab} purchase is processing.`
           : `Your ${activeTab} purchase was successful!`,
@@ -251,8 +251,7 @@ export function useUtilityPurchase({
     setLoading(false);
   };
 
-  // Backfill proved the shown 202 terminal: forget its key (fresh
-  // buy-again) and refetch the wallet (debit/refund settled late).
+  // Backfill proved the shown 202 terminal: forget its key + refetch.
   const settleBackfilledAttempt = () => {
     settleShownAttempt();
     refreshWallet();

@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWallet } from './use-wallet';
 
@@ -380,6 +380,38 @@ describe('useWallet', () => {
     result.current.refreshWallet();
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+  });
+
+  it('sets the refresh gate synchronously and clears it on settle', async () => {
+    let resolveFetch!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(result.current.isWalletRefreshPending()).toBe(false);
+
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    // The gate is a synchronous ref write: true immediately, before
+    // the fetch effect flips walletLoading — no commit/effect gap
+    // for a submit click to slip through on a stale balance.
+    act(() => {
+      result.current.refreshWallet();
+    });
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+
+    resolveFetch({ ok: true, json: async () => ({ balance: 500 }) });
+    await waitFor(() => {
+      expect(result.current.isWalletRefreshPending()).toBe(false);
+    });
   });
 
   it('should refetch when merchantSlug changes', async () => {

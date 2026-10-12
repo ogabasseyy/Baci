@@ -20,6 +20,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     walletBalance: 5000,
     walletError: false,
     walletLoading: false,
+    walletRefreshPending: false,
     ...overrides,
   };
 }
@@ -32,6 +33,19 @@ describe('checkUtilityPurchaseReadiness', () => {
   it('proceeds when session and wallet are settled and funded', () => {
     expect(checkUtilityPurchaseReadiness(baseInput())).toBe(true);
     expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('blocks while a wallet refresh is pending even when loading is false', () => {
+    // Commit/effect race: refreshWallet() ran but the fetch effect
+    // has not flipped walletLoading yet — the balance is stale.
+    expect(
+      checkUtilityPurchaseReadiness(
+        baseInput({ walletLoading: false, walletRefreshPending: true })
+      )
+    ).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Checking wallet balance' })
+    );
   });
 
   it('blocks while auth is loading', () => {

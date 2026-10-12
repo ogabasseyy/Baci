@@ -50,6 +50,7 @@ describe('bill stale success replay', () => {
       onSuccess?: jest.Mock;
       resetWalletIdempotencyKey?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
+      getIsActive?: () => boolean;
     } = {}
   ) {
     const handlePurchase = createBillFormPurchaseHandler({
@@ -59,6 +60,7 @@ describe('bill stale success replay', () => {
       customer: null,
       customerId: '1234567890',
       dismissKeyboard: jest.fn(),
+      getIsActive: overrides.getIsActive,
       getIsSubmitting: () => false,
       numericAmount: 1000,
       onSuccess: overrides.onSuccess ?? jest.fn(),
@@ -262,5 +264,58 @@ describe('bill stale success replay', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('preserves an off-screen success for replay instead of resetting', async () => {
+    const onSuccess = jest.fn();
+    const resetWalletIdempotencyKey = jest.fn();
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 1000,
+      reference: 'WAL-OFFSCREEN-BILL',
+    });
+    await runPurchase({
+      onSuccess,
+      resetWalletIdempotencyKey,
+      getIsActive: () => false,
+    });
+
+    // Back-navigated mid-flight: no UI on the gone screen, and the key
+    // is PRESERVED — a reset here would mint fresh on reopen and debit
+    // twice.
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    const descriptor = buildVtuPurchaseDescriptor(submitted);
+    expect(isStalePendingVtuSuccess(descriptor, 'WAL-OFFSCREEN-BILL')).toBe(
+      false
+    );
+    expect(
+      isStalePendingVtuSuccess(
+        descriptor,
+        'WAL-OFFSCREEN-BILL',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(true);
+
+    // Reopen replay: SAME key, original outcome presented.
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 1000,
+      reference: 'WAL-OFFSCREEN-BILL',
+    });
+    await runPurchase({ onSuccess, resetWalletIdempotencyKey });
+    const replayed = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(replayed.idempotencyKey).toBe('stale-bill-key');
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ reference: 'WAL-OFFSCREEN-BILL' })
+    );
   });
 });

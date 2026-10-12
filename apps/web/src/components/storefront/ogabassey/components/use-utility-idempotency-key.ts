@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
   forgetPendingVtuPurchase,
@@ -37,6 +37,7 @@ interface UseUtilityIdempotencyKeyResult {
     payloadSignature: string
   ) => UtilityIdempotencyAttempt;
   forgetScopedKey: (scoped: string) => void;
+  isResultViewActive: () => boolean;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
   markAttemptShown: (scoped: string | null) => void;
@@ -73,20 +74,20 @@ export function shouldRotateVtuKeyForStatus(status: unknown): boolean {
 }
 
 /**
- * Finalizes a settled attempt whose owner switched mid-flight, before
- * the caller suppresses the result UI. Success (terminal AND
- * processing) is PRESERVED: the charge committed to the submitter
- * while their UI was suppressed, so their switch-back repeat must
- * replay the original outcome — forgetting would mint a fresh key
- * and debit/vend a second time. A genuinely new intent stays safe
- * via the stale-success guard ("Purchase Already Completed"). Terminal
- * observations also record completion (processing notes don't), so
- * the guard keys off completion time. Status-bearing terminal errors
- * forget the key — otherwise the retained key replays the dead
- * transaction when they retry. Ambiguous errors keep the key so the
- * retry dedupes.
+ * Finalizes a settled attempt whose result UI is suppressed — the
+ * owner switched mid-flight or the modal unmounted before the
+ * response arrived. Success (terminal AND processing) is PRESERVED:
+ * the charge committed while the UI was suppressed, so the repeat
+ * must replay the original outcome — forgetting would mint a fresh
+ * key and debit/vend a second time. A genuinely new intent stays
+ * safe via the stale-success guard ("Purchase Already Completed").
+ * Terminal observations also record completion (processing notes
+ * don't), so the guard keys off completion time. Status-bearing
+ * terminal errors forget the key — otherwise the retained key
+ * replays the dead transaction when they retry. Ambiguous errors
+ * keep the key so the retry dedupes.
  */
-export function finalizeSwitchedAttempt(
+export function finalizeSuppressedAttempt(
   attempt: UtilityIdempotencyAttempt | null,
   result: UtilityCheckoutResult
 ): void {
@@ -133,6 +134,18 @@ export function useUtilityIdempotencyKey({
   // voucher backfill settles it when a 202 later reports terminal, so
   // buy-again mints fresh instead of replaying the old vend as new.
   const shownAttemptScopedRef = useRef<string | null>(null);
+  // The owning modal unmounts on close: gate registry forgets on
+  // this — an unmounted success must retain its key so reopening
+  // replays instead of minting fresh and debiting twice (hyTj).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const isResultViewActive = () => mountedRef.current;
 
   const captureAttemptKey = (payloadSignature: string) => {
     // merchantId is guaranteed defined here: the purchase readiness
@@ -181,6 +194,7 @@ export function useUtilityIdempotencyKey({
   return {
     captureAttemptKey,
     forgetScopedKey,
+    isResultViewActive,
     isScopedReplay,
     isScopedStale,
     markAttemptShown,

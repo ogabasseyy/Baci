@@ -26,6 +26,7 @@ import {
   useBillFormBeneficiaries,
 } from './use-bill-form-beneficiaries';
 import { useBillFormSelection } from './use-bill-form-selection';
+import { useMountedRef } from './use-mounted-ref';
 import { useNextStepScroll } from './use-next-step-scroll';
 import { formatUtilityAmountInput } from './utility-amount-format';
 
@@ -53,6 +54,7 @@ export function useBillFormController({
   const [amount, setAmount] = useState(initialAmount ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const mountedRef = useMountedRef();
   const [isRepeatPaymentActive, setIsRepeatPaymentActive] = useState(false);
   const [verifiedCustomerName, setVerifiedCustomerName] = useState<
     string | null
@@ -105,8 +107,7 @@ export function useBillFormController({
     setProviderPickerExpanded,
   } = useBillFormSelection({
     billers: billersQuery.data,
-    // Returning users repeat more than they add: when beneficiaries exist the
-    // provider grid starts collapsed behind "Other providers" (see BillForm).
+    // Repeat-first: beneficiaries collapse the provider grid (see BillForm).
     hasBeneficiaries: (recentRecipients?.length ?? 0) > 0,
     initialAmount,
     initialBillerName,
@@ -205,6 +206,7 @@ export function useBillFormController({
       customer,
       customerId,
       dismissKeyboard,
+      getIsActive: () => mountedRef.current,
       getIsSubmitting: () => isSubmittingRef.current,
       numericAmount,
       onSuccess,
@@ -286,9 +288,8 @@ export function useBillFormController({
     updateAmount: setAmount,
     updateCustomerId: (value: string) => {
       setCustomerId(value);
-      // Editing the customer/meter ID invalidates any in-flight repeat-payment
-      // session — clear it so canShowPayment can't stay true with stale
-      // verified state attached to the previous identifier.
+      // Editing the ID clears any repeat-payment session so canShowPayment
+      // can't stay true with verified state for the previous identifier.
       deactivateRepeatPayment();
       resetVerification();
     },

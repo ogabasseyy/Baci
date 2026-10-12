@@ -7,7 +7,7 @@ import {
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import {
-  finalizeSwitchedAttempt,
+  finalizeSuppressedAttempt,
   shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
 } from './use-utility-idempotency-key';
@@ -232,7 +232,7 @@ describe('useUtilityIdempotencyKey', () => {
   });
 });
 
-describe('finalizeSwitchedAttempt', () => {
+describe('finalizeSuppressedAttempt', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
   });
@@ -250,7 +250,7 @@ describe('finalizeSwitchedAttempt', () => {
       attempt = result.current.captureAttemptKey('SIG');
     });
 
-    finalizeSwitchedAttempt(attempt, {
+    finalizeSuppressedAttempt(attempt, {
       kind: 'wallet-success',
       reference: 'REF-1',
       amount: 1000,
@@ -281,13 +281,13 @@ describe('finalizeSwitchedAttempt', () => {
         processing = result.current.captureAttemptKey('SIG-PROC');
       });
 
-      finalizeSwitchedAttempt(terminal, {
+      finalizeSuppressedAttempt(terminal, {
         kind: 'wallet-success',
         reference: 'REF-TERM',
         amount: 1000,
         processing: false,
       });
-      finalizeSwitchedAttempt(processing, {
+      finalizeSuppressedAttempt(processing, {
         kind: 'wallet-success',
         reference: 'REF-PROC',
         amount: 1000,
@@ -320,7 +320,7 @@ describe('finalizeSwitchedAttempt', () => {
       attempt = result.current.captureAttemptKey('SIG');
     });
 
-    finalizeSwitchedAttempt(attempt, {
+    finalizeSuppressedAttempt(attempt, {
       kind: 'wallet-success',
       reference: 'REF-PROC',
       amount: 1000,
@@ -341,11 +341,11 @@ describe('finalizeSwitchedAttempt', () => {
       attempt = result.current.captureAttemptKey('SIG');
     });
 
-    finalizeSwitchedAttempt(attempt, {
+    finalizeSuppressedAttempt(attempt, {
       kind: 'error',
       message: 'timeout',
     });
-    finalizeSwitchedAttempt(null, {
+    finalizeSuppressedAttempt(null, {
       kind: 'wallet-success',
       reference: 'REF-1',
       amount: 1000,
@@ -368,7 +368,7 @@ describe('finalizeSwitchedAttempt', () => {
       attempt = result.current.captureAttemptKey('SIG');
     });
 
-    finalizeSwitchedAttempt(attempt, {
+    finalizeSuppressedAttempt(attempt, {
       kind: 'error',
       message: 'Insufficient funds',
       status: 400,
@@ -390,7 +390,7 @@ describe('finalizeSwitchedAttempt', () => {
       attempt = result.current.captureAttemptKey('SIG');
     });
 
-    finalizeSwitchedAttempt(attempt, {
+    finalizeSuppressedAttempt(attempt, {
       kind: 'error',
       message: 'Too many requests',
       status: 429,

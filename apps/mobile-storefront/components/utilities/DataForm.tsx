@@ -29,6 +29,7 @@ import { RecentUtilityRecipients } from './RecentUtilityRecipients';
 import { UtilityPaymentOptions } from './UtilityPaymentOptions';
 import { useDataBillerInitialization } from './use-data-biller-initialization';
 import { useDataFormBeneficiaryController } from './use-data-form-beneficiary-controller';
+import { useMountedRef } from './use-mounted-ref';
 
 export function DataForm({
   initialAmount,
@@ -85,6 +86,7 @@ export function DataForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const mountedRef = useMountedRef();
   const shouldScrollToPaymentRef = useRef(isRepeatPaymentReady);
   const wasRepeatPaymentReadyRef = useRef(isRepeatPaymentReady);
   const paymentYRef = useRef<number | null>(null);
@@ -157,6 +159,7 @@ export function DataForm({
   const handlePurchase = createDataFormPurchaseHandler({
     customer,
     dismissKeyboard,
+    getIsActive: () => mountedRef.current,
     getIsSubmitting: () => isSubmittingRef.current,
     onSuccess,
     payment,

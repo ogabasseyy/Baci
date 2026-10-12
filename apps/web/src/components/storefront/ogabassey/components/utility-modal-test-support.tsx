@@ -218,6 +218,7 @@ export const utilityModalTestHarness = {
     });
     mockUseWallet.mockReturnValue({
       payWithWallet: true,
+      isWalletRefreshPending: () => false,
       refreshWallet: vi.fn(),
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),

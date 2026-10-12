@@ -20,6 +20,7 @@ import {
   getAirtimeCustomerName,
   validateAirtimePurchaseInput,
 } from './airtime-form-controller.helpers';
+import { useMountedRef } from './use-mounted-ref';
 import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
 
 interface UseAirtimePurchaseHandlerProps {
@@ -32,10 +33,16 @@ interface UseAirtimePurchaseHandlerProps {
   onSuccess: AirtimeFormProps['onSuccess'];
   dismissKeyboard: () => void;
   returnToHref?: WalletReturnHref | null;
+  /**
+   * Screen liveness probe. Defaults to this hook's own mount state
+   * (mount = form mounted); injectable for tests.
+   */
+  getIsActive?: () => boolean;
 }
 
 interface ExecuteAirtimePurchaseInput {
   customer: Customer | null;
+  getIsActive?: () => boolean;
   numericAmount: number;
   onSettled: () => void;
   onSuccess: AirtimeFormProps['onSuccess'];
@@ -50,6 +57,7 @@ interface ExecuteAirtimePurchaseInput {
  */
 async function executeAirtimePurchase({
   customer,
+  getIsActive,
   numericAmount,
   onSettled,
   onSuccess,
@@ -91,6 +99,17 @@ async function executeAirtimePurchase({
         // original outcome, not mint fresh and debit twice. Terminal
         // observations also record completion (processing notes must
         // NOT): the stale guard keys off completion time.
+        notePendingVtuReference(descriptor, result.reference);
+        if (result.status !== 'processing') {
+          markPendingVtuCompleted(descriptor);
+        }
+        return;
+      }
+      if (getIsActive && !getIsActive()) {
+        // Back-navigated mid-flight: PRESERVE the entry (reference +
+        // completion) so a reopen retries with the SAME key and replays
+        // this outcome instead of minting fresh and debiting twice.
+        // Suppress onSuccess/Alert: the screen is gone.
         notePendingVtuReference(descriptor, result.reference);
         if (result.status !== 'processing') {
           markPendingVtuCompleted(descriptor);
@@ -172,9 +191,12 @@ export function useAirtimePurchaseHandler({
   onSuccess,
   dismissKeyboard,
   returnToHref,
+  getIsActive: getIsActiveProp,
 }: UseAirtimePurchaseHandlerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const mountedRef = useMountedRef();
+  const getIsActive = getIsActiveProp ?? (() => mountedRef.current);
 
   const handlePurchase = async () => {
     dismissKeyboard();
@@ -209,6 +231,7 @@ export function useAirtimePurchaseHandler({
     setIsSubmitting(true);
     await executeAirtimePurchase({
       customer,
+      getIsActive,
       numericAmount,
       onSettled: () => {
         isSubmittingRef.current = false;

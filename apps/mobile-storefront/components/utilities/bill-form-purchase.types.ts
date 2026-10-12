@@ -19,6 +19,8 @@ export interface CreateBillFormPurchaseHandlerInput {
   customer: BillCustomer | null | undefined;
   customerId: string;
   dismissKeyboard: () => void;
+  /** Screen liveness probe; when false the success is preserved, not shown. */
+  getIsActive?: () => boolean;
   getIsSubmitting: () => boolean;
   numericAmount: number;
   onSuccess: BillFormProps['onSuccess'];

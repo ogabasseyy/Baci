@@ -13,6 +13,7 @@ interface CheckUtilityPurchaseReadinessInput {
   walletBalance: number;
   walletError: boolean;
   walletLoading: boolean;
+  walletRefreshPending: boolean;
 }
 
 /**
@@ -34,6 +35,7 @@ export function checkUtilityPurchaseReadiness({
   walletBalance,
   walletError,
   walletLoading,
+  walletRefreshPending,
 }: CheckUtilityPurchaseReadinessInput): boolean {
   if (isAuthLoading) {
     toast({
@@ -72,7 +74,10 @@ export function checkUtilityPurchaseReadiness({
   // A failed or still-loading wallet fetch also reads as balance 0 — never
   // report that as insufficient funds. Loading asks for patience; an error
   // retries the fetch so the customer is not stuck until remount.
-  if (walletLoading) {
+  // `walletRefreshPending` covers the commit/effect race: refreshWallet()
+  // sets it synchronously, before the fetch effect flips walletLoading,
+  // so a click in that interval still blocks on the stale balance.
+  if (walletLoading || walletRefreshPending) {
     toast({
       title: 'Checking wallet balance',
       description: 'Please wait while we confirm your wallet balance.',

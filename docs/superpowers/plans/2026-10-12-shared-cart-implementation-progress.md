@@ -12,8 +12,8 @@ ChatGPT, web and mobile. No merge, deploy or live orders from this work.
 
 ## Task status
 
-- [x] Task 1: baseline + shared contract (this phase; see evidence below)
-- [ ] Task 2: scoped guest access + canonical schema
+- [x] Task 1: baseline + shared contract (see evidence below)
+- [x] Task 2: scoped guest access + canonical schema (see evidence below)
 - [ ] Tasks 3–14 per dependency order
   (1 → 2 → 3 → 4 → 5 → 6 → 7 → 11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
 
@@ -43,6 +43,62 @@ Decisions:
   (MCP 20 lines / 10 per line / 7-day TTL); the web 50-line validate
   slice stays a legacy transport bound.
 - Amounts in minor units; adapters convert from existing float prices.
+
+## Task 2 evidence
+
+New modules: `apps/web/src/lib/cart/{cart-runtime-env,session-proof,
+principal,scoped-client}.ts` with colocated tests; migrations
+`20261012050000_commerce_cart_core.sql` (8 tables, RLS enabled, indexed
+FKs) and `20261012050100_commerce_cart_roles.sql` (3 dedicated roles,
+narrow grants, claim-checked RLS policies, `cleanup_commerce_carts()`);
+`supabase/tests/commerce_cart_access.sql` (14 isolation sections);
+`shared_cart`/`shared_cart_realtime` enrollment flags via
+`merchantHasFeature` (disabled for all plans; explicit grant only) plus
+required `FEATURE_MESSAGES` entries.
+
+TDD:
+- JS RED: 23 behavioral failures on naive stubs (accept-all verifier,
+  unnamespaced cookie, broad-role minter).
+- JS GREEN: 25/25 pass (`session-proof`, `principal`, `scoped-client`
+  suites, incl. a wrong-secret forgery test added from review feedback);
+  `merchant-has-feature` + 2 consumer suites pass.
+- SQL RED: first assertion failed under the policy-less roles stub
+  (`permission denied`, legit shopper denied).
+- SQL GREEN: all 14 sections pass on disposable PostgreSQL 18.6 with
+  real roles (`psql -X -v ON_ERROR_STOP=1 ... -f
+  supabase/tests/commerce_cart_access.sql` → ROLLBACK, no residue).
+- REST GREEN: 9/9 assertions over real HTTP against PostgREST v13.0.5
+  with real HS256 JWTs (own-cart read, wrong-merchant empty, receiver/
+  anon/broad-authenticated denied, expired JWT 401, bootstrap insert
+  accepted with owner-verified row, cross-merchant insert denied).
+  Harness kept under `/tmp/baci-cart-rest-proof/` (throwaway probe, not
+  committed); durable collateral is the SQL test above.
+- `pnpm --filter @baci/web typecheck` clean (incl. tools-workers, mcp);
+  `@baci/shared` typecheck + 19 cart tests still green after the
+  `VerifiedCartSession.grantId: string | null` bootstrap correction;
+  Biome clean on all touched files.
+- CodeRabbit (uncommitted): 2 minor findings, both fixed and re-proven —
+  composite FK now `ON DELETE SET NULL (cart_id)` (SQL §15 pins the
+  receipt survives with merchant intact); cleanup fn follows the MCP
+  precedent (no vacuous definer caller check, explicit
+  `REVOKE ... FROM PUBLIC, anon, authenticated`, owner postgres).
+  SQL suite extended to 15 sections, still green.
+
+Decisions:
+- Proofs are HMAC-SHA256 `cp1` with env/aud binding, absolute TTLs
+  (24h session capped at grant expiry, 15m bootstrap), rotation via
+  previous secrets; DB grant liveness is rechecked per statement by RLS.
+- Session grants allow add/set_quantity/remove/clear; `replace` stays
+  reserved for platform adapters with preconditions (Tasks 3/12).
+- No direct shopper writes except bootstrap cart/receipt creation; no
+  grant minting outside the Task 3 creation RPC; receiver has zero table
+  access until Task 8's topic policy.
+- Proof replay within TTL is inherent to bearer proofs; mitigated by
+  short TTLs, per-statement RLS rechecks and (Tasks 5–6) Secure/HttpOnly
+  host-only cookies. JWT `exp` is enforced by PostgREST (proven 401).
+- Existing customer/merchant sessions untouched: new modules make no
+  auth calls, use a separate `baci-cart-<slug>` cookie namespace, and
+  cart roles hold no grants on customers/orders (proven in SQL §13).
 
 Review handoffs: Phase A packet after Task 2 (Task 1 commits stay
 reviewable per task; coordinator reviews per phase).

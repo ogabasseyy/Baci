@@ -98,7 +98,38 @@ Adopted from existing code, not invented:
 
 ## Task 2 signing/role decision
 
-Pending. The local Supabase role/token spike (Task 2) records its
-pass/fail here before any path activates. Failure of the cart
-authorization proof blocks the cart pilot; a realtime-only limitation
-permits a fetch-only pilot.
+PASS for the cart authorization path; realtime topic policy stays pending
+for Task 8. Proven 12 October 2026 on PostgreSQL 18.6 (disposable) plus
+PostgREST v13.0.5 over real HTTP with real HS256 JWTs:
+
+- Dedicated roles `commerce_cart_shopper` / `commerce_cart_receiver` /
+  `commerce_cart_worker` (NOLOGIN, NOINHERIT, NOSUPERUSER, NOBYPASSRLS).
+  Shopper reads only its merchant/cart/grant while the grant row is live;
+  wrong merchant/cart/grant, forged subject, expired/revoked grant,
+  missing claims, anon, `authenticated` and receiver are all denied at
+  the table or RLS layer. See `supabase/tests/commerce_cart_access.sql`
+  (14 sections) and the `/tmp/baci-cart-rest-proof/rest-proof.mjs`
+  transcript (9 REST assertions).
+- Session proofs are versioned HMAC-SHA256 (`cp1`), bound to merchant,
+  cart, grant, principal, environment and audience, with absolute TTLs
+  (session 24h capped at grant expiry, bootstrap 15m) and previous-secret
+  rotation. Grants keep the 7-day sliding lifecycle; proofs never renew
+  past grant expiry. Cookie namespace is `baci-cart-<merchant-slug>` so
+  same-host merchant tabs stay separate.
+- Scoped PostgREST tokens reuse the existing `signScopedSupabaseJwt`
+  infrastructure with role `commerce_cart_shopper` / `commerce_cart_receiver`
+  and a 5-minute TTL; the broad `authenticated` role is never minted.
+- Enrollment flags `shared_cart` / `shared_cart_realtime` extend the
+  existing `merchantHasFeature` mechanism with empty plan tiers: disabled
+  by default, explicit `premium_features` grant only.
+- Bounded cleanup `cleanup_commerce_carts()` (definer, fixed search path,
+  worker-only execute) deletes only past-horizon receipts/events and
+  flips only checkout-free expired carts.
+
+Still gated, not proven here: `CART_SESSION_SECRET` production
+provisioning (requires explicit environment approval; issuance fails
+closed until then); the `realtime.messages` receive policy (Task 8);
+worker connection wiring under `SET ROLE` (Task 8); the ES256 JWK
+signing path against a full local Supabase stack (HS256 legacy path
+proven; full `supabase start` was skipped because a peer stack holds
+the default ports).

@@ -127,8 +127,10 @@ export type CartResult =
 /** Verified session authority. Built server-side, never from body fields. */
 export interface VerifiedCartSession {
   merchantId: string;
+  /** Null for pre-cart bootstrap proofs, which carry no cart authority. */
   cartId: string | null;
-  grantId: string;
+  /** Null for pre-cart bootstrap proofs, which carry no grant authority. */
+  grantId: string | null;
   principalId: string;
   allowedOperations: CartCommand['type'][];
   expiresAt: string;

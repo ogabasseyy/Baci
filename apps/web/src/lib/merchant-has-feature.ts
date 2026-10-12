@@ -1,7 +1,9 @@
 export type MerchantFeatureGate =
   | 'custom_domain'
   | 'growth_integrations'
-  | 'marketplace_sync';
+  | 'marketplace_sync'
+  | 'shared_cart'
+  | 'shared_cart_realtime';
 
 export type MerchantFeatureSource = {
   plan_expires_at?: string | null;
@@ -28,6 +30,10 @@ export function merchantHasFeature(
     custom_domain: new Set(['starter', 'pro', 'business', 'enterprise']),
     growth_integrations: new Set(['pro', 'business', 'enterprise']),
     marketplace_sync: new Set(['pro', 'business', 'enterprise']),
+    // Shared-cart enrollment stays disabled for every plan until the pilot
+    // gates pass; only an explicit premium_features grant enables it.
+    shared_cart: new Set([]),
+    shared_cart_realtime: new Set([]),
   };
   if (!merchant?.plan_tier || !allowedTiers[feature].has(merchant.plan_tier)) {
     return false;

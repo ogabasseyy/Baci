@@ -131,8 +131,12 @@ def update_files(root, pins, retrieved=None):
                                "auditor ARM checksum")
     # Stage both files beside their targets first, then rename, so a
     # failure before the renames leaves the pair untouched instead of
-    # desyncing the installer and auditor pins.
+    # desyncing the installer and auditor pins. If a rename fails after
+    # an earlier one landed, restore the landed targets from their
+    # original text so the pair never stays desynced.
+    originals = {install: install.read_text(), anchors: anchors.read_text()}
     staged = []
+    replaced = []
     try:
         for target, text in ((install, install_text), (anchors, anchor_text)):
             tmp = target.with_name(target.name + ".tmp")
@@ -140,6 +144,13 @@ def update_files(root, pins, retrieved=None):
             staged.append((tmp, target))
         for tmp, target in staged:
             os.replace(tmp, target)
+            replaced.append(target)
+    except OSError:
+        for target in replaced:
+            rollback = target.with_name(target.name + ".rollback")
+            rollback.write_text(originals[target])
+            os.replace(rollback, target)
+        raise
     finally:
         for tmp, _ in staged:
             tmp.unlink(missing_ok=True)

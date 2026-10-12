@@ -247,6 +247,28 @@ class MusePinUpdateTests(unittest.TestCase):
             self.assertEqual((installer.read_text(), anchors.read_text()), before)
             self.assertEqual(list(root.rglob("*.tmp")), [])
 
+    def test_failed_second_rename_rolls_back_the_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer, anchors = self._pin_tree(root, "1.4.6-R6000.1", "a" * 64, "b" * 64)
+            before = (installer.read_text(), anchors.read_text())
+            real_replace = os.replace
+            calls = {"count": 0}
+
+            def flaky_replace(src, dst):
+                calls["count"] += 1
+                if calls["count"] == 2:
+                    raise OSError("simulated rename failure")
+                return real_replace(src, dst)
+
+            pins = {"version": "1.5.0-R6100.2", "x86": "c" * 64, "aarch64": "d" * 64}
+            with mock.patch.object(os, "replace", flaky_replace):
+                with self.assertRaises(OSError):
+                    updater.update_files(root, pins, retrieved="2026-01-02")
+            self.assertEqual((installer.read_text(), anchors.read_text()), before)
+            self.assertEqual(list(root.rglob("*.tmp")), [])
+            self.assertEqual(list(root.rglob("*.rollback")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

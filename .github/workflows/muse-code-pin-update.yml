@@ -197,13 +197,14 @@ jobs:
             # When the PR was created with GITHUB_TOKEN, GitHub suppresses
             # the pull_request workflows that produce the required checks.
             # Dispatch them explicitly against the new branch so the checks
-            # exist on the PR head commit. A PR created with the dedicated
-            # token triggers those workflows itself, so dispatching there
-            # would only duplicate them.
+            # exist on the PR head commit. CI is dispatched in both cases:
+            # even when a dedicated token lets the normal pull_request run
+            # start, the pin files match no web path, so its quality gates
+            # would skip without force_quality_gates.
+            gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
             if [ "$HAS_PIN_TOKEN" = "true" ]; then
-              echo "Pin update PR created with the dedicated token; pull_request checks trigger normally."
+              echo "Pin update PR created with the dedicated token; security and selftest checks trigger normally."
             else
-              gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
               gh workflow run security.yml --ref "$branch" -f trusted_changed=true
               gh workflow run muse-review-selftest.yml --ref "$branch"
             fi

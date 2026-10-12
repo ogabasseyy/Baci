@@ -463,6 +463,7 @@ describe('DataForm', () => {
       );
       expect(onSuccessMock).toHaveBeenCalledWith({
         amount: 1000,
+        customerIdentifier: '08031234567',
         cashback: { amount: 5, newBalance: 25 },
         reference: 'VTU-WALLET-123',
         status: 'successful',
@@ -509,6 +510,7 @@ describe('DataForm', () => {
     await waitFor(() => {
       expect(onSuccessMock).toHaveBeenCalledWith({
         amount: 1000,
+        customerIdentifier: '08031234567',
         cashback: undefined,
         reference: 'VTU-DATA-PENDING-123',
         status: 'processing',

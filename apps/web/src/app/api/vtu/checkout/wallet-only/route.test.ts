@@ -73,6 +73,8 @@ interface IdempotencyRowState {
     request_fingerprint: string;
   } | null;
   insertCalls: number;
+  txnMetadata?: Record<string, unknown> | null;
+  txnUpdates?: Record<string, unknown>[];
 }
 
 function buildSupabase(
@@ -131,6 +133,24 @@ function buildSupabase(
                 maybeSingle: byUserIdMaybeSingle,
               })),
             })),
+          })),
+        };
+      }
+      if (table === 'vtu_transactions') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({
+                data: { metadata: state.txnMetadata ?? null },
+                error: null,
+              }),
+            })),
+          })),
+          update: vi.fn((patch: { metadata: Record<string, unknown> }) => ({
+            eq: vi.fn(() => {
+              state.txnUpdates?.push(patch.metadata);
+              return Promise.resolve({ data: null, error: null });
+            }),
           })),
         };
       }
@@ -448,6 +468,81 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       transactionId: 'vtu-tx-existing',
     });
     expect(state.insertCalls).toBe(0);
+  });
+
+  it('idempotent replay: overlays the current-attempt phone before re-driving', async () => {
+    // Attempt 1 stored no phone (profile not yet hydrated); the retry
+    // carries it. The phone is outside the fingerprint, so the replay
+    // proceeds — and the overlay must persist the fresh phone before
+    // fulfillment re-drives the Monnify/Kuda bill call.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      txnMetadata: {
+        customerPhone: null,
+        originalPhoneNumber: '08099999999',
+      },
+      txnUpdates: [],
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status } = await callRoute(
+      makeRequest({
+        idempotencyKey: VALID_KEY,
+        body: { ...VALID_BODY, customerPhone: '08012345678' },
+      })
+    );
+
+    expect(status).toBe(200);
+    expect(state.txnUpdates).toEqual([
+      {
+        customerPhone: '08012345678',
+        originalPhoneNumber: '08099999999',
+      },
+    ]);
+    expect(mockFulfill).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      transactionId: 'vtu-tx-existing',
+    });
+  });
+
+  it('idempotent replay: invalid phone returns the same 400 as attempt 1', async () => {
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      txnMetadata: { customerPhone: '08011111111' },
+      txnUpdates: [],
+    };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status, body } = await callRoute(
+      makeRequest({
+        idempotencyKey: VALID_KEY,
+        body: { ...VALID_BODY, customerPhone: '12345' },
+      })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({ error: 'Invalid customer phone number' });
+    expect(state.txnUpdates).toHaveLength(0);
+    expect(mockFulfill).not.toHaveBeenCalled();
   });
 
   it('changed-payload collision: same key with a different request fingerprint returns 409 instead of replaying', async () => {

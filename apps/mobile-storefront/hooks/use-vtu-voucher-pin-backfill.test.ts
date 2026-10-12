@@ -302,6 +302,44 @@ describe('useVtuVoucherPinBackfill', () => {
     expect(recallPendingVtuKey('hook-telco')).toBeNull();
   });
 
+  it('retains the entry when the success view unmounts before resolution', async () => {
+    rememberPendingVtuPurchase('hook-unmount', 'key-hook-unmount');
+    notePendingVtuReference('hook-unmount', 'REF-001');
+    let resolveFetch!: (response: Response) => void;
+    mockFetchWithTimeout.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const { unmount } = renderHook(
+      () => useVtuVoucherPinBackfill({ ...BASE_INPUT, utilityType: 'airtime' }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    // Leave the success screen while the fetch is in flight: the
+    // promise still resolves, but the result was never shown.
+    unmount();
+    resolveFetch(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+          },
+        ],
+      })
+    );
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    // No further polls after unmount, and the terminal observation
+    // must NOT forget — a later identical purchase recalls the key
+    // and replays instead of minting fresh and debiting twice.
+    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('hook-unmount')).toBe('key-hook-unmount');
+  });
+
   it('forgets the retained entry when history reports failure', async () => {
     rememberPendingVtuPurchase('hook-fail', 'key-hook-fail');
     notePendingVtuReference('hook-fail', 'REF-001');

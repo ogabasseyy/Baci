@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ValidUtilityType } from '@/components/utilities/utility-purchase.types';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
@@ -96,11 +96,14 @@ interface UseVtuVoucherPinBackfillInput {
 async function fetchVoucherPin({
   apiType,
   capturedUserId,
+  isViewActive,
   reference,
 }: {
   apiType: BackfillApiType | null;
   /** userId baked into the query key when this fetch started. */
   capturedUserId: string | null;
+  /** False once the success view unmounts — see the forget guard. */
+  isViewActive: () => boolean;
   reference: string | null | undefined;
 }): Promise<BackfillObservation | null> {
   const { data: sessionData, error: sessionError } =
@@ -174,22 +177,21 @@ async function fetchVoucherPin({
   const status = typeof match?.status === 'string' ? match.status : null;
   const refundPending =
     typeof match?.refund_pending === 'boolean' ? match.refund_pending : null;
-  // Terminality learned from history forgets the retained registry
-  // entry: the success is shown, so an identical repeat is a new
-  // intent that must mint fresh — keeping the key would present the
-  // previous vend as the new purchase without delivering anything.
-  // Failure forgets only once the refund is confirmed, or the wallet
-  // would refresh against the still-debited balance with no later
-  // refresh when the refund lands. Bound to the polling account: an
-  // account switch mid-flight must not let the old account's terminal
-  // response mutate the global registry for a result never shown.
+  // Terminality forgets the retained entry: the success is SHOWN, so
+  // a repeat must mint fresh (keeping the key would present the old
+  // vend as new). Failure forgets only on confirmed refund. Two
+  // guards: polling account (a switch mid-flight must not mutate the
+  // registry for a result never shown) and still-mounted (an
+  // in-flight fetch resolves after unmount — web's backfill checks
+  // cancelled/aborted before its forget; same rule here).
   const failedTerminal = status === 'failed' && refundPending === false;
   const currentUserId = useAuthStore.getState().user?.id ?? null;
   if (
     reference &&
     (status === 'successful' || failedTerminal) &&
     capturedUserId !== null &&
-    capturedUserId === currentUserId
+    capturedUserId === currentUserId &&
+    isViewActive()
   ) {
     forgetPendingVtuByReference(reference);
   }
@@ -212,6 +214,15 @@ export function useVtuVoucherPinBackfill({
   // Without the reset, the old query's spent count would starve the new
   // one (e.g. switch away and back leaves one fetch before the cap).
   const lastIdentityRef = useRef<string | null>(null);
+  // The success screen owns this hook, so mounted means shown: an
+  // unmount before resolution must skip the forget (Codex R31 fQGT).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const { data } = useQuery<BackfillObservation | null>({
     queryKey: ['vtu', 'voucher-pin-backfill', userId, apiType, reference],
@@ -265,7 +276,12 @@ export function useVtuVoucherPinBackfill({
       fetchCountRef.current += 1;
       const rawUserId = context.queryKey[2];
       const capturedUserId = typeof rawUserId === 'string' ? rawUserId : null;
-      return fetchVoucherPin({ apiType, capturedUserId, reference });
+      return fetchVoucherPin({
+        apiType,
+        capturedUserId,
+        reference,
+        isViewActive: () => mountedRef.current,
+      });
     },
   });
 

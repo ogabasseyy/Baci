@@ -10,6 +10,7 @@ import {
   preparePendingVtuTransaction,
   resolveVtuCustomer,
 } from '@/lib/vtu-pending-transaction';
+import { overlayReplayCustomerPhone } from '@/lib/vtu-replay-phone-overlay';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
@@ -132,17 +133,12 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const existing = await findExistingIdempotencyRow(supabase, idempotencyKey);
 
-    // Replay path: reuse the existing vtu_transaction_id. Three guards
-    // before we trust the mapping:
-    //   1. Ownership (cross-customer/storefront collision → 400). A
-    //      stolen key must not replay against another customer's row
-    //      or another storefront's row (the fingerprint omits
-    //      merchant binding, so the merchant id is asserted here).
-    //   2. Payload fingerprint (changed-intent collision → 409). The
-    //      mobile client correctly keeps the key on TimeoutError /
-    //      NetworkError / 5xx, but the user could edit the form
-    //      between attempts. Replaying the original vend on a
-    //      changed payload would charge the wrong recipient/amount.
+    // Replay path: reuse the existing vtu_transaction_id after two
+    // guards: ownership (a stolen key must not replay against another
+    // customer/storefront — the fingerprint omits merchant binding, so
+    // the merchant id is asserted here) and payload fingerprint
+    // (changed intent → 409; replaying the original vend would charge
+    // the wrong recipient/amount).
     if (existing) {
       const requestingOwnership = await resolveRequestingOwnership(
         supabase,
@@ -173,6 +169,13 @@ export async function POST(request: NextRequest) {
           409
         );
       }
+      // Current-attempt contact overlay: the retry carries the
+      // freshest profile phone; attempt-1's snapshot must not win.
+      await overlayReplayCustomerPhone({
+        supabase,
+        transactionId: existing.vtu_transaction_id,
+        customerPhone: input.customerPhone,
+      });
       const replayedFulfillment = await fulfillPendingVtuTransaction({
         supabase,
         transactionId: existing.vtu_transaction_id,
@@ -209,18 +212,12 @@ export async function POST(request: NextRequest) {
         request_fingerprint: requestFingerprint,
       });
     if (insertError) {
-      // Likely a parallel submit won the race on the PRIMARY KEY. Two
-      // cleanup steps:
-      //   1. Delete the orphan vtu_transactions row we just created. It
-      //      points at a customer + amount but is unreferenced from the
-      //      idempotency table (the parallel call's row points at the
-      //      OTHER vtu_transaction_id). Without this delete, a later
-      //      reconciliation script that scans status='pending' could
-      //      re-fulfill the orphan and produce a SECOND wallet debit
-      //      under a fresh source_id (which the redeem RPC's per-id
-      //      idempotency would NOT block).
-      //   2. Re-fetch the winning idempotency row and proceed through
-      //      the replay path.
+      // Likely a parallel submit won the PRIMARY KEY race. Two steps:
+      //   1. Delete our orphan vtu_transactions row: unreferenced from
+      //      the idempotency table, and a pending-scan reconciler could
+      //      otherwise re-fulfill it into a SECOND debit (the redeem
+      //      RPC's per-id idempotency would NOT block a fresh source).
+      //   2. Re-fetch the winner's row and replay it.
       const { error: deleteError } = await supabase
         .from('vtu_transactions')
         .delete()
@@ -238,10 +235,8 @@ export async function POST(request: NextRequest) {
         idempotencyKey
       );
       if (racedExisting) {
-        // Same guards as the regular replay path: customer + merchant
-        // ownership (no privilege-escalation via PK race, no
-        // cross-storefront replay) AND fingerprint (no changed-intent
-        // silently fulfilling the winner's payload).
+        // Same ownership + fingerprint guards as the replay path (no
+        // privilege-escalation via PK race, no changed-intent replay).
         if (
           !prepared.customer?.id ||
           racedExisting.customer_id !== prepared.customer.id
@@ -263,6 +258,12 @@ export async function POST(request: NextRequest) {
             409
           );
         }
+        // Same current-attempt contact overlay as the replay path.
+        await overlayReplayCustomerPhone({
+          supabase,
+          transactionId: racedExisting.vtu_transaction_id,
+          customerPhone: input.customerPhone,
+        });
         const replayedFulfillment = await fulfillPendingVtuTransaction({
           supabase,
           transactionId: racedExisting.vtu_transaction_id,
@@ -283,10 +284,8 @@ export async function POST(request: NextRequest) {
     });
     return mapFulfillmentToResponse(fulfillment);
   } catch (error) {
-    // Don't echo raw error messages to the client — `findExistingIdempotencyRow`
-    // and other helpers wrap PostgREST errors that can leak Supabase URL /
-    // schema fragments. Whitelist the user-facing errors thrown by
-    // `preparePendingVtuTransaction`; everything else is a generic 500.
+    // Don't echo raw errors (PostgREST fragments can leak Supabase URL /
+    // schema). Whitelisted prepare/overlay errors → 400; else → 500.
     const message = error instanceof Error ? error.message : '';
     if (isUserFacingCheckoutError(message)) {
       return createErrorResponse(message, 400);

@@ -14,7 +14,9 @@
  * `validationReference` (re-verification issues a new one) and
  * receipt-only `customerAddress`/`customerName`/`customerPhone`/
  * `merchantSlug` (hydration drift between attempts must not split
- * retries). `expectedUserId` is a binding, never identity.
+ * retries — and the provider contact phone reaches retries via the
+ * server-side current-attempt overlay, not the key). `expectedUserId`
+ * is a binding, never identity.
  */
 export const VTU_RETRY_IDENTITY_FIELDS = [
   'amount',

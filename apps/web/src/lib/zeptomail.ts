@@ -3,14 +3,16 @@ import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   isRetryableError,
-  parseError,
   RETRY_CONFIG,
   runZeptoMailTransport,
   sleep,
 } from '@/lib/zeptomail-retry';
+import { parseError } from '@/lib/zeptomail-send-error';
 import { zeptoMailRequest } from '@/lib/zeptomail-transport';
 
 const DEFAULT_FROM_DOMAIN = getZeptoMailFromDomain();
+
+export { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 /**
  * Resolve the ZeptoMail API token. Lives here (not in the retry unit) so
@@ -344,9 +346,6 @@ function createAuditAttempt(params: {
 }
 
 /**
- * Sleep helper for retry delays
- */
-/**
  * Send transactional email via ZeptoMail with HTML content.
  *
  * Dispatch boundary: every outcome reached after the first transport
@@ -454,6 +453,9 @@ export async function sendEmail({
   ]);
   const outcome = await runZeptoMailTransport({
     sender,
+    signal,
+    fallbackDeadlineMs,
+    maxAttemptsPerSender,
     content: {
       recipientEmail,
       recipientName: toName,

@@ -130,3 +130,66 @@ SELECT pg_temp.assert_true(
    WHERE value ->> 'name' = 'Free shipping'),
   'status projection dropped minimum_order_amount'
 );
+
+-- 15b. Duplicate tier names collapse to the lowest threshold (mirroring
+-- the route's dedupeLadderByName): last-match-wins would oscillate
+-- Silver -> Gold -> Silver as points grow past the second Silver rung.
+UPDATE public.loyalty_settings
+SET tiers = '[{"name": "Silver", "minPoints": 1000}, {"name": "Silver", "minPoints": 5000}, {"name": "Gold", "minPoints": 3000}, {"name": "Platinum", "minPoints": 10000}]'::jsonb
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    6000, '01aa0000-0000-4000-8000-000000000001'
+  ) = 'Gold',
+  'duplicate tier names did not collapse to the lowest threshold'
+);
+
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 15c. History carries the issued code as a recovery receipt: a capped
+-- reward leaves the catalog once its redemption response is lost, so
+-- the redemption transaction surfaces the code for later recovery.
+INSERT INTO public.reward_redemptions (
+  id, customer_id, merchant_id, points_spent, reward_type,
+  reward_value, discount_code
+) VALUES (
+  '01aa0000-0000-4000-8000-00000000015c',
+  '01aa0000-0000-4000-8000-000000000011',
+  '01aa0000-0000-4000-8000-000000000001',
+  100, 'discount', 500, 'RDM-STATUS15C'
+);
+
+INSERT INTO public.points_transactions (
+  customer_id, merchant_id, type, points, balance_after,
+  source, source_id, description
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000011',
+  '01aa0000-0000-4000-8000-000000000001',
+  'redemption', -100, 200, 'redemption',
+  '01aa0000-0000-4000-8000-00000000015c', 'Redeemed: Big perk'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT value ->> 'redemption_code' = 'RDM-STATUS15C'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'transactions') AS value
+   WHERE value ->> 'type' = 'redemption'
+     AND value ->> 'description' = 'Redeemed: Big perk'),
+  'history dropped the issued redemption code'
+);
+
+-- Fixture cleanup: the FIFO projection cases walk member 011's ledger,
+-- so the receipt rows above must not leak into later files.
+DELETE FROM public.points_transactions
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000011'
+  AND source = 'redemption'
+  AND source_id = '01aa0000-0000-4000-8000-00000000015c';
+DELETE FROM public.reward_redemptions
+WHERE id = '01aa0000-0000-4000-8000-00000000015c';

@@ -81,105 +81,121 @@ export async function POST(request: NextRequest) {
           p_code: code,
         }
       );
-      if (!loyaltyError) {
-        const parsedLoyaltyArray = loyaltyCheckoutCodeRowSchema
-          .array()
-          .safeParse(loyaltyData);
-        const parsedLoyaltySingle = parsedLoyaltyArray.success
-          ? null
-          : loyaltyCheckoutCodeRowSchema.safeParse(loyaltyData);
-        const loyaltyCode = parsedLoyaltyArray.success
-          ? (parsedLoyaltyArray.data[0] ?? null)
-          : (parsedLoyaltySingle?.data ?? null);
-        const loyaltyValue = Number(loyaltyCode?.reward_value);
-        // Bridgeable shape only: discount types (plain 'discount' is
-        // fixed by convention, mirroring the order wrapper) + positive
-        // value. Other reward types fall through to the generic invalid
-        // response — they are honored through manual/fulfillment
-        // channels.
+      // A failed lookup is a retryable server failure, not an invalid
+      // code (mirrors the order-path resolver): valid-code holders must
+      // not be told their issued code is invalid during an outage.
+      if (loyaltyError) {
+        logger.error({
+          message: 'Loyalty code lookup failed',
+          error: loyaltyError,
+          merchantId: merchant_id,
+        });
+        return NextResponse.json(
+          { valid: false, error: 'Internal server error' },
+          { status: 500 }
+        );
+      }
+      const parsedLoyaltyArray = loyaltyCheckoutCodeRowSchema
+        .array()
+        .safeParse(loyaltyData);
+      const parsedLoyaltySingle = parsedLoyaltyArray.success
+        ? null
+        : loyaltyCheckoutCodeRowSchema.safeParse(loyaltyData);
+      const loyaltyCode = parsedLoyaltyArray.success
+        ? (parsedLoyaltyArray.data[0] ?? null)
+        : (parsedLoyaltySingle?.data ?? null);
+      const loyaltyValue = Number(loyaltyCode?.reward_value);
+      // Bridgeable shape only: discount types (plain 'discount' is
+      // fixed by convention, mirroring the order wrapper) + positive
+      // value. Other reward types fall through to the generic invalid
+      // response — they are honored through manual/fulfillment
+      // channels.
+      if (
+        loyaltyCode != null &&
+        (loyaltyCode.reward_type === 'discount' ||
+          loyaltyCode.reward_type === 'discount_fixed' ||
+          loyaltyCode.reward_type === 'discount_percentage') &&
+        Number.isFinite(loyaltyValue) &&
+        loyaltyValue > 0
+      ) {
+        // Dead codes collapse to the same generic invalid an unknown
+        // code gets: distinct used/expired/disabled messages would let
+        // anyone probe live codes without spending. The order wrapper
+        // re-enforces state and keeps the authoritative distinction.
         if (
-          loyaltyCode != null &&
-          (loyaltyCode.reward_type === 'discount' ||
-            loyaltyCode.reward_type === 'discount_fixed' ||
-            loyaltyCode.reward_type === 'discount_percentage') &&
-          Number.isFinite(loyaltyValue) &&
-          loyaltyValue > 0
+          loyaltyCode.reward_enabled !== true ||
+          loyaltyCode.used ||
+          (loyaltyCode.expires_at &&
+            new Date(loyaltyCode.expires_at) < new Date())
         ) {
-          // Dead codes collapse to the same generic invalid an unknown
-          // code gets: distinct used/expired/disabled messages would let
-          // anyone probe live codes without spending. The order wrapper
-          // re-enforces state and keeps the authoritative distinction.
-          if (
-            loyaltyCode.reward_enabled !== true ||
-            loyaltyCode.used ||
-            (loyaltyCode.expires_at &&
-              new Date(loyaltyCode.expires_at) < new Date())
-          ) {
-            return NextResponse.json(
-              { valid: false, error: 'Invalid discount code' },
-              { status: 200 }
-            );
-          }
-          // Accepted oracle (low): unlike the collapsed dead-code states
-          // above, the minimum message stays distinct. It discloses that a
-          // probed code is live, but the minimum itself is public catalog
-          // info, the message is actionable ("add more to unlock"), the
-          // 12-hex space plus proxy rate limiting bounds enumeration, and
-          // the order wrapper re-enforces state authoritatively.
-          if (
-            loyaltyCode.minimum_order_amount != null &&
-            cart_total < Number(loyaltyCode.minimum_order_amount)
-          ) {
-            // Merchant currency for the threshold label (country and
-            // payout_currency are anon-granted published columns; an
-            // unreadable row falls back to the NGN default).
-            const { data: merchantRow } = await supabase
-              .from('merchants')
-              .select('country, payout_currency')
-              .eq('id', merchant_id)
-              .maybeSingle();
-            const minimumLabel = formatMerchantCurrency(
-              Number(loyaltyCode.minimum_order_amount),
-              {
-                country: merchantRow?.country ?? null,
-                payout_currency: merchantRow?.payout_currency ?? null,
-              },
-              { maximumFractionDigits: 0 }
-            );
-            return NextResponse.json(
-              {
-                valid: false,
-                error: `Minimum purchase of ${minimumLabel} required`,
-              },
-              { status: 200 }
-            );
-          }
-          const loyaltyDiscountType =
-            loyaltyCode.reward_type === 'discount_percentage'
-              ? 'percentage'
-              : 'fixed';
-          const loyaltyDiscountAmount = computeDiscountAmountForSubtotal(
-            {
-              discount_type: loyaltyDiscountType,
-              discount_value: loyaltyValue,
-              maximum_discount_amount: null,
-            },
-            cart_total
+          return NextResponse.json(
+            { valid: false, error: 'Invalid discount code' },
+            { status: 200 }
           );
-          // No redemption UUID: the order route re-resolves the code
-          // server-side, so the internal row id stays out of anon reach.
-          return NextResponse.json({
-            valid: true,
-            code,
+        }
+        // Accepted oracle (low): unlike the collapsed dead-code states
+        // above, the minimum message stays distinct. It discloses that a
+        // probed code is live, but the minimum itself is public catalog
+        // info, the message is actionable ("add more to unlock"), the
+        // 12-hex space plus proxy rate limiting bounds enumeration, and
+        // the order wrapper re-enforces state authoritatively.
+        if (
+          loyaltyCode.minimum_order_amount != null &&
+          cart_total < Number(loyaltyCode.minimum_order_amount)
+        ) {
+          // Merchant currency for the threshold label (anon-granted
+          // published columns). A failed lookup stays currency-neutral
+          // instead of mislabeling a non-NGN threshold as NGN; only a
+          // cleanly absent row falls back to the NGN default.
+          const { data: merchantRow, error: merchantError } = await supabase
+            .from('merchants')
+            .select('country, payout_currency')
+            .eq('id', merchant_id)
+            .maybeSingle();
+          const minimumAmount = Number(loyaltyCode.minimum_order_amount);
+          const minimumLabel = merchantError
+            ? minimumAmount.toLocaleString()
+            : formatMerchantCurrency(
+                minimumAmount,
+                {
+                  country: merchantRow?.country ?? null,
+                  payout_currency: merchantRow?.payout_currency ?? null,
+                },
+                { maximumFractionDigits: 0 }
+              );
+          return NextResponse.json(
+            {
+              valid: false,
+              error: `Minimum purchase of ${minimumLabel} required`,
+            },
+            { status: 200 }
+          );
+        }
+        const loyaltyDiscountType =
+          loyaltyCode.reward_type === 'discount_percentage'
+            ? 'percentage'
+            : 'fixed';
+        const loyaltyDiscountAmount = computeDiscountAmountForSubtotal(
+          {
             discount_type: loyaltyDiscountType,
             discount_value: loyaltyValue,
-            discount_amount: loyaltyDiscountAmount,
-            minimum_order: loyaltyCode.minimum_order_amount
-              ? Number(loyaltyCode.minimum_order_amount)
-              : undefined,
-            description: loyaltyCode.reward_name,
-          });
-        }
+            maximum_discount_amount: null,
+          },
+          cart_total
+        );
+        // No redemption UUID: the order route re-resolves the code
+        // server-side, so the internal row id stays out of anon reach.
+        return NextResponse.json({
+          valid: true,
+          code,
+          discount_type: loyaltyDiscountType,
+          discount_value: loyaltyValue,
+          discount_amount: loyaltyDiscountAmount,
+          minimum_order: loyaltyCode.minimum_order_amount
+            ? Number(loyaltyCode.minimum_order_amount)
+            : undefined,
+          description: loyaltyCode.reward_name,
+        });
       }
     }
 

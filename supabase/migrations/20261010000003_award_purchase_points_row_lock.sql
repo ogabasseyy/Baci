@@ -31,6 +31,7 @@ DECLARE
     v_expiry_date TIMESTAMPTZ;
     v_attempt INTEGER := 0;
     v_referral_code TEXT;
+    v_created BOOLEAN := FALSE;
 BEGIN
     -- Serialize account creation with enrollments: enroll_customer_loyalty
     -- takes this same key before its own check-then-insert, so a first
@@ -90,6 +91,7 @@ BEGIN
                     VALUES (p_customer_id, p_merchant_id, v_referral_code)
                     RETURNING id, points_balance, lifetime_points, current_tier
                     INTO v_loyalty;
+                    v_created := TRUE;
                     EXIT;
                 EXCEPTION WHEN unique_violation THEN
                     -- Concurrent mint collided: fall through to mint again.
@@ -124,6 +126,12 @@ BEGIN
     );
 
     IF v_points_earned IS NULL OR v_points_earned <= 0 THEN
+        -- Remove the provisional row: a first purchase that earns nothing
+        -- (zero/NULL total, zero multiplier) must not mint an
+        -- already_enrolled membership that forfeits signup bonuses.
+        IF v_created THEN
+            DELETE FROM public.customer_loyalty WHERE id = v_loyalty.id;
+        END IF;
         RETURN 0;
     END IF;
 

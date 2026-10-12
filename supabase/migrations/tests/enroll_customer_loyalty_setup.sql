@@ -275,3 +275,20 @@ INSERT INTO public.loyalty_rewards (
   ('01aa0000-0000-4000-8000-000000000001', 'Disabled perk', 100, 'discount', false, NULL, NULL),
   ('01aa0000-0000-4000-8000-000000000001', 'Expired perk', 150, 'discount', true, now() - interval '1 day', NULL),
   ('01aa0000-0000-4000-8000-000000000001', 'Sold-out perk', 120, 'discount', true, NULL, 0);
+
+-- The 01 migration dedupes legacy referral codes before indexing: the
+-- invariant the deploy depends on is pinned here (no merchant holds two
+-- rows under one case-insensitive code, and the index exists).
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM pg_catalog.pg_indexes
+    WHERE indexname = 'customer_loyalty_merchant_referral_code_key'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE referral_code IS NOT NULL
+    GROUP BY merchant_id, upper(referral_code)
+    HAVING count(*) > 1
+  ),
+  'referral-code uniqueness invariant is broken'
+);

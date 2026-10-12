@@ -25,6 +25,7 @@ export interface PointsTransaction {
   type: 'purchase' | 'bonus' | 'referral' | 'redemption' | 'adjustment';
   description: string;
   created_at: string;
+  redemption_code?: string | null;
 }
 
 export interface LoyaltySettings {

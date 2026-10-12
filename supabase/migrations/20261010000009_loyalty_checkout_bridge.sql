@@ -53,7 +53,9 @@ BEGIN
     rr.id,
     rr.reward_type::text,
     rr.reward_value,
-    rw.minimum_order_amount,
+    -- Issuance snapshot first: a merchant minimum raised after redeem
+    -- cannot strand the paid code (legacy rows fall back to live).
+    COALESCE(rr.minimum_order_amount, rw.minimum_order_amount),
     rw.enabled,
     rr.expires_at,
     COALESCE(rr.used, false),
@@ -102,6 +104,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_redemption  record;
+  v_reward_id   uuid;
   v_order       record;
   v_now         timestamptz := pg_catalog.now();
   v_expected    numeric;
@@ -110,31 +113,39 @@ BEGIN
     RAISE EXCEPTION 'loyalty_redemption_required';
   END IF;
 
-  -- Lock the redemption row up front. Held through commit so concurrent
+  -- Parent-before-child lock order: the rewards DELETE route locks the
+  -- parent first (its ON DELETE SET NULL then touches the child), so
+  -- holding the child while waiting on the parent deadlocks. Read the
+  -- reward id unlocked, lock the parent, then lock the child.
+  SELECT rr.reward_id INTO v_reward_id
+  FROM public.reward_redemptions rr
+  WHERE rr.id = p_loyalty_redemption_id AND rr.merchant_id = p_merchant_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'loyalty_redemption_not_found'; END IF;
+
+  IF v_reward_id IS NOT NULL THEN
+    PERFORM 1 FROM public.loyalty_rewards rw
+    WHERE rw.id = v_reward_id FOR UPDATE;
+  END IF;
+
+  -- Lock the redemption row. Held through commit so concurrent
   -- checkouts racing the same single-use code serialize on the claim.
+  -- Re-reads every field: a racing checkout may have claimed the code
+  -- since the unlocked read above. The parent is already locked, so
+  -- the joined policy cannot change under the validation below; a
+  -- reward deleted before the parent lock reads back NULL, which the
+  -- policy gate treats as inactive.
   SELECT
     rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
-    rw.enabled AS reward_enabled, rw.minimum_order_amount
+    rw.enabled AS reward_enabled,
+    COALESCE(rr.minimum_order_amount, rw.minimum_order_amount)
+      AS minimum_order_amount
   INTO v_redemption
   FROM public.reward_redemptions rr
   LEFT JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
   WHERE rr.id = p_loyalty_redemption_id AND rr.merchant_id = p_merchant_id
   FOR UPDATE OF rr;
   IF NOT FOUND THEN RAISE EXCEPTION 'loyalty_redemption_not_found'; END IF;
-
-  -- Lock the reward policy row too and re-read it: FOR UPDATE OF rr
-  -- cannot cover the nullable side of the LEFT JOIN, so without this a
-  -- merchant disabling the reward (or raising its minimum) mid-checkout
-  -- would race the validation below. A reward deleted before this lock
-  -- reads back NULL, which the policy gate treats as inactive.
-  IF v_redemption.reward_id IS NOT NULL THEN
-    SELECT rw.enabled, rw.minimum_order_amount
-    INTO v_redemption.reward_enabled, v_redemption.minimum_order_amount
-    FROM public.loyalty_rewards rw
-    WHERE rw.id = v_redemption.reward_id
-    FOR UPDATE;
-  END IF;
 
   -- Create (or idempotently replay) the order via the unmodified trust-boundary RPC.
   SELECT

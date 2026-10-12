@@ -7,7 +7,10 @@
 --  20261010000006_adjust_loyalty_points,
 --  20261010000007_credit_loyalty_referral,
 --  20261010000008_loyalty_redemption_idempotency,
---  20261010000009_loyalty_checkout_bridge).
+--  20261010000009_loyalty_checkout_bridge,
+--  20261010000010_reserve_rdm_discount_code_prefix,
+--  20261010000011_snapshot_redemption_minimum,
+--  20261010000012_wallet_credit_loyalty_redemption).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --

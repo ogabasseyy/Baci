@@ -189,10 +189,16 @@ SELECT pg_temp.assert_true(
 -- Effect asserted separately (see case 19): same-statement reads have
 -- no guaranteed order relative to the redemption call.
 SELECT pg_temp.assert_true(
-  (SELECT store_credit = 500
-   FROM public.customers
-   WHERE id = '01aa0000-0000-4000-8000-000000000018'),
-  'store_credit redemption did not credit the customer'
+  (SELECT available_balance = 500
+   FROM public.customer_wallets
+   WHERE customer_id = '01aa0000-0000-4000-8000-000000000018')
+  AND EXISTS (
+    SELECT 1 FROM public.customer_wallet_transactions
+    WHERE customer_id = '01aa0000-0000-4000-8000-000000000018'
+      AND source_type = 'loyalty_redemption'
+      AND amount = 500
+  ),
+  'store_credit redemption did not credit the wallet ledger'
 );
 
 SELECT pg_temp.assert_true(
@@ -238,9 +244,9 @@ SELECT pg_temp.assert_true(
    FROM public.customer_loyalty
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000018')
-  AND (SELECT store_credit = 500
-   FROM public.customers
-   WHERE id = '01aa0000-0000-4000-8000-000000000018')
+  AND (SELECT available_balance = 500
+   FROM public.customer_wallets
+   WHERE customer_id = '01aa0000-0000-4000-8000-000000000018')
   AND (SELECT NOT EXISTS (
        SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
        WHERE value ->> 'name' = 'Gated credit'
@@ -252,9 +258,8 @@ SELECT pg_temp.assert_true(
   'minimum-gated store credit was honored, mutated, or advertised'
 );
 
--- 23h. The RDM- reservation holds at the database boundary: a direct
--- discount_codes insert (the unguarded mobile-admin path) with an RDM-*
--- code fails, while an ordinary code still writes.
+-- 23h. The RDM- reservation holds at the database boundary (guards
+-- the unguarded mobile-admin path); ordinary codes still write.
 DO $$
 BEGIN
   INSERT INTO public.discount_codes (
@@ -281,4 +286,13 @@ SELECT pg_temp.assert_true(
       AND code = 'DB-PROBE-OK-01'
   ),
   'ordinary merchant code was rejected by the RDM reservation'
+);
+
+-- 23i. The wrapper enforces the issuance snapshot, not the live reward
+-- row (a post-redeem minimum raise cannot strand the paid code).
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%COALESCE(rr.minimum_order_amount%',
+  'wrapper enforces the live minimum instead of the snapshot'
 );

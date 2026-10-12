@@ -21,6 +21,7 @@ DECLARE
     v_tiers JSONB;
     v_tier JSONB;
     v_result VARCHAR(50) := 'Bronze';
+    v_seen_names TEXT[] := '{}';
 BEGIN
     SELECT tiers INTO v_tiers
     FROM public.loyalty_settings
@@ -47,11 +48,16 @@ BEGIN
         -- Skip nameless entries: assigning NULL would commit a loyalty
         -- row the API result schema rejects (500 on an enrolled
         -- customer), so fall through to the prior tier instead.
+        -- Collapse duplicate names (first/lowest threshold wins, like
+        -- the route's dedupeLadderByName): last-match-wins across
+        -- duplicates would oscillate tiers as points grow.
         IF (v_tier->>'minPoints') ~ '^-?[0-9]+$'
            AND p_lifetime_points >= (v_tier->>'minPoints')::NUMERIC
-           AND pg_catalog.btrim(COALESCE(v_tier->>'name', '')) <> '' THEN
+           AND pg_catalog.btrim(COALESCE(v_tier->>'name', '')) <> ''
+           AND NOT (pg_catalog.lower(v_tier->>'name') = ANY(v_seen_names)) THEN
             v_result := v_tier->>'name';
         END IF;
+        v_seen_names := v_seen_names || pg_catalog.lower(COALESCE(v_tier->>'name', ''));
     END LOOP;
 
     RETURN v_result;

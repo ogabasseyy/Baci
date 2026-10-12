@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLoyalty } from './use-loyalty';
 
@@ -193,5 +193,47 @@ describe('useLoyalty', () => {
     expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/i);
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('ignores a stale load that resolves after a newer refetch', async () => {
+    let resolveFirst!: (value: Response) => void;
+    let resolveSecond!: (value: Response) => void;
+    vi.mocked(fetch)
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((r) => {
+            resolveFirst = r;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((r) => {
+            resolveSecond = r;
+          })
+      );
+
+    const { result } = renderHook(() => useLoyalty('merchant-1', 'customer-1'));
+    let refetchPromise!: Promise<void>;
+    act(() => {
+      refetchPromise = result.current.refetch();
+    });
+
+    const fresh = { enrolled: true, points_balance: 222 };
+    await act(async () => {
+      resolveSecond({ ok: true, json: async () => fresh } as Response);
+      await refetchPromise;
+    });
+    expect(result.current.data).toMatchObject({ points_balance: 222 });
+
+    // The aborted first request resolves last: its payload and its
+    // loading=false must both be discarded.
+    await act(async () => {
+      resolveFirst({
+        ok: true,
+        json: async () => ({ enrolled: true, points_balance: 111 }),
+      } as Response);
+      await Promise.resolve();
+    });
+    expect(result.current.data).toMatchObject({ points_balance: 222 });
   });
 });

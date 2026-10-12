@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import { type LoyaltyData, loadLoyaltyData } from '@/lib/loyalty-data-client';
 import { redemptionIdempotencyKeys } from '@/lib/loyalty-redemption-keys';
@@ -40,11 +40,26 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLoyaltyData = () =>
-    loadLoyaltyData(merchantId, customerId, { setData, setLoading, setError });
+  // One in-flight load per instance: a refetch (or identity change)
+  // aborts the previous request so a slow first response cannot
+  // overwrite fresher data or clear its loading state.
+  const controllerRef = useRef<AbortController | null>(null);
+  const fetchLoyaltyData = () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    return loadLoyaltyData(
+      merchantId,
+      customerId,
+      { setData, setLoading, setError },
+      controller.signal
+    );
+  };
 
   useEffect(() => {
+    controllerRef.current?.abort();
     const controller = new AbortController();
+    controllerRef.current = controller;
     void loadLoyaltyData(
       merchantId,
       customerId,

@@ -211,11 +211,9 @@ export async function GET(request: NextRequest) {
     const pointsToNextTier = nextEntry
       ? Math.max(0, nextEntry.minPoints - status.lifetime_points)
       : 0;
-    // Thresholds cover the whole merchant ladder (custom names included)
-    // over the standard defaults, so tier_thresholds[tier] always resolves
-    // for a ladder member. Progress is computed here rather than in the
-    // card: lifetime can sit below a raised current threshold, which the
-    // card's subtraction formula turns into negative or NaN progress.
+    // Thresholds cover the whole ladder over the defaults, so every rung
+    // resolves. Progress is computed here: lifetime can sit below a raised
+    // threshold, which the card's subtraction turns negative or NaN.
     const thresholds: Record<string, number> = { ...DEFAULT_THRESHOLDS };
     for (const entry of ladder) {
       thresholds[entry.name] = entry.minPoints;
@@ -279,6 +277,7 @@ export async function GET(request: NextRequest) {
         type: txn.type,
         description: txn.description ?? '',
         created_at: txn.created_at,
+        redemption_code: txn.redemption_code ?? null,
       })),
       settings: {
         points_per_naira: currencyUnit > 0 ? perCurrency / currencyUnit : 0.01,

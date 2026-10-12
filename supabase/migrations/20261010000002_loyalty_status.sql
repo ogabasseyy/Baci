@@ -227,24 +227,29 @@ BEGIN
   INTO v_transactions
   FROM (
     SELECT jsonb_build_object(
-      'id', id,
-      'points', points,
-      'type', type,
-      'description', description,
-      'created_at', created_at
+      'id', pt.id,
+      'points', pt.points,
+      'type', pt.type,
+      'description', pt.description,
+      'created_at', pt.created_at,
+      -- Recovery receipt: a capped reward leaves the catalog once its
+      -- response is lost, so history carries the issued code.
+      'redemption_code', rr.discount_code
     ) AS txn
-    FROM public.points_transactions
-    WHERE merchant_id = p_merchant_id
-      AND customer_id = p_customer_id
+    FROM public.points_transactions AS pt
+    LEFT JOIN public.reward_redemptions AS rr
+      ON pt.source = 'redemption' AND pt.source_id = rr.id::text
+    WHERE pt.merchant_id = p_merchant_id
+      AND pt.customer_id = p_customer_id
       -- Same source exclusion as the FIFO ledger: VTU/wallet rows
       -- update customers.loyalty_points, so listing them beside the
       -- customer_loyalty balance would show earnings that never
       -- affected it. NULL sources stay included (see above).
       AND (
-        source IS NULL
-        OR source NOT IN ('vtu_airtime_purchase', 'wallet_redemption')
+        pt.source IS NULL
+        OR pt.source NOT IN ('vtu_airtime_purchase', 'wallet_redemption')
       )
-    ORDER BY created_at DESC
+    ORDER BY pt.created_at DESC
     LIMIT 10
   ) AS txns;
 

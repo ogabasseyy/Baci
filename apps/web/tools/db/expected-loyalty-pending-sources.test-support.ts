@@ -2,26 +2,26 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000001_enroll_customer_loyalty.sql',
-    sha256: 'b67d71dcba9308b76505b83df70e05146effe1229f3a454469c8e8765c0af527',
+    sha256: '5ce6916663ec5bbb871f26d46ed7bda3d0c0f38c8492f47f1a09127e072c8807',
   },
   {
     repositoryPath: 'supabase/migrations/20261010000002_loyalty_status.sql',
-    sha256: '7dae26eacb93d99d95abb10c99765ae805e9a7673a97b8b2f6b58725b9ed1dfa',
+    sha256: '89128237884a3bde63be9fc189000b6b12799c462f8f40ed925b11ad3a052d7f',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000003_award_purchase_points_row_lock.sql',
-    sha256: '1751846dc6d8f9b7dad19e6264432349e9c8a3c8053741922cf6f11107daa897',
+    sha256: '9fb427abf90126ef40d216f29e2b3318d8fa37e3a7dc36a6c48e0e76e828467c',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000004_calculate_loyalty_tier_order.sql',
-    sha256: '35aadf71b8cf7bcd967e27e041cc3b8adfbafab8230b55c8d3c3456f665bc6f1',
+    sha256: 'add3ed07a8e0e74ee1544b532cc005228df891542b01960d21d1116d6439cd77',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000005_redeem_loyalty_reward.sql',
-    sha256: '0c6bf91c52ca6bfeab041a2589922ffdfa1aa151c9b08645ed5dff5b61199f5c',
+    sha256: 'e96f6665382e41ac9cb95edd0e54bbf77a299fe79678cb4d12deaa6e3e355b31',
   },
   {
     repositoryPath:
@@ -41,11 +41,21 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000009_loyalty_checkout_bridge.sql',
-    sha256: '86ae7ba324cff453379d3fbb2d0df545ae5bac25ec61fbeb36d080dd8a75c677',
+    sha256: '88e23abc1dea4f9acc8632fd1566715dc0ac43714ed2c2b8942e4e65ef376866',
   },
   {
     repositoryPath:
       'supabase/migrations/20261010000010_reserve_rdm_discount_code_prefix.sql',
-    sha256: 'a1f31c954e23e502a943791924a0935ec78be8b64467fc4bccd1e02cd1fd39c3',
+    sha256: '8f270b581c8e3d28593b44db19c9a4ca7b9199c45ce994e607a9c977979ffbe6',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010000011_snapshot_redemption_minimum.sql',
+    sha256: '4178edc5f7793ebf226bbfe334cfd0304bbeb35de394e0075200f19f4ce73d07',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010000012_wallet_credit_loyalty_redemption.sql',
+    sha256: 'a71824a808360f85e7a2093e23f69e1e0e6246d16bcb2b4a11202cbcc2de5d14',
   },
 ] as const;

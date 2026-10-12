@@ -1,9 +1,7 @@
--- Checkout-bridge cases for the enroll_customer_loyalty suite (cases
--- 24a-25c). Runs after idempotency: discount-typed RDM-* codes resolve
--- for checkout and the order wrapper claims them atomically. Member 024
--- (balance 499 after case 23d) funds the fixture redemptions; case 20's
--- member-018 balance is untouched. Grant asserts live here instead of
--- setup (repository 300-line limit).
+-- Checkout-bridge cases (24a-25c): discount RDM-* codes resolve and the
+-- order wrapper claims them atomically. Member 024 (balance 499) funds
+-- fixtures; member-018 untouched. Grant asserts live here (setup is at
+-- the 300-line limit).
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, reward_value,
   minimum_order_amount, enabled
@@ -173,10 +171,9 @@ EXCEPTION
 END $$;
 
 -- 25c. The wrapper's claim mechanics are pinned on the definition (the
--- full order flow needs the orders schema, which the stub suite does
--- not model; runtime coverage comes from the local bridge probe plus
--- the route tests): row lock, used-marking, minimum, two-sided amount
--- check, and the replay-first branch.
+-- stub suite cannot model full orders; runtime proof is the bridge probe
+-- plus route tests): row lock, used-marking, minimum, two-sided amount
+-- check, replay-first branch, and parent-before-child lock order.
 SELECT pg_temp.assert_true(
   pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
@@ -192,7 +189,17 @@ SELECT pg_temp.assert_true(
   ) LIKE '%discount_amount_mismatch%'
   AND pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
-  ) LIKE '%idempotency_replayed%',
+  ) LIKE '%idempotency_replayed%'
+  -- Parent lock precedes the child lock (reversed order deadlocks
+  -- against the rewards DELETE route's parent-first FK cascade).
+  AND (
+    SELECT strpos(def, 'FROM public.loyalty_rewards rw') > 0
+       AND strpos(def, 'FROM public.loyalty_rewards rw')
+         < strpos(def, 'FOR UPDATE OF rr')
+    FROM pg_get_functiondef(
+      'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
+    ) AS def
+  ),
   'loyalty order wrapper is missing claim mechanics'
 );
 
@@ -231,10 +238,8 @@ SELECT pg_temp.assert_true(
   'loyalty checkout bridge grants are incorrect'
 );
 
--- The checkout lookup index normalizes case like the resolver and is
--- merchant-scoped unique: a plain (merchant_id, discount_code) index
--- could serve only the merchant prefix, and without uniqueness the
--- resolver's LIMIT 1 could straddle two same-code redemptions.
+-- The lookup index normalizes case like the resolver and is
+-- merchant-scoped unique, so LIMIT 1 cannot straddle two codes.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_indexdef(
     'public.loyalty_redemption_checkout_code_idx'::pg_catalog.regclass
@@ -282,13 +287,13 @@ SELECT pg_temp.assert_true(
   'redeem does not retry code collisions'
 );
 
--- The order wrapper locks the reward policy row and re-reads it: FOR
--- UPDATE OF rr cannot cover the nullable side of the redemption join,
--- so without this a merchant disabling the reward mid-checkout would
--- race validation with stale enabled/minimum values.
+-- The order wrapper locks parent-before-child: the reward row first (via
+-- the unlocked id read), then FOR UPDATE OF rr. The DELETE route locks
+-- the same order, so inverting here deadlocks against its ON DELETE
+-- SET NULL; the re-read also keeps enabled/minimum values fresh.
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
-  ) LIKE '%FROM public.loyalty_rewards rw%WHERE rw.id = v_redemption.reward_id%FOR UPDATE%',
-  'order wrapper does not lock the reward policy row'
+  ) LIKE '%FROM public.loyalty_rewards rw%WHERE rw.id = v_reward_id FOR UPDATE%FOR UPDATE OF rr%',
+  'order wrapper does not lock parent-before-child'
 );

@@ -1,12 +1,9 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
 --
--- SECURITY DEFINER RPC performing the whole redemption in one
--- transaction: expiry reconciliation, availability (enabled, dates,
--- finite stock, supported types), usage cap, program minimum,
--- valued-reward guard, store_credit fulfillment, balance check,
--- unique-code mint, deduction, and ledger row. The caller must own the
--- customer row (customers.user_id = auth.uid()). Drop the 3-arg
--- signature: the idempotency key changes the argument list.
+-- SECURITY DEFINER: expiry reconciliation, availability, usage cap,
+-- program minimum, valued guard, store_credit fulfillment, balance
+-- check, code mint, deduction, ledger row. Caller must own the
+-- customer row. Drop the 3-arg signature (idempotency key arity).
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
@@ -39,10 +36,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  -- Existence, liveness, and ownership in one predicate (see enrollment).
-  -- Runs before the replay lookup below: the stored success carries the
-  -- redemption code, and returning it before this check would expose it
-  -- to any authenticated caller who presents the key with matching IDs.
+  -- Existence/liveness/ownership first: replaying the stored code
+  -- before this check would leak it to any caller with the key.
   PERFORM 1
   FROM public.customers
   WHERE id = p_customer_id
@@ -54,10 +49,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
-  -- Idempotency: a retry replays the stored success (key lock
-  -- serializes concurrent same-key retries; failures are never stored).
-  -- Runs before the program gate: the receipt replays even if the
-  -- merchant later disables or deletes the program row.
+  -- Idempotency replay runs before the program gate (key lock
+  -- serializes retries; failures are never stored).
   IF p_idempotency_key IS NOT NULL THEN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtext('loyalty_redeem:' || p_idempotency_key::text)
@@ -96,8 +89,7 @@ BEGIN
   END IF;
 
   -- Reconcile expired purchase credits first (FIFO unspent remainder
-  -- only): without this expired points stay spendable, and the
-  -- member-row lock keeps concurrent redeems from double-counting.
+  -- only); the member-row lock stops double-counting.
   v_expired_points := public.calculate_unspent_expired_points(
     p_merchant_id, p_customer_id
   );
@@ -229,10 +221,12 @@ BEGIN
       BEGIN
         INSERT INTO public.reward_redemptions (
           merchant_id, customer_id, reward_id, points_spent,
-          reward_type, reward_value, discount_code, expires_at
+          reward_type, reward_value, discount_code, expires_at,
+          minimum_order_amount
         ) VALUES (
           p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
-          v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at
+          v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at,
+          v_reward.minimum_order_amount
         )
         RETURNING id INTO v_redemption_id;
         EXIT;
@@ -254,14 +248,14 @@ BEGIN
     WHERE id = p_reward_id;
   END IF;
 
-  -- store_credit fulfillment: credit the spendable customer balance in
-  -- the same transaction (row locked: concurrent credits serialize).
-  -- Without this the customer loses points for a useless discount code.
+  -- store_credit fulfillment: credit the wallet ledger checkout actually
+  -- spends (redeem_wallet_for_order), not display-only customers.store_credit.
   IF v_reward.reward_type = 'store_credit' THEN
-    UPDATE public.customers
-    SET store_credit = COALESCE(store_credit, 0) + v_reward.reward_value,
-        updated_at = pg_catalog.now()
-    WHERE id = p_customer_id;
+    PERFORM public.credit_customer_wallet(
+      p_customer_id, p_merchant_id, v_reward.reward_value,
+      'loyalty_redemption', v_redemption_id,
+      'Loyalty reward: ' || v_reward.name
+    );
   END IF;
 
   UPDATE public.customer_loyalty

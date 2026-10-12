@@ -26,15 +26,18 @@
 -- plain index build is used instead of CONCURRENTLY.
 DO $$
 BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM public.customer_loyalty
-    WHERE referral_code IS NOT NULL
-    GROUP BY merchant_id, upper(referral_code)
-    HAVING count(*) > 1
-  ) THEN
-    RAISE WARNING 'customer_loyalty has case-variant duplicate referral codes; unique index creation will fail';
-  END IF;
+  -- Deduplicate legacy referral codes (the old 8-char generator had no
+  -- uniqueness guard): keep one row per merchant+code, NULL the rest so
+  -- the unique index below always applies. Balances are untouched.
+  UPDATE public.customer_loyalty AS target
+  SET referral_code = NULL
+  WHERE referral_code IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.customer_loyalty AS keeper
+      WHERE keeper.merchant_id = target.merchant_id
+        AND upper(keeper.referral_code) = upper(target.referral_code)
+        AND keeper.ctid < target.ctid
+    );
 END;
 $$;
 CREATE UNIQUE INDEX IF NOT EXISTS customer_loyalty_merchant_referral_code_key
@@ -139,16 +142,10 @@ BEGIN
     pg_catalog.hashtext(p_merchant_id::text || ':' || p_customer_id::text)
   );
 
-  -- Post-lock recheck: a first purchase racing enrollment may have
-  -- created the row after the pre-lock check above (the award takes this
-  -- same key, so the winner committed before this lock was granted).
-  -- Return already_enrolled explicitly instead of falling through to the
-  -- insert's unique-violation handler. Bonuses attach only to rows this
-  -- function creates: an award-created row keeps the sequential
-  -- purchase-first outcome (no signup/referral bonus), so the race
-  -- resolves exactly like award-then-enroll run in order. Crediting
-  -- bonuses onto pre-existing rows would be a contract change for
-  -- already_enrolled, not a race fix. The unique-violation handler below
+  -- Post-lock recheck: a racing first purchase may have created the row
+  -- after the pre-lock check. Return already_enrolled explicitly (bonuses
+  -- attach only to rows this function creates, so the race resolves like
+  -- sequential award-then-enroll). The unique-violation handler below
   -- stays as a net for writers that bypass the advisory lock.
   PERFORM 1
   FROM public.customer_loyalty

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -165,15 +166,58 @@ describe('RewardsPage', () => {
     const { rerender } = render(<RewardsPage />);
     expect(catalogMock).toHaveBeenCalled();
 
-    // New shopper while the new fetch is in flight (stale customer-1
-    // data still in the hook): the previous enrolled subtree must not
-    // paint. The gate keys on identity, not loading, so even the
-    // pre-fetch frame skeletons.
+    // New shopper while the hook still shows customer-1's settled data
+    // (loading has not flipped yet): the previous enrolled subtree
+    // must not paint. Only a true->false edge stamps the identity.
     catalogMock.mockClear();
     authMock.mockReturnValue({ customer: { id: 'customer-2' } } as never);
-    loyaltyMock.mockReturnValue({ ...settled, loading: true } as never);
     rerender(<RewardsPage />);
 
     expect(catalogMock).not.toHaveBeenCalled();
+  });
+
+  it('shows the issued code beside redemption history entries', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    vi.mocked(useLoyalty).mockReturnValue({
+      enrolled: true,
+      loading: false,
+      recentTransactions: [
+        {
+          id: 'txn-1',
+          points: -100,
+          type: 'redemption',
+          description: 'Redeemed: Big perk',
+          created_at: '2026-01-01',
+          redemption_code: 'RDM-ABC123',
+        },
+      ],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    } as never);
+
+    render(<RewardsPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: /history/i }));
+
+    // Recovery receipt: the capped reward left the catalog, but the
+    // already-paid code stays visible in history.
+    expect(screen.getByText(/RDM-ABC123/)).toBeInTheDocument();
   });
 });

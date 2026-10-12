@@ -243,20 +243,24 @@ export function RewardsCatalog({
                       {reward.points_required.toLocaleString()} pts
                     </span>
                   </div>
-                  {(reward.minimum_order_amount ?? 0) > 0 && (
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Min. order{' '}
-                      {formatMerchantCurrency(
-                        reward.minimum_order_amount ?? 0,
-                        {
-                          country: merchantCountry,
-                          payout_currency: merchantPayoutCurrency,
-                        },
-                        { maximumFractionDigits: 0 }
-                      )}{' '}
-                      at checkout
-                    </p>
-                  )}
+                  {/* Minimums apply at online checkout, which bridges
+                      discount rewards only: manual-fulfillment types must
+                      not advertise a threshold they never enforce. */}
+                  {(reward.minimum_order_amount ?? 0) > 0 &&
+                    reward.reward_type === 'discount' && (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Min. order{' '}
+                        {formatMerchantCurrency(
+                          reward.minimum_order_amount ?? 0,
+                          {
+                            country: merchantCountry,
+                            payout_currency: merchantPayoutCurrency,
+                          },
+                          { maximumFractionDigits: 0 }
+                        )}{' '}
+                        at checkout
+                      </p>
+                    )}
 
                   <Button
                     className="w-full"

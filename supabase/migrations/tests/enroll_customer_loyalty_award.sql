@@ -210,3 +210,28 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET points_currency_unit = 100
 WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+-- 5i. A first purchase that earns nothing leaves no membership: with a
+-- zero total the award returns 0 and removes the provisional row, so a
+-- later enrollment still pays signup bonuses (no already_enrolled).
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES (
+  '02aa0000-0000-4000-8000-000000000013',
+  '02aa0000-0000-4000-8000-000000000001',
+  'award-c@example.com'
+);
+
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '02aa0000-0000-4000-8000-000000000013',
+    '02aa0000-0000-4000-8000-000000000001',
+    '02aa0000-0000-4000-8000-0000000000a6',
+    0
+  ) = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '02aa0000-0000-4000-8000-000000000013'
+  ),
+  'zero award minted a bonus-less membership'
+);

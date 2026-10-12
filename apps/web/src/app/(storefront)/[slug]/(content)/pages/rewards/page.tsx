@@ -2,7 +2,7 @@
 
 import { Gift, History, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoyaltyEnrollmentForm } from '@/components/storefront/loyalty/loyalty-enrollment-form';
 import { LoyaltyStatusCard } from '@/components/storefront/loyalty/loyalty-status-card';
 import { RewardsCatalog } from '@/components/storefront/loyalty/rewards-catalog';
@@ -61,9 +61,16 @@ export default function RewardsPage() {
   // so the previous shopper's data never paints.
   const identity = `${merchantId ?? ''}:${customerId ?? ''}`;
   const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+  // Mark loaded only on a true->false edge: a same-flush effect order
+  // could otherwise stamp the new identity while loading still shows
+  // the previous settled value, flashing stale shopper data.
+  // Assume in-flight until proven otherwise (the hook boots loading,
+  // and test doubles start settled): only a true->false edge stamps.
+  const wasLoading = useRef(true);
   useEffect(() => {
-    if (!loading) setLoadedIdentity(identity);
-  }, [loading, identity]);
+    if (wasLoading.current && !loading) setLoadedIdentity(identity);
+    wasLoading.current = loading;
+  });
   // No loading term: same-identity refetches keep content (dialog
   // survives), while a new identity skeletons on the very first render.
   const showSkeleton = loadedIdentity !== identity;
@@ -222,6 +229,11 @@ export default function RewardsPage() {
                               <p className="font-medium text-sm">
                                 {transaction.description}
                               </p>
+                              {transaction.redemption_code ? (
+                                <p className="font-mono text-xs text-muted-foreground">
+                                  Code: {transaction.redemption_code}
+                                </p>
+                              ) : null}
                               <p className="text-xs text-muted-foreground">
                                 {new Date(
                                   transaction.created_at

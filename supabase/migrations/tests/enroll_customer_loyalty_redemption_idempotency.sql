@@ -113,6 +113,11 @@ SELECT pg_temp.assert_true(
 
 -- 23d. Failures are never stored: an insufficient-points attempt under
 -- a key retries as a fresh attempt after a top-up, then replays.
+SELECT id AS pricey_reward_id
+FROM public.loyalty_rewards
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Too pricey' \gset
+
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000113');
 
 SELECT pg_temp.assert_true(
@@ -121,9 +126,7 @@ SELECT pg_temp.assert_true(
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000024',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Too pricey'),
+     :'pricey_reward_id',
      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
    ) AS result),
   'keyed insufficient-points attempt did not fail cleanly'
@@ -140,9 +143,7 @@ SELECT pg_temp.assert_true(
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000024',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Too pricey'),
+     :'pricey_reward_id',
      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
    ) AS result),
   'retry after top-up did not succeed fresh under the same key'
@@ -155,37 +156,25 @@ SELECT pg_temp.assert_true(
        SELECT discount_code FROM public.reward_redemptions
        WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
          AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-         AND reward_id = (
-           SELECT id FROM public.loyalty_rewards
-           WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-             AND name = 'Too pricey'
-         )
+         AND reward_id = :'pricey_reward_id'
      )
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000024',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Too pricey'),
+     :'pricey_reward_id',
      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
    ) AS result)
   AND (SELECT count(*) = 1
    FROM public.reward_redemptions
    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
      AND customer_id = '01aa0000-0000-4000-8000-000000000024'
-     AND reward_id = (
-       SELECT id FROM public.loyalty_rewards
-       WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-         AND name = 'Too pricey'
-     )),
+     AND reward_id = :'pricey_reward_id'),
   'post-top-up retry did not store and replay'
 );
 
--- 23e. The idempotency receipt survives its reward row: deleting the
--- reward SET NULLs the receipt instead of cascading it, so a
--- lost-response retry still replays the original success (the stored
--- new_balance 400) instead of failing reward_unavailable after the
--- points were already consumed. No later case uses 'Idempotent perk'.
+-- 23e. The idempotency receipt survives its reward row (SET NULL, not
+-- cascade), so a lost-response retry replays the stored success
+-- instead of failing reward_unavailable. No later case uses it.
 SELECT id AS doomed_reward_id
 FROM public.loyalty_rewards
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
@@ -225,10 +214,9 @@ SELECT pg_temp.assert_true(
   'idempotency foreign keys lack covering indexes'
 );
 
--- 23f. Ownership precedes the replay lookup: a caller presenting
--- another customer's key with matching IDs gets customer_not_found,
--- not the stored success — the replayed code must never leak across
--- customers. (Pre-fix this returned 024's success to 105's session.)
+-- 23f. Ownership precedes replay: another customer's key returns
+-- customer_not_found, never the stored code. (Pre-fix this leaked
+-- 024's success into 105's session.)
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
 
 SELECT pg_temp.assert_true(
@@ -238,17 +226,14 @@ SELECT pg_temp.assert_true(
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000024',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Too pricey'),
+     :'pricey_reward_id',
      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
    ) AS result),
   'cross-customer replay leaked the stored code'
 );
 
--- 23g. The replay lookup precedes the program-state gate: a receipt
--- replays even after the merchant disables the program, instead of
--- failing program_unavailable on already-consumed points+stock. The
+-- 23g. Replay precedes the program-state gate: a receipt replays after
+-- a program disable instead of failing program_unavailable. The
 -- program is re-enabled immediately: later files need it live.
 UPDATE public.loyalty_settings
 SET enabled = false
@@ -261,9 +246,7 @@ SELECT pg_temp.assert_true(
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000024',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Too pricey'),
+     :'pricey_reward_id',
      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
    ) AS result),
   'disabled program blocked the idempotent replay'
@@ -272,3 +255,39 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET enabled = true
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 23j. The RDM trigger grandfathers legacy rows for non-code edits: a
+-- pre-existing RDM-* code stays deactivatable, while writing an RDM-*
+-- code (insert or code update) still fails.
+ALTER TABLE public.discount_codes
+  DISABLE TRIGGER discount_codes_no_rdm_prefix;
+INSERT INTO public.discount_codes (
+  merchant_id, code, discount_type, discount_value
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'RDM-LEGACY-01',
+  'fixed_amount', 100
+);
+ALTER TABLE public.discount_codes
+  ENABLE TRIGGER discount_codes_no_rdm_prefix;
+
+UPDATE public.discount_codes
+SET is_active = false
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND code = 'RDM-LEGACY-01';
+
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM public.discount_codes
+    WHERE code = 'RDM-LEGACY-01' AND is_active IS NOT TRUE
+  ),
+  'legacy RDM code was not deactivatable'
+);
+
+DO $$
+BEGIN
+  UPDATE public.discount_codes
+  SET code = 'RDM-LEGACY-02'
+  WHERE code = 'RDM-LEGACY-01';
+  RAISE EXCEPTION 'RDM code rewrite was not rejected';
+EXCEPTION WHEN check_violation THEN NULL;
+END $$;

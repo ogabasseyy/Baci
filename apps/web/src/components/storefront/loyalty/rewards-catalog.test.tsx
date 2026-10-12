@@ -112,12 +112,15 @@ describe('RewardsCatalog', () => {
         points_required: 100,
         reward_type: 'store_credit',
         discount_value: 500,
+        minimum_order_amount: 5000,
       })
     );
 
     render(<RewardsCatalog merchantId="merchant-1" customerId="customer-1" />);
 
     expect(screen.getByText('₦500 Store Credit')).toBeInTheDocument();
+    // Manual-fulfillment types never show the checkout threshold row.
+    expect(screen.queryByText(/Min\. order/)).not.toBeInTheDocument();
   });
 
   it('preserves fractional store-credit values instead of rounding', () => {

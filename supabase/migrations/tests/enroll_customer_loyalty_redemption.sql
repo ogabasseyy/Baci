@@ -239,10 +239,8 @@ SELECT pg_temp.assert_true(
   'rejected non-positive redemption mutated state or stayed visible'
 );
 
--- Stock decrements only after the redemption insert: a RETURN rolls
--- back nothing, so decrementing before the mint loop would leak a unit
--- when code generation exhausts its retries. (Exhaustion needs five
--- RNG collisions, so the ordering itself is pinned, not the outcome.)
+-- Stock decrements only after the insert (a pre-mint decrement would
+-- leak a unit on exhaustion); the ordering is pinned, not the outcome.
 SELECT pg_temp.assert_true(
   pg_catalog.strpos(
     pg_catalog.pg_get_functiondef(
@@ -268,12 +266,26 @@ SELECT pg_temp.assert_true(
   'code mint does not probe the merchant namespace'
 );
 
--- Redemption pins the settings row (FOR UPDATE) through settlement like
--- enrollment, so a concurrent disable/minimum change cannot slip under
--- the stale read. (Single session here; pinned like case 10d.)
+-- Redemption pins the settings row (FOR UPDATE) like enrollment
+-- (single session; pinned like case 10d).
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
   ) LIKE '%FROM public.loyalty_settings%FOR UPDATE%',
   'redemption lost the settings-row lock'
+);
+
+-- The mint snapshots the issuance minimum: Free shipping carries 2500
+-- (set by the status file, which runs before this one), so the case-15
+-- redemption row must carry 2500 even if the reward row later changes.
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM public.reward_redemptions rr
+    JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
+    WHERE rw.merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND rw.name = 'Free shipping'
+      AND rr.minimum_order_amount = 2500
+  ),
+  'redemption did not snapshot the issuance minimum'
 );

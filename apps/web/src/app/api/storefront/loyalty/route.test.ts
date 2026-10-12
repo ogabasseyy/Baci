@@ -71,6 +71,7 @@ describe('GET /api/storefront/loyalty', () => {
           type: 'bonus',
           description: 'Loyalty signup bonus',
           created_at: '2026-10-09T00:00:00.000Z',
+          redemption_code: null,
         },
       ],
       settings: {

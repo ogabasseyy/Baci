@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/anon', () => ({
@@ -16,7 +16,10 @@ const mockCreateAnonClient = vi.mocked(createAnonClient);
 
 let merchantRow: unknown = null;
 
-function mockRpc(impl: (fn: string, args: Record<string, unknown>) => unknown) {
+function mockRpc(
+  impl: (fn: string, args: Record<string, unknown>) => unknown,
+  errors: { merchant?: unknown } = {}
+) {
   const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
     data: impl(fn, args),
     error: null,
@@ -24,7 +27,10 @@ function mockRpc(impl: (fn: string, args: Record<string, unknown>) => unknown) {
   const from = vi.fn(() => ({
     select: vi.fn(() => ({
       eq: vi.fn(() => ({
-        maybeSingle: vi.fn(async () => ({ data: merchantRow, error: null })),
+        maybeSingle: vi.fn(async () => ({
+          data: errors.merchant ? null : merchantRow,
+          error: errors.merchant ?? null,
+        })),
       })),
     })),
   }));
@@ -185,7 +191,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
-  it('falls back to invalid when the loyalty lookup errors', async () => {
+  it('returns 500 when the loyalty lookup errors', async () => {
     const rpc = vi.fn(async (fn: string) =>
       fn === 'get_storefront_discount_code'
         ? { data: [], error: null }
@@ -193,9 +199,13 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     );
     mockCreateAnonClient.mockReturnValue({ rpc } as never);
 
-    const body = await (await POST(request(baseBody))).json();
+    const response = await POST(request(baseBody));
+    const body = await response.json();
 
-    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+    // A failed lookup is a retryable 500, not an invalid code: holders
+    // must not be told an issued code is invalid during an outage.
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ valid: false, error: 'Internal server error' });
   });
 
   it('collapses a disabled-reward code to generic invalid', async () => {
@@ -257,6 +267,24 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body.error).not.toContain('₦');
   });
 
+  it('keeps the minimum label currency-neutral on lookup failure', async () => {
+    mockRpc(
+      (fn) =>
+        fn === 'get_storefront_discount_code'
+          ? []
+          : [loyaltyRow({ minimum_order_amount: 50000 })],
+      { merchant: { message: 'db down' } }
+    );
+
+    const body = await (
+      await POST(request({ ...baseBody, cart_total: 10000 }))
+    ).json();
+
+    expect(body.valid).toBe(false);
+    expect(body.error).toBe('Minimum purchase of 50,000 required');
+    expect(body.error).not.toMatch(/₦|₹|\$/);
+  });
+
   it('rejects invalid input before any lookup', async () => {
     const rpc = mockRpc(() => []);
 
@@ -268,6 +296,3 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 });
-
-// Silence unused-import lint when NextResponse is only used for types.
-void NextResponse;

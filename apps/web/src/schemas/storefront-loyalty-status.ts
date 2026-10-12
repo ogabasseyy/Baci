@@ -34,6 +34,8 @@ const loyaltyStatusTransactionSchema = z.object({
   type: z.string(),
   description: z.string().nullable(),
   created_at: z.string(),
+  // Recovery receipt for capped redemptions (null for earn/bonus rows).
+  redemption_code: z.string().nullable().optional(),
 });
 
 export const storefrontLoyaltyStatusResultSchema = z.object({

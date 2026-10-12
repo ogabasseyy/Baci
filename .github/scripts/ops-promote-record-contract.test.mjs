@@ -22,6 +22,9 @@ function matches(pattern, path) {
       .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('[^/]*'))
     .join('.*');
+  // All pattern segments are regex-escaped above and the input is repo-owned
+  // filter config (not user input); the glob shape must stay dynamic.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   return new RegExp(`^${expression}$`).test(path);
 }
 
@@ -87,3 +90,38 @@ test('pattern matching mirrors paths-filter glob semantics', () => {
   assert.ok(matches('.github/scripts/*.mjs', '.github/scripts/extra.mjs'));
   assert.ok(matches('vps-workers/**', 'vps-workers/lib/deep/file.sh'));
 });
+
+test('the reseed input reaches the script through env, never interpolation', () => {
+  // Regression test for the run-shell-injection hardening: the dispatch
+  // input must be indirected through env so no ${{ }} interpolation can
+  // reach a run: script. A text-only 'confirm_reseed' check would also
+  // pass against the vulnerable workflow, so pin the exact mechanism.
+  assert.match(workflow, /env:\s*\n\s*CONFIRM_RESEED: \$\{\{ inputs\.confirm_reseed \}\}/);
+  assert.match(workflow, /\[\s*"\$CONFIRM_RESEED"\s*!=\s*'true'\s*\]/);
+  assert.deepEqual(runScriptInterpolations(workflow), []);
+});
+
+// Collects every ${{ }} interpolation inside a run: script block by
+// tracking block-scalar indentation: a `run: |` line opens a script
+// region that ends at the first line indented at or above the run key.
+function runScriptInterpolations(source) {
+  const hits = [];
+  const lines = source.split('\n');
+  let runIndent = -1;
+  for (const [index, line] of lines.entries()) {
+    if (runIndent >= 0) {
+      const indent = line.match(/^\s*/)[0].length;
+      if (line.trim() === '' || indent > runIndent) {
+        if (line.includes('${{')) hits.push(`line ${index + 1}: ${line.trim()}`);
+        continue;
+      }
+      runIndent = -1;
+    }
+    const run = line.match(/^(\s*)run:\s*(.*)$/);
+    if (run) {
+      if (/^[|>][-+]?\s*(#.*)?$/.test(run[2])) runIndent = run[1].length;
+      else if (run[2].includes('${{')) hits.push(`line ${index + 1}: ${line.trim()}`);
+    }
+  }
+  return hits;
+}

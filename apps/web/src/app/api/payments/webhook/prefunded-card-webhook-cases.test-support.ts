@@ -3,8 +3,11 @@ import type { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import { createServiceClient } from '@/lib/supabase/service';
 
+// Shared first-card cases. paystackSecret must equal the importing suite's
+// stubbed PAYSTACK_SECRET_KEY so signatures verify.
 export function prefundedCardWebhookCases(
-  post: (request: NextRequest) => Promise<Response>
+  post: (request: NextRequest) => Promise<Response>,
+  paystackSecret: string
 ) {
   describe('first-card capture isolation', () => {
     it.each([
@@ -15,7 +18,7 @@ export function prefundedCardWebhookCases(
         event: 'charge.success',
         data: { reference: 'different', metadata },
       });
-      const signature = createHmac('sha512', 'test-paystack-secret')
+      const signature = createHmac('sha512', paystackSecret)
         .update(raw)
         .digest('hex');
       const response = await post(
@@ -62,7 +65,7 @@ export function prefundedCardWebhookCases(
       },
     ])('never sends a first-card capture through legacy settlement: %j', async (data) => {
       const raw = JSON.stringify({ event: 'charge.success', data });
-      const signature = createHmac('sha512', 'test-paystack-secret')
+      const signature = createHmac('sha512', paystackSecret)
         .update(raw)
         .digest('hex');
       const request = new Request(

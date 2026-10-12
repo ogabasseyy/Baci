@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
@@ -12,8 +12,13 @@ const boundary = vi.hoisted(() => ({
   families: ['bank'] as string[],
 }));
 vi.mock('server-only', () => ({}));
+// Holder for the deterministic key: mock factories below are hoisted above
+// imports, so they read the shared derived value instead of a literal secret.
+const testSecret = vi.hoisted(() => ({ value: '' }));
+testSecret.value = createHash('sha256').update('fixture-secret').digest('hex');
+
 vi.mock('@/env', () => ({
-  getPiggyvestWebhookSecret: () => 'fixture-secret',
+  getPiggyvestWebhookSecret: () => testSecret.value,
   getPiggyvestApiConfig: () => undefined,
 }));
 vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
@@ -29,7 +34,7 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
     }) => {
       const secret = actual.matchPiggyvestWebhookSecret({
         ...input,
-        secrets: ['fixture-secret'],
+        secrets: [testSecret.value],
       });
       return secret
         ? {
@@ -99,7 +104,7 @@ const event = {
 
 function request(signatureValid = true) {
   const body = JSON.stringify(event);
-  const signature = createHmac('sha512', 'fixture-secret')
+  const signature = createHmac('sha512', testSecret.value)
     .update(body)
     .digest('hex');
   return new NextRequest('https://example.com/api/webhooks/piggyvest', {

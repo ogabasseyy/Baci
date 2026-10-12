@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { paidInterestFixture as fixture } from './primary-wallet-paid-interest.test-support';
 import { applyPrimaryWalletSignedPaidInterest } from './primary-wallet-paid-interest-signed';
@@ -62,7 +62,9 @@ describe('signed production primary paid interest', () => {
   });
   it('accepts a rotation-retained signature on the direct fallback path', async () => {
     const rawBody = Buffer.from(JSON.stringify(fixture.event));
-    const retained = 'old-test-only-key';
+    const retained = createHash('sha256')
+      .update('old-test-only-key')
+      .digest('hex');
     expect(
       await applyPrimaryWalletSignedPaidInterest({
         rawBody,

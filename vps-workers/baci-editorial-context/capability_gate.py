@@ -91,16 +91,24 @@ def should_run(base, register, changed):
 
 def main():
     base = os.environ.get("BASE_SHA", "")
+    env = dict(os.environ)
     if base and set(base) != {"0"}:
         try:
             register = json.loads(Path(REGISTER_PATH).read_text())
         except (OSError, ValueError):
             register = None  # Broken register: run the suite for its diagnosis.
-        if register is not None and not should_run(base, register, changed_paths(base)):
+        changed = changed_paths(base)
+        if register is not None and not should_run(base, register, changed):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
+        if changed is not None and REGISTER_PATH not in changed:
+            # Freshness hard-gates only changes that carry the register fix;
+            # cited-source PRs still get binding/digest checks, and staleness
+            # is enforced by the scheduled workflow and the runtime window.
+            env.pop("BACI_REGISTER_REQUIRE_FRESH", None)
     return subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_*capabilit*.py"]
+        [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_*capabilit*.py"],
+        env=env,
     ).returncode
 
 

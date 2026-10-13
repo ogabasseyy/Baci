@@ -33,14 +33,19 @@ not imply every merchant can access every integration by default.
    the register binding: re-review the affected claims and record the new
    `source_revision`/`reviewed_at` instead of carrying the old binding forward.
    The enforceable binding is the register's `evidence_digest`: a SHA256 over
-   every cited `source_refs` path, its content hash, and the register's own
-   claim text, recomputed by the
+   every content-bound cited `source_refs` path, its content hash, and the
+   register's own claim text, recomputed by the
    binding test (`evidence_digest_for` in
-   `vps-workers/baci-editorial-context/test_capability_gate.py`). Any
-   cited-file content change — on a branch, on main, or through a squash
+   `vps-workers/baci-editorial-context/register_digests.py`; regenerate both
+   digests with `python3 vps-workers/baci-editorial-context/register_digests.py --write`).
+   Refs of `unverified` rows are existence-checked but not content-bound —
+   those records state that a capability is not established, so unrelated
+   edits to the audited surfaces do not force a re-review. Any content-bound
+   cited-file change — on a branch, on main, or through a squash
    merge — fails the check until the claims are re-reviewed and the digest is
    regenerated. `source_revision` records the reviewed tree for provenance;
-   it is not itself the enforcement mechanism.
+   when it resolves in the local history, the binding test also verifies the
+   cited contents match that revision.
 4. Copy the reviewed register to the VPS writer's
    `data/baci-platform-research/capabilities.json`. The prompt records its SHA256,
    source revision and review date; after 14 days it is treated as stale.

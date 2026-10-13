@@ -1,0 +1,70 @@
+"""Recompute the capability register's binding digests.
+
+Usage:
+  python3 register_digests.py [--register PATH] [--write]
+
+Prints the evidence_digest and claims_digest for the register. With --write,
+both fields are updated in place (formatting preserved). Run this after a
+register re-review; the binding test and the writer runtime verify these
+exact recipes, so never compute them by hand.
+"""
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+
+def claims_digest_for(data):
+    bound = {
+        "capabilities": data["capabilities"],
+        "reviewed_at": data["reviewed_at"],
+        "source_revision": data["source_revision"],
+    }
+    return hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
+
+
+def evidence_digest_for(repo, data):
+    """Content digest over cited paths, their contents, and the claim text.
+
+    Refs of `unverified` rows are existence-checked but not content-bound:
+    those claims record that a capability is not established, so unrelated
+    edits to the audited surfaces must not force a full re-review.
+    """
+    refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
+    digest = hashlib.sha256()
+    for ref in refs:
+        digest.update(ref.encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
+        digest.update(b"\n")
+    digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
+    digest.update(str(data.get("reviewed_at", "")).encode())
+    digest.update(str(data.get("source_revision", "")).encode())
+    return digest.hexdigest()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--register", default=None, help="register path (default: repo docs/product/baci-capabilities.json)")
+    parser.add_argument("--write", action="store_true", help="update the digest fields in place")
+    args = parser.parse_args(argv)
+    register_path = Path(args.register) if args.register else Path(__file__).resolve().parents[2] / "docs/product/baci-capabilities.json"
+    repo = register_path.resolve().parents[2]
+    data = json.loads(register_path.read_text())
+    evidence = evidence_digest_for(repo, data)
+    claims = claims_digest_for(data)
+    print(f"evidence_digest: {evidence}")
+    print(f"claims_digest: {claims}")
+    if args.write:
+        text = register_path.read_text()
+        text = re.sub(r'"evidence_digest": "[a-f0-9]{64}"', f'"evidence_digest": "{evidence}"', text, count=1)
+        text = re.sub(r'"claims_digest": "[a-f0-9]{64}"', f'"claims_digest": "{claims}"', text, count=1)
+        register_path.write_text(text)
+        print(f"updated {register_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,25 +24,13 @@ _gate_spec = importlib.util.spec_from_file_location(
 gate = importlib.util.module_from_spec(_gate_spec)
 _gate_spec.loader.exec_module(gate)
 
-
-def evidence_digest_for(repo, data):
-    """Content digest over cited paths, their contents, and the claim text.
-
-    Refs of `unverified` rows are existence-checked but not content-bound:
-    those claims record that a capability is not established, so unrelated
-    edits to the audited surfaces must not force a full re-review.
-    """
-    refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
-    digest = hashlib.sha256()
-    for ref in refs:
-        digest.update(ref.encode())
-        digest.update(b"\0")
-        digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
-        digest.update(b"\n")
-    digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
-    digest.update(str(data.get("reviewed_at", "")).encode())
-    digest.update(str(data.get("source_revision", "")).encode())
-    return digest.hexdigest()
+_digests_spec = importlib.util.spec_from_file_location(
+    "register_digests", Path(__file__).parent / "register_digests.py"
+)
+_digests = importlib.util.module_from_spec(_digests_spec)
+_digests_spec.loader.exec_module(_digests)
+evidence_digest_for = _digests.evidence_digest_for
+claims_digest_for = _digests.claims_digest_for
 
 
 def binding_failures(repo, data):
@@ -66,6 +55,36 @@ def binding_failures(repo, data):
         expected = data.get("evidence_digest")
         if not isinstance(expected, str) or evidence_digest_for(repo, data) != expected:
             failures.append("cited evidence or claim text changed since review; re-review the claims and update evidence_digest")
+        if data.get("claims_digest") != claims_digest_for(data):
+            failures.append("claims_digest does not match register content; regenerate with register_digests.py")
+        failures.extend(_provenance_failures(repo, data))
+    return failures
+
+
+def _provenance_failures(repo, data):
+    """When source_revision resolves here, cited content must match it."""
+    import re
+
+    revision = data.get("source_revision")
+    if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
+        return []
+    probe = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "-e", f"{revision}^{{commit}}"],
+        capture_output=True, text=True,
+    )
+    if probe.returncode != 0:
+        return []  # Rewritten history (e.g. squash merge): digest still binds.
+    failures = []
+    refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
+    for ref in refs:
+        at_rev = subprocess.run(
+            ["git", "-C", str(repo), "show", f"{revision}:{ref}"],
+            capture_output=True,
+        )
+        if at_rev.returncode != 0:
+            failures.append(f"cited source absent at source_revision {revision[:10]}: {ref}")
+        elif hashlib.sha256(at_rev.stdout).hexdigest() != hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest():
+            failures.append(f"cited content differs from source_revision {revision[:10]}: {ref}")
     return failures
 
 
@@ -138,6 +157,20 @@ class CapabilityGateTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
+    def test_register_digests_cli_reproduces_shipped_digests(self):
+        repo = Path(__file__).resolve().parents[2]
+        register_path = repo / "docs/product/baci-capabilities.json"
+        if not register_path.exists():
+            self.skipTest("shipped register unavailable")
+        out = subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "register_digests.py"), "--register", str(register_path)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(out.returncode, 0, out.stderr)
+        data = json.loads(register_path.read_text())
+        self.assertIn(f"evidence_digest: {data['evidence_digest']}", out.stdout)
+        self.assertIn(f"claims_digest: {data['claims_digest']}", out.stdout)
+
     def test_binding_failures_are_detected_in_fixture_repo(self):
         def git(repo, *args):
             subprocess.run(
@@ -152,8 +185,9 @@ class CapabilityGateTests(unittest.TestCase):
             git(repo, "add", ".")
             git(repo, "commit", "-q", "-m", "one")
             refs = ["cited.txt"]
-            data = {"capabilities": [{"source_refs": refs}]}
+            data = {"capabilities": [{"source_refs": refs}], "reviewed_at": "2026-01-01T00:00:00Z", "source_revision": "a" * 40}
             data["evidence_digest"] = evidence_digest_for(repo, data)
+            data["claims_digest"] = claims_digest_for(data)
             self.assertEqual(binding_failures(repo, data), [])
             (repo / "cited.txt").write_text("v2")
             self.assertTrue(binding_failures(repo, data), "changed cited content must fail the digest binding")

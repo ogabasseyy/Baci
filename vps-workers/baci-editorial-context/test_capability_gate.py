@@ -25,8 +25,13 @@ _gate_spec.loader.exec_module(gate)
 
 
 def evidence_digest_for(repo, data):
-    """Content digest over cited paths, their contents, and the claim text."""
-    refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
+    """Content digest over cited paths, their contents, and the claim text.
+
+    Refs of `unverified` rows are existence-checked but not content-bound:
+    those claims record that a capability is not established, so unrelated
+    edits to the audited surfaces must not force a full re-review.
+    """
+    refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
     digest = hashlib.sha256()
     for ref in refs:
         digest.update(ref.encode())
@@ -34,6 +39,8 @@ def evidence_digest_for(repo, data):
         digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
         digest.update(b"\n")
     digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
+    digest.update(str(data.get("reviewed_at", "")).encode())
+    digest.update(str(data.get("source_revision", "")).encode())
     return digest.hexdigest()
 
 

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "reviewed_at": "2026-10-13T09:42:57+01:00",
   "source_revision": "cad3662aa76e2ac29ab31f29a6732dd0a8c017f2",
-  "evidence_digest": "2cfc3ead73b398bbd473e74fe1e2b8726a46789707401e462075ec557f65af9c",
-  "claims_digest": "68d1ee414534c28f50d3771dca259fba743d50580f7222ca727d34e4f3b3bf20",
+  "evidence_digest": "565e7b9d76501ed13e76a58a4c12d06c29d586215a12cdd7589cb5f141fcd4de",
+  "claims_digest": "d270ddd0861dd6ea3b6b7e39eda59db9b8fa8f513eb30c3609fd72915990047b",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {
@@ -52,7 +52,7 @@
       "id": "imports", "title": "Catalog import and inventory", "status": "code_evidenced",
       "claim": "Baci implements bulk CSV product imports, variants and stock-management workflows, including serialized inventory.",
       "limitations": "Requires the products:create permission. Barcode fields are not proof of barcode scanning or POS. General catalog export and product bundles require separate verification.",
-      "source_refs": ["apps/web/src/components/products/csv-bulk-import-dialog.tsx", "apps/web/src/app/api/products/bulk-import/route.ts", "apps/mobile-admin/components/product/ProductStockControls.tsx"]
+      "source_refs": ["apps/web/src/components/products/csv-bulk-import-dialog.tsx", "apps/web/src/app/api/products/bulk-import/route.ts", "apps/mobile-admin/components/product/ProductStockControls.tsx", "apps/mobile-admin/components/product/ProductVariantsCard.tsx", "apps/mobile-admin/hooks/product-save.ts", "apps/mobile-admin/components/product/VariantInventoryUnitsSheet.tsx"]
     },
     {
       "id": "expenses", "title": "Expenses and profit reporting", "status": "code_evidenced",

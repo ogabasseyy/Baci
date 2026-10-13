@@ -22,7 +22,12 @@ else:
 
 def _seal(value):
     """Compute the claims digest the runtime now requires, over the fixture's rows."""
-    value["claims_digest"] = hashlib.sha256(json.dumps(value.get("capabilities", []), sort_keys=True).encode()).hexdigest()
+    bound = {
+        "capabilities": value.get("capabilities", []),
+        "reviewed_at": value.get("reviewed_at", ""),
+        "source_revision": value.get("source_revision", ""),
+    }
+    value["claims_digest"] = hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
     return value
 
 

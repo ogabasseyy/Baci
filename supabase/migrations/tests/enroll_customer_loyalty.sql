@@ -15,7 +15,8 @@
 --  20261010000014_release_loyalty_claim_on_cancel,
 --  20261010000015_loyalty_transactions_receipts,
 --  20261010000016_loyalty_redemption_currency,
---  20261010000017_loyalty_redemption_max_percentage).
+--  20261010000017_loyalty_redemption_max_percentage,
+--  20261010000018_consume_loyalty_redemption).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --
@@ -38,6 +39,7 @@
 \ir enroll_customer_loyalty_projection.sql
 \ir enroll_customer_loyalty_adjustment.sql
 \ir enroll_customer_loyalty_redemption_guards.sql
+\ir enroll_customer_loyalty_consume.sql
 \ir enroll_customer_loyalty_status_receipts.sql
 \ir enroll_customer_loyalty_cancel_reuse.sql
 

@@ -76,6 +76,30 @@ describe('redemptionIdempotencyKeys', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-r');
   });
 
+  it('does not reuse a key another tab cleared after success', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+    });
+
+    const first = redemptionIdempotencyKeys.forReward('m', 'c', 'reward-x');
+    // Another tab redeemed successfully: it clears storage and its own
+    // Map, but this tab's Map still holds the spent key.
+    store.clear();
+
+    const second = redemptionIdempotencyKeys.forReward('m', 'c', 'reward-x');
+    expect(second).not.toBe(first);
+    expect(second).toMatch(UUID_PATTERN);
+
+    redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-x');
+  });
+
   it('clears the stored key on success', () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {

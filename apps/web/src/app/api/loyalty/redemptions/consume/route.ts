@@ -9,19 +9,21 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { loyaltyRedemptionConsumeSchema } from '@/schemas/loyalty-redemption-consume';
 
-// Manual-fulfillment reward types: minted by redeem_loyalty_reward as
-// present-the-code redemptions that checkout never honors. Consuming
-// one here is the single-use enforcement for those codes.
-const MANUAL_REWARD_TYPES = [
-  'free_shipping',
-  'free_product',
-  'exclusive_access',
-] as const;
+type ConsumeRpcResult = {
+  success?: boolean;
+  error?: string;
+  redemption_id?: string;
+  discount_code?: string;
+  reward_type?: string;
+  customer_id?: string;
+  used_at?: string;
+};
 
 /**
- * POST - Mark a manual-fulfillment redemption as consumed. The update's
- * used=false predicate makes consumption atomic and single-use under
- * the merchant RLS policy on reward_redemptions.
+ * POST - Mark a manual-fulfillment redemption as consumed. The
+ * consume_loyalty_redemption RPC performs the atomic single-use update
+ * under the caller's merchant access (owner or staff), which the
+ * owner-only RLS policy on reward_redemptions cannot express.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -73,18 +75,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Escape LIKE wildcards so a presented code matches literally.
-    const presentedCode = parsed.data.code.replace(/[%_\\]/g, '\\$&');
-    const now = new Date().toISOString();
-    const { data, error } = await supabase
-      .from('reward_redemptions')
-      .update({ used: true, used_at: now })
-      .eq('merchant_id', merchantContext.merchantId)
-      .eq('used', false)
-      .in('reward_type', [...MANUAL_REWARD_TYPES])
-      .ilike('discount_code', presentedCode)
-      .or(`expires_at.is.null,expires_at.gt.${now}`)
-      .select('id, discount_code, reward_type, customer_id, used_at');
+    const { data, error } = await supabase.rpc('consume_loyalty_redemption', {
+      p_merchant_id: merchantContext.merchantId,
+      p_code: parsed.data.code,
+    });
 
     if (error) {
       console.error('Error consuming loyalty redemption:', error);
@@ -94,15 +88,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const consumed = data?.[0];
-    if (!consumed) {
+    const result = (data ?? {}) as ConsumeRpcResult;
+    if (!result.success) {
+      if (result.error === 'forbidden') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
       return NextResponse.json(
         { error: 'Redemption not found or already consumed' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ success: true, data: consumed });
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: result.redemption_id,
+        discount_code: result.discount_code,
+        reward_type: result.reward_type,
+        customer_id: result.customer_id,
+        used_at: result.used_at,
+      },
+    });
   } catch (error) {
     console.error('Loyalty redemption consume POST error:', error);
     return NextResponse.json(

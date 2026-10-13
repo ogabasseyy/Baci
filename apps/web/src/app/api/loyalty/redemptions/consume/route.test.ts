@@ -42,28 +42,22 @@ let merchantContext: { merchantId: string; role?: string } | null = {
   merchantId: 'merchant-1',
   role: 'owner',
 };
-let consumedRows: Record<string, unknown>[] = [
-  {
-    id: 'redemption-1',
-    discount_code: 'RDM-ABC123',
-    reward_type: 'free_product',
-    customer_id: 'customer-1',
-    used_at: '2026-10-13T00:00:00.000Z',
-  },
-];
-let consumeError: { message: string } | null = null;
+let rpcResult: Record<string, unknown> = {
+  success: true,
+  redemption_id: 'redemption-1',
+  discount_code: 'RDM-ABC123',
+  reward_type: 'free_product',
+  customer_id: 'customer-1',
+  used_at: '2026-10-13T00:00:00.000Z',
+};
+let rpcError: { message: string } | null = null;
 
-const select = vi.fn(() =>
+const rpc = vi.fn(() =>
   Promise.resolve({
-    data: consumeError ? null : consumedRows,
-    error: consumeError,
+    data: rpcError ? null : rpcResult,
+    error: rpcError,
   })
 );
-const chain: Record<string, unknown> = {};
-for (const method of ['update', 'eq', 'in', 'ilike', 'or']) {
-  chain[method] = vi.fn(() => chain);
-}
-chain.select = select;
 
 const createMockSupabase = () => ({
   auth: {
@@ -74,12 +68,7 @@ const createMockSupabase = () => ({
       })
     ),
   },
-  from: vi.fn((table: string) => {
-    if (table === 'reward_redemptions') {
-      return chain;
-    }
-    throw new Error(`Unexpected table: ${table}`);
-  }),
+  rpc,
 });
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -115,22 +104,17 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     );
     authUser = { id: 'user-1' };
     merchantContext = { merchantId: 'merchant-1', role: 'owner' };
-    consumedRows = [
-      {
-        id: 'redemption-1',
-        discount_code: 'RDM-ABC123',
-        reward_type: 'free_product',
-        customer_id: 'customer-1',
-        used_at: '2026-10-13T00:00:00.000Z',
-      },
-    ];
-    consumeError = null;
+    rpcResult = {
+      success: true,
+      redemption_id: 'redemption-1',
+      discount_code: 'RDM-ABC123',
+      reward_type: 'free_product',
+      customer_id: 'customer-1',
+      used_at: '2026-10-13T00:00:00.000Z',
+    };
+    rpcError = null;
     hasPermission.mockReturnValue(true);
     getMerchantForApiRequest.mockResolvedValue(merchantContext);
-    for (const method of ['update', 'eq', 'in', 'ilike', 'or']) {
-      (chain[method] as ReturnType<typeof vi.fn>).mockClear();
-    }
-    select.mockClear();
   });
 
   it('returns 401 before CSRF validation when unauthenticated', async () => {
@@ -148,7 +132,7 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
 
     expect(response.status).toBe(403);
-    expect(chain.update).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('returns 400 when the code is missing', async () => {
@@ -157,29 +141,30 @@ describe('POST /api/loyalty/redemptions/consume', () => {
 
     expect(response.status).toBe(400);
     expect(json.error).toContain('code');
-    expect(chain.update).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('consumes an unused manual redemption atomically', async () => {
+  it('consumes an unused manual redemption through the RPC', async () => {
     const response = await POST(makeRequest({ code: 'rdm-abc123' }));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data.discount_code).toBe('RDM-ABC123');
-    expect(chain.update).toHaveBeenCalledWith(
-      expect.objectContaining({ used: true })
-    );
-    expect(chain.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
-    expect(chain.eq).toHaveBeenCalledWith('used', false);
-    expect(chain.in).toHaveBeenCalledWith(
-      'reward_type',
-      expect.arrayContaining(['free_product'])
-    );
+    expect(json.data).toEqual({
+      id: 'redemption-1',
+      discount_code: 'RDM-ABC123',
+      reward_type: 'free_product',
+      customer_id: 'customer-1',
+      used_at: '2026-10-13T00:00:00.000Z',
+    });
+    expect(rpc).toHaveBeenCalledWith('consume_loyalty_redemption', {
+      p_merchant_id: 'merchant-1',
+      p_code: 'rdm-abc123',
+    });
   });
 
-  it('returns 404 when nothing matches (unknown or already consumed)', async () => {
-    consumedRows = [];
+  it('returns 404 when the RPC finds nothing (unknown or consumed)', async () => {
+    rpcResult = { success: false, error: 'redemption_not_found' };
 
     const response = await POST(makeRequest({ code: 'RDM-UNKNOWN' }));
     const json = await response.json();
@@ -188,8 +173,16 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     expect(json.error).toContain('already consumed');
   });
 
-  it('returns 500 when the update fails', async () => {
-    consumeError = { message: 'db failure' };
+  it('returns 403 when the RPC denies merchant access', async () => {
+    rpcResult = { success: false, error: 'forbidden' };
+
+    const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
+
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 500 when the RPC fails', async () => {
+    rpcError = { message: 'db failure' };
 
     const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
 

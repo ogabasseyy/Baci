@@ -11,6 +11,13 @@ const STORAGE_PREFIX = 'loyalty-redeem-key:';
 
 const keysByIntent = new Map<string, string>();
 
+// Intents whose key reached durable storage. Only those are subject to
+// storage reconciliation on read: when storage later reads empty, the
+// key was cleared (here or in another tab after its success), so the
+// cached copy must not be reused. Intents that never persisted (SSR,
+// private mode) keep Map-only behavior.
+const persistedIntents = new Set<string>();
+
 function storageKey(
   merchantId: string,
   customerId: string,
@@ -50,16 +57,23 @@ function keyForReward(
   rewardId: string
 ): string {
   const intent = storageKey(merchantId, customerId, rewardId);
-  const cached = keysByIntent.get(intent);
-  if (cached) return cached;
   const stored = readStored(intent);
   if (stored) {
     keysByIntent.set(intent, stored);
+    persistedIntents.add(intent);
     return stored;
   }
+  const cached = keysByIntent.get(intent);
+  if (cached && !persistedIntents.has(intent)) return cached;
+  // No stored key: either never minted, or a persisted key was cleared
+  // after success (possibly by another tab — its Map clear cannot reach
+  // this tab, so reconcile here instead of replaying a spent key).
+  keysByIntent.delete(intent);
+  persistedIntents.delete(intent);
   const fresh = crypto.randomUUID();
   keysByIntent.set(intent, fresh);
   writeStored(intent, fresh);
+  if (readStored(intent) === fresh) persistedIntents.add(intent);
   return fresh;
 }
 
@@ -70,6 +84,7 @@ function clearKeyForReward(
 ): void {
   const intent = storageKey(merchantId, customerId, rewardId);
   keysByIntent.delete(intent);
+  persistedIntents.delete(intent);
   removeStored(intent);
 }
 

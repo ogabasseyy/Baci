@@ -164,7 +164,7 @@ jobs:
             echo "Muse pin already matches stable $VERSION."
             exit 0
           fi
-          existing="$(gh pr list --state open --limit 200 --json headRefName,url,isCrossRepository \
+          existing="$(gh pr list --state open --base main --limit 200 --json headRefName,url,isCrossRepository \
             --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .headRefName' | head -n1)"
           if [[ -n "$existing" ]]; then
             echo "An open Muse pin update already exists on $existing; verifying its pins and checks."
@@ -190,9 +190,10 @@ jobs:
             # branch) register the same names without running the gates;
             # only a non-skipped run proves the gate exists.
             checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | select(.conclusion != "skipped") | .name] | join("\n")')"
+            selftest_checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, .conclusion] | @tsv] | join("\n")')"
             grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
             grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
-            if ! printf '%s\n' "$checks" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
+            if ! printf '%s\n' "$selftest_checks" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
               gh workflow run muse-review-selftest.yml --ref "$existing"
             fi
             exit 0

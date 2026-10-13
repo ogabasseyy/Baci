@@ -6,17 +6,32 @@ computed (unknown base, git error), the suite runs: fail closed, never skip.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 REGISTER_PATH = "docs/product/baci-capabilities.json"
+MAP_PATH = "docs/product/agent-access-map.md"
 SUITE_DIR = "vps-workers/baci-editorial-context"
+
+
+def map_cited_paths(text):
+    paths = set()
+    for token in re.findall(r"`([^`]+)`", text):
+        token = token.strip().strip(",;")
+        if re.match(r"^(apps|docs|packages|vps-workers|\.github)/", token) and "/" in token:
+            paths.add(token)
+    return paths
 
 
 def relevant_paths(register):
     refs = {ref for row in register["capabilities"] for ref in row["source_refs"]}
-    return {REGISTER_PATH} | refs
+    paths = {REGISTER_PATH, MAP_PATH} | refs
+    map_file = Path(MAP_PATH)
+    if map_file.exists():
+        paths |= map_cited_paths(map_file.read_text())
+    return paths
 
 
 def changed_paths(base, cwd="."):

@@ -87,4 +87,19 @@ if ! printf '%b' "${quality_gate_recovered}" | bash "${checker}" 'Quality Gate';
   exit 1
 fi
 
+# The Semgrep scan is advisory for pin-update branches: its trusted-tree
+# finding intentionally makes the check red, but a completed run is enough
+# to avoid repeating the same scan on every weekly updater cycle.
+for terminal_conclusion in failure cancelled timed_out stale success; do
+  semgrep_run="Semgrep SAST\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:30:00Z\t301\t${terminal_conclusion}\n"
+  if ! printf '%b' "${semgrep_run}" | bash "${checker}" --terminal 'Semgrep SAST'; then
+    echo "FAIL treated completed Semgrep result ${terminal_conclusion} as incomplete." >&2
+    exit 1
+  fi
+done
+if printf '%b' 'Semgrep SAST\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t\t302\tfailure' | bash "${checker}" --terminal 'Semgrep SAST' >/dev/null 2>&1; then
+  echo 'FAIL treated a Semgrep run without completed_at as complete.' >&2
+  exit 1
+fi
+
 printf 'Muse self-test matrix checks passed.\n'

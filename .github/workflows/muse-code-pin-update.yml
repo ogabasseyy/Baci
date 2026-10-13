@@ -190,9 +190,12 @@ jobs:
             # skipped gates are dispatched again instead of reused.
             check_runs="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, (.started_at // ""), (.created_at // ""), (.completed_at // ""), .id, (.conclusion // "")] | @tsv] | join("\n")')"
             if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh 'Quality Gate'; then
-              gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
+              echo "Quality Gate is missing or unsuccessful on $existing; its pull_request run must be approved or rerun by a maintainer." >&2
             fi
-            if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh 'Semgrep SAST'; then
+            # Security is advisory here: the trusted-tree audit intentionally
+            # fails on these pin changes, so any completed result means this
+            # exact head was already scanned and must not be redispatched.
+            if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh --terminal 'Semgrep SAST'; then
               gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
             fi
             if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
@@ -211,17 +214,10 @@ jobs:
             gh pr create --base main --head "$branch" \
               --title "chore: update Muse review CLI pin to $VERSION" \
               --body "Automated weekly update from Meta's public Muse stable channel. The updater verified the channel manifest, HTTPS host, version, and Linux SHA256 checksums, then passed the Muse review and SARIF regression suites before opening this PR. Please review the binary pin and trust-anchor change before merging."
-            # When the PR was created with GITHUB_TOKEN, GitHub suppresses
-            # the pull_request workflows that produce the required checks.
-            # Dispatch them explicitly against the new branch so the checks
-            # exist on the PR head commit. CI is dispatched in both cases:
-            # even when a dedicated token lets the normal pull_request run
-            # start, the pin files match no web path, so its quality gates
-            # would skip without force_quality_gates.
-            gh workflow run ci.yml --ref "$branch" -f force_quality_gates=true
             if [ "$HAS_PIN_TOKEN" = "true" ]; then
-              echo "Pin update PR created with the dedicated token; security and selftest checks trigger normally."
+              echo "Pin update PR created with the dedicated token; pull_request checks run with forced quality gates."
             else
+              echo "Pin update PR created with GITHUB_TOKEN. GitHub may require a maintainer to approve its pull_request workflows before checks run." >&2
               gh workflow run security.yml --ref "$branch" -f force_trusted_change=true
               gh workflow run muse-review-selftest.yml --ref "$branch"
             fi

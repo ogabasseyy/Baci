@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+terminal_only=false
+if [[ "${1:-}" == "--terminal" ]]; then
+  terminal_only=true
+  shift
+fi
+
 if (( $# > 0 )); then
   required_checks=("$@")
 else
@@ -23,16 +29,17 @@ latest_checks="$(awk -F '\t' '
       stamp[$1] = order
       run_id[$1] = $5
       conclusion[$1] = $6
+      completed_at[$1] = $4
     }
   }
   END {
-    for (name in stamp) print name "\t" conclusion[name]
+    for (name in stamp) print name "\t" conclusion[name] "\t" completed_at[name]
   }
 ' <<<"${checks}")"
 missing=()
 for expected in "${required_checks[@]}"; do
-  if ! awk -F '\t' -v expected="${expected}" \
-    '$1 == expected && $2 == "success" { found = 1 } END { exit !found }' \
+  if ! awk -F '\t' -v expected="${expected}" -v terminal_only="${terminal_only}" \
+    '$1 == expected && (terminal_only == "true" ? ($2 != "" && $3 != "") : $2 == "success") { found = 1 } END { exit !found }' \
     <<<"${latest_checks}"; then
     missing+=("${expected}")
   fi

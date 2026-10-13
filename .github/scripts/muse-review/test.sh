@@ -103,10 +103,11 @@ captured="$(jq -cS -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}"
 assert_eq "capture-answer" '{"text":"review result"}' "${captured}"
 cat > "${capture_fixture}" <<'EXPORT'
 {"events":[
-  {"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}},
-  {"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}},
-  {"payload_type":"session.tokenUsage","payload":{"modelId":"bad model\n::error::secret"}},
-  {"payload_type":"model_completed","payload":{"modelId":"not-the-session-usage-source"}}
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}},
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}},
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"bad model\n::error::secret"}}},
+  {"kind":"record","envelope":{"payload_type":"model_completed","payload":{"modelId":"not-the-session-usage-source"}}},
+  {"payload_type":"session.tokenUsage","payload":{"modelId":"must-ignore-top-level"}}
 ]}
 EXPORT
 captured_models="$(jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" | paste -sd ',' -)"

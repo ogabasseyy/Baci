@@ -2,6 +2,7 @@
 """Update the Muse CLI and SARIF auditor pins from Meta's public stable channel."""
 
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -14,6 +15,8 @@ CHANNEL_URL = "https://api.meta.ai/muse-code/channels/muse-stable"
 MANIFEST_HOST = "lookaside.facebook.com"
 VERSION_RE = re.compile(r"\A[0-9]+\.[0-9]+\.[0-9]+-R[0-9]+\.[0-9]+\Z")
 SHA_RE = re.compile(r"\A[0-9a-f]{64}\Z")
+RETRIEVAL_DATE_RE = re.compile(
+    r"\(retrieved [0-9]{4}-[0-9]{2}-[0-9]{2} over TLS\)")
 
 
 class TrustedRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -89,6 +92,16 @@ def replace_once(text, pattern, replacement, label):
     if count != 1:
         raise ValueError("expected exactly one " + label + " pin")
     return updated
+
+
+def normalized_installer_hash(path):
+    """Hash the installer while treating only its retrieval date as variable."""
+    text = Path(path).read_text()
+    normalized, count = RETRIEVAL_DATE_RE.subn(
+        "(retrieved DATE over TLS)", text)
+    if count != 1:
+        raise ValueError("expected exactly one manifest retrieval date")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def update_files(root, pins, retrieved=None):
@@ -174,6 +187,9 @@ def current_pinned_version(root):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--normalized-installer-sha":
+        print(normalized_installer_hash(sys.argv[2]))
+        return
     root = Path(__file__).resolve().parents[2]
     pins = resolve_pins(fetch_json(CHANNEL_URL, "api.meta.ai"))
     ensure_not_downgrade(pins["version"], current_pinned_version(root),

@@ -7,15 +7,18 @@
 #
 # Env in: META_API_KEY, PROMPT_FILE, MUSE_MODEL, MUSE_EFFORT, RUNNER_TEMP,
 #   GITHUB_WORKSPACE, GITHUB_OUTPUT, SCRIPT_DIR.
-# Output: review_file. Exits nonzero when the agent fails so the step outcome
-# stays truthful (the step uses continue-on-error; Post renders a fallback).
+# Output: review_file plus a model-ID notice from usage events. Exits nonzero
+# when the agent or structured-output capture fails so the step outcome stays
+# truthful (the step uses continue-on-error; Post renders a fallback).
 set -euo pipefail
 
 # shellcheck disable=SC1091  # SCRIPT_DIR is set by the workflow step
 . "${SCRIPT_DIR}/lib.sh"
 
 review_file="${RUNNER_TEMP}/muse-review-body.md"
+model_file="${RUNNER_TEMP}/muse-model-ids.txt"
 : > "${review_file}"
+: > "${model_file}"
 
 # Materialize a symlink-free workspace BEFORE the key is exposed: the agent
 # inherits META_API_KEY and reads changed files, so any PR-added symlink
@@ -41,7 +44,7 @@ fi
 # suspicious review output. Full containment would need runner-level egress
 # filtering, which stock GitHub-hosted runners do not offer.
 set +e
-env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec \
+env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --prompt-file "${PROMPT_FILE}" \
   --workspace "${GITHUB_WORKSPACE}" \
   --reasoning-effort "${MUSE_EFFORT}" \
@@ -51,16 +54,30 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec \
   --disable-shell \
   --no-session-log \
   --output-schema "${SCRIPT_DIR}/schema.json" \
-  "${model_args[@]}" </dev/null > "${review_file}" 2>"${RUNNER_TEMP}/muse-stderr.log"
-muse_rc=$?
+  "${model_args[@]}" </dev/null 2>"${RUNNER_TEMP}/muse-stderr.log" \
+  | python3 "${SCRIPT_DIR}/capture-jsonl.py" --review-file "${review_file}" --model-file "${model_file}"
+run_status=("${PIPESTATUS[@]}")
+muse_rc="${run_status[0]}"
+capture_rc="${run_status[1]}"
 set -e
 
 echo "review_file=${review_file}" >> "${GITHUB_OUTPUT}"
 
-if (( muse_rc != 0 )); then
-  echo "::warning::muse exec exited ${muse_rc}; stderr tail follows"
+if (( capture_rc == 0 )); then
+  if [[ -s "${model_file}" ]]; then
+    model_ids="$(awk 'NF { printf "%s%s", sep, $0; sep=", " } END { print "" }' "${model_file}")"
+    echo "::notice::Muse model(s) used: ${model_ids}"
+  else
+    echo "::notice::Muse completed without a model-usage event; exact model ID is unavailable."
+  fi
+else
+  echo "::warning::Could not extract Muse's structured output or model ID."
+fi
+
+if (( muse_rc != 0 || capture_rc != 0 )); then
+  echo "::warning::Muse exec or JSONL capture failed (muse=${muse_rc}, capture=${capture_rc}); stderr tail follows"
   # Redact-then-truncate like review bodies: the raw tail could carry
   # secrets a misbehaving model echoed to stderr.
   redact "$(cat "${RUNNER_TEMP}/muse-stderr.log" 2>/dev/null || true)" | tail -c 4000
-  exit "${muse_rc}"
+  exit 1
 fi

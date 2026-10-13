@@ -94,6 +94,9 @@ if (cd "${linkdir}" && head_readable "${linkdir}/real/AGENTS.md"); then got_hr="
 assert_eq "readable-absolute" "no" "${got_hr}"
 rm -rf "${linkdir}"
 
+# --- capture-jsonl.py ---
+python3 "${SCRIPT_DIR}/capture-jsonl.test.py"
+
 # --- sweep_workspace_symlinks ---
 sweepdir="$(mktemp -d)"
 mkdir -p "${sweepdir}/.git" "${sweepdir}/trusted-scripts" "${sweepdir}/sub"

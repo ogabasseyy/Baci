@@ -11,6 +11,7 @@ let mockWalletQuery: {
     };
   };
   error?: Error | null;
+  isFetchingNow?: () => boolean;
   isLoading?: boolean;
   refetch: jest.Mock;
 };
@@ -97,6 +98,25 @@ describe('useUtilityPayment', () => {
     expect(result.current.walletBalance).toBe(0);
     expect(result.current.walletError).toBe(walletError);
     expect(result.current.walletIsLoading).toBe(false);
+  });
+
+  it('exposes a live wallet-refetch reader instead of a snapshot boolean', () => {
+    // Codex R75 6r486a: a refetch starting after the snapshot —
+    // during the settlement-gate await — must still read true at
+    // readiness time through the same hook result.
+    let refetching = false;
+    mockWalletQuery = {
+      data: { wallet: { balance: 1500 } },
+      error: null,
+      isFetchingNow: () => refetching,
+      isLoading: false,
+      refetch: jest.fn(() => Promise.resolve({})),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.isWalletRefetching()).toBe(false);
+    refetching = true;
+    expect(result.current.isWalletRefetching()).toBe(true);
   });
 
   it('exposes canFundByBankTransfer when authed and the merchant DVA is enabled', () => {

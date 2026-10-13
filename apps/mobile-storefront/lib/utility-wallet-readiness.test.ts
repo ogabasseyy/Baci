@@ -25,7 +25,7 @@ function paymentState(
     walletBalance: 5000,
     walletError: null,
     walletIsLoading: false,
-    walletIsRefetching: false,
+    isWalletRefetching: () => false,
     ...overrides,
   };
 }
@@ -113,14 +113,14 @@ describe('ensureUtilityWalletReady', () => {
 
   it('blocks while a wallet refetch is in flight even when loading is false', () => {
     // Muse follow-up: isLoading is false during background refetches,
-    // so gate on isRefetching too — the cached balance is about to be
-    // replaced. Mirrors web's walletRefreshPending check.
+    // so gate on the live fetch reader too — the cached balance is
+    // about to be replaced. Mirrors web's walletRefreshPending check.
     const ready = ensureUtilityWalletReady({
       amount: 1000,
       payment: paymentState({
         walletBalance: 5000,
         walletIsLoading: false,
-        walletIsRefetching: true,
+        isWalletRefetching: () => true,
       }),
     });
 
@@ -132,6 +132,26 @@ describe('ensureUtilityWalletReady', () => {
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 
+  it('re-reads refetch state on every evaluation instead of snapshotting it', () => {
+    // Codex R75 6r486a: the payment object is captured BEFORE the
+    // settlement-gate await; a refetch starting during that await
+    // must still block. A render-time boolean would stay false here.
+    let refetching = false;
+    const payment = paymentState({
+      walletBalance: 5000,
+      walletIsLoading: false,
+      isWalletRefetching: () => refetching,
+    });
+
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(true);
+    refetching = true;
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Checking wallet balance',
+      expect.any(String)
+    );
+  });
+
   it('blocks retained replays while a wallet refetch is in flight', () => {
     // The R65 bypass skips the balance comparison, not the loading
     // gates: a replay must still wait for fresh balance evidence.
@@ -141,7 +161,7 @@ describe('ensureUtilityWalletReady', () => {
       payment: paymentState({
         walletBalance: 0,
         walletIsLoading: false,
-        walletIsRefetching: true,
+        isWalletRefetching: () => true,
       }),
     });
 

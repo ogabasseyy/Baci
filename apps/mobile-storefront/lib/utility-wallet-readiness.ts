@@ -17,11 +17,13 @@ interface UtilityWalletReadinessPayment {
   walletError: Error | null;
   walletIsLoading: boolean;
   /**
-   * A balance refetch is in flight (React Query isRefetching). The
-   * cached balance is about to be replaced, so the gate blocks on it
-   * exactly like a first load — mirroring web's walletRefreshPending.
+   * Live wallet-fetch reader (Codex R75 6r486a), invoked at gate
+   * time — NOT a render-time snapshot. The payment object is
+   * captured before the settlement-gate await; a refetch starting
+   * during that await must still block. Mirrors web's
+   * walletRefreshPending live read.
    */
-  walletIsRefetching: boolean;
+  isWalletRefetching: () => boolean;
 }
 
 /**
@@ -68,7 +70,7 @@ export function ensureUtilityWalletReady({
   // submit against the balance it is about to replace. Merely stale
   // data with no fetch running still stands (the server stays
   // authoritative); blocking on that would brick purchases.
-  if (payment.walletIsLoading || payment.walletIsRefetching) {
+  if (payment.walletIsLoading || payment.isWalletRefetching()) {
     Alert.alert(
       'Checking wallet balance',
       'Please wait a moment and try again.'

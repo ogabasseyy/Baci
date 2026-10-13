@@ -232,6 +232,12 @@ export function useWallet(options: UseWalletOptions = {}) {
     error,
     fetchStatus,
     isError,
+    // Live reader (Codex R75 6r486a): readiness gates call this AFTER
+    // the settlement-gate await, when the render-time isRefetching
+    // snapshot is stale. Reads the cache imperatively, so a refetch
+    // starting mid-await still blocks. exact: the key is owner-scoped.
+    isFetchingNow: () =>
+      queryClient.isFetching({ queryKey: walletQueryKey, exact: true }) > 0,
     isLoading,
     isRefetching,
     refetch,

@@ -346,6 +346,51 @@ function setupWalletTableMocks({
 }
 
 describe('useWallet', () => {
+  it('reads live fetch state through isFetchingNow without waiting for a rerender', async () => {
+    // Codex R75 6r486a: readiness gates invoke this AFTER the
+    // settlement-gate await, so it must read the query cache
+    // imperatively — a render-time isRefetching snapshot would be
+    // stale. Drive fetch state through the client with a held
+    // deferred: no timing assumptions.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.isFetchingNow()).toBe(false);
+
+    const settledData = result.current.data;
+    let releaseFetch!: (value: typeof settledData) => void;
+    const pending = new Promise<typeof settledData>((resolve) => {
+      releaseFetch = resolve;
+    });
+    let inFlight!: Promise<typeof settledData>;
+    await act(async () => {
+      inFlight = queryClient.fetchQuery({
+        queryFn: () => pending,
+        queryKey: walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        }),
+      });
+    });
+
+    await waitFor(() => expect(result.current.isFetchingNow()).toBe(true));
+
+    releaseFetch(settledData);
+    await act(async () => {
+      await inFlight;
+    });
+    expect(result.current.isFetchingNow()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
   it('reads customer wallet transactions instead of merchant wallet transactions', async () => {
     const { tableCalls, transactionFilters } = setupWalletTableMocks();
     const queryClient = createTestClient();

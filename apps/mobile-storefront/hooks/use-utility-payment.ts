@@ -126,7 +126,10 @@ export function useUtilityPayment() {
     walletBalance,
     walletError,
     walletIsLoading: wallet.isLoading,
-    walletIsRefetching: wallet.isRefetching,
+    // Live reader, not the render-time snapshot (Codex R75 6r486a):
+    // the readiness gate invokes this after the settlement-gate
+    // await, so a refetch starting mid-await must still read true.
+    isWalletRefetching: wallet.isFetchingNow,
     /**
      * Returns the wallet-only Idempotency-Key (UUID) for this purchase
      * descriptor, recalling a still-pending key across form remounts

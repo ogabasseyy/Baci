@@ -109,6 +109,25 @@ describe.each([
     ).not.toThrow();
   });
 
+  it('adopts a domestic composed quote pin and passes the real booking guard', async () => {
+    const composedAddress = {
+      ...address,
+      address: '12 Test Street, Ikeja, Lagos',
+    };
+    const composedReceiver = {
+      ...request.receiver,
+      address: composedAddress.address,
+    };
+    const destination = await enrich(composedAddress, composedReceiver);
+    expect(destination).toMatchObject(coordinates);
+    expect(() =>
+      assertQuoteReceiverMatchesOrder(
+        { ...request, receiver: composedReceiver },
+        { shipping_address: destination ?? null }
+      )
+    ).not.toThrow();
+  });
+
   it('does not backfill an existing order from address text alone', async () => {
     const supabase = createSupabaseRpcMock({
       provider,

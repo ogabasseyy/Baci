@@ -4,6 +4,7 @@ import type {
 } from '@/lib/shipping/international-shipment-items';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import type { OrderShippingAddressForQuote } from '@/lib/shipping/order-quote-destination';
+import { shippingCoordinatePairSchema } from '@/schemas/order-shipping-address';
 
 type ReuseOrderQuoteValidationContext = {
   order_items: ReturnType<typeof toInternationalQuoteValidationItemsFromOrder>;
@@ -32,7 +33,11 @@ function readOrderShippingAddress(
     return undefined;
   }
 
+  const pin = shippingCoordinatePairSchema.safeParse(value);
+  if (!pin.success) return undefined;
+
   return {
+    ...pin.data,
     address,
     city,
     country: typeof value.country === 'string' ? value.country : undefined,

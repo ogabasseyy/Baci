@@ -71,7 +71,11 @@ export function matchesDomesticReceiverAddress(
   orderAddress: QuoteReceiverMatchAddress,
   quoteAddress: QuoteRequest['receiver']
 ): boolean {
-  const quoteStreet = normalizeReceiverMatchText(quoteAddress.address);
+  const quoteStreet = normalizeAddressForQuoteMatch(
+    quoteAddress.address,
+    quoteAddress.city,
+    quoteAddress.state
+  );
   const orderStreet = normalizeAddressForQuoteMatch(
     orderAddress.address,
     orderAddress.city,
@@ -83,5 +87,7 @@ export function matchesDomesticReceiverAddress(
   const normalizedOrderAddress = normalizeReceiverMatchText(
     orderAddress.address
   );
-  return normalizedOrderAddress.startsWith(`${quoteStreet},`);
+  return normalizedOrderAddress.startsWith(
+    `${normalizeReceiverMatchText(quoteAddress.address)},`
+  );
 }

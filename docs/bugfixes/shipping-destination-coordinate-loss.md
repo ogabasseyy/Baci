@@ -103,3 +103,15 @@ are unchanged. The storefront inventory was regenerated through its existing
 source-bound generator; all 573 route classifications remain unchanged. Neither
 validator was relaxed. Independent operation schemas now have focused modules
 and colocated tests, with `orders.ts` retaining its compatibility exports.
+
+## Replay and reuse corrections
+
+Both order and quote street text remove only their own exact city/state suffix
+before comparison; different street/building or locality text still fails.
+Reuse validation retains the stored complete pin and rejects malformed pairs.
+Quote-less idempotency hashes include complete coordinates, including zero,
+so a coordinate-only retry cannot silently reuse a different destination.
+No-pin legacy hashes and selected-quote hashes retain their original bytes.
+Historical quote-less retries whose pins were stripped before this prevention
+change cannot prove the original pin and fail closed; no compatibility fallback
+discards coordinates or weakens the booking destination guard.

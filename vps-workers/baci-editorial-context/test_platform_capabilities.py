@@ -27,8 +27,13 @@ def _register(rows, **overrides):
     }
     value.update(overrides)
     if "claims_digest" not in overrides:
+        bound = {
+            "capabilities": value["capabilities"],
+            "reviewed_at": value["reviewed_at"],
+            "source_revision": value["source_revision"],
+        }
         value["claims_digest"] = hashlib.sha256(
-            json.dumps(value["capabilities"], sort_keys=True).encode()
+            json.dumps(bound, sort_keys=True).encode()
         ).hexdigest()
     return value
 
@@ -132,8 +137,15 @@ class CapabilityContextTests(unittest.TestCase):
         )
         gate = importlib.util.module_from_spec(gate_spec)
         gate_spec.loader.exec_module(gate)
-        missing = [p for p in sorted(gate.map_cited_paths(map_path.read_text())) if not (repo / p.rstrip("/")).exists()]
+        text = map_path.read_text()
+        missing = [p for p in sorted(gate.map_cited_paths(text)) if not (repo / p.rstrip("/")).exists()]
         self.assertEqual(missing, [], f"agent-access-map cites non-resolvable paths: {missing}")
+        import subprocess
+
+        tracked = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True).stdout.split()
+        basenames = {Path(p).name for p in tracked}
+        missing_names = [n for n in sorted(gate.map_cited_filenames(text)) if n not in basenames]
+        self.assertEqual(missing_names, [], f"agent-access-map cites unresolvable filenames: {missing_names}")
 
     def test_missing_or_malformed_evidence_digest_fails_closed(self):
         for bad in (None, "xyz", "e" * 63):
@@ -191,6 +203,12 @@ class CapabilityContextTests(unittest.TestCase):
     def test_tampered_claim_fails_closed(self):
         value = _register([_row()])
         value["capabilities"][0]["claim"] = "Tampered claim added after review"
+        result = self.render(value)
+        self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_tampered_reviewed_at_fails_closed(self):
+        value = _register([_row()])
+        value["reviewed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         result = self.render(value)
         self.assertIn("Register unavailable, invalid or stale", result)
 

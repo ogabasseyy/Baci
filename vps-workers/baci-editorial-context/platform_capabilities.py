@@ -48,7 +48,12 @@ def capability_context(*, now=None):
         claims_digest = data.get("claims_digest", "")
         if not isinstance(claims_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", claims_digest):
             raise ValueError("claims digest")
-        actual_claims = hashlib.sha256(json.dumps(data["capabilities"], sort_keys=True).encode()).hexdigest()
+        bound_payload = {
+            "capabilities": data["capabilities"],
+            "reviewed_at": data["reviewed_at"],
+            "source_revision": revision,
+        }
+        actual_claims = hashlib.sha256(json.dumps(bound_payload, sort_keys=True).encode()).hexdigest()
         if actual_claims != claims_digest:
             raise ValueError("claims digest mismatch")
         if not isinstance(data.get("reviewed_at"), str):

@@ -55,7 +55,7 @@ jobs:
           # Merge-queue runs validate integration, not register freshness:
           # staleness gates PRs that touch the register/cited sources and the
           # scheduled freshness workflow, never unrelated queued changes.
-          BACI_REGISTER_REQUIRE_FRESH: ${{ github.event_name != 'merge_group' && github.event_name != 'workflow_dispatch' && '1' || '' }}
+          BACI_REGISTER_REQUIRE_FRESH: ${{ github.event_name == 'pull_request' && '1' || '' }}
         run: python3 vps-workers/baci-editorial-context/capability_gate.py
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).

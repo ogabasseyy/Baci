@@ -36,7 +36,7 @@ not imply every merchant can access every integration by default.
    every cited `source_refs` path, its content hash, and the register's own
    claim text, recomputed by the
    binding test (`evidence_digest_for` in
-   `vps-workers/baci-editorial-context/test_platform_capabilities.py`). Any
+   `vps-workers/baci-editorial-context/test_capability_gate.py`). Any
    cited-file content change — on a branch, on main, or through a squash
    merge — fails the check until the claims are re-reviewed and the digest is
    regenerated. `source_revision` records the reviewed tree for provenance;

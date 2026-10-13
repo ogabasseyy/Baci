@@ -25,6 +25,15 @@ def map_cited_paths(text):
     return paths
 
 
+def map_cited_filenames(text):
+    names = set()
+    for token in re.findall(r"`([^`]+)`", text):
+        token = token.strip().strip(",;")
+        if "/" not in token and re.search(r"\.(ts|tsx|js|jsx|py|json)$", token):
+            names.add(token)
+    return names
+
+
 def relevant_paths(register):
     paths = {REGISTER_PATH, MAP_PATH}
     try:
@@ -33,7 +42,9 @@ def relevant_paths(register):
         pass  # Structurally invalid register: base set still triggers the suite.
     map_file = Path(MAP_PATH)
     if map_file.exists():
-        paths |= map_cited_paths(map_file.read_text())
+        text = map_file.read_text()
+        paths |= map_cited_paths(text)
+        paths |= map_cited_filenames(text)
     return paths
 
 
@@ -63,7 +74,7 @@ def changed_paths(base, cwd="."):
 
 
 def _matches(path, relevant):
-    if path in relevant:
+    if path in relevant or Path(path).name in relevant:
         return True
     # Directory citations (trailing slash or not) cover everything under them.
     return any(path.startswith(r.rstrip("/") + "/") for r in relevant)

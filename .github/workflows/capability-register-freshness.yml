@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: capability-register-freshness-${{ github.ref }}
@@ -26,3 +27,14 @@ jobs:
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'
         run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_*capabilit*.py'
+      - name: Open an issue when the register goes stale
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Capability register outside its 14-day evidence window"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
+          fi

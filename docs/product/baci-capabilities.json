@@ -2,8 +2,8 @@
   "schema_version": 1,
   "reviewed_at": "2026-10-13T09:42:57+01:00",
   "source_revision": "cad3662aa76e2ac29ab31f29a6732dd0a8c017f2",
-  "evidence_digest": "565e7b9d76501ed13e76a58a4c12d06c29d586215a12cdd7589cb5f141fcd4de",
-  "claims_digest": "d270ddd0861dd6ea3b6b7e39eda59db9b8fa8f513eb30c3609fd72915990047b",
+  "evidence_digest": "65acbdba8f16304e6b19d9a9e3b2b47bde4eba9bf24bf0d4adddb5b6d87e1251",
+  "claims_digest": "dcc6401d7fd745f890f15fd628dc7f3d1c63e35bd9492a4b06a71d4789ab78fd",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {
@@ -70,7 +70,7 @@
       "id": "marketing", "title": "Growth and tracking integrations", "status": "code_evidenced",
       "claim": "Baci implements analytics/advertising setup and product-feed integration surfaces across web and mobile-admin.",
       "limitations": "Provider IDs, consent, OAuth, configuration and entitlements apply. Social profile links are not ad-account integrations. Configuration does not prove events delivered or improved conversions.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/analytics-config.tsx", "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx", "apps/web/src/app/feeds/google-merchant.xml/route.ts", "apps/web/src/app/feeds/openai.jsonl/route.ts", "apps/web/src/app/feeds/facebook.xml/route.ts"]
+      "source_refs": ["apps/mobile-admin/app/(admin)/analytics-config.tsx", "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx", "apps/web/src/app/feeds/google-merchant.xml/route.ts", "apps/web/src/app/feeds/openai.jsonl/route.ts", "apps/web/src/app/feeds/facebook.xml/route.ts", "apps/web/src/app/api/integrations/ads/google/connect/route.ts", "apps/web/src/app/api/integrations/ads/meta/connect/route.ts", "apps/web/src/app/api/integrations/ads/tiktok/connect/route.ts", "apps/web/src/app/api/integrations/ads/snapchat/connect/route.ts"]
     },
     {
       "id": "ai", "title": "AI-assisted commerce workflows", "status": "code_evidenced",

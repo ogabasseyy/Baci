@@ -34,6 +34,24 @@ def map_cited_filenames(text):
     return names
 
 
+def map_link_targets(text, map_dir="docs/product"):
+    """Repository-local Markdown link destinations, normalized to repo paths."""
+    targets = set()
+    for target in re.findall(r"\]\(([^)\s]+)\)", text):
+        if "://" in target or target.startswith(("#", "mailto:")):
+            continue
+        normalized = Path(map_dir, target).as_posix()
+        parts = []
+        for part in normalized.split("/"):
+            if part == "..":
+                if parts:
+                    parts.pop()
+            elif part not in ("", "."):
+                parts.append(part)
+        targets.add("/".join(parts))
+    return targets
+
+
 def relevant_paths(register):
     paths = {REGISTER_PATH, MAP_PATH}
     try:
@@ -45,12 +63,19 @@ def relevant_paths(register):
         text = map_file.read_text()
         paths |= map_cited_paths(text)
         paths |= map_cited_filenames(text)
+        paths |= map_link_targets(text)
     return paths
 
 
-def changed_paths(base, cwd="."):
+def changed_paths(base, cwd=".", mode=None):
+    # Push events compare the previous tip directly (two-dot): a three-dot
+    # merge-base diff would hide paths removed by a force-push. Pull requests
+    # keep the three-dot merge-base comparison.
+    if mode is None:
+        mode = "push" if os.environ.get("GITHUB_EVENT_NAME") == "push" else "pull_request"
+    spec = f"{base}..HEAD" if mode == "push" else f"{base}...HEAD"
     proc = subprocess.run(
-        ["git", "-C", str(cwd), "diff", "--name-status", "-z", f"{base}...HEAD"],
+        ["git", "-C", str(cwd), "diff", "--name-status", "-z", spec],
         capture_output=True, text=True,
     )
     if proc.returncode != 0:
@@ -80,6 +105,14 @@ def _matches(path, relevant):
     return any(path.startswith(r.rstrip("/") + "/") for r in relevant)
 
 
+def _touches_unverified_refs(register, changed):
+    try:
+        refs = {ref for row in register["capabilities"] if row.get("status") == "unverified" for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        return True
+    return any(_matches(p, refs) for p in changed)
+
+
 def should_run(base, register, changed):
     if changed is None:
         return True
@@ -101,10 +134,13 @@ def main():
         if register is not None and not should_run(base, register, changed):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
-        if changed is not None and REGISTER_PATH not in changed:
-            # Freshness hard-gates only changes that carry the register fix;
-            # cited-source PRs still get binding/digest checks, and staleness
-            # is enforced by the scheduled workflow and the runtime window.
+        if changed is not None and REGISTER_PATH not in changed and not _touches_unverified_refs(register, changed):
+            # Freshness hard-gates register-carrying changes and changes to
+            # unverified-row refs (no digest compensates there). For
+            # content-bound cited sources the digest check already forces a
+            # register re-review in the same change, so staleness must not
+            # block unrelated fixes; it stays enforced by the scheduled
+            # workflow and the runtime window.
             env.pop("BACI_REGISTER_REQUIRE_FRESH", None)
     return subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_*capabilit*.py"],

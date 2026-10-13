@@ -26,6 +26,7 @@ def _seal(value):
         "capabilities": value.get("capabilities", []),
         "reviewed_at": value.get("reviewed_at", ""),
         "source_revision": value.get("source_revision", ""),
+        "review_scope": value.get("review_scope", ""),
     }
     value["claims_digest"] = hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
     return value

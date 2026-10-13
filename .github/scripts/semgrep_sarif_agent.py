@@ -256,6 +256,8 @@ def audit_agent_runner(drift):
                 [_dequote(w) for w in rest])
             if problem == "agent-subcommand":
                 drift.append(problem)
+            elif "--json" not in seen:
+                drift.append("agent-json-mode")
             elif "--disable-shell" not in seen:
                 drift.append("agent-shell-boundary")
             elif "--disable-write" not in seen:

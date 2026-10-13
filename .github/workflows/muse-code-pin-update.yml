@@ -190,7 +190,7 @@ jobs:
             # branch) register the same names without running the gates;
             # only a non-skipped run proves the gate exists.
             checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | select(.conclusion != "skipped") | .name] | join("\n")')"
-            selftest_checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, .conclusion] | @tsv] | join("\n")')"
+            selftest_checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, (.completed_at // .started_at // .created_at // ""), .id, (.conclusion // "")] | @tsv] | join("\n")')"
             grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
             grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
             if ! printf '%s\n' "$selftest_checks" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then

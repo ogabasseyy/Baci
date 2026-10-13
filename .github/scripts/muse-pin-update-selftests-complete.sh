@@ -11,11 +11,24 @@ required_checks=(
   'Selftest (static)'
 )
 checks="$(cat)"
+latest_checks="$(awk -F '\t' '
+  NF >= 4 && $1 != "" && $2 != "" {
+    if (!($1 in stamp) || $2 > stamp[$1] ||
+        ($2 == stamp[$1] && ($3 + 0) > (run_id[$1] + 0))) {
+      stamp[$1] = $2
+      run_id[$1] = $3
+      conclusion[$1] = $4
+    }
+  }
+  END {
+    for (name in stamp) print name "\t" conclusion[name]
+  }
+' <<<"${checks}")"
 missing=()
 for expected in "${required_checks[@]}"; do
   if ! awk -F '\t' -v expected="${expected}" \
     '$1 == expected && $2 == "success" { found = 1 } END { exit !found }' \
-    <<<"${checks}"; then
+    <<<"${latest_checks}"; then
     missing+=("${expected}")
   fi
 done

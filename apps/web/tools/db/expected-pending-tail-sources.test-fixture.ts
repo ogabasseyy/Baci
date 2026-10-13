@@ -18,6 +18,18 @@ export const EXPECTED_PENDING_TAIL_SOURCES = {
       sha256:
         '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad',
     },
+    {
+      repositoryPath:
+        'supabase/migrations/20261013213516_customer_checkout_shipping_recovery_context.sql',
+      sha256:
+        'ae81f71311b41528d8d730d90f2824a0a848223be0e2cdafb48b0ff77f27504f',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261013213522_customer_checkout_shipping_recovery_confirmation.sql',
+      sha256:
+        'd771210edf2a907516c2c5739be97dcea90e1dbea0a15f3515802fb29b7ff48e',
+    },
   ],
   identity: [
     {

@@ -10,9 +10,8 @@ import { CheckoutFormField } from './CheckoutFormField';
 import { CheckoutGuestSaveDetails } from './CheckoutGuestSaveDetails';
 import { CollapsibleCheckoutCard } from './selection/CollapsibleCheckoutCard';
 
-// Email addresses can't contain whitespace; strip it as the user types so a
-// stray space (common on mobile keyboards after autocomplete) can't produce a
-// validation error they have to hunt for.
+// Normalize form data immediately, while CheckoutFormField preserves the native
+// editing draft until blur so autofill does not trigger an active text rewrite.
 function stripEmailWhitespace(value: string): string {
   return value.replace(/\s+/g, '');
 }

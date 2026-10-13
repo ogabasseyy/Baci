@@ -398,3 +398,5 @@ patchedDependencies:
   # prototype-pollution trust bypass (GHSA-238p-pmpm-9mq7) while keeping
   # @copilotkit/react-core's ^0.16.22 range.
   katex@0.16.47: patches/katex@0.16.47.patch
+  # Use native Core Animation composition for the iOS gradient hang hot path.
+  expo-linear-gradient@57.0.1: patches/expo-linear-gradient@57.0.1.patch

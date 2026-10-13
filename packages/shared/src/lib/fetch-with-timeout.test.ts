@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithTimeout, readJsonWithDeadline } from './fetch-with-timeout';
+import { fetchJsonWithDeadline, fetchWithTimeout } from './fetch-with-timeout';
 
 describe('fetchWithTimeout', () => {
   afterEach(() => {
@@ -91,65 +91,172 @@ describe('fetchWithTimeout', () => {
   });
 });
 
-describe('readJsonWithDeadline', () => {
+describe('fetchJsonWithDeadline', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  it('cancels the stalled stream when the deadline wins', async () => {
-    // Codex R71 6rzIQ3: rejecting the wrapper alone leaves the body
-    // downloading — retries would pile up connections behind stalls.
+  it('resolves parsed data with the response on success', async () => {
     vi.useFakeTimers();
-    const cancel = vi.fn(async () => {});
-    const response = {
-      body: { cancel },
-      json: () => new Promise(() => {}),
-    } as unknown as Response;
+    const json = vi.fn(async () => ({ pin: 'PIN-1' }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json,
+    } as unknown as Response);
 
-    const read = readJsonWithDeadline(response, Date.now() + 100);
-    const expectation = expect(read).rejects.toThrow('Operation timed out');
+    const result = await fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 1000,
+    });
+
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(result.data).toEqual({ pin: 'PIN-1' });
+    expect(result.response.ok).toBe(true);
+  });
+
+  it('aborts the fetch when headers outlive the deadline', async () => {
+    vi.useFakeTimers();
+    let captured: AbortSignal | null | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      captured = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    });
+
+    const read = fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 100,
+    });
+    const expectation = expect(read).rejects.toThrow(
+      'Request timed out. Please try again.'
+    );
     await vi.advanceTimersByTimeAsync(100);
     await expectation;
-    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(captured?.aborted).toBe(true);
   });
 
-  it('returns the parsed body without cancelling on success', async () => {
+  it('aborts the fetch when the body outlives the deadline', async () => {
+    // Codex R72 6rzq3y: response.json() locks the stream, so only a
+    // fetch-level abort releases a stalled body pre-retry.
     vi.useFakeTimers();
-    const cancel = vi.fn(async () => {});
-    const response = {
-      body: { cancel },
-      json: async () => ({ ok: true }),
-    } as unknown as Response;
+    let captured: AbortSignal | null | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      captured = init?.signal ?? undefined;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => {}),
+      } as unknown as Response);
+    });
 
-    await expect(
-      readJsonWithDeadline(response, Date.now() + 100)
-    ).resolves.toEqual({ ok: true });
-    expect(cancel).not.toHaveBeenCalled();
+    const read = fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 100,
+    });
+    const expectation = expect(read).rejects.toThrow(
+      'Request timed out. Please try again.'
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
+    expect(captured?.aborted).toBe(true);
   });
 
-  it('propagates body errors and tolerates an unusable body', async () => {
+  it('skips the body read when shouldReadBody declines', async () => {
     vi.useFakeTimers();
-    const broken = {
-      body: null,
+    const json = vi.fn(async () => ({ pin: 'PIN-1' }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 503,
+      json,
+    } as unknown as Response);
+
+    const result = await fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 1000,
+      shouldReadBody: (res) => res.ok,
+    });
+
+    expect(json).not.toHaveBeenCalled();
+    expect(result.data).toBeNull();
+    expect(result.response.status).toBe(503);
+  });
+
+  it('preserves caller aborts during the body read', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      const abortError = () => {
+        const error = new Error('cancelled by caller');
+        error.name = 'AbortError';
+        return error;
+      };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((_resolve, reject) => {
+            // Already aborted before the read started (like a real
+            // fetch with a pre-aborted signal).
+            if (init?.signal?.aborted) {
+              reject(abortError());
+              return;
+            }
+            init?.signal?.addEventListener('abort', () => {
+              reject(abortError());
+            });
+          }),
+      } as unknown as Response);
+    });
+
+    const read = fetchJsonWithDeadline('/api/test', {
+      signal: controller.signal,
+      deadlineMs: Date.now() + 1000,
+    });
+    const expectation = expect(read).rejects.toThrow('cancelled by caller');
+    controller.abort();
+    await expectation;
+  });
+
+  it('propagates body parse errors unchanged', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
       json: async () => {
         throw new Error('bad json');
       },
-    } as unknown as Response;
-    await expect(
-      readJsonWithDeadline(broken, Date.now() + 100)
-    ).rejects.toThrow('bad json');
+    } as unknown as Response);
 
-    const unusable = {
-      body: {
-        cancel: async () => {
-          throw new Error('nope');
-        },
-      },
-      json: () => new Promise(() => {}),
-    } as unknown as Response;
-    const read = readJsonWithDeadline(unusable, Date.now() + 100);
-    const expectation = expect(read).rejects.toThrow('Operation timed out');
-    await vi.advanceTimersByTimeAsync(100);
+    await expect(
+      fetchJsonWithDeadline('/api/test', { deadlineMs: Date.now() + 1000 })
+    ).rejects.toThrow('bad json');
+  });
+
+  it('times out immediately past the deadline', async () => {
+    vi.useFakeTimers();
+    let captured: AbortSignal | null | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      captured = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    });
+
+    const read = fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() - 1,
+    });
+    const expectation = expect(read).rejects.toThrow(
+      'Request timed out. Please try again.'
+    );
+    await vi.advanceTimersByTimeAsync(1);
     await expectation;
+    expect(captured?.aborted).toBe(true);
   });
 });

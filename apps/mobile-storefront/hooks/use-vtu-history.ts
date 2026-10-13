@@ -1,9 +1,9 @@
-import { readJsonWithDeadline } from '@baci/shared';
+import { fetchJsonWithDeadline } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
 import { markSettledPendingVtuByReference } from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -118,25 +118,22 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
         query.set('type', apiType);
       }
 
-      // One deadline for headers + body (Codex R70 6ryArL).
+      // One deadline for headers + body; stalls abort the fetch
+      // pre-retry (R70 6ryArL, R72 6rzq3y). Reads always: failures
+      // surface data.error below.
       const deadlineMs = Date.now() + SHORT_TIMEOUT;
-      const response = await fetchWithTimeout(
-        `${EXPO_PUBLIC_API_URL}/api/vtu/history?${query.toString()}`,
-        {
-          method: 'GET',
-          deadlineMs,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session?.access_token && {
-              Authorization: `Bearer ${session.access_token}`,
-            }),
-          },
-        }
-      );
-      const data = await readJsonWithDeadline<{ error?: string }>(
-        response,
-        deadlineMs
-      );
+      const { data, response } = await fetchJsonWithDeadline<{
+        error?: string;
+      }>(`${EXPO_PUBLIC_API_URL}/api/vtu/history?${query.toString()}`, {
+        method: 'GET',
+        deadlineMs,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token && {
+            Authorization: `Bearer ${session.access_token}`,
+          }),
+        },
+      });
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load utility history.');

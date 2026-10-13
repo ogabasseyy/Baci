@@ -107,16 +107,18 @@ describe('useUtilityRetainedSettlement', () => {
     try {
       rememberPendingVtuPurchase('{"stall":true}', 'key-stall');
       notePendingVtuReference('{"stall":true}', 'VTU-STALL');
-      const cancelBody = vi.fn(async () => {});
-      const fetchMock = vi.fn(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10_000 - 100));
-        return {
-          ok: true,
-          status: 200,
-          json: () => new Promise(() => {}),
-          body: { cancel: cancelBody },
-        };
-      });
+      const seenSignals: Array<AbortSignal | undefined> = [];
+      const fetchMock = vi.fn(
+        async (_url: string, init?: { signal?: AbortSignal }) => {
+          seenSignals.push(init?.signal);
+          await new Promise((resolve) => setTimeout(resolve, 10_000 - 100));
+          return {
+            ok: true,
+            status: 200,
+            json: () => new Promise(() => {}),
+          };
+        }
+      );
       vi.stubGlobal('fetch', fetchMock);
 
       renderHook(() => useUtilityRetainedSettlement(input));
@@ -130,8 +132,8 @@ describe('useUtilityRetainedSettlement', () => {
 
       expect(getPendingVtuSettlementPass()).toBeNull();
       expect(recallPendingVtuKey('{"stall":true}')).toBe('key-stall');
-      // R71: the stalled stream was cancelled before the fail-open.
-      expect(cancelBody).toHaveBeenCalledTimes(1);
+      // R72: the stalled fetch was aborted before the fail-open.
+      expect(seenSignals[0]?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }

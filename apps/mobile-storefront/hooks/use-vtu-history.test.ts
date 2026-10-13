@@ -16,7 +16,6 @@ import {
 type MockFetchResponse = {
   ok: boolean;
   json: () => Promise<Record<string, unknown>>;
-  body?: { cancel: () => Promise<void> };
 };
 
 type MockUserResult = {
@@ -29,15 +28,17 @@ type MockSessionResult = {
   error: Error | null;
 };
 
-const mockFetchWithTimeout =
-  jest.fn<(...args: unknown[]) => Promise<MockFetchResponse>>();
+// Real shared helper under test (R72): global fetch is the seam,
+// typed loosely so response literals stay terse.
+const fetchSpy = jest.spyOn(global, 'fetch') as unknown as jest.Mock<
+  (url: string, init?: RequestInit) => Promise<MockFetchResponse>
+>;
 const mockGetUser = jest.fn<() => Promise<MockUserResult>>();
 const mockGetSession = jest.fn<() => Promise<MockSessionResult>>();
 const mockAuthUserId = jest.fn<() => string | null>();
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
   SHORT_TIMEOUT: 10000,
-  fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
 jest.mock('@/lib/supabase', () => ({
@@ -112,7 +113,7 @@ beforeEach(() => {
 describe('useVTUHistory', () => {
   it('loads utility history for the selected filter', async () => {
     const queryClient = createTestClient();
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => ({
         transactions: [
@@ -175,7 +176,7 @@ describe('useVTUHistory', () => {
         payment_status: 'failed',
       }),
     ]);
-    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/api/vtu/history?'),
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -183,9 +184,7 @@ describe('useVTUHistory', () => {
         }),
       })
     );
-    expect(mockFetchWithTimeout.mock.calls[0]?.[0]).toContain(
-      'type=electricity'
-    );
+    expect(fetchSpy.mock.calls[0]?.[0]).toContain('type=electricity');
 
     unmount();
     queryClient.clear();
@@ -197,17 +196,13 @@ describe('useVTUHistory', () => {
     jest.useFakeTimers();
     try {
       const queryClient = createTestClient();
-      const cancelBody = jest
-        .fn<() => Promise<void>>()
-        .mockResolvedValue(undefined);
-      mockFetchWithTimeout.mockImplementationOnce(
+      fetchSpy.mockImplementationOnce(
         () =>
           new Promise<MockFetchResponse>((resolve) => {
             setTimeout(() => {
               resolve({
                 ok: true,
                 json: () => new Promise<Record<string, unknown>>(() => {}),
-                body: { cancel: cancelBody },
               });
             }, 9900);
           })
@@ -220,20 +215,21 @@ describe('useVTUHistory', () => {
       // (and its 9.9s headers timer) must be scheduled at T0, or
       // React's scheduler hops shift the deadline mid-advance.
       await act(async () => {});
-      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
       await act(async () => {
         await jest.advanceTimersByTimeAsync(10_000);
       });
 
-      expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/api/vtu/history?'),
-        expect.objectContaining({ deadlineMs: expect.any(Number) })
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
       // The deadline fires on the last fake tick; the rejection still
       // needs scheduler turns to reach the rendered error state.
       await waitFor(() => expect(result.current.isError).toBe(true));
-      // R71: the stalled stream was cancelled before the failure.
-      expect(cancelBody).toHaveBeenCalledTimes(1);
+      // R72: the stalled fetch was aborted pre-failure.
+      const sentSignal = fetchSpy.mock.calls[0]?.[1]?.signal;
+      expect(sentSignal?.aborted).toBe(true);
 
       unmount();
       queryClient.clear();
@@ -258,7 +254,7 @@ describe('useVTUHistory', () => {
     notePendingVtuReference('hist-suppressed', 'VTU-126');
     markPendingVtuCompleted('hist-suppressed');
     const queryClient = createTestClient();
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => ({
         transactions: [
@@ -325,7 +321,7 @@ describe('useVTUHistory', () => {
     // has moved on — the rows were never shown to the submitter.
     mockAuthUserId.mockReturnValue('auth-user-2');
     const queryClient = createTestClient();
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => ({
         transactions: [
@@ -354,7 +350,7 @@ describe('useVTUHistory', () => {
 
   it('surfaces the server error message when the request fails', async () => {
     const queryClient = createTestClient();
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: false,
       json: async () => ({ error: 'History is unavailable' }),
     });

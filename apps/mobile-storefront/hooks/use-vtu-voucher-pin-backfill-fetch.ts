@@ -1,7 +1,7 @@
-import { readJsonWithDeadline } from '@baci/shared';
+import { fetchJsonWithDeadline } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
 import {
   forgetPendingVtuByReference,
   markSettledPendingVtuByReference,
@@ -78,11 +78,13 @@ export async function fetchVoucherPin({
     status: null,
     refundPending: null,
   };
-  // One deadline for headers + body (Codex R70 6ryArL).
+  // One deadline for headers + body; stalls abort the fetch
+  // pre-retry (R70 6ryArL, R72 6rzq3y).
   const deadlineMs = Date.now() + SHORT_TIMEOUT;
+  let data: unknown;
   let response: Response;
   try {
-    response = await fetchWithTimeout(
+    ({ data, response } = await fetchJsonWithDeadline(
       `${EXPO_PUBLIC_API_URL}/api/vtu/history?${params.toString()}`,
       {
         method: 'GET',
@@ -91,10 +93,11 @@ export async function fetchVoucherPin({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
+        shouldReadBody: (res) => res.ok,
       }
-    );
+    ));
   } catch {
-    // Network/timeout: transient, retry within budget.
+    // Network/timeout/unparseable body: transient, retry within budget.
     return BLANK;
   }
   if (!response.ok) {
@@ -106,16 +109,8 @@ export async function fetchVoucherPin({
     }
     return BLANK;
   }
-  let body: unknown;
-  try {
-    // Body shares the deadline; stalls cancel pre-retry (R71).
-    body = await readJsonWithDeadline(response, deadlineMs);
-  } catch {
-    // Unparseable body: transient, retry within budget.
-    return BLANK;
-  }
 
-  const parsed = VtuHistoryResponseSchema.safeParse(body);
+  const parsed = VtuHistoryResponseSchema.safeParse(data);
   if (!parsed.success) {
     // Broken contract — throw so polling halts instead of burning remaining
     // attempts returning blanks that React Query treats as successful data.

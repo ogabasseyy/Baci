@@ -79,28 +79,81 @@ export async function fetchWithTimeout(
   }
 }
 
+export interface FetchJsonWithDeadlineOptions extends FetchWithTimeoutOptions {
+  /** Absolute wall-clock deadline both phases share (required). */
+  deadlineMs: number;
+  /**
+   * Whether to read the body once headers arrive. Error-row bodies
+   * are usually unread (pass `(res) => res.ok`); the default reads
+   * always (e.g. history needs `data.error` from failures).
+   */
+  shouldReadBody?: (response: Response) => boolean;
+}
+
+export interface FetchJsonWithDeadlineResult<T = unknown> {
+  /** Parsed body (`null` when `shouldReadBody` skipped the read). */
+  data: T;
+  /** Response with headers/status intact (body consumed when read). */
+  response: Response;
+}
+
 /**
- * Reads a response body as JSON under one shared wall-clock
- * deadline. Combines `withDeadline` with stalled-stream cleanup
- * (Codex R71 6rzIQ3): when the body outlives the deadline, the
- * wrapper rejects AND the abandoned stream is cancelled, so retries
- * cannot pile up connections behind stalled bodies. Parse errors
- * propagate unchanged; cleanup never throws (a missing/unusable
- * `body`, e.g. non-browser runtimes, degrades to a no-op).
+ * Fetches headers AND reads the JSON body under one shared
+ * wall-clock deadline, aborting the fetch itself when either phase
+ * outlives it (Codex R70 6ryArL, R72 6rzq3y). Aborting at the fetch
+ * level (not `body.cancel()`, which rejects on the locked stream
+ * `response.json()` holds) releases the connection even for stalled
+ * bodies, so retries cannot pile up abandoned downloads. A
+ * `withDeadline` race backs the abort so the deadline is honored
+ * even where a runtime fails to reject a pending read on abort.
+ * Caller aborts propagate untouched; parse errors propagate as-is.
+ * No AbortSignal.any/.timeout (missing below the safari 15.4 floor
+ * and on Hermes — R66 6rvh_R).
  */
-export async function readJsonWithDeadline<T = unknown>(
-  response: Response,
-  deadlineMs: number
-): Promise<T> {
-  const body = response.body;
+export async function fetchJsonWithDeadline<T = unknown>(
+  input: RequestInfo | URL,
+  options: FetchJsonWithDeadlineOptions
+): Promise<FetchJsonWithDeadlineResult<T>> {
+  const {
+    deadlineMs,
+    shouldReadBody = () => true,
+    signal: callerSignal,
+    timeoutMessage = DEFAULT_FETCH_TIMEOUT_MESSAGE,
+    ...fetchOptions
+  } = options;
+  // Per-attempt owned controller: aborting it kills in-flight
+  // headers AND any locked body read (the R72 mechanism).
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    Math.max(deadlineMs - Date.now(), 0)
+  );
   try {
-    return (await withDeadline(response.json(), deadlineMs)) as T;
+    const response = await fetch(input, {
+      ...fetchOptions,
+      signal: composeAbortSignals(
+        callerSignal ? [controller.signal, callerSignal] : [controller.signal]
+      ),
+    });
+    if (!shouldReadBody(response)) {
+      return { data: null as T, response };
+    }
+    const data = (await withDeadline(
+      response.json(),
+      deadlineMs,
+      timeoutMessage
+    )) as T;
+    return { data, response };
   } catch (error) {
-    try {
-      await body?.cancel();
-    } catch {
-      // Best-effort cleanup: the attempt already failed.
+    if (isAbortError(error) && timedOut) {
+      throw new Error(timeoutMessage);
     }
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }

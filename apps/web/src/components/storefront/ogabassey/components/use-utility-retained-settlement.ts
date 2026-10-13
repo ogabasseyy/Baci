@@ -1,7 +1,7 @@
 'use client';
 
 import { buildPendingVtuScopeTag } from '@baci/shared';
-import { fetchWithTimeout, readJsonWithDeadline } from '@baci/shared/lib';
+import { fetchJsonWithDeadline } from '@baci/shared/lib';
 import { useEffect } from 'react';
 import {
   forgetPendingVtuByReference,
@@ -81,27 +81,27 @@ export function useUtilityRetainedSettlement({
               limit: '1',
               reference,
             });
-            // One deadline for headers + body (Codex R70 6ryArL):
-            // bounded so a hung history endpoint cannot stall a gated
-            // submit past the fail-open timeout.
+            // One deadline for headers + body; stalls abort the fetch
+            // pre-retry (R70 6ryArL, R72 6rzq3y): bounded so a hung
+            // history endpoint cannot stall a gated submit past the
+            // fail-open timeout.
             const deadlineMs = Date.now() + 10_000;
-            const response = await fetchWithTimeout(
+            const { data, response } = await fetchJsonWithDeadline(
               `/api/vtu/history?${params.toString()}`,
               {
-                // Compatible composition (Codex R66 6rvh_R): no
-                // AbortSignal.any/.timeout (missing below the safari
-                // 15.4 floor).
+                // Compatible composition (R66 floor); error bodies are
+                // never read.
                 signal: controller.signal,
                 deadlineMs,
+                shouldReadBody: (res) => res.ok,
               }
             );
             if (!response.ok) {
               return null;
             }
-            const body = await readJsonWithDeadline(response, deadlineMs);
             return {
               reference,
-              backfill: parseUtilityVoucherBackfill(body, reference),
+              backfill: parseUtilityVoucherBackfill(data, reference),
             };
           } catch {
             return null;

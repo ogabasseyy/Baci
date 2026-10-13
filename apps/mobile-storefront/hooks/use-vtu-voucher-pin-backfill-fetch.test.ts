@@ -16,8 +16,8 @@ const mockGetSession =
       error: null | { message: string };
     }>
   >();
-const mockFetchWithTimeout =
-  jest.fn<(url: string, options: RequestInit) => Promise<Response>>();
+// Real shared helper under test (R72): global fetch is the seam.
+const fetchSpy = jest.spyOn(global, 'fetch');
 const mockCurrentUserId: { value: string | null } = { value: 'user-1' };
 
 jest.mock('@/lib/supabase', () => ({
@@ -27,8 +27,6 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
-  fetchWithTimeout: (url: string, options: RequestInit) =>
-    mockFetchWithTimeout(url, options),
   SHORT_TIMEOUT: 5000,
 }));
 
@@ -91,34 +89,34 @@ describe('fetchVoucherPin', () => {
     });
 
     await expect(fetchVoucherPin(input)).resolves.toBeNull();
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns a blank observation on transient failures', async () => {
     // Network throw, 5xx, 429, and unparseable bodies all consume
     // the attempt but keep polling (Codex R64 6rucqk).
-    mockFetchWithTimeout.mockRejectedValueOnce(new Error('down'));
+    fetchSpy.mockRejectedValueOnce(new Error('down'));
     await expect(fetchVoucherPin(input)).resolves.toEqual({
       pin: null,
       status: null,
       refundPending: null,
     });
 
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse({}, false, 503));
+    fetchSpy.mockResolvedValueOnce(makeResponse({}, false, 503));
     await expect(fetchVoucherPin(input)).resolves.toEqual({
       pin: null,
       status: null,
       refundPending: null,
     });
 
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse({}, false, 429));
+    fetchSpy.mockResolvedValueOnce(makeResponse({}, false, 429));
     await expect(fetchVoucherPin(input)).resolves.toEqual({
       pin: null,
       status: null,
       refundPending: null,
     });
 
-    mockFetchWithTimeout.mockResolvedValueOnce({
+    fetchSpy.mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: jest
@@ -133,12 +131,12 @@ describe('fetchVoucherPin', () => {
   });
 
   it('throws on permanent failures to halt polling', async () => {
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse({}, false, 401));
+    fetchSpy.mockResolvedValueOnce(makeResponse({}, false, 401));
     await expect(fetchVoucherPin(input)).rejects.toThrow(
       'VTU history fetch failed: 401'
     );
 
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse({ nope: 1 }));
+    fetchSpy.mockResolvedValueOnce(makeResponse({ nope: 1 }));
     await expect(fetchVoucherPin(input)).rejects.toThrow(
       'VTU history response schema mismatch'
     );
@@ -147,7 +145,7 @@ describe('fetchVoucherPin', () => {
   it('returns the observation and forgets on shown terminal success', async () => {
     rememberPendingVtuPurchase('fetch-1', 'key-1');
     notePendingVtuReference('fetch-1', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse(successBody()));
+    fetchSpy.mockResolvedValueOnce(makeResponse(successBody()));
 
     const observation = await fetchVoucherPin(input);
 
@@ -162,7 +160,7 @@ describe('fetchVoucherPin', () => {
   it('forgets refund-confirmed failures but not pending ones', async () => {
     rememberPendingVtuPurchase('fetch-done', 'key-done');
     notePendingVtuReference('fetch-done', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(
+    fetchSpy.mockResolvedValueOnce(
       makeResponse({
         transactions: [
           {
@@ -179,7 +177,7 @@ describe('fetchVoucherPin', () => {
 
     rememberPendingVtuPurchase('fetch-open', 'key-open');
     notePendingVtuReference('fetch-open', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(
+    fetchSpy.mockResolvedValueOnce(
       makeResponse({
         transactions: [
           {
@@ -201,7 +199,7 @@ describe('fetchVoucherPin', () => {
     // results nobody saw — the retry must be told "Already Completed".
     rememberPendingVtuPurchase('fetch-bg', 'key-bg');
     notePendingVtuReference('fetch-bg', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse(successBody()));
+    fetchSpy.mockResolvedValueOnce(makeResponse(successBody()));
 
     const observation = await fetchVoucherPin({
       ...input,
@@ -217,7 +215,7 @@ describe('fetchVoucherPin', () => {
     rememberPendingVtuPurchase('fetch-bg-suppressed', 'key-bg-suppressed');
     notePendingVtuReference('fetch-bg-suppressed', 'REF-1');
     markPendingVtuCompleted('fetch-bg-suppressed');
-    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse(successBody()));
+    fetchSpy.mockResolvedValueOnce(makeResponse(successBody()));
 
     await fetchVoucherPin({ ...input, backgroundSettle: true });
 
@@ -233,7 +231,7 @@ describe('fetchVoucherPin', () => {
     // Nothing was delivered: the retry is correctly a fresh charge.
     rememberPendingVtuPurchase('fetch-bg-fail', 'key-bg-fail');
     notePendingVtuReference('fetch-bg-fail', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(
+    fetchSpy.mockResolvedValueOnce(
       makeResponse({
         transactions: [
           {
@@ -254,7 +252,7 @@ describe('fetchVoucherPin', () => {
     // Codex R68 6rwg9A: headers arrived but the body never streams.
     jest.useFakeTimers();
     try {
-      mockFetchWithTimeout.mockResolvedValueOnce({
+      fetchSpy.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () => new Promise(() => {}),
@@ -279,10 +277,7 @@ describe('fetchVoucherPin', () => {
     // restart the clock (blank at 5s, not ~10s).
     jest.useFakeTimers();
     try {
-      const cancelBody = jest
-        .fn<() => Promise<void>>()
-        .mockResolvedValue(undefined);
-      mockFetchWithTimeout.mockImplementationOnce(
+      fetchSpy.mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
             setTimeout(() => {
@@ -290,7 +285,6 @@ describe('fetchVoucherPin', () => {
                 ok: true,
                 status: 200,
                 json: () => new Promise(() => {}),
-                body: { cancel: cancelBody },
               } as unknown as Response);
             }, 4900);
           })
@@ -304,12 +298,13 @@ describe('fetchVoucherPin', () => {
         status: null,
         refundPending: null,
       });
-      expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/api/vtu/history?'),
-        expect.objectContaining({ deadlineMs: expect.any(Number) })
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
-      // R71: the stalled stream was cancelled before the blank.
-      expect(cancelBody).toHaveBeenCalledTimes(1);
+      // R72: the stalled fetch was aborted pre-blank.
+      const sentSignal = fetchSpy.mock.calls[0]?.[1]?.signal;
+      expect(sentSignal?.aborted).toBe(true);
     } finally {
       jest.useRealTimers();
     }
@@ -318,7 +313,7 @@ describe('fetchVoucherPin', () => {
   it('never forgets across an account switch or after unmount', async () => {
     rememberPendingVtuPurchase('fetch-switched', 'key-switched');
     notePendingVtuReference('fetch-switched', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValue(makeResponse(successBody()));
+    fetchSpy.mockResolvedValue(makeResponse(successBody()));
 
     mockCurrentUserId.value = 'user-2';
     const switched = await fetchVoucherPin(input);
@@ -337,9 +332,7 @@ describe('fetchVoucherPin', () => {
   it('returns nulls without forgetting when the row is missing', async () => {
     rememberPendingVtuPurchase('fetch-missing', 'key-missing');
     notePendingVtuReference('fetch-missing', 'REF-1');
-    mockFetchWithTimeout.mockResolvedValueOnce(
-      makeResponse({ transactions: [] })
-    );
+    fetchSpy.mockResolvedValueOnce(makeResponse({ transactions: [] }));
 
     const observation = await fetchVoucherPin(input);
 

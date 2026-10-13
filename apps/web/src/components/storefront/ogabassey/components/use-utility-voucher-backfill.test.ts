@@ -375,36 +375,38 @@ describe('useUtilityVoucherBackfill', () => {
     // 100ms before the bound — the body shares the REMAINDER, so
     // attempt 2 still starts at 10s + poll (not ~20s + poll).
     let calls = 0;
-    const cancelBody = vi.fn(async () => {});
-    const fetchMock = vi.fn(async () => {
-      calls += 1;
-      if (calls === 1) {
-        await new Promise((resolve) =>
-          setTimeout(
-            resolve,
-            UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS - 100
-          )
-        );
+    const seenSignals: Array<AbortSignal | undefined> = [];
+    const fetchMock = vi.fn(
+      async (_url: string, init?: { signal?: AbortSignal }) => {
+        seenSignals.push(init?.signal);
+        calls += 1;
+        if (calls === 1) {
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS - 100
+            )
+          );
+        }
+        return {
+          ok: true,
+          status: 200,
+          json:
+            calls === 1
+              ? () => new Promise(() => {})
+              : async () => ({
+                  transactions: [
+                    {
+                      request_reference: 'VTU-1',
+                      status: 'successful',
+                      voucher_pin: 'PIN-1',
+                      refund_pending: false,
+                    },
+                  ],
+                }),
+        };
       }
-      return {
-        ok: true,
-        status: 200,
-        body: { cancel: cancelBody },
-        json:
-          calls === 1
-            ? () => new Promise(() => {})
-            : async () => ({
-                transactions: [
-                  {
-                    request_reference: 'VTU-1',
-                    status: 'successful',
-                    voucher_pin: 'PIN-1',
-                    refund_pending: false,
-                  },
-                ],
-              }),
-      };
-    });
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
@@ -422,9 +424,10 @@ describe('useUtilityVoucherBackfill', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.current).toMatchObject({ pin: 'PIN-1', successful: true });
-    // R71: the stalled attempt-1 stream was cancelled; the successful
-    // attempt-2 stream was not.
-    expect(cancelBody).toHaveBeenCalledTimes(1);
+    // R72: the stalled attempt-1 fetch was aborted pre-retry; the
+    // successful attempt-2 fetch was untouched.
+    expect(seenSignals[0]?.aborted).toBe(true);
+    expect(seenSignals[1]?.aborted).toBe(false);
   });
 
   it('scopes history polls by reference', async () => {

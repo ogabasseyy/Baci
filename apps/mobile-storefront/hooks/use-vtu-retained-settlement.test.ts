@@ -21,8 +21,8 @@ const mockGetSession =
       error: null | { message: string };
     }>
   >();
-const mockFetchWithTimeout =
-  jest.fn<(url: string, options: RequestInit) => Promise<Response>>();
+// Real shared helper under test (R72): global fetch is the seam.
+const fetchSpy = jest.spyOn(global, 'fetch');
 const mockUseAuthStore = jest.fn<() => string | null>();
 
 jest.mock('@/lib/supabase', () => ({
@@ -32,8 +32,6 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
-  fetchWithTimeout: (url: string, options: RequestInit) =>
-    mockFetchWithTimeout(url, options),
   SHORT_TIMEOUT: 5000,
 }));
 
@@ -83,7 +81,7 @@ describe('useVtuRetainedSettlement', () => {
     // double-charge on a fresh key.
     rememberPendingVtuPurchase('mob-settle', 'key-settle');
     notePendingVtuReference('mob-settle', 'REF-SETTLED');
-    mockFetchWithTimeout.mockResolvedValue(
+    fetchSpy.mockResolvedValue(
       makeResponse({
         transactions: [
           {
@@ -101,8 +99,8 @@ describe('useVtuRetainedSettlement', () => {
       expect(isStalePendingVtuSuccess('mob-settle', 'REF-SETTLED')).toBe(true)
     );
     expect(recallPendingVtuKey('mob-settle')).toBe('key-settle');
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    const url = String(mockFetchWithTimeout.mock.calls[0]?.[0] ?? '');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
     expect(url).toContain('reference=REF-SETTLED');
     expect(url).not.toContain('type=');
   });
@@ -113,7 +111,7 @@ describe('useVtuRetainedSettlement', () => {
     rememberPendingVtuPurchase('mob-suppressed', 'key-suppressed');
     notePendingVtuReference('mob-suppressed', 'REF-SUPPRESSED');
     markPendingVtuCompleted('mob-suppressed');
-    mockFetchWithTimeout.mockResolvedValue(
+    fetchSpy.mockResolvedValue(
       makeResponse({
         transactions: [
           {
@@ -127,7 +125,7 @@ describe('useVtuRetainedSettlement', () => {
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getPendingVtuSettlementPass()).toBeNull());
     expect(recallPendingVtuKey('mob-suppressed')).toBe('key-suppressed');
     expect(isStalePendingVtuSuccess('mob-suppressed', 'REF-SUPPRESSED')).toBe(
@@ -144,12 +142,12 @@ describe('useVtuRetainedSettlement', () => {
     notePendingVtuReference('mob-mine', 'REF-MINE');
     rememberPendingVtuPurchase('mob-theirs', 'key-theirs', theirs);
     notePendingVtuReference('mob-theirs', 'REF-THEIRS');
-    mockFetchWithTimeout.mockResolvedValue(makeResponse({ transactions: [] }));
+    fetchSpy.mockResolvedValue(makeResponse({ transactions: [] }));
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
-    const url = String(mockFetchWithTimeout.mock.calls[0]?.[0] ?? '');
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    const url = String(fetchSpy.mock.calls[0]?.[0] ?? '');
     expect(url).toContain('reference=REF-MINE');
     expect(recallPendingVtuKey('mob-theirs')).toBe('key-theirs');
   });
@@ -170,7 +168,7 @@ describe('useVtuRetainedSettlement', () => {
     const { unmount: unmountEmpty } = renderHook(() =>
       useVtuRetainedSettlement({ enabled: true })
     );
-    await waitFor(() => expect(mockFetchWithTimeout).not.toHaveBeenCalled());
+    await waitFor(() => expect(fetchSpy).not.toHaveBeenCalled());
 
     unmountDisabled();
     unmountUnsigned();
@@ -180,11 +178,11 @@ describe('useVtuRetainedSettlement', () => {
   it('leaves entries untouched when the read fails', async () => {
     rememberPendingVtuPurchase('mob-flaky', 'key-flaky');
     notePendingVtuReference('mob-flaky', 'REF-FLAKY');
-    mockFetchWithTimeout.mockResolvedValue(makeResponse({}, false, 500));
+    fetchSpy.mockResolvedValue(makeResponse({}, false, 500));
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     // Fail-open: the replay path still dedupes.
     expect(recallPendingVtuKey('mob-flaky')).toBe('key-flaky');
   });
@@ -198,14 +196,14 @@ describe('useVtuRetainedSettlement', () => {
     const gate = new Promise<unknown>((resolve) => {
       release = resolve;
     });
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: true,
       status: 200,
       json: () => gate,
     } as unknown as Response);
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
 
     // Switch before the read resolves: the guard inside
     // fetchVoucherPin must skip the forget.
@@ -234,7 +232,7 @@ describe('useVtuRetainedSettlement', () => {
     const gate = new Promise<unknown>((resolve) => {
       release = resolve;
     });
-    mockFetchWithTimeout.mockResolvedValue({
+    fetchSpy.mockResolvedValue({
       ok: true,
       status: 200,
       json: () => gate,
@@ -242,7 +240,7 @@ describe('useVtuRetainedSettlement', () => {
 
     expect(getPendingVtuSettlementPass()).toBeNull();
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
 
     const pass = getPendingVtuSettlementPass();
     expect(pass).toBeInstanceOf(Promise);
@@ -284,14 +282,14 @@ describe('useVtuRetainedSettlement', () => {
     const fetchGate = new Promise<Response>((resolve) => {
       releaseFetch = resolve;
     });
-    mockFetchWithTimeout.mockReturnValueOnce(fetchGate);
+    fetchSpy.mockReturnValueOnce(fetchGate);
 
     const { rerender, unmount } = renderHook(
       ({ enabled }: { enabled: boolean }) =>
         useVtuRetainedSettlement({ enabled }),
       { initialProps: { enabled: true } }
     );
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     expect(getPendingVtuSettlementPass()).not.toBeNull();
 
     mockUseAuthStore.mockReturnValue('user-2');

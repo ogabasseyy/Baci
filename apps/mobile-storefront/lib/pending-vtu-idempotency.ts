@@ -27,7 +27,7 @@
 
 import {
   hasLegacyVtuScopeKeys,
-  PERSISTED_VTU_KEY_TTL_MS,
+  isExpiredPendingVtuEntry,
   parsePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-codec';
@@ -131,7 +131,7 @@ export function recallPendingVtuKey(
 ): string | null {
   const pending = pendingPurchases.get(descriptor);
   if (!pending) return null;
-  if (now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
+  if (isExpiredPendingVtuEntry(pending, now)) {
     pendingPurchases.delete(descriptor);
     persistPendingVtuPurchases();
     return null;
@@ -140,17 +140,17 @@ export function recallPendingVtuKey(
 }
 
 /**
- * Frees one registry slot by dropping a past-TTL entry (live recall
- * would drop it on access anyway, regardless of reference state).
- * When every entry is still live the registry OVERFLOWS past the cap
- * instead of evicting: no client-side signal proves terminality, so
- * deleting a live attempt would lose deduplication and its retry
- * would mint fresh and double-debit. Entries are tiny and the 7-day
- * TTL bounds retention, so overflow is cheap and self-healing.
+ * Frees one registry slot by dropping an EXPIRED entry (live recall
+ * would drop it on access anyway). TTL-retained referenced-processing
+ * entries are never dropped here: they keep the registry OVERFLOWING
+ * past the cap instead, since evicting them would lose deduplication
+ * and their retry would mint fresh and double-debit. Entries are tiny
+ * and retention ends on observed terminality, so overflow is cheap
+ * and self-healing.
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
-    if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
+    if (isExpiredPendingVtuEntry(entry, now)) {
       pendingPurchases.delete(scoped);
       return;
     }

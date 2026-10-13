@@ -48,6 +48,21 @@ export interface ParsedPendingVtuSnapshot {
  */
 export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * TTL expiry with referenced-processing retention (Codex R61 6rtSNk):
+ * referenced-but-uncompleted entries outlive the TTL because the
+ * server keeps provider-unknown rows processing indefinitely —
+ * deleting the key mapping would mint fresh on retry and
+ * double-debit. Retention ends on observed terminality.
+ */
+export function isExpiredPendingVtuEntry(
+  entry: PersistedPendingVtuPurchase,
+  now: number = Date.now()
+): boolean {
+  if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) return false;
+  return entry.reference === null || entry.completedAt != null;
+}
+
 function isPersistedEntry(
   item: unknown
 ): item is [string, PersistedPendingVtuPurchase] {
@@ -87,7 +102,7 @@ export function serializePendingVtuEntries(
 ): string {
   const live: [string, PersistedPendingVtuPurchase][] = [];
   for (const [scoped, entry] of entries) {
-    if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) {
+    if (!isExpiredPendingVtuEntry(entry, now)) {
       live.push([
         scoped,
         {
@@ -158,8 +173,7 @@ export function parsePendingVtuSnapshot(
   const entries = (Array.isArray(rawEntries) ? rawEntries : [])
     .filter(
       (item): item is [string, PersistedPendingVtuPurchase] =>
-        isPersistedEntry(item) &&
-        now - item[1].rememberedAt <= PERSISTED_VTU_KEY_TTL_MS
+        isPersistedEntry(item) && !isExpiredPendingVtuEntry(item[1], now)
     )
     .filter(
       ([scoped, entry]) =>

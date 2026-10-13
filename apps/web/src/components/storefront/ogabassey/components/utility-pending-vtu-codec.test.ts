@@ -55,30 +55,36 @@ describe('utility-pending-vtu-codec', () => {
     ).toEqual({ entries: [], forgotten: [] });
   });
 
-  it('drops TTL-expired entries of any reference state on serialize and parse', () => {
-    // Uniform 7-day horizon: no client-side signal proves terminality, so
-    // referenced entries expire exactly like reference-less ones —
-    // mirrors live recall.
+  it('retains referenced-processing entries past the TTL on serialize and parse', () => {
+    // Codex R61 6rtSNk: a referenced but never-terminally-observed
+    // entry is still resolvable (the server keeps provider-unknown
+    // rows processing indefinitely), so the TTL must not delete the
+    // only client mapping to the original key — the retry would mint
+    // fresh and double-debit. Unreferenced and completed entries
+    // still drop.
     const weekMs = 7 * 24 * 60 * 60 * 1000;
-    const expired = entry({ reference: 'REF-A' });
-
-    expect(
-      parsePendingVtuSnapshot(
-        serializePendingVtuEntries(
-          [['a', expired]],
-          [],
-          Date.now() + weekMs + 1
-        )
+    const parsed = parsePendingVtuSnapshot(
+      serializePendingVtuEntries(
+        [
+          ['a', entry({ reference: 'REF-A' })],
+          ['b', entry()],
+          ['c', entry({ reference: 'REF-C', completedAt: Date.now() })],
+        ],
+        [],
+        Date.now() + weekMs + 1
       )
-    ).toEqual({ entries: [], forgotten: [] });
+    );
+    expect(parsed.entries.map(([scoped]) => scoped)).toEqual(['a']);
+    expect(parsed.entries[0][1].reference).toBe('REF-A');
 
-    expect(
-      parsePendingVtuSnapshot(
-        JSON.stringify([
-          ['a', entry({ reference: 'REF-A', rememberedAt: 1 })],
-        ])
-      )
-    ).toEqual({ entries: [], forgotten: [] });
+    // Legacy raw snapshots get the same retention on parse.
+    const legacy = parsePendingVtuSnapshot(
+      JSON.stringify([
+        ['a', entry({ reference: 'REF-A', rememberedAt: 1 })],
+        ['b', entry({ rememberedAt: 1 })],
+      ])
+    );
+    expect(legacy.entries.map(([scoped]) => scoped)).toEqual(['a']);
   });
 
   it('ignores corrupt snapshots on parse', () => {

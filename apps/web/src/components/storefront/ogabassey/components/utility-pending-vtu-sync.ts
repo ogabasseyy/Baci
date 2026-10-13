@@ -160,19 +160,19 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
       }
       continue;
     }
-    // Entry-merge DELIBERATELY stays timestamp-bound (asymmetric
-    // with live-delete above): a zombie entry for an OLDER
-    // generation (stale tab that missed the intermediate forget)
-    // must still be suppressed, and only the timestamp proves it
-    // predates the deletion. Well-formed snapshots cannot hold a
-    // different-key entry older than their own tombstone, so this
-    // never suppresses a genuine newer generation.
+    // Entry-merge is KEY-bound like live-delete (Codex R61 6rtSNf):
+    // a newer generation (different key) must survive an older
+    // generation's tombstone even when remembered earlier (stale
+    // tab B forgetting K1 after tab A minted K2 — timestamp-only
+    // suppression would erase the active K2 key and a retry would
+    // mint K3 and debit again). A re-remembered entry (newer than
+    // the tombstone) still merges, and keyless tombstones
+    // (pre-binding) keep timestamp arbitration.
     const tombstone = forgottenScopedKeys.get(scoped);
-    // A re-remembered entry (newer than the tombstone) still merges:
-    // only the deleted generation is suppressed.
     if (
       tombstone !== undefined &&
-      entry.rememberedAt <= tombstone.forgottenAt
+      entry.rememberedAt <= tombstone.forgottenAt &&
+      (tombstone.key === undefined || tombstone.key === entry.key)
     ) {
       continue;
     }

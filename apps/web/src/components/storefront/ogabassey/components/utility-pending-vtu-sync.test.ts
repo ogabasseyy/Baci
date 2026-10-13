@@ -453,10 +453,10 @@ describe('keyed tombstones (6rrMIj)', () => {
     expect(recallPendingVtuKey('SIG-GEN')).toBeUndefined();
   });
 
-  it('still suppresses zombie older-generation entries by timestamp', () => {
-    // Entry-merge DELIBERATELY stays timestamp-bound: a stale tab
-    // that missed the intermediate forget must not resurrect its
-    // zombie entry via merge.
+  it('still suppresses zombie same-generation entries', () => {
+    // Same key as the tombstone means the snapshot entry IS the
+    // deleted generation: suppress even though only the timestamp
+    // proves it predates the deletion.
     const now = Date.now();
     savePendingVtuSnapshot(
       JSON.stringify({
@@ -471,13 +471,41 @@ describe('keyed tombstones (6rrMIj)', () => {
             },
           ],
         ],
-        forgotten: [{ scoped: 'SIG-GEN', forgottenAt: now, key: 'key-K2' }],
+        forgotten: [{ scoped: 'SIG-GEN', forgottenAt: now, key: 'key-K1' }],
       })
     );
 
     syncPendingVtuPurchasesFromSnapshot();
 
     expect(recallPendingVtuKey('SIG-GEN')).toBeUndefined();
+  });
+
+  it('merges a newer-generation entry older than a foreign tombstone', () => {
+    // Codex R61 6rtSNf: tab A settled K1 and minted K2, then stale
+    // tab B forgot K1 with a later clock. Timestamp-only merge
+    // would erase the active K2 and its retry would mint K3 and
+    // debit again; the key binding retains K2.
+    const now = Date.now();
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [
+          [
+            'SIG-GEN',
+            {
+              key: 'key-K2',
+              reference: null,
+              rememberedAt: now - 60_000,
+              completedAt: null,
+            },
+          ],
+        ],
+        forgotten: [{ scoped: 'SIG-GEN', forgottenAt: now, key: 'key-K1' }],
+      })
+    );
+
+    syncPendingVtuPurchasesFromSnapshot();
+
+    expect(recallPendingVtuKey('SIG-GEN')).toBe('key-K2');
   });
 
   it('records the deleted key generation on forget', () => {

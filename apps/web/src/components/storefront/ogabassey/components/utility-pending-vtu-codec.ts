@@ -50,6 +50,21 @@ import {
  */
 export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * TTL expiry with referenced-processing retention (Codex R61 6rtSNk):
+ * referenced-but-uncompleted entries outlive the TTL because the
+ * server keeps provider-unknown rows processing indefinitely —
+ * deleting the key mapping would mint fresh on retry and
+ * double-debit. Retention ends on observed terminality.
+ */
+export function isExpiredPendingVtuEntry(
+  entry: PersistedPendingVtuEntry,
+  now: number = Date.now()
+): boolean {
+  if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) return false;
+  return entry.reference === null || entry.completedAt != null;
+}
+
 
 export interface PersistedPendingVtuEntry {
   key: string;
@@ -135,7 +150,7 @@ export function serializePendingVtuEntries(
 ): string {
   const live: [string, PersistedPendingVtuEntry][] = [];
   for (const [scoped, entry] of entries) {
-    if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) {
+    if (!isExpiredPendingVtuEntry(entry, now)) {
       live.push([
         scoped,
         {
@@ -196,7 +211,7 @@ export function parsePendingVtuSnapshot(
       continue;
     }
     const [scoped, entry] = item;
-    if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
+    if (isExpiredPendingVtuEntry(entry, now)) {
       continue;
     }
     entries.push([

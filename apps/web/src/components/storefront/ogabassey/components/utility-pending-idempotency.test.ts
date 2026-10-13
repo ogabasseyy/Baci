@@ -54,16 +54,16 @@ describe('utility-pending-idempotency', () => {
     expect(recallPendingVtuKey('{"ttl":"drop"}')).toBeUndefined();
   });
 
-  it('drops TTL-expired referenced entries on recall', () => {
-    // No client-side signal proves terminality (noted references mark
-    // non-terminal processing responses), so the 7-day TTL applies
-    // uniformly — including to referenced entries.
+  it('retains TTL-aged referenced entries on recall', () => {
+    // Codex R61 6rtSNk: dropping the key mapping for a referenced but
+    // never-terminally-observed entry would make the retry mint fresh
+    // and debit again while the first charge is still processing.
     rememberPendingVtuPurchase('{"ttl":"ref"}', 'key-ttl-ref');
     notePendingVtuReference('{"ttl":"ref"}', 'REF-TTL');
     const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
-    expect(recallPendingVtuKey('{"ttl":"ref"}', expired)).toBeUndefined();
-    // Deletion sticks: a live recall also misses.
-    expect(recallPendingVtuKey('{"ttl":"ref"}')).toBeUndefined();
+    expect(recallPendingVtuKey('{"ttl":"ref"}', expired)).toBe('key-ttl-ref');
+    // Retention sticks: a live recall still hits.
+    expect(recallPendingVtuKey('{"ttl":"ref"}')).toBe('key-ttl-ref');
   });
 
   it('overflows past the cap rather than evicting live attempts', () => {
@@ -111,16 +111,17 @@ describe('utility-pending-idempotency', () => {
     }
   });
 
-  it('evicts past-TTL entries (even referenced) before live ones', () => {
-    // sig-old is referenced but aged past the TTL (live recall would
-    // drop it on access anyway); the rest are young. The past-TTL
-    // entry goes first — otherwise the cap would wedge once 32
-    // referenced entries accumulate.
+  it('retains referenced-processing past-TTL entries at the cap (overflow)', () => {
+    // Codex R61 6rtSNk: sig-old is referenced but never terminally
+    // observed, so the cap cannot evict it — eviction would lose the
+    // original key and the retry would double-debit. Only the
+    // unreferenced aged entry is a victim; sig-old overflows instead.
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
       rememberPendingVtuPurchase('{"old":"sig"}', 'key-old');
       notePendingVtuReference('{"old":"sig"}', 'REF-OLD');
+      rememberPendingVtuPurchase('{"old":"unref"}', 'key-unref');
       vi.setSystemTime(
         new Date('2026-01-01T00:00:00Z').getTime() +
           PERSISTED_VTU_KEY_TTL_MS -
@@ -135,8 +136,10 @@ describe('utility-pending-idempotency', () => {
           1000
       );
       rememberPendingVtuPurchase('{"live":"new"}', 'key-new');
-      // Past-TTL referenced victim evicted…
-      expect(recallPendingVtuKey('{"old":"sig"}')).toBeUndefined();
+      // Unreferenced aged victim evicted…
+      expect(recallPendingVtuKey('{"old":"unref"}')).toBeUndefined();
+      // …TTL-aged referenced-processing entry retained (overflow)…
+      expect(recallPendingVtuKey('{"old":"sig"}')).toBe('key-old');
       // …young survivors kept.
       expect(recallPendingVtuKey('{"live":0}')).toBe('key-0');
       expect(recallPendingVtuKey('{"live":"new"}')).toBe('key-new');

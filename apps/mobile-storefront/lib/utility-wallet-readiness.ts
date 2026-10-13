@@ -16,6 +16,12 @@ interface UtilityWalletReadinessPayment {
   walletBalance: number;
   walletError: Error | null;
   walletIsLoading: boolean;
+  /**
+   * A balance refetch is in flight (React Query isRefetching). The
+   * cached balance is about to be replaced, so the gate blocks on it
+   * exactly like a first load — mirroring web's walletRefreshPending.
+   */
+  walletIsRefetching: boolean;
 }
 
 /**
@@ -58,7 +64,11 @@ export function ensureUtilityWalletReady({
     );
     return false;
   }
-  if (payment.walletIsLoading) {
+  // A refetch in flight means fresh data is seconds away — never
+  // submit against the balance it is about to replace. Merely stale
+  // data with no fetch running still stands (the server stays
+  // authoritative); blocking on that would brick purchases.
+  if (payment.walletIsLoading || payment.walletIsRefetching) {
     Alert.alert(
       'Checking wallet balance',
       'Please wait a moment and try again.'

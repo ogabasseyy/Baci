@@ -25,6 +25,7 @@ function paymentState(
     walletBalance: 5000,
     walletError: null,
     walletIsLoading: false,
+    walletIsRefetching: false,
     ...overrides,
   };
 }
@@ -108,6 +109,43 @@ describe('ensureUtilityWalletReady', () => {
       expect.any(String)
     );
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+  });
+
+  it('blocks while a wallet refetch is in flight even when loading is false', () => {
+    // Muse follow-up: isLoading is false during background refetches,
+    // so gate on isRefetching too — the cached balance is about to be
+    // replaced. Mirrors web's walletRefreshPending check.
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      payment: paymentState({
+        walletBalance: 5000,
+        walletIsLoading: false,
+        walletIsRefetching: true,
+      }),
+    });
+
+    expect(ready).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Checking wallet balance',
+      expect.any(String)
+    );
+    expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+  });
+
+  it('blocks retained replays while a wallet refetch is in flight', () => {
+    // The R65 bypass skips the balance comparison, not the loading
+    // gates: a replay must still wait for fresh balance evidence.
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      isRetainedReplay: true,
+      payment: paymentState({
+        walletBalance: 0,
+        walletIsLoading: false,
+        walletIsRefetching: true,
+      }),
+    });
+
+    expect(ready).toBe(false);
   });
 
   it('offers a wallet refetch from the error state instead of reporting a shortfall', () => {

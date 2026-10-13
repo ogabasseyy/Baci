@@ -55,6 +55,7 @@ describe('data form purchase cashback', () => {
         walletBalance: 5000,
         walletError: null,
         walletIsLoading: false,
+        walletIsRefetching: false,
         getWalletIdempotencyKey: jest.fn(() => 'data-key'),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',

@@ -126,6 +126,7 @@ export function useUtilityPayment() {
     walletBalance,
     walletError,
     walletIsLoading: wallet.isLoading,
+    walletIsRefetching: wallet.isRefetching,
     /**
      * Returns the wallet-only Idempotency-Key (UUID) for this purchase
      * descriptor, recalling a still-pending key across form remounts

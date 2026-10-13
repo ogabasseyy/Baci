@@ -24,10 +24,13 @@ import {
 
 export { VtuPersistenceError };
 
-import { getProviderVtuCommissionRate } from '@/lib/vtu-commission-rates';
 import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { resolveKudaFallbackCreditCorrection } from '@/lib/vtu-fallback-credit-correction';
-import { isFlaggedReferenceLessVtuRow } from '@/lib/vtu-flagged-recovery';
+import {
+  isFlaggedReferenceLessVtuRow,
+  isUnsubmittedPreparedVtuRow,
+  markVtuProviderSubmissionStarted,
+} from '@/lib/vtu-flagged-recovery';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
@@ -2387,6 +2390,25 @@ export async function fulfillPendingVtuTransaction({
           row,
           supabase,
         });
+      } else if (isUnsubmittedPreparedVtuRow(row)) {
+        // Proven-never-submitted twin (Codex R50 6rp7M_): the wallet
+        // debit landed but the process died between the debit persist
+        // and the first provider call — every direct Kuda purchase
+        // has this crash window. Marker absence on a stale
+        // marker-era row proves no submission ran, so flip to marked
+        // pending and let the next pass re-drive: the debit
+        // short-circuits idempotently and the same request_reference
+        // submits for the first time (no provider idempotency
+        // needed). No ledger gate: walletDebited=true IS the debit
+        // proof (it persists only after the debit RPC succeeds).
+        // Without this the row falls into the flagged branch below,
+        // requeries a never-submitted reference as unknown forever,
+        // and strands the debit with no vend and no refund.
+        await restoreInterruptedPreVendVtuRow({
+          userSafeMessage: `Reconciliation recovered unsubmitted prepared row ${row.id}`,
+          row,
+          supabase,
+        });
       } else if (isFlaggedReferenceLessVtuRow(row)) {
         // Post-vend twin of the strand above (mutually exclusive by
         // the flag): the debit provably landed but the result persist
@@ -2647,6 +2669,37 @@ export async function fulfillPendingVtuTransaction({
     // Mutate the row's metadata so downstream code (refund-on-Kuda-fail
     // branch) sees walletDebited=true.
     row.metadata = debitedMetadata;
+  }
+
+  // Submission marker (Codex R50 6rp7M_): persist BEFORE the first
+  // provider call so a crash between the wallet-debit persist and
+  // the vend is provably unsubmitted — the reconciler re-drives
+  // marker-less stale rows with the same reference instead of
+  // stranding the debit forever. Fail closed like the walletDebited
+  // persist above: without the marker the row is indistinguishable
+  // from a submitted-but-unpersisted vend, which must never
+  // re-drive, so restore to marked pending and surface the failure
+  // (the next pass retries the marker write, then vends).
+  const submissionMarkerError = await markVtuProviderSubmissionStarted({
+    row,
+    supabase,
+  });
+  if (submissionMarkerError) {
+    console.error('Failed to persist VTU provider-submission marker:', {
+      error: submissionMarkerError.message,
+      transactionId: row.id,
+    });
+    await restoreInterruptedPreVendVtuRow({
+      // Fixed user-safe template: the raw DB error stays in the
+      // server log above — error_message is customer-visible history.
+      userSafeMessage:
+        'VTU purchase confirmation failed; the purchase will resume automatically.',
+      row,
+      supabase,
+    });
+    throwVtuPersistenceError(
+      `Failed to persist provider-submission marker for ${row.id}: ${submissionMarkerError.message}`
+    );
   }
 
   let result: VtuPurchaseResult;

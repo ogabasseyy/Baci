@@ -2,6 +2,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { hasRecentBackfillSchedule } from '@/lib/vtu-backfill-pacing';
+import { resolveHistoryMerchantCustomer } from '@/lib/vtu-history-customer-resolution';
 import {
   getPaymentStatusKey,
   projectHistoryTransaction,
@@ -16,7 +17,6 @@ import {
   shouldBackfillForStatus,
   shouldBackfillForType,
 } from '@/lib/vtu-voucher-backfill';
-import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 import { historyQuerySchema } from '@/schemas/vtu';
 
 const PAYMENT_STATUS_BATCH_SIZE = 250;
@@ -49,84 +49,35 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { merchantSlug, type, limit, reference } = parsed.data;
 
-    // Alias-aware (mirrors checkout): a processing tab open across a
-    // store rename polls with the stale slug; without the fallback the
-    // backfill 404s, treats it as permanent, and never settles. Strict:
-    // an alias-DB failure throws (retryable 5xx via the outer catch),
-    // never a 404 the backfill would treat as terminal.
-    const { data: merchant, error: merchantError } =
-      await withMerchantSlugAliasFallback(
-        merchantSlug,
-        (resolvedSlug) =>
-          supabase
-            .from('merchants')
-            .select('id')
-            .eq('slug', resolvedSlug)
-            .maybeSingle(),
-        { strict: true }
-      );
-
-    // A lookup ERROR is indeterminate (retryable), not "not found": a
-    // transient DB blip must not present as a permanent 404 either.
-    if (merchantError) {
-      console.error('Failed to resolve VTU history merchant:', merchantError);
+    const resolution = await resolveHistoryMerchantCustomer({
+      supabase,
+      merchantSlug,
+      user: auth.user,
+    });
+    if (resolution.kind === 'merchantError') {
       return NextResponse.json(
         { error: 'Failed to fetch history' },
         { status: 500 }
       );
     }
-
-    if (!merchant) {
+    if (resolution.kind === 'noMerchant') {
       return NextResponse.json(
         { error: 'Merchant not found' },
         { status: 404 }
       );
     }
-
-    let customer = null;
-
-    const { data: customerByUserId } = await supabase
-      .from('customers')
-      .select('id, user_id')
-      .eq('merchant_id', merchant.id)
-      .eq('user_id', auth.user.id)
-      .maybeSingle();
-
-    if (customerByUserId) {
-      customer = customerByUserId;
-    } else if (auth.user.email) {
-      // Keep this GET read-only. VTU checkout resolves and links email-matched
-      // customers through resolveVtuCustomer before creating payment rows.
-      const { data: customerByEmail } = await supabase
-        .from('customers')
-        .select('id, user_id')
-        .eq('merchant_id', merchant.id)
-        .eq('email', auth.user.email)
-        .maybeSingle();
-
-      // Tenant isolation: the email claim alone proves nothing (a guest
-      // row pre-created with this email may belong to someone else, and
-      // an attacker can register an unverified account on it), so only
-      // a row already linked to THIS auth user is accepted. Unlinked
-      // (null) and mismatched rows fall through to the empty list —
-      // never link here: first-claimer-wins on a GET would let an
-      // attacker permanently claim a victim's guest history.
-      if (customerByEmail?.user_id === auth.user.id) {
-        customer = customerByEmail;
-      }
-    }
-
-    if (!customer) {
+    if (resolution.kind === 'noCustomer') {
       return NextResponse.json({ transactions: [] });
     }
+    const { customerId, merchantId } = resolution;
 
     let query = supabase
       .from('vtu_transactions')
       .select(
         'id, created_at, type, status, amount, network_provider, phone_number, biller_name, biller_item_code, customer_identifier, customer_name, request_reference, transaction_id, error_message, customer_cashback, metadata, source, customer_id'
       )
-      .eq('merchant_id', merchant.id)
-      .eq('customer_id', customer.id);
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', customerId);
 
     if (type) {
       query = query.eq('type', type);
@@ -179,7 +130,7 @@ export async function GET(request: NextRequest) {
         const { data: paymentRows, error: paymentRowsError } = await supabase
           .from('transactions')
           .select('gateway, gateway_reference, status')
-          .eq('merchant_id', merchant.id)
+          .eq('merchant_id', merchantId)
           .in('gateway_reference', paymentReferenceBatch);
 
         if (paymentRowsError) {

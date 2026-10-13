@@ -4,16 +4,13 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
+import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
-import {
-  preparePendingVtuTransaction,
-  resolveVtuCustomer,
-} from '@/lib/vtu-pending-transaction';
+import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
-import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -25,46 +22,6 @@ interface ExistingIdempotencyRow {
   customer_id: string;
   merchant_id: string;
   request_fingerprint: string;
-}
-
-/**
- * Merchant + customer owned by the authed user under the slug. Null =
- * genuine not-found/mismatch (400); lookup ERRORS throw (500, key
- * kept). Merchant id backs the replay storefront check (the
- * fingerprint omits merchant binding).
- */
-async function resolveRequestingOwnership(
-  supabase: SupabaseClient,
-  user: NonNullable<Awaited<ReturnType<typeof authenticateApiRequest>>['user']>,
-  merchantSlug: string
-): Promise<{ customerId: string | null; merchantId: string | null }> {
-  // Alias-aware + strict: stale tabs resolve via the alias table; alias
-  // failures 500 (key kept) instead of 400 ownership mismatch (rotated).
-  const { data: merchant, error: merchantError } =
-    await withMerchantSlugAliasFallback(
-      merchantSlug,
-      (s) =>
-        supabase.from('merchants').select('id').eq('slug', s).maybeSingle(),
-      { strict: true }
-    );
-  if (merchantError) {
-    throw new Error(
-      `Failed to resolve VTU merchant ownership: ${merchantError.message}`
-    );
-  }
-  if (!merchant) {
-    return { customerId: null, merchantId: null };
-  }
-  const customer = await resolveVtuCustomer({
-    supabase,
-    merchantId: merchant.id as string,
-    strictLookups: true,
-    user,
-  });
-  return {
-    customerId: customer?.id ?? null,
-    merchantId: merchant.id as string,
-  };
 }
 
 async function findExistingIdempotencyRow(
@@ -171,9 +128,9 @@ export async function POST(request: NextRequest) {
       // Current-attempt overlay: the retry carries the freshest
       // phone/reference; attempt-1's snapshot must not win. Runs on
       // the AUTHENTICATED user client (never service role for this
-      // user-facing write): the RPC enforces row ownership from the
-      // JWT, and the refresh pre-read resolves through the owner
-      // SELECT policy.
+      // user-facing write): the patch RPC enforces row ownership
+      // from the JWT, and the refresh pre-read resolves through the
+      // ownership-scoped RPC (no customer table projection).
       await overlayReplayAttributes({
         supabase: auth.supabase,
         transactionId: existing.vtu_transaction_id,

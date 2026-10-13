@@ -80,6 +80,7 @@ interface PendingTransactionMockOptions {
   updateErrors?: {
     finalMetadata?: { message: string };
     purchase?: { message: string };
+    submissionMarker?: { message: string };
     successMetadata?: { message: string };
   };
   updatePayloads?: unknown[];
@@ -108,6 +109,20 @@ function selectUpdateError(
   }
 
   return updateErrors.finalMetadata;
+}
+
+function isSubmissionMarkerShaped(payloadRecord: Record<string, unknown>) {
+  const markerMetadata =
+    payloadRecord.metadata && typeof payloadRecord.metadata === 'object'
+      ? (payloadRecord.metadata as Record<string, unknown>)
+      : null;
+  return (
+    !('status' in payloadRecord) &&
+    !('transaction_id' in payloadRecord) &&
+    !('error_message' in payloadRecord) &&
+    markerMetadata !== null &&
+    'providerSubmissionStartedAt' in markerMetadata
+  );
 }
 
 function isClaimOrErrorUpdate(payloadRecord: Record<string, unknown>): boolean {
@@ -170,6 +185,13 @@ function createPendingTransactionSupabaseMock({
   updatePayloads = [],
 }: PendingTransactionMockOptions): SupabaseStub {
   let purchaseUpdateAttempt = 0;
+  // Fulfill persists the submission marker exactly once per pass, but
+  // later metadata-only writes spread row.metadata (marker included),
+  // so shape alone cannot tell them apart: only the FIRST
+  // marker-shaped write takes the submissionMarker slot. Later ones
+  // fall through to finalMetadata, preserving tests that script a
+  // failure for a post-vend metadata write.
+  let submissionMarkerWriteSeen = false;
   const claimMaybeSingle = vi.fn().mockResolvedValue({
     data: claimData,
     error: null,
@@ -273,6 +295,13 @@ function createPendingTransactionSupabaseMock({
                 transactionRow,
                 updateErrors
               );
+              if (
+                !submissionMarkerWriteSeen &&
+                isSubmissionMarkerShaped(payloadRecord)
+              ) {
+                submissionMarkerWriteSeen = true;
+                updateError = updateErrors.submissionMarker;
+              }
               if (
                 (payloadRecord.status === 'successful' ||
                   payloadRecord.status === 'failed') &&
@@ -4811,6 +4840,64 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     });
 
+    it('restores submission-marker write failures to marked pending without vending', async () => {
+      // The marker must persist BEFORE the first provider call: without
+      // it the row is indistinguishable from a submitted-but-unpersisted
+      // vend, which must never re-drive. Fail closed (restore + throw)
+      // so the next pass retries the marker write, then vends.
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        updateErrors: { submissionMarker: { message: 'marker write failed' } },
+        claimData: {
+          id: 'vtu-marker-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
+        transactionRow: {
+          id: 'vtu-marker-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-MARKERRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-marker-restore',
+        })
+      ).rejects.toThrow(/Failed to persist provider-submission marker/);
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          error_message:
+            'VTU purchase confirmation failed; the purchase will resume automatically.',
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('marker write failed');
+      }
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    });
+
     it('skips redeem RPC when walletDebited is already true and proceeds to vend', async () => {
       // P1: walletDebited=true means a prior fulfillment pass already
       // completed the debit. The current request must NOT re-call the
@@ -4902,8 +4989,17 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  function buildStrandedRowSupabase(ledgerData: unknown) {
+  function buildStrandedRowSupabase(
+    ledgerData: unknown,
+    options: {
+      createdAt?: string;
+      metadata?: Record<string, unknown>;
+    } = {}
+  ) {
     const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const rowMetadata = options.metadata ?? {
+      paymentSplit: { wallet: 1000, card: 0 },
+    };
     const single = vi
       .fn()
       .mockResolvedValueOnce({
@@ -4918,7 +5014,7 @@ describe('fulfillPendingVtuTransaction', () => {
           request_reference: 'VTU-STRANDED',
           transaction_id: null,
           status: 'processing',
-          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          metadata: rowMetadata,
           error_message: null,
           merchant_commission: null,
           customer_cashback: null,
@@ -4926,7 +5022,7 @@ describe('fulfillPendingVtuTransaction', () => {
           biller_item_code: null,
           customer_identifier: null,
           source: 'checkout',
-          created_at: '2026-10-01T00:00:00.000Z',
+          created_at: options.createdAt ?? '2026-10-01T00:00:00.000Z',
           updated_at: staleAt,
         },
         error: null,
@@ -4934,7 +5030,7 @@ describe('fulfillPendingVtuTransaction', () => {
       .mockResolvedValueOnce({
         data: {
           error_message: null,
-          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          metadata: rowMetadata,
           status: 'processing',
           transaction_id: null,
         },
@@ -5004,6 +5100,45 @@ describe('fulfillPendingVtuTransaction', () => {
         }),
       })
     );
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('recovers an unsubmitted prepared row to marked pending instead of requery limbo', async () => {
+    // Crash between the debit persist and the first provider call
+    // (Codex R50 6rp7M_): walletDebited is set but no submission
+    // marker exists on a stale marker-era row, which proves no
+    // provider call ran. Recovery flips to marked pending so the
+    // next pass re-drives with the same reference (debit
+    // short-circuits idempotently) instead of requerying a
+    // never-submitted reference as unknown forever. FAILS against
+    // pre-fix code (no unsubmitted branch: the row takes the flagged
+    // requery path and no flip is issued).
+    const { supabase, update } = buildStrandedRowSupabase(
+      { id: 'ledger-debit-1' },
+      {
+        createdAt: '2026-10-21T00:00:00.000Z',
+        metadata: { walletDebited: true },
+      }
+    );
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_message: expect.stringContaining('unsubmitted prepared row'),
+        status: 'pending',
+        metadata: expect.objectContaining({
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       reference: 'VTU-STRANDED',
       status: 'processing',

@@ -29,6 +29,34 @@ describe('UtilitySuccessView', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('themes result surfaces with storefront variables, not hardcoded colors', () => {
+    // Merchant palettes (custom/dark) apply: headings, subtext, the
+    // detail panel, and the success icon all resolve through store
+    // variables with default-theme fallbacks.
+    render(
+      <UtilitySuccessView
+        activeTab="airtime"
+        amount={1500}
+        onClose={vi.fn()}
+        reference="VTU-123"
+      />
+    );
+
+    const root = screen.getByText('Success!').parentElement;
+    const [icon, heading, subtext, panel] = Array.from(
+      root?.children ?? []
+    );
+    expect(icon?.className).toContain('store-success-bg');
+    expect(icon?.className).toContain('store-success-text');
+    expect(heading?.className).toContain('store-text');
+    expect(subtext?.className).toContain('store-muted-text');
+    expect(panel?.className).toContain('store-muted-surface');
+    // No hardcoded gray/green survives on the result states.
+    expect(root?.innerHTML).not.toContain('text-gray-');
+    expect(root?.innerHTML).not.toContain('bg-gray-');
+    expect(root?.innerHTML).not.toContain('green-');
+  });
+
   it('renders the pending state while a purchase is processing', () => {
     render(
       <UtilitySuccessView
@@ -143,11 +171,16 @@ describe('UtilitySuccessView', () => {
 
       expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
       expect(screen.getByText(/1,000 was refunded/)).toBeInTheDocument();
-      // Themed danger tokens (not hardcoded red) so merchant palettes apply.
-      const icon = screen.getByText('Purchase failed').parentElement
-        ?.children[0];
+      // Themed tokens (not hardcoded colors) so merchant palettes apply.
+      const root = screen.getByText('Purchase failed').parentElement;
+      const [icon, heading, subtext, panel] = Array.from(
+        root?.children ?? []
+      );
       expect(icon?.className).toContain('store-danger-bg');
       expect(icon?.className).toContain('store-danger-text');
+      expect(heading?.className).toContain('store-text');
+      expect(subtext?.className).toContain('store-muted-text');
+      expect(panel?.className).toContain('store-muted-surface');
     } finally {
       vi.unstubAllGlobals();
     }

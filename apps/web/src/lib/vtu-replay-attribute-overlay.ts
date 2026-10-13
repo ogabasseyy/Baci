@@ -118,12 +118,23 @@ async function tryRefreshServerValidationReference(
   transactionId: string
 ): Promise<string | undefined> {
   try {
+    // Ownership-scoped projection (Codex R50 6rp7ND): the RPC
+    // returns only these three refresh fields for owner rows (zero
+    // rows otherwise — no existence oracle) instead of exposing
+    // full customer rows through a SELECT policy.
     const { data, error } = await supabase
-      .from('vtu_transactions')
-      .select('metadata, customer_identifier, status')
-      .eq('id', transactionId)
-      .single();
-    if (error || !data) {
+      .rpc('get_vtu_replay_refresh_fields', {
+        p_transaction_id: transactionId,
+      })
+      .maybeSingle();
+    // Untyped client: the RPC projection is unknown to the query
+    // builder, so narrow the three refresh fields explicitly.
+    const refresh = data as {
+      customer_identifier: unknown;
+      metadata: unknown;
+      status: unknown;
+    } | null;
+    if (error || !refresh) {
       return undefined;
     }
     // Refresh only before a re-vend: successful rows short-circuit in
@@ -131,10 +142,10 @@ async function tryRefreshServerValidationReference(
     // failed rows take the refund path — none consume a reference, so
     // a 30s validation call here would only stall lost-response
     // replays during a validation outage (Codex R34 hY3x).
-    if (data.status !== 'pending') {
+    if (refresh.status !== 'pending') {
       return undefined;
     }
-    const stored: unknown = data.metadata;
+    const stored: unknown = refresh.metadata;
     const metadata: Record<string, unknown> =
       typeof stored === 'object' && stored !== null
         ? (stored as Record<string, unknown>)
@@ -150,8 +161,8 @@ async function tryRefreshServerValidationReference(
     const productCode =
       typeof metadata.productCode === 'string' ? metadata.productCode : '';
     const customerIdentifier =
-      typeof data.customer_identifier === 'string'
-        ? data.customer_identifier
+      typeof refresh.customer_identifier === 'string'
+        ? refresh.customer_identifier
         : '';
     if (!billerCode || !productCode || !customerIdentifier) {
       return undefined;

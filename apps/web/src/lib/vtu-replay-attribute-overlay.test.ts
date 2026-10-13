@@ -22,18 +22,24 @@ type VtuRow = {
 } | null;
 
 function buildSupabase(calls: RpcCall[], row: VtuRow): SupabaseClient {
+  const rpc = vi.fn((fn: string, args: Record<string, unknown>) => {
+    // The ownership-scoped refresh read is tracked separately from
+    // the patch RPC: existing assertions pin the patch call shape.
+    if (fn === 'get_vtu_replay_refresh_fields') {
+      return {
+        maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+      };
+    }
+    calls.push({ fn, args });
+    return Promise.resolve({ data: null, error: null });
+  });
   return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn().mockResolvedValue({ data: row, error: null }),
-        })),
-      })),
-    })),
-    rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
-      calls.push({ fn, args });
-      return Promise.resolve({ data: null, error: null });
+    from: vi.fn(() => {
+      throw new Error(
+        'overlay must not query vtu_transactions directly (use the scoped RPC)'
+      );
     }),
+    rpc,
   } as unknown as SupabaseClient;
 }
 
@@ -297,18 +303,51 @@ describe('overlayReplayAttributes', () => {
     }
   });
 
+  it('reads refresh fields through the ownership-scoped RPC, never the table', async () => {
+    // Codex R50 6rp7ND: no SELECT policy exposes customer rows, so
+    // the pre-read goes through get_vtu_replay_refresh_fields (three
+    // columns, owner rows only) instead of from().select().
+    mockVerifyBillCustomer.mockResolvedValue({
+      message: 'ok',
+      validationReference: 'VAL-REFRESHED',
+      verified: true,
+    });
+    const supabase = buildSupabase(calls, monnifyRow());
+
+    const result = await overlayReplayAttributes({
+      customerPhone: undefined,
+      supabase,
+      transactionId: 'vtu-tx-1',
+      validationReference: undefined,
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith('get_vtu_replay_refresh_fields', {
+      p_transaction_id: 'vtu-tx-1',
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(result).toEqual({ refreshed: true, updated: true });
+    expect(calls).toEqual([
+      {
+        args: {
+          p_customer_phone: null,
+          p_transaction_id: 'vtu-tx-1',
+          p_validation_reference: 'VAL-REFRESHED',
+        },
+        fn: 'set_vtu_transaction_replay_attributes',
+      },
+    ]);
+  });
+
   it('wraps RPC failures without leaking them to the client contract', async () => {
     const supabase = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn().mockResolvedValue({ data: null, error: null }),
-          })),
-        })),
-      })),
-      rpc: vi.fn(() =>
-        Promise.resolve({ data: null, error: { message: 'P0002' } })
-      ),
+      rpc: vi.fn((fn: string) => {
+        if (fn === 'get_vtu_replay_refresh_fields') {
+          return {
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          };
+        }
+        return Promise.resolve({ data: null, error: { message: 'P0002' } });
+      }),
     } as unknown as SupabaseClient;
     await expect(
       overlayReplayAttributes({

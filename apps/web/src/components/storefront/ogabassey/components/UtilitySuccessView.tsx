@@ -94,23 +94,23 @@ export function UtilitySuccessView({
         <div className="size-16 bg-[var(--store-danger-bg,#fee2e2)] text-[var(--store-danger-text,#dc2626)] rounded-full flex items-center justify-center mx-auto mb-4">
           <X size={32} />
         </div>
-        <h4 className="text-xl font-bold text-gray-900 mb-2">
+        <h4 className="text-xl font-bold text-[var(--store-text,#111827)] mb-2">
           Purchase failed
         </h4>
-        <p className="text-gray-500 mb-6">
+        <p className="text-[var(--store-muted-text,#6b7280)] mb-6">
           The purchase failed. {refundCopy}
         </p>
-        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+        <div className="bg-[var(--store-muted-surface,#f9fafb)] rounded-lg p-4 mb-6 text-sm">
           <div className="flex justify-between mb-2">
-            <span className="text-gray-500">Service</span>
+            <span className="text-[var(--store-muted-text,#6b7280)]">Service</span>
             <span className="font-medium capitalize">{activeTab}</span>
           </div>
           <div className="flex justify-between mb-2">
-            <span className="text-gray-500">Amount</span>
+            <span className="text-[var(--store-muted-text,#6b7280)]">Amount</span>
             <span className="font-medium">₦{amount.toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Ref</span>
+            <span className="text-[var(--store-muted-text,#6b7280)]">Ref</span>
             <span className="font-mono text-xs">{reference}</span>
           </div>
         </div>
@@ -132,31 +132,31 @@ export function UtilitySuccessView({
           <Clock size={32} />
         </div>
       ) : (
-        <div className="size-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="size-16 bg-[var(--store-success-bg,#dcfce7)] text-[var(--store-success-text,#16a34a)] rounded-full flex items-center justify-center mx-auto mb-4">
           <Check size={32} />
         </div>
       )}
-      <h4 className="text-xl font-bold text-gray-900 mb-2">
+      <h4 className="text-xl font-bold text-[var(--store-text,#111827)] mb-2">
         {resolvedProcessing ? 'Processing…' : 'Success!'}
       </h4>
-      <p className="text-gray-500 mb-6">
+      <p className="text-[var(--store-muted-text,#6b7280)] mb-6">
         {resolvedProcessing
           ? polling
             ? 'Your transaction is being processed. This screen updates automatically when it settles.'
             : 'Your transaction is being processed. It can still fail or be refunded — check back shortly.'
           : 'Your transaction has been processed successfully.'}
       </p>
-      <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+      <div className="bg-[var(--store-muted-surface,#f9fafb)] rounded-lg p-4 mb-6 text-sm">
         <div className="flex justify-between mb-2">
-          <span className="text-gray-500">Service</span>
+          <span className="text-[var(--store-muted-text,#6b7280)]">Service</span>
           <span className="font-medium capitalize">{activeTab}</span>
         </div>
         <div className="flex justify-between mb-2">
-          <span className="text-gray-500">Amount</span>
+          <span className="text-[var(--store-muted-text,#6b7280)]">Amount</span>
           <span className="font-medium">₦{amount.toLocaleString()}</span>
         </div>
         <div className="flex justify-between mb-2">
-          <span className="text-gray-500">Ref</span>
+          <span className="text-[var(--store-muted-text,#6b7280)]">Ref</span>
           <span className="font-mono text-xs">{reference}</span>
         </div>
         {resolvedPin ? (

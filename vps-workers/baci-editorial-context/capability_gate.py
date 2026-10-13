@@ -4,6 +4,7 @@ Runs the suite unless the change provably touches neither the register, the
 binding code, nor any cited source. If the changed-path set cannot be
 computed (unknown base, git error), the suite runs: fail closed, never skip.
 """
+import datetime as dt
 import json
 import os
 import re
@@ -113,6 +114,25 @@ def _touches_unverified_refs(register, changed):
     return any(_matches(p, refs) for p in changed)
 
 
+def _register_stale(register):
+    try:
+        reviewed = dt.datetime.fromisoformat(str(register["reviewed_at"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return True
+    if reviewed.tzinfo is None:
+        reviewed = reviewed.replace(tzinfo=dt.timezone.utc)
+    return dt.datetime.now(dt.timezone.utc) - reviewed > dt.timedelta(days=14)
+
+
+def freshness_required(register, changed):
+    """Freshness hard-gates register changes, stale registers, unverified refs."""
+    if changed is None or register is None:
+        return True
+    if REGISTER_PATH in changed or _register_stale(register):
+        return True
+    return _touches_unverified_refs(register, changed)
+
+
 def should_run(base, register, changed):
     if changed is None:
         return True
@@ -134,12 +154,12 @@ def main():
         if register is not None and not should_run(base, register, changed):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
-        if changed is not None and REGISTER_PATH not in changed and not _touches_unverified_refs(register, changed):
-            # Freshness hard-gates register-carrying changes and changes to
-            # unverified-row refs (no digest compensates there). For
-            # content-bound cited sources the digest check already forces a
-            # register re-review in the same change, so staleness must not
-            # block unrelated fixes; it stays enforced by the scheduled
+        if not freshness_required(register, changed):
+            # Fresh register + content-bound-only change: the digest check
+            # already forces a register re-review in the same change, so the
+            # freshness hard-fail must not block unrelated fixes. A stale
+            # register keeps the hard gate everywhere (re-digesting alone
+            # cannot bypass it); staleness is also enforced by the scheduled
             # workflow and the runtime window.
             env.pop("BACI_REGISTER_REQUIRE_FRESH", None)
     return subprocess.run(

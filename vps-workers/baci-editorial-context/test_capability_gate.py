@@ -103,7 +103,7 @@ class CapabilityGateTests(unittest.TestCase):
         if not stale:
             # Freshness and runtime acceptance are only asserted inside the
             # evidence window; structural binding below is always enforced.
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path), "BACI_CAPABILITY_REGISTER_DIGEST": data["evidence_digest"]}):
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path), "BACI_CAPABILITY_REGISTER_DIGEST": data["claims_digest"]}):
                 rendered = capability_context()
             self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
             self.assertNotIn("Register unavailable", rendered)
@@ -156,6 +156,21 @@ class CapabilityGateTests(unittest.TestCase):
                 self.assertFalse(gate.should_run("base", citing, {"apps/web/src/lib/other.ts"}))
             finally:
                 os.chdir(previous)
+
+    def test_freshness_scoping(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        fresh = {"reviewed_at": now, "capabilities": [
+            {"status": "code_evidenced", "source_refs": ["apps/web/src/lib/feeds.ts"]},
+            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
+        bound_change = {"apps/web/src/lib/feeds.ts"}
+        self.assertFalse(gate.freshness_required(fresh, bound_change))
+        self.assertTrue(gate.freshness_required(stale, bound_change), "re-digesting must not bypass a stale register")
+        self.assertTrue(gate.freshness_required(fresh, {"docs/product/baci-capabilities.json"}))
+        self.assertTrue(gate.freshness_required(fresh, {"apps/web/src/app/(platform)/pricing/page.tsx"}))
+        self.assertTrue(gate.freshness_required(fresh, None))
+        self.assertTrue(gate.freshness_required(None, bound_change))
 
     def test_register_digests_cli_reproduces_shipped_digests(self):
         repo = Path(__file__).resolve().parents[2]

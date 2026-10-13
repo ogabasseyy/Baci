@@ -183,7 +183,7 @@ jobs:
             # only a non-skipped run proves the gate exists.
             checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | select(.conclusion != "skipped") | .name] | join("\n")')"
             grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
-            grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f trusted_changed=true
+            grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
             grep -q '^Selftest (' <<<"$checks" || gh workflow run muse-review-selftest.yml --ref "$existing"
             exit 0
           fi
@@ -209,7 +209,7 @@ jobs:
             if [ "$HAS_PIN_TOKEN" = "true" ]; then
               echo "Pin update PR created with the dedicated token; security and selftest checks trigger normally."
             else
-              gh workflow run security.yml --ref "$branch" -f trusted_changed=true
+              gh workflow run security.yml --ref "$branch" -f force_trusted_change=true
               gh workflow run muse-review-selftest.yml --ref "$branch"
             fi
           fi

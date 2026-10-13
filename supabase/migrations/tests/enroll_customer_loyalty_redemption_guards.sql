@@ -134,3 +134,35 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
 UPDATE public.customer_loyalty SET points_balance = 100
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND customer_id = '01aa0000-0000-4000-8000-000000000012';
+
+-- Minimum-bearing manual rewards fail closed at redeem and hide from
+-- the catalog: no order context ever enforces their minimum.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  minimum_order_amount, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Minimum manual', 100,
+  'free_shipping', NULL, 5000, true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Minimum manual')
+   ) AS result)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000012'
+    ) AS status(result),
+    LATERAL jsonb_array_elements(status.result -> 'rewards') AS reward
+    WHERE reward.value ->> 'name' = 'Minimum manual'
+  ),
+  'minimum-bearing manual reward redeemed or stayed advertised'
+);

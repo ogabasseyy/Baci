@@ -1,7 +1,6 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
 -- SECURITY DEFINER; caller owns the row; no 3-arg arity.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
-
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,
   p_customer_id uuid,
@@ -33,7 +32,6 @@ BEGIN
   IF p_merchant_id IS NULL OR p_customer_id IS NULL OR p_reward_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
-
   -- Existence/liveness/ownership first (replay would leak the code).
   PERFORM 1
   FROM public.customers
@@ -56,7 +54,6 @@ BEGIN
       RETURN v_replay;
     END IF;
   END IF;
-
   -- FOR UPDATE pins program state through settlement.
 
   SELECT enabled, minimum_redemption_points, maximum_redemption_percentage
@@ -79,16 +76,13 @@ BEGIN
   WHERE merchant_id = p_merchant_id
     AND customer_id = p_customer_id
   FOR UPDATE;
-
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'not_enrolled');
   END IF;
-
-  -- Reconcile expired purchase credits first (FIFO remainder only).
+  -- Reconcile expired purchase credits first.
   v_expired_points := public.calculate_unspent_expired_points(
     p_merchant_id, p_customer_id
   );
-
   IF v_expired_points > 0 THEN
     UPDATE public.points_transactions
     SET expired = true
@@ -111,8 +105,7 @@ BEGIN
       'expiry', 'Expired purchase points reconciled'
     );
   END IF;
-
-  -- Lock the reward row (finite stock decrements below).
+  -- Lock the reward row.
   SELECT id, name, reward_type, reward_value, points_cost, stock_quantity,
          usage_limit_per_customer, minimum_order_amount
   INTO v_reward
@@ -134,7 +127,6 @@ BEGIN
       'exclusive_access'
     )
   FOR UPDATE;
-
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
@@ -151,7 +143,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- Program minimum compares the requested cost, not the balance.
+  -- Program minimum compares cost, not balance.
   IF v_minimum IS NOT NULL AND v_minimum > 0
      AND v_reward.points_cost < v_minimum THEN
     RETURN jsonb_build_object(
@@ -163,7 +155,7 @@ BEGIN
     );
   END IF;
 
-  -- Valued rewards need positive value (percentages at most 100).
+  -- Valued rewards need positive value (<=100%).
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
@@ -172,10 +164,14 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit fails closed (no order context here).
-  IF v_reward.reward_type = 'store_credit'
-     AND v_reward.minimum_order_amount IS NOT NULL
-     AND v_reward.minimum_order_amount > 0 THEN
+  -- Minimum-gated store credit and manual-fulfillment rewards fail
+  -- closed: neither has an order amount to enforce the minimum against
+  -- (checkout for store credit, the consume endpoint for manual types).
+  IF v_reward.minimum_order_amount IS NOT NULL
+     AND v_reward.minimum_order_amount > 0
+     AND (v_reward.reward_type = 'store_credit'
+       OR v_reward.reward_type IN (
+         'free_shipping', 'free_product', 'exclusive_access')) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
   -- Fixed values rounding to zero units: reject before deduction.

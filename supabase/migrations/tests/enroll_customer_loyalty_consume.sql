@@ -63,8 +63,30 @@ SELECT pg_temp.assert_true(
   'suspended staff session consumed a manual code'
 );
 
--- Active staff (user 102) consume too: merchant access, not just the
--- owner row, authorizes the atomic update.
+-- Active staff without marketing:edit are rejected inside the RPC:
+-- the DEFINER function is directly reachable, so access alone is not
+-- authorization (user 102 is a sales_rep: marketing view only).
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'forbidden'
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME2'
+   ) AS result),
+  'staff without marketing edit consumed a manual code'
+);
+
+-- Grant marketing:edit and the same staff session consumes: the
+-- permission, not just the owner row, authorizes the atomic update.
+SET ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+UPDATE public.staff_members
+SET permissions = '{"marketing": {"edit": true}}'::jsonb
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND user_id = '01aa0000-0000-4000-8000-000000000102';
+RESET ROLE;
+
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
 
 -- Valueless plain discounts are manual (present-the-code) too.

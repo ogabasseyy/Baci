@@ -41,8 +41,8 @@ describe('isLoyaltyCodeCurrencyCurrent', () => {
     expect(current).toBe(false);
   });
 
-  it('falls back to the country currency when payout is not an ISO code', async () => {
-    const current = await isLoyaltyCodeCurrencyCurrent(
+  it('stamps blank-payout merchants NGN like the order RPC (no country fallback)', async () => {
+    const ghanaCode = await isLoyaltyCodeCurrencyCurrent(
       clientWith({
         data: { country: 'GH', payout_currency: null },
         error: null,
@@ -50,8 +50,17 @@ describe('isLoyaltyCodeCurrencyCurrent', () => {
       'm',
       'GHS'
     );
+    const nairaCode = await isLoyaltyCodeCurrencyCurrent(
+      clientWith({
+        data: { country: 'GH', payout_currency: null },
+        error: null,
+      }),
+      'm',
+      'NGN'
+    );
 
-    expect(current).toBe(true);
+    expect(ghanaCode).toBe(false);
+    expect(nairaCode).toBe(true);
   });
 
   it('treats a failed lookup as current (the wrapper decides)', async () => {

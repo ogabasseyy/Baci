@@ -140,6 +140,19 @@ describe('resolveLoyaltyCheckoutCode', () => {
     expect(resolution.ok).toBe(true);
   });
 
+  it('lets a used code reach replay even after a currency change', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(
+        () => ({ data: [{ ...ROW, used: true }], error: null }),
+        { country: 'US', payout_currency: 'USD' }
+      ),
+      merchantId: 'm',
+      code: 'RDM-USED',
+    });
+
+    expect(resolution.ok).toBe(true);
+  });
+
   it('rejects a fixed code whose issuance currency no longer matches', async () => {
     const resolution = await resolveLoyaltyCheckoutCode({
       supabase: clientWith(() => ({ data: [ROW], error: null }), {

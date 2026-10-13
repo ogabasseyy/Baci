@@ -90,3 +90,31 @@ DELETE FROM public.loyalty_rewards
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND name = 'NGN probe';
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+-- Issuance currency mirrors the order RPC's stamping rule exactly:
+-- the payout currency decides and the country is never consulted, so
+-- mint and order stamps cannot diverge (the payout format CHECK
+-- already guarantees a well-formed code; the resolver must not add a
+-- country fallback on top of it).
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
+UPDATE public.merchants SET country = 'US', payout_currency = 'NGN'
+WHERE id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.merchant_resolved_currency(
+    '01aa0000-0000-4000-8000-000000000001') = 'NGN',
+  'country fallback moved the issuance currency off the order stamp'
+);
+
+UPDATE public.merchants SET payout_currency = 'USD'
+WHERE id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.merchant_resolved_currency(
+    '01aa0000-0000-4000-8000-000000000001') = 'USD',
+  'payout currency did not resolve verbatim like order stamping'
+);
+
+UPDATE public.merchants SET country = 'Nigeria', payout_currency = DEFAULT
+WHERE id = '01aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');

@@ -93,7 +93,11 @@ export async function resolveLoyaltyCheckoutCode({
   // the same gate authoritatively. A failed merchant lookup skips the
   // preview gate and lets the wrapper decide. A positive minimum is
   // monetary too, so minimum-carrying percentage codes gate as well.
+  // Used codes skip the gate: a committed checkout whose response was
+  // lost must still reach the wrapper's idempotent replay even after a
+  // currency change (the wrapper decides replay vs already-used).
   if (
+    !loyaltyRow.used &&
     (discountType === 'fixed' || Number(loyaltyRow.minimum_order_amount) > 0) &&
     loyaltyRow.issuance_currency &&
     !(await isLoyaltyCodeCurrencyCurrent(

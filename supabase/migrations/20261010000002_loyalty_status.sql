@@ -230,6 +230,15 @@ BEGIN
           AND public.merchant_resolves_to_ngn(p_merchant_id)
         )
       )
+      -- Hide minimum-bearing manual rewards (same guard as the
+      -- redemption RPC; keep in sync): no order context ever enforces
+      -- their minimum, so advertising them promises a threshold the
+      -- merchant configured but nothing checks.
+      AND (
+        reward_type NOT IN (
+          'free_shipping', 'free_product', 'exclusive_access')
+        OR COALESCE(minimum_order_amount, 0) <= 0
+      )
   ) AS rewards;
 
   -- Transactions live in get_loyalty_transactions (migration 15):

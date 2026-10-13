@@ -1,3 +1,51 @@
+-- Permission helper for the consume RPC: the merchant owner, or an
+-- active staff member whose effective permissions (role defaults
+-- merged with custom grants, the same shapes permissionGrantsAccess
+-- accepts in the API) include marketing:edit. Kept DEFINER-internal:
+-- only the consume RPC calls it.
+CREATE OR REPLACE FUNCTION public.loyalty_consume_is_authorized(
+  p_merchant_id uuid
+) RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_staff_id uuid;
+  v_perms jsonb;
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.merchants AS m
+    WHERE m.id = p_merchant_id AND m.user_id = auth.uid()
+  ) THEN
+    RETURN true;
+  END IF;
+
+  SELECT s.id INTO v_staff_id
+  FROM public.staff_members AS s
+  WHERE s.merchant_id = p_merchant_id
+    AND s.user_id = auth.uid()
+    AND s.status = 'active';
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  v_perms := public.get_staff_permissions(v_staff_id);
+  RETURN COALESCE((v_perms #>> '{full_access,all}')::boolean, false)
+      OR COALESCE((v_perms #>> '{*,*}')::boolean, false)
+      OR COALESCE((v_perms #>> '{*,edit}')::boolean, false)
+      OR COALESCE((v_perms #>> '{marketing,*}')::boolean, false)
+      OR COALESCE((v_perms #>> '{marketing,all}')::boolean, false)
+      OR COALESCE((v_perms #>> '{marketing,edit}')::boolean, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.loyalty_consume_is_authorized(uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.loyalty_consume_is_authorized(uuid)
+  TO service_role;
+
 -- Merchant consume path for manual-fulfillment redemptions (issue #3165).
 --
 -- redeem_loyalty_reward mints present-the-code codes for manual types
@@ -24,7 +72,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  IF NOT public.has_merchant_access(p_merchant_id) THEN
+  -- Permission lives here, not only in the API route: the DEFINER RPC
+  -- is directly reachable through PostgREST by any authenticated staff
+  -- session, so merchant access alone (any active staff) is not enough.
+  IF NOT public.loyalty_consume_is_authorized(p_merchant_id) THEN
     RETURN jsonb_build_object('success', false, 'error', 'forbidden');
   END IF;
 

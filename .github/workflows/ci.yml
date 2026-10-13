@@ -72,7 +72,10 @@ jobs:
           FILTER_QUIZ_DB: ${{ steps.filter.outputs.quiz_db }}
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
-          FORCE_QUALITY_GATES: ${{ inputs.force_quality_gates }}
+          # Generated Muse pin PRs must run the real gates in their
+          # pull_request context; workflow_dispatch checks do not satisfy
+          # required PR checks.
+          FORCE_QUALITY_GATES: ${{ inputs.force_quality_gates || startsWith(github.head_ref, 'automation/muse-code-pin-') }}
         run: bash .github/scripts/resolve-ci-change-scope.sh
       - name: Resolve test plan
         id: test-plan

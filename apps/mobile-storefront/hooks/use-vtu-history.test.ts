@@ -16,6 +16,7 @@ import {
 type MockFetchResponse = {
   ok: boolean;
   json: () => Promise<Record<string, unknown>>;
+  body?: { cancel: () => Promise<void> };
 };
 
 type MockUserResult = {
@@ -196,6 +197,9 @@ describe('useVTUHistory', () => {
     jest.useFakeTimers();
     try {
       const queryClient = createTestClient();
+      const cancelBody = jest
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
       mockFetchWithTimeout.mockImplementationOnce(
         () =>
           new Promise<MockFetchResponse>((resolve) => {
@@ -203,6 +207,7 @@ describe('useVTUHistory', () => {
               resolve({
                 ok: true,
                 json: () => new Promise<Record<string, unknown>>(() => {}),
+                body: { cancel: cancelBody },
               });
             }, 9900);
           })
@@ -227,6 +232,8 @@ describe('useVTUHistory', () => {
       // The deadline fires on the last fake tick; the rejection still
       // needs scheduler turns to reach the rendered error state.
       await waitFor(() => expect(result.current.isError).toBe(true));
+      // R71: the stalled stream was cancelled before the failure.
+      expect(cancelBody).toHaveBeenCalledTimes(1);
 
       unmount();
       queryClient.clear();

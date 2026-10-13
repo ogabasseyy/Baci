@@ -1,4 +1,4 @@
-import { withDeadline } from '@baci/shared';
+import { readJsonWithDeadline } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EXPO_PUBLIC_API_URL } from '@/env';
@@ -133,7 +133,10 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
           },
         }
       );
-      const data = await withDeadline(response.json(), deadlineMs);
+      const data = await readJsonWithDeadline<{ error?: string }>(
+        response,
+        deadlineMs
+      );
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load utility history.');

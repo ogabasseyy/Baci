@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithTimeout } from './fetch-with-timeout';
+import { fetchWithTimeout, readJsonWithDeadline } from './fetch-with-timeout';
 
 describe('fetchWithTimeout', () => {
   afterEach(() => {
@@ -88,5 +88,68 @@ describe('fetchWithTimeout', () => {
     controller.abort();
 
     await expect(request).rejects.toThrow('cancelled by caller');
+  });
+});
+
+describe('readJsonWithDeadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('cancels the stalled stream when the deadline wins', async () => {
+    // Codex R71 6rzIQ3: rejecting the wrapper alone leaves the body
+    // downloading — retries would pile up connections behind stalls.
+    vi.useFakeTimers();
+    const cancel = vi.fn(async () => {});
+    const response = {
+      body: { cancel },
+      json: () => new Promise(() => {}),
+    } as unknown as Response;
+
+    const read = readJsonWithDeadline(response, Date.now() + 100);
+    const expectation = expect(read).rejects.toThrow('Operation timed out');
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the parsed body without cancelling on success', async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn(async () => {});
+    const response = {
+      body: { cancel },
+      json: async () => ({ ok: true }),
+    } as unknown as Response;
+
+    await expect(
+      readJsonWithDeadline(response, Date.now() + 100)
+    ).resolves.toEqual({ ok: true });
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it('propagates body errors and tolerates an unusable body', async () => {
+    vi.useFakeTimers();
+    const broken = {
+      body: null,
+      json: async () => {
+        throw new Error('bad json');
+      },
+    } as unknown as Response;
+    await expect(
+      readJsonWithDeadline(broken, Date.now() + 100)
+    ).rejects.toThrow('bad json');
+
+    const unusable = {
+      body: {
+        cancel: async () => {
+          throw new Error('nope');
+        },
+      },
+      json: () => new Promise(() => {}),
+    } as unknown as Response;
+    const read = readJsonWithDeadline(unusable, Date.now() + 100);
+    const expectation = expect(read).rejects.toThrow('Operation timed out');
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
   });
 });

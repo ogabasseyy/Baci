@@ -1,4 +1,4 @@
-import { withDeadline } from '@baci/shared';
+import { readJsonWithDeadline } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
@@ -108,8 +108,8 @@ export async function fetchVoucherPin({
   }
   let body: unknown;
   try {
-    // Body shares the attempt deadline (R70 6ryArL).
-    body = await withDeadline(response.json(), deadlineMs);
+    // Body shares the deadline; stalls cancel pre-retry (R71).
+    body = await readJsonWithDeadline(response, deadlineMs);
   } catch {
     // Unparseable body: transient, retry within budget.
     return BLANK;

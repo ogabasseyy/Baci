@@ -279,6 +279,9 @@ describe('fetchVoucherPin', () => {
     // restart the clock (blank at 5s, not ~10s).
     jest.useFakeTimers();
     try {
+      const cancelBody = jest
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
       mockFetchWithTimeout.mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
@@ -287,6 +290,7 @@ describe('fetchVoucherPin', () => {
                 ok: true,
                 status: 200,
                 json: () => new Promise(() => {}),
+                body: { cancel: cancelBody },
               } as unknown as Response);
             }, 4900);
           })
@@ -304,6 +308,8 @@ describe('fetchVoucherPin', () => {
         expect.stringContaining('/api/vtu/history?'),
         expect.objectContaining({ deadlineMs: expect.any(Number) })
       );
+      // R71: the stalled stream was cancelled before the blank.
+      expect(cancelBody).toHaveBeenCalledTimes(1);
     } finally {
       jest.useRealTimers();
     }

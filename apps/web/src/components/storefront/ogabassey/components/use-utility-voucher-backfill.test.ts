@@ -375,6 +375,7 @@ describe('useUtilityVoucherBackfill', () => {
     // 100ms before the bound — the body shares the REMAINDER, so
     // attempt 2 still starts at 10s + poll (not ~20s + poll).
     let calls = 0;
+    const cancelBody = vi.fn(async () => {});
     const fetchMock = vi.fn(async () => {
       calls += 1;
       if (calls === 1) {
@@ -388,6 +389,7 @@ describe('useUtilityVoucherBackfill', () => {
       return {
         ok: true,
         status: 200,
+        body: { cancel: cancelBody },
         json:
           calls === 1
             ? () => new Promise(() => {})
@@ -420,6 +422,9 @@ describe('useUtilityVoucherBackfill', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.current).toMatchObject({ pin: 'PIN-1', successful: true });
+    // R71: the stalled attempt-1 stream was cancelled; the successful
+    // attempt-2 stream was not.
+    expect(cancelBody).toHaveBeenCalledTimes(1);
   });
 
   it('scopes history polls by reference', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchWithTimeout, withDeadline } from '@baci/shared/lib';
+import { fetchWithTimeout, readJsonWithDeadline } from '@baci/shared/lib';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
@@ -232,9 +232,9 @@ export function useUtilityVoucherBackfill({
               return;
             }
           } else {
-            // Body shares the attempt deadline (R70 6ryArL).
+            // Body shares the deadline; stalls cancel pre-retry (R71).
             parsed = parseUtilityVoucherBackfill(
-              await withDeadline(response.json(), deadlineMs),
+              await readJsonWithDeadline(response, deadlineMs),
               reference
             );
             // Broken contract: halt instead of burning attempts.

@@ -1,3 +1,5 @@
+import { withDeadline } from './with-timeout';
+
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export const DEFAULT_FETCH_TIMEOUT_MESSAGE =
   'Request timed out. Please try again.';
@@ -74,5 +76,31 @@ export async function fetchWithTimeout(
     throw error;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/**
+ * Reads a response body as JSON under one shared wall-clock
+ * deadline. Combines `withDeadline` with stalled-stream cleanup
+ * (Codex R71 6rzIQ3): when the body outlives the deadline, the
+ * wrapper rejects AND the abandoned stream is cancelled, so retries
+ * cannot pile up connections behind stalled bodies. Parse errors
+ * propagate unchanged; cleanup never throws (a missing/unusable
+ * `body`, e.g. non-browser runtimes, degrades to a no-op).
+ */
+export async function readJsonWithDeadline<T = unknown>(
+  response: Response,
+  deadlineMs: number
+): Promise<T> {
+  const body = response.body;
+  try {
+    return (await withDeadline(response.json(), deadlineMs)) as T;
+  } catch (error) {
+    try {
+      await body?.cancel();
+    } catch {
+      // Best-effort cleanup: the attempt already failed.
+    }
+    throw error;
   }
 }

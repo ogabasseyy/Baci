@@ -1,7 +1,7 @@
 'use client';
 
 import { buildPendingVtuScopeTag } from '@baci/shared';
-import { fetchWithTimeout, withDeadline } from '@baci/shared/lib';
+import { fetchWithTimeout, readJsonWithDeadline } from '@baci/shared/lib';
 import { useEffect } from 'react';
 import {
   forgetPendingVtuByReference,
@@ -98,7 +98,7 @@ export function useUtilityRetainedSettlement({
             if (!response.ok) {
               return null;
             }
-            const body = await withDeadline(response.json(), deadlineMs);
+            const body = await readJsonWithDeadline(response, deadlineMs);
             return {
               reference,
               backfill: parseUtilityVoucherBackfill(body, reference),

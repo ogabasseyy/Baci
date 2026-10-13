@@ -9,8 +9,13 @@ import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
  * history. A link error is indeterminate — 5xx under strict, null
  * otherwise (self-heals on retry via the byUserId hit if the link
  * actually landed). A zero-row match means the row vanished
- * mid-checkout or a concurrent email claim won the race —
- * definitive miss, null in both modes. Extracted from
+ * mid-checkout or a concurrent email claim won the race — so
+ * re-read: when the winner linked the row to THIS same user (two
+ * overlapping checkouts for one account), accept it — returning
+ * null would 400 before the idempotency-key race, the client would
+ * forget the shared key, and the retry would mint fresh and charge
+ * twice (Codex R54 6rrFRL). A different user's claim (or a vanished
+ * row) stays a definitive miss, null in both modes. Extracted from
  * vtu-pending-transaction.ts per the Boy Scout Rule.
  */
 export async function linkVtuCustomerByEmail<
@@ -49,6 +54,25 @@ export async function linkVtuCustomerByEmail<
     return null;
   }
   if (!linked) {
+    // Lost the atomic-claim race (or the row vanished): re-read and
+    // accept only a same-user link (see docblock). No merchant
+    // scope: id is the primary key, matching the update above.
+    const { data: current, error: rereadError } = await supabase
+      .from('customers')
+      .select('id, email, first_name, last_name, phone, user_id')
+      .eq('id', byEmail.id)
+      .maybeSingle();
+    if (rereadError) {
+      throwIfStrictVtuLookupError({
+        context: 'look up VTU customer',
+        error: rereadError,
+        strictLookups,
+      });
+      return null;
+    }
+    if (current?.user_id === userId) {
+      return current as T & { user_id: string };
+    }
     return null;
   }
   return { ...byEmail, user_id: userId };

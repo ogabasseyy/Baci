@@ -181,6 +181,67 @@ export function isUnsubmittedPreparedVtuRow(
 }
 
 /**
+ * True for a processing Monnify row stranded between the
+ * submission-marker persist and the provider call (Codex R54
+ * 6rrFRC): the marker proves this worker got that far, but no
+ * provider response reference exists, so the row can neither
+ * re-drive (marker presence fails the unsubmitted proof) nor
+ * requery (Monnify resolves ONLY by a response vendReference).
+ * Re-driving re-submits the same request_reference as Monnify's
+ * vendReference — the SAME dedupe assumption the transient-vend
+ * path already makes for response-unknown Monnify rows — rather
+ * than stranding the debit. Kuda rows are excluded: re-vend has
+ * no dedupe evidence there, so they stay requery-only
+ * (visible, support-recoverable).
+ *
+ * The provider gate also excludes mid-fallback crashes for free:
+ * the Kuda fallback overwrites metadata.provider to 'kuda'
+ * before dispatching, so provider === 'monnify' with no response
+ * reference means Monnify itself never answered. Presence-based
+ * (only new code writes the marker), so no era gate; stale-only
+ * like its siblings — a live worker is between persists.
+ */
+export function isMarkedUnsubmittedMonnifyVtuRow(
+  row: FlaggedReferenceLessRowCandidate,
+  nowMs: number = Date.now()
+): boolean {
+  if (row.status !== 'processing') {
+    return false;
+  }
+  if (row.transaction_id?.trim()) {
+    return false;
+  }
+  if (row.error_message?.trim()) {
+    return false;
+  }
+  if (row.metadata?.walletDebited !== true) {
+    return false;
+  }
+  if (row.metadata?.provider !== 'monnify') {
+    return false;
+  }
+  // Marker presence (see docblock): absence belongs to the
+  // unsubmitted-prepared path, checked first at the call site.
+  // (metadata is non-null here: null fails the provider gate.)
+  if (!(VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in row.metadata)) {
+    return false;
+  }
+  // A response vend reference means the vend ran: requery-only.
+  const vendReference = row.metadata.monnifyVendReference;
+  if (typeof vendReference === 'string' && vendReference.trim() !== '') {
+    return false;
+  }
+  if (!row.updated_at) {
+    return false;
+  }
+  const updatedAtMs = new Date(row.updated_at).getTime();
+  if (!Number.isFinite(updatedAtMs)) {
+    return false;
+  }
+  return nowMs - updatedAtMs > STRANDED_PRE_VEND_STALE_MS;
+}
+
+/**
  * Persists the provider-submission marker immediately before the
  * first provider call (see VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY).
  * Returns the persist error message, or null on success (row
@@ -188,6 +249,19 @@ export function isUnsubmittedPreparedVtuRow(
  * marker). Fail closed: the caller must NOT vend when this fails —
  * without the marker the row is indistinguishable from a
  * submitted-but-unpersisted vend, which must never re-drive.
+ *
+ * Read-back verify (Codex R54 6rrFRC): the UPDATE may have
+ * committed while its response was lost (timeout/kill during the
+ * RTT). Without a re-read that row sits processing with the marker
+ * and no provider reference — the reconciler can neither re-drive
+ * it (marker presence fails the unsubmitted proof) nor settle it
+ * (nothing to requery). A re-read marker with no response
+ * reference is provably OURS — this worker never dispatched a
+ * provider call on the linear path here, and every other vend
+ * entry needs a stale-or-pending row — so adopt it and proceed to
+ * the vend. Any other outcome (re-read error, vanished row, moved
+ * status, or a response reference) keeps the original error and
+ * the caller's CAS-guarded restore.
  */
 export async function markVtuProviderSubmissionStarted({
   row,
@@ -204,9 +278,35 @@ export async function markVtuProviderSubmissionStarted({
     .from('vtu_transactions')
     .update({ metadata })
     .eq('id', row.id);
-  if (error) {
+  if (!error) {
+    row.metadata = metadata;
+    return null;
+  }
+  const { data: current, error: rereadError } = await supabase
+    .from('vtu_transactions')
+    .select('metadata, status, transaction_id')
+    .eq('id', row.id)
+    .maybeSingle();
+  if (rereadError || !current) {
     return { message: error.message };
   }
-  row.metadata = metadata;
+  const currentMetadata =
+    current.metadata !== null &&
+    typeof current.metadata === 'object' &&
+    !Array.isArray(current.metadata)
+      ? (current.metadata as Record<string, unknown>)
+      : null;
+  const markerPresent =
+    currentMetadata !== null &&
+    VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in currentMetadata;
+  const responsePersisted =
+    (typeof current.transaction_id === 'string' &&
+      current.transaction_id.trim() !== '') ||
+    (typeof currentMetadata?.monnifyVendReference === 'string' &&
+      currentMetadata.monnifyVendReference.trim() !== '');
+  if (!markerPresent || responsePersisted || current.status !== 'processing') {
+    return { message: error.message };
+  }
+  row.metadata = currentMetadata;
   return null;
 }

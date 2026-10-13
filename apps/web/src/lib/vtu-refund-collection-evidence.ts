@@ -46,6 +46,13 @@ export interface VtuCollectionEvidenceRow {
  *    reference on the transactions row only. A missing link, a
  *    missing row, or any non-completed status is not evidence:
  *    declined/pending gateway rows never collected.
+ * 5. A COMPLETED gateway transaction whose metadata names this VTU
+ *    row (`metadata->>vtu_transaction_id`) — the legacy charge route
+ *    stored the link there and left order_id null without copying
+ *    paymentReference onto the VTU row, so branches 1-4 all miss a
+ *    genuinely charged row the worker abandoned before refunding
+ *    (Codex R54 6rrFRE). The payments webhook treats this same link
+ *    as authoritative for fulfillment.
  *
  * Fail closed: a ledger/gateway read error throws (retryable —
  * clients keep the key, the cron retries) instead of guessing.
@@ -109,6 +116,26 @@ export async function hasVtuCollectionEvidence({
     if (error) {
       throwVtuPersistenceError(
         `Failed to verify order collection evidence before VTU refund: ${error.message}`
+      );
+    }
+    if (
+      (data ?? []).some(
+        (transaction: { status?: unknown }) =>
+          transaction.status === 'completed'
+      )
+    ) {
+      return true;
+    }
+  }
+  {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('status')
+      .eq('merchant_id', row.merchant_id)
+      .eq('metadata->>vtu_transaction_id', row.id);
+    if (error) {
+      throwVtuPersistenceError(
+        `Failed to verify metadata-linked collection evidence before VTU refund: ${error.message}`
       );
     }
     if (

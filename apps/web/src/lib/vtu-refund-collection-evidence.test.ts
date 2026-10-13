@@ -36,7 +36,7 @@ describe('hasVtuCollectionEvidence', () => {
       if (table === 'transactions') {
         // Awaited directly (no terminal maybeSingle): every .eq
         // returns the awaitable terminal response, one queued
-        // response per select() call (reference query, then order).
+        // response per select() call (reference, order, metadata).
         return {
           select: vi.fn(() => {
             const response = transactionResponses[txCursor++] ?? {
@@ -146,22 +146,45 @@ describe('hasVtuCollectionEvidence', () => {
     expect(eqArgs).toContainEqual(['order_id', 'order-1']);
   });
 
+  it('accepts a completed metadata-linked gateway transaction', async () => {
+    // Legacy charge shape (Codex R54 6rrFRE): no paymentReference on
+    // the VTU row, order_id null, no provider reference — the only
+    // link is transactions.metadata.vtu_transaction_id.
+    const { eqArgs, supabase } = buildSupabase({
+      transactionResponses: [statusResponse('completed')],
+    });
+
+    await expect(
+      hasVtuCollectionEvidence({
+        metadata: {},
+        row: { ...row, order_id: null, transaction_id: null },
+        supabase,
+      })
+    ).resolves.toBe(true);
+    expect(eqArgs).toContainEqual(['metadata->>vtu_transaction_id', 'vtu-1']);
+  });
+
   it('rejects missing links and non-completed gateway rows', async () => {
-    // No link at all: nothing to look up.
+    // No reference/order link: only the metadata branch runs, and an
+    // empty result is not evidence.
     const noRef = buildSupabase();
     await expect(
       hasVtuCollectionEvidence({ metadata: {}, row, supabase: noRef.supabase })
     ).resolves.toBe(false);
-    expect(noRef.from).not.toHaveBeenCalledWith('transactions');
+    expect(noRef.eqArgs).toContainEqual([
+      'metadata->>vtu_transaction_id',
+      'vtu-1',
+    ]);
 
     // Links present but no completed transaction: declined and
     // pending gateway rows never collected.
     for (const statuses of [[], ['failed'], ['pending', 'cancelled']]) {
+      const queued = {
+        data: statuses.map((status) => ({ status })),
+        error: null,
+      };
       const { supabase } = buildSupabase({
-        transactionResponses: [
-          { data: statuses.map((status) => ({ status })), error: null },
-          { data: statuses.map((status) => ({ status })), error: null },
-        ],
+        transactionResponses: [queued, queued, queued],
       });
       await expect(
         hasVtuCollectionEvidence({
@@ -202,5 +225,12 @@ describe('hasVtuCollectionEvidence', () => {
         supabase: orderDown,
       })
     ).rejects.toThrow('Failed to verify order collection evidence');
+
+    const { supabase: metadataDown } = buildSupabase({
+      transactionResponses: [{ data: [], error: { message: 'db down' } }],
+    });
+    await expect(
+      hasVtuCollectionEvidence({ metadata: {}, row, supabase: metadataDown })
+    ).rejects.toThrow('Failed to verify metadata-linked collection evidence');
   });
 });

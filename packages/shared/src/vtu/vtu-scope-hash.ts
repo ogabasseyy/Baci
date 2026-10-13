@@ -34,6 +34,17 @@ export function isVtuScopeHash(value: string): boolean {
 }
 
 /**
+ * True for a raw scope key the migration must hash: colon-bearing
+ * (both scope separators and the descriptor JSON's own — even empty
+ * merchant/owner still emit the separators) and not already a
+ * digest. Bare colon-less keys are unproducible by either scope
+ * choke point (only test fixtures) and pass through.
+ */
+export function isLegacyVtuScopeKey(scoped: string): boolean {
+  return !isVtuScopeHash(scoped) && scoped.includes(':');
+}
+
+/**
  * Migrates a persisted scope key to its digest form (migrate-on-read).
  *
  * Legacy snapshots hold raw `merchant:owner:<json>` keys, which always
@@ -49,7 +60,7 @@ export function isVtuScopeHash(value: string): boolean {
  * detector must change with it or raw keys will persist unhashed.
  */
 export function normalizePersistedVtuScopeKey(scoped: string): string {
-  if (isVtuScopeHash(scoped) || !scoped.includes(':')) {
+  if (!isLegacyVtuScopeKey(scoped)) {
     return scoped;
   }
   return hashVtuScopeDescriptor(scoped);

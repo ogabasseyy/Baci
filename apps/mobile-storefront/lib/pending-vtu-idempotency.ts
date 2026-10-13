@@ -33,6 +33,7 @@ import {
   clearForgottenVtuScopes,
   clearPendingVtuSnapshot,
   forgottenVtuScopes,
+  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
   noteForgottenVtuScopes,
   PERSISTED_VTU_KEY_TTL_MS,
@@ -108,7 +109,16 @@ function persistPendingVtuPurchases(): void {
 }
 
 // Restart recovery: rehydrate before any submit runs in this launch.
-hydratePendingVtuPurchases(loadPendingVtuSnapshot());
+// One-time migration write-back: when the snapshot still holds raw
+// scope keys, persist the migrated digests now so an abandoned
+// entry stops retaining plaintext identifiers for the full TTL
+// (Codex R54 6rrFRH). Single runtime — no cross-tab merge needed —
+// and snapshot tombstones ride along via forgottenVtuScopes.
+const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
+hydratePendingVtuPurchases(initialPendingVtuSnapshot);
+if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
+  persistPendingVtuPurchases();
+}
 
 /**
  * Binds a descriptor to the submitting owner + merchant. Callers MUST

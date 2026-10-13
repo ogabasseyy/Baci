@@ -28,6 +28,7 @@ import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { resolveKudaFallbackCreditCorrection } from '@/lib/vtu-fallback-credit-correction';
 import {
   isFlaggedReferenceLessVtuRow,
+  isMarkedUnsubmittedMonnifyVtuRow,
   isUnsubmittedPreparedVtuRow,
   markVtuProviderSubmissionStarted,
 } from '@/lib/vtu-flagged-recovery';
@@ -2458,6 +2459,24 @@ export async function fulfillPendingVtuTransaction({
         // and strands the debit with no vend and no refund.
         await restoreInterruptedPreVendVtuRow({
           userSafeMessage: `Reconciliation recovered unsubmitted prepared row ${row.id}`,
+          row,
+          supabase,
+        });
+      } else if (isMarkedUnsubmittedMonnifyVtuRow(row)) {
+        // Marked Monnify gap (Codex R54 6rrFRC): the worker died
+        // between the submission-marker persist and the provider
+        // call (or the marker response was lost to a dead worker),
+        // leaving marker + debit but no response reference — neither
+        // re-drivable (unsubmitted proof needs marker absence) nor
+        // requeryable (Monnify resolves only by a response
+        // vendReference). Flip to marked pending like its
+        // unsubmitted twin: the next pass re-drives with the same
+        // request_reference, which Monnify receives as its
+        // vendReference — the same dedupe assumption the
+        // transient-vend path already relies on. Kuda gaps stay out
+        // (no dedupe evidence): requery-unknown, support-recoverable.
+        await restoreInterruptedPreVendVtuRow({
+          userSafeMessage: `Reconciliation recovered marked unsubmitted Monnify row ${row.id}`,
           row,
           supabase,
         });

@@ -2,6 +2,7 @@ import { hashVtuScopeDescriptor } from '@baci/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   clearPendingVtuSnapshot,
+  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
   parsePendingVtuSnapshot,
   savePendingVtuSnapshot,
@@ -198,6 +199,57 @@ describe('utility-pending-idempotency-store', () => {
     expect(serialized).not.toContain('merchant-1');
     expect(serialized).not.toContain('user-1');
     expect(parsePendingVtuSnapshot(serialized).entries[0][0]).toBe(scoped);
+  });
+
+  it('flags snapshots still holding raw scope keys', () => {
+    const legacy = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const rememberedAt = Date.now();
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [[legacy, entry({ rememberedAt })]],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [],
+          forgotten: [{ scoped: legacy, forgottenAt: rememberedAt }],
+        })
+      )
+    ).toBe(true);
+    // Bare-array legacy shape.
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify([[legacy, entry({ rememberedAt })]])
+      )
+    ).toBe(true);
+  });
+
+  it('ignores digests, bare keys, and corrupt snapshots', () => {
+    const digest = hashVtuScopeDescriptor('m:u:{"a":1}');
+    const rememberedAt = Date.now();
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [[digest, entry({ rememberedAt })]],
+          forgotten: [{ scoped: digest, forgottenAt: rememberedAt }],
+        })
+      )
+    ).toBe(false);
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [['a', entry({ rememberedAt })]],
+          forgotten: [{ scoped: 'gone', forgottenAt: rememberedAt }],
+        })
+      )
+    ).toBe(false);
+    expect(hasLegacyVtuScopeKeys(null)).toBe(false);
+    expect(hasLegacyVtuScopeKeys('not-json')).toBe(false);
+    expect(hasLegacyVtuScopeKeys('{"entries":{}}')).toBe(false);
   });
 });
 

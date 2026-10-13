@@ -4,10 +4,12 @@ import { scopePendingVtuKey } from './pending-vtu-idempotency';
 import {
   clearForgottenVtuScopes,
   forgottenVtuScopes,
+  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
   noteForgottenVtuScopes,
   parsePendingVtuSnapshot,
   persistPendingVtuEntries,
+  savePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-store';
 
@@ -242,5 +244,102 @@ describe('pending-vtu-idempotency-store', () => {
     expect(serialized).not.toContain('merchant-1');
     expect(serialized).not.toContain('user-1');
     expect(parsePendingVtuSnapshot(serialized).entries[0][0]).toBe(scoped);
+  });
+
+  it('flags snapshots still holding raw scope keys', () => {
+    const legacy = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const rememberedAt = Date.now();
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [[legacy, entry({ rememberedAt })]],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [],
+          forgotten: [{ scoped: legacy, forgottenAt: rememberedAt }],
+        })
+      )
+    ).toBe(true);
+    expect(
+      hasLegacyVtuScopeKeys(JSON.stringify([[legacy, entry({ rememberedAt })]]))
+    ).toBe(true);
+  });
+
+  it('ignores digests, bare keys, and corrupt snapshots', () => {
+    const digest = hashVtuScopeDescriptor('m:u:{"a":1}');
+    const rememberedAt = Date.now();
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [[digest, entry({ rememberedAt })]],
+          forgotten: [{ scoped: digest, forgottenAt: rememberedAt }],
+        })
+      )
+    ).toBe(false);
+    expect(
+      hasLegacyVtuScopeKeys(
+        JSON.stringify({
+          entries: [['a', entry({ rememberedAt })]],
+          forgotten: [],
+        })
+      )
+    ).toBe(false);
+    expect(hasLegacyVtuScopeKeys(null)).toBe(false);
+    expect(hasLegacyVtuScopeKeys('not-json')).toBe(false);
+  });
+
+  it('rewrites a legacy snapshot with digests on registry load', async () => {
+    // Migrate-on-read must reach the disk: without a write-back an
+    // abandoned entry keeps its plaintext identifiers at rest for
+    // the full TTL (Codex R54 6rrFRH).
+    const legacyEntry = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const legacyTombstone = 'merchant-1:user-1:{"phoneNumber":"08030000002"}';
+    const rememberedAt = Date.now();
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [[legacyEntry, entry({ rememberedAt })]],
+        forgotten: [{ scoped: legacyTombstone, forgottenAt: rememberedAt }],
+      })
+    );
+
+    jest.resetModules();
+    await import('./pending-vtu-idempotency');
+
+    const stored = loadPendingVtuSnapshot() ?? '';
+    expect(stored).not.toContain('08030000000');
+    expect(stored).not.toContain('merchant-1:user-1');
+    const parsed = parsePendingVtuSnapshot(stored);
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0][0]).toBe(hashVtuScopeDescriptor(legacyEntry));
+    expect(parsed.entries[0][1].key).toBe('k');
+    expect(parsed.forgotten).toHaveLength(1);
+    expect(parsed.forgotten[0].scoped).toBe(
+      hashVtuScopeDescriptor(legacyTombstone)
+    );
+  });
+
+  it('leaves a digest snapshot untouched on registry load', async () => {
+    // No legacy keys: no write. The TTL-expired entry proves it —
+    // any persist would have pruned it, changing the bytes.
+    const digest = hashVtuScopeDescriptor('m:u:{"a":1}');
+    const staleDigest = hashVtuScopeDescriptor('m:u:{"stale":true}');
+    const original = JSON.stringify({
+      entries: [
+        [digest, entry({ rememberedAt: Date.now() })],
+        [staleDigest, entry({ rememberedAt: 1 })],
+      ],
+      forgotten: [],
+    });
+    savePendingVtuSnapshot(original);
+
+    jest.resetModules();
+    await import('./pending-vtu-idempotency');
+
+    expect(loadPendingVtuSnapshot()).toBe(original);
   });
 });

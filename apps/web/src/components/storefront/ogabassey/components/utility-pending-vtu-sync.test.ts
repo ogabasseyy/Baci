@@ -1,3 +1,4 @@
+import { hashVtuScopeDescriptor } from '@baci/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
@@ -47,6 +48,79 @@ describe('utility-pending-vtu-sync', () => {
 
     expect(fresh.recallPendingVtuKey(scoped)).toBe(key);
     expect(fresh.hasNotedPendingVtuReference(scoped, 'REF-RELOAD')).toBe(true);
+  });
+
+  it('rewrites a legacy snapshot with digests on load', async () => {
+    // Migrate-on-read must reach the disk: without a write-back an
+    // abandoned entry keeps its plaintext identifiers at rest for
+    // the full TTL (Codex R54 6rrFRH).
+    const legacyEntry = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const legacyTombstone = 'merchant-1:user-1:{"phoneNumber":"08030000002"}';
+    const rememberedAt = Date.now();
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [
+          [
+            legacyEntry,
+            {
+              key: 'key-legacy',
+              reference: null,
+              rememberedAt,
+              completedAt: null,
+            },
+          ],
+        ],
+        forgotten: [{ scoped: legacyTombstone, forgottenAt: rememberedAt }],
+      })
+    );
+
+    vi.resetModules();
+    await import('./utility-pending-vtu-sync');
+
+    const stored = loadPendingVtuSnapshot() ?? '';
+    expect(stored).not.toContain('08030000000');
+    expect(stored).not.toContain('merchant-1:user-1');
+    const parsed = parsePendingVtuSnapshot(stored);
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0][0]).toBe(hashVtuScopeDescriptor(legacyEntry));
+    expect(parsed.entries[0][1].key).toBe('key-legacy');
+    // The syncing persist preserves tombstones (a raw save would drop
+    // them and resurrect cross-tab deletions).
+    expect(parsed.forgotten).toHaveLength(1);
+    expect(parsed.forgotten[0].scoped).toBe(
+      hashVtuScopeDescriptor(legacyTombstone)
+    );
+  });
+
+  it('leaves a digest snapshot untouched on load', async () => {
+    // No legacy keys: no write. The TTL-expired entry proves it —
+    // any persist would have pruned it, changing the bytes.
+    const digest = hashVtuScopeDescriptor('m:u:{"a":1}');
+    const staleDigest = hashVtuScopeDescriptor('m:u:{"stale":true}');
+    const original = JSON.stringify({
+      entries: [
+        [
+          digest,
+          {
+            key: 'key-fresh',
+            reference: null,
+            rememberedAt: Date.now(),
+            completedAt: null,
+          },
+        ],
+        [
+          staleDigest,
+          { key: 'key-stale', reference: null, rememberedAt: 1 },
+        ],
+      ],
+      forgotten: [],
+    });
+    savePendingVtuSnapshot(original);
+
+    vi.resetModules();
+    await import('./utility-pending-vtu-sync');
+
+    expect(loadPendingVtuSnapshot()).toBe(original);
   });
 
   it('recalls a key another tab persisted after this tab loaded', () => {

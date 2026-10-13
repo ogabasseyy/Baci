@@ -7,7 +7,10 @@
  * anywhere; the MMKV touchpoints stay lazy and try/catch-guarded so
  * web/SSR (where `createMMKV` throws) degrades to memory-only.
  */
-import { normalizePersistedVtuScopeKey } from '@baci/shared';
+import {
+  isLegacyVtuScopeKey,
+  normalizePersistedVtuScopeKey,
+} from '@baci/shared';
 import { createMMKV } from 'react-native-mmkv';
 
 interface PersistedPendingVtuPurchase {
@@ -179,6 +182,56 @@ export function parsePendingVtuSnapshot(
       },
     ]);
   return { entries, forgotten };
+}
+
+/**
+ * True when a snapshot still holds raw scope keys at rest. The
+ * registry persists once after hydrating such a snapshot so the
+ * migrate-on-read digests actually replace the plaintext (otherwise
+ * an abandoned entry keeps its identifiers for the full TTL —
+ * Codex R54 6rrFRH). Shape-tolerant like the parser; corrupt
+ * snapshots report false.
+ */
+export function hasLegacyVtuScopeKeys(serialized: string | null): boolean {
+  if (!serialized) {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return false;
+  }
+  const rawEntries: unknown = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { entries?: unknown } | null)?.entries;
+  const rawForgotten: unknown = Array.isArray(parsed)
+    ? []
+    : (parsed as { forgotten?: unknown } | null)?.forgotten;
+  if (Array.isArray(rawEntries)) {
+    for (const item of rawEntries) {
+      if (
+        Array.isArray(item) &&
+        typeof item[0] === 'string' &&
+        isLegacyVtuScopeKey(item[0])
+      ) {
+        return true;
+      }
+    }
+  }
+  if (Array.isArray(rawForgotten)) {
+    for (const item of rawForgotten) {
+      if (
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as { scoped?: unknown }).scoped === 'string' &&
+        isLegacyVtuScopeKey((item as { scoped: string }).scoped)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 interface PendingVtuKeyStore {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hashVtuScopeDescriptor,
+  isLegacyVtuScopeKey,
   isVtuScopeHash,
   normalizePersistedVtuScopeKey,
 } from './vtu-scope-hash';
@@ -63,5 +64,14 @@ describe('isVtuScopeHash / normalizePersistedVtuScopeKey', () => {
     const digest = hashVtuScopeDescriptor('m:u:{"a":1}');
     expect(normalizePersistedVtuScopeKey(digest)).toBe(digest);
     expect(normalizePersistedVtuScopeKey('bare-fixture')).toBe('bare-fixture');
+  });
+
+  it('flags exactly the keys the migration rewrites', () => {
+    expect(isLegacyVtuScopeKey('m:u:{"a":1}')).toBe(true);
+    expect(isLegacyVtuScopeKey('::{"a":1}')).toBe(true);
+    expect(isLegacyVtuScopeKey(hashVtuScopeDescriptor('m:u:{"a":1}'))).toBe(
+      false
+    );
+    expect(isLegacyVtuScopeKey('bare-fixture')).toBe(false);
   });
 });

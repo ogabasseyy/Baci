@@ -28,9 +28,23 @@
  * retry replays instead of minting fresh and double-debiting. The
  * 7-day TTL is the clearing mechanism (bounded retention without
  * breaking recovery).
+ *
+ * Deploy-window residual: a tab still running pre-digest code cannot
+ * read digest keys a post-deploy tab persisted (migrate-on-read only
+ * bridges old snapshots to new code, not the reverse), so the same
+ * purchase submitted in both tabs during the window mints twice.
+ * Same class as the documented simultaneous-mint residual, strictly
+ * rarer (needs cross-version tabs plus the same purchase in both),
+ * and it heals on the old tab's next reload. Dual-writing both
+ * formats would close it but keeps raw identifiers at rest
+ * indefinitely, defeating the digest migration — deliberately not
+ * done.
  */
 
-import { normalizePersistedVtuScopeKey } from '@baci/shared';
+import {
+  isLegacyVtuScopeKey,
+  normalizePersistedVtuScopeKey,
+} from '@baci/shared';
 
 /**
  * How long a persisted entry survives across reloads. Independent of
@@ -211,6 +225,58 @@ export function parsePendingVtuSnapshot(
     });
   }
   return { entries, forgotten };
+}
+
+/**
+ * True when a snapshot still holds raw scope keys at rest. The sync
+ * layer persists once after hydrating such a snapshot so the
+ * migrate-on-read digests actually replace the plaintext (otherwise
+ * an abandoned entry keeps its identifiers until an unrelated
+ * mutation persists — Codex R54 6rrFRH). Shape-tolerant like the
+ * parser (bare array or {entries, forgotten}); corrupt snapshots
+ * report false — parse drops them, and clearing them is out of the
+ * migration's scope.
+ */
+export function hasLegacyVtuScopeKeys(serialized: string | null): boolean {
+  if (!serialized) {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    return false;
+  }
+  const rawEntries = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { entries?: unknown })?.entries;
+  const rawForgotten = Array.isArray(parsed)
+    ? []
+    : ((parsed as { forgotten?: unknown })?.forgotten ?? []);
+  if (Array.isArray(rawEntries)) {
+    for (const item of rawEntries) {
+      if (
+        Array.isArray(item) &&
+        typeof item[0] === 'string' &&
+        isLegacyVtuScopeKey(item[0])
+      ) {
+        return true;
+      }
+    }
+  }
+  if (Array.isArray(rawForgotten)) {
+    for (const item of rawForgotten) {
+      if (
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as { scoped?: unknown }).scoped === 'string' &&
+        isLegacyVtuScopeKey((item as { scoped: string }).scoped)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function loadPendingVtuSnapshot(): string | null {

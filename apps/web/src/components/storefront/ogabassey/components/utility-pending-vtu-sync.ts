@@ -7,6 +7,7 @@
  * recall/remember/note/complete/stale operations on top.
  */
 import {
+  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
   parsePendingVtuSnapshot,
   savePendingVtuSnapshot,
@@ -143,4 +144,14 @@ export function persistPendingVtuPurchases(): void {
 }
 
 // Reload recovery: rehydrate before any submit runs in this browser.
-hydratePendingVtuPurchases(loadPendingVtuSnapshot());
+// One-time migration write-back: when the snapshot still holds raw
+// scope keys, persist the migrated digests now (through the syncing
+// persist — never a raw save — so snapshot tombstones survive and a
+// newer cross-tab write merges instead of being clobbered).
+// Without this an abandoned entry keeps its plaintext identifiers
+// for the full TTL despite migrate-on-read (Codex R54 6rrFRH).
+const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
+hydratePendingVtuPurchases(initialPendingVtuSnapshot);
+if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
+  persistPendingVtuPurchases();
+}

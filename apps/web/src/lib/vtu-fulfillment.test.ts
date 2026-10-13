@@ -73,6 +73,7 @@ interface PendingTransactionMockOptions {
     support_email?: string | null;
   };
   claimData?: Record<string, unknown> | null;
+  completedGatewayTransactions?: Array<{ status: string }>;
   emailClaimData?: { id: string } | null;
   notificationClaimData?: { id: string } | null;
   purchaseUpdateData?: { id: string } | null;
@@ -177,6 +178,7 @@ function createPendingTransactionSupabaseMock({
   rpcImpl,
   merchantData = { business_name: 'OgaBassey' },
   claimData = { id: 'vtu-1' },
+  completedGatewayTransactions = [],
   emailClaimData = { id: 'vtu-1' },
   notificationClaimData = { id: 'vtu-1' },
   purchaseUpdateData = { id: 'vtu-1' },
@@ -244,6 +246,22 @@ function createPendingTransactionSupabaseMock({
                   columns === 'error_message, metadata, status, transaction_id'
                     ? (currentTransactionData ?? transactionRow)
                     : transactionRow,
+                error: null,
+              }),
+              // Marker read-back verify (Codex R54 6rrFRC): the
+              // scripted marker write truly failed, so the re-read
+              // shows no marker — the error (and the caller's
+              // restore+throw) stands.
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  metadata:
+                    transactionRow.metadata &&
+                    typeof transactionRow.metadata === 'object'
+                      ? transactionRow.metadata
+                      : {},
+                  status: 'processing',
+                  transaction_id: transactionRow.transaction_id ?? null,
+                },
                 error: null,
               }),
             }),
@@ -359,6 +377,20 @@ function createPendingTransactionSupabaseMock({
             eq: vi.fn().mockReturnValue({ maybeSingle: customerMaybeSingle }),
           }),
         };
+      }
+
+      if (table === 'transactions') {
+        // Refund-gate evidence lookups: awaitable terminal (no
+        // maybeSingle), one scripted payload per test. Defaults to
+        // no gateway rows — genuinely-charged legacy rows opt in.
+        const terminal = Object.assign(
+          Promise.resolve({
+            data: completedGatewayTransactions,
+            error: null,
+          }),
+          { eq: vi.fn(() => terminal) }
+        );
+        return { select: vi.fn(() => ({ eq: terminal.eq })) };
       }
 
       return {
@@ -3754,6 +3786,55 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(skippedPayload?.metadata).not.toHaveProperty('refundIssued');
     });
 
+    it('refunds (never skips) a failed row with a metadata-linked completed gateway transaction', async () => {
+      // Twin of the skip test (Codex R54 6rrFRE): the legacy charge
+      // route stored its VTU link in transactions.metadata, left
+      // order_id null, and never copied paymentReference onto the
+      // VTU row — so a genuinely charged row abandoned before its
+      // refund carries no other evidence. Skipping it would strand a
+      // paid purchase with no vend and no refund.
+      const updatePayloads: unknown[] = [];
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+      const supabase = createPendingTransactionSupabaseMock({
+        completedGatewayTransactions: [{ status: 'completed' }],
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {},
+          error_message: 'Kuda request failed',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.objectContaining({
+          p_amount: 1000,
+          p_customer_id: 'customer-1',
+          p_vtu_transaction_id: 'vtu-1',
+        })
+      );
+      expect(result).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+      expect(
+        findPayloadWithMetadata(
+          updatePayloads,
+          (metadata) => metadata.refundSkipped === 'no_collection_evidence'
+        )
+      ).toBeUndefined();
+    });
+
     it('skips the refund when the row has no customer_id', async () => {
       const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
       const supabase = createPendingTransactionSupabaseMock({
@@ -5179,6 +5260,48 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
         error_message: expect.stringContaining('unsubmitted prepared row'),
+        status: 'pending',
+        metadata: expect.objectContaining({
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('recovers a marked unsubmitted Monnify row to marked pending instead of stranding it', async () => {
+    // Crash between the marker persist and the provider call
+    // (Codex R54 6rrFRC): the marker fails the unsubmitted proof
+    // and Monnify cannot requery without a response vendReference,
+    // so without this branch the row strands processing forever.
+    // Recovery flips to marked pending; the next pass re-drives
+    // with the same reference (Monnify receives it as its
+    // vendReference — the transient path's dedupe assumption).
+    // FAILS against pre-fix code (no marked-Monnify branch: the
+    // row falls through to resolve-current with no flip issued).
+    const { supabase, update } = buildStrandedRowSupabase(
+      { id: 'ledger-debit-1' },
+      {
+        metadata: {
+          provider: 'monnify',
+          providerSubmissionStartedAt: new Date().toISOString(),
+          walletDebited: true,
+        },
+      }
+    );
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_message: expect.stringContaining('marked unsubmitted Monnify'),
         status: 'pending',
         metadata: expect.objectContaining({
           preVendInterruptedAt: expect.any(String),

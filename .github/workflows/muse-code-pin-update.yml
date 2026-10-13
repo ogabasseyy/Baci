@@ -19,7 +19,10 @@ jobs:
   # job with no write credentials and no credential-bearing steps after it.
   # Only the verified pin files cross into the write job, as an artifact.
   smoke:
-    if: github.ref == 'refs/heads/main'
+    # Read-only: safe to exercise from any branch via manual dispatch so
+    # the pin resolution and artifact layout can be verified before the
+    # workflow ever lands on main. Only update-pin stays main-gated.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

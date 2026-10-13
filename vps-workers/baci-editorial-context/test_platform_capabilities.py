@@ -58,7 +58,7 @@ class CapabilityContextTests(unittest.TestCase):
             path.write_text(json.dumps(value))
             env = {"BACI_CAPABILITY_REGISTER_PATH": str(path)}
             if pin:
-                env["BACI_CAPABILITY_REGISTER_DIGEST"] = "e" * 64
+                env["BACI_CAPABILITY_REGISTER_DIGEST"] = value["claims_digest"]
             with patch.dict(os.environ, env):
                 return capability_context()
 
@@ -104,13 +104,14 @@ class CapabilityContextTests(unittest.TestCase):
         # Built from a valid, pinned register with one key duplicated while
         # preserving the parsed value, so only the duplicate-key guard can
         # reject it (removing the guard would render the claim).
-        text = json.dumps(_register([_row()]))
+        value = _register([_row()])
+        text = json.dumps(value)
         duplicated = text.replace('"schema_version": 1,', '"schema_version": 1, "schema_version": 1,', 1)
         self.assertNotEqual(duplicated, text)
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
             path.write_text(duplicated)
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": value["claims_digest"]}):
                 result = capability_context()
             self.assertIn("Register unavailable, invalid or stale", result)
 
@@ -123,13 +124,14 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertIn("Register unavailable, invalid or stale", result)
 
     def test_env_pinned_digest_is_enforced(self):
-        result = self.render(_register([_row()]), pin=False)
+        value = _register([_row()])
+        result = self.render(value, pin=False)
         self.assertIn("Register unavailable, invalid or stale", result)
         with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "f" * 64}):
-            result = self.render(_register([_row()]), pin=False)
+            result = self.render(value, pin=False)
             self.assertIn("Register unavailable, invalid or stale", result)
-        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
-            result = self.render(_register([_row()]), pin=False)
+        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": value["claims_digest"]}):
+            result = self.render(value, pin=False)
             self.assertIn("Search and register domains through Baci", result)
 
     def test_agent_access_map_paths_resolve(self):
@@ -170,8 +172,9 @@ class CapabilityContextTests(unittest.TestCase):
     def test_naive_now_is_treated_as_utc(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
-            path.write_text(json.dumps(_register([_row()])))
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
+            value = _register([_row()])
+            path.write_text(json.dumps(value))
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": value["claims_digest"]}):
                 result = capability_context(now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None))
             self.assertIn("Search and register domains through Baci", result)
 

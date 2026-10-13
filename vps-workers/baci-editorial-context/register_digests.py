@@ -21,6 +21,7 @@ def claims_digest_for(data):
         "capabilities": data["capabilities"],
         "reviewed_at": data["reviewed_at"],
         "source_revision": data["source_revision"],
+        "review_scope": data.get("review_scope", ""),
     }
     return hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
 
@@ -42,16 +43,18 @@ def evidence_digest_for(repo, data):
     digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
     digest.update(str(data.get("reviewed_at", "")).encode())
     digest.update(str(data.get("source_revision", "")).encode())
+    digest.update(str(data.get("review_scope", "")).encode())
     return digest.hexdigest()
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--register", default=None, help="register path (default: repo docs/product/baci-capabilities.json)")
+    parser.add_argument("--repo", default=None, help="repo root the cited paths resolve against (default: derived from the register path)")
     parser.add_argument("--write", action="store_true", help="update the digest fields in place")
     args = parser.parse_args(argv)
     register_path = Path(args.register) if args.register else Path(__file__).resolve().parents[2] / "docs/product/baci-capabilities.json"
-    repo = register_path.resolve().parents[2]
+    repo = Path(args.repo) if args.repo else register_path.resolve().parents[2]
     data = json.loads(register_path.read_text())
     evidence = evidence_digest_for(repo, data)
     claims = claims_digest_for(data)
@@ -59,8 +62,11 @@ def main(argv=None):
     print(f"claims_digest: {claims}")
     if args.write:
         text = register_path.read_text()
-        text = re.sub(r'"evidence_digest": "[a-f0-9]{64}"', f'"evidence_digest": "{evidence}"', text, count=1)
-        text = re.sub(r'"claims_digest": "[a-f0-9]{64}"', f'"claims_digest": "{claims}"', text, count=1)
+        text, n_evidence = re.subn(r'"evidence_digest"\s*:\s*"[a-f0-9]{64}"', f'"evidence_digest": "{evidence}"', text, count=1)
+        text, n_claims = re.subn(r'"claims_digest"\s*:\s*"[a-f0-9]{64}"', f'"claims_digest": "{claims}"', text, count=1)
+        if n_evidence != 1 or n_claims != 1:
+            print(f"error: could not update digest fields in {register_path} (evidence replaced: {n_evidence}, claims replaced: {n_claims}); fix the register JSON manually", file=sys.stderr)
+            return 2
         register_path.write_text(text)
         print(f"updated {register_path}")
     return 0

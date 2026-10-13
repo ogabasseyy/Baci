@@ -171,6 +171,29 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertIn(f"evidence_digest: {data['evidence_digest']}", out.stdout)
         self.assertIn(f"claims_digest: {data['claims_digest']}", out.stdout)
 
+    def test_register_digests_write_handles_compact_json(self):
+        with tempfile.TemporaryDirectory() as root:
+            register = Path(root) / "capabilities.json"
+            data = {
+                "schema_version": 1,
+                "reviewed_at": "2026-01-01T00:00:00Z",
+                "source_revision": "a" * 40,
+                "evidence_digest": "0" * 64,
+                "claims_digest": "0" * 64,
+                "capabilities": [{"id": "x", "title": "X", "claim": "c", "limitations": "l", "status": "code_evidenced", "source_refs": ["cited.txt"]}],
+            }
+            (Path(root) / "cited.txt").write_text("v1")
+            register.write_text(json.dumps(data, separators=(",", ":")))
+            out = subprocess.run(
+                [sys.executable, str(Path(__file__).parent / "register_digests.py"), "--register", str(register), "--repo", str(root), "--write"],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(out.returncode, 0, out.stderr)
+            updated = json.loads(register.read_text())
+            self.assertNotEqual(updated["evidence_digest"], "0" * 64)
+            self.assertEqual(updated["evidence_digest"], evidence_digest_for(Path(root), updated))
+            self.assertEqual(updated["claims_digest"], claims_digest_for(updated))
+
     def test_binding_failures_are_detected_in_fixture_repo(self):
         def git(repo, *args):
             subprocess.run(
@@ -185,12 +208,17 @@ class CapabilityGateTests(unittest.TestCase):
             git(repo, "add", ".")
             git(repo, "commit", "-q", "-m", "one")
             refs = ["cited.txt"]
-            data = {"capabilities": [{"source_refs": refs}], "reviewed_at": "2026-01-01T00:00:00Z", "source_revision": "a" * 40}
+            first = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            data = {"capabilities": [{"source_refs": refs}], "reviewed_at": "2026-01-01T00:00:00Z", "source_revision": first}
             data["evidence_digest"] = evidence_digest_for(repo, data)
             data["claims_digest"] = claims_digest_for(data)
             self.assertEqual(binding_failures(repo, data), [])
             (repo / "cited.txt").write_text("v2")
             self.assertTrue(binding_failures(repo, data), "changed cited content must fail the digest binding")
+            data["evidence_digest"] = evidence_digest_for(repo, data)
+            data["claims_digest"] = claims_digest_for(data)
+            provenance = binding_failures(repo, data)
+            self.assertTrue(any("source_revision" in f for f in provenance), f"provenance alone must reject after redigest: {provenance}")
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["missing.txt"]}], "evidence_digest": "x"}), "missing cited source must fail")
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["../escape.txt"]}], "evidence_digest": "x"}), "escaping cited source must fail")
 

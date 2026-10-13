@@ -25,6 +25,7 @@ DECLARE
     v_loyalty RECORD;
     v_points_earned INTEGER;
     v_multiplier DECIMAL := 1.0;
+    v_derived_tier TEXT;
     v_new_balance INTEGER;
     v_new_lifetime INTEGER;
     v_new_tier VARCHAR(50);
@@ -106,6 +107,13 @@ BEGIN
         END LOOP;
     END IF;
 
+    -- The multiplier follows the tier derived from CURRENT lifetime
+    -- points, not the stored current_tier: a ladder edit or rename
+    -- leaves stored names stale, and awarding at the former tier's
+    -- rate (or the 1x rename fallback) misprices this purchase.
+    v_derived_tier := public.calculate_loyalty_tier(
+        COALESCE(v_loyalty.lifetime_points, 0), p_merchant_id);
+
     -- Tier multiplier follows the calculator's dedup (threshold order,
     -- case-insensitive, first/lowest wins): a raw-first match could award
     -- a higher duplicate's rate. Non-numeric multipliers fall back to 1.0
@@ -123,7 +131,7 @@ BEGIN
                 END ASC NULLS LAST,
                 t.ord
         ) ordered
-        WHERE pg_catalog.lower(ordered.tier->>'name') = pg_catalog.lower(v_loyalty.current_tier)
+        WHERE pg_catalog.lower(ordered.tier->>'name') = pg_catalog.lower(v_derived_tier)
         LIMIT 1;
     END IF;
 

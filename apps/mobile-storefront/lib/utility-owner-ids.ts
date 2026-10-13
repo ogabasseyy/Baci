@@ -15,12 +15,18 @@
  * Each call site names its policy via the helper it imports.
  */
 
-/** Owner for wallet reads and post-purchase invalidations (customer-first). */
+/**
+ * Owner for wallet reads and post-purchase invalidations
+ * (customer-first). Null — never '' — when both identities are
+ * absent: `walletKeys.data` throws on an empty owner, so the no-owner
+ * state must be unrepresentable as an owner, not a falsy string a
+ * future caller could forward. All callers falsy-guard.
+ */
 export function resolveWalletReadOwnerId(
   customerId: string | null | undefined,
   userId: string | null | undefined
-): string {
-  return customerId ?? userId ?? '';
+): string | null {
+  return customerId ?? userId ?? null;
 }
 
 /** Owner for VTU idempotency scope (user-first: stable across hydration). */

@@ -13,7 +13,10 @@ import {
   creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
 } from '@/lib/vtu-checkout';
-import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
+import {
+  refreshWalletAfterSuppressedVtuResult,
+  shouldDiscardVtuResultForAccountSwitch,
+} from './vtu-account-switch';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -145,8 +148,10 @@ export function createDataFormPurchaseHandler({
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
-          // balance is not stale when the submitter returns.
-          await payment.refetchWallet();
+          // balance is not stale when the submitter returns. Never-fails
+          // wrapper: a refetch rejection must not flip this recorded
+          // success into `Payment Failed`.
+          await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
         if (getIsActive && !getIsActive()) {
@@ -160,8 +165,10 @@ export function createDataFormPurchaseHandler({
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
-          // wallet screen shows the post-debit balance.
-          await payment.refetchWallet();
+          // wallet screen shows the post-debit balance. Never-fails
+          // wrapper (see above): the recorded success stands even if the
+          // refetch rejects.
+          await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
         // Only rotate on terminal success. 'processing' means the

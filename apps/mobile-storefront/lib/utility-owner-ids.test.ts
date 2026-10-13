@@ -11,7 +11,8 @@ describe('utility-owner-ids', () => {
 
   it('falls back to the auth user for wallet reads before hydration', () => {
     expect(resolveWalletReadOwnerId(undefined, 'user-1')).toBe('user-1');
-    expect(resolveWalletReadOwnerId(null, null)).toBe('');
+    expect(resolveWalletReadOwnerId(null, null)).toBeNull();
+    expect(resolveWalletReadOwnerId(undefined, undefined)).toBeNull();
   });
 
   it('resolves idempotency scope user-first for hydration stability', () => {

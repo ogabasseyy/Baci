@@ -1,7 +1,10 @@
 import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
-import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
+import {
+  refreshWalletAfterSuppressedVtuResult,
+  shouldDiscardVtuResultForAccountSwitch,
+} from './vtu-account-switch';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -51,5 +54,33 @@ describe('shouldDiscardVtuResultForAccountSwitch', () => {
     // The debit may have landed: cached wallets must go stale so
     // switching back cannot serve the pre-debit balance.
     expect(invalidateWallets).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('refreshWalletAfterSuppressedVtuResult', () => {
+  it('awaits the wallet refetch on success', async () => {
+    let settled = false;
+    const refetchWallet = jest.fn(() =>
+      Promise.resolve('ok').then((value) => {
+        settled = true;
+        return value;
+      })
+    );
+
+    await refreshWalletAfterSuppressedVtuResult({ refetchWallet });
+
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(true);
+  });
+
+  it('swallows a refetch rejection instead of failing the purchase', async () => {
+    const refetchWallet = jest.fn(() =>
+      Promise.reject(new Error('query exploded'))
+    );
+
+    await expect(
+      refreshWalletAfterSuppressedVtuResult({ refetchWallet })
+    ).resolves.toBeUndefined();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
   });
 });

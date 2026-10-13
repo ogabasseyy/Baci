@@ -33,3 +33,25 @@ export function shouldDiscardVtuResultForAccountSwitch(
   }
   return true;
 }
+
+/**
+ * Refreshes the wallet after a suppressed VTU result (account switch
+ * or off-screen settle) without ever failing the purchase. The charge
+ * committed and the registry already holds the outcome for
+ * switch-back replay, so a refetch rejection must degrade to a stale
+ * balance — the pre-refetch status quo — never propagate into the
+ * handler's outer catch and flip a recorded success into `Payment
+ * Failed`. Still awaited: on success the next readiness check is
+ * fresh. `payment.refetchWallet` already swallows query errors, but
+ * the suppressed path must not depend on that implementation detail.
+ */
+export async function refreshWalletAfterSuppressedVtuResult(payment: {
+  refetchWallet: () => Promise<unknown>;
+}): Promise<void> {
+  try {
+    await payment.refetchWallet();
+  } catch {
+    // Swallowed by design (see docblock): the suppressed UI has
+    // nothing to report to, and the committed outcome stands.
+  }
+}

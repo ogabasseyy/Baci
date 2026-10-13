@@ -17,7 +17,10 @@ import type { CreateBillFormPurchaseHandlerInput } from './bill-form-purchase.ty
 import { getBillPaymentAmountError } from './bill-payment-amount-validation';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
 import { resolveBillFulfillment } from './resolve-bill-fulfillment';
-import { shouldDiscardVtuResultForAccountSwitch } from './vtu-account-switch';
+import {
+  refreshWalletAfterSuppressedVtuResult,
+  shouldDiscardVtuResultForAccountSwitch,
+} from './vtu-account-switch';
 
 const GENERIC_PAYMENT_ERROR_MESSAGE = 'Payment failed. Please try again.';
 
@@ -172,8 +175,10 @@ export function createBillFormPurchaseHandler({
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
-          // balance is not stale when the submitter returns.
-          await payment.refetchWallet();
+          // balance is not stale when the submitter returns. Never-fails
+          // wrapper: a refetch rejection must not flip this recorded
+          // success into `Payment Failed`.
+          await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
         if (getIsActive && !getIsActive()) {
@@ -187,8 +192,10 @@ export function createBillFormPurchaseHandler({
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
-          // wallet screen shows the post-debit balance.
-          await payment.refetchWallet();
+          // wallet screen shows the post-debit balance. Never-fails
+          // wrapper (see above): the recorded success stands even if the
+          // refetch rejects.
+          await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
         // 'processing' is non-terminal — the vend is still in flight

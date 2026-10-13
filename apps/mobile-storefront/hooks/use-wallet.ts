@@ -100,7 +100,9 @@ export function useWallet(options: UseWalletOptions = {}) {
   // Real-time sync
   // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount
   useEffect(() => {
-    if (!customer?.id && !user?.id) return;
+    // Equivalent to the old both-absent guard (the helper returns null
+    // exactly then), and narrows the nullable owner for the key below.
+    if (!walletOwnerId) return;
 
     // Cleanup any existing channel first (prevent duplicates)
     if (channelRef.current) {

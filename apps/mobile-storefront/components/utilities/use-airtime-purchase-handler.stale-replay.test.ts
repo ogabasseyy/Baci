@@ -258,6 +258,34 @@ describe('airtime stale success replay', () => {
     ).toBe(true);
   });
 
+  it('keeps a switched success out of Payment Failed when the wallet refetch rejects', async () => {
+    const onSuccess = jest.fn();
+    const refetchWallet = jest.fn(() =>
+      Promise.reject(new Error('wallet query exploded'))
+    );
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-SWITCHED-REJECT',
+    });
+    const { result } = renderHandler({
+      onSuccess,
+      refetchWallet,
+      isSubmittingOwnerCurrent: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    // The committed success must not surface as a failure: only the
+    // account-switch notice may appear, never `Payment Failed`.
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      expect.stringContaining('changed while the purchase was processing')
+    );
+  });
+
   it('notes (without completing) a switched processing reference', async () => {
     // The note lands, but no completion is recorded: when the vend
     // resolves minutes later the replay must PRESENT it, not report

@@ -6,7 +6,10 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { useUtilityRetainedSettlement } from './use-utility-retained-settlement';
+import {
+  getPendingVtuSettlementPass,
+  useUtilityRetainedSettlement,
+} from './use-utility-retained-settlement';
 
 function mockHistory(impl: (url: string) => unknown) {
   return vi.fn(async (url: string) => ({
@@ -196,5 +199,52 @@ describe('useUtilityRetainedSettlement', () => {
     });
 
     expect(recallPendingVtuKey('{"switch":true}')).toBe('key-switch');
+  });
+
+  it('exposes the in-flight pass for the settle-then-submit gate', async () => {
+    // Codex R60 6rs7PV: submits branch on this — non-null while the
+    // pass runs, null once it lands (and when idle).
+    rememberPendingVtuPurchase('{"gate":true}', 'key-gate');
+    notePendingVtuReference('{"gate":true}', 'VTU-GATE');
+    let release!: (value: unknown) => void;
+    const gate = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => gate,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(getPendingVtuSettlementPass()).toBeNull();
+    renderHook(() => useUtilityRetainedSettlement(input));
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const pass = getPendingVtuSettlementPass();
+    expect(pass).toBeInstanceOf(Promise);
+
+    await act(async () => {
+      release({
+        transactions: [
+          {
+            request_reference: 'VTU-GATE',
+            status: 'successful',
+            refund_pending: false,
+          },
+        ],
+      });
+      await pass;
+    });
+    expect(recallPendingVtuKey('{"gate":true}')).toBeUndefined();
+    expect(getPendingVtuSettlementPass()).toBeNull();
+  });
+
+  it('reports no pass when idle', async () => {
+    renderHook(() => useUtilityRetainedSettlement(input));
+    await act(async () => {});
+
+    expect(getPendingVtuSettlementPass()).toBeNull();
   });
 });

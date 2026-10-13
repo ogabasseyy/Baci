@@ -32,6 +32,12 @@ jest.mock('@/lib/vtu-checkout', () => {
   };
 });
 
+const mockGetSettlementPass = jest.fn<() => Promise<void> | null>();
+
+jest.mock('@/hooks/use-vtu-retained-settlement', () => ({
+  getPendingVtuSettlementPass: () => mockGetSettlementPass(),
+}));
+
 jest.mock('@/lib/utility-wallet-readiness', () => ({
   ensureUtilityWalletReady: jest.fn(() => true),
 }));
@@ -39,6 +45,7 @@ jest.mock('@/lib/utility-wallet-readiness', () => ({
 describe('airtime stale success replay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSettlementPass.mockReturnValue(null);
     // Hermetic registry: each test re-seeds its own entries (prior
     // order-dependent assertions leaned on cross-test leftovers).
     clearPendingVtuKeys();
@@ -641,5 +648,29 @@ describe('airtime stale success replay', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(true);
+  });
+
+  it('waits for the settlement pass before recalling the key', async () => {
+    // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing the
+    // screen-open pass must not recall a key the pass will forget.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockGetSettlementPass.mockReturnValueOnce(gate);
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 500,
+      reference: 'WAL-GATE-AIR',
+    });
+    const { result } = renderHandler();
+    const pending = result.current.handlePurchase();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
+    expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
   });
 });

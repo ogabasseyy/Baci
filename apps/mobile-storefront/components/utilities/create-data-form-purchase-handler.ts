@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { getPendingVtuSettlementPass } from '@/hooks/use-vtu-retained-settlement';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
   isStalePendingVtuSuccess,
@@ -120,6 +121,14 @@ export function createDataFormPurchaseHandler({
       const descriptor = payment.scopePendingVtuDescriptor(
         buildVtuPurchaseDescriptor(request)
       );
+      // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing
+      // the screen-open settlement pass must not recall a key the
+      // pass is about to forget. Branch-on-null keeps the idle submit
+      // synchronously dispatched.
+      const settlementPass = getPendingVtuSettlementPass();
+      if (settlementPass) {
+        await settlementPass;
+      }
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       const submittingOwner = payment.captureSubmittingOwner();
       const submittingUserId = payment.captureSubmittingUserId();

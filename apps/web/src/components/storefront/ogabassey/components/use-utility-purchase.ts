@@ -5,6 +5,7 @@ import type { Customer, CustomerUser } from '@/contexts/customer-auth-context';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
+import { getPendingVtuSettlementPass } from './use-utility-retained-settlement';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
 import {
   finalizeSuppressedAttempt,
@@ -149,6 +150,14 @@ export function useUtilityPurchase({
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
     };
+    // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing the
+    // modal-open settlement pass must not recall a key the pass is
+    // about to forget. Branch-on-null keeps the idle submit
+    // synchronously dispatched.
+    const settlementPass = getPendingVtuSettlementPass();
+    if (settlementPass) {
+      await settlementPass;
+    }
     const result = await submitUtilityCheckout({
       payload,
       merchantSlug: merchantSlug || 'ogabassey',

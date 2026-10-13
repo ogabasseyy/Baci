@@ -4,6 +4,19 @@ import { listNotedPendingVtuReferences } from '@/lib/pending-vtu-idempotency';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
+ * In-flight settlement pass, if any. Submit paths branch on
+ * {@link getPendingVtuSettlementPass} before recall-or-mint so a
+ * submit racing the pass cannot reuse a key the pass is about to
+ * forget (Codex R60 6rs7PV). Branch-on-null (not an unconditional
+ * await) keeps the common no-pass submit synchronously dispatched.
+ */
+let activeSettlementPass: Promise<void> | null = null;
+
+export function getPendingVtuSettlementPass(): Promise<void> | null {
+  return activeSettlementPass;
+}
+
+/**
  * Background terminal update for retained idempotency entries.
  *
  * Mobile mirror of web's useUtilityRetainedSettlement (Codex R57
@@ -38,22 +51,32 @@ export function useVtuRetainedSettlement({
     }
     let cancelled = false;
     const submitterUserId = userId;
-    void Promise.all(
-      references.map(async (reference) => {
-        try {
-          // apiType null: no type filter — the reference alone
-          // scopes the read, whatever its utility type.
-          await fetchVoucherPin({
-            apiType: null,
-            capturedUserId: submitterUserId,
-            isViewActive: () => !cancelled,
-            reference,
-          });
-        } catch {
-          // Fail-open (see docblock).
-        }
-      })
-    );
+    // fetchVoucherPin's reads already time out (SHORT_TIMEOUT), so
+    // this pass always settles — a gated submit cannot hang on it.
+    const pass = (async () => {
+      await Promise.all(
+        references.map(async (reference) => {
+          try {
+            // apiType null: no type filter — the reference alone
+            // scopes the read, whatever its utility type.
+            await fetchVoucherPin({
+              apiType: null,
+              capturedUserId: submitterUserId,
+              isViewActive: () => !cancelled,
+              reference,
+            });
+          } catch {
+            // Fail-open (see docblock).
+          }
+        })
+      );
+    })();
+    activeSettlementPass = pass;
+    void pass.finally(() => {
+      if (activeSettlementPass === pass) {
+        activeSettlementPass = null;
+      }
+    });
     return () => {
       cancelled = true;
     };

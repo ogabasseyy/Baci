@@ -1,4 +1,4 @@
-import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { type Href, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type PagerView from 'react-native-pager-view';
@@ -29,8 +29,11 @@ import type {
   ValidUtilityType,
 } from '@/components/utilities/utility-purchase.types';
 import Colors from '@/constants/Colors';
+import {
+  invalidateWalletBalanceQueries,
+  useInvalidateWalletOnSuccess,
+} from '@/hooks/use-invalidate-wallet-on-success';
 import { useVtuRetainedSettlement } from '@/hooks/use-vtu-retained-settlement';
-import { walletKeys } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { RouteRepeatParamsSchema } from '@/schemas/utility-purchase';
@@ -51,30 +54,6 @@ const INDEX_TO_UTILITY_TYPE: readonly ValidUtilityType[] = [
   'power',
   'gaming',
 ];
-
-// Module scope (no useCallback — the React Compiler owns memoization).
-// Deliberately omits userId: explicit exact:false prefix matching, so
-// this {merchantId, ownerId} prefix clears stored keys both with and
-// without the optional userId segment (sessions with a customer row but
-// no auth user store the shorter key). Passing userId here would miss
-// those sessions and leave stale balances cached.
-function invalidateWalletBalanceQueries({
-  merchantId,
-  ownerId,
-  queryClient,
-}: {
-  merchantId: string;
-  ownerId: string | null;
-  queryClient: QueryClient;
-}): void {
-  if (!ownerId) {
-    return;
-  }
-  void queryClient.invalidateQueries({
-    queryKey: walletKeys.data({ merchantId, ownerId }),
-    exact: false,
-  });
-}
 
 export default function UtilityPurchaseScreen() {
   const rawParams =
@@ -181,27 +160,12 @@ export default function UtilityPurchaseScreen() {
     }
   }, [routeType]);
 
-  useEffect(() => {
-    // Invalidate on the resolved (session OR param) reference: every
-    // wallet purchase debits, so a cached pre-debit balance would let
-    // the next submit go stale. Params included on purpose — post-kill
-    // restores render from params against a persisted cache; a foreign
-    // shared URL costs one harmless refetch.
-    if (!currentType || !successReference) {
-      return;
-    }
-    invalidateWalletBalanceQueries({
-      merchantId: activeMerchantId,
-      ownerId: walletOwnerId,
-      queryClient,
-    });
-  }, [
+  useInvalidateWalletOnSuccess({
     activeMerchantId,
     currentType,
-    queryClient,
     successReference,
     walletOwnerId,
-  ]);
+  });
 
   const handleGoBack = () => {
     if (router.canGoBack()) {

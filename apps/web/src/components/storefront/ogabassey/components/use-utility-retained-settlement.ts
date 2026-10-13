@@ -8,6 +8,19 @@ import {
 import { parseUtilityVoucherBackfill } from './use-utility-voucher-backfill';
 
 /**
+ * In-flight settlement pass, if any. Submit paths branch on
+ * {@link getPendingVtuSettlementPass} before recall-or-mint so a
+ * submit racing the pass cannot reuse a key the pass is about to
+ * forget (Codex R60 6rs7PV). Branch-on-null (not an unconditional
+ * await) keeps the common no-pass submit synchronously dispatched.
+ */
+let activeSettlementPass: Promise<void> | null = null;
+
+export function getPendingVtuSettlementPass(): Promise<void> | null {
+  return activeSettlementPass;
+}
+
+/**
  * Background terminal update for retained idempotency entries.
  *
  * The voucher backfill stops polling after ~36 minutes, but
@@ -45,7 +58,7 @@ export function useUtilityRetainedSettlement({
     }
     let cancelled = false;
     const controller = new AbortController();
-    (async () => {
+    const pass = (async () => {
       const outcomes = await Promise.all(
         references.map(async (reference) => {
           try {
@@ -56,7 +69,15 @@ export function useUtilityRetainedSettlement({
             });
             const response = await fetch(
               `/api/vtu/history?${params.toString()}`,
-              { signal: controller.signal }
+              {
+                // Bounded so a hung history endpoint cannot stall a
+                // gated submit forever (fail-open on timeout, as on
+                // any other read error).
+                signal: AbortSignal.any([
+                  controller.signal,
+                  AbortSignal.timeout(10_000),
+                ]),
+              }
             );
             if (!response.ok) {
               return null;
@@ -86,6 +107,12 @@ export function useUtilityRetainedSettlement({
         }
       }
     })();
+    activeSettlementPass = pass;
+    void pass.finally(() => {
+      if (activeSettlementPass === pass) {
+        activeSettlementPass = null;
+      }
+    });
     return () => {
       cancelled = true;
       controller.abort();

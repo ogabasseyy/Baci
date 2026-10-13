@@ -6,7 +6,10 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
-import { useVtuRetainedSettlement } from './use-vtu-retained-settlement';
+import {
+  getPendingVtuSettlementPass,
+  useVtuRetainedSettlement,
+} from './use-vtu-retained-settlement';
 
 const mockGetSession =
   jest.fn<
@@ -166,5 +169,48 @@ describe('useVtuRetainedSettlement', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(recallPendingVtuKey('mob-switch')).toBe('key-switch');
+  });
+
+  it('exposes the in-flight pass for the settle-then-submit gate', async () => {
+    // Codex R60 6rs7PV: submits branch on this — non-null while the
+    // pass runs, null once it lands (and when idle).
+    rememberPendingVtuPurchase('mob-gate', 'key-gate');
+    notePendingVtuReference('mob-gate', 'REF-GATE');
+    let release!: (value: unknown) => void;
+    const gate = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => gate,
+    } as unknown as Response);
+
+    expect(getPendingVtuSettlementPass()).toBeNull();
+    renderHook(() => useVtuRetainedSettlement({ enabled: true }));
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+
+    const pass = getPendingVtuSettlementPass();
+    expect(pass).toBeInstanceOf(Promise);
+
+    release({
+      transactions: [
+        {
+          request_reference: 'REF-GATE',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    });
+    await pass;
+
+    expect(recallPendingVtuKey('mob-gate')).toBeNull();
+    expect(getPendingVtuSettlementPass()).toBeNull();
+  });
+
+  it('reports no pass when idle', async () => {
+    renderHook(() => useVtuRetainedSettlement({ enabled: true }));
+
+    expect(getPendingVtuSettlementPass()).toBeNull();
   });
 });

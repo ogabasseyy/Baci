@@ -13,11 +13,15 @@ import { useUtilityPurchase } from './use-utility-purchase';
 
 const mockSubmit = vi.hoisted(() => vi.fn());
 const mockToast = vi.hoisted(() => vi.fn());
+const mockGetSettlementPass = vi.hoisted(() => vi.fn());
 
 vi.mock('./utility-checkout-submit', () => ({
   submitUtilityCheckout: mockSubmit,
 }));
 vi.mock('@/hooks/use-toast', () => ({ toast: mockToast }));
+vi.mock('./use-utility-retained-settlement', () => ({
+  getPendingVtuSettlementPass: mockGetSettlementPass,
+}));
 
 const customer = {
   id: 'customer-1',
@@ -64,6 +68,8 @@ describe('useUtilityPurchase', () => {
   beforeEach(() => {
     mockSubmit.mockReset();
     mockToast.mockReset();
+    mockGetSettlementPass.mockReset();
+    mockGetSettlementPass.mockReturnValue(null);
     clearPendingVtuKeys();
   });
 
@@ -96,6 +102,33 @@ describe('useUtilityPurchase', () => {
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Checking account' })
     );
+  });
+
+  it('waits for the settlement pass before submitting', async () => {
+    // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing the
+    // modal-open pass must not recall a key the pass will forget.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockGetSettlementPass.mockReturnValueOnce(gate);
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-GATE',
+      amount: 1000,
+      processing: false,
+    });
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {});
+    expect(mockSubmit).not.toHaveBeenCalled();
+
+    release();
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
+    expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
   });
 
   it('binds the submit to the captured auth user id', async () => {

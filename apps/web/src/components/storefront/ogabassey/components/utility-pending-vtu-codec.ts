@@ -43,18 +43,17 @@ import {
 export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * TTL expiry with uncompleted retention (R61 6rtSNk, R63 6ruGlp):
- * uncompleted entries — referenced-processing AND unanswered —
- * outlive the TTL (provider-unknown rows stay processing
- * indefinitely; a lost response leaves reference null after a
- * committed debit). Only OBSERVED-completed entries expire past
- * the TTL — their retry is a new intent.
+ * TTL expiry (R61/R63 uncompleted retention, R69 completion-based
+ * horizon): uncompleted entries outlive the TTL; observed-completed
+ * entries expire 7d after COMPLETION, not submit — a transaction
+ * processing past the submit TTL then completing must still replay.
  */
 export function isExpiredPendingVtuEntry(
   entry: PersistedPendingVtuEntry,
   now: number = Date.now()
 ): boolean {
-  if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) return false;
+  const horizonBase = entry.completedAt ?? entry.rememberedAt;
+  if (now - horizonBase <= PERSISTED_VTU_KEY_TTL_MS) return false;
   return entry.completedAt != null;
 }
 

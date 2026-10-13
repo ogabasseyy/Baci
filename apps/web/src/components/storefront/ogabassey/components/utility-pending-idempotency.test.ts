@@ -56,8 +56,14 @@ describe('utility-pending-idempotency', () => {
     );
 
     rememberPendingVtuPurchase('{"ttl":"done"}', 'key-done');
-    markPendingVtuCompleted('{"ttl":"done"}');
-    expect(recallPendingVtuKey('{"ttl":"done"}', expired)).toBeUndefined();
+    const doneAt = Date.now();
+    markPendingVtuCompleted('{"ttl":"done"}', doneAt);
+    expect(
+      recallPendingVtuKey(
+        '{"ttl":"done"}',
+        doneAt + PERSISTED_VTU_KEY_TTL_MS + 1
+      )
+    ).toBeUndefined();
     // Deletion sticks: a live recall also misses.
     expect(recallPendingVtuKey('{"ttl":"done"}')).toBeUndefined();
   });

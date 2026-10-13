@@ -108,6 +108,39 @@ describe('pending-vtu-idempotency-codec', () => {
     expect(legacy.entries.map(([scoped]) => scoped)).toEqual(['a', 'b']);
   });
 
+  it('expires observed completions from completion, not submit', () => {
+    // Codex R69 6rxZFN: a transaction processing past the submit TTL
+    // then completing must still replay — expiring from rememberedAt
+    // would mint fresh and debit twice for a delivered vend.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const parsed = parsePendingVtuSnapshot(
+      serializePendingVtuEntries(
+        [
+          // Submitted 8d ago, completed 1d ago: retained.
+          [
+            'a',
+            entry({
+              rememberedAt: now - 8 * dayMs,
+              completedAt: now - dayMs,
+            }),
+          ],
+          // Submitted 9d ago, completed 8d ago: expired.
+          [
+            'b',
+            entry({
+              rememberedAt: now - 9 * dayMs,
+              completedAt: now - 8 * dayMs,
+            }),
+          ],
+        ],
+        [],
+        now
+      )
+    );
+    expect(parsed.entries.map(([scoped]) => scoped)).toEqual(['a']);
+  });
+
   it('round-trips scope tags, leaving pre-tag snapshots untagged', () => {
     // Codex R62 6rtokd: the owner-scoped settle filter needs the tag
     // to survive restarts; pre-tag snapshots parse untagged (fail open).

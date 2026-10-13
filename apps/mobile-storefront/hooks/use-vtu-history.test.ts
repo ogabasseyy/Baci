@@ -6,6 +6,8 @@ import { createElement, type PropsWithChildren } from 'react';
 import { useVTUHistory } from '@/hooks/use-vtu-history';
 import {
   clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -188,11 +190,11 @@ describe('useVTUHistory', () => {
     queryClient.clear();
   });
 
-  it('forgets retained entries for shown successes only', async () => {
-    // Background terminal update (Codex R57 6rseWu): a row that
-    // settles after the backfill stops must still settle its entry
-    // when history shows it — otherwise a later identical buy
-    // replays the old vend as new.
+  it('marks successes stale without deleting them', async () => {
+    // Codex R69 6rxZFO: history also mounts hidden (quick-repeat
+    // defaults, receipts pager), so a read never proves display —
+    // successes mark stale (the retry is told "Already Completed"),
+    // suppressed completions are skipped so their replay presents.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('hist-success', 'key-success');
     notePendingVtuReference('hist-success', 'VTU-123');
@@ -200,6 +202,9 @@ describe('useVTUHistory', () => {
     notePendingVtuReference('hist-pending', 'VTU-124');
     rememberPendingVtuPurchase('hist-failed', 'key-failed');
     notePendingVtuReference('hist-failed', 'VTU-125');
+    rememberPendingVtuPurchase('hist-suppressed', 'key-suppressed');
+    notePendingVtuReference('hist-suppressed', 'VTU-126');
+    markPendingVtuCompleted('hist-suppressed');
     const queryClient = createTestClient();
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
@@ -229,6 +234,14 @@ describe('useVTUHistory', () => {
             amount: 1500,
             request_reference: 'VTU-125',
           },
+          {
+            id: 'tx-4',
+            created_at: '2026-04-08T12:03:00.000Z',
+            type: 'airtime',
+            status: 'successful',
+            amount: 500,
+            request_reference: 'VTU-126',
+          },
         ],
       }),
     });
@@ -238,9 +251,13 @@ describe('useVTUHistory', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // Shown success settles; pending is untouched; failed keeps
+    // Success marks stale (not deleted); suppressed keeps its fresh
+    // mark so the replay presents; pending is untouched; failed keeps
     // backfill-era behavior (no refund proof in this projection).
-    expect(recallPendingVtuKey('hist-success')).toBeNull();
+    expect(recallPendingVtuKey('hist-success')).toBe('key-success');
+    expect(isStalePendingVtuSuccess('hist-success', 'VTU-123')).toBe(true);
+    expect(recallPendingVtuKey('hist-suppressed')).toBe('key-suppressed');
+    expect(isStalePendingVtuSuccess('hist-suppressed', 'VTU-126')).toBe(false);
     expect(recallPendingVtuKey('hist-pending')).toBe('key-pending');
     expect(recallPendingVtuKey('hist-failed')).toBe('key-failed');
 

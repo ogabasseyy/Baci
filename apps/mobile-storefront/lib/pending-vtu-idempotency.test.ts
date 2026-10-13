@@ -239,8 +239,11 @@ describe('pending-vtu-idempotency', () => {
       phoneNumber: 'ttl-done',
     });
     rememberPendingVtuPurchase(doneDescriptor, 'key-done');
-    markPendingVtuCompleted(doneDescriptor);
-    expect(recallPendingVtuKey(doneDescriptor, expired)).toBeNull();
+    const doneAt = Date.now();
+    markPendingVtuCompleted(doneDescriptor, doneAt);
+    expect(
+      recallPendingVtuKey(doneDescriptor, doneAt + PERSISTED_VTU_KEY_TTL_MS + 1)
+    ).toBeNull();
     // Deletion sticks: a live recall also misses.
     expect(recallPendingVtuKey(doneDescriptor)).toBeNull();
   });

@@ -75,6 +75,7 @@ jobs:
               # at most ~24h after merge. Keep that schedule enabled.
               - '.github/scripts/muse-review/**'
               - '.github/scripts/muse-pin-update*'
+              - '.github/scripts/resolve-ci-change-scope*'
               # The drift auditor itself (both spellings: the filter
               # is hyphenated, its modules underscored): auditor
               # changes must run the job that executes the audit.
@@ -93,6 +94,7 @@ jobs:
             # semgrep_relevant above — otherwise the job that reads
             # the signal is skipped and the red X never appears.
             trusted_changed:
+              - '.github/scripts/resolve-ci-change-scope*'
               - '.github/scripts/muse-review/**'
               - '.github/scripts/muse-pin-update*'
               - '.github/scripts/semgrep-sarif*'

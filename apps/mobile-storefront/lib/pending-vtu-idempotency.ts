@@ -276,6 +276,17 @@ export function forgetPendingVtuPurchase(
   persistPendingVtuPurchases();
 }
 
+/** Noted references across live entries, deduped (settle hook reads history for these; Codex R57 6rsvy7). */
+export function listNotedPendingVtuReferences(): string[] {
+  const references = new Set<string>();
+  for (const entry of pendingPurchases.values()) {
+    if (entry.reference !== null) {
+      references.add(entry.reference);
+    }
+  }
+  return [...references];
+}
+
 /** Test-only escape hatch: module state survives across test cases. */
 export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();

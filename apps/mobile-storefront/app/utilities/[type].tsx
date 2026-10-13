@@ -29,6 +29,7 @@ import type {
   ValidUtilityType,
 } from '@/components/utilities/utility-purchase.types';
 import Colors from '@/constants/Colors';
+import { useVtuRetainedSettlement } from '@/hooks/use-vtu-retained-settlement';
 import { walletKeys } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
@@ -144,6 +145,11 @@ export default function UtilityPurchaseScreen() {
   });
   const resolvedSuccessData = successData ?? getParamSuccessData(params);
   const successReference = resolvedSuccessData?.reference;
+
+  // Settle retained idempotency entries whose rows reached terminality
+  // after the backfill stopped polling, before the customer can repeat
+  // (Codex R57 6rsvy7). No-op without retained references.
+  useVtuRetainedSettlement({ enabled: true });
 
   const pagerRef = useRef<PagerView>(null);
 

@@ -9,6 +9,7 @@ import {
   hasNotedPendingVtuReference,
   hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
+  listNotedPendingVtuReferences,
   markPendingVtuCompleted,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
@@ -402,5 +403,16 @@ describe('pending-vtu-idempotency', () => {
     expect(snapshot.entries).toEqual([]);
     expect(snapshot.forgotten).toHaveLength(1);
     expect(recallPendingVtuKey(scoped)).toBeNull();
+  });
+
+  it('lists noted references deduped, excluding unanswered entries', () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('mob-l1', 'key-l1');
+    notePendingVtuReference('mob-l1', 'REF-SHARED');
+    rememberPendingVtuPurchase('mob-l2', 'key-l2');
+    notePendingVtuReference('mob-l2', 'REF-SHARED');
+    rememberPendingVtuPurchase('mob-l3', 'key-l3');
+
+    expect(listNotedPendingVtuReferences()).toEqual(['REF-SHARED']);
   });
 });

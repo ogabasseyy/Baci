@@ -21,12 +21,27 @@ def relevant_paths(register):
 
 def changed_paths(base, cwd="."):
     proc = subprocess.run(
-        ["git", "-C", str(cwd), "diff", "--name-only", "-z", f"{base}...HEAD"],
+        ["git", "-C", str(cwd), "diff", "--name-status", "-z", f"{base}...HEAD"],
         capture_output=True, text=True,
     )
     if proc.returncode != 0:
         return None
-    return {p for p in proc.stdout.split("\0") if p}
+    # -z name-status emits STATUS\0path\0, with renames as R###\0old\0new\0.
+    # Both sides of a rename count: dropping the old cited path must not
+    # bypass the gate just because the register still lists it.
+    fields = [p for p in proc.stdout.split("\0") if p]
+    paths = set()
+    i = 0
+    while i < len(fields):
+        status = fields[i]
+        i += 1
+        if status.startswith(("R", "C")):
+            paths.update(fields[i : i + 2])
+            i += 2
+        else:
+            paths.add(fields[i])
+            i += 1
+    return paths
 
 
 def should_run(base, register, changed):

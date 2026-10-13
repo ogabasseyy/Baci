@@ -42,6 +42,9 @@ def capability_context(*, now=None):
         digest = data.get("evidence_digest", "")
         if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise ValueError("evidence digest")
+        expected_digest = os.environ.get("BACI_CAPABILITY_REGISTER_DIGEST")
+        if expected_digest and expected_digest != digest:
+            raise ValueError("evidence digest mismatch")
         if not isinstance(data.get("reviewed_at"), str):
             raise ValueError("reviewed_at type")
         reviewed = dt.datetime.fromisoformat(data["reviewed_at"].replace("Z", "+00:00"))

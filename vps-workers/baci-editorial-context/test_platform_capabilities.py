@@ -41,14 +41,16 @@ def _row(**overrides):
     return row
 
 
-def evidence_digest_for(repo, refs):
-    """Content digest over cited paths and their file contents."""
+def evidence_digest_for(repo, data):
+    """Content digest over cited paths, their contents, and the claim text."""
+    refs = sorted({ref for row in data["capabilities"] for ref in row["source_refs"]})
     digest = hashlib.sha256()
-    for ref in sorted(refs):
+    for ref in refs:
         digest.update(ref.encode())
         digest.update(b"\0")
         digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
         digest.update(b"\n")
+    digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -74,8 +76,8 @@ def binding_failures(repo, data):
                 failures.append(f"cited source is not tracked: {ref}")
     if not failures:
         expected = data.get("evidence_digest")
-        if not isinstance(expected, str) or evidence_digest_for(repo, refs) != expected:
-            failures.append("cited evidence content changed since review; re-review the claims and update evidence_digest")
+        if not isinstance(expected, str) or evidence_digest_for(repo, data) != expected:
+            failures.append("cited evidence or claim text changed since review; re-review the claims and update evidence_digest")
     return failures
 
 
@@ -142,6 +144,27 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertIn("Register unavailable, invalid or stale", result)
         result = self.render(_register([_row()], review_scope="s" * 1001))
         self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_env_pinned_digest_is_enforced(self):
+        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "f" * 64}):
+            result = self.render(_register([_row()]))
+            self.assertIn("Register unavailable, invalid or stale", result)
+        with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
+            result = self.render(_register([_row()]))
+            self.assertIn("Search and register domains through Baci", result)
+
+    def test_agent_access_map_paths_resolve(self):
+        repo = Path(__file__).resolve().parents[2]
+        map_path = repo / "docs/product/agent-access-map.md"
+        if not map_path.exists():
+            self.skipTest("agent access map unavailable")
+        gate_spec = importlib.util.spec_from_file_location(
+            "capability_gate", Path(__file__).parent / "capability_gate.py"
+        )
+        gate = importlib.util.module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        missing = [p for p in sorted(gate.map_cited_paths(map_path.read_text())) if not (repo / p.rstrip("/")).exists()]
+        self.assertEqual(missing, [], f"agent-access-map cites non-resolvable paths: {missing}")
 
     def test_missing_or_malformed_evidence_digest_fails_closed(self):
         for bad in (None, "xyz", "e" * 63):
@@ -269,7 +292,8 @@ class CapabilityContextTests(unittest.TestCase):
             git(repo, "add", ".")
             git(repo, "commit", "-q", "-m", "one")
             refs = ["cited.txt"]
-            data = {"capabilities": [{"source_refs": refs}], "evidence_digest": evidence_digest_for(repo, refs)}
+            data = {"capabilities": [{"source_refs": refs}]}
+            data["evidence_digest"] = evidence_digest_for(repo, data)
             self.assertEqual(binding_failures(repo, data), [])
             (repo / "cited.txt").write_text("v2")
             self.assertTrue(binding_failures(repo, data), "changed cited content must fail the digest binding")

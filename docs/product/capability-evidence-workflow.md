@@ -33,7 +33,8 @@ not imply every merchant can access every integration by default.
    the register binding: re-review the affected claims and record the new
    `source_revision`/`reviewed_at` instead of carrying the old binding forward.
    The enforceable binding is the register's `evidence_digest`: a SHA256 over
-   every cited `source_refs` path and its content hash, recomputed by the
+   every cited `source_refs` path, its content hash, and the register's own
+   claim text, recomputed by the
    binding test (`evidence_digest_for` in
    `vps-workers/baci-editorial-context/test_platform_capabilities.py`). Any
    cited-file content change — on a branch, on main, or through a squash

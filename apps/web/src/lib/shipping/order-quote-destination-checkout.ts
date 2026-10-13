@@ -24,6 +24,8 @@ type CheckoutItemForQuote = PhysicalQuoteMetadata & {
 };
 
 export type QuoteCheckoutContext = {
+  /** Only order creation may adopt the pin from its validated checkout quote. */
+  isNewOrder?: boolean;
   items?: CheckoutItemForQuote[];
   merchantId?: string;
   shippingFee?: number;

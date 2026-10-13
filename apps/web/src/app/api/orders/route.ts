@@ -1378,6 +1378,7 @@ export async function POST(request: NextRequest) {
         resolvedSelectedQuoteId,
         shipping_address,
         {
+          isNewOrder: !isIdempotentOrderReplay,
           items: quoteValidationItems,
           merchantId: body.merchant_id,
           shippingFee:

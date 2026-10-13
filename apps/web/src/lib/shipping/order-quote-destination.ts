@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { shippingCoordinatePairSchema } from '@/schemas/order-shipping-address';
 import {
   matchesQuoteDestination,
   type OrderShippingAddressForQuote,
@@ -102,8 +103,36 @@ export async function enrichShippingAddressWithQuoteDestination(
   }
   validateQuoteCheckoutContext(quote, quoteRequest, context);
 
+  const orderPin = shippingCoordinatePairSchema.safeParse(shippingAddress);
+  const quotePin = shippingCoordinatePairSchema.safeParse(
+    quoteRequest.receiver
+  );
+  if (!orderPin.success || !quotePin.success) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  const { latitude: orderLatitude, longitude: orderLongitude } = orderPin.data;
+  const { latitude: quoteLatitude, longitude: quoteLongitude } = quotePin.data;
+  const orderHasPin =
+    typeof orderLatitude === 'number' && typeof orderLongitude === 'number';
+  const quoteHasPin =
+    typeof quoteLatitude === 'number' && typeof quoteLongitude === 'number';
+  // A new checkout can adopt the validated, merchant-scoped quote's pin.
+  // Existing orders must keep their own destination provenance; matching text
+  // alone does not authorize adding or replacing their coordinates.
+  if (
+    (orderHasPin && !quoteHasPin) ||
+    (!orderHasPin && quoteHasPin && !context.isNewOrder) ||
+    (orderHasPin &&
+      quoteHasPin &&
+      (Math.abs(orderLatitude - quoteLatitude) > 1e-6 ||
+        Math.abs(orderLongitude - quoteLongitude) > 1e-6))
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+
   return {
     ...shippingAddress,
+    ...(!orderHasPin && quoteHasPin ? quotePin.data : {}),
     country: quoteRequest.receiver.country ?? shippingAddress.country,
     countryCode:
       quoteRequest.receiver.countryCode ?? shippingAddress.countryCode,

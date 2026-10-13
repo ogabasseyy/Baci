@@ -55,16 +55,17 @@ describe('enrichShippingAddressWithQuoteDestination', () => {
     });
   });
 
-  it('keeps the original address for non-GIGL quotes', async () => {
+  it('keeps the original address for non-carrier quotes', async () => {
     await expect(
       enrichShippingAddressWithQuoteDestination(
         createSupabaseRpcMock({
-          provider: 'TOPSHIP',
-          provider_rate_id: 'topship:express:1',
+          provider: 'MERCHANT',
+          provider_rate_id: 'merchant:local:1',
           quote_request: null,
         }) as unknown as SupabaseClient,
         'quote-1',
-        shippingAddress
+        shippingAddress,
+        { merchantId: 'merchant-current', shippingProvider: 'MERCHANT' }
       )
     ).resolves.toEqual(shippingAddress);
   });

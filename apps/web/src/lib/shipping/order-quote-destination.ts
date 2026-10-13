@@ -10,7 +10,10 @@ import {
   validateQuoteCheckoutContext,
 } from './order-quote-destination-checkout';
 import { OrderQuoteDestinationMismatchError } from './order-quote-destination-errors';
-import { parseStoredQuoteRequest } from './order-shipment-booking-utils';
+import {
+  isShippingProviderCode,
+  parseStoredQuoteRequest,
+} from './order-shipment-booking-utils';
 
 export type { OrderShippingAddressForQuote } from './order-quote-destination-address';
 export { normalizeAddressForQuoteMatch } from './order-quote-destination-address';
@@ -79,8 +82,7 @@ export async function enrichShippingAddressWithQuoteDestination(
     throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
   }
 
-  const isGiglQuote = quote?.provider === 'GIGL';
-  if (!quote || !isGiglQuote) {
+  if (!quote || !isShippingProviderCode(quote.provider)) {
     return shippingAddress;
   }
 

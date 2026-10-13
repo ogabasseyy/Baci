@@ -24,6 +24,8 @@ guard that rejects the subsequent booking.
 - Preserve coordinates through order input parsing.
 - After quote merchant, provider, fee, item, expiry and destination-text checks,
   allow **new order creation only** to adopt its validated checkout quote's pin.
+- Apply validated pin adoption to supported carrier quotes, including GIGL and
+  TOPSHIP, with the same merchant, provider, fee, item and destination checks.
 - Reject malformed or conflicting pins. Keep existing matching order pins.
 - Existing order reuse and idempotent replay cannot adopt missing coordinates
   from matching address text alone. The booking guard stays intact.
@@ -91,3 +93,13 @@ the booking destination guard together. It covers missing, partial, malformed,
 out-of-range, zero, conflicting and existing pins, as well as changed address
 text. Existing checkout quote validation, order API, order reuse and operation
 schema suites also run. No test calls a live carrier or writes production data.
+
+## Source-contract receipts
+
+The order route only adds its existing idempotent-replay decision to quote
+validation. Its frozen event-boundary receipt was updated after verifying that
+tenant authorization, payments, notifications and privileged-client authority
+are unchanged. The storefront inventory was regenerated through its existing
+source-bound generator; all 573 route classifications remain unchanged. Neither
+validator was relaxed. Independent operation schemas now have focused modules
+and colocated tests, with `orders.ts` retaining its compatibility exports.

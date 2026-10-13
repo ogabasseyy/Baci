@@ -40,30 +40,34 @@ const request = {
   },
   items: [{ name: 'Phone', quantity: 1, weight: 1, value: 1000 }],
 };
-const context = {
-  isNewOrder: true,
-  merchantId,
-  shippingProvider: 'GIGL',
-  shippingFee: 2500,
-  items: orderInput.items,
-};
+describe.each([
+  'GIGL',
+  'TOPSHIP',
+])('checkout destination coordinate provenance for %s', (provider) => {
+  const context = {
+    isNewOrder: true,
+    merchantId,
+    shippingProvider: provider,
+    shippingFee: 2500,
+    items: orderInput.items,
+  };
 
-function enrich(
-  shippingAddress: OrderShippingAddressForQuote,
-  receiver: Record<string, unknown> = request.receiver
-) {
-  return enrichShippingAddressWithQuoteDestination(
-    createSupabaseRpcMock({
-      price: 2500,
-      quote_request: { ...request, receiver },
-    }) as unknown as SupabaseClient,
-    'quote-1',
-    shippingAddress,
-    context
-  );
-}
+  function enrich(
+    shippingAddress: OrderShippingAddressForQuote,
+    receiver: Record<string, unknown> = request.receiver
+  ) {
+    return enrichShippingAddressWithQuoteDestination(
+      createSupabaseRpcMock({
+        provider,
+        price: 2500,
+        quote_request: { ...request, receiver },
+      }) as unknown as SupabaseClient,
+      'quote-1',
+      shippingAddress,
+      context
+    );
+  }
 
-describe('checkout destination coordinate provenance', () => {
   it('preserves valid coordinates through order input validation', () => {
     const result = orderCreateSchema.parse({
       ...orderInput,
@@ -107,6 +111,7 @@ describe('checkout destination coordinate provenance', () => {
 
   it('does not backfill an existing order from address text alone', async () => {
     const supabase = createSupabaseRpcMock({
+      provider,
       price: 2500,
       quote_request: request,
     });
@@ -133,6 +138,7 @@ describe('checkout destination coordinate provenance', () => {
       latitude: coordinates.latitude + 1e-7,
     };
     const supabase = createSupabaseRpcMock({
+      provider,
       price: 2500,
       quote_request: request,
     });
@@ -179,6 +185,57 @@ describe('checkout destination coordinate provenance', () => {
         }
       )
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it.each([
+    { shippingFee: 2501 },
+    { shippingProvider: 'OTHER' },
+    { items: [{ ...orderInput.items[0], quantity: 2 }] },
+    { items: [{ ...orderInput.items[0], price: 1001 }] },
+  ])('rejects changed checkout context before adopting the pin: %j', async (change) => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          provider,
+          price: 2500,
+          quote_request: request,
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        address,
+        { ...context, ...change }
+      )
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('rejects an expired quote before adopting the pin', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          provider,
+          price: 2500,
+          quote_request: request,
+          expires_at: new Date(0).toISOString(),
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        address,
+        context
+      )
+    ).rejects.toMatchObject({ code: 'INTERNATIONAL_QUOTE_EXPIRED' });
+  });
+
+  it('rejects a quote request from another merchant before adopting the pin', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          provider,
+          price: 2500,
+          quote_request: { ...request, merchantId: 'another-merchant' },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        address,
+        context
+      )
+    ).rejects.toMatchObject({ code: 'INTERNATIONAL_QUOTE_MERCHANT_MISMATCH' });
   });
 
   it('still rejects changed address text even when coordinates match', async () => {

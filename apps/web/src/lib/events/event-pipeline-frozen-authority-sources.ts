@@ -36,8 +36,11 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
+  // Re-pinned for validated checkout-coordinate provenance: the route passes
+  // its existing idempotent-replay decision to quote enrichment. Notification,
+  // payment, tenant authorization, and privileged-client authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '33166c90e60c3d9d0a2648abe4ba31df243205376696e1ceae6f9bfb0d9398b0',
+    'd0e74f98308b19478a9f3c5e440e5bba7d70596f0b5ea0e022a180e7db338095',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

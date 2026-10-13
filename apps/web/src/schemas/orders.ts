@@ -9,15 +9,14 @@ import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
 import { optionalHttpUrlSchema } from './order-create-fields';
 import { orderShippingAddressSchema } from './order-shipping-address';
 
+export { merchantOrderCancellationSchema } from './merchant-order-cancellation';
+export { orderIdParamsSchema } from './order-id-params';
+export type { RecordPaymentInput } from './order-record-payment';
+export { type OrderUpdateInput, orderUpdateSchema } from './order-update';
 export {
-  merchantOrderCancellationSchema,
-  type OrderUpdateInput,
-  orderIdParamsSchema,
-  orderUpdateSchema,
-  type RecordPaymentInput,
   type ReuseCheckoutOrderInput,
   reuseCheckoutOrderSchema,
-} from './order-operations';
+} from './reuse-checkout-order';
 
 const optionalVariantNameSchema = z.preprocess(
   (value) => (value === null ? undefined : value),

@@ -11,6 +11,7 @@ t helper-ws-redirect 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pip
 
 # --- agent argv (value-boundary, scrub exactness, model shape) ---
 t runner-model-glue 1 "agent-shell-boundary" happy.sarif "$R${FS}  --disable-shell \\${FS}r${FS}--disable-shell${FS}--model \"--disable-shell --disable-write\""
+t runner-json-mode 1 "agent-json-mode" happy.sarif "$R${FS}exec --json \\${FS}r${FS}--json${FS}--removed-json"
 t runner-scrub-glue 1 "agent-token-isolation" happy.sarif "$R${FS}env -u GITHUB_TOKEN -u GH_TOKEN${FS}r${FS}-u GITHUB_TOKEN${FS}-u GITHUB_TOKEN=foo"
 t runner-model-args 1 "agent-model-args" happy.sarif "$R${FS}model_file=\"\${RUNNER_TEMP}/muse-model-ids.txt\"${FS}a${FS}model_args+=(--enable-x)"
 t runner-unknown-flag 1 "agent-unknown-flag" happy.sarif "$R${FS}--reasoning-effort${FS}r${FS}--reasoning-effort${FS}--frobnicate"

@@ -25,4 +25,4 @@ jobs:
       - name: Assert capability register is inside its evidence window
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'
-        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_platform_capabilities.py'
+        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_*capabilit*.py'

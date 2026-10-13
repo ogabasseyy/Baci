@@ -26,8 +26,11 @@ def map_cited_paths(text):
 
 
 def relevant_paths(register):
-    refs = {ref for row in register["capabilities"] for ref in row["source_refs"]}
-    paths = {REGISTER_PATH, MAP_PATH} | refs
+    paths = {REGISTER_PATH, MAP_PATH}
+    try:
+        paths |= {ref for row in register["capabilities"] for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        pass  # Structurally invalid register: base set still triggers the suite.
     map_file = Path(MAP_PATH)
     if map_file.exists():
         paths |= map_cited_paths(map_file.read_text())
@@ -86,7 +89,7 @@ def main():
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
     return subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_platform_capabilities.py"]
+        [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_*capabilit*.py"]
     ).returncode
 
 

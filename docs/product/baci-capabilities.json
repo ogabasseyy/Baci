@@ -2,7 +2,7 @@
   "schema_version": 1,
   "reviewed_at": "2026-10-13T00:05:07+01:00",
   "source_revision": "222397a422314a305725d084ff1ffcac1ff5c86f",
-  "evidence_digest": "ec01e51214a20f1b12c170e61885e3c83f11422135b3327e8d91778dd57b26ea",
+  "evidence_digest": "f2d846e3c51bb000c9364fbbcdf0893e43dc3c20542bb2b67cc5fb20159f8489",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {
@@ -87,7 +87,7 @@
       "id": "unverified-parity", "title": "Capabilities requiring further verification", "status": "unverified",
       "claim": "Dedicated offline POS, multi-location stock, customer-group segmentation, bundles, general merchant API access, wholesale commerce and secure digital fulfillment are not established by this audit.",
       "limitations": "Unverified is not absent. Require exact workflow, deployed version, entitlement and end-to-end evidence before claiming availability, absence or complete competitor parity.",
-      "source_refs": ["docs/product/capability-evidence-workflow.md"]
+      "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx", "apps/web/src/lib/llms-markdown-platform.ts"]
     }
   ]
 }

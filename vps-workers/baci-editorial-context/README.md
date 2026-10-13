@@ -40,9 +40,10 @@ register makes the lane fail closed to the "Register unavailable" prompt text,
 so watch for that fallback in writer output. At deploy time, record the
 register's `evidence_digest` from the reviewed repo copy and confirm the same
 digest appears in generated writer prompts; a mismatch means the deployed
-register is not the reviewed one. For hard enforcement, set
-`BACI_CAPABILITY_REGISTER_DIGEST` to that digest in the writer environment:
-the lane then fails closed on any register whose digest differs. Treat write access to the
+register is not the reviewed one. The pin is mandatory, not optional: set
+`BACI_CAPABILITY_REGISTER_DIGEST` to that digest in the writer environment —
+until it is set (and whenever it differs), the lane fails closed and
+platform-marketing prompts run without capability evidence. Treat write access to the
 register path (`BACI_CAPABILITY_REGISTER_PATH`) as prompt control: the file is
 operator-reviewed evidence whose text reaches the writer prompt, so only
 trusted operators may write it, and the hash printed into each prompt is the

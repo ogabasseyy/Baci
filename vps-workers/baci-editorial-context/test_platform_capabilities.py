@@ -82,11 +82,14 @@ def binding_failures(repo, data):
 
 
 class CapabilityContextTests(unittest.TestCase):
-    def render(self, value):
+    def render(self, value, pin=True):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
             path.write_text(json.dumps(value))
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
+            env = {"BACI_CAPABILITY_REGISTER_PATH": str(path)}
+            if pin:
+                env["BACI_CAPABILITY_REGISTER_DIGEST"] = "e" * 64
+            with patch.dict(os.environ, env):
                 return capability_context()
 
     def test_valid_register_renders_claims_without_internal_paths(self):
@@ -146,11 +149,13 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertIn("Register unavailable, invalid or stale", result)
 
     def test_env_pinned_digest_is_enforced(self):
+        result = self.render(_register([_row()]), pin=False)
+        self.assertIn("Register unavailable, invalid or stale", result)
         with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "f" * 64}):
-            result = self.render(_register([_row()]))
+            result = self.render(_register([_row()]), pin=False)
             self.assertIn("Register unavailable, invalid or stale", result)
         with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
-            result = self.render(_register([_row()]))
+            result = self.render(_register([_row()]), pin=False)
             self.assertIn("Search and register domains through Baci", result)
 
     def test_agent_access_map_paths_resolve(self):
@@ -185,7 +190,7 @@ class CapabilityContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
             path.write_text(json.dumps(_register([_row()])))
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
                 result = capability_context(now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None))
             self.assertIn("Search and register domains through Baci", result)
 
@@ -232,7 +237,7 @@ class CapabilityContextTests(unittest.TestCase):
         if not stale:
             # Freshness and runtime acceptance are only asserted inside the
             # evidence window; structural binding below is always enforced.
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path)}):
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(register_path), "BACI_CAPABILITY_REGISTER_DIGEST": data["evidence_digest"]}):
                 rendered = capability_context()
             self.assertIn("<capability-register-json untrusted-evidence-data>", rendered)
             self.assertNotIn("Register unavailable", rendered)

@@ -59,20 +59,30 @@ def changed_paths(base, cwd="."):
     return paths
 
 
+def _matches(path, relevant):
+    if path in relevant:
+        return True
+    # Directory citations (trailing slash or not) cover everything under them.
+    return any(path.startswith(r.rstrip("/") + "/") for r in relevant)
+
+
 def should_run(base, register, changed):
     if changed is None:
         return True
     relevant = relevant_paths(register)
     return any(
-        p in relevant or p.startswith(SUITE_DIR + "/") for p in changed
+        _matches(p, relevant) or p.startswith(SUITE_DIR + "/") for p in changed
     )
 
 
 def main():
     base = os.environ.get("BASE_SHA", "")
     if base and set(base) != {"0"}:
-        register = json.loads(Path(REGISTER_PATH).read_text())
-        if not should_run(base, register, changed_paths(base)):
+        try:
+            register = json.loads(Path(REGISTER_PATH).read_text())
+        except (OSError, ValueError):
+            register = None  # Broken register: run the suite for its diagnosis.
+        if register is not None and not should_run(base, register, changed_paths(base)):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
     return subprocess.run(

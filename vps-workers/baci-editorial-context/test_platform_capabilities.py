@@ -275,6 +275,21 @@ class CapabilityContextTests(unittest.TestCase):
             self.assertIn("renamed.ts", changed)
             citing = {"capabilities": [{"source_refs": ["cited.ts"]}]}
             self.assertTrue(gate.should_run(base, citing, changed), "renaming a cited source must run the suite")
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/agent-access-map.md").write_text("See `apps/web/src/lib/agentic/` for tools.")
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                citing = {"capabilities": [{"source_refs": ["cited.ts"]}]}
+                self.assertTrue(
+                    gate.should_run("base", citing, {"apps/web/src/lib/agentic/new-route.ts"}),
+                    "a new file under a map-cited directory must run the suite",
+                )
+                self.assertFalse(gate.should_run("base", citing, {"apps/web/src/lib/other.ts"}))
+            finally:
+                os.chdir(previous)
 
     def test_binding_failures_are_detected_in_fixture_repo(self):
         import subprocess

@@ -1,4 +1,4 @@
-import { withTimeout } from '@baci/shared';
+import { withDeadline } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
@@ -78,13 +78,15 @@ export async function fetchVoucherPin({
     status: null,
     refundPending: null,
   };
+  // One deadline for headers + body (Codex R70 6ryArL).
+  const deadlineMs = Date.now() + SHORT_TIMEOUT;
   let response: Response;
   try {
     response = await fetchWithTimeout(
       `${EXPO_PUBLIC_API_URL}/api/vtu/history?${params.toString()}`,
       {
         method: 'GET',
-        timeout: SHORT_TIMEOUT,
+        deadlineMs,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${sessionData.session.access_token}`,
@@ -106,9 +108,8 @@ export async function fetchVoucherPin({
   }
   let body: unknown;
   try {
-    // Body read bounded too (R68 6rwg9A): the fetch helper resolves
-    // on headers, so a stalled body needs its own cap.
-    body = await withTimeout(response.json(), SHORT_TIMEOUT);
+    // Body shares the attempt deadline (R70 6ryArL).
+    body = await withDeadline(response.json(), deadlineMs);
   } catch {
     // Unparseable body: transient, retry within budget.
     return BLANK;

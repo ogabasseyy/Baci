@@ -1,3 +1,4 @@
+import { withDeadline } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EXPO_PUBLIC_API_URL } from '@/env';
@@ -117,11 +118,13 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
         query.set('type', apiType);
       }
 
+      // One deadline for headers + body (Codex R70 6ryArL).
+      const deadlineMs = Date.now() + SHORT_TIMEOUT;
       const response = await fetchWithTimeout(
         `${EXPO_PUBLIC_API_URL}/api/vtu/history?${query.toString()}`,
         {
           method: 'GET',
-          timeout: SHORT_TIMEOUT,
+          deadlineMs,
           headers: {
             'Content-Type': 'application/json',
             ...(session?.access_token && {
@@ -130,7 +133,7 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
           },
         }
       );
-      const data = await response.json();
+      const data = await withDeadline(response.json(), deadlineMs);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load utility history.');

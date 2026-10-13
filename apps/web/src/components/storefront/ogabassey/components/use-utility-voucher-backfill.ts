@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchWithTimeout, withTimeout } from '@baci/shared/lib';
+import { fetchWithTimeout, withDeadline } from '@baci/shared/lib';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
@@ -213,13 +213,16 @@ export function useUtilityVoucherBackfill({
       ) {
         let parsed: UtilityVoucherBackfill | null = null;
         try {
+          // One deadline for headers + body (Codex R70 6ryArL).
+          const deadlineMs =
+            Date.now() + UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS;
           const response = await fetchWithTimeout(
             `/api/vtu/history?${params.toString()}`,
             {
               // Per-request bound (shared helper: no AbortSignal.any/
               // .timeout below the safari 15.4 floor — R66 6rvh_R).
               signal: controller.signal,
-              timeoutMs: UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
+              deadlineMs,
             }
           );
           if (!response.ok) {
@@ -229,13 +232,9 @@ export function useUtilityVoucherBackfill({
               return;
             }
           } else {
-            // Body read bounded too (R68 6rwg9A): the fetch helper
-            // resolves on headers, so a stalled body needs its own cap.
+            // Body shares the attempt deadline (R70 6ryArL).
             parsed = parseUtilityVoucherBackfill(
-              await withTimeout(
-                response.json(),
-                UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS
-              ),
+              await withDeadline(response.json(), deadlineMs),
               reference
             );
             // Broken contract: halt instead of burning attempts.

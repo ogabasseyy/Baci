@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { withTimeout } from './with-timeout';
+import { withDeadline, withTimeout } from './with-timeout';
 
 describe('withTimeout', () => {
   afterEach(() => {
@@ -26,5 +26,30 @@ describe('withTimeout', () => {
     const assertion = expect(pending).rejects.toThrow('slow body');
     await vi.advanceTimersByTimeAsync(1000);
     await assertion;
+  });
+});
+
+describe('withDeadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives the body only the budget remaining at call time', async () => {
+    // Codex R70 6ryArL: slow headers must not restart the clock — a
+    // body read starting 900ms into a 1s deadline gets 100ms.
+    vi.useFakeTimers();
+    const deadlineMs = Date.now() + 1000;
+    await vi.advanceTimersByTimeAsync(900);
+    const pending = withDeadline(new Promise(() => {}), deadlineMs, 'stalled');
+    const assertion = expect(pending).rejects.toThrow('stalled');
+    await vi.advanceTimersByTimeAsync(100);
+    await assertion;
+  });
+
+  it('still resolves a ready value past the deadline', async () => {
+    vi.useFakeTimers();
+    await expect(
+      withDeadline(Promise.resolve('late-but-ready'), Date.now() - 1)
+    ).resolves.toBe('late-but-ready');
   });
 });

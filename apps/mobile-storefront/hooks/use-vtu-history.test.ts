@@ -190,6 +190,51 @@ describe('useVTUHistory', () => {
     queryClient.clear();
   });
 
+  it('shares one deadline across slow headers and a stalled body', async () => {
+    // Codex R70 6ryArL: headers arrive 100ms before the bound and the
+    // body never streams — the query must fail at 10s, not ~20s.
+    jest.useFakeTimers();
+    try {
+      const queryClient = createTestClient();
+      mockFetchWithTimeout.mockImplementationOnce(
+        () =>
+          new Promise<MockFetchResponse>((resolve) => {
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                json: () => new Promise<Record<string, unknown>>(() => {}),
+              });
+            }, 9900);
+          })
+      );
+
+      const { result, unmount } = renderHook(() => useVTUHistory('power'), {
+        wrapper: createWrapper(queryClient),
+      });
+      // Flush the query start BEFORE moving the fake clock: the fetch
+      // (and its 9.9s headers timer) must be scheduled at T0, or
+      // React's scheduler hops shift the deadline mid-advance.
+      await act(async () => {});
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/api/vtu/history?'),
+        expect.objectContaining({ deadlineMs: expect.any(Number) })
+      );
+      // The deadline fires on the last fake tick; the rejection still
+      // needs scheduler turns to reach the rendered error state.
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      unmount();
+      queryClient.clear();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('marks successes stale without deleting them', async () => {
     // Codex R69 6rxZFO: history also mounts hidden (quick-repeat
     // defaults, receipts pager), so a read never proves display —

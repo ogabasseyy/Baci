@@ -101,15 +101,20 @@ describe('useUtilityRetainedSettlement', () => {
   it('fails open when the response body stalls', async () => {
     // Codex R68 6rwg9A: headers arrive but the body never streams —
     // the pass must resolve after the bound, not gate submits forever.
+    // Codex R70 6ryArL: headers arrive 100ms before the bound — the
+    // body shares the REMAINDER, so the pass still resolves at 10s.
     vi.useFakeTimers();
     try {
       rememberPendingVtuPurchase('{"stall":true}', 'key-stall');
       notePendingVtuReference('{"stall":true}', 'VTU-STALL');
-      const fetchMock = vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: () => new Promise(() => {}),
-      }));
+      const fetchMock = vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10_000 - 100));
+        return {
+          ok: true,
+          status: 200,
+          json: () => new Promise(() => {}),
+        };
+      });
       vi.stubGlobal('fetch', fetchMock);
 
       renderHook(() => useUtilityRetainedSettlement(input));

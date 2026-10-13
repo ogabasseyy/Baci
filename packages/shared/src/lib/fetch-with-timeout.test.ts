@@ -43,6 +43,32 @@ describe('fetchWithTimeout', () => {
     await expectation;
   });
 
+  it('bounds headers by the deadlineMs remainder instead of timeoutMs', async () => {
+    // Codex R70 6ryArL: headers + body share one per-request
+    // deadline — the explicit deadline wins over timeoutMs.
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    });
+
+    const request = fetchWithTimeout('/api/test', {
+      deadlineMs: Date.now() + 100,
+      timeoutMs: 10_000,
+    });
+    const expectation = expect(request).rejects.toThrow(
+      'Request timed out. Please try again.'
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
+  });
+
   it('preserves caller abort errors', async () => {
     const controller = new AbortController();
     vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {

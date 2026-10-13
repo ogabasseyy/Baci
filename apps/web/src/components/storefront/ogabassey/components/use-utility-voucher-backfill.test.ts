@@ -371,10 +371,20 @@ describe('useUtilityVoucherBackfill', () => {
   it('bounds a stalled response body and retries the poll', async () => {
     // Codex R68 6rwg9A: the fetch helper resolves on headers, so a
     // body that never streams would hang the attempt forever without
-    // the shared body-read bound.
+    // the shared body-read bound. Codex R70 6ryArL: headers arrive
+    // 100ms before the bound — the body shares the REMAINDER, so
+    // attempt 2 still starts at 10s + poll (not ~20s + poll).
     let calls = 0;
     const fetchMock = vi.fn(async () => {
       calls += 1;
+      if (calls === 1) {
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS - 100
+          )
+        );
+      }
       return {
         ok: true,
         status: 200,

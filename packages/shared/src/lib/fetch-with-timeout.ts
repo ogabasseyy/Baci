@@ -3,6 +3,14 @@ export const DEFAULT_FETCH_TIMEOUT_MESSAGE =
   'Request timed out. Please try again.';
 
 export interface FetchWithTimeoutOptions extends RequestInit {
+  /**
+   * Absolute wall-clock deadline (Date.now() ms). When present, the
+   * abort timer uses the REMAINING budget instead of timeoutMs, so
+   * headers + body can share one per-request deadline (Codex R70
+   * 6ryArL): pass the same deadlineMs here and to withDeadline for
+   * the body read. Takes precedence over timeoutMs.
+   */
+  deadlineMs?: number;
   timeoutMessage?: string;
   timeoutMs?: number;
 }
@@ -38,6 +46,7 @@ export async function fetchWithTimeout(
   options: FetchWithTimeoutOptions = {}
 ) {
   const {
+    deadlineMs,
     signal,
     timeoutMessage = DEFAULT_FETCH_TIMEOUT_MESSAGE,
     timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
@@ -46,10 +55,12 @@ export async function fetchWithTimeout(
   const controller = new AbortController();
   const signals = signal ? [controller.signal, signal] : [controller.signal];
   let timedOut = false;
+  const effectiveTimeoutMs =
+    deadlineMs === undefined ? timeoutMs : Math.max(deadlineMs - Date.now(), 0);
   const timeout = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, timeoutMs);
+  }, effectiveTimeoutMs);
 
   try {
     return await fetch(input, {

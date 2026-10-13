@@ -273,6 +273,42 @@ describe('fetchVoucherPin', () => {
     }
   });
 
+  it('shares one deadline across slow headers and a stalled body', async () => {
+    // Codex R70 6ryArL: headers arrive 100ms before the bound and the
+    // body never streams — the body must share the REMAINDER, not
+    // restart the clock (blank at 5s, not ~10s).
+    jest.useFakeTimers();
+    try {
+      mockFetchWithTimeout.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                status: 200,
+                json: () => new Promise(() => {}),
+              } as unknown as Response);
+            }, 4900);
+          })
+      );
+
+      const pending = fetchVoucherPin(input);
+      await jest.advanceTimersByTimeAsync(5000);
+
+      await expect(pending).resolves.toEqual({
+        pin: null,
+        status: null,
+        refundPending: null,
+      });
+      expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/api/vtu/history?'),
+        expect.objectContaining({ deadlineMs: expect.any(Number) })
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('never forgets across an account switch or after unmount', async () => {
     rememberPendingVtuPurchase('fetch-switched', 'key-switched');
     notePendingVtuReference('fetch-switched', 'REF-1');

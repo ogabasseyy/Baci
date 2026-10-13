@@ -11,8 +11,8 @@ import {
   markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
-  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 
 interface UseUtilityIdempotencyKeyInput {
   customerId?: string;

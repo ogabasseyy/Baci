@@ -1,4 +1,3 @@
-import { hashVtuScopeDescriptor } from '@baci/shared';
 import { createWalletIdempotencyKey } from './utility-checkout';
 import { clearPendingVtuSnapshot } from './utility-pending-idempotency-store';
 import { isExpiredPendingVtuEntry } from './utility-pending-vtu-codec';
@@ -21,16 +20,17 @@ import {
  * mirror), scoped to owner + merchant then SHA-256 digested: same
  * signature in means the same payload out, with the server 409 guard
  * as backstop, and no recipient identifier rests in the map or the
- * snapshot. Terminal outcomes MUST forget, or a later repeat buy
- * reattaches to a dead key.
+ * snapshot. Deletion rule (R68 6rwG9F): only a view that just showed
+ * a result may forget it; background passes mark successes stale
+ * instead, so suppressed outcomes replay instead of double-charging.
  *
  * Durability: localStorage (cross-tab) so reloads and new-tab
  * retries replay the same key. Uniform 7-day TTL everywhere
  * (persisted + live, any reference state); within it the 5-minute
  * stale window arbitrates success replays of noted references.
  *
- * State + cross-tab sync live in utility-pending-vtu-sync.ts (split
- * per the 300-line budget); this module owns the operations on top.
+ * Sync + scoping live in utility-pending-vtu-sync.ts and
+ * utility-pending-vtu-scope.ts; ops live here.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
@@ -43,29 +43,6 @@ const MAX_PENDING_PURCHASES = 32;
  * it would present the earlier vend as the new purchase.
  */
 export const PENDING_VTU_STALE_AFTER_MS = 5 * 60 * 1000;
-
-/**
- * Binds a purchase signature to the submitting owner + merchant. The
- * signature deliberately omits identity (mirroring the server
- * fingerprint), so without this a sign-out + second customer could
- * recall the first customer's key for the same purchase — and the
- * route rejects it as belonging to another customer. Callers MUST
- * scope ONCE per submission and pass the scoped key to every registry
- * call: a module-global scope would let an account switch mid-flight
- * redirect one customer's completion onto another customer's entry.
- * Returns the SHA-256 digest (not the raw scope string): the
- * signature embeds recipient identifiers and the digest keeps them
- * out of the live map and the localStorage snapshot at rest.
- */
-export function scopePendingVtuSignature(
-  ownerId: string | null | undefined,
-  merchantId: string | null | undefined,
-  payloadSignature: string
-): string {
-  return hashVtuScopeDescriptor(
-    `${merchantId ?? ''}:${ownerId ?? ''}:${payloadSignature}`
-  );
-}
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
@@ -161,15 +138,12 @@ export function markPendingVtuCompleted(
 }
 
 /**
- * Forgets retained entries by NOTED server reference. The settlement
- * pollers learn terminality from history — not from a response — so
- * they know the reference but not the signature. Terminality always
- * forgets (mirroring the view's settle-on-success): the success is
- * SHOWN, so an identical repeat is a new intent that must mint fresh
- * and deliver anew — keeping the key would present the previous vend
- * as the new purchase without delivering anything. (Marking is
- * reserved for UNSHOWN completions on the switched path, where the
- * stale guard arbitrates replays.)
+ * Forgets retained entries by NOTED server reference. SHOWN-context
+ * only (the voucher backfill, which just displayed the result): an
+ * identical repeat is a new intent that must mint fresh and deliver
+ * anew. Background passes MUST use markSettledPendingVtuByReference
+ * instead — they observe terminality for results nobody saw, and
+ * forgetting those would mint fresh on retry and debit twice (R68).
  */
 export function forgetPendingVtuByReference(
   reference: string,
@@ -182,6 +156,31 @@ export function forgetPendingVtuByReference(
     }
     pendingVtuPurchases.delete(scoped);
     noteForgottenVtuScope(scoped, now, pending.key);
+    touched = true;
+  }
+  if (touched) {
+    persistPendingVtuPurchases();
+  }
+}
+
+/**
+ * Settles background-observed terminal successes WITHOUT deleting
+ * (R68 6rwG9F). Marked (suppressed) entries are skipped — the stale
+ * guard presents them on replay. Unmarked entries are marked with an
+ * already-stale timestamp: the outcome was never shown in-session
+ * (watched resolutions are forgotten by the backfill first), so the
+ * retry is told "Already Completed" instead of double-charging.
+ */
+export function markSettledPendingVtuByReference(
+  reference: string,
+  now: number = Date.now()
+): void {
+  let touched = false;
+  for (const pending of pendingVtuPurchases.values()) {
+    if (pending.reference !== reference || pending.completedAt !== null) {
+      continue;
+    }
+    pending.completedAt = now - PENDING_VTU_STALE_AFTER_MS - 1;
     touched = true;
   }
   if (touched) {

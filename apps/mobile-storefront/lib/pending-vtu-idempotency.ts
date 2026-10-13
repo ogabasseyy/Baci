@@ -1,28 +1,13 @@
 /**
- * Cross-mount recall for wallet-only VTU idempotency keys.
+ * Cross-mount recall for wallet-only VTU idempotency keys: retries
+ * reuse the key and the route's row dedupes, never double-charges.
  *
- * The key used to live in a form ref, so remounting after "Back to Home"
- * minted a fresh UUID and the server debited a SECOND transaction. This
- * module-level registry survives remounts, so a retry reuses its key
- * and the route's `vtu_idempotency_keys` row dedupes instead.
+ * Entries key by canonical descriptor (server-fingerprint mirror),
+ * owner+merchant scoped then digested. Deletion rule (R68): only a
+ * view that just showed a result may forget it; background passes
+ * mark successes stale so suppressed outcomes replay.
  *
- * Entries are keyed by a canonical purchase descriptor mirroring the
- * server fingerprint, additionally owner+merchant scoped then SHA-256
- * digested (the descriptor itself omits identity, like the server
- * hash): same descriptor in means same payload out, the server's 409
- * guard stays the backstop, and no recipient identifier rests in the
- * map or the snapshot. Terminal outcomes MUST forget, or a later
- * repeat would reattach to a dead key.
- *
- * Durability: entries persist in MMKV (device-scoped) so an app
- * restart between a timed-out submit and its retry still replays the
- * same key instead of minting a fresh one and debiting twice. All
- * entries expire after a uniform 7-day horizon (persisted and live
- * recall alike, regardless of reference state): 7 days dwarf any
- * plausible processing duration, while infinite retention would
- * accumulate unboundedly. Within the TTL the 5-minute stale window
- * arbitrates success replays of noted references against
- * `rememberedAt`.
+ * Durability: MMKV. Uniform 7-day TTL; 5-minute stale window within.
  */
 
 import {
@@ -205,18 +190,11 @@ export function markPendingVtuCompleted(
 }
 
 /**
- * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: same NOTED reference AND
- * completion was observed longer ago than the recall window, so this
- * submit is a NEW intent, not a retry. Callers MUST forget the
- * descriptor and prompt a fresh submit instead of presenting the
- * earlier vend as the new purchase. Staleness keys off the COMPLETION
- * time, never the submit/noted time, so a slow first completion is
- * presented instead of misreported as "Already Completed" (which
- * would reset the key and double-debit the prompted retry).
- * Entries with no OBSERVED completion are NEVER
- * stale. Past the TTL recall already dropped them, so this predicate
- * never sees them.
+ * True when a success replays an already-completed purchase: same
+ * NOTED reference AND completion observed past the recall window, so
+ * this submit is a NEW intent. Callers MUST forget and prompt fresh.
+ * Staleness keys off COMPLETION time (slow first completions still
+ * present); unobserved completions are NEVER stale.
  */
 export function isStalePendingVtuSuccess(
   descriptor: string,
@@ -236,13 +214,10 @@ export function isStalePendingVtuSuccess(
 }
 
 /**
- * Forgets retained entries by NOTED server reference. The backfill
- * learns terminality from history — not from a response — so it knows
- * the reference but not the descriptor. Terminality always forgets:
- * the success is SHOWN, so an identical repeat is a new intent that
- * must mint fresh — keeping the key would present the previous vend
- * as the new purchase without delivering anything. (Marking is
- * reserved for UNSHOWN completions on the switched path.)
+ * Forgets retained entries by NOTED server reference. SHOWN-context
+ * only (history/backfill views displaying the result): an identical
+ * repeat is a new intent that must mint fresh. Background passes
+ * MUST use markSettledPendingVtuByReference instead (R68 6rwG9F).
  */
 export function forgetPendingVtuByReference(
   reference: string,
@@ -256,6 +231,26 @@ export function forgetPendingVtuByReference(
   }
   if (scopes.length > 0) {
     noteForgottenVtuScopes(scopes, now);
+    persistPendingVtuPurchases();
+  }
+}
+
+/** Settles background-observed terminal successes WITHOUT deleting
+ * (R68 6rwG9F): marked entries are skipped (stale guard presents),
+ * unmarked are marked already-stale ("Already Completed", no recharge). */
+export function markSettledPendingVtuByReference(
+  reference: string,
+  now: number = Date.now()
+): void {
+  let touched = false;
+  for (const pending of pendingPurchases.values()) {
+    if (pending.reference !== reference || pending.completedAt !== null) {
+      continue;
+    }
+    pending.completedAt = now - PENDING_VTU_STALE_AFTER_MS - 1;
+    touched = true;
+  }
+  if (touched) {
     persistPendingVtuPurchases();
   }
 }

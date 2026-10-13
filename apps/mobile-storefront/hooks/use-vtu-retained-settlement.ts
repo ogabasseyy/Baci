@@ -28,8 +28,8 @@ export function getPendingVtuSettlementPass(): Promise<void> | null {
  * later — then pushed out of the page — would leave its entry
  * replaying the old vend as a new purchase. When the purchase
  * screen opens, every retained noted reference gets a direct
- * reference-scoped history read; fetchVoucherPin forgets terminally
- * settled entries (success, or failed with a confirmed refund).
+ * reference-scoped history read; successes mark stale (suppressed
+ * completions skipped, R68), refunded failures forget.
  *
  * Zero-cost when idle: with no retained references no fetch runs.
  * Fail-open: history errors leave entries untouched (the replay
@@ -72,6 +72,8 @@ export function useVtuRetainedSettlement({
             // scopes the read, whatever its utility type.
             await fetchVoucherPin({
               apiType: null,
+              // Bulk pass, nothing shown: successes mark stale (R68).
+              backgroundSettle: true,
               capturedUserId: submitterUserId,
               isViewActive: () => !cancelled,
               reference,

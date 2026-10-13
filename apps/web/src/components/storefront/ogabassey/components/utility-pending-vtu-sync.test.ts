@@ -10,8 +10,8 @@ import {
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
-  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
   loadPendingVtuSnapshot,
   savePendingVtuSnapshot,

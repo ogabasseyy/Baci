@@ -1,7 +1,11 @@
+import { withTimeout } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
-import { forgetPendingVtuByReference } from '@/lib/pending-vtu-idempotency';
+import {
+  forgetPendingVtuByReference,
+  markSettledPendingVtuByReference,
+} from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { VtuHistoryResponseSchema } from '@/schemas/vtu-history';
 import { useAuthStore } from '@/stores/auth-store';
@@ -29,11 +33,18 @@ export interface BackfillObservation {
  */
 export async function fetchVoucherPin({
   apiType,
+  backgroundSettle = false,
   capturedUserId,
   isViewActive,
   reference,
 }: {
   apiType: BackfillApiType | null;
+  /**
+   * True for the retained-settlement pass (bulk, nothing shown):
+   * successes mark stale (suppressed completions skipped) instead of
+   * forgetting; refunded failures still forget (R68 6rwG9F).
+   */
+  backgroundSettle?: boolean;
   /** userId baked into the query key when this fetch started. */
   capturedUserId: string | null;
   /** False once the success view unmounts — see the forget guard. */
@@ -95,7 +106,9 @@ export async function fetchVoucherPin({
   }
   let body: unknown;
   try {
-    body = await response.json();
+    // Body read bounded too (R68 6rwg9A): the fetch helper resolves
+    // on headers, so a stalled body needs its own cap.
+    body = await withTimeout(response.json(), SHORT_TIMEOUT);
   } catch {
     // Unparseable body: transient, retry within budget.
     return BLANK;
@@ -116,13 +129,13 @@ export async function fetchVoucherPin({
   const status = typeof match?.status === 'string' ? match.status : null;
   const refundPending =
     typeof match?.refund_pending === 'boolean' ? match.refund_pending : null;
-  // Terminality forgets the retained entry: the success is SHOWN, so
-  // a repeat must mint fresh (keeping the key would present the old
-  // vend as new). Failure forgets only on confirmed refund. Two
-  // guards: polling account (a switch mid-flight must not mutate the
-  // registry for a result never shown) and still-mounted (an
-  // in-flight fetch resolves after unmount — web's backfill checks
-  // cancelled/aborted before its forget; same rule here).
+  // Terminality settles the retained entry. Shown-context (the
+  // backfill query displaying this result): forget, so a repeat mints
+  // fresh. Background pass: successes mark stale instead (suppressed
+  // completions are skipped so their replay presents — R68 6rwG9F).
+  // Failure forgets only on confirmed refund (nothing delivered).
+  // Guards: polling account (a switch mid-flight must not mutate the
+  // registry for a result never shown) and still-mounted.
   const failedTerminal = status === 'failed' && refundPending === false;
   const currentUserId = useAuthStore.getState().user?.id ?? null;
   if (
@@ -132,7 +145,11 @@ export async function fetchVoucherPin({
     capturedUserId === currentUserId &&
     isViewActive()
   ) {
-    forgetPendingVtuByReference(reference);
+    if (backgroundSettle && status === 'successful') {
+      markSettledPendingVtuByReference(reference);
+    } else {
+      forgetPendingVtuByReference(reference);
+    }
   }
   return { pin: pin || null, status, refundPending };
 }

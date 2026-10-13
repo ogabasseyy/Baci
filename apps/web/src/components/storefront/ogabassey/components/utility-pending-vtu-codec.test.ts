@@ -5,7 +5,7 @@ import {
   parsePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './utility-pending-vtu-codec';
-import { scopePendingVtuSignature } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 
 function entry(overrides: Record<string, unknown> = {}) {
   return {

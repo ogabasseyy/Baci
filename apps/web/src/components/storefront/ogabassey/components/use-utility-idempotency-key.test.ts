@@ -4,8 +4,8 @@ import {
   clearPendingVtuKeys,
   hasNotedPendingVtuReference,
   markPendingVtuCompleted,
-  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
   finalizeSuppressedAttempt,
   shouldRotateVtuKeyForStatus,

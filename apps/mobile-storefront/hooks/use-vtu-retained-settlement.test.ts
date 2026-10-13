@@ -3,6 +3,8 @@ import { jest } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import {
   clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -75,9 +77,10 @@ describe('useVtuRetainedSettlement', () => {
     });
   });
 
-  it('settles retained references with direct reference-scoped reads', async () => {
-    // Codex R57 6rsvy7: capped history pages can miss a settled row,
-    // so each retained reference is queried directly (web parity).
+  it('marks terminal successes stale without deleting them', async () => {
+    // Codex R68 6rwG9F: the outcome was never shown in-session, so
+    // the retry must be told "Already Completed" — not silently
+    // double-charge on a fresh key.
     rememberPendingVtuPurchase('mob-settle', 'key-settle');
     notePendingVtuReference('mob-settle', 'REF-SETTLED');
     mockFetchWithTimeout.mockResolvedValue(
@@ -94,11 +97,42 @@ describe('useVtuRetainedSettlement', () => {
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
 
-    await waitFor(() => expect(recallPendingVtuKey('mob-settle')).toBeNull());
+    await waitFor(() =>
+      expect(isStalePendingVtuSuccess('mob-settle', 'REF-SETTLED')).toBe(true)
+    );
+    expect(recallPendingVtuKey('mob-settle')).toBe('key-settle');
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
     const url = String(mockFetchWithTimeout.mock.calls[0]?.[0] ?? '');
     expect(url).toContain('reference=REF-SETTLED');
     expect(url).not.toContain('type=');
+  });
+
+  it('skips suppressed completions so their replay presents', async () => {
+    // Codex R68 6rwG9F: the terminal result was never shown — the
+    // pass must not delete it; the retry replays the unseen outcome.
+    rememberPendingVtuPurchase('mob-suppressed', 'key-suppressed');
+    notePendingVtuReference('mob-suppressed', 'REF-SUPPRESSED');
+    markPendingVtuCompleted('mob-suppressed');
+    mockFetchWithTimeout.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-SUPPRESSED',
+            status: 'successful',
+            refund_pending: false,
+          },
+        ],
+      })
+    );
+
+    renderHook(() => useVtuRetainedSettlement({ enabled: true }));
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getPendingVtuSettlementPass()).toBeNull());
+    expect(recallPendingVtuKey('mob-suppressed')).toBe('key-suppressed');
+    expect(isStalePendingVtuSuccess('mob-suppressed', 'REF-SUPPRESSED')).toBe(
+      false
+    );
   });
 
   it('skips references tagged to another owner', async () => {
@@ -224,7 +258,8 @@ describe('useVtuRetainedSettlement', () => {
     });
     await pass;
 
-    expect(recallPendingVtuKey('mob-gate')).toBeNull();
+    expect(recallPendingVtuKey('mob-gate')).toBe('key-gate');
+    expect(isStalePendingVtuSuccess('mob-gate', 'REF-GATE')).toBe(true);
     expect(getPendingVtuSettlementPass()).toBeNull();
   });
 

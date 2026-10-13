@@ -368,6 +368,50 @@ describe('useUtilityVoucherBackfill', () => {
     }
   });
 
+  it('bounds a stalled response body and retries the poll', async () => {
+    // Codex R68 6rwg9A: the fetch helper resolves on headers, so a
+    // body that never streams would hang the attempt forever without
+    // the shared body-read bound.
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json:
+          calls === 1
+            ? () => new Promise(() => {})
+            : async () => ({
+                transactions: [
+                  {
+                    request_reference: 'VTU-1',
+                    status: 'successful',
+                    voucher_pin: 'PIN-1',
+                    refund_pending: false,
+                  },
+                ],
+              }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The 10s body bound fires: attempt 1 fails, the loop sleeps one
+    // poll interval, attempt 2 resolves the pin.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS +
+          UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current).toMatchObject({ pin: 'PIN-1', successful: true });
+  });
+
   it('scopes history polls by reference', async () => {
     const seen: string[] = [];
     const fetchMock = mockHistory((url: string) => {
@@ -752,6 +796,62 @@ describe('useUtilityVoucherBackfill', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(recallPendingVtuKey('{"hook-switch":true}')).toBe(
       'key-hook-switch'
+    );
+  });
+
+  it('retains the entry when the view unmounts during the session read', async () => {
+    // Codex R68 6rwg83: the terminal result was parsed but the view
+    // unmounted while getSession() was pending — forgetting now would
+    // mint fresh on reopen and debit twice. Cancellation is
+    // rechecked after the read.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-unmount":true}', 'key-hook-unmount');
+    notePendingVtuReference('{"hook-unmount":true}', 'VTU-1');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // First read captures the submitter; the re-verification hangs.
+    sessionMocks.getSession.mockClear();
+    sessionMocks.getSession.mockResolvedValueOnce({
+      data: { session: { user: { id: 'user-1' } } },
+      error: null,
+    });
+    let releaseRead!: (value: unknown) => void;
+    const readGate = new Promise((resolve) => {
+      releaseRead = resolve;
+    });
+    sessionMocks.getSession.mockReturnValueOnce(readGate);
+
+    const { unmount } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sessionMocks.getSession).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      unmount();
+    });
+    releaseRead({
+      data: { session: { user: { id: 'user-1' } } },
+      error: null,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(recallPendingVtuKey('{"hook-unmount":true}')).toBe(
+      'key-hook-unmount'
     );
   });
 

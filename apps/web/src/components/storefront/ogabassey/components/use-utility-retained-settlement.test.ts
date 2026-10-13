@@ -3,6 +3,8 @@ import { buildPendingVtuScopeTag } from '@baci/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -37,7 +39,11 @@ describe('useUtilityRetainedSettlement', () => {
     vi.unstubAllGlobals();
   });
 
-  it('forgets entries whose rows reached terminal success', async () => {
+  it('marks terminal successes stale without deleting them', async () => {
+    // Codex R68 6rwG9F: the outcome was never shown in-session (a
+    // watched resolution is forgotten by the backfill first), so the
+    // retry must be told "Already Completed" — not silently
+    // double-charge on a fresh key.
     rememberPendingVtuPurchase('{"settle":true}', 'key-settle');
     notePendingVtuReference('{"settle":true}', 'VTU-SETTLED');
     const fetchMock = mockHistory(() => ({
@@ -58,7 +64,68 @@ describe('useUtilityRetainedSettlement', () => {
     expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain(
       'reference=VTU-SETTLED'
     );
-    expect(recallPendingVtuKey('{"settle":true}')).toBeUndefined();
+    expect(recallPendingVtuKey('{"settle":true}')).toBe('key-settle');
+    expect(isStalePendingVtuSuccess('{"settle":true}', 'VTU-SETTLED')).toBe(
+      true
+    );
+  });
+
+  it('skips suppressed completions so their replay presents', async () => {
+    // Codex R68 6rwG9F: the terminal result was never shown — the
+    // pass must not delete it; the retry replays the unseen outcome
+    // instead of minting fresh and debiting twice.
+    rememberPendingVtuPurchase('{"suppressed":true}', 'key-suppressed');
+    notePendingVtuReference('{"suppressed":true}', 'VTU-SUPPRESSED');
+    markPendingVtuCompleted('{"suppressed":true}');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-SUPPRESSED',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityRetainedSettlement(input));
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('{"suppressed":true}')).toBe('key-suppressed');
+    expect(
+      isStalePendingVtuSuccess('{"suppressed":true}', 'VTU-SUPPRESSED')
+    ).toBe(false);
+  });
+
+  it('fails open when the response body stalls', async () => {
+    // Codex R68 6rwg9A: headers arrive but the body never streams —
+    // the pass must resolve after the bound, not gate submits forever.
+    vi.useFakeTimers();
+    try {
+      rememberPendingVtuPurchase('{"stall":true}', 'key-stall');
+      notePendingVtuReference('{"stall":true}', 'VTU-STALL');
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => {}),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      renderHook(() => useUtilityRetainedSettlement(input));
+      await act(async () => {});
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(getPendingVtuSettlementPass()).not.toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(getPendingVtuSettlementPass()).toBeNull();
+      expect(recallPendingVtuKey('{"stall":true}')).toBe('key-stall');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('settles without AbortSignal.any/.timeout (safari 15.4 floor)', async () => {
@@ -90,7 +157,10 @@ describe('useUtilityRetainedSettlement', () => {
       await act(async () => {});
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(recallPendingVtuKey('{"compat":true}')).toBeUndefined();
+      expect(recallPendingVtuKey('{"compat":true}')).toBe('key-compat');
+      expect(isStalePendingVtuSuccess('{"compat":true}', 'VTU-COMPAT')).toBe(
+        true
+      );
     } finally {
       abortSignalStatics.any = realAny;
       abortSignalStatics.timeout = realTimeout;
@@ -298,7 +368,8 @@ describe('useUtilityRetainedSettlement', () => {
       });
       await pass;
     });
-    expect(recallPendingVtuKey('{"gate":true}')).toBeUndefined();
+    expect(recallPendingVtuKey('{"gate":true}')).toBe('key-gate');
+    expect(isStalePendingVtuSuccess('{"gate":true}', 'VTU-GATE')).toBe(true);
     expect(getPendingVtuSettlementPass()).toBeNull();
   });
 

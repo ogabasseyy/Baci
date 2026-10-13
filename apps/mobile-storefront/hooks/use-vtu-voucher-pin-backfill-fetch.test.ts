@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import {
   clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  markPendingVtuCompleted,
   notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -192,6 +194,83 @@ describe('fetchVoucherPin', () => {
     const observation = await fetchVoucherPin(input);
     expect(observation?.status).toBe('failed');
     expect(recallPendingVtuKey('fetch-open')).toBe('key-open');
+  });
+
+  it('marks successes stale in background-settle mode without deleting', async () => {
+    // Codex R68 6rwG9F: the settlement pass observes terminality for
+    // results nobody saw — the retry must be told "Already Completed".
+    rememberPendingVtuPurchase('fetch-bg', 'key-bg');
+    notePendingVtuReference('fetch-bg', 'REF-1');
+    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse(successBody()));
+
+    const observation = await fetchVoucherPin({
+      ...input,
+      backgroundSettle: true,
+    });
+
+    expect(observation?.status).toBe('successful');
+    expect(recallPendingVtuKey('fetch-bg')).toBe('key-bg');
+    expect(isStalePendingVtuSuccess('fetch-bg', 'REF-1')).toBe(true);
+  });
+
+  it('skips suppressed completions in background-settle mode', async () => {
+    rememberPendingVtuPurchase('fetch-bg-suppressed', 'key-bg-suppressed');
+    notePendingVtuReference('fetch-bg-suppressed', 'REF-1');
+    markPendingVtuCompleted('fetch-bg-suppressed');
+    mockFetchWithTimeout.mockResolvedValueOnce(makeResponse(successBody()));
+
+    await fetchVoucherPin({ ...input, backgroundSettle: true });
+
+    expect(recallPendingVtuKey('fetch-bg-suppressed')).toBe(
+      'key-bg-suppressed'
+    );
+    expect(isStalePendingVtuSuccess('fetch-bg-suppressed', 'REF-1')).toBe(
+      false
+    );
+  });
+
+  it('still forgets refund-confirmed failures in background-settle mode', async () => {
+    // Nothing was delivered: the retry is correctly a fresh charge.
+    rememberPendingVtuPurchase('fetch-bg-fail', 'key-bg-fail');
+    notePendingVtuReference('fetch-bg-fail', 'REF-1');
+    mockFetchWithTimeout.mockResolvedValueOnce(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-1',
+            status: 'failed',
+            refund_pending: false,
+          },
+        ],
+      })
+    );
+
+    await fetchVoucherPin({ ...input, backgroundSettle: true });
+
+    expect(recallPendingVtuKey('fetch-bg-fail')).toBeNull();
+  });
+
+  it('returns blank when the response body stalls past the bound', async () => {
+    // Codex R68 6rwg9A: headers arrived but the body never streams.
+    jest.useFakeTimers();
+    try {
+      mockFetchWithTimeout.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => {}),
+      } as unknown as Response);
+
+      const pending = fetchVoucherPin(input);
+      await jest.advanceTimersByTimeAsync(5000);
+
+      await expect(pending).resolves.toEqual({
+        pin: null,
+        status: null,
+        refundPending: null,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('never forgets across an account switch or after unmount', async () => {

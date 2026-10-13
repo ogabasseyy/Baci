@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchWithTimeout } from '@baci/shared/lib';
+import { fetchWithTimeout, withTimeout } from '@baci/shared/lib';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
@@ -137,17 +137,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Backoff schedule: 3s for the first 10 attempts (fast provider
- * confirmations), then 10s to attempt 43 (~6 minutes — covers a
- * single reconciliation pass), then a 60s patient lane to attempt
- * 73 (~36 minutes total). The reconciler rotates one 25-row page
- * per 5-minute window, so a row on a later page of a backlog
- * settles AFTER a 6-minute loop gives up — and since the stale
- * guard only fires past an OBSERVED completion, the retained entry
- * would then replay the old vend as a later identical purchase
- * (Codex R55 6rrU6M). The patient lane keeps watching through ~7
- * page rotations; each observation still settles the entry the
- * moment terminality lands.
+ * Backoff: 3s x10 (fast confirmations), 10s to #43 (~6min — one
+ * reconciler pass), 60s to #73 (~36min). The patient lane matters:
+ * the reconciler rotates one 25-row page per 5min window, so a
+ * backlog row settles after a 6min loop quits — and the stale guard
+ * only fires past an OBSERVED completion, so the retained entry
+ * would replay the old vend as new (R55 6rrU6M).
  */
 function backfillPollDelayMs(attempt: number): number {
   if (attempt <= UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS) {
@@ -234,8 +229,13 @@ export function useUtilityVoucherBackfill({
               return;
             }
           } else {
+            // Body read bounded too (R68 6rwg9A): the fetch helper
+            // resolves on headers, so a stalled body needs its own cap.
             parsed = parseUtilityVoucherBackfill(
-              await response.json(),
+              await withTimeout(
+                response.json(),
+                UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS
+              ),
               reference
             );
             // Broken contract: halt instead of burning attempts.
@@ -266,13 +266,13 @@ export function useUtilityVoucherBackfill({
             parsed.successful ||
             (parsed.failed && parsed.refundConfirmed)
           ) {
-            // Forget only for the still-signed-in submitter: after an
-            // account switch the entry must stay, so a switch-back
-            // identical purchase replays instead of minting fresh and
-            // debiting a second time. (Unmount is already covered by
-            // the cancelled check above.)
+            // Forget only for the still-signed-in submitter on a
+            // still-mounted view: after a switch the entry must stay
+            // (switch-back replays), and after an unmount-during-read
+            // the unseen result must replay too (R68 6rwg83).
             const currentUserId = await readUserId();
             if (
+              !cancelled &&
               submitterUserId !== null &&
               submitterUserId === currentUserId
             ) {

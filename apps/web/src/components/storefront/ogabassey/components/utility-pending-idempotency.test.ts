@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildPendingVtuScopeTag } from '@baci/shared';
-import { scopePendingVtuSignature } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
   clearPendingVtuKeys,
   forgetPendingVtuByReference,
@@ -10,6 +10,7 @@ import {
   isStalePendingVtuSuccess,
   listNotedPendingVtuReferences,
   markPendingVtuCompleted,
+  markSettledPendingVtuByReference,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
@@ -163,36 +164,6 @@ describe('utility-pending-idempotency', () => {
     expect(recallPendingVtuKey('{"amount":100}')).toBe(key);
   });
 
-  it('binds the scoped key to owner and merchant', () => {
-    const scopedA = scopePendingVtuSignature(
-      'customer-a',
-      'merchant-1',
-      '{"scoped":true}'
-    );
-
-    expect(
-      scopePendingVtuSignature('customer-b', 'merchant-1', '{"scoped":true}')
-    ).not.toBe(scopedA);
-    expect(
-      scopePendingVtuSignature('customer-a', 'merchant-2', '{"scoped":true}')
-    ).not.toBe(scopedA);
-    expect(
-      scopePendingVtuSignature('customer-a', 'merchant-1', '{"scoped":true}')
-    ).toBe(scopedA);
-  });
-
-  it('digests the scoped key so no identifier rests in the map', () => {
-    const scoped = scopePendingVtuSignature(
-      'customer-a',
-      'merchant-1',
-      '{"phoneNumber":"08030000000"}'
-    );
-
-    expect(scoped).toMatch(/^[0-9a-f]{64}$/);
-    expect(scoped).not.toContain('08030000000');
-    expect(scoped).not.toContain('customer-a');
-  });
-
   it('isolates remembered keys by scoped owner', () => {
     const scopedA = scopePendingVtuSignature(
       'customer-a',
@@ -300,6 +271,37 @@ describe('utility-pending-idempotency', () => {
 
     expect(recallPendingVtuKey(signature)).toBeUndefined();
     expect(getPendingVtuKey(signature)).not.toBe(key);
+  });
+
+  it('marks background-settled successes stale without deleting them', () => {
+    // Codex R68 6rwG9F: the outcome was never shown in-session, so
+    // the retry must be told "Already Completed" — not silently
+    // double-charge on a fresh key, and not lose the replay.
+    const signature = '{"mark-settle":true}';
+    const key = getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-MARK-SETTLE');
+
+    markSettledPendingVtuByReference('REF-OTHER');
+    expect(recallPendingVtuKey(signature)).toBe(key);
+
+    markSettledPendingVtuByReference('REF-MARK-SETTLE');
+
+    expect(recallPendingVtuKey(signature)).toBe(key);
+    expect(isStalePendingVtuSuccess(signature, 'REF-MARK-SETTLE')).toBe(true);
+  });
+
+  it('skips already-marked entries when settling by reference', () => {
+    // Codex R68 6rwG9F: suppressed completions keep their fresh mark
+    // so the stale guard presents them on replay.
+    const signature = '{"mark-skip":true}';
+    const key = getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-MARK-SKIP');
+    markPendingVtuCompleted(signature);
+
+    markSettledPendingVtuByReference('REF-MARK-SKIP');
+
+    expect(recallPendingVtuKey(signature)).toBe(key);
+    expect(isStalePendingVtuSuccess(signature, 'REF-MARK-SKIP')).toBe(false);
   });
 
   it('recognizes a noted reference as the replay of its processing vend', () => {

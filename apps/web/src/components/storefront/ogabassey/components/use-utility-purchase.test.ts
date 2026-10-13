@@ -7,8 +7,8 @@ import type {
 import {
   clearPendingVtuKeys,
   markPendingVtuCompleted,
-  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
+import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { buildUtilityCheckoutWalletPayload } from './utility-checkout-wallet-payload';
 import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';

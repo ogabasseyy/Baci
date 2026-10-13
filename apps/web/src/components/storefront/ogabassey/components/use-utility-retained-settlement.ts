@@ -1,11 +1,12 @@
 'use client';
 
 import { buildPendingVtuScopeTag } from '@baci/shared';
-import { fetchWithTimeout } from '@baci/shared/lib';
+import { fetchWithTimeout, withTimeout } from '@baci/shared/lib';
 import { useEffect } from 'react';
 import {
   forgetPendingVtuByReference,
   listNotedPendingVtuReferences,
+  markSettledPendingVtuByReference,
 } from './utility-pending-idempotency';
 import { parseUtilityVoucherBackfill } from './use-utility-voucher-backfill';
 
@@ -30,9 +31,9 @@ export function getPendingVtuSettlementPass(): Promise<void> | null {
  * leave its entry replaying the old vend as a new purchase (Codex
  * R57 6rseWu). Web has no history screen to observe through, so the
  * purchase modal settles on open instead: for every retained noted
- * reference, a reference-scoped history read forgets terminally
- * settled entries (success, or failed with a confirmed refund —
- * the same rule as the backfill) before the customer can repeat.
+ * reference, a reference-scoped history read settles terminal rows
+ * before the customer can repeat — successes mark stale (skipping
+ * suppressed completions, R68), refunded failures forget.
  *
  * Zero-cost when idle: with no retained references no fetch runs.
  * Fail-open: history errors, schema mismatches, and non-terminal
@@ -95,12 +96,13 @@ export function useUtilityRetainedSettlement({
             if (!response.ok) {
               return null;
             }
+            // Body read bounded too (R68 6rwg9A): the fetch helper
+            // resolves on headers; a stalled body must not gate
+            // submits past the fail-open timeout.
+            const body = await withTimeout(response.json(), 10_000);
             return {
               reference,
-              backfill: parseUtilityVoucherBackfill(
-                await response.json(),
-                reference
-              ),
+              backfill: parseUtilityVoucherBackfill(body, reference),
             };
           } catch {
             return null;
@@ -112,10 +114,16 @@ export function useUtilityRetainedSettlement({
       }
       for (const outcome of outcomes) {
         const parsed = outcome?.backfill;
-        if (
-          parsed &&
-          (parsed.successful || (parsed.failed && parsed.refundConfirmed))
-        ) {
+        if (!parsed) {
+          continue;
+        }
+        // Success settles via mark-stale (suppressed completions are
+        // skipped so their replay presents — R68 6rwG9F). Refunded
+        // failure forgets: nothing was delivered, so the retry is
+        // correctly a fresh charge attempt.
+        if (parsed.successful) {
+          markSettledPendingVtuByReference(outcome.reference);
+        } else if (parsed.failed && parsed.refundConfirmed) {
           forgetPendingVtuByReference(outcome.reference);
         }
       }

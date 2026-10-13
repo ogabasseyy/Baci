@@ -12,6 +12,7 @@ import {
   isStalePendingVtuSuccess,
   listNotedPendingVtuReferences,
   markPendingVtuCompleted,
+  markSettledPendingVtuByReference,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
@@ -142,6 +143,45 @@ describe('pending-vtu-idempotency', () => {
     forgetPendingVtuByReference('REF-SETTLE');
 
     expect(recallPendingVtuKey(descriptor)).toBeNull();
+  });
+
+  it('marks background-settled successes stale without deleting them', () => {
+    // Codex R68 6rwG9F: the outcome was never shown in-session, so
+    // the retry must be told "Already Completed" — not silently
+    // double-charge on a fresh key.
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 4,
+      phoneNumber: 'mark-settle-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-mark-settle');
+    notePendingVtuReference(descriptor, 'REF-MARK-SETTLE');
+
+    markSettledPendingVtuByReference('REF-OTHER');
+    expect(recallPendingVtuKey(descriptor)).toBe('key-mark-settle');
+
+    markSettledPendingVtuByReference('REF-MARK-SETTLE');
+
+    expect(recallPendingVtuKey(descriptor)).toBe('key-mark-settle');
+    expect(isStalePendingVtuSuccess(descriptor, 'REF-MARK-SETTLE')).toBe(true);
+  });
+
+  it('skips already-marked entries when settling by reference', () => {
+    // Codex R68 6rwG9F: suppressed completions keep their fresh mark
+    // so the stale guard presents them on replay.
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 4,
+      phoneNumber: 'mark-skip-check',
+    });
+    rememberPendingVtuPurchase(descriptor, 'key-mark-skip');
+    notePendingVtuReference(descriptor, 'REF-MARK-SKIP');
+    markPendingVtuCompleted(descriptor);
+
+    markSettledPendingVtuByReference('REF-MARK-SKIP');
+
+    expect(recallPendingVtuKey(descriptor)).toBe('key-mark-skip');
+    expect(isStalePendingVtuSuccess(descriptor, 'REF-MARK-SKIP')).toBe(false);
   });
 
   it('recognizes a noted reference independently of completion', () => {

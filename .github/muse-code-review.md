@@ -31,6 +31,10 @@ and cites sources. A redaction step scrubs common secret patterns from the
 review body before posting (defense in depth, since web access widens
 prompt-injection exfil options).
 
+The Actions log also records the effective model IDs Muse reports with usage
+events. If Muse completes without reporting a model ID, the log says that the
+exact model is unavailable; raw provider traces and session logs are not kept.
+
 ## Quota safety
 
 Subscription plans cap prompts per rolling window, so this workflow stays

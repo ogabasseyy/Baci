@@ -5,7 +5,7 @@
 # head check): the agent authenticates only via META_API_KEY, and both token
 # vars are scrubbed from its environment as defense in depth.
 #
-# Env in: META_API_KEY, PROMPT_FILE, MUSE_MODEL, MUSE_EFFORT, RUNNER_TEMP,
+# Env in: META_API_KEY, PROMPT_FILE, MUSE_EFFORT, RUNNER_TEMP,
 #   GITHUB_WORKSPACE, GITHUB_OUTPUT, SCRIPT_DIR.
 # Output: review_file plus a model-ID notice from usage events. Exits nonzero
 # when the agent or structured-output capture fails so the step outcome stays
@@ -30,11 +30,6 @@ if (( swept > 0 )); then
   echo "::notice::Removed ${swept} workspace symlink(s) before the agent run."
 fi
 
-model_args=()
-if [[ -n "${MUSE_MODEL}" ]]; then
-  model_args+=(--model "${MUSE_MODEL}")
-fi
-
 # Residual risk (accepted, documented): the agent holds META_API_KEY with
 # web tools ON and this runner has no egress firewall, so a prompt-injected
 # model could exfiltrate the key over the network despite --disable-shell /
@@ -55,7 +50,7 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --disable-shell \
   --no-session-log \
   --output-schema "${SCRIPT_DIR}/schema.json" \
-  "${model_args[@]}" </dev/null 2>"${RUNNER_TEMP}/muse-stderr.log" \
+  </dev/null 2>"${RUNNER_TEMP}/muse-stderr.log" \
   | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
 run_rc=$?
 set -e

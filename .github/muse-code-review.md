@@ -31,9 +31,10 @@ and cites sources. A redaction step scrubs common secret patterns from the
 review body before posting (defense in depth, since web access widens
 prompt-injection exfil options).
 
-The Actions log also records the effective model IDs Muse reports with usage
-events. If Muse completes without reporting a model ID, the log says that the
-exact model is unavailable; raw provider traces and session logs are not kept.
+The review leaves model selection to Muse's default. The Actions log records
+the effective model IDs Muse reports with usage events. If Muse completes
+without reporting a model ID, the log says that the exact model is unavailable;
+raw provider traces and session logs are not kept.
 
 ## Quota safety
 
@@ -85,4 +86,4 @@ The workflow file only orchestrates steps; every shell program lives in
 ## Prerequisites per repo
 
 - Secret META_API_KEY (repo Settings -> Secrets and variables -> Actions)
-- Optional repo variables: MUSE_MODEL, MUSE_REASONING_EFFORT
+- Optional repo variable: MUSE_REASONING_EFFORT

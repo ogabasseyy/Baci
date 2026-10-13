@@ -133,6 +133,12 @@ export function createBillFormPurchaseHandler({
       const settlementPass = getPendingVtuSettlementPass();
       if (settlementPass) {
         await settlementPass;
+        // R73: popped during the gate — never submit into an abandoned
+        // view. No-pass submits stay synchronous from the tap.
+        if (getIsActive && !getIsActive()) {
+          setIsSubmitting(false);
+          return;
+        }
       }
       // Retained-replay peek (R65 6ru4mK): the SAME request the submit
       // signs with — a charged-but-unanswered retry must bypass the

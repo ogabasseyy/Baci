@@ -127,6 +127,7 @@ export function useUtilityPurchase({
     const settlementPass = getPendingVtuSettlementPass();
     if (settlementPass) {
       await settlementPass;
+      if (!isResultViewActive()) return; // R73: closed during the gate.
     }
     // Peek signs the same payload the submit signs (shared builder).
     const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.

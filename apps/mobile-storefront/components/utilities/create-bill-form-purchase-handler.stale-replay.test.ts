@@ -468,4 +468,21 @@ describe('bill stale success replay', () => {
     expect(mockPeek).toHaveBeenCalledTimes(1);
     expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
   });
+
+  it('does not charge when the screen pops during the settlement gate', async () => {
+    // Codex R73 6r0cZk: popped mid-gate must not debit+vend into an
+    // abandoned view — liveness is rechecked before peek/submit.
+    let release!: () => void;
+    mockGetSettlementPass.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    );
+    let active = true;
+    const pending = runPurchase({ getIsActive: () => active });
+    active = false;
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+  });
 });

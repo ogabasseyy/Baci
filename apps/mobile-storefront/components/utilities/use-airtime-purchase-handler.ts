@@ -37,10 +37,7 @@ interface UseAirtimePurchaseHandlerProps {
   onSuccess: AirtimeFormProps['onSuccess'];
   dismissKeyboard: () => void;
   returnToHref?: WalletReturnHref | null;
-  /**
-   * Screen liveness probe. Defaults to this hook's own mount state
-   * (mount = form mounted); injectable for tests.
-   */
+  /** Screen liveness probe (mount state by default; injectable). */
   getIsActive?: () => boolean;
 }
 
@@ -51,10 +48,7 @@ interface ExecuteAirtimePurchaseInput {
   onSuccess: AirtimeFormProps['onSuccess'];
   payment: ReturnType<typeof useUtilityPayment>;
   phoneNumber: string;
-  /**
-   * Prebuilt by the caller (same record the retained-replay peek
-   * signed) — never rebuilt here, so peek and submit cannot drift.
-   */
+  /** Caller-prebuilt (peek-signed): never rebuilt, no peek/submit drift. */
   request: {
     amount: number;
     customerName: string;
@@ -258,6 +252,12 @@ export function useAirtimePurchaseHandler({
     const settlementPass = getPendingVtuSettlementPass();
     if (settlementPass) {
       await settlementPass;
+      // R73: popped during the gate — never submit into an abandoned
+      // view. No-pass submits stay synchronous from the tap.
+      if (!getIsActive()) {
+        isSubmittingRef.current = false;
+        return;
+      }
     }
     // Retained-replay peek (R65 6ru4mK): the SAME request the submit
     // signs with — a charged-but-unanswered retry must bypass the

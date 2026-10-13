@@ -205,6 +205,39 @@ describe('useUtilityPurchase', () => {
     expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
   });
 
+  it('does not submit when the modal closes during the settlement gate', async () => {
+    // Codex R73 6r0cZk: closing mid-gate must not debit+vend into an
+    // abandoned view — liveness is rechecked before peek/submit.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockGetSettlementPass.mockReturnValueOnce(gate);
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-ABANDONED',
+      amount: 1000,
+      processing: false,
+    });
+    const { result, unmount } = renderHook(() =>
+      useUtilityPurchase(baseParams())
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {});
+    expect(mockSubmit).not.toHaveBeenCalled();
+
+    unmount();
+    await act(async () => {
+      release();
+    });
+    await act(async () => {});
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+  });
+
   it('binds the submit to the captured auth user id', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'wallet-success',

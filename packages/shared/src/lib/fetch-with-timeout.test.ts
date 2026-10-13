@@ -184,6 +184,31 @@ describe('fetchJsonWithDeadline', () => {
     expect(result.response.status).toBe(503);
   });
 
+  it('aborts a skipped body instead of leaving it downloading', async () => {
+    // Codex R73 6r0cZh: a stalled non-OK body must not linger across
+    // retries just because the caller skips the read.
+    vi.useFakeTimers();
+    let captured: AbortSignal | null | undefined;
+    const json = vi.fn(() => new Promise(() => {}));
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      captured = init?.signal ?? undefined;
+      return Promise.resolve({
+        ok: false,
+        status: 503,
+        json,
+      } as unknown as Response);
+    });
+
+    const result = await fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 1000,
+      shouldReadBody: (res) => res.ok,
+    });
+
+    expect(result.data).toBeNull();
+    expect(json).not.toHaveBeenCalled();
+    expect(captured?.aborted).toBe(true);
+  });
+
   it('preserves caller aborts during the body read', async () => {
     vi.useFakeTimers();
     const controller = new AbortController();

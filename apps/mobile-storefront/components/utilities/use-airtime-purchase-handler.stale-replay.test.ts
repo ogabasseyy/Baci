@@ -674,4 +674,21 @@ describe('airtime stale success replay', () => {
     expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
     expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
   });
+
+  it('does not charge when the screen pops during the settlement gate', async () => {
+    // Codex R73 6r0cZk: unmount mid-gate must not debit+vend — the
+    // defaulted mount probe is rechecked before peek/submit.
+    let release!: () => void;
+    mockGetSettlementPass.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    );
+    const { result, unmount } = renderHandler();
+    const pending = result.current.handlePurchase();
+    unmount();
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+  });
 });

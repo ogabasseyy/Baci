@@ -140,6 +140,11 @@ export async function fetchJsonWithDeadline<T = unknown>(
       ),
     });
     if (!shouldReadBody(response)) {
+      // Skipped bodies must not linger across retries (R73 6r0cZh):
+      // the stream is still unlocked here, but fetch-level abort
+      // releases it uniformly (a no-op once fully arrived). Headers
+      // were already received, so ok/status stay readable.
+      controller.abort();
       return { data: null as T, response };
     }
     const data = (await withDeadline(

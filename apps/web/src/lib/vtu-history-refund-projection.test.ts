@@ -78,6 +78,19 @@ describe('projectHistoryRefundFields', () => {
     ).toEqual({ refund_pending: true, refunded_to_wallet: null });
   });
 
+  it('clears pending for no-evidence skips: terminally failed, not owed', () => {
+    // A skipped row was deliberately never credited (no collection
+    // evidence) — keeping it pending would spin pollers forever on
+    // a refund that will never arrive.
+    expect(
+      projectHistoryRefundFields({
+        metadata: { refundSkipped: 'no_collection_evidence' },
+        row: CHECKOUT_ROW,
+        status: 'failed',
+      })
+    ).toEqual({ refund_pending: false, refunded_to_wallet: null });
+  });
+
   it('never flags rows that require no refund as pending', () => {
     const metadata = {};
     // Non-checkout sources never run refund handling.

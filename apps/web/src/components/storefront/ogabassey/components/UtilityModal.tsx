@@ -7,6 +7,7 @@ import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { WALLET_FUNDING_TELEMETRY } from '@/lib/posthog/wallet-funding-events';
 import { useWallet } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet';
 import { useCustomerFormReset } from './use-customer-form-reset';
+import { useUtilityModalFormSeeding } from './use-utility-modal-seeding';
 import { useUtilityFundingPanel } from './use-utility-funding-panel';
 import { useUtilityPendingIntent } from './use-utility-pending-intent';
 import { useUtilityPurchase } from './use-utility-purchase';
@@ -103,52 +104,23 @@ export const UtilityModal = ({
     walletLoading,
   });
 
-  // Stable identity of the owned resume draft; null when nothing to resume.
-  const intentKey = intent
-    ? `${intent.tab}|${intent.amount}|${intent.phoneNumber}|${intent.networkProvider ?? ''}`
-    : null;
-
-  // Render-time prev-prop comparison seeding the form. `prevIsOpen` inits
-  // `false` so the seed also runs when the modal renders already-open.
-  const [prevIsOpen, setPrevIsOpen] = useState(false);
-  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
-  // Owned intent already applied to the form; also part of the form remount key.
-  const [appliedIntentKey, setAppliedIntentKey] = useState<string | null>(null);
   // `customer.id` changes on auth hydration (undefined -> defined) AND on an
   // account switch (defined -> defined on the same shared tab). Either re-seeds
-  // from the NEW customer's owned intent (below); a switch also bumps
+  // from the NEW customer's owned intent; a switch also bumps
   // `customerEpoch`, which both forms key on so neither carries the previous
   // customer's local draft. A keystroke does NOT change `customer.id`, so
   // reseeds never remount mid-typing (which would drop input focus).
   const customerId = customer?.id;
   const { customerChanged, customerEpoch } = useCustomerFormReset(customerId);
-  if (isOpen !== prevIsOpen || initialTab !== prevInitialTab) {
-    setPrevIsOpen(isOpen);
-    setPrevInitialTab(initialTab);
-    if (isOpen) {
-      // Land on the tab holding the resumed draft so a `data` draft is not
-      // stranded on the default `airtime` tab. `intentKey` may be null until
-      // auth hydrates — the customer-change branch below reseeds then.
-      setActiveTab(intent?.tab ?? initialTab);
-      setStep('details');
-      // Collapse the funding panel so reopening never re-triggers DVA
-      // auto-create without a fresh "Pay with Bank Transfer" tap.
-      closeFundingPanel();
-      setAppliedIntentKey(intentKey);
-    } else {
-      // Re-arm seeding for the next open.
-      setAppliedIntentKey(null);
-    }
-  } else if (isOpen && customerChanged) {
-    // Signed-in customer changed while the modal stayed open (auth hydrating,
-    // or an account switch). Re-seed for them and remount AirtimeDataForm (its
-    // key includes `customerId`): the previous customer's typed phone/amount
-    // lives in the form's LOCAL state — which no prop clears without a remount
-    // — and must never surface to the next customer.
-    setActiveTab(intent?.tab ?? initialTab);
-    setStep('details');
-    setAppliedIntentKey(intentKey);
-  }
+  const { appliedIntentKey } = useUtilityModalFormSeeding({
+    closeFundingPanel,
+    customerChanged,
+    initialTab,
+    intent,
+    isOpen,
+    setActiveTab,
+    setStep,
+  });
 
   const handleSelectWallet = () => {
     captureClientEvent(

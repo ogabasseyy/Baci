@@ -16,8 +16,11 @@ type RpcCall = {
 };
 
 type VtuRow = {
-  metadata: unknown;
+  biller_code: unknown;
   customer_identifier: unknown;
+  product_code: unknown;
+  provider: unknown;
+  require_validation_ref: unknown;
   status: unknown;
 } | null;
 
@@ -48,13 +51,11 @@ function monnifyRow(
   status: unknown = 'pending'
 ): VtuRow {
   return {
-    metadata: {
-      provider: 'monnify',
-      requireValidationRef: true,
-      billerCode: 'BILLER',
-      productCode: 'PRODUCT',
-      ...overrides,
-    },
+    provider: 'monnify',
+    require_validation_ref: true,
+    biller_code: 'BILLER',
+    product_code: 'PRODUCT',
+    ...overrides,
     customer_identifier: '1234567890',
     status,
   };
@@ -192,7 +193,7 @@ describe('overlayReplayAttributes', () => {
     const result = await overlayReplayAttributes({
       supabase: buildSupabase(
         calls,
-        monnifyRow({ provider: 'kuda', requireValidationRef: false })
+        monnifyRow({ provider: 'kuda', require_validation_ref: false })
       ),
       transactionId: 'vtu-tx-1',
       customerPhone: undefined,
@@ -224,7 +225,7 @@ describe('overlayReplayAttributes', () => {
     const result = await overlayReplayAttributes({
       supabase: buildSupabase(
         calls,
-        monnifyRow({ requireValidationRef: false })
+        monnifyRow({ require_validation_ref: false })
       ),
       transactionId: 'vtu-tx-1',
       customerPhone: undefined,

@@ -39,6 +39,11 @@ import {
   restoreInterruptedPreVendVtuRow,
 } from '@/lib/vtu-pre-vend-recovery';
 import {
+  hasVtuCollectionEvidence,
+  VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_COLLECTION,
+} from '@/lib/vtu-refund-collection-evidence';
+import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
 } from '@/lib/vtu-refund-guard';
@@ -138,6 +143,8 @@ interface VtuTransactionRow {
   updated_at?: string | null;
   /** Creation time; excludes pre-marker legacy rows from recovery. */
   created_at?: string | null;
+  /** Order link; collection evidence for legacy card rows. */
+  order_id?: string | null;
 }
 
 interface CreditWalletResult {
@@ -446,10 +453,21 @@ async function refundVtuToCustomerWallet({
   row,
   supabase,
   refundContext = 'kuda_failure',
+  requireCollectionEvidence = false,
 }: {
   metadata: Record<string, unknown>;
   row: VtuTransactionRow;
   supabase: SupabaseClient;
+  /**
+   * Existing-failed rows only (Codex R51 6rqH1I): the card-only
+   * fallthrough refunds full row.amount for rows WITHOUT a
+   * paymentSplit — a legacy shape that includes gateway-init and
+   * declined-authorization rows which never collected. Fresh vend
+   * failures leave this false (this pass's vend attempt proves
+   * collection preceded it); rows arriving ALREADY failed demand
+   * recorded evidence or the row is marked skipped, never credited.
+   */
+  requireCollectionEvidence?: boolean;
   /**
    * `kuda_failure` (default): the vend was actually attempted and the
    * upstream provider rejected it. If the wallet leg was already debited
@@ -544,8 +562,30 @@ async function refundVtuToCustomerWallet({
       `Refund dispatch invariant violated for ${row.id}: paymentSplit present, walletDebited=false, refundContext=kuda_failure, no ledger refund row`
     );
   }
-  // Card-only path (no paymentSplit): refund the full row.amount as
-  // before. PR #1466's behaviour preserved.
+  // Card-only path (no paymentSplit — legacy shape; current
+  // checkout rows always persist a split at prepare time): refund the
+  // full row.amount ONLY with collection evidence when the caller
+  // requires it. Legacy failures include gateway-init and
+  // declined-authorization rows that never collected — crediting
+  // those mints unearned wallet funds (Codex R51 6rqH1I). Without
+  // evidence the row is marked skipped (terminally failed,
+  // cron-excluded, refund_pending cleared) — never credited, never
+  // thrown (nothing here is retryable).
+  if (
+    requireCollectionEvidence &&
+    !(await hasVtuCollectionEvidence({ metadata, row, supabase }))
+  ) {
+    console.warn(
+      'Skipping VTU refund: no collection evidence for card-only row:',
+      { transactionId: row.id }
+    );
+    const metadataChanged = setMetadataValue(
+      metadata,
+      VTU_REFUND_SKIPPED_KEY,
+      VTU_REFUND_SKIPPED_NO_COLLECTION
+    );
+    return { metadataChanged, refundIssued: false, refundedAmount: 0 };
+  }
   return await refundCardOnly({ metadata, row, supabase, totalAmount });
 }
 
@@ -2296,7 +2336,7 @@ export async function fulfillPendingVtuTransaction({
   const { data: existing, error: existingError } = await supabase
     .from('vtu_transactions')
     .select(
-      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source, updated_at, created_at'
+      'id, merchant_id, customer_id, type, network_provider, phone_number, amount, request_reference, transaction_id, status, metadata, error_message, merchant_commission, customer_cashback, biller_name, biller_item_code, customer_identifier, source, updated_at, created_at, order_id'
     )
     .eq('id', transactionId)
     .single();
@@ -2312,21 +2352,33 @@ export async function fulfillPendingVtuTransaction({
 
   if (row.status === 'failed' && !retryFailed) {
     // Existing failed row — issue (or confirm) the wallet refund so the
-    // customer can retry from wallet credit. Idempotent.
+    // customer can retry from wallet credit. Idempotent. Collection
+    // evidence is required here (unlike fresh failures, where this
+    // pass's vend attempt proves collection): rows arriving ALREADY
+    // failed include legacy gateway-init rows that never collected,
+    // and crediting those mints unearned funds. A deliberate
+    // no-evidence skip is terminal, not unconfirmed: nothing is
+    // retryable, so it returns failed without throwing.
     const refundMetadata = { ...(row.metadata ?? {}) };
     const refund = await refundVtuToCustomerWallet({
       metadata: refundMetadata,
+      requireCollectionEvidence: true,
       row,
       supabase,
     });
-    throwIfVtuRefundUnconfirmed({
-      row,
-      refundIssued: refund.refundIssued,
-      refundedAmount: refund.refundedAmount,
-      failedMessage: row.error_message ?? undefined,
-      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
-      message: `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
-    });
+    if (
+      refundMetadata[VTU_REFUND_SKIPPED_KEY] !==
+      VTU_REFUND_SKIPPED_NO_COLLECTION
+    ) {
+      throwIfVtuRefundUnconfirmed({
+        row,
+        refundIssued: refund.refundIssued,
+        refundedAmount: refund.refundedAmount,
+        failedMessage: row.error_message ?? undefined,
+        failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+        message: `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
+      });
+    }
     if (refund.metadataChanged) {
       const { error: refundMetadataUpdateError } = await supabase
         .from('vtu_transactions')

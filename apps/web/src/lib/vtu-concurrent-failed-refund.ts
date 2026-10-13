@@ -50,6 +50,12 @@ export async function resolveConcurrentFailedVtuTransaction({
   supabase: SupabaseClient;
 }): Promise<ConcurrentFailedRefundResult> {
   // Idempotent: a prior pass's flags short-circuit inside the issuer.
+  // No collection-evidence gate here: this path runs only when the
+  // row transitioned processing -> failed DURING this pass, so the
+  // concurrent winner's fresh vend attempt (or provider verdict)
+  // proves collection preceded it. The gate lives on the
+  // existing-failed branch (rows arriving ALREADY failed, possibly
+  // legacy and never collected).
   const refundMetadata = { ...(row.metadata ?? {}) };
   const refund = await issueRefund(refundMetadata);
   throwIfVtuRefundUnconfirmed({

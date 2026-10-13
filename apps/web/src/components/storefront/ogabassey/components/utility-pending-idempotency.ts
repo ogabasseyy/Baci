@@ -1,3 +1,4 @@
+import { hashVtuScopeDescriptor } from '@baci/shared';
 import { createWalletIdempotencyKey } from './utility-checkout';
 import {
   PERSISTED_VTU_KEY_TTL_MS,
@@ -18,9 +19,11 @@ import {
  * dedupes instead of double-charging.
  *
  * Entries key by canonical purchase signature (server-fingerprint
- * mirror), scoped to owner + merchant: same signature in means the
- * same payload out, with the server 409 guard as backstop. Terminal
- * outcomes MUST forget, or a later repeat buy reattaches to a dead key.
+ * mirror), scoped to owner + merchant then SHA-256 digested: same
+ * signature in means the same payload out, with the server 409 guard
+ * as backstop, and no recipient identifier rests in the map or the
+ * snapshot. Terminal outcomes MUST forget, or a later repeat buy
+ * reattaches to a dead key.
  *
  * Durability: localStorage (cross-tab) so reloads and new-tab
  * retries replay the same key. Uniform 7-day TTL everywhere
@@ -51,13 +54,18 @@ export const PENDING_VTU_STALE_AFTER_MS = 5 * 60 * 1000;
  * scope ONCE per submission and pass the scoped key to every registry
  * call: a module-global scope would let an account switch mid-flight
  * redirect one customer's completion onto another customer's entry.
+ * Returns the SHA-256 digest (not the raw scope string): the
+ * signature embeds recipient identifiers and the digest keeps them
+ * out of the live map and the localStorage snapshot at rest.
  */
 export function scopePendingVtuSignature(
   ownerId: string | null | undefined,
   merchantId: string | null | undefined,
   payloadSignature: string
 ): string {
-  return `${merchantId ?? ''}:${ownerId ?? ''}:${payloadSignature}`;
+  return hashVtuScopeDescriptor(
+    `${merchantId ?? ''}:${ownerId ?? ''}:${payloadSignature}`
+  );
 }
 
 /**

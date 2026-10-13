@@ -12,22 +12,25 @@
  * simultaneous cross-tab mints can still diverge (documented residual
  * — sync recall cannot take an async lock).
  *
- * Privacy note: snapshot keys embed the purchase signature (recipient
- * phone / meter identifiers) in plaintext, like the existing
- * sessionStorage utility draft. Recall is owner+merchant scoped (a
- * foreign account can never USE these keys) and entries expire after
- * 7 days, but anyone with same-profile devtools access can read the
- * identifiers until then. True confidentiality is impossible here —
- * reload recovery requires the mapping to be readable after restart,
- * and any on-disk salt/key is equally readable — so hashing would
- * only deter casual glances while risking the recall path. App-wide
- * sign-out storage clearing is the real fix for the shared-device
- * class (orders, drafts, and this snapshot alike); tracked separately.
- * Deliberately NOT cleared on sign-out/switch: the signer's entries
- * must survive their absence so a switch-back retry replays instead
- * of minting fresh and double-debiting. The 7-day TTL is the clearing
- * mechanism (bounded retention without breaking recovery).
+ * Privacy note: snapshot keys are SHA-256 digests of the purchase
+ * scope (recipient phone / meter identifiers never rest here in
+ * plaintext — unlike the sessionStorage utility draft, which still
+ * does). Deterministic, so recall re-derives the same digest from the
+ * payload; unsalted, because any on-disk salt is as readable as the
+ * snapshot and would break cross-tab recall. Recall stays
+ * owner+merchant scoped (a foreign account can never USE these keys)
+ * and entries expire after 7 days, but the digest is verifiable by
+ * anyone who can guess the payload (same-profile devtools), so
+ * app-wide sign-out storage clearing remains the real fix for the
+ * shared-device class (orders, drafts, and this snapshot alike);
+ * tracked separately. Deliberately NOT cleared on sign-out/switch:
+ * the signer's entries must survive their absence so a switch-back
+ * retry replays instead of minting fresh and double-debiting. The
+ * 7-day TTL is the clearing mechanism (bounded retention without
+ * breaking recovery).
  */
+
+import { normalizePersistedVtuScopeKey } from '@baci/shared';
 
 /**
  * How long a persisted entry survives across reloads. Independent of
@@ -146,6 +149,8 @@ export function serializePendingVtuEntries(
  * Parses a snapshot back into entries + tombstones. Corrupt snapshots
  * and TTL-expired items are dropped (mirrors live recall). Legacy
  * bare-array snapshots (entries only) still parse, with no tombstones.
+ * Legacy raw scope keys migrate to digests on read (both entries and
+ * tombstones, so suppression matching stays consistent).
  */
 export function parsePendingVtuSnapshot(
   serialized: string | null,
@@ -180,7 +185,7 @@ export function parsePendingVtuSnapshot(
       continue;
     }
     entries.push([
-      scoped,
+      normalizePersistedVtuScopeKey(scoped),
       {
         key: entry.key,
         reference: entry.reference ?? null,
@@ -200,7 +205,10 @@ export function parsePendingVtuSnapshot(
     if (now - item.forgottenAt > PERSISTED_VTU_KEY_TTL_MS) {
       continue;
     }
-    forgotten.push({ scoped: item.scoped, forgottenAt: item.forgottenAt });
+    forgotten.push({
+      scoped: normalizePersistedVtuScopeKey(item.scoped),
+      forgottenAt: item.forgottenAt,
+    });
   }
   return { entries, forgotten };
 }

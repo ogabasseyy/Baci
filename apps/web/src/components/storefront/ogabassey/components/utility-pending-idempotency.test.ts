@@ -169,6 +169,18 @@ describe('utility-pending-idempotency', () => {
     ).toBe(scopedA);
   });
 
+  it('digests the scoped key so no identifier rests in the map', () => {
+    const scoped = scopePendingVtuSignature(
+      'customer-a',
+      'merchant-1',
+      '{"phoneNumber":"08030000000"}'
+    );
+
+    expect(scoped).toMatch(/^[0-9a-f]{64}$/);
+    expect(scoped).not.toContain('08030000000');
+    expect(scoped).not.toContain('customer-a');
+  });
+
   it('isolates remembered keys by scoped owner', () => {
     const scopedA = scopePendingVtuSignature(
       'customer-a',

@@ -7,6 +7,7 @@
  * anywhere; the MMKV touchpoints stay lazy and try/catch-guarded so
  * web/SSR (where `createMMKV` throws) degrades to memory-only.
  */
+import { normalizePersistedVtuScopeKey } from '@baci/shared';
 import { createMMKV } from 'react-native-mmkv';
 
 interface PersistedPendingVtuPurchase {
@@ -117,7 +118,9 @@ export function serializePendingVtuEntries(
  * bare-array snapshots (entries only) still parse, with no
  * tombstones. Entries at or below their tombstone's generation are
  * suppressed HERE (mobile has one runtime, so unlike web there is no
- * live map to reconcile — hydrate only runs on an empty map).
+ * live map to reconcile — hydrate only runs on an empty map). Legacy
+ * raw scope keys migrate to digests on read, on both sides of the
+ * suppression comparison, so old tombstones still suppress old entries.
  */
 export function parsePendingVtuSnapshot(
   serialized: string | null,
@@ -146,7 +149,7 @@ export function parsePendingVtuSnapshot(
       (tombstone) => now - tombstone.forgottenAt <= PERSISTED_VTU_KEY_TTL_MS
     )
     .map((tombstone) => ({
-      scoped: tombstone.scoped,
+      scoped: normalizePersistedVtuScopeKey(tombstone.scoped),
       forgottenAt: tombstone.forgottenAt,
     }));
   const tombstonedAt = new Map(
@@ -159,10 +162,12 @@ export function parsePendingVtuSnapshot(
         now - item[1].rememberedAt <= PERSISTED_VTU_KEY_TTL_MS
     )
     .filter(
-      ([scoped, entry]) => (tombstonedAt.get(scoped) ?? -1) < entry.rememberedAt
+      ([scoped, entry]) =>
+        (tombstonedAt.get(normalizePersistedVtuScopeKey(scoped)) ?? -1) <
+        entry.rememberedAt
     )
     .map(([scoped, entry]): [string, PersistedPendingVtuPurchase] => [
-      scoped,
+      normalizePersistedVtuScopeKey(scoped),
       {
         key: entry.key,
         reference: entry.reference ?? null,

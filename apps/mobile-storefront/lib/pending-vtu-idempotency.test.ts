@@ -400,6 +400,19 @@ describe('pending-vtu-idempotency', () => {
     );
   });
 
+  it('digests the scoped key so no identifier rests in the map', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 7,
+      phoneNumber: '08030000000',
+    });
+    const scoped = scopePendingVtuKey('customer-a', 'merchant-1', descriptor);
+
+    expect(scoped).toMatch(/^[0-9a-f]{64}$/);
+    expect(scoped).not.toContain('08030000000');
+    expect(scoped).not.toContain('customer-a');
+  });
+
   it('isolates remembered keys by scoped owner', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',

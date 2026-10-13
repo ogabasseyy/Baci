@@ -3707,6 +3707,53 @@ describe('fulfillPendingVtuTransaction', () => {
       });
     });
 
+    it('marks (never credits) a legacy failed row with no collection evidence', async () => {
+      // Money-minting regression (Codex R51 6rqH1I): legacy
+      // gateway-init/declined rows never collected — no wallet
+      // flag, no ledger redemption, no provider reference, no
+      // payment reference, no order link. Crediting those mints
+      // unearned wallet funds the cron would spray across every
+      // historical failed row. The row is marked skipped
+      // (terminally failed, cron-excluded) and returns failed
+      // WITHOUT throwing (nothing is retryable). FAILS against
+      // pre-fix code (no gate: full-amount card-only refund issued).
+      const updatePayloads: unknown[] = [];
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {},
+          error_message: 'Gateway initialization failed',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({ status: 'failed' });
+      expect(result).not.toHaveProperty('refundedToWallet');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.any(Object)
+      );
+      const skippedPayload = findPayloadWithMetadata(
+        updatePayloads,
+        (metadata) => metadata.refundSkipped === 'no_collection_evidence'
+      );
+      expect(skippedPayload?.metadata).toMatchObject({
+        refundSkipped: 'no_collection_evidence',
+      });
+      expect(skippedPayload?.metadata).not.toHaveProperty('refundIssued');
+    });
+
     it('skips the refund when the row has no customer_id', async () => {
       const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
       const supabase = createPendingTransactionSupabaseMock({

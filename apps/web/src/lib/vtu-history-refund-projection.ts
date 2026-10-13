@@ -6,6 +6,7 @@
  * success view polls these fields to decide when a failed purchase
  * is truly settled.
  */
+import { VTU_REFUND_SKIPPED_NO_COLLECTION } from '@/lib/vtu-refund-collection-evidence';
 import { requiresVtuCustomerWalletRefund } from '@/lib/vtu-refund-guard';
 
 export interface HistoryRefundProjection {
@@ -33,6 +34,7 @@ interface RefundMetadataShape {
   paymentSplit?: unknown;
   refundAmount?: unknown;
   refundIssued?: unknown;
+  refundSkipped?: unknown;
   walletDebited?: unknown;
 }
 
@@ -65,10 +67,15 @@ export function projectHistoryRefundFields({
   const totalRestored = cardLeg + walletLeg;
   // PostgREST returns numerics as strings; requires() needs a number.
   const amount = Number(row.amount);
+  // A deliberate no-evidence skip is terminally failed, not
+  // awaiting a refund: pollers must stop, not spin forever.
+  const refundSkipped =
+    shape.refundSkipped === VTU_REFUND_SKIPPED_NO_COLLECTION;
   return {
     refund_pending:
       status === 'failed' &&
       !refundIssued &&
+      !refundSkipped &&
       requiresVtuCustomerWalletRefund({
         amount: Number.isFinite(amount) ? amount : 0,
         customer_id:

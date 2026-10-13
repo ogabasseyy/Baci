@@ -215,6 +215,7 @@ describe('airtime stale success replay', () => {
   it('discards the result when the account switched mid-flight', async () => {
     const onSuccess = jest.fn();
     const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'successful',
       amount: 500,
@@ -223,11 +224,15 @@ describe('airtime stale success replay', () => {
     const { result } = renderHandler({
       onSuccess,
       resetWalletIdempotencyKey,
+      refetchWallet,
       isSubmittingOwnerCurrent: () => false,
     });
     await result.current.handlePurchase();
 
     expect(onSuccess).not.toHaveBeenCalled();
+    // The charge committed but onSuccess is suppressed: the wallet
+    // must still refresh so the balance is not stale on return.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).toHaveBeenCalledWith(
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
@@ -414,9 +419,11 @@ describe('airtime stale success replay', () => {
       amount: 500,
       reference: 'WAL-OFFSCREEN-AIR',
     });
+    const refetchWallet = jest.fn();
     const { result } = renderHandler({
       onSuccess,
       resetWalletIdempotencyKey,
+      refetchWallet,
       getIsActive: () => false,
     });
     await result.current.handlePurchase();
@@ -426,6 +433,9 @@ describe('airtime stale success replay', () => {
     // twice.
     expect(onSuccess).not.toHaveBeenCalled();
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    // The suppressed onSuccess never fires the parent's wallet
+    // invalidation: refresh here so the balance is current.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
       string,
       unknown
@@ -472,9 +482,11 @@ describe('airtime stale success replay', () => {
         resolveCharge = resolve;
       })
     );
+    const refetchWallet = jest.fn();
     const { result, unmount } = renderHandler({
       onSuccess,
       resetWalletIdempotencyKey,
+      refetchWallet,
     });
     const purchase = result.current.handlePurchase();
     unmount();
@@ -487,6 +499,7 @@ describe('airtime stale success replay', () => {
 
     expect(onSuccess).not.toHaveBeenCalled();
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
       string,
       unknown

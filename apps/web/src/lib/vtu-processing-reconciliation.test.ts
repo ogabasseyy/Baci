@@ -91,7 +91,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -107,7 +107,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -176,7 +176,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null)';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({

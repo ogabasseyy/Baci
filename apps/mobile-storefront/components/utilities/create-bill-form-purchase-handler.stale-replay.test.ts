@@ -232,6 +232,7 @@ describe('bill stale success replay', () => {
   it('discards the result when the account switched mid-flight', async () => {
     const onSuccess = jest.fn();
     const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'successful',
       amount: 1000,
@@ -240,10 +241,14 @@ describe('bill stale success replay', () => {
     await runPurchase({
       onSuccess,
       resetWalletIdempotencyKey,
+      refetchWallet,
       isSubmittingOwnerCurrent: () => false,
     });
 
     expect(onSuccess).not.toHaveBeenCalled();
+    // The charge committed but onSuccess is suppressed: the wallet
+    // must still refresh so the balance is not stale on return.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).toHaveBeenCalledWith(
       'Account Changed',
       expect.stringContaining('changed while the purchase was processing')
@@ -272,6 +277,7 @@ describe('bill stale success replay', () => {
   it('preserves an off-screen success for replay instead of resetting', async () => {
     const onSuccess = jest.fn();
     const resetWalletIdempotencyKey = jest.fn();
+    const refetchWallet = jest.fn();
     mockChargeWalletForVtu.mockResolvedValueOnce({
       status: 'successful',
       amount: 1000,
@@ -280,6 +286,7 @@ describe('bill stale success replay', () => {
     await runPurchase({
       onSuccess,
       resetWalletIdempotencyKey,
+      refetchWallet,
       getIsActive: () => false,
     });
 
@@ -288,6 +295,9 @@ describe('bill stale success replay', () => {
     // twice.
     expect(onSuccess).not.toHaveBeenCalled();
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    // The suppressed onSuccess never fires the parent's wallet
+    // invalidation: refresh here so the balance is current.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     const submitted = mockChargeWalletForVtu.mock.calls.at(-1)?.[0] as Record<
       string,
       unknown

@@ -7,10 +7,11 @@
  * and the route's `vtu_idempotency_keys` row dedupes instead.
  *
  * Entries are keyed by a canonical purchase descriptor mirroring the
- * server fingerprint, additionally owner+merchant scoped (the
- * descriptor itself omits identity, like the server hash): same
- * descriptor in means same payload out, and the server's 409 guard
- * stays the backstop. Terminal outcomes MUST forget, or a later
+ * server fingerprint, additionally owner+merchant scoped then SHA-256
+ * digested (the descriptor itself omits identity, like the server
+ * hash): same descriptor in means same payload out, the server's 409
+ * guard stays the backstop, and no recipient identifier rests in the
+ * map or the snapshot. Terminal outcomes MUST forget, or a later
  * repeat would reattach to a dead key.
  *
  * Durability: entries persist in MMKV (device-scoped) so an app
@@ -24,7 +25,10 @@
  * `rememberedAt`.
  */
 
-import { canonicalizeVtuRetryIdentity } from '@baci/shared';
+import {
+  canonicalizeVtuRetryIdentity,
+  hashVtuScopeDescriptor,
+} from '@baci/shared';
 import {
   clearForgottenVtuScopes,
   clearPendingVtuSnapshot,
@@ -110,13 +114,18 @@ hydratePendingVtuPurchases(loadPendingVtuSnapshot());
  * Binds a descriptor to the submitting owner + merchant. Callers MUST
  * scope ONCE per submission: a module-global scope would let an
  * account switch redirect one customer's completion onto another's.
+ * Returns the SHA-256 digest (not the raw scope string): the
+ * descriptor embeds recipient identifiers and the digest keeps them
+ * out of the live map and the MMKV snapshot at rest.
  */
 export function scopePendingVtuKey(
   ownerId: string | null | undefined,
   merchantId: string | null | undefined,
   descriptor: string
 ): string {
-  return `${merchantId ?? ''}:${ownerId ?? ''}:${descriptor}`;
+  return hashVtuScopeDescriptor(
+    `${merchantId ?? ''}:${ownerId ?? ''}:${descriptor}`
+  );
 }
 
 /**

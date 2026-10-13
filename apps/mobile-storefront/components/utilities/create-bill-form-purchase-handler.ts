@@ -170,6 +170,10 @@ export function createBillFormPurchaseHandler({
           if (result.status !== 'processing') {
             markPendingVtuCompleted(descriptor);
           }
+          // The charge committed but the suppressed onSuccess will never
+          // fire the parent's wallet invalidation: refresh here so the
+          // balance is not stale when the submitter returns.
+          await payment.refetchWallet();
           return;
         }
         if (getIsActive && !getIsActive()) {
@@ -181,6 +185,10 @@ export function createBillFormPurchaseHandler({
           if (result.status !== 'processing') {
             markPendingVtuCompleted(descriptor);
           }
+          // The charge committed but the suppressed onSuccess will never
+          // fire the parent's wallet invalidation: refresh here so the
+          // wallet screen shows the post-debit balance.
+          await payment.refetchWallet();
           return;
         }
         // 'processing' is non-terminal — the vend is still in flight

@@ -9,6 +9,7 @@ import {
   PENDING_VTU_STALE_AFTER_MS,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
+  scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import {
   loadPendingVtuSnapshot,
@@ -29,18 +30,23 @@ describe('utility-pending-vtu-sync', () => {
   });
 
   it('recalls the pending key after a page reload', async () => {
-    const key = getPendingVtuKey('{"reload":true}');
-    notePendingVtuReference('{"reload":true}', 'REF-RELOAD');
+    // Prod-shaped key: every caller scopes through the choke point
+    // (digested), so the reload path must round-trip the digest.
+    const scoped = scopePendingVtuSignature(
+      'user-reload',
+      'merchant-1',
+      '{"reload":true}'
+    );
+    const key = getPendingVtuKey(scoped);
+    notePendingVtuReference(scoped, 'REF-RELOAD');
 
     // A reload re-executes the module with an empty map; the
     // localStorage entry must restore the pending purchase.
     vi.resetModules();
     const fresh = await import('./utility-pending-idempotency');
 
-    expect(fresh.recallPendingVtuKey('{"reload":true}')).toBe(key);
-    expect(
-      fresh.hasNotedPendingVtuReference('{"reload":true}', 'REF-RELOAD')
-    ).toBe(true);
+    expect(fresh.recallPendingVtuKey(scoped)).toBe(key);
+    expect(fresh.hasNotedPendingVtuReference(scoped, 'REF-RELOAD')).toBe(true);
   });
 
   it('recalls a key another tab persisted after this tab loaded', () => {

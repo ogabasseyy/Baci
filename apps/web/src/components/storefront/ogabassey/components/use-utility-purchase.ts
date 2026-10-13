@@ -55,7 +55,7 @@ interface BillSubmit {
   validationReference?: string;
 }
 
-type UtilityPurchaseStep = 'details' | 'processing' | 'success';
+export type UtilityPurchaseStep = 'details' | 'processing' | 'success';
 
 interface UseUtilityPurchaseReturn {
   handleAirtimeDataSubmit: (data: AirtimeDataSubmit) => void;

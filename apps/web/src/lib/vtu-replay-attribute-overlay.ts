@@ -118,20 +118,23 @@ async function tryRefreshServerValidationReference(
   transactionId: string
 ): Promise<string | undefined> {
   try {
-    // Ownership-scoped projection (Codex R50 6rp7ND): the RPC
-    // returns only these three refresh fields for owner rows (zero
-    // rows otherwise — no existence oracle) instead of exposing
-    // full customer rows through a SELECT policy.
+    // Ownership-scoped scalar projection (Codex R50 6rp7ND,
+    // narrowed by Muse R52): the RPC returns only the refresh
+    // scalars for owner rows (zero rows otherwise — no existence
+    // oracle) instead of the whole metadata jsonb.
     const { data, error } = await supabase
       .rpc('get_vtu_replay_refresh_fields', {
         p_transaction_id: transactionId,
       })
       .maybeSingle();
     // Untyped client: the RPC projection is unknown to the query
-    // builder, so narrow the three refresh fields explicitly.
+    // builder, so narrow the refresh scalars explicitly.
     const refresh = data as {
+      biller_code: unknown;
       customer_identifier: unknown;
-      metadata: unknown;
+      product_code: unknown;
+      provider: unknown;
+      require_validation_ref: unknown;
       status: unknown;
     } | null;
     if (error || !refresh) {
@@ -145,21 +148,16 @@ async function tryRefreshServerValidationReference(
     if (refresh.status !== 'pending') {
       return undefined;
     }
-    const stored: unknown = refresh.metadata;
-    const metadata: Record<string, unknown> =
-      typeof stored === 'object' && stored !== null
-        ? (stored as Record<string, unknown>)
-        : {};
     if (
-      metadata.provider !== 'monnify' ||
-      metadata.requireValidationRef !== true
+      refresh.provider !== 'monnify' ||
+      refresh.require_validation_ref !== true
     ) {
       return undefined;
     }
     const billerCode =
-      typeof metadata.billerCode === 'string' ? metadata.billerCode : '';
+      typeof refresh.biller_code === 'string' ? refresh.biller_code : '';
     const productCode =
-      typeof metadata.productCode === 'string' ? metadata.productCode : '';
+      typeof refresh.product_code === 'string' ? refresh.product_code : '';
     const customerIdentifier =
       typeof refresh.customer_identifier === 'string'
         ? refresh.customer_identifier

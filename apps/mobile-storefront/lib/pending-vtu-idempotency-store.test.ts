@@ -1,4 +1,6 @@
+import { hashVtuScopeDescriptor } from '@baci/shared';
 import { jest } from '@jest/globals';
+import { scopePendingVtuKey } from './pending-vtu-idempotency';
 import {
   clearForgottenVtuScopes,
   forgottenVtuScopes,
@@ -189,5 +191,56 @@ describe('pending-vtu-idempotency-store', () => {
     expect(persistPendingVtuEntries([])).toBe(false);
     expect(forgottenVtuScopes.size).toBe(1);
     expect(loadPendingVtuSnapshot()).toBeNull();
+  });
+
+  it('migrates legacy raw scope keys to digests on parse', () => {
+    const legacyEntry = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const legacyTombstone = 'merchant-1:user-1:{"phoneNumber":"08030000002"}';
+    const rememberedAt = Date.now();
+    const parsed = parsePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [[legacyEntry, entry({ rememberedAt })]],
+        forgotten: [{ scoped: legacyTombstone, forgottenAt: rememberedAt }],
+      })
+    );
+
+    expect(parsed.entries).toEqual([
+      [hashVtuScopeDescriptor(legacyEntry), entry({ rememberedAt })],
+    ]);
+    expect(parsed.forgotten).toEqual([
+      {
+        scoped: hashVtuScopeDescriptor(legacyTombstone),
+        forgottenAt: rememberedAt,
+      },
+    ]);
+  });
+
+  it('still suppresses a legacy entry under its legacy tombstone', () => {
+    const legacy = 'merchant-1:user-1:{"phoneNumber":"08030000001"}';
+    const parsed = parsePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [[legacy, entry({ rememberedAt: 1000 })]],
+        forgotten: [{ scoped: legacy, forgottenAt: 2000 }],
+      }),
+      3000
+    );
+
+    expect(parsed.entries).toEqual([]);
+    expect(parsed.forgotten[0].scoped).toBe(hashVtuScopeDescriptor(legacy));
+  });
+
+  it('writes fresh snapshots with no plaintext identifiers', () => {
+    const scoped = scopePendingVtuKey(
+      'user-1',
+      'merchant-1',
+      '{"phoneNumber":"08030000000"}'
+    );
+    expect(scoped).toMatch(/^[0-9a-f]{64}$/);
+    const serialized = serializePendingVtuEntries([[scoped, entry()]], []);
+
+    expect(serialized).not.toContain('08030000000');
+    expect(serialized).not.toContain('merchant-1');
+    expect(serialized).not.toContain('user-1');
+    expect(parsePendingVtuSnapshot(serialized).entries[0][0]).toBe(scoped);
   });
 });

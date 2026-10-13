@@ -1,3 +1,4 @@
+import { hashVtuScopeDescriptor } from '@baci/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   clearPendingVtuSnapshot,
@@ -6,6 +7,7 @@ import {
   savePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './utility-pending-idempotency-store';
+import { scopePendingVtuSignature } from './utility-pending-idempotency';
 
 function entry(overrides: Record<string, unknown> = {}) {
   return {
@@ -164,6 +166,38 @@ describe('utility-pending-idempotency-store', () => {
         now
       )
     ).toEqual({ entries: [], forgotten: [] });
+  });
+
+  it('migrates legacy raw scope keys to digests on parse', () => {
+    const legacy = 'merchant-1:user-1:{"phoneNumber":"08030000000"}';
+    const rememberedAt = Date.now();
+    const parsed = parsePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [[legacy, entry({ rememberedAt })]],
+        forgotten: [{ scoped: legacy, forgottenAt: rememberedAt }],
+      })
+    );
+    const digest = hashVtuScopeDescriptor(legacy);
+
+    expect(parsed.entries).toEqual([[digest, entry({ rememberedAt })]]);
+    expect(parsed.forgotten).toEqual([
+      { scoped: digest, forgottenAt: rememberedAt },
+    ]);
+  });
+
+  it('writes fresh snapshots with no plaintext identifiers', () => {
+    const scoped = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"phoneNumber":"08030000000"}'
+    );
+    expect(scoped).toMatch(/^[0-9a-f]{64}$/);
+    const serialized = serializePendingVtuEntries([[scoped, entry()]], []);
+
+    expect(serialized).not.toContain('08030000000');
+    expect(serialized).not.toContain('merchant-1');
+    expect(serialized).not.toContain('user-1');
+    expect(parsePendingVtuSnapshot(serialized).entries[0][0]).toBe(scoped);
   });
 });
 

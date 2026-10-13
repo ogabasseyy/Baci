@@ -28,6 +28,7 @@
 \ir enroll_customer_loyalty_award.sql
 \ir enroll_customer_loyalty_referrals.sql
 \ir enroll_customer_loyalty_status.sql
+\ir enroll_customer_loyalty_status_ngn.sql
 \ir enroll_customer_loyalty_redemption.sql
 \ir enroll_customer_loyalty_redemption_limits.sql
 \ir enroll_customer_loyalty_redemption_idempotency.sql

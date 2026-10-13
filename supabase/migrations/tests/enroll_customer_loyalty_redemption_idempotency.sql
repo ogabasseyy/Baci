@@ -6,7 +6,6 @@ INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES (
   '01aa0000-0000-4000-8000-000000000001',
   'idempotent@example.com', '01aa0000-0000-4000-8000-000000000113'
 );
-
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, enabled
 ) VALUES
@@ -41,7 +40,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'keyed first redemption failed'
 );
-
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'new_balance')::integer = 400
@@ -68,7 +66,6 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000024'),
   'same-key retry did not replay without re-spending'
 );
-
 -- 23b. The same key with a different reward is a changed intent, not a
 -- retry: rejected with no mutation.
 SELECT pg_temp.assert_true(
@@ -88,7 +85,6 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000024'),
   'key reuse with a different reward was not rejected cleanly'
 );
-
 -- 23c. A key replayed with mismatched IDs is rejected: ownership
 -- passes for the caller's own customer, then the replay guard mismatches.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
@@ -106,7 +102,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'cross-customer key replay was not rejected'
 );
-
 -- 23d. Failures are never stored: an insufficient-points attempt under
 -- a key retries as a fresh attempt after a top-up, then replays.
 SELECT id AS pricey_reward_id
@@ -127,7 +122,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'keyed insufficient-points attempt did not fail cleanly'
 );
-
 UPDATE public.customer_loyalty
 SET points_balance = 1000
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
@@ -144,7 +138,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'retry after top-up did not succeed fresh under the same key'
 );
-
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'new_balance')::integer = 499
@@ -167,7 +160,6 @@ SELECT pg_temp.assert_true(
      AND reward_id = :'pricey_reward_id'),
   'post-top-up retry did not store and replay'
 );
-
 -- 23e. The idempotency receipt survives its reward row (SET NULL, not
 -- cascade), so a lost-response retry replays the stored success
 -- instead of failing reward_unavailable. No later case uses it.
@@ -184,7 +176,6 @@ SELECT pg_temp.assert_true(
    WHERE key = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
   'reward delete cascaded the idempotency receipt'
 );
-
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND (result ->> 'new_balance')::integer = 400
@@ -196,7 +187,20 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'post-delete retry did not replay the stored success'
 );
-
+-- 23e2. After the reward delete, the same key with a DIFFERENT reward
+-- is an intent change (idempotency_key_reused), never a replay of the
+-- old receipt: the immutable requested_reward_id carries the check.
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'idempotency_key_reused'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000024',
+     :'pricey_reward_id',
+     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+   ) AS result),
+  'changed reward after deletion replayed the old receipt'
+);
 -- Every idempotency-table FK has a covering index (else deletes scan to enforce cascades).
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_indexdef(
@@ -207,7 +211,6 @@ SELECT pg_temp.assert_true(
   ) LIKE '%(reward_id)%',
   'idempotency foreign keys lack covering indexes'
 );
-
 -- 23f. Ownership precedes replay: another customer's key returns
 -- customer_not_found, never the stored code. (Pre-fix this leaked
 -- 024's success into 105's session.)
@@ -225,7 +228,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'cross-customer replay leaked the stored code'
 );
-
 -- 23g. Replay precedes the program-state gate: a receipt replays after
 -- a program disable instead of failing program_unavailable. The
 -- program is re-enabled immediately: later files need it live.
@@ -245,7 +247,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'disabled program blocked the idempotent replay'
 );
-
 UPDATE public.loyalty_settings
 SET enabled = true
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -274,7 +275,6 @@ SELECT pg_temp.assert_true(
   ),
   'legacy RDM code was not deactivatable'
 );
-
 -- Resending the unchanged code (dashboard/mobile always include it)
 -- does not trip the reservation.
 UPDATE public.discount_codes SET code = 'RDM-LEGACY-01', is_active = false

@@ -1,11 +1,13 @@
 -- Release loyalty claims when their order cancels (issue #3165).
 --
 -- Claim linkage is reward_redemptions.used_on_order_id, stamped by the
--- checkout bridge. Every cancel path funnels through
--- orders.shipping_status = 'cancelled' (customer, merchant, and
--- inventory-release RPCs), so one trigger restores the code without
--- touching points (spent at redeem; the code simply becomes spendable
--- again) or stock (consumed at redeem, not at claim).
+-- checkout bridge. Cancel paths set shipping_status = 'cancelled'
+-- (customer, merchant, inventory-release RPCs) or only
+-- payment_status = 'cancelled' (mark_abandoned_orders), so the trigger
+-- watches both fields and restores the code without touching points
+-- (spent at redeem; the code simply becomes spendable again) or stock
+-- (consumed at redeem, not at claim). Effective cancellation everywhere
+-- in this series means either field is 'cancelled'.
 CREATE OR REPLACE FUNCTION public.release_loyalty_claims_on_order_cancel()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -13,8 +15,10 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF NEW.shipping_status = 'cancelled'
-     AND OLD.shipping_status IS DISTINCT FROM 'cancelled' THEN
+  IF (NEW.shipping_status = 'cancelled'
+      AND OLD.shipping_status IS DISTINCT FROM 'cancelled')
+     OR (NEW.payment_status = 'cancelled'
+      AND OLD.payment_status IS DISTINCT FROM 'cancelled') THEN
     -- SKIP LOCKED: a checkout retry can hold a claim row while waiting
     -- on this order (redemption->order); waiting here would invert to
     -- order->redemption and deadlock. Skipped rows stay stamped to a
@@ -35,7 +39,7 @@ $$;
 
 DROP TRIGGER IF EXISTS release_loyalty_claims_on_order_cancel ON public.orders;
 CREATE TRIGGER release_loyalty_claims_on_order_cancel
-  AFTER UPDATE OF shipping_status ON public.orders
+  AFTER UPDATE OF shipping_status, payment_status ON public.orders
   FOR EACH ROW
   EXECUTE FUNCTION public.release_loyalty_claims_on_order_cancel();
 

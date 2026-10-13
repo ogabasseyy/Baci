@@ -1,7 +1,9 @@
 // Mirror calculate_loyalty_tier's threshold reading (migration 04): a
 // threshold counts iff it is an integer in range, exactly like the SQL
 // ^-?[0-9]+$ NUMERIC compare (digit strings coerce; decimals, unsafe
-// magnitudes, and non-numeric values fall to the 0 floor).
+// magnitudes, and non-numeric values are unusable and never match, so
+// they return null here and the caller drops the rung — flooring them
+// to 0 would invent a rung SQL never assigns).
 export interface LadderRung {
   name: string;
   minPoints: number;
@@ -23,7 +25,7 @@ export function dedupeLadderByName<T extends LadderRung>(
   });
 }
 
-export function toLadderThreshold(value: unknown): number {
+export function toLadderThreshold(value: unknown): number | null {
   if (
     typeof value === 'number' &&
     Number.isInteger(value) &&
@@ -36,5 +38,5 @@ export function toLadderThreshold(value: unknown): number {
     Number.isSafeInteger(Number(value))
   )
     return Number(value);
-  return 0;
+  return null;
 }

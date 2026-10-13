@@ -51,6 +51,42 @@ describe('POST /api/storefront/loyalty/redeem instructions', () => {
     );
   });
 
+  it('labels fixed instructions with the issuance currency after a merchant move', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createSuccessResult(),
+        reward_name: 'Two thousand off',
+        reward_type: 'discount_fixed',
+        reward_value: 2000,
+        issuance_currency: 'NGN',
+      },
+      error: null,
+    });
+    mocks.mockMaybeSingle
+      .mockResolvedValueOnce({
+        data: { id: CUSTOMER_ID },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { country: 'US', payout_currency: 'USD' },
+        error: null,
+      });
+
+    const response = await POST(
+      createRequest({
+        merchant_id: MERCHANT_ID,
+        customer_id: CUSTOMER_ID,
+        reward_id: REWARD_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.instructions).toBe(
+      'Apply this code at checkout to receive ₦2,000 off your order.'
+    );
+  });
+
   it('stays currency-neutral when the merchant lookup fails', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {

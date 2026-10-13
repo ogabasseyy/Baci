@@ -84,6 +84,36 @@ describe('GET /api/storefront/loyalty', () => {
     });
   });
 
+  it('drops rungs with unusable thresholds instead of flooring them', async () => {
+    mocks.mockRpc.mockResolvedValue({
+      data: {
+        ...createStatusResult(),
+        tiers: [
+          { name: 'bronze', minPoints: 0, multiplier: null, perks: [] },
+          { name: 'silver', minPoints: null, multiplier: null, perks: [] },
+          { name: 'silver', minPoints: 1000, multiplier: null, perks: [] },
+          { name: 'gold', minPoints: 5000, multiplier: null, perks: [] },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await GET(
+      createRequest(`merchant_id=${MERCHANT_ID}&customer_id=${CUSTOMER_ID}`)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.next_tier).toBe('silver');
+    expect(body.points_to_next_tier).toBe(500);
+    expect(body.tier_thresholds.silver).toBe(1000);
+    expect(
+      body.tiers.filter((tier: { name: string }) => tier.name === 'silver')
+    ).toEqual([
+      { name: 'silver', minPoints: 1000, multiplier: null, perks: [] },
+    ]);
+  });
+
   it('returns zeros for a non-enrolled customer', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: {

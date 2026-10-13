@@ -127,16 +127,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Normalize merchant-saved tiers before validation: the settings API
-    // accepts arbitrary tier JSON, so entries can be null and minPoints can
-    // arrive null (which would 500 below) while the route needs finite
-    // numbers for threshold arithmetic. toLadderThreshold coerces
-    // digit-strings like calculate_loyalty_tier, else clamps to the 0 floor.
-    // Multiplier/perks ride through for benefit display (null/empty when
-    // the merchant never set them); non-arrays and non-strings are dropped
-    // rather than failing the whole status read. Nameless entries are
-    // dropped too (SQL assignment skips them): kept as name: '' they
-    // would become a falsy next_tier and hide real progression.
+    // Normalize merchant-saved tiers before validation: arbitrary tier
+    // JSON can carry null entries/thresholds (which would 500 below).
+    // toLadderThreshold coerces digit-strings like calculate_loyalty_tier;
+    // unusable thresholds drop the rung (SQL never matches them — a 0
+    // floor would invent a rung and hide the real threshold on dedupe).
+    // Nameless entries drop too (SQL assignment skips them).
     type RawTierEntry = {
       name?: unknown;
       minPoints?: unknown;
@@ -155,21 +151,27 @@ export async function GET(request: NextRequest) {
     );
     const normalizedResult = {
       ...result,
-      tiers: rawTiers.map((entry) => ({
-        ...entry,
-        name: typeof entry.name === 'string' ? entry.name : '',
-        minPoints: toLadderThreshold(entry.minPoints),
-        multiplier:
-          typeof entry.multiplier === 'number' &&
-          Number.isFinite(entry.multiplier)
-            ? entry.multiplier
-            : null,
-        perks: Array.isArray(entry.perks)
-          ? entry.perks.filter(
-              (perk): perk is string => typeof perk === 'string'
-            )
-          : [],
-      })),
+      tiers: rawTiers.flatMap((entry) => {
+        const minPoints = toLadderThreshold(entry.minPoints);
+        if (minPoints === null) return [];
+        return [
+          {
+            ...entry,
+            name: typeof entry.name === 'string' ? entry.name : '',
+            minPoints,
+            multiplier:
+              typeof entry.multiplier === 'number' &&
+              Number.isFinite(entry.multiplier)
+                ? entry.multiplier
+                : null,
+            perks: Array.isArray(entry.perks)
+              ? entry.perks.filter(
+                  (perk): perk is string => typeof perk === 'string'
+                )
+              : [],
+          },
+        ];
+      }),
     };
     const validated =
       storefrontLoyaltyStatusResultSchema.safeParse(normalizedResult);

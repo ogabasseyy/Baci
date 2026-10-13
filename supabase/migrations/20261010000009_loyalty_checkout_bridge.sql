@@ -59,7 +59,9 @@ BEGIN
     -- (the release trigger skips rows locked by an in-flight retry, and
     -- cancelled is terminal so the read cannot stale). The wrapper
     -- re-verifies under lock before claiming.
-    COALESCE(rr.used, false) AND o.shipping_status IS DISTINCT FROM 'cancelled',
+    COALESCE(rr.used, false)
+      AND o.shipping_status IS DISTINCT FROM 'cancelled'
+      AND o.payment_status IS DISTINCT FROM 'cancelled',
     rr.issuance_currency,
     rw.name::text,
     rr.max_redemption_percentage
@@ -113,6 +115,7 @@ DECLARE
   v_now         timestamptz := pg_catalog.now();
   v_expected    numeric;
   v_claim_order_status text;
+  v_claim_payment_status text;
   v_order_currency text;
 BEGIN
   IF p_loyalty_redemption_id IS NULL THEN
@@ -194,10 +197,12 @@ BEGIN
   -- locked by an in-flight retry (SKIP LOCKED), and cancelled is terminal
   -- (reopen clamp), so the status read below cannot go stale.
   IF v_redemption.used THEN
-    SELECT o.shipping_status INTO v_claim_order_status
+    SELECT o.shipping_status, o.payment_status
+    INTO v_claim_order_status, v_claim_payment_status
     FROM public.orders o
     WHERE o.id = v_redemption.used_on_order_id;
-    IF v_claim_order_status IS DISTINCT FROM 'cancelled' THEN
+    IF v_claim_order_status IS DISTINCT FROM 'cancelled'
+       AND v_claim_payment_status IS DISTINCT FROM 'cancelled' THEN
       RAISE EXCEPTION 'loyalty_code_already_used';
     END IF;
   END IF;

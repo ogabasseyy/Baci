@@ -63,3 +63,32 @@ SELECT pg_temp.assert_true(
    WHERE value ->> 'redemption_code' = 'RDM-REUSE34'),
   'cancelled-claim receipt fell out of history recovery'
 );
+
+-- 34c. Payment-only cancellation (mark_abandoned_orders sets only
+-- payment_status) also releases: the trigger watches both fields and
+-- the resolver treats either as effective cancellation.
+SET ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.orders (id, merchant_id, order_number, customer_name, total, shipping_status, payment_status)
+VALUES ('01aa0000-0000-4000-8000-000000000035', '01aa0000-0000-4000-8000-000000000001', 'LOYALTY-REUSE-35', 'Reuse Probe', 10000, 'pending', 'unpaid');
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, points_spent, reward_type, reward_value,
+  discount_code, used, used_on_order_id, used_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', '01aa0000-0000-4000-8000-000000000012',
+  50, 'discount_fixed', 500, 'RDM-REUSE35',
+  true, '01aa0000-0000-4000-8000-000000000035', pg_catalog.now()
+);
+UPDATE public.orders SET payment_status = 'cancelled'
+WHERE id = '01aa0000-0000-4000-8000-000000000035';
+RESET ROLE;
+
+SELECT pg_temp.assert_true(
+  (SELECT used IS FALSE AND used_on_order_id IS NULL
+   FROM public.reward_redemptions WHERE discount_code = 'RDM-REUSE35')
+  AND (SELECT row.used IS FALSE
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-REUSE35'
+   ) AS row),
+  'payment-only cancellation did not release the claim'
+);

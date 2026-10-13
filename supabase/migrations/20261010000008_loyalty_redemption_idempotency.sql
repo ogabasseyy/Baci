@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS public.loyalty_redemption_idempotency_keys (
   -- a reward delete still replays instead of re-spending or failing.
   reward_id uuid
     REFERENCES public.loyalty_rewards(id) ON DELETE SET NULL,
+  -- Immutable copy of the requested reward: the intent check compares
+  -- this, so a reward deletion (SET NULL above) cannot turn a changed
+  -- reward under the same key into a replay of the old receipt.
+  requested_reward_id uuid NOT NULL,
   response jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT pg_catalog.now()
 );
@@ -62,7 +66,7 @@ AS $$
 DECLARE
   v_row record;
 BEGIN
-  SELECT merchant_id, customer_id, reward_id, response
+  SELECT merchant_id, customer_id, requested_reward_id, response
   INTO v_row
   FROM public.loyalty_redemption_idempotency_keys
   WHERE key = p_key;
@@ -78,11 +82,10 @@ BEGIN
       'success', false, 'error', 'idempotency_key_mismatch'
     );
   END IF;
-  -- A NULL stored reward means the reward row was deleted after the
-  -- success was recorded (SET NULL above): the receipt is still this
-  -- key's immutable proof, so replay it rather than 409ing.
-  IF v_row.reward_id IS NOT NULL
-     AND v_row.reward_id IS DISTINCT FROM p_reward_id THEN
+  -- Intent compares the immutable requested_reward_id: a deleted
+  -- reward row (reward_id SET NULL) still replays for the same reward,
+  -- while a changed reward under the same key is rejected, not replayed.
+  IF v_row.requested_reward_id IS DISTINCT FROM p_reward_id THEN
     RETURN jsonb_build_object(
       'success', false, 'error', 'idempotency_key_reused'
     );
@@ -111,9 +114,9 @@ SET search_path = ''
 AS $$
 BEGIN
   INSERT INTO public.loyalty_redemption_idempotency_keys (
-    key, merchant_id, customer_id, reward_id, response
+    key, merchant_id, customer_id, reward_id, requested_reward_id, response
   ) VALUES (
-    p_key, p_merchant_id, p_customer_id, p_reward_id, p_response
+    p_key, p_merchant_id, p_customer_id, p_reward_id, p_reward_id, p_response
   )
   ON CONFLICT (key) DO NOTHING;
 END;

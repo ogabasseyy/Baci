@@ -3,12 +3,16 @@
 // (getRedemptionInstructions); the shapes travel with it because no other
 // module consumes them.
 
-import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
+import {
+  formatAmountInCurrency,
+  formatMerchantCurrency,
+} from '@/lib/resolve-merchant-currency';
 
 export interface RedemptionRewardSummary {
   reward_type: string;
   discount_type?: string;
   discount_value?: number;
+  issuance_currency?: string | null;
 }
 
 export interface RedemptionMerchantCurrency {
@@ -31,6 +35,16 @@ export function getRedemptionInstructions(
       }
       if (reward.discount_type === 'percentage') {
         return `Apply this code at checkout to receive ${reward.discount_value}% off your order.`;
+      }
+      // The issuance snapshot wins over the merchant's current
+      // currency: the value is denominated at mint, and checkout
+      // rejects the code if the merchant has since moved.
+      if (reward.issuance_currency) {
+        return `Apply this code at checkout to receive ${formatAmountInCurrency(
+          reward.discount_value ?? 0,
+          reward.issuance_currency,
+          { maximumFractionDigits: 0 }
+        )} off your order.`;
       }
       // Null currency means the merchant lookup failed: currency-neutral
       // copy beats a false NGN label on a non-NGN merchant's dialog.

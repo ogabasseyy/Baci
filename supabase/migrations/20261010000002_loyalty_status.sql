@@ -111,11 +111,10 @@ BEGIN
 
   SELECT signup_bonus_points, referral_bonus_points,
          points_per_currency, points_currency_unit, tiers,
-         minimum_redemption_points
+         minimum_redemption_points, enabled
   INTO v_settings
   FROM public.loyalty_settings
-  WHERE merchant_id = p_merchant_id
-    AND enabled IS TRUE;
+  WHERE merchant_id = p_merchant_id;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
@@ -141,6 +140,13 @@ BEGIN
 
   v_enrolled := FOUND;
 
+  -- A disabled program suppresses enrollment and the rewards catalog,
+  -- but members keep their balance, history, and outstanding receipts
+  -- (issued codes stay valid under their snapshots at checkout).
+  IF v_settings.enabled IS DISTINCT FROM true AND NOT v_enrolled THEN
+    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
+  END IF;
+
   -- Spendable projection: the materialized balance still holds expired
   -- lots until a redemption reconciles them, so project the same FIFO
   -- remainder the redemption RPC would deduct. Read-only: nothing is
@@ -165,6 +171,7 @@ BEGIN
     ) AS reward
     FROM public.loyalty_rewards
     WHERE merchant_id = p_merchant_id
+      AND v_settings.enabled IS TRUE
       AND enabled IS TRUE
       AND (start_date IS NULL OR start_date <= pg_catalog.now())
       AND (end_date IS NULL OR end_date >= pg_catalog.now())

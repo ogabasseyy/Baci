@@ -17,24 +17,24 @@ describe('toLadderThreshold', () => {
     expect(toLadderThreshold('007')).toBe(7);
   });
 
-  it('floors numeric decimals the SQL integer-literal match rejects', () => {
-    expect(toLadderThreshold(100.5)).toBe(0);
-    expect(toLadderThreshold(Number.NaN)).toBe(0);
-    expect(toLadderThreshold(Number.POSITIVE_INFINITY)).toBe(0);
+  it('rejects numeric decimals the SQL integer-literal match rejects', () => {
+    expect(toLadderThreshold(100.5)).toBeNull();
+    expect(toLadderThreshold(Number.NaN)).toBeNull();
+    expect(toLadderThreshold(Number.POSITIVE_INFINITY)).toBeNull();
   });
 
-  it('floors unsafe magnitudes that would lose precision', () => {
-    expect(toLadderThreshold(Number.MAX_SAFE_INTEGER + 1)).toBe(0);
-    expect(toLadderThreshold('99999999999999999999')).toBe(0);
+  it('rejects unsafe magnitudes that would lose precision', () => {
+    expect(toLadderThreshold(Number.MAX_SAFE_INTEGER + 1)).toBeNull();
+    expect(toLadderThreshold('99999999999999999999')).toBeNull();
   });
 
-  it('floors null, missing, and non-numeric values', () => {
-    expect(toLadderThreshold(null)).toBe(0);
-    expect(toLadderThreshold(undefined)).toBe(0);
-    expect(toLadderThreshold('100.5')).toBe(0);
-    expect(toLadderThreshold('gold')).toBe(0);
-    expect(toLadderThreshold('')).toBe(0);
-    expect(toLadderThreshold({})).toBe(0);
+  it('rejects null, missing, and non-numeric values as unusable', () => {
+    expect(toLadderThreshold(null)).toBeNull();
+    expect(toLadderThreshold(undefined)).toBeNull();
+    expect(toLadderThreshold('100.5')).toBeNull();
+    expect(toLadderThreshold('gold')).toBeNull();
+    expect(toLadderThreshold('')).toBeNull();
+    expect(toLadderThreshold({})).toBeNull();
   });
 
   it('keeps the lowest rung per case-insensitive name', () => {

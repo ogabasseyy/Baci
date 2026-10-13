@@ -198,8 +198,7 @@ BEGIN
   v_expires_at := pg_catalog.now() + interval '30 days';
 
   -- Lock the merchant row before resolving currency for every
-  -- currency-bound reward: a concurrent payout update must not
-  -- commit between snapshot and settlement (born-mismatched code).
+  -- currency-bound reward (no born-mismatched code).
   IF v_reward.reward_type IN ('discount', 'discount_fixed', 'store_credit')
      OR COALESCE(v_reward.minimum_order_amount, 0) > 0 THEN
     PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
@@ -209,7 +208,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Mint a merchant-unique code; stamp currency + cap snapshot.
+  -- Mint a merchant-unique code; stamp currency + cap.
   v_currency := public.merchant_resolved_currency(p_merchant_id);
   LOOP
     v_attempt := v_attempt + 1;
@@ -281,6 +280,7 @@ BEGIN
     'reward_name', v_reward.name,
     'reward_type', v_reward.reward_type,
     'reward_value', v_reward.reward_value,
+    'issuance_currency', v_currency,
     'points_spent', v_reward.points_cost,
     'new_balance', v_new_balance,
     'expires_at', v_expires_at

@@ -241,6 +241,7 @@ export async function POST(request: NextRequest) {
             reward_type: catalog.reward_type,
             discount_type: catalog.discount_type,
             discount_value: redemption.reward_value ?? undefined,
+            issuance_currency: redemption.issuance_currency ?? null,
           },
           merchantError ? null : (merchantRow ?? {})
         ),

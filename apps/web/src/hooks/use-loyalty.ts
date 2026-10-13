@@ -44,6 +44,9 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
   // aborts the previous request so a slow first response cannot
   // overwrite fresher data or clear its loading state.
   const controllerRef = useRef<AbortController | null>(null);
+  // A post-mutation refresh runs only while the mutation's identity is
+  // still current, so a slow enroll/redeem cannot abort the new load.
+  const identityRef = useRef({ merchantId, customerId });
   const fetchLoyaltyData = () => {
     controllerRef.current?.abort();
     const controller = new AbortController();
@@ -57,6 +60,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
   };
 
   useEffect(() => {
+    identityRef.current = { merchantId, customerId };
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -91,8 +95,13 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         return { success: false, error: result.error };
       }
 
-      // Refresh loyalty data after enrollment
-      await fetchLoyaltyData();
+      // Refresh loyalty data after enrollment (skipped if superseded)
+      if (
+        identityRef.current.merchantId === merchantId &&
+        identityRef.current.customerId === customerId
+      ) {
+        await fetchLoyaltyData();
+      }
 
       return {
         success: true,
@@ -150,8 +159,13 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         rewardId
       );
 
-      // Refresh loyalty data after redemption
-      await fetchLoyaltyData();
+      // Refresh loyalty data after redemption (skipped if superseded)
+      if (
+        identityRef.current.merchantId === merchantId &&
+        identityRef.current.customerId === customerId
+      ) {
+        await fetchLoyaltyData();
+      }
 
       return {
         success: true,

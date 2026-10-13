@@ -77,17 +77,17 @@ jobs:
           # agree with each other; both are rewritten from the same
           # manifest. Run the installer so a wrong manifest checksum
           # fails closed here instead of at Muse review runtime.
+          # Capture the expected ARM64 values BEFORE install.sh runs
+          # the unreviewed binary (muse --version): afterwards no
+          # workspace file, staged copies included, can be trusted.
+          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
+          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
           export HOME="${RUNNER_TEMP}/muse-smoke-home"
           mkdir -p "$HOME"
           export GITHUB_PATH="${RUNNER_TEMP}/muse-smoke-path"
           bash .github/scripts/muse-review/install.sh
           # install.sh only verifies the runner's own architecture;
           # verify the ARM64 checksum against the real artifact too.
-          # Read the expected values from the staged copies hashed
-          # before the unreviewed binary ran, never from the workspace
-          # files it could have modified.
-          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
-          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
           arm_bin="$(mktemp)"
           curl --disable --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
             --connect-timeout 15 --max-time 600 -fsSL -o "$arm_bin" \
@@ -148,6 +148,8 @@ jobs:
           GH_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN || github.token }}
           HAS_PIN_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN != '' }}
           VERSION: ${{ needs.smoke.outputs.version }}
+          INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -165,13 +167,12 @@ jobs:
               --jq .content | base64 -d > "${RUNNER_TEMP}/existing-install.sh"
             gh api "repos/${REPO}/contents/.github/scripts/semgrep_sarif_pins.py?ref=${existing}" \
               --jq .content | base64 -d > "${RUNNER_TEMP}/existing-pins.py"
-            if ! diff \
-              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' "${RUNNER_TEMP}/existing-install.sh") \
-              <(grep -E '^(MUSE_VERSION|SHA_X86_LINUX|SHA_AARCH64_LINUX)=' .github/scripts/muse-review/install.sh) \
-              || ! diff \
-              <(grep -E 'MUSE_PINNED_VERSION|"[0-9a-f]{64}"' "${RUNNER_TEMP}/existing-pins.py") \
-              <(grep -E 'MUSE_PINNED_VERSION|"[0-9a-f]{64}"' .github/scripts/semgrep_sarif_pins.py); then
-              echo "::error::Existing pin-update branch $existing carries different pins than the verified stable $VERSION; refusing to reuse it." >&2
+            # Full-file hash comparison: the whole trust files must be
+            # byte-identical to the smoke-verified copies, not just
+            # their version/checksum lines.
+            if [ "$(sha256sum "${RUNNER_TEMP}/existing-install.sh" | awk '{print $1}')" != "$INSTALL_SHA" ] \
+              || [ "$(sha256sum "${RUNNER_TEMP}/existing-pins.py" | awk '{print $1}')" != "$PINS_SHA" ]; then
+              echo "::error::Existing pin-update branch $existing carries different pin files than the verified stable $VERSION; refusing to reuse it." >&2
               exit 1
             fi
             # Re-dispatch only checks that are actually missing, so a

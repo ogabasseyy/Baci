@@ -24,22 +24,12 @@ import {
 
 export { VtuPersistenceError };
 
-import { hasExistingVtuDebitLedger } from '@/lib/vtu-debit-ledger-lookup';
 import { resolveKudaFallbackCreditCorrection } from '@/lib/vtu-fallback-credit-correction';
-import {
-  isFlaggedReferenceLessVtuRow,
-  isMarkedUnsubmittedMonnifyVtuRow,
-  isUnsubmittedPreparedVtuRow,
-} from '@/lib/vtu-flagged-recovery';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
+import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
 import {
-  isStrandedPreVendVtuRow,
-  restoreInterruptedPreVendVtuRow,
-} from '@/lib/vtu-pre-vend-recovery';
-import {
-  hasVtuCollectionEvidence,
   VTU_REFUND_SKIPPED_KEY,
   VTU_REFUND_SKIPPED_NO_COLLECTION,
 } from '@/lib/vtu-refund-collection-evidence';
@@ -47,7 +37,11 @@ import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
 } from '@/lib/vtu-refund-guard';
-import { markVtuProviderSubmissionStarted } from '@/lib/vtu-submission-marker';
+import {
+  recoverStrandedPreVendVtuRow,
+  shouldSkipRefundWithoutCollectionEvidence,
+  writeVtuProviderSubmissionMarkerOrRestore,
+} from './vtu-fulfillment-recovery';
 
 export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
 export { RetryableVtuError };
@@ -115,7 +109,7 @@ function readPaymentSplit(
   return { wallet: split.wallet, card: split.card };
 }
 
-interface VtuTransactionRow {
+export interface VtuTransactionRow {
   amount: number;
   biller_item_code: string | null;
   biller_name: string | null;
@@ -566,20 +560,15 @@ async function refundVtuToCustomerWallet({
   // Card-only path (no paymentSplit — legacy shape; current
   // checkout rows always persist a split at prepare time): refund the
   // full row.amount ONLY with collection evidence when the caller
-  // requires it. Legacy failures include gateway-init and
-  // declined-authorization rows that never collected — crediting
-  // those mints unearned wallet funds (Codex R51 6rqH1I). Without
-  // evidence the row is marked skipped (terminally failed,
-  // cron-excluded, refund_pending cleared) — never credited, never
-  // thrown (nothing here is retryable).
+  // requires it (see vtu-fulfillment-recovery for the why).
   if (
     requireCollectionEvidence &&
-    !(await hasVtuCollectionEvidence({ metadata, row, supabase }))
+    (await shouldSkipRefundWithoutCollectionEvidence({
+      metadata,
+      row,
+      supabase,
+    }))
   ) {
-    console.warn(
-      'Skipping VTU refund: no collection evidence for card-only row:',
-      { transactionId: row.id }
-    );
     const metadataChanged = setMetadataValue(
       metadata,
       VTU_REFUND_SKIPPED_KEY,
@@ -2417,78 +2406,12 @@ export async function fulfillPendingVtuTransaction({
       supabase,
     });
     if (!reconciliationRow) {
-      // Reference-less pre-vend strand (the restore write failed
-      // while the database was down): flip back to marked pending so
-      // the next pass re-drives it instead of stranding the debit
-      // forever. The predicate requires proof no live worker holds
-      // the row; re-read after so a raced settle reports terminal.
-      // Fail closed (Codex R39 rldXK): flip ONLY when the ledger
-      // proves a debit landed (money moved → duty to complete;
-      // re-drive is idempotent-safe). A never-debited strand may be
-      // a terminal insufficient-balance decline whose failed-persist
-      // exhausted — byte-identical to a crash strand — and flipping
-      // it would let a later top-up vend a rejected purchase with no
-      // new submission. No post-decision write can close this (any
-      // such write can exhaust in the same outage as the payload
-      // persist), so the safety lives in this read path instead.
-      // Never-debited strands stay processing (visible,
-      // support-recoverable). A ledger-read failure throws (no flip)
-      // — fail closed, the next pass retries the check.
-      if (
-        isStrandedPreVendVtuRow(row) &&
-        (await hasExistingVtuDebitLedger({ row, supabase }))
-      ) {
-        await restoreInterruptedPreVendVtuRow({
-          userSafeMessage: `Reconciliation recovered stranded pre-vend row ${row.id}`,
-          row,
-          supabase,
-        });
-      } else if (isUnsubmittedPreparedVtuRow(row)) {
-        // Proven-never-submitted twin (Codex R50 6rp7M_): the wallet
-        // debit landed but the process died between the debit persist
-        // and the first provider call — every direct Kuda purchase
-        // has this crash window. Marker absence on a stale
-        // marker-era row proves no submission ran, so flip to marked
-        // pending and let the next pass re-drive: the debit
-        // short-circuits idempotently and the same request_reference
-        // submits for the first time (no provider idempotency
-        // needed). No ledger gate: walletDebited=true IS the debit
-        // proof (it persists only after the debit RPC succeeds).
-        // Without this the row falls into the flagged branch below,
-        // requeries a never-submitted reference as unknown forever,
-        // and strands the debit with no vend and no refund.
-        await restoreInterruptedPreVendVtuRow({
-          userSafeMessage: `Reconciliation recovered unsubmitted prepared row ${row.id}`,
-          row,
-          supabase,
-        });
-      } else if (isMarkedUnsubmittedMonnifyVtuRow(row)) {
-        // Marked Monnify gap (Codex R54 6rrFRC): the worker died
-        // between the submission-marker persist and the provider
-        // call (or the marker response was lost to a dead worker),
-        // leaving marker + debit but no response reference — neither
-        // re-drivable (unsubmitted proof needs marker absence) nor
-        // requeryable (Monnify resolves only by a response
-        // vendReference). Flip to marked pending like its
-        // unsubmitted twin: the next pass re-drives with the same
-        // request_reference, which Monnify receives as its
-        // vendReference — the same dedupe assumption the
-        // transient-vend path already relies on. Kuda gaps stay out
-        // (no dedupe evidence): requery-unknown, support-recoverable.
-        await restoreInterruptedPreVendVtuRow({
-          userSafeMessage: `Reconciliation recovered marked unsubmitted Monnify row ${row.id}`,
-          row,
-          supabase,
-        });
-      } else if (isFlaggedReferenceLessVtuRow(row)) {
-        // Post-vend twin of the strand above (mutually exclusive by
-        // the flag): the debit provably landed but the result persist
-        // exhausted, so the claim declines and pre-vend recovery
-        // refuses to re-vend. Settle from provider truth instead —
-        // reconcileProcessingVtuTransaction requeries by the
-        // persisted reference and never vends. No claim: its markers
-        // are diagnostic-only, and settlement is status-CAS plus
-        // ledger-idempotent under concurrent passes.
+      // Stranded pre-vend recovery (see vtu-fulfillment-recovery):
+      // restore re-drivable strands; settle flagged ones from
+      // provider truth (reconcile requeries by reference, never
+      // vends).
+      const recovery = await recoverStrandedPreVendVtuRow({ row, supabase });
+      if (recovery === 'settle-from-provider') {
         return reconcileProcessingVtuTransaction({ row, supabase });
       }
       return resolveCurrentVtuTransactionState({ row, supabase });
@@ -2742,36 +2665,10 @@ export async function fulfillPendingVtuTransaction({
     row.metadata = debitedMetadata;
   }
 
-  // Submission marker (Codex R50 6rp7M_): persist BEFORE the first
-  // provider call so a crash between the wallet-debit persist and
-  // the vend is provably unsubmitted — the reconciler re-drives
-  // marker-less stale rows with the same reference instead of
-  // stranding the debit forever. Fail closed like the walletDebited
-  // persist above: without the marker the row is indistinguishable
-  // from a submitted-but-unpersisted vend, which must never
-  // re-drive, so restore to marked pending and surface the failure
-  // (the next pass retries the marker write, then vends).
-  const submissionMarkerError = await markVtuProviderSubmissionStarted({
-    row,
-    supabase,
-  });
-  if (submissionMarkerError) {
-    console.error('Failed to persist VTU provider-submission marker:', {
-      error: submissionMarkerError.message,
-      transactionId: row.id,
-    });
-    await restoreInterruptedPreVendVtuRow({
-      // Fixed user-safe template: the raw DB error stays in the
-      // server log above — error_message is customer-visible history.
-      userSafeMessage:
-        'VTU purchase confirmation failed; the purchase will resume automatically.',
-      row,
-      supabase,
-    });
-    throwVtuPersistenceError(
-      `Failed to persist provider-submission marker for ${row.id}: ${submissionMarkerError.message}`
-    );
-  }
+  // Submission marker (see vtu-fulfillment-recovery): persist BEFORE
+  // the first provider call; throws (after restoring to marked
+  // pending) when the write fails.
+  await writeVtuProviderSubmissionMarkerOrRestore({ row, supabase });
 
   let result: VtuPurchaseResult;
   try {

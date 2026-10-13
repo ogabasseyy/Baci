@@ -1,20 +1,12 @@
 -- Checkout bridge for loyalty reward codes (issue #3165).
 --
 -- Redeemed RDM-* codes lived only in reward_redemptions, which checkout
--- never read: every code failed validation. This wires the
--- discount-typed codes (fixed/percentage with a positive value) into
--- checkout: a resolve RPC for the validate/order routes plus an order
--- wrapper that claims the code atomically, mirroring
--- create_storefront_order_with_discount_code (lock, order call,
--- replay-first, policy, mark-used). Non-discount types and valueless
--- codes stay outside the online bridge: they have no discount amount
--- to apply and are honored through manual/fulfillment channels.
--- Minimums on code types ARE honored here against the DB subtotal.
--- Merchant-scoped case-insensitive code uniqueness, doubling as the
--- checkout lookup index: the resolver compares upper(discount_code),
--- so a plain (merchant_id, discount_code) index could serve only the
--- merchant prefix and would scan that merchant's redemption rows per
--- lookup. The redeem RPC retries code generation on this constraint.
+-- never read. This wires discount-typed codes (positive value) into
+-- checkout: a resolve RPC plus an order wrapper that claims the code
+-- atomically, mirroring create_storefront_order_with_discount_code.
+-- Non-discount types stay outside the bridge (manual fulfillment).
+-- Minimums ARE honored here against the DB subtotal. Merchant-scoped
+-- case-insensitive code uniqueness doubles as the lookup index.
 CREATE UNIQUE INDEX IF NOT EXISTS loyalty_redemption_checkout_code_idx
   ON public.reward_redemptions(merchant_id, pg_catalog.upper(discount_code));
 
@@ -127,10 +119,8 @@ BEGIN
     RAISE EXCEPTION 'loyalty_redemption_required';
   END IF;
 
-  -- Parent-before-child lock order: the rewards DELETE route locks the
-  -- parent first (its ON DELETE SET NULL then touches the child), so
-  -- holding the child while waiting on the parent deadlocks. Read the
-  -- reward id unlocked, lock the parent, then lock the child.
+  -- Parent-before-child lock order (DELETE route locks parent first):
+  -- read the reward id unlocked, lock the parent, then lock the child.
   SELECT rr.reward_id INTO v_reward_id
   FROM public.reward_redemptions rr
   WHERE rr.id = p_loyalty_redemption_id AND rr.merchant_id = p_merchant_id;
@@ -260,6 +250,12 @@ BEGIN
       pg_catalog.round(
         v_order.subtotal * v_redemption.max_redemption_percentage / 100.0, 0));
   END IF;
+
+  -- A computed discount of zero must not consume the code: reject
+  -- before the claim (percentages and the cap can round to zero on
+  -- small subtotals even though the mint rejects zero-value fixed).
+  IF v_expected <= 0 THEN
+    RAISE EXCEPTION 'loyalty_code_not_applicable'; END IF;
 
   IF pg_catalog.abs(v_order.discount_amount - v_expected) > 1 THEN
     RAISE EXCEPTION 'discount_amount_mismatch'

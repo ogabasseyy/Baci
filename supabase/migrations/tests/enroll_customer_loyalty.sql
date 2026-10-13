@@ -32,6 +32,7 @@
 \ir enroll_customer_loyalty_redemption_limits.sql
 \ir enroll_customer_loyalty_redemption_idempotency.sql
 \ir enroll_customer_loyalty_checkout_bridge.sql
+\ir enroll_customer_loyalty_checkout_bridge_zero.sql
 \ir enroll_customer_loyalty_reconciliation.sql
 \ir enroll_customer_loyalty_projection.sql
 \ir enroll_customer_loyalty_adjustment.sql

@@ -181,6 +181,41 @@ describe('POST /api/loyalty/settings', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  it('returns 400 for a non-number maximum_redemption_percentage', async () => {
+    const response = await POST(
+      makeRequest({ maximum_redemption_percentage: '50' })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toContain('maximum_redemption_percentage');
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a cap that rounds to zero at column precision', async () => {
+    const response = await POST(
+      makeRequest({ maximum_redemption_percentage: 0.001 })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toContain('maximum_redemption_percentage');
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 instead of crashing on a null JSON body', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/loyalty/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'null',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it('persists settings when the request is authenticated and CSRF is valid', async () => {
     const response = await POST(makeRequest({ enabled: true }));
     const json = await response.json();

@@ -215,6 +215,24 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body.discount_amount).toBe(2500);
     expect(body.discount_value).toBe(25);
   });
+  it('collapses a percentage code whose discount rounds to zero', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [
+            loyaltyRow({
+              reward_type: 'discount_percentage',
+              reward_value: 10,
+            }),
+          ]
+    );
+
+    const body = await (
+      await POST(request({ ...baseBody, cart_total: 4 }))
+    ).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
   it('collapses a minimum-carrying percentage code after a currency change', async () => {
     setMerchantRow({ country: 'US', payout_currency: 'USD' });
     mockRpc((fn) =>

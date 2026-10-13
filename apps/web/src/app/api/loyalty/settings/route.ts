@@ -7,6 +7,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
+import { loyaltySettingsPostSchema } from '@/schemas/loyalty-settings';
 
 /**
  * Loyalty Settings API
@@ -142,19 +143,28 @@ export async function POST(request: NextRequest) {
 
     const merchantId = merchantContext.merchantId;
 
-    const body = await request.json();
-    // The cap binds issued codes at checkout: a non-positive or
-    // over-100 value would mint codes worth nothing (or fail there).
-    if (
-      body.maximum_redemption_percentage != null &&
-      (!Number.isFinite(Number(body.maximum_redemption_percentage)) ||
-        Number(body.maximum_redemption_percentage) <= 0 ||
-        Number(body.maximum_redemption_percentage) > 100)
-    ) {
+    // Validate before any database operation: malformed JSON, a
+    // non-object body, and wrongly-typed fields fail closed with 400
+    // instead of throwing or coercing into the upsert.
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+    const parsed = loyaltySettingsPostSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const capIssue = parsed.error.issues.some((issue) =>
+        issue.path.includes('maximum_redemption_percentage')
+      );
       return NextResponse.json(
         {
-          error:
-            'maximum_redemption_percentage must be greater than 0 and at most 100',
+          error: capIssue
+            ? 'maximum_redemption_percentage must be at least 0.01 and at most 100 with up to two decimal places'
+            : 'Invalid request body',
         },
         { status: 400 }
       );
@@ -173,7 +183,7 @@ export async function POST(request: NextRequest) {
       maximum_redemption_percentage,
       tiers,
       points_expiry_days,
-    } = body;
+    } = parsed.data;
 
     const { data: settings, error } = await supabase
       .from('loyalty_settings')

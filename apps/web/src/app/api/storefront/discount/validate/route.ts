@@ -70,7 +70,6 @@ export async function POST(request: NextRequest) {
       ? (parsedArray.data[0] ?? null)
       : (parsedSingle?.data ?? null);
 
-    // Loyalty fallback (issue #3165): RDM-* codes live elsewhere.
     if (!discountCode) {
       const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
         'get_loyalty_redemption_for_checkout',
@@ -96,8 +95,6 @@ export async function POST(request: NextRequest) {
         ? (parsedLoyaltyArray.data[0] ?? null)
         : (parsedLoyaltySingle?.data ?? null);
       const loyaltyValue = Number(loyaltyCode?.reward_value);
-      // Bridgeable shape only: discount types ('discount' is fixed
-      // by convention) + positive value; others get generic invalid.
       if (
         loyaltyCode != null &&
         (loyaltyCode.reward_type === 'discount' ||
@@ -106,8 +103,7 @@ export async function POST(request: NextRequest) {
         Number.isFinite(loyaltyValue) &&
         loyaltyValue > 0
       ) {
-        // Dead codes collapse to generic invalid (no probing oracle);
-        // the order wrapper re-enforces state authoritatively.
+        // Dead codes collapse to generic invalid (no probing oracle).
         if (
           loyaltyCode.used ||
           (loyaltyCode.expires_at &&
@@ -119,7 +115,6 @@ export async function POST(request: NextRequest) {
           );
         }
         // Currency gate first (a mismatched code can never validate).
-        // Fixed codes keep issuance currency (wrapper enforces).
         if (
           (loyaltyCode.reward_type !== 'discount_percentage' ||
             Number(loyaltyCode.minimum_order_amount) > 0) &&
@@ -140,7 +135,7 @@ export async function POST(request: NextRequest) {
           loyaltyCode.minimum_order_amount != null &&
           cart_total < Number(loyaltyCode.minimum_order_amount)
         ) {
-          // Threshold label currency; failure stays currency-neutral.
+          // Threshold label currency.
           const { data: merchantRow, error: merchantError } = await supabase
             .from('merchants')
             .select('country, payout_currency')
@@ -185,7 +180,14 @@ export async function POST(request: NextRequest) {
           },
           cart_total
         );
-        // Explicit null (no discount_codes row); effective value.
+        // Zero computed discount collapses to invalid (checkout rejects).
+        if (loyaltyDiscountAmount <= 0) {
+          return NextResponse.json(
+            { valid: false, error: 'Invalid discount code' },
+            { status: 200 }
+          );
+        }
+        // Effective value (explicit null discount_code_id).
         const effectiveDiscountValue =
           loyaltyDiscountType === 'percentage'
             ? cart_total > 0
@@ -257,7 +259,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Single source of truth for the amount (mirrors the order route).
     const discountAmount = computeDiscountAmountForSubtotal(
       {
         discount_type:

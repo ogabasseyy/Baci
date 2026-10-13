@@ -41,7 +41,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000009_loyalty_checkout_bridge.sql',
-    sha256: '5d175f714e520ae202c15bcd45ca9f7b977dc4d7de359f654c6789ecc048f3f3',
+    sha256: '8a954cc2ae9e7bf4f811033e5b9a7c481274c6c2fc7c86664b1b168456818b7b',
   },
   {
     repositoryPath:

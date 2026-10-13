@@ -81,3 +81,14 @@ API and mobile tests cover auth/CSRF, public-data redaction, service preservatio
 explicit acknowledgment, no automatic requests/booking/funding, stale responses,
 search edit invalidation, busy controls and local expiry/ETA display. Native
 emulator verification is outstanding; `adb` is unavailable in this workspace.
+
+## Signing boundary
+
+Recovery stages through a server-only, fixed-action preparation helper. It
+checks order identity, complete pins, domestic GIG delivery and the unchanged
+paid fee before minting the existing HMAC proof. Trusted merchant identity is
+explicitly bound into the quote request because the booking request builder
+does not include it. The helper uses only the caller's RLS client and the
+recovery preparation RPC. The credential manifest permits exactly the reviewed
+route-to-helper-to-signer path; direct signer access and sibling-route reuse
+remain rejected by regression tests.

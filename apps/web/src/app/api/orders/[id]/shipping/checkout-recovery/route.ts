@@ -5,7 +5,6 @@ import {
   buildAdminOrderGiglProductLookup,
   mapAdminOrderGiglQuoteItems,
 } from '@/app/api/shipping/quotes/admin-order-gigl-quote-items';
-import { toShippingQuoteUpsert } from '@/app/api/shipping/quotes/shipping-quote-persistence';
 import {
   authenticateApiRequest,
   getUserAccess,
@@ -16,8 +15,8 @@ import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
 import { checkoutRecoveryStreetAddress } from '@/lib/shipping/checkout-recovery-street-address';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
+import { prepareCheckoutShippingRecovery } from '@/lib/shipping/prepare-checkout-shipping-recovery';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
-import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import type { ShippingQuote } from '@/lib/shipping/types';
 import {
   shippingCheckoutRecoverySchema,
@@ -235,26 +234,14 @@ export async function POST(
       error:
         'The fresh quote differs from the shipping fee already paid. This recovery cannot change the paid amount.',
     });
-  const persisted = toShippingQuoteUpsert(quote, {
+  const staged = await prepareCheckoutShippingRecovery(supabase, {
+    orderId: id,
     merchantId: access.merchantId,
-    sessionId: id,
+    fingerprint,
+    paidShippingFee,
+    quote,
     quoteRequest: built.request,
   });
-  const proof = createShippingQuoteRouteProof({
-    action: 'prepare_customer_checkout_shipping_recovery',
-    merchantId: access.merchantId,
-    subjectId: id,
-    payload: { order_id: id, fingerprint, quote: persisted },
-  });
-  const staged = await supabase.rpc(
-    'prepare_customer_checkout_shipping_recovery' as never,
-    {
-      p_order_id: id,
-      p_fingerprint: fingerprint,
-      p_quote: persisted,
-      p_route_proof: proof,
-    } as never
-  );
   if (staged.error) return failure(staged.error);
   if (
     typeof staged.data !== 'string' ||

@@ -1,5 +1,6 @@
 'use client';
 
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useEffect } from 'react';
 import {
   forgetPendingVtuByReference,
@@ -42,17 +43,28 @@ export function getPendingVtuSettlementPass(): Promise<void> | null {
 export function useUtilityRetainedSettlement({
   enabled,
   merchantSlug,
+  scopeMerchantId,
+  scopeOwnerId,
   userId,
 }: {
   enabled: boolean;
   merchantSlug: string | null | undefined;
+  scopeMerchantId: string | null | undefined;
+  scopeOwnerId: string | null | undefined;
   userId: string | null | undefined;
 }): void {
   useEffect(() => {
     if (!enabled || !merchantSlug || !userId) {
       return;
     }
-    const references = listNotedPendingVtuReferences();
+    // Owner-scoped (Codex R62 6rtokd): the registry survives
+    // switches by design, so filter to the active account's tag —
+    // foreign references would only burn history reads (and gate
+    // latency) under the wrong session. Untagged legacy entries
+    // still settle (fail open).
+    const references = listNotedPendingVtuReferences(
+      buildPendingVtuScopeTag(scopeOwnerId, scopeMerchantId)
+    );
     if (references.length === 0) {
       return;
     }
@@ -117,5 +129,5 @@ export function useUtilityRetainedSettlement({
       cancelled = true;
       controller.abort();
     };
-  }, [enabled, merchantSlug, userId]);
+  }, [enabled, merchantSlug, scopeMerchantId, scopeOwnerId, userId]);
 }

@@ -2,6 +2,14 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import {
+  clearPendingVtuKeys,
+  hasNotedPendingVtuReference,
+  isStalePendingVtuSuccess,
+  PENDING_VTU_STALE_AFTER_MS,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import {
+  preserveSuppressedVtuSuccess,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
@@ -82,5 +90,67 @@ describe('refreshWalletAfterSuppressedVtuResult', () => {
       refreshWalletAfterSuppressedVtuResult({ refetchWallet })
     ).resolves.toBeUndefined();
     expect(refetchWallet).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('preserveSuppressedVtuSuccess', () => {
+  beforeEach(() => {
+    clearPendingVtuKeys();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function paymentWithRefetch(refetchWallet: jest.Mock) {
+    return { refetchWallet } as unknown as PaymentState;
+  }
+
+  it('notes + completes terminal results and refreshes the wallet', async () => {
+    rememberPendingVtuPurchase('d', 'k');
+    const refetchWallet = jest.fn(() => Promise.resolve('ok'));
+
+    await preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
+      reference: 'R',
+      status: 'successful',
+    });
+
+    expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    jest
+      .useFakeTimers()
+      .setSystemTime(Date.now() + PENDING_VTU_STALE_AFTER_MS + 1);
+    expect(isStalePendingVtuSuccess('d', 'R')).toBe(true);
+  });
+
+  it('notes processing results without completing them', async () => {
+    rememberPendingVtuPurchase('d', 'k');
+    const refetchWallet = jest.fn(() => Promise.resolve('ok'));
+
+    await preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
+      reference: 'R',
+      status: 'processing',
+    });
+
+    expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
+    jest
+      .useFakeTimers()
+      .setSystemTime(Date.now() + PENDING_VTU_STALE_AFTER_MS + 1);
+    expect(isStalePendingVtuSuccess('d', 'R')).toBe(false);
+  });
+
+  it('never fails when the wallet refetch rejects', async () => {
+    rememberPendingVtuPurchase('d', 'k');
+    const refetchWallet = jest.fn(() =>
+      Promise.reject(new Error('query exploded'))
+    );
+
+    await expect(
+      preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
+        reference: 'R',
+        status: 'successful',
+      })
+    ).resolves.toBeUndefined();
+    expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
   });
 });

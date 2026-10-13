@@ -6,7 +6,7 @@ import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import { getPendingVtuSettlementPass } from './use-utility-retained-settlement';
-import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
+import { applyUtilityWalletSuccessOutcome } from './utility-purchase-wallet-success';
 import {
   finalizeSuppressedAttempt,
   shouldRotateVtuKeyForStatus,
@@ -190,61 +190,29 @@ export function useUtilityPurchase({
     }
 
     if (result.kind === 'wallet-success') {
-      // Terminal forgets (fresh buy-again); processing keeps (a fresh
-      // resubmit would bypass the dedupe row and debit twice). Refresh
-      // instead of decrementing: a stale HIGH balance would pass the
-      // underfunded pre-check for a purchase the server rejects.
-      const scoped = captured.attempt?.scoped;
-      const replayResolvesProcessing =
-        !result.processing &&
-        scoped !== undefined &&
-        isScopedReplay(scoped, result.reference);
-      if (!result.processing) {
-        if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
-          // Stale replay answers a NEW intent with the old vend: forget so
-          // the next tap mints fresh, and say so.
-          forgetScopedKey(scoped);
-          toast({
-            title: 'Purchase Already Completed',
-            description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
-        }
-        if (scoped !== undefined) {
-          forgetScopedKey(scoped);
-        }
-      } else {
-        if (scoped !== undefined) {
-          noteScopedReference(scoped, result.reference);
-        }
-        refreshWallet();
-      }
-      clearIntent();
-      applyUtilityPurchaseBalanceEffect({
+      const stale = applyUtilityWalletSuccessOutcome({
+        activeTab,
         appliedReferences: appliedBalanceRefs.current,
-        // Recalled key ⇒ identical submit already went out: ambiguous.
-        isAmbiguousReplay:
-          replayResolvesProcessing ||
-          (!result.processing && captured.attempt?.recalled === true),
+        attempt: captured.attempt,
+        forgetScopedKey,
+        isScopedReplay,
+        isScopedStale,
+        markAttemptShown,
+        noteScopedReference,
+        clearIntent,
         refreshWallet,
         result,
+        setLoading,
+        setStep,
+        setSuccessAmount,
+        setTransactionRef,
+        setTransactionVoucherPin,
         setWalletBalance,
         submitAmount: payload.amount,
       });
-      setTransactionRef(result.reference);
-      markAttemptShown(scoped ?? null);
-      setSuccessAmount(result.amount);
-      setTransactionVoucherPin(result.voucherPin ?? null);
-      // A 202 can still fail or be refunded: never the success screen.
-      setStep(result.processing ? 'processing' : 'success');
-      toast({
-        title: result.processing ? 'Purchase Processing' : 'Purchase Successful',
-        description: result.processing
-          ? `Your ${activeTab} purchase is processing.`
-          : `Your ${activeTab} purchase was successful!`,
-      });
+      if (stale) {
+        return;
+      }
     } else if (result.kind === 'error') {
       // 4xx rotates (fresh retry); pre-route/5xx/unknown keeps (dedupes).
       if (captured.attempt && shouldRotateVtuKeyForStatus(result.status)) {

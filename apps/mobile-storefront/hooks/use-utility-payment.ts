@@ -1,3 +1,4 @@
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useRef } from 'react';
@@ -133,7 +134,10 @@ export function useUtilityPayment() {
       const recalled = recallPendingVtuKey(descriptor);
       if (recalled) return recalled;
       const minted = Crypto.randomUUID();
-      rememberPendingVtuPurchase(descriptor, minted);
+      // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
+      // the settle filter recomputes this for the active account.
+      const scopeTag = buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID);
+      rememberPendingVtuPurchase(descriptor, minted, scopeTag);
       return minted;
     },
     /**

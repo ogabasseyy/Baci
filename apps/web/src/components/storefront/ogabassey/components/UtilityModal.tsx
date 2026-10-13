@@ -117,6 +117,9 @@ export const UtilityModal = ({
   useUtilityRetainedSettlement({
     enabled: isOpen,
     merchantSlug: merchant?.slug,
+    // Same pair the idempotency scope hashed (Codex R62 6rtokd).
+    scopeMerchantId: merchant?.id,
+    scopeOwnerId: user?.id ?? customer?.id,
     userId: user?.id,
   });
 

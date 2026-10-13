@@ -69,13 +69,10 @@ export function scopePendingVtuSignature(
 
 /**
  * Key previously used for this exact purchase, if it is still pending.
- * Entries past the 7-day TTL are dropped instead of recalled — including
- * referenced ones. No client-side signal proves terminality (noted
- * references mark non-terminal processing responses, and the server
- * leaves unconfirmed rows processing indefinitely), so retention is
- * horizon-based: 7 days dwarf any plausible processing duration, while
- * infinite retention would accumulate unboundedly and wedge the cap.
- * The 5min stale check still arbitrates success replays within the TTL.
+ * Referenced-but-uncompleted entries are retained past the 7-day TTL
+ * (the server leaves unconfirmed rows processing indefinitely); all
+ * other TTL-aged entries drop. The 5min stale check still arbitrates
+ * success replays.
  */
 export function recallPendingVtuKey(
   payloadSignature: string,
@@ -94,13 +91,9 @@ export function recallPendingVtuKey(
 }
 
 /**
- * Frees one registry slot by dropping an EXPIRED entry (live recall
- * would drop it on access anyway). TTL-retained referenced-processing
- * entries are never dropped here: they keep the registry OVERFLOWING
- * past the cap instead, since evicting them would lose deduplication
- * and their retry would mint fresh and double-debit. Entries are tiny
- * and retention ends on observed terminality, so overflow is cheap
- * and self-healing.
+ * Frees one slot by dropping an EXPIRED entry (recall would drop it
+ * anyway). TTL-retained entries are never victims — the registry
+ * overflows instead (their retry would mint fresh and double-debit).
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingVtuPurchases) {
@@ -114,7 +107,8 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
-  key: string
+  key: string,
+  scopeTag?: string
 ): void {
   if (
     !pendingVtuPurchases.has(payloadSignature) &&
@@ -126,6 +120,7 @@ export function rememberPendingVtuPurchase(
   pendingVtuPurchases.set(payloadSignature, {
     key,
     reference: null,
+    ...(scopeTag !== undefined ? { scopeTag } : {}),
     rememberedAt: Date.now(),
     completedAt: null,
   });
@@ -256,32 +251,40 @@ export function forgetPendingVtuPurchase(payloadSignature: string): void {
  * fresh one on first submit. Mirrors mobile's
  * `getWalletIdempotencyKey(descriptor)`.
  */
-export function getPendingVtuKey(payloadSignature: string): string {
+export function getPendingVtuKey(
+  payloadSignature: string,
+  scopeTag?: string
+): string {
   const recalled = recallPendingVtuKey(payloadSignature);
   if (recalled) {
     return recalled;
   }
   const minted = createWalletIdempotencyKey();
-  rememberPendingVtuPurchase(payloadSignature, minted);
+  rememberPendingVtuPurchase(payloadSignature, minted, scopeTag);
   return minted;
 }
 
 /**
  * Noted server references across live entries (cross-tab synced).
  * The retained-settlement hook reads history for these when the
- * purchase modal opens, so rows that settled after the backfill
- * stopped still complete their entries (Codex R57 6rseWu).
- * Unanswered (reference-less) entries are excluded — with no
- * reference there is nothing to look up.
+ * purchase modal opens (Codex R57 6rseWu). Reference-less entries
+ * are excluded (nothing to look up). With a scope tag, tagged
+ * entries for OTHER owners are excluded too — untagged (legacy)
+ * entries fail open, since their owner is unknowable (R62 6rtokd).
  */
-export function listNotedPendingVtuReferences(): string[] {
+export function listNotedPendingVtuReferences(scopeTag?: string): string[] {
   syncPendingVtuPurchasesFromSnapshot();
   // Deduped: several descriptors can note the same reference (and
   // unscoped test keys twin with their migrated digests after a
   // sync) — one history read per reference is enough.
   const references = new Set<string>();
   for (const entry of pendingVtuPurchases.values()) {
-    if (entry.reference !== null) {
+    if (
+      entry.reference !== null &&
+      (scopeTag === undefined ||
+        entry.scopeTag === undefined ||
+        entry.scopeTag === scopeTag)
+    ) {
       references.add(entry.reference);
     }
   }

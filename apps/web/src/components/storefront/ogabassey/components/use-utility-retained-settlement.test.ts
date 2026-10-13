@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
@@ -22,6 +23,8 @@ function mockHistory(impl: (url: string) => unknown) {
 const input = {
   enabled: true,
   merchantSlug: 'ogabassey',
+  scopeMerchantId: 'merchant-1',
+  scopeOwnerId: 'user-1',
   userId: 'user-1',
 };
 
@@ -158,6 +161,28 @@ describe('useUtilityRetainedSettlement', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // Fail-open: the replay path still dedupes.
     expect(recallPendingVtuKey('{"flaky":true}')).toBe('key-flaky');
+  });
+
+  it('skips references tagged to another owner', async () => {
+    // Codex R62 6rtokd: the registry survives switches by design —
+    // the pass must only read the active account's references.
+    const mine = buildPendingVtuScopeTag('user-1', 'merchant-1');
+    const theirs = buildPendingVtuScopeTag('user-2', 'merchant-1');
+    rememberPendingVtuPurchase('{"mine":true}', 'key-mine', mine);
+    notePendingVtuReference('{"mine":true}', 'VTU-MINE');
+    rememberPendingVtuPurchase('{"theirs":true}', 'key-theirs', theirs);
+    notePendingVtuReference('{"theirs":true}', 'VTU-THEIRS');
+    const fetchMock = mockHistory(() => ({ transactions: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityRetainedSettlement(input));
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain(
+      'reference=VTU-MINE'
+    );
+    expect(recallPendingVtuKey('{"theirs":true}')).toBe('key-theirs');
   });
 
   it('cancels the in-flight pass on account switch', async () => {

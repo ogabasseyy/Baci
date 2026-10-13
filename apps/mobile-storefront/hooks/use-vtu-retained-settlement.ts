@@ -1,6 +1,9 @@
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useEffect } from 'react';
 import { fetchVoucherPin } from '@/hooks/use-vtu-voucher-pin-backfill-fetch';
+import { CONFIG } from '@/lib/config';
 import { listNotedPendingVtuReferences } from '@/lib/pending-vtu-idempotency';
+import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { useAuthStore } from '@/stores/auth-store';
 
 /**
@@ -40,12 +43,20 @@ export function useVtuRetainedSettlement({
   enabled: boolean;
 }): void {
   const userId = useAuthStore((state) => state.user?.id ?? null);
+  const ownerId = useAuthStore((state) =>
+    resolveIdempotencyScopeOwnerId(state.user?.id, state.customer?.id)
+  );
 
   useEffect(() => {
     if (!enabled || !userId) {
       return;
     }
-    const references = listNotedPendingVtuReferences();
+    // Owner-scoped (Codex R62 6rtokd): same pair the idempotency
+    // scope hashed. Foreign references would only burn history
+    // reads under the wrong session; untagged legacy still settle.
+    const references = listNotedPendingVtuReferences(
+      buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID)
+    );
     if (references.length === 0) {
       return;
     }
@@ -80,5 +91,5 @@ export function useVtuRetainedSettlement({
     return () => {
       cancelled = true;
     };
-  }, [enabled, userId]);
+  }, [enabled, ownerId, userId]);
 }

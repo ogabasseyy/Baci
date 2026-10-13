@@ -1,5 +1,9 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import {
+  markPendingVtuCompleted,
+  notePendingVtuReference,
+} from '@/lib/pending-vtu-idempotency';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -57,4 +61,26 @@ export async function refreshWalletAfterSuppressedVtuResult(payment: {
     // Swallowed by design (see docblock): the suppressed UI has
     // nothing to report to, and the committed outcome stands.
   }
+}
+
+/**
+ * Preserves a committed outcome whose UI is suppressed (account
+ * switch or back-navigation mid-flight). Notes the reference so a
+ * switch-back repeat replays instead of minting fresh and debiting
+ * twice; records completion for terminal observations (processing
+ * notes must NOT — the stale guard keys off completion time); and
+ * refreshes the wallet (never-fails) since the suppressed onSuccess
+ * will never fire the parent's invalidation. Shared by the airtime
+ * and bill handlers (Codex R62 6rtokS/6rtokY).
+ */
+export async function preserveSuppressedVtuSuccess(
+  payment: PaymentState,
+  descriptor: string,
+  result: { reference: string; status: string }
+): Promise<void> {
+  notePendingVtuReference(descriptor, result.reference);
+  if (result.status !== 'processing') {
+    markPendingVtuCompleted(descriptor);
+  }
+  await refreshWalletAfterSuppressedVtuResult(payment);
 }

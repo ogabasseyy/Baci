@@ -19,6 +19,7 @@ import {
   useUtilityVoucherBackfill,
   UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS,
   UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS,
+  UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
   UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS,
 } from './use-utility-voucher-backfill';
 
@@ -260,6 +261,69 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('bounds each poll with a per-request timeout', async () => {
+    // Codex R62 6rtokb: a hung history read must consume one
+    // attempt, not stall every later poll. The mock honors the
+    // abort signal, like a real fetch. AbortSignal.timeout runs on
+    // real timers (unfakable), so the test fires the bound manually
+    // and asserts the module combined + valued it correctly.
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const timeoutController = new AbortController();
+    timeoutSpy.mockReturnValue(timeoutController.signal);
+    try {
+      let calls = 0;
+      const fetchMock = vi.fn(
+        async (_url: string, init?: { signal?: AbortSignal }) => {
+          calls += 1;
+          if (calls === 1) {
+            await new Promise<never>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('timed out', 'TimeoutError'));
+              });
+            });
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              transactions: [
+                {
+                  request_reference: 'VTU-1',
+                  status: 'successful',
+                  voucher_pin: 'PIN-1',
+                  refund_pending: false,
+                },
+              ],
+            }),
+          };
+        }
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+      await act(async () => {});
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(timeoutSpy).toHaveBeenCalledWith(
+        UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS
+      );
+
+      await act(async () => {
+        timeoutController.abort();
+        await vi.advanceTimersByTimeAsync(
+          UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+        );
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.current).toMatchObject({
+        pin: 'PIN-1',
+        successful: true,
+      });
+    } finally {
+      timeoutSpy.mockRestore();
+    }
   });
 
   it('scopes history polls by reference', async () => {

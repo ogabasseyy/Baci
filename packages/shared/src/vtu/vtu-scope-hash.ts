@@ -65,3 +65,18 @@ export function normalizePersistedVtuScopeKey(scoped: string): string {
   }
   return hashVtuScopeDescriptor(scoped);
 }
+
+/**
+ * Owner+merchant scope tag for a pending VTU entry. Mirrors the
+ * `merchant:owner` prefix of the scoped-key preimage WITHOUT the
+ * descriptor, so settle passes can filter retained references to
+ * the active account without reversing the one-way scope digest
+ * (Codex R62 6rtokd). Hashed like the scoped key: no new plaintext
+ * identifiers at rest.
+ */
+export function buildPendingVtuScopeTag(
+  ownerId: string | null | undefined,
+  merchantId: string | null | undefined
+): string {
+  return hashVtuScopeDescriptor(`${merchantId ?? ''}:${ownerId ?? ''}`);
+}

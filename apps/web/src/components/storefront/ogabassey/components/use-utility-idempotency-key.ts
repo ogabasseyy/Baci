@@ -1,5 +1,6 @@
 'use client';
 
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useEffect, useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
@@ -158,7 +159,13 @@ export function useUtilityIdempotencyKey({
       payloadSignature
     );
     const recalled = recallPendingVtuKey(scoped) !== undefined;
-    return { key: getPendingVtuKey(scoped), scoped, recalled };
+    // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
+    // the settle filter recomputes this for the active account.
+    const scopeTag = buildPendingVtuScopeTag(
+      userId ?? customerId,
+      merchantId
+    );
+    return { key: getPendingVtuKey(scoped, scopeTag), scoped, recalled };
   };
 
   const forgetScopedKey = (scoped: string) => {

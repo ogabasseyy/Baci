@@ -10,30 +10,22 @@
  * Privacy note: snapshot keys are SHA-256 digests of the purchase
  * scope (recipient phone / meter identifiers never rest here in
  * plaintext — unlike the sessionStorage utility draft, which still
- * does). Deterministic, so recall re-derives the same digest from the
- * payload; unsalted, because any on-disk salt is as readable as the
- * snapshot and would break cross-tab recall. Recall stays
- * owner+merchant scoped (a foreign account can never USE these keys)
- * and entries expire after 7 days, but the digest is verifiable by
- * anyone who can guess the payload (same-profile devtools), so
- * app-wide sign-out storage clearing remains the real fix for the
- * shared-device class (orders, drafts, and this snapshot alike);
- * tracked separately. Deliberately NOT cleared on sign-out/switch:
- * the signer's entries must survive their absence so a switch-back
- * retry replays instead of minting fresh and double-debiting. The
- * 7-day TTL is the clearing mechanism (bounded retention without
- * breaking recovery).
+ * does). Deterministic and unsalted, so recall re-derives the same
+ * digest from the payload. Recall stays owner+merchant scoped (a
+ * foreign account can never USE these keys); the digest is
+ * verifiable by anyone who can guess the payload (same-profile
+ * devtools), so app-wide sign-out clearing remains the real fix
+ * for the shared-device class (tracked separately). Deliberately
+ * NOT cleared on sign-out/switch: the signer's entries must
+ * survive their absence so a switch-back retry replays instead
+ * of minting fresh and double-debiting (the TTL bounds retention).
  *
  * Deploy-window residual: a tab still running pre-digest code cannot
  * read digest keys a post-deploy tab persisted (migrate-on-read only
- * bridges old snapshots to new code, not the reverse), so the same
- * purchase submitted in both tabs during the window mints twice.
- * Same class as the documented simultaneous-mint residual, strictly
- * rarer (needs cross-version tabs plus the same purchase in both),
- * and it heals on the old tab's next reload. Dual-writing both
- * formats would close it but keeps raw identifiers at rest
- * indefinitely, defeating the digest migration — deliberately not
- * done.
+ * bridges old snapshots to new code), so the same purchase in both
+ * tabs during the window mints twice. Rarer than the documented
+ * simultaneous-mint residual and heals on reload; dual-writing both
+ * formats would keep raw identifiers at rest — deliberately not done.
  */
 import {
   isLegacyVtuScopeKey,
@@ -72,19 +64,18 @@ export interface PersistedPendingVtuEntry {
   rememberedAt: number;
   /** Null for entries snapshotted before completion tracking shipped. */
   completedAt?: number | null;
+  /** Owner+merchant scope tag; absent on pre-tag snapshots. */
+  scopeTag?: string;
 }
 
 /**
  * Deletion tombstone: a scope another tab deliberately forgot. Without
  * these, tab B keeps a deleted entry in memory and writes it back on
  * its next persist, resurrecting a completed key (stale success replay
- * without a new debit). `forgottenAt` arbitrates against re-remember:
- * an entry remembered after the tombstone wins.
- * `key` (when present) binds the tombstone to the deleted key
- * generation: a newer in-flight key under the same scope must
- * survive a tombstone written for an older generation (Codex R55
- * 6rrMIj). Absent on tombstones written before the binding
- * shipped — those fall back to timestamp arbitration.
+ * without a new debit). `forgottenAt` arbitrates against re-remember;
+ * `key` (when present) binds the deleted key generation so a newer
+ * in-flight key survives an older generation's tombstone (R55 6rrMIj).
+ * Keyless tombstones (pre-binding) keep timestamp arbitration.
  */
 export interface PersistedVtuTombstone {
   scoped: string;
@@ -104,6 +95,7 @@ export type PendingVtuEntryInput = [
     reference: string | null;
     rememberedAt: number;
     completedAt?: number | null;
+    scopeTag?: string;
   },
 ];
 
@@ -137,11 +129,9 @@ function isPersistedTombstone(
 }
 
 /**
- * Serializes live entries + deletion tombstones for storage (prunes
- * TTL-expired entries of any reference state — mirrors live recall,
- * so a single uniform 7-day horizon governs retention everywhere;
- * tombstones past the horizon are dropped too since the entries they
- * guard have expired regardless).
+ * Serializes live entries + deletion tombstones for storage (drops
+ * expired entries — referenced-processing outlive the TTL — and
+ * horizon-aged tombstones guarding long-gone entries).
  */
 export function serializePendingVtuEntries(
   entries: Iterable<PendingVtuEntryInput>,
@@ -158,6 +148,9 @@ export function serializePendingVtuEntries(
           reference: entry.reference,
           rememberedAt: entry.rememberedAt,
           completedAt: entry.completedAt ?? null,
+          ...(typeof entry.scopeTag === 'string'
+            ? { scopeTag: entry.scopeTag }
+            : {}),
         },
       ]);
     }
@@ -224,6 +217,11 @@ export function parsePendingVtuSnapshot(
         // replay presents success, then forgets — never "Completed").
         completedAt:
           typeof entry.completedAt === 'number' ? entry.completedAt : null,
+        // Pre-tag snapshots omit this: untagged entries fail open in
+        // owner-scoped settle filters (their owner is unknowable).
+        ...(typeof entry.scopeTag === 'string'
+          ? { scopeTag: entry.scopeTag }
+          : {}),
       },
     ]);
   }

@@ -104,6 +104,37 @@ describe('pending-vtu-idempotency-codec', () => {
     expect(legacy.entries.map(([scoped]) => scoped)).toEqual(['a']);
   });
 
+  it('round-trips scope tags, leaving pre-tag snapshots untagged', () => {
+    // Codex R62 6rtokd: the owner-scoped settle filter needs the tag
+    // to survive restarts; pre-tag snapshots parse untagged (fail open).
+    const parsed = parsePendingVtuSnapshot(
+      serializePendingVtuEntries(
+        [
+          ['a', entry({ scopeTag: 'tag-1' })],
+          ['b', entry()],
+        ],
+        []
+      )
+    );
+    expect(parsed.entries[0][1].scopeTag).toBe('tag-1');
+    expect(parsed.entries[1][1].scopeTag).toBeUndefined();
+
+    const legacy = parsePendingVtuSnapshot(
+      JSON.stringify([
+        [
+          'a',
+          {
+            key: 'k',
+            reference: 'REF-A',
+            rememberedAt: Date.now(),
+            completedAt: null,
+          },
+        ],
+      ])
+    );
+    expect(legacy.entries[0][1].scopeTag).toBeUndefined();
+  });
+
   it('ignores corrupt snapshots on parse', () => {
     const empty = { entries: [], forgotten: [] };
     expect(parsePendingVtuSnapshot('{oops')).toEqual(empty);

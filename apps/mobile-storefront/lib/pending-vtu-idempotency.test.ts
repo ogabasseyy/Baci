@@ -1,3 +1,4 @@
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import {
   buildVtuPurchaseDescriptor,
   scopePendingVtuKey,
@@ -417,5 +418,34 @@ describe('pending-vtu-idempotency', () => {
     rememberPendingVtuPurchase('mob-l3', 'key-l3');
 
     expect(listNotedPendingVtuReferences()).toEqual(['REF-SHARED']);
+  });
+
+  it('filters noted references by scope tag, failing open untagged', () => {
+    // Codex R62 6rtokd: the settle pass must not burn history reads
+    // on another account's references. Untagged (pre-tag) entries
+    // fail open — their owner is unknowable.
+    clearPendingVtuKeys();
+    const mine = buildPendingVtuScopeTag('user-1', 'merchant-1');
+    const theirs = buildPendingVtuScopeTag('user-2', 'merchant-1');
+    rememberPendingVtuPurchase('mob-a', 'key-a', mine);
+    notePendingVtuReference('mob-a', 'REF-A');
+    rememberPendingVtuPurchase('mob-b', 'key-b', theirs);
+    notePendingVtuReference('mob-b', 'REF-B');
+    rememberPendingVtuPurchase('mob-c', 'key-c');
+    notePendingVtuReference('mob-c', 'REF-C');
+
+    expect(listNotedPendingVtuReferences(mine).sort()).toEqual([
+      'REF-A',
+      'REF-C',
+    ]);
+    expect(listNotedPendingVtuReferences(theirs).sort()).toEqual([
+      'REF-B',
+      'REF-C',
+    ]);
+    expect(listNotedPendingVtuReferences().sort()).toEqual([
+      'REF-A',
+      'REF-B',
+      'REF-C',
+    ]);
   });
 });

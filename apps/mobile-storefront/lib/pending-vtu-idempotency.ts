@@ -55,14 +55,11 @@ interface PendingVtuPurchase {
   key: string;
   /** Server reference once a response arrives; null while unsent/unanswered. */
   reference: string | null;
+  /** Owner+merchant scope tag (absent on pre-tag entries); settle filter. */
+  scopeTag?: string;
   /** Client-local timestamp of the original submit (elapsed math only). */
   rememberedAt: number;
-  /**
-   * When terminal success was first OBSERVED (null while
-   * processing/unanswered). The stale predicate keys off THIS, never
-   * the submit/noted time, so a slow first completion is presented
-   * instead of misreported as "Already Completed".
-   */
+  /** Terminal-success-observed time (null while processing). Stale keys off THIS. */
   completedAt: number | null;
 }
 
@@ -119,11 +116,10 @@ if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
 }
 
 /**
- * Key previously used for this exact purchase, if it is still pending.
- * Past-TTL entries are dropped instead of recalled (no client signal
- * proves terminality, so retention is horizon-based: 7 days dwarf any
- * plausible processing duration). The 5min stale check still
- * arbitrates success replays within the TTL.
+ * Key previously used for this exact purchase, if still pending.
+ * Referenced-but-uncompleted entries outlive the 7-day TTL (the
+ * server leaves unconfirmed rows processing indefinitely); all
+ * other TTL-aged entries drop.
  */
 export function recallPendingVtuKey(
   descriptor: string,
@@ -140,13 +136,9 @@ export function recallPendingVtuKey(
 }
 
 /**
- * Frees one registry slot by dropping an EXPIRED entry (live recall
- * would drop it on access anyway). TTL-retained referenced-processing
- * entries are never dropped here: they keep the registry OVERFLOWING
- * past the cap instead, since evicting them would lose deduplication
- * and their retry would mint fresh and double-debit. Entries are tiny
- * and retention ends on observed terminality, so overflow is cheap
- * and self-healing.
+ * Frees one slot by dropping an EXPIRED entry (recall would drop it
+ * anyway). TTL-retained entries are never victims — the registry
+ * overflows instead (their retry would mint fresh and double-debit).
  */
 function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingPurchases) {
@@ -160,7 +152,8 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 /** Records the key a purchase was submitted with (cap-enforced). */
 export function rememberPendingVtuPurchase(
   descriptor: string,
-  key: string
+  key: string,
+  scopeTag?: string
 ): void {
   if (
     !pendingPurchases.has(descriptor) &&
@@ -172,6 +165,7 @@ export function rememberPendingVtuPurchase(
   pendingPurchases.set(descriptor, {
     key,
     reference: null,
+    ...(scopeTag !== undefined ? { scopeTag } : {}),
     rememberedAt: Date.now(),
     completedAt: null,
   });
@@ -276,11 +270,19 @@ export function forgetPendingVtuPurchase(
   persistPendingVtuPurchases();
 }
 
-/** Noted references across live entries, deduped (settle hook reads history for these; Codex R57 6rsvy7). */
-export function listNotedPendingVtuReferences(): string[] {
+/**
+ * Noted references across live entries, deduped. With a scope tag,
+ * other owners' tagged entries are excluded; untagged fail open.
+ */
+export function listNotedPendingVtuReferences(scopeTag?: string): string[] {
   const references = new Set<string>();
   for (const entry of pendingPurchases.values()) {
-    if (entry.reference !== null) {
+    if (
+      entry.reference !== null &&
+      (scopeTag === undefined ||
+        entry.scopeTag === undefined ||
+        entry.scopeTag === scopeTag)
+    ) {
       references.add(entry.reference);
     }
   }

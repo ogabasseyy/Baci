@@ -20,6 +20,8 @@ export interface PendingVtuPurchase {
   key: string;
   /** Server reference once a response arrives; null while unsent/unanswered. */
   reference: string | null;
+  /** Owner+merchant scope tag (absent on pre-tag entries); settle filter. */
+  scopeTag?: string;
   /** Client-local timestamp of the original submit (elapsed math only). */
   rememberedAt: number;
   /**

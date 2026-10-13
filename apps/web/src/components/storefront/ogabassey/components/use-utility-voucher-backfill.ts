@@ -4,22 +4,20 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 
-// Bill-style purchases (power, TV, betting) may receive their voucher /
-// token after the initial 202 returns, once the provider reports back.
-// Poll the history endpoint until the pin is persisted so the success
-// view can surface it without forcing a replay (which the stale guard
-// would suppress as "Purchase Already Completed"). Airtime/data ride
-// the same loop for settlement tracking (no voucher expected): without
-// it a telco 202 would sit on "Processing" forever, never settle the
-// retained key or refetch the wallet. Mirrors mobile's
-// useVtuVoucherPinBackfill; web has no TanStack Query, so this uses a
-// plain effect loop with the same interval and attempt cap.
+// Bill-style purchases may receive their voucher after the initial
+// 202, once the provider reports back. Poll history until the pin
+// persists so the success view surfaces it without a replay (which
+// the stale guard would suppress as "Already Completed").
+// Airtime/data ride the same loop for settlement tracking: without
+// it a telco 202 would sit on "Processing" forever. Mirrors
+// mobile's useVtuVoucherPinBackfill (plain loop; same intervals).
 export const UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS = 3000;
 export const UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS = 10_000;
 export const UTILITY_VOUCHER_BACKFILL_PATIENT_INTERVAL_MS = 60_000;
 export const UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS = 10;
 export const UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS = 43;
 export const UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS = 73;
+export const UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS = 10_000; // One hung read must not stall later attempts.
 
 const TAB_TO_HISTORY_TYPE: Record<string, string> = {
   airtime: 'airtime',
@@ -53,9 +51,8 @@ export interface UtilityVoucherBackfill {
   /** Backfilled voucher/token; null until the provider reports it. */
   pin: string | null;
   /**
-   * No refund outstanding: either never debited or the refund RPC
-   * landed. Fail-closed (explicit false only): a missing flag keeps
-   * polling rather than claiming a refund without proof.
+   * No refund outstanding. Fail-closed (explicit false only): a
+   * missing flag keeps polling rather than claiming without proof.
    */
   refundConfirmed: boolean;
   /** Amount credited back, when known. */
@@ -222,7 +219,13 @@ export function useUtilityVoucherBackfill({
         try {
           const response = await fetch(
             `/api/vtu/history?${params.toString()}`,
-            { signal: controller.signal }
+            {
+              // Per-request bound: a hung read must not stall later attempts.
+              signal: AbortSignal.any([
+                controller.signal,
+                AbortSignal.timeout(UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS),
+              ]),
+            }
           );
           if (!response.ok) {
             // 5xx/429 are transient: consume the attempt and retry.

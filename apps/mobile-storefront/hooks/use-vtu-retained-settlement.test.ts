@@ -1,3 +1,4 @@
+import { buildPendingVtuScopeTag } from '@baci/shared';
 import { jest } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import {
@@ -52,7 +53,7 @@ jest.mock('@/stores/auth-store', () => {
 
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'http://localhost:3001' }));
 jest.mock('@/lib/config', () => ({
-  CONFIG: { MERCHANT_SLUG: 'test-merchant' },
+  CONFIG: { MERCHANT_SLUG: 'test-merchant', MERCHANT_ID: 'test-merchant-id' },
 }));
 
 function makeResponse(body: unknown, ok = true, status = 200): Response {
@@ -98,6 +99,25 @@ describe('useVtuRetainedSettlement', () => {
     const url = String(mockFetchWithTimeout.mock.calls[0]?.[0] ?? '');
     expect(url).toContain('reference=REF-SETTLED');
     expect(url).not.toContain('type=');
+  });
+
+  it('skips references tagged to another owner', async () => {
+    // Codex R62 6rtokd: the registry survives switches by design —
+    // the pass must only read the active account's references.
+    const mine = buildPendingVtuScopeTag('user-1', 'test-merchant-id');
+    const theirs = buildPendingVtuScopeTag('user-2', 'test-merchant-id');
+    rememberPendingVtuPurchase('mob-mine', 'key-mine', mine);
+    notePendingVtuReference('mob-mine', 'REF-MINE');
+    rememberPendingVtuPurchase('mob-theirs', 'key-theirs', theirs);
+    notePendingVtuReference('mob-theirs', 'REF-THEIRS');
+    mockFetchWithTimeout.mockResolvedValue(makeResponse({ transactions: [] }));
+
+    renderHook(() => useVtuRetainedSettlement({ enabled: true }));
+
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    const url = String(mockFetchWithTimeout.mock.calls[0]?.[0] ?? '');
+    expect(url).toContain('reference=REF-MINE');
+    expect(recallPendingVtuKey('mob-theirs')).toBe('key-theirs');
   });
 
   it('stays idle without references, session, or enablement', async () => {

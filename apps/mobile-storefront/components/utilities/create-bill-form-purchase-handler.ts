@@ -4,7 +4,6 @@ import { HttpError } from '@/lib/fetch-with-timeout';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
   isStalePendingVtuSuccess,
-  markPendingVtuCompleted,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
@@ -19,6 +18,7 @@ import { getBillPaymentAmountError } from './bill-payment-amount-validation';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
 import { resolveBillFulfillment } from './resolve-bill-fulfillment';
 import {
+  preserveSuppressedVtuSuccess,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
 } from './vtu-account-switch';
@@ -173,38 +173,16 @@ export function createBillFormPurchaseHandler({
           )
         ) {
           // Finalize the SUBMITTER's entry (descriptor captured at
-          // submit) before suppressing the UI: PRESERVE success —
-          // their switch-back repeat must replay the original outcome,
-          // not mint fresh and debit twice. Terminal observations also
-          // record completion (processing notes must NOT): the stale
-          // guard keys off completion time.
-          notePendingVtuReference(descriptor, result.reference);
-          if (result.status !== 'processing') {
-            markPendingVtuCompleted(descriptor);
-          }
-          // The charge committed but the suppressed onSuccess will never
-          // fire the parent's wallet invalidation: refresh here so the
-          // balance is not stale when the submitter returns. Never-fails
-          // wrapper: a refetch rejection must not flip this recorded
-          // success into `Payment Failed`.
-          await refreshWalletAfterSuppressedVtuResult(payment);
+          // submit) so their switch-back repeat replays the original
+          // outcome instead of minting fresh and debiting twice.
+          await preserveSuppressedVtuSuccess(payment, descriptor, result);
           return;
         }
         if (getIsActive && !getIsActive()) {
-          // Back-navigated mid-flight: PRESERVE the entry (reference +
-          // completion) so a reopen retries with the SAME key and replays
-          // this outcome instead of minting fresh and debiting twice.
-          // Suppress onSuccess/Alert: the screen is gone.
-          notePendingVtuReference(descriptor, result.reference);
-          if (result.status !== 'processing') {
-            markPendingVtuCompleted(descriptor);
-          }
-          // The charge committed but the suppressed onSuccess will never
-          // fire the parent's wallet invalidation: refresh here so the
-          // wallet screen shows the post-debit balance. Never-fails
-          // wrapper (see above): the recorded success stands even if the
-          // refetch rejects.
-          await refreshWalletAfterSuppressedVtuResult(payment);
+          // Back-navigated mid-flight: preserve so a reopen retries
+          // with the SAME key and replays. Suppress onSuccess/Alert:
+          // the screen is gone.
+          await preserveSuppressedVtuSuccess(payment, descriptor, result);
           return;
         }
         // 'processing' is non-terminal — the vend is still in flight

@@ -18,6 +18,8 @@ export interface PersistedPendingVtuPurchase {
   rememberedAt: number;
   /** Absent for entries snapshotted before completion tracking shipped. */
   completedAt?: number | null;
+  /** Owner+merchant scope tag; absent on pre-tag snapshots. */
+  scopeTag?: string;
 }
 
 /**
@@ -110,6 +112,9 @@ export function serializePendingVtuEntries(
           reference: entry.reference ?? null,
           rememberedAt: entry.rememberedAt,
           completedAt: entry.completedAt ?? null,
+          ...(typeof entry.scopeTag === 'string'
+            ? { scopeTag: entry.scopeTag }
+            : {}),
         },
       ]);
     }
@@ -190,6 +195,11 @@ export function parsePendingVtuSnapshot(
         // (first replay presents success, then resets).
         completedAt:
           typeof entry.completedAt === 'number' ? entry.completedAt : null,
+        // Pre-tag snapshots omit this: untagged entries fail open in
+        // owner-scoped settle filters (their owner is unknowable).
+        ...(typeof entry.scopeTag === 'string'
+          ? { scopeTag: entry.scopeTag }
+          : {}),
       },
     ]);
   return { entries, forgotten };

@@ -13,7 +13,9 @@ required_checks=(
 checks="$(cat)"
 missing=()
 for expected in "${required_checks[@]}"; do
-  if ! grep -Fqx -- "${expected}" <<<"${checks}"; then
+  if ! awk -F '\t' -v expected="${expected}" \
+    '$1 == expected && $2 == "success" { found = 1 } END { exit !found }' \
+    <<<"${checks}"; then
     missing+=("${expected}")
   fi
 done

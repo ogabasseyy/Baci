@@ -180,19 +180,29 @@ describe('pending-vtu-idempotency', () => {
     ).toBe(false);
   });
 
-  it('drops TTL-expired reference-less entries on recall', () => {
-    // Reference-less entries are never stale by policy (a re-tap
-    // after failure is a retry), so the TTL is their only horizon.
+  it('retains TTL-aged unanswered entries on recall', () => {
+    // Codex R63 6ruGlp: a lost response leaves the reference null
+    // after a possibly-committed debit — dropping the key would mint
+    // fresh on retry and debit twice. Only completed entries drop.
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 9,
-      phoneNumber: 'ttl-drop',
+      phoneNumber: 'ttl-unanswered',
     });
     rememberPendingVtuPurchase(descriptor, 'key-ttl');
     const expired = Date.now() + PERSISTED_VTU_KEY_TTL_MS + 1;
-    expect(recallPendingVtuKey(descriptor, expired)).toBeNull();
+    expect(recallPendingVtuKey(descriptor, expired)).toBe('key-ttl');
+
+    const doneDescriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 9,
+      phoneNumber: 'ttl-done',
+    });
+    rememberPendingVtuPurchase(doneDescriptor, 'key-done');
+    markPendingVtuCompleted(doneDescriptor);
+    expect(recallPendingVtuKey(doneDescriptor, expired)).toBeNull();
     // Deletion sticks: a live recall also misses.
-    expect(recallPendingVtuKey(descriptor)).toBeNull();
+    expect(recallPendingVtuKey(doneDescriptor)).toBeNull();
   });
 
   it('retains TTL-aged referenced entries on recall', () => {
@@ -262,17 +272,18 @@ describe('pending-vtu-idempotency', () => {
   });
 
   it('retains referenced-processing past-TTL entries at the cap (overflow)', () => {
-    // Codex R61 6rtSNk: sig-old is referenced but never terminally
-    // observed, so the cap cannot evict it — eviction would lose the
-    // original key and the retry would double-debit. Only the
-    // unreferenced aged entry is a victim; sig-old overflows instead.
+    // Codex R61 6rtSNk + R63 6ruGlp: sig-old is uncompleted, so the
+    // cap cannot evict it — eviction would lose the original key and
+    // the retry would double-debit. Only the completed aged entry is
+    // a victim; sig-old overflows instead.
     clearPendingVtuKeys();
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
       rememberPendingVtuPurchase('sig-old', 'key-old');
       notePendingVtuReference('sig-old', 'REF-OLD');
-      rememberPendingVtuPurchase('sig-unref', 'key-unref');
+      rememberPendingVtuPurchase('sig-done', 'key-done');
+      markPendingVtuCompleted('sig-done');
       jest.setSystemTime(
         new Date('2026-01-01T00:00:00Z').getTime() +
           PERSISTED_VTU_KEY_TTL_MS -
@@ -287,8 +298,8 @@ describe('pending-vtu-idempotency', () => {
           1000
       );
       rememberPendingVtuPurchase('live-new', 'key-new');
-      // Unreferenced aged victim evicted…
-      expect(recallPendingVtuKey('sig-unref')).toBeNull();
+      // Completed aged victim evicted…
+      expect(recallPendingVtuKey('sig-done')).toBeNull();
       // …TTL-aged referenced-processing entry retained (overflow)…
       expect(recallPendingVtuKey('sig-old')).toBe('key-old');
       // …young survivors kept.

@@ -58,26 +58,30 @@ describe('pending-vtu-idempotency-codec', () => {
     });
   });
 
-  it('drops TTL-expired entries on serialize and parse', () => {
+  it('drops TTL-expired completed entries on serialize and parse', () => {
+    // Only OBSERVED completion expires past the TTL (Codex R63
+    // 6ruGlp): uncompleted entries — answered or not — may still
+    // resolve server-side, so they outlive the horizon.
     const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const done = entry({ completedAt: Date.now() });
 
     expect(
-      serializePendingVtuEntries([['a', entry()]], [], Date.now() + weekMs + 1)
+      serializePendingVtuEntries([['a', done]], [], Date.now() + weekMs + 1)
     ).toBe('{"entries":[],"forgotten":[]}');
 
     expect(
       parsePendingVtuSnapshot(
-        JSON.stringify([['a', entry({ rememberedAt: 1 })]])
+        JSON.stringify([['a', entry({ rememberedAt: 1, completedAt: 2 })]])
       )
     ).toEqual({ entries: [], forgotten: [] });
   });
 
-  it('retains referenced-processing entries past the TTL on serialize and parse', () => {
-    // Codex R61 6rtSNk: a referenced but never-terminally-observed
-    // entry is still resolvable (the server keeps provider-unknown
-    // rows processing indefinitely), so the TTL must not delete the
-    // only client mapping to the original key — the retry would mint
-    // fresh and double-debit. Unreferenced and completed entries
+  it('retains uncompleted entries past the TTL on serialize and parse', () => {
+    // Codex R61 6rtSNk + R63 6ruGlp: referenced-processing AND
+    // unanswered entries may still resolve server-side (a lost
+    // response leaves the reference null after a committed debit),
+    // so the TTL must not delete their key mapping — the retry
+    // would mint fresh and double-debit. Only completed entries
     // still drop.
     const weekMs = 7 * 24 * 60 * 60 * 1000;
     const parsed = parsePendingVtuSnapshot(
@@ -91,17 +95,17 @@ describe('pending-vtu-idempotency-codec', () => {
         Date.now() + weekMs + 1
       )
     );
-    expect(parsed.entries.map(([scoped]) => scoped)).toEqual(['a']);
-    expect(parsed.entries[0][1].reference).toBe('REF-A');
+    expect(parsed.entries.map(([scoped]) => scoped)).toEqual(['a', 'b']);
 
     // Legacy raw snapshots get the same retention on parse.
     const legacy = parsePendingVtuSnapshot(
       JSON.stringify([
         ['a', entry({ reference: 'REF-A', rememberedAt: 1 })],
         ['b', entry({ rememberedAt: 1 })],
+        ['c', entry({ rememberedAt: 1, completedAt: 2 })],
       ])
     );
-    expect(legacy.entries.map(([scoped]) => scoped)).toEqual(['a']);
+    expect(legacy.entries.map(([scoped]) => scoped)).toEqual(['a', 'b']);
   });
 
   it('round-trips scope tags, leaving pre-tag snapshots untagged', () => {

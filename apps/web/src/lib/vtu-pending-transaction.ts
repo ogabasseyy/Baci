@@ -13,9 +13,15 @@ import {
   verifyBillCustomer as verifyMonnifyBillCustomer,
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
+import {
+  type CustomerRecord,
+  resolveVtuCustomer,
+} from './vtu-customer-resolution';
+
+export { resolveVtuCustomer };
+
 import { calculateCommerce } from '@/lib/supabase/client';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
-import { linkVtuCustomerByEmail } from '@/lib/vtu-customer-link';
 import { VTU_SUBMISSION_MARKER_ERA_KEY } from '@/lib/vtu-flagged-recovery';
 import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
 import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
@@ -386,15 +392,6 @@ function resolveCommissionProviderKey({
   return key;
 }
 
-interface CustomerRecord {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  phone: string | null;
-  user_id: string | null;
-}
-
 interface MerchantRecord {
   id: string;
   slug: string;
@@ -432,71 +429,6 @@ export interface PreparedVtuTransaction {
     status: string;
     type: PurchaseInput['type'];
   };
-}
-
-export async function resolveVtuCustomer({
-  supabase,
-  merchantId,
-  strictLookups = false,
-  user,
-}: {
-  supabase: SupabaseClient;
-  merchantId: string;
-  /** Strict policy (see vtu-strict-lookups): throw instead of null. */
-  strictLookups?: boolean;
-  user: User;
-}) {
-  const { data: byUserId, error: byUserIdError } = await supabase
-    .from('customers')
-    .select('id, email, first_name, last_name, phone, user_id')
-    .eq('merchant_id', merchantId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-  throwIfStrictVtuLookupError({
-    context: 'look up VTU customer',
-    error: byUserIdError,
-    strictLookups,
-  });
-
-  if (byUserId) {
-    return byUserId as CustomerRecord;
-  }
-
-  if (!user.email) {
-    return null;
-  }
-
-  const { data: byEmail, error: byEmailError } = await supabase
-    .from('customers')
-    .select('id, email, first_name, last_name, phone, user_id')
-    .eq('merchant_id', merchantId)
-    .eq('email', user.email)
-    .maybeSingle();
-  throwIfStrictVtuLookupError({
-    context: 'look up VTU customer',
-    error: byEmailError,
-    strictLookups,
-  });
-
-  if (byEmail && !byEmail.user_id) {
-    return linkVtuCustomerByEmail({
-      byEmail,
-      strictLookups,
-      supabase,
-      userId: user.id,
-    });
-  }
-
-  // Tenant isolation: an email-matched row linked to a DIFFERENT auth
-  // user must never be returned — every caller would otherwise transact
-  // as that customer (all callers fail closed on null). The email claim
-  // alone cannot distinguish the owner from an account squatting on an
-  // unverified address.
-  if (byEmail?.user_id && byEmail.user_id !== user.id) {
-    return null;
-  }
-
-  return (byEmail as CustomerRecord | null) ?? null;
 }
 
 export async function preparePendingVtuTransaction({

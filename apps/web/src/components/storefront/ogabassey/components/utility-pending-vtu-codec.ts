@@ -43,18 +43,19 @@ import {
 export const PERSISTED_VTU_KEY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * TTL expiry with referenced-processing retention (Codex R61 6rtSNk):
- * referenced-but-uncompleted entries outlive the TTL because the
- * server keeps provider-unknown rows processing indefinitely —
- * deleting the key mapping would mint fresh on retry and
- * double-debit. Retention ends on observed terminality.
+ * TTL expiry with uncompleted retention (R61 6rtSNk, R63 6ruGlp):
+ * uncompleted entries — referenced-processing AND unanswered —
+ * outlive the TTL (provider-unknown rows stay processing
+ * indefinitely; a lost response leaves reference null after a
+ * committed debit). Only OBSERVED-completed entries expire past
+ * the TTL — their retry is a new intent.
  */
 export function isExpiredPendingVtuEntry(
   entry: PersistedPendingVtuEntry,
   now: number = Date.now()
 ): boolean {
   if (now - entry.rememberedAt <= PERSISTED_VTU_KEY_TTL_MS) return false;
-  return entry.reference === null || entry.completedAt != null;
+  return entry.completedAt != null;
 }
 
 

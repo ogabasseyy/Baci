@@ -13,7 +13,7 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
-      trusted_changed:
+      force_trusted_change:
         description: 'Fail the SARIF filter as if trusted files changed (for automation that cannot trigger pull_request checks)'
         type: boolean
         default: false
@@ -115,7 +115,7 @@ jobs:
             # unless a dispatch explicitly asserts a trusted change
             # (the Muse pin updater, whose PR checks are dispatched
             # because GITHUB_TOKEN cannot trigger pull_request runs).
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.trusted_changed }}" = "true" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_trusted_change }}" = "true" ]; then
               echo "trusted_changed=true" >> "$GITHUB_OUTPUT"
             else
               echo "trusted_changed=false" >> "$GITHUB_OUTPUT"

@@ -80,10 +80,6 @@ export function LoyaltyEnrollmentForm({
     referralCode: string;
   } | null>(null);
 
-  if (enrolled) {
-    return null; // Already enrolled, component should be hidden
-  }
-
   const handleEnroll = () => {
     void submitLoyaltyEnrollment({
       enroll,
@@ -96,6 +92,10 @@ export function LoyaltyEnrollmentForm({
     });
   };
 
+  // The receipt renders before the enrolled branch below: the enroll
+  // refresh flips enrolled before enroll() returns, and hiding on
+  // enrolled first would discard the success card (points + referral
+  // code) the shopper just earned.
   if (showSuccess && enrollmentData) {
     return (
       <Card className="border-green-200 bg-green-50">
@@ -128,6 +128,10 @@ export function LoyaltyEnrollmentForm({
         </CardContent>
       </Card>
     );
+  }
+
+  if (enrolled) {
+    return null; // Already enrolled, component should be hidden
   }
 
   const benefits = [

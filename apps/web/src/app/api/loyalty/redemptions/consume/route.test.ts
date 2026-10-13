@@ -47,6 +47,9 @@ let rpcResult: Record<string, unknown> = {
   redemption_id: 'redemption-1',
   discount_code: 'RDM-ABC123',
   reward_type: 'free_product',
+  reward_id: 'reward-1',
+  reward_name: 'Free mug',
+  reward_product_id: 'product-1',
   customer_id: 'customer-1',
   used_at: '2026-10-13T00:00:00.000Z',
 };
@@ -109,6 +112,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
       redemption_id: 'redemption-1',
       discount_code: 'RDM-ABC123',
       reward_type: 'free_product',
+      reward_id: 'reward-1',
+      reward_name: 'Free mug',
+      reward_product_id: 'product-1',
       customer_id: 'customer-1',
       used_at: '2026-10-13T00:00:00.000Z',
     };
@@ -154,6 +160,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
       id: 'redemption-1',
       discount_code: 'RDM-ABC123',
       reward_type: 'free_product',
+      reward_id: 'reward-1',
+      reward_name: 'Free mug',
+      reward_product_id: 'product-1',
       customer_id: 'customer-1',
       used_at: '2026-10-13T00:00:00.000Z',
     });

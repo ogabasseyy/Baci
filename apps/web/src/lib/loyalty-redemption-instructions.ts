@@ -71,7 +71,7 @@ export function getRedemptionInstructions(
     case 'exclusive_access':
       return 'This code grants you early access to new products and exclusive sales.';
     case 'store_credit':
-      return 'The credit has been added to your store balance and applies automatically at checkout.';
+      return 'The credit has been added to your store balance. Enable Wallet Credit at checkout to apply it to your order.';
     default:
       return 'Apply this code at checkout or present it in-store to redeem your reward.';
   }

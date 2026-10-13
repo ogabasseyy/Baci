@@ -68,7 +68,7 @@ describe('getRedemptionInstructions', () => {
     expect(
       getRedemptionInstructions({ reward_type: 'store_credit' }, null)
     ).toBe(
-      'The credit has been added to your store balance and applies automatically at checkout.'
+      'The credit has been added to your store balance. Enable Wallet Credit at checkout to apply it to your order.'
     );
   });
 });

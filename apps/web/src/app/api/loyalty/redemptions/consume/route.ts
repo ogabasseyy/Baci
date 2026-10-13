@@ -15,6 +15,9 @@ type ConsumeRpcResult = {
   redemption_id?: string;
   discount_code?: string;
   reward_type?: string;
+  reward_id?: string | null;
+  reward_name?: string | null;
+  reward_product_id?: string | null;
   customer_id?: string;
   used_at?: string;
 };
@@ -105,6 +108,9 @@ export async function POST(request: NextRequest) {
         id: result.redemption_id,
         discount_code: result.discount_code,
         reward_type: result.reward_type,
+        reward_id: result.reward_id ?? null,
+        reward_name: result.reward_name ?? null,
+        reward_product_id: result.reward_product_id ?? null,
         customer_id: result.customer_id,
         used_at: result.used_at,
       },

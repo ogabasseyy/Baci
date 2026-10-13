@@ -66,6 +66,8 @@ SET search_path = ''
 AS $$
 DECLARE
   v_row record;
+  v_reward_name text;
+  v_reward_product_id uuid;
 BEGIN
   IF p_merchant_id IS NULL OR p_code IS NULL
      OR pg_catalog.btrim(p_code) = '' THEN
@@ -93,7 +95,8 @@ BEGIN
       OR (rr.reward_type = 'discount'
         AND COALESCE(rr.reward_value, 0) <= 0)
     )
-  RETURNING rr.id, rr.discount_code, rr.reward_type, rr.customer_id, rr.used_at
+  RETURNING rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
+    rr.customer_id, rr.used_at
   INTO v_row;
 
   IF NOT FOUND THEN
@@ -102,11 +105,24 @@ BEGIN
     );
   END IF;
 
+  -- Fulfillment identity for the caller: staff were given this path
+  -- precisely because their RLS client cannot inspect the redemption
+  -- afterward, so say WHICH reward (and product, for free_product)
+  -- the presented code was for. The reward row may since be deleted
+  -- (reward_id SET NULL), leaving the type as the only identity.
+  SELECT lr.name, lr.reward_product_id
+  INTO v_reward_name, v_reward_product_id
+  FROM public.loyalty_rewards AS lr
+  WHERE lr.id = v_row.reward_id;
+
   RETURN jsonb_build_object(
     'success', true,
     'redemption_id', v_row.id,
     'discount_code', v_row.discount_code,
     'reward_type', v_row.reward_type,
+    'reward_id', v_row.reward_id,
+    'reward_name', v_reward_name,
+    'reward_product_id', v_reward_product_id,
     'customer_id', v_row.customer_id,
     'used_at', v_row.used_at
   );

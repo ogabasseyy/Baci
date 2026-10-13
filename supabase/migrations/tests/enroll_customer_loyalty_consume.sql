@@ -3,21 +3,30 @@
 -- rewards that checkout never honors.
 SET ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.loyalty_rewards (
+  id, merchant_id, name, points_cost, reward_type, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000501',
+  '01aa0000-0000-4000-8000-000000000001', 'Consume product', 50,
+  'free_product', true
+);
 INSERT INTO public.reward_redemptions (
-  merchant_id, customer_id, points_spent, reward_type, reward_value,
-  discount_code, used, expires_at
+  merchant_id, customer_id, reward_id, points_spent, reward_type,
+  reward_value, discount_code, used, expires_at
 ) VALUES
   ('01aa0000-0000-4000-8000-000000000001',
-   '01aa0000-0000-4000-8000-000000000012', 50, 'free_product', NULL,
+   '01aa0000-0000-4000-8000-000000000012',
+   '01aa0000-0000-4000-8000-000000000501',
+   50, 'free_product', NULL,
    'RDM-CONSUME1', NULL, pg_catalog.now() + interval '30 days'),
   ('01aa0000-0000-4000-8000-000000000001',
-   '01aa0000-0000-4000-8000-000000000012', 50, 'discount', NULL,
+   '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'discount', NULL,
    'RDM-CONSUME2', false, pg_catalog.now() + interval '30 days'),
   ('01aa0000-0000-4000-8000-000000000001',
-   '01aa0000-0000-4000-8000-000000000012', 50, 'discount_fixed', 500,
+   '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'discount_fixed', 500,
    'RDM-CONSUME3', false, pg_catalog.now() + interval '30 days'),
   ('01aa0000-0000-4000-8000-000000000001',
-   '01aa0000-0000-4000-8000-000000000012', 50, 'free_shipping', NULL,
+   '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'free_shipping', NULL,
    'RDM-CONSUME4', false, pg_catalog.now() - interval '1 day');
 RESET ROLE;
 
@@ -29,6 +38,9 @@ SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'true'
      AND result ->> 'discount_code' = 'RDM-CONSUME1'
+     AND result ->> 'reward_name' = 'Consume product'
+     AND result ->> 'reward_id'
+       = '01aa0000-0000-4000-8000-000000000501'
    FROM public.consume_loyalty_redemption(
      '01aa0000-0000-4000-8000-000000000001', 'rdm-consume1'
    ) AS result),

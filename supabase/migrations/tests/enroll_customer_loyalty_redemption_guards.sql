@@ -41,3 +41,30 @@ SELECT pg_temp.assert_true(
   ),
   'over-100% reward redeemed or stayed advertised'
 );
+
+-- A zero maximum-redemption cap refuses the mint before any spend:
+-- the code would otherwise be consumed at checkout for no discount.
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 0
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'program_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Wild percent')
+   ) AS result)
+  AND (SELECT points_balance = 100
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
+  'zero-cap redemption spent points or minted a code'
+);
+
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 50
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';

@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
       p_code: code,
     });
 
-    // Errors are retryable 500s: fall-through would mislabel RDM-* codes.
     if (error) {
       return lookupErrorResponse(
         'Discount code lookup failed',
@@ -80,7 +79,6 @@ export async function POST(request: NextRequest) {
           p_code: code,
         }
       );
-      // A failed lookup is a retryable server failure, not invalid.
       if (loyaltyError) {
         return lookupErrorResponse(
           'Loyalty code lookup failed',
@@ -187,13 +185,19 @@ export async function POST(request: NextRequest) {
           },
           cart_total
         );
-        // Explicit null: no discount_codes row exists for loyalty codes.
+        // Explicit null (no discount_codes row); effective value.
+        const effectiveDiscountValue =
+          loyaltyDiscountType === 'percentage'
+            ? cart_total > 0
+              ? Math.round((loyaltyDiscountAmount / cart_total) * 10000) / 100
+              : 0
+            : loyaltyDiscountAmount;
         return NextResponse.json({
           valid: true,
           discount_code_id: null,
           code,
           discount_type: loyaltyDiscountType,
-          discount_value: loyaltyValue,
+          discount_value: effectiveDiscountValue,
           discount_amount: loyaltyDiscountAmount,
           minimum_order: loyaltyCode.minimum_order_amount
             ? Number(loyaltyCode.minimum_order_amount)
@@ -210,7 +214,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if code has started
     if (
       discountCode.starts_at &&
       new Date(discountCode.starts_at) > new Date()
@@ -221,7 +224,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if code has expired
     if (
       discountCode.expires_at &&
       new Date(discountCode.expires_at) < new Date()
@@ -232,7 +234,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check usage limit
     if (
       discountCode.usage_limit != null &&
       discountCode.usage_count >= discountCode.usage_limit
@@ -243,7 +244,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check minimum purchase amount
     if (
       discountCode.minimum_purchase_amount != null &&
       cart_total < Number(discountCode.minimum_purchase_amount)
@@ -257,8 +257,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Single source of truth for the amount (mirrored by the redemption RPC),
-    // so caps and rounding stay aligned with the order route and the DB.
+    // Single source of truth for the amount (mirrors the order route).
     const discountAmount = computeDiscountAmountForSubtotal(
       {
         discount_type:

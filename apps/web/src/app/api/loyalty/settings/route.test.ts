@@ -170,6 +170,17 @@ describe('POST /api/loyalty/settings', () => {
     expect(json.error).toBe('Failed to save settings');
   });
 
+  it('returns 400 for an out-of-range maximum_redemption_percentage', async () => {
+    const response = await POST(
+      makeRequest({ maximum_redemption_percentage: 0 })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toContain('maximum_redemption_percentage');
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it('persists settings when the request is authenticated and CSRF is valid', async () => {
     const response = await POST(makeRequest({ enabled: true }));
     const json = await response.json();

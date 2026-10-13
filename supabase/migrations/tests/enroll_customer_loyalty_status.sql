@@ -109,6 +109,20 @@ SELECT pg_temp.assert_true(
   'tier-crossing status returned the wrong tier'
 );
 
+-- 14c. Status derives the tier from the CURRENT ladder, not the stored rung.
+UPDATE public.loyalty_settings SET tiers = '[{"name": "Bronze", "perks": [], "minPoints": 0, "multiplier": 1.0}, {"name": "Silver", "perks": ["free_shipping"], "minPoints": 2000, "multiplier": 1.25}]'::jsonb WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'current_tier' = 'Bronze'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015'
+   ) AS result),
+  'status kept the stored tier after a ladder edit'
+);
+
+UPDATE public.loyalty_settings SET tiers = '[{"name": "Bronze", "perks": [], "minPoints": 0, "multiplier": 1.0}, {"name": "Silver", "perks": ["free_shipping"], "minPoints": 1000, "multiplier": 1.25}, {"name": "Gold", "perks": ["free_shipping", "early_access"], "minPoints": 5000, "multiplier": 1.5}, {"name": "Platinum", "perks": ["free_shipping", "early_access", "exclusive_discounts"], "minPoints": 10000, "multiplier": 2.0}]'::jsonb WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
 -- 15. The catalog projection surfaces minimum_order_amount so the UI can
 -- disclose the checkout minimum before the customer spends points.
 UPDATE public.loyalty_rewards
@@ -116,8 +130,7 @@ SET minimum_order_amount = 2500
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND name = 'Free shipping';
 
--- Member 011 belongs to user 101 (same caller as case 14): the status
--- function rejects cross-owner reads, so re-auth past case 14b's 105.
+-- Member 011 belongs to user 101: re-auth past case 14b's 105.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
 
 SELECT pg_temp.assert_true(
@@ -131,9 +144,8 @@ SELECT pg_temp.assert_true(
   'status projection dropped minimum_order_amount'
 );
 
--- 15b. Duplicate tier names collapse to the lowest threshold (mirroring
--- the route's dedupeLadderByName): last-match-wins would oscillate
--- Silver -> Gold -> Silver as points grow past the second Silver rung.
+-- 15b. Duplicate tier names collapse to the lowest threshold
+-- (last-match-wins would oscillate Silver -> Gold -> Silver).
 UPDATE public.loyalty_settings
 SET tiers = '[{"name": "Silver", "minPoints": 1000}, {"name": "Silver", "minPoints": 5000}, {"name": "Gold", "minPoints": 3000}, {"name": "Platinum", "minPoints": 10000}]'::jsonb
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
@@ -149,9 +161,8 @@ UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
--- 15c. History carries the issued code as a recovery receipt: a capped
--- reward leaves the catalog once its redemption response is lost, so
--- the redemption transaction surfaces the code for later recovery.
+-- 15c. History carries the issued code as a recovery receipt for
+-- capped rewards that already left the catalog.
 INSERT INTO public.reward_redemptions (
   id, customer_id, merchant_id, points_spent, reward_type,
   reward_value, discount_code
@@ -184,8 +195,7 @@ SELECT pg_temp.assert_true(
   'history dropped the issued redemption code'
 );
 
--- Fixture cleanup: the FIFO projection cases walk member 011's ledger,
--- so the receipt rows above must not leak into later files.
+-- Fixture cleanup: receipt rows must not leak into later files.
 DELETE FROM public.points_transactions
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND customer_id = '01aa0000-0000-4000-8000-000000000011'
@@ -194,9 +204,8 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
 DELETE FROM public.reward_redemptions
 WHERE id = '01aa0000-0000-4000-8000-00000000015c';
 
--- 15d. Types with no fulfillment path are unredeemable and hidden:
--- checkout honors discount-typed codes only, so Ship perk fails
--- closed and never reaches the catalog (member 011, user 101).
+-- 15d. Types with no fulfillment path are unredeemable and hidden
+-- (checkout honors discount-typed codes only).
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
      AND result ->> 'error' = 'reward_unavailable'
@@ -223,8 +232,7 @@ SELECT pg_temp.assert_true(
   'fulfillment-less reward type reached the catalog'
 );
 
--- 15e. Store credit is NGN-only: the wallet ledger cannot spend it
--- off-NGN, so a USD merchant's reward fails closed and stays hidden.
+-- 15e. Store credit is NGN-only (wallet cannot spend it off-NGN).
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, reward_value, enabled
 ) VALUES (
@@ -238,8 +246,7 @@ SELECT id AS probe_reward_id FROM public.loyalty_rewards
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND name = 'NGN probe' \gset
 
--- merchants UPDATE is owner/staff-only under RLS: flip as the
--- fixture owner, then drop back to member 011's owner for the calls.
+-- Flip merchants as the fixture owner (RLS), then drop back.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
 UPDATE public.merchants SET payout_currency = 'USD'
 WHERE id = '01aa0000-0000-4000-8000-000000000001';
@@ -283,8 +290,7 @@ SELECT pg_temp.assert_true(
   'non-NGN store credit reached the catalog'
 );
 
--- Restore the NGN default and remove the probe: later files assume an
--- NGN merchant and enumerate the catalog.
+-- Restore the NGN default: later files assume an NGN merchant.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000107');
 UPDATE public.merchants SET payout_currency = DEFAULT
 WHERE id = '01aa0000-0000-4000-8000-000000000001';

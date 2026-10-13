@@ -71,8 +71,13 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
 
-  -- Lock the member row: concurrent redemptions must serialize on the
-  -- balance check below instead of double-spending.
+  -- A non-positive/over-100 cap mints a worthless code: refuse.
+  IF v_max_redemption_pct IS NOT NULL
+     AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
+  END IF;
+
+  -- Lock the member row: redemptions serialize on the balance check.
   SELECT id, COALESCE(points_balance, 0)
   INTO v_loyalty_id, v_balance
   FROM public.customer_loyalty
@@ -84,8 +89,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'not_enrolled');
   END IF;
 
-  -- Reconcile expired purchase credits first (FIFO unspent remainder
-  -- only); the member-row lock stops double-counting.
+  -- Reconcile expired purchase credits first (FIFO remainder only).
   v_expired_points := public.calculate_unspent_expired_points(
     p_merchant_id, p_customer_id
   );
@@ -114,7 +118,7 @@ BEGIN
     );
   END IF;
 
-  -- Lock the reward row: finite stock decrements atomically below.
+  -- Lock the reward row (finite stock decrements below).
   SELECT id, name, reward_type, reward_value, points_cost, stock_quantity,
          usage_limit_per_customer, minimum_order_amount
   INTO v_reward
@@ -176,9 +180,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit cannot be honored (no order context here):
-  -- fail closed. Currency is locked and gated pre-mint below (same
-  -- rejection as the status RPC hides; keep the two in sync).
+  -- Minimum-gated store credit fails closed (no order context here);
+  -- currency is locked and gated pre-mint below.
   IF v_reward.reward_type = 'store_credit'
      AND v_reward.minimum_order_amount IS NOT NULL
      AND v_reward.minimum_order_amount > 0 THEN
@@ -197,8 +200,7 @@ BEGIN
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
 
-  -- Lock merchant currency before minting (store_credit only): a later flip
-  -- would strand a phantom redemption; the held lock stays valid to settlement.
+  -- Lock merchant currency before minting (store_credit only).
   IF v_reward.reward_type = 'store_credit' THEN
     PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
     IF NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
@@ -207,9 +209,7 @@ BEGIN
   END IF;
 
   -- Mint a merchant-unique code (probe + insert-retry), excluding
-  -- merchant discount_codes too (checkout resolves merchant-first).
-  -- The issuance currency is stamped now: a later payout_currency
-  -- change must not re-denominate this already-paid fixed code.
+  -- merchant discount_codes; stamp issuance currency + cap snapshot.
   v_currency := public.merchant_resolved_currency(p_merchant_id);
   LOOP
     v_attempt := v_attempt + 1;

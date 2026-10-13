@@ -143,6 +143,22 @@ export async function POST(request: NextRequest) {
     const merchantId = merchantContext.merchantId;
 
     const body = await request.json();
+    // The cap binds issued codes at checkout: a non-positive or
+    // over-100 value would mint codes worth nothing (or fail there).
+    if (
+      body.maximum_redemption_percentage != null &&
+      (!Number.isFinite(Number(body.maximum_redemption_percentage)) ||
+        Number(body.maximum_redemption_percentage) <= 0 ||
+        Number(body.maximum_redemption_percentage) > 100)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'maximum_redemption_percentage must be greater than 0 and at most 100',
+        },
+        { status: 400 }
+      );
+    }
     const {
       enabled,
       program_name,

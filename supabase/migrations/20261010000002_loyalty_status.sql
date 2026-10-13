@@ -253,7 +253,11 @@ BEGIN
     'enrolled', true,
     'points_balance', v_spendable,
     'lifetime_points', COALESCE(v_loyalty.lifetime_points, 0),
-    'current_tier', COALESCE(v_loyalty.current_tier, 'Bronze'),
+    -- Derive from the current ladder, not the stored rung: a merchant
+    -- tier edit must not leave members on obsolete benefits until
+    -- their next purchase recalculates it.
+    'current_tier', public.calculate_loyalty_tier(
+      COALESCE(v_loyalty.lifetime_points, 0), p_merchant_id),
     'referral_code', v_loyalty.referral_code,
     'tiers', COALESCE(v_settings.tiers, '[]'::jsonb),
     'signup_bonus_points', COALESCE(v_settings.signup_bonus_points, 0),

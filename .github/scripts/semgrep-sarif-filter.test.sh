@@ -117,7 +117,7 @@ t combined-flags-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${F
 
 # --- agent runner + installer guards ---
 t runner-missing 1 "agent-runner-missing" happy.sarif "rm:$R"
-t runner-count 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}muse --version"
+t runner-count 1 "agent-invocation-count" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}muse --version"
 t runner-shell 1 "agent-shell-boundary" happy.sarif "$R${FS}2:--disable-shell${FS}r${FS}--disable-shell${FS}--disable-shelx"
 t runner-suffix 1 "agent-shell-boundary" happy.sarif "$R${FS}2:--disable-shell${FS}d${RS}$R${FS}2:--disable-write${FS}d${RS}$R${FS}muse-stderr.log\"${FS}r${FS}muse-stderr.log\"${FS}muse-stderr.log\"; echo --disable-shell --disable-write"
 t token-alias 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          MUSE_GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}"

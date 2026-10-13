@@ -70,8 +70,8 @@ AS $$
         OR EXISTS (
           SELECT 1 FROM public.orders AS o
           WHERE o.id = rr.used_on_order_id
-            AND (o.shipping_status = 'cancelled'
-              OR o.payment_status = 'cancelled')
+            AND (o.shipping_status IN ('cancelled', 'canceled')
+              OR o.payment_status IN ('cancelled', 'canceled'))
         ))
       AND (rr.expires_at IS NULL OR rr.expires_at > pg_catalog.now())
       AND NOT EXISTS (

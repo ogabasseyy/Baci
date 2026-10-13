@@ -219,6 +219,14 @@ BEGIN
         )
         OR (reward_value > 0 AND (reward_type <> 'discount_percentage' OR reward_value <= 100))
       )
+      -- Hide fixed rewards whose value rounds to zero (the redemption
+      -- RPC rejects them; keep in sync): a 0.10 fixed reward is
+      -- affordable-looking but permanently unredeemable.
+      AND (
+        reward_type NOT IN ('discount', 'discount_fixed')
+        OR reward_value IS NULL
+        OR pg_catalog.round(reward_value) > 0
+      )
       -- Hide unhonorable store credit (same predicates as the
       -- redemption RPC; keep the two in sync): minimums are
       -- unenforceable without order context, and the wallet ledger

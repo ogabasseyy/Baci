@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RedemptionSuccessDialog } from './redemption-success-dialog';
 
@@ -87,9 +87,9 @@ describe('RedemptionSuccessDialog', () => {
     expect(screen.getByText('RDM-ABC123')).toBeInTheDocument();
   });
 
-  it('copies the code and toasts on copy click', () => {
+  it('copies the code and toasts on copy click', async () => {
     mockToast.mockClear();
-    const writeText = vi.fn();
+    const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal('navigator', { clipboard: { writeText } });
 
     render(
@@ -105,10 +105,42 @@ describe('RedemptionSuccessDialog', () => {
     );
 
     expect(writeText).toHaveBeenCalledWith('RDM-ABC123');
-    expect(mockToast).toHaveBeenCalledWith({
-      title: 'Copied!',
-      description: 'Redemption code copied to clipboard',
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Copied!',
+        description: 'Redemption code copied to clipboard',
+      });
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('toasts a failure instead of success when the clipboard rejects', async () => {
+    mockToast.mockClear();
+    const writeText = vi.fn(() => Promise.reject(new Error('denied')));
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={RESULT}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copy redemption code' })
+    );
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Copy failed',
+        description: 'Select the code and copy it manually',
+        variant: 'destructive',
+      });
+    });
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Copied!' })
+    );
     vi.unstubAllGlobals();
   });
 

@@ -282,13 +282,13 @@ UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
--- 10d. Enrollment pins the settings row (FOR UPDATE) through settlement
+-- 10d. Enrollment pins the settings row (FOR SHARE) through settlement
 -- so a concurrent disable or bonus change cannot slip under the stale
 -- read. (Single session here; pinned on the definition like case 10c.)
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.enroll_customer_loyalty(uuid,uuid,text)'::pg_catalog.regprocedure
-  ) LIKE '%FROM public.loyalty_settings%FOR UPDATE%',
+  ) LIKE '%FROM public.loyalty_settings%FOR SHARE%',
   'enrollment lost the settings-row lock'
 );
 

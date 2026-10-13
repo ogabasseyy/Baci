@@ -86,7 +86,8 @@ BEGIN
   END IF;
 
   -- Fail closed when the program is missing/disabled; clamp negatives to
-  -- zero. FOR UPDATE pins the row through settlement (no deadlock: the
+  -- zero. FOR SHARE pins the snapshot through settlement without
+  -- serializing concurrent enrollments/redemptions on the row (the
   -- settings endpoint never takes the advisory creation lock below).
   SELECT
     GREATEST(COALESCE(signup_bonus_points, 0), 0),
@@ -95,7 +96,7 @@ BEGIN
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
     AND enabled IS TRUE
-  FOR UPDATE;
+  FOR SHARE;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');

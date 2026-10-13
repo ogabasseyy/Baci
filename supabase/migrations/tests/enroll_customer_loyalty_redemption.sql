@@ -266,12 +266,12 @@ SELECT pg_temp.assert_true(
   'code mint does not probe the merchant namespace'
 );
 
--- Redemption pins the settings row (FOR UPDATE) like enrollment
+-- Redemption pins the settings row (FOR SHARE) like enrollment
 -- (single session; pinned like case 10d).
 SELECT pg_temp.assert_true(
   pg_catalog.pg_get_functiondef(
     'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
-  ) LIKE '%FROM public.loyalty_settings%FOR UPDATE%',
+  ) LIKE '%FROM public.loyalty_settings%FOR SHARE%',
   'redemption lost the settings-row lock'
 );
 

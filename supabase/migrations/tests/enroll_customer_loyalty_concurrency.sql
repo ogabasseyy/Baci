@@ -289,7 +289,7 @@ DECLARE
   v_def text;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef('public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure) INTO v_def;
-  IF v_def NOT LIKE '%rr.used_on_order_id,%' OR v_def NOT LIKE '%IS DISTINCT FROM ''cancelled''%'
+  IF v_def NOT LIKE '%rr.used_on_order_id,%' OR v_def NOT LIKE '%NOT IN (''cancelled'', ''canceled'')%'
      OR v_def NOT LIKE '%OR rr.used_on_order_id = v_redemption.used_on_order_id%' THEN
     RAISE EXCEPTION 'wrapper does not release claims stamped to cancelled orders';
   END IF;

@@ -166,3 +166,25 @@ SELECT pg_temp.assert_true(
   ),
   'minimum-bearing manual reward redeemed or stayed advertised'
 );
+
+-- Fixed rewards whose value rounds to zero hide from the catalog
+-- (redeem rejects them): no affordable-looking dead rewards.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Fractional fixed', 100,
+  'discount_fixed', 0.10, true
+);
+
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000012'
+    ) AS status(result),
+    LATERAL jsonb_array_elements(status.result -> 'rewards') AS reward
+    WHERE reward.value ->> 'name' = 'Fractional fixed'
+  ),
+  'zero-round fixed reward stayed advertised'
+);

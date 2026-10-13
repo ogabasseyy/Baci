@@ -9,7 +9,6 @@
 -- case-insensitive code uniqueness doubles as the lookup index.
 CREATE UNIQUE INDEX IF NOT EXISTS loyalty_redemption_checkout_code_idx
   ON public.reward_redemptions(merchant_id, pg_catalog.upper(discount_code));
-
 -- Resolve a loyalty code for checkout. Read-only; the order wrapper
 -- re-locks and re-verifies, so this stays lock-free. Anon-granted: the
 -- validate route uses the anon client (bearer semantics, mirroring the
@@ -40,11 +39,9 @@ BEGIN
   IF p_merchant_id IS NULL THEN
     RAISE EXCEPTION 'merchant_id_required';
   END IF;
-
   IF p_code IS NULL OR pg_catalog.btrim(p_code) = '' THEN
     RAISE EXCEPTION 'code_required';
   END IF;
-
   RETURN QUERY
   SELECT
     rr.id,
@@ -60,8 +57,10 @@ BEGIN
     -- cancelled is terminal so the read cannot stale). The wrapper
     -- re-verifies under lock before claiming.
     COALESCE(rr.used, false)
-      AND o.shipping_status IS DISTINCT FROM 'cancelled'
-      AND o.payment_status IS DISTINCT FROM 'cancelled',
+      AND COALESCE(o.shipping_status, '')
+        NOT IN ('cancelled', 'canceled')
+      AND COALESCE(o.payment_status, '')
+        NOT IN ('cancelled', 'canceled'),
     rr.issuance_currency,
     rw.name::text,
     rr.max_redemption_percentage
@@ -74,11 +73,9 @@ BEGIN
   LIMIT 1;
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text)
   TO anon, authenticated, service_role;
-
 -- Order wrapper: claims a single-use loyalty code while creating the
 -- order. Same shape as the discount-code wrapper: lock the claim row,
 -- create (or replay) the order through the unmodified trust-boundary
@@ -201,8 +198,10 @@ BEGIN
     INTO v_claim_order_status, v_claim_payment_status
     FROM public.orders o
     WHERE o.id = v_redemption.used_on_order_id;
-    IF v_claim_order_status IS DISTINCT FROM 'cancelled'
-       AND v_claim_payment_status IS DISTINCT FROM 'cancelled' THEN
+    IF COALESCE(v_claim_order_status, '')
+         NOT IN ('cancelled', 'canceled')
+       AND COALESCE(v_claim_payment_status, '')
+         NOT IN ('cancelled', 'canceled') THEN
       RAISE EXCEPTION 'loyalty_code_already_used';
     END IF;
   END IF;

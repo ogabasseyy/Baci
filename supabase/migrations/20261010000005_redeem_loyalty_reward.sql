@@ -54,13 +54,14 @@ BEGIN
       RETURN v_replay;
     END IF;
   END IF;
-  -- FOR UPDATE pins program state through settlement.
+  -- FOR SHARE pins program state through settlement without
+  -- serializing concurrent redemptions on the settings row.
 
   SELECT enabled, minimum_redemption_points, maximum_redemption_percentage
   INTO v_enabled, v_minimum, v_max_redemption_pct
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
-  FOR UPDATE;
+  FOR SHARE;
   IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;

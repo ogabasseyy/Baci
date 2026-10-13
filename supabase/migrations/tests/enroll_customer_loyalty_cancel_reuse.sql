@@ -92,3 +92,31 @@ SELECT pg_temp.assert_true(
    ) AS row),
   'payment-only cancellation did not release the claim'
 );
+
+-- 34d. The US spelling 'canceled' is terminal too (the order update
+-- schema accepts both): it releases and makes the code reusable.
+SET ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.orders (id, merchant_id, order_number, customer_name, total, shipping_status)
+VALUES ('01aa0000-0000-4000-8000-000000000036', '01aa0000-0000-4000-8000-000000000001', 'LOYALTY-REUSE-36', 'Reuse Probe', 10000, 'pending');
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, points_spent, reward_type, reward_value,
+  discount_code, used, used_on_order_id, used_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', '01aa0000-0000-4000-8000-000000000012',
+  50, 'discount_fixed', 500, 'RDM-REUSE36',
+  true, '01aa0000-0000-4000-8000-000000000036', pg_catalog.now()
+);
+UPDATE public.orders SET shipping_status = 'canceled'
+WHERE id = '01aa0000-0000-4000-8000-000000000036';
+RESET ROLE;
+
+SELECT pg_temp.assert_true(
+  (SELECT used IS FALSE AND used_on_order_id IS NULL
+   FROM public.reward_redemptions WHERE discount_code = 'RDM-REUSE36')
+  AND (SELECT row.used IS FALSE
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-REUSE36'
+   ) AS row),
+  'US-spelled cancellation did not release the claim'
+);

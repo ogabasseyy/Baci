@@ -48,12 +48,21 @@ export function RedemptionSuccessDialog({
     (result?.rewardType === 'discount' &&
       (discountValue == null || discountValue <= 0));
 
-  const copyCode = () => {
-    if (result?.code) {
-      navigator.clipboard.writeText(result.code);
+  const copyCode = async () => {
+    if (!result?.code) return;
+    try {
+      // Confirm the write: clipboard access can be unavailable or
+      // denied, and reporting success then loses the shopper's code.
+      await navigator.clipboard.writeText(result.code);
       toast({
         title: 'Copied!',
         description: 'Redemption code copied to clipboard',
+      });
+    } catch {
+      toast({
+        title: 'Copy failed',
+        description: 'Select the code and copy it manually',
+        variant: 'destructive',
       });
     }
   };

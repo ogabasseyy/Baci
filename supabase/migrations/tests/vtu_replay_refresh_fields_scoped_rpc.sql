@@ -6,11 +6,14 @@
 --
 -- This script intentionally mutates inside a transaction and rolls back.
 -- Covers migration 20261012235000 (Codex R50 6rp7ND) as narrowed by
--- 20261012235500 (Muse R52): the owner VTU SELECT policy is dropped,
--- and the overlay pre-read goes through get_vtu_replay_refresh_fields,
--- which projects exactly six scalars for owner rows and zero rows
--- otherwise (no existence oracle). JWT-less service-role callers (the
--- reconciliation cron) still see existing rows.
+-- 20261012235500 (Muse R52) and pinned by 20261013031000 (Muse R55)
+-- and 20261013040000 (Muse R57): the owner VTU SELECT policy is
+-- dropped, and the overlay pre-read goes through
+-- get_vtu_replay_refresh_fields, which projects exactly six scalars
+-- for owner rows and zero rows otherwise (no existence oracle).
+-- Service_role-JWT callers (the reconciliation cron) still see
+-- existing rows; sub-less JWTs of any other role — and truly
+-- claimless sessions — see nothing.
 -- =============================================
 
 BEGIN;
@@ -92,19 +95,35 @@ BEGIN
   IF v_out_params <> ARRAY['biller_code', 'customer_identifier', 'product_code', 'provider', 'require_validation_ref', 'status'] THEN
     RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: unexpected OUT columns: %', v_out_params;
   END IF;
-  -- Case 1: JWT-less caller (no JWT claims set yet in this
-  -- transaction) sees the existing row — the reconciliation cron
-  -- path is unchanged.
-  SELECT count(*), max(status) INTO n, v_status
-  FROM public.get_vtu_replay_refresh_fields(v_tx);
-  IF n <> 1 OR v_status <> 'pending' THEN
-    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: JWT-less call returned % row(s)', n;
+  -- Case 0: a truly claimless session (no JWT claims set yet in
+  -- this transaction) is denied even for an existing row — the
+  -- carve-out is gone (Muse R57).
+  SELECT count(*) INTO n FROM public.get_vtu_replay_refresh_fields(v_tx);
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: claimless call returned % row(s)', n;
   END IF;
   SELECT count(*) INTO n
   FROM public.get_vtu_replay_refresh_fields(v_missing);
   IF n <> 0 THEN
-    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: JWT-less call on missing row returned rows';
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: claimless call on missing row returned rows';
   END IF;
+
+  -- Case 1: the service_role JWT (the reconciliation cron's shape:
+  -- claims present, role service_role, no sub) still sees the
+  -- existing row.
+  SET LOCAL ROLE service_role;
+  PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  SELECT count(*), max(status) INTO n, v_status
+  FROM public.get_vtu_replay_refresh_fields(v_tx);
+  IF n <> 1 OR v_status <> 'pending' THEN
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: service-JWT call returned % row(s)', n;
+  END IF;
+  SELECT count(*) INTO n
+  FROM public.get_vtu_replay_refresh_fields(v_missing);
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: service-JWT call on missing row returned rows';
+  END IF;
+  RESET ROLE;
 
   -- Case 2: the owner reads exactly the six refresh scalars with
   -- the metadata keys extracted (the SECRET-TOKEN sibling key stays
@@ -140,7 +159,7 @@ BEGIN
   END IF;
 
   -- Case 5: a sub-less JWT whose role is NOT service_role (an anon
-  -- caller after a future grant slip) must NOT take the JWT-less
+  -- caller after a future grant slip) must NOT take the privileged
   -- passthrough — the same empty set for existing and missing rows
   -- alike (Muse R55 role pin). Pre-pin this returned the row.
   PERFORM set_config('request.jwt.claim.sub', '', true);

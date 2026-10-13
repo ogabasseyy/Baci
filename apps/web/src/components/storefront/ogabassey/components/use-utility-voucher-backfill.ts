@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 
 // Bill-style purchases (power, TV, betting) may receive their voucher /
@@ -196,6 +197,22 @@ export function useUtilityVoucherBackfill({
       reference,
     });
     (async () => {
+      // Mobile parity: capture the polling account so a mid-flight
+      // switch cannot forget the submitter's retained key for a
+      // result never shown to them (Muse R57). Local session read,
+      // no network; a failure degrades to null, which never forgets.
+      const supabase = createClient();
+      const readUserId = async (): Promise<string | null> => {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          return session?.user?.id ?? null;
+        } catch {
+          return null;
+        }
+      };
+      const submitterUserId = await readUserId();
       for (
         let attempt = 1;
         attempt <= UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS;
@@ -246,7 +263,18 @@ export function useUtilityVoucherBackfill({
             parsed.successful ||
             (parsed.failed && parsed.refundConfirmed)
           ) {
-            forgetPendingVtuByReference(reference);
+            // Forget only for the still-signed-in submitter: after an
+            // account switch the entry must stay, so a switch-back
+            // identical purchase replays instead of minting fresh and
+            // debiting a second time. (Unmount is already covered by
+            // the cancelled check above.)
+            const currentUserId = await readUserId();
+            if (
+              submitterUserId !== null &&
+              submitterUserId === currentUserId
+            ) {
+              forgetPendingVtuByReference(reference);
+            }
           }
           if (isTerminalBackfill(parsed, tokenExpected)) {
             return;

@@ -1,5 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const sessionMocks = vi.hoisted(() => ({ getSession: vi.fn() }));
+
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ auth: { getSession: sessionMocks.getSession } }),
+}));
 import {
   clearPendingVtuKeys,
   notePendingVtuReference,
@@ -172,8 +178,22 @@ describe('isTokenBackfillTab', () => {
 });
 
 describe('useUtilityVoucherBackfill', () => {
+  // Mutable polling account: tests flip this mid-poll to simulate
+  // an account switch between capture and terminal observation.
+  let currentUserId: string | null = 'user-1';
+
   beforeEach(() => {
     vi.useFakeTimers();
+    currentUserId = 'user-1';
+    sessionMocks.getSession.mockImplementation(async () => ({
+      data: {
+        session:
+          currentUserId === null
+            ? null
+            : { user: { id: currentUserId } },
+      },
+      error: null,
+    }));
   });
 
   afterEach(() => {
@@ -580,6 +600,85 @@ describe('useUtilityVoucherBackfill', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(recallPendingVtuKey('{"hook":true}')).toBeUndefined();
+  });
+
+  it('retains the entry when the account switches before terminality', async () => {
+    // Mobile parity (Muse R57): the terminal result was never shown
+    // to the submitter, so their key must stay — a switch-back
+    // identical purchase replays instead of minting fresh and
+    // debiting a second time.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-switch":true}', 'key-hook-switch');
+    notePendingVtuReference('{"hook-switch":true}', 'VTU-1');
+    let calls = 0;
+    const fetchMock = mockHistory(() => {
+      calls += 1;
+      return calls === 1
+        ? { transactions: [pendingRow] }
+        : {
+            transactions: [
+              {
+                request_reference: 'VTU-1',
+                status: 'successful',
+                refund_pending: false,
+              },
+            ],
+          };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
+    // Attempt 1 (pending) runs as user-1; switch before attempt 2.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    currentUserId = 'user-2';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(recallPendingVtuKey('{"hook-switch":true}')).toBe(
+      'key-hook-switch'
+    );
+  });
+
+  it('retains the entry when no session is captured', async () => {
+    // Fail closed like mobile: a null capture never forgets.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-nosession":true}', 'key-hook-nosession');
+    notePendingVtuReference('{"hook-nosession":true}', 'VTU-1');
+    currentUserId = null;
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-1',
+          status: 'successful',
+          refund_pending: false,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS * 2
+      );
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(recallPendingVtuKey('{"hook-nosession":true}')).toBe(
+      'key-hook-nosession'
+    );
   });
 
   it('settles a row that lands in the patient lane past the slow window', async () => {

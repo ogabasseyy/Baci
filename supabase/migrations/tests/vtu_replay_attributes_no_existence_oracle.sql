@@ -5,11 +5,13 @@
 --   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/vtu_replay_attributes_no_existence_oracle.sql
 --
 -- This script intentionally mutates inside a transaction and rolls back.
--- Covers migration 20261012234500 (Muse R50): an authenticated caller
--- must not be able to distinguish "transaction exists but is not
--- mine" from "transaction does not exist" — both take the same
--- silent path. The P0002 missing-row signal is kept for JWT-less
--- service-role callers only.
+-- Covers migration 20261012234500 (Muse R50) as pinned by
+-- 20261013031000 (Muse R55) and 20261013040000 (Muse R57): an
+-- authenticated caller must not be able to distinguish "transaction
+-- exists but is not mine" from "transaction does not exist" — both
+-- take the same silent path. The P0002 missing-row signal is kept
+-- for service_role-JWT callers only; sub-less JWTs of any other
+-- role — and truly claimless sessions — take the silent skip.
 -- =============================================
 
 BEGIN;
@@ -56,17 +58,33 @@ DECLARE
   v_metadata_before jsonb;
   v_metadata_after jsonb;
 BEGIN
-  -- Case 1: JWT-less caller (no JWT claims set yet in this
-  -- transaction) still gets the loud P0002 signal on a missing row —
-  -- the cron resolves its IDs server-side, so that is a caller bug.
+  -- Case 0: a truly claimless session (no JWT claims set yet in
+  -- this transaction) takes the silent skip — no write, no P0002,
+  -- on existing or missing rows (Muse R57). Any raise fails this
+  -- script; the end-of-script metadata assertion proves the
+  -- existing-row call wrote nothing.
+  PERFORM public.set_vtu_transaction_replay_attributes(
+    v_tx, '08000000001', 'VAL-CLAIMLESS'
+  );
+  PERFORM public.set_vtu_transaction_replay_attributes(
+    v_missing, '08000000001', 'VAL-CLAIMLESS'
+  );
+
+  -- Case 1: the service_role JWT (the reconciliation cron's shape:
+  -- claims present, role service_role, no sub) still gets the loud
+  -- P0002 signal on a missing row — the cron resolves its IDs
+  -- server-side, so that is a caller bug.
+  SET LOCAL ROLE service_role;
+  PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
   BEGIN
     PERFORM public.set_vtu_transaction_replay_attributes(
       v_missing, '08012345678', 'VAL-1'
     );
-    RAISE EXCEPTION 'ORACLE-REGRESSION: JWT-less call on a missing row did not raise P0002';
+    RAISE EXCEPTION 'ORACLE-REGRESSION: service-JWT call on a missing row did not raise P0002';
   EXCEPTION WHEN SQLSTATE 'P0002' THEN
     -- Expected.
   END;
+  RESET ROLE;
 
   SELECT metadata INTO v_metadata_before
   FROM public.vtu_transactions WHERE id = v_tx;

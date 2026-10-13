@@ -1590,6 +1590,7 @@ export async function POST(request: NextRequest) {
     // targeting is enforced authoritatively + replay-safely in the wrapper RPC.
     let discountCodeId: string | null = null;
     let loyaltyRedemptionId: string | null = null;
+    let loyaltyMaxRedemptionPercentage: number | null = null;
     let discountCodeAmount = 0;
     if (requestedDiscountCode) {
       if (hasVoucherItem) {
@@ -1666,6 +1667,8 @@ export async function POST(request: NextRequest) {
         loyaltyRedemptionId = loyaltyResolution.redemptionId;
         codeDiscountType = loyaltyResolution.discountType;
         codeDiscountValue = loyaltyResolution.discountValue;
+        loyaltyMaxRedemptionPercentage =
+          loyaltyResolution.maxRedemptionPercentage;
         codeMaximumDiscountAmount = null;
       }
 
@@ -1696,6 +1699,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Failed to create order', details: 'invalid_items' },
           { status: 400 }
+        );
+      }
+
+      // The loyalty cap is a percentage of the subtotal (snapshotted
+      // at mint); convert now that the canonical subtotal is known.
+      if (loyaltyMaxRedemptionPercentage != null) {
+        codeMaximumDiscountAmount = Math.round(
+          (canonicalOrderSubtotal * loyaltyMaxRedemptionPercentage) / 100
         );
       }
 

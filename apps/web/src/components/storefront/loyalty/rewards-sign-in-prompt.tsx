@@ -15,8 +15,8 @@ export function RewardsSignInPrompt({ slug }: { slug: string }) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center size-16 bg-purple-100 rounded-full mb-4">
-          <Sparkles className="size-8 text-purple-600" />
+        <div className="inline-flex items-center justify-center size-16 bg-store-primary/10 rounded-full mb-4">
+          <Sparkles className="size-8 text-store-primary" />
         </div>
         <h1 className="text-3xl font-bold mb-2">Rewards Program</h1>
         <p className="text-muted-foreground max-w-md mx-auto">
@@ -71,8 +71,8 @@ export function RewardsSignInPrompt({ slug }: { slug: string }) {
             <Card key={benefit.title}>
               <CardContent className="pt-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="p-3 bg-purple-100 rounded-full mb-3">
-                    <benefit.icon className="size-6 text-purple-600" />
+                  <div className="p-3 bg-store-primary/10 rounded-full mb-3">
+                    <benefit.icon className="size-6 text-store-primary" />
                   </div>
                   <h3 className="font-medium mb-1">{benefit.title}</h3>
                   <p className="text-sm text-muted-foreground">

@@ -93,6 +93,27 @@ describe('useLoyalty', () => {
     ]);
   });
 
+  it('getTierInfo treats an empty configured tier as authoritative', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        enrolled: true,
+        tier: 'silver',
+        points_balance: 10,
+        tiers: [{ name: 'Silver', multiplier: null, perks: [] }],
+      }),
+    } as Response);
+
+    const { result } = renderHook(() => useLoyalty('merchant-1', 'customer-1'));
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    // No invented 1.5x/early-access/shipping promises for a rung the
+    // merchant configured with no multiplier and no perks.
+    expect(result.current.getTierInfo('silver').benefits).toEqual([]);
+  });
+
   it('getTierInfo falls back for tiers missing from the ladder', async () => {
     const { result } = renderHook(() =>
       useLoyalty('store-preview', 'customer-1')

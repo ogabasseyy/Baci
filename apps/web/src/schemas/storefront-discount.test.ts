@@ -176,6 +176,7 @@ describe('storefront-discount schemas', () => {
       expires_at: null,
       used: false,
       issuance_currency: 'NGN',
+      max_redemption_percentage: null,
       reward_name: 'Probe reward',
     };
 

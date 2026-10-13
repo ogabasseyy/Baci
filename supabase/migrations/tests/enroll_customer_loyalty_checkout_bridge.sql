@@ -1,6 +1,5 @@
--- Checkout-bridge cases (24a-25c): discount RDM-* codes resolve and the
--- order wrapper claims them atomically. Member 024 (balance 499) funds
--- fixtures; member-018 untouched. Grant asserts live here.
+-- Checkout-bridge cases (24a-25c): discount RDM-* codes resolve and
+-- the order wrapper claims them atomically. Member 024 funds fixtures.
 INSERT INTO public.loyalty_rewards (
   merchant_id, name, points_cost, reward_type, reward_value,
   minimum_order_amount, enabled
@@ -40,14 +39,14 @@ SELECT discount_code AS fixed_code FROM public.reward_redemptions WHERE merchant
 SELECT discount_code AS percent_code FROM public.reward_redemptions WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND customer_id = '01aa0000-0000-4000-8000-000000000024' AND reward_id = :'percent_reward_id' \gset
 SELECT discount_code AS credit_code FROM public.reward_redemptions WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001' AND customer_id = '01aa0000-0000-4000-8000-000000000024' AND reward_id = :'credit_reward_id' \gset
 
--- 24a. A discount-typed code resolves with its snapshot terms (no live
--- reward state: issued codes are snapshot-governed).
+-- 24a. A discount-typed code resolves with its snapshot terms.
 SELECT pg_temp.assert_true(
   (SELECT row.reward_type = 'discount_fixed'
      AND row.reward_value = 1000
      AND row.minimum_order_amount = 5000
      AND row.used IS FALSE
      AND row.issuance_currency = 'NGN'
+     AND row.max_redemption_percentage = 50
      AND row.reward_name = 'Bridge fixed'
    FROM public.get_loyalty_redemption_for_checkout(
      '01aa0000-0000-4000-8000-000000000001',
@@ -76,8 +75,7 @@ SELECT pg_temp.assert_true(
   'lowercase loyalty code did not resolve'
 );
 
--- 24d. Non-discount types resolve too: the resolve is dumb and the
--- routes/wrapper filter (single enforcement point per layer).
+-- 24d. Non-discount types resolve too (routes/wrapper filter).
 SELECT pg_temp.assert_true(
   (SELECT row.reward_type = 'store_credit'
    FROM public.get_loyalty_redemption_for_checkout(
@@ -87,8 +85,7 @@ SELECT pg_temp.assert_true(
   'store_credit code did not resolve for layer filtering'
 );
 
--- 24e. Used codes still resolve with used=true (enforcement lives in
--- the wrapper, which re-locks and re-verifies).
+-- 24e. Used codes still resolve with used=true (wrapper enforces).
 UPDATE public.reward_redemptions
 SET used = true, used_at = pg_catalog.now()
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
@@ -198,6 +195,9 @@ SELECT pg_temp.assert_true(
   AND pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
   ) LIKE '%loyalty_code_currency_mismatch%'
+  AND pg_get_functiondef(
+    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
+  ) LIKE '%max_redemption_percentage%'
   AND pg_get_functiondef(
     'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::regprocedure
   ) LIKE '%idempotency_replayed%'

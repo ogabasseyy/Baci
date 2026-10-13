@@ -33,7 +33,8 @@ CREATE OR REPLACE FUNCTION public.get_loyalty_redemption_for_checkout(
   expires_at timestamptz,
   used boolean,
   issuance_currency text,
-  reward_name text
+  reward_name text,
+  max_redemption_percentage numeric
 )
 -- Snapshot-governed: issued codes never consult the live reward row, so
 -- a later disable or delete cannot strand an already-paid code. The
@@ -68,7 +69,8 @@ BEGIN
     -- re-verifies under lock before claiming.
     COALESCE(rr.used, false) AND o.shipping_status IS DISTINCT FROM 'cancelled',
     rr.issuance_currency,
-    rw.name::text
+    rw.name::text,
+    rr.max_redemption_percentage
   FROM public.reward_redemptions rr
   LEFT JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
   LEFT JOIN public.orders o ON o.id = rr.used_on_order_id
@@ -149,7 +151,7 @@ BEGIN
   SELECT
     rr.id, rr.reward_id, rr.reward_type, rr.reward_value, rr.discount_code,
     rr.expires_at, COALESCE(rr.used, false) AS used,
-    rr.used_on_order_id, rr.issuance_currency,
+    rr.used_on_order_id, rr.issuance_currency, rr.max_redemption_percentage,
     COALESCE(rr.minimum_order_amount, rw.minimum_order_amount)
       AS minimum_order_amount
   INTO v_redemption
@@ -224,13 +226,14 @@ BEGIN
      AND v_order.subtotal < v_redemption.minimum_order_amount THEN
     RAISE EXCEPTION 'minimum_purchase_not_met'; END IF;
 
-  -- Fixed codes are denominated in their issuance currency (stamped at
-  -- mint): a later merchant currency change must not re-denominate a
-  -- paid code against this order's currency. Percentage codes scale
-  -- with the subtotal and stay currency-agnostic; unstamped rows
-  -- (pre-snapshot mints) keep the legacy behavior.
-  IF v_redemption.reward_type IN ('discount', 'discount_fixed')
-     AND v_redemption.issuance_currency IS NOT NULL THEN
+  -- Fixed codes and positive minimums are denominated in their
+  -- issuance currency (stamped at mint): a later merchant currency
+  -- change must not re-denominate a paid code against this order's
+  -- currency. Minimum-free percentage codes scale with the subtotal
+  -- and stay currency-agnostic; unstamped rows keep legacy behavior.
+  IF v_redemption.issuance_currency IS NOT NULL
+     AND (v_redemption.reward_type IN ('discount', 'discount_fixed')
+       OR COALESCE(v_redemption.minimum_order_amount, 0) > 0) THEN
     SELECT o.currency INTO v_order_currency
     FROM public.orders o
     WHERE o.id = v_order.id;
@@ -249,6 +252,14 @@ BEGIN
     v_expected := pg_catalog.round(v_redemption.reward_value, 0);
   END IF;
   v_expected := GREATEST(0, LEAST(v_expected, pg_catalog.round(v_order.subtotal, 0)));
+
+  -- The merchant's maximum redemption percentage, snapshotted at
+  -- mint, caps the discount share of the subtotal.
+  IF v_redemption.max_redemption_percentage IS NOT NULL THEN
+    v_expected := LEAST(v_expected,
+      pg_catalog.round(
+        v_order.subtotal * v_redemption.max_redemption_percentage / 100.0, 0));
+  END IF;
 
   IF pg_catalog.abs(v_order.discount_amount - v_expected) > 1 THEN
     RAISE EXCEPTION 'discount_amount_mismatch'

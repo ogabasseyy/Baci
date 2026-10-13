@@ -10,6 +10,7 @@ export type LoyaltyCheckoutCodeResolution =
       redemptionId: string;
       discountType: 'fixed' | 'percentage';
       discountValue: number;
+      maxRedemptionPercentage: number | null;
     }
   | { ok: false; response: NextResponse };
 
@@ -90,9 +91,10 @@ export async function resolveLoyaltyCheckoutCode({
   // value no longer means what the customer paid for. Collapse to the
   // generic invalid (no currency oracle); the order wrapper enforces
   // the same gate authoritatively. A failed merchant lookup skips the
-  // preview gate and lets the wrapper decide.
+  // preview gate and lets the wrapper decide. A positive minimum is
+  // monetary too, so minimum-carrying percentage codes gate as well.
   if (
-    discountType === 'fixed' &&
+    (discountType === 'fixed' || Number(loyaltyRow.minimum_order_amount) > 0) &&
     loyaltyRow.issuance_currency &&
     !(await isLoyaltyCodeCurrencyCurrent(
       supabase,
@@ -113,5 +115,6 @@ export async function resolveLoyaltyCheckoutCode({
     redemptionId: loyaltyRow.redemption_id,
     discountType,
     discountValue: loyaltyValue,
+    maxRedemptionPercentage: loyaltyRow.max_redemption_percentage,
   };
 }

@@ -14,6 +14,7 @@ const ROW = {
   expires_at: null,
   used: false,
   issuance_currency: 'NGN',
+  max_redemption_percentage: null,
   reward_name: 'Probe reward',
 };
 
@@ -46,7 +47,43 @@ describe('resolveLoyaltyCheckoutCode', () => {
       redemptionId: ROW.redemption_id,
       discountType: 'fixed',
       discountValue: 100,
+      maxRedemptionPercentage: null,
     });
+  });
+
+  it('passes the snapshotted max redemption percentage through', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(() => ({
+        data: [{ ...ROW, max_redemption_percentage: 25 }],
+        error: null,
+      })),
+      merchantId: 'm',
+      code: 'RDM-CAPPED',
+    });
+
+    expect(resolution).toMatchObject({ ok: true, maxRedemptionPercentage: 25 });
+  });
+
+  it('rejects a minimum-carrying percentage code after a currency change', async () => {
+    const resolution = await resolveLoyaltyCheckoutCode({
+      supabase: clientWith(
+        () => ({
+          data: [
+            {
+              ...ROW,
+              reward_type: 'discount_percentage',
+              minimum_order_amount: 5000,
+            },
+          ],
+          error: null,
+        }),
+        { country: 'US', payout_currency: 'USD' }
+      ),
+      merchantId: 'm',
+      code: 'RDM-PCTMIN',
+    });
+
+    expect(resolution.ok).toBe(false);
   });
 
   it('maps a plain discount to fixed and percentage to proportional', async () => {

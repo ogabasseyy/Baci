@@ -39,8 +39,11 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for the loyalty checkout bridge (issue #3165): unknown
   // merchant codes now fall back to resolveLoyaltyCheckoutCode before the
   // invalid-code rejection; notification and payment authority unchanged.
+  // Re-pinned for loyalty_code_currency_mismatch in clientErrorCodes
+  // and the max-redemption-percentage cap conversion; notification
+  // and payment authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'c4975769332086347cb4cdcf8b2a6c4be00723c76f4b5a4babe4778a89fd3320',
+    '4f2ddb239d33fd7dd4bfde1d8c37baa2921e81e157b4e24825ebe39b12fd51bc',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

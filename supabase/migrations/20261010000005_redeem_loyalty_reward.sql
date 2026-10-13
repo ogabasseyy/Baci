@@ -24,6 +24,7 @@ DECLARE
   v_redemption_id uuid;
   v_redemption_code text;
   v_currency text;
+  v_max_redemption_pct numeric;
   v_expires_at timestamptz;
   v_expired_points integer := 0;
   v_redemption_count integer := 0;
@@ -34,8 +35,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
 
-  -- Existence/liveness/ownership first: replaying the stored code
-  -- before this check would leak it to any caller with the key.
+  -- Existence/liveness/ownership first (replay would leak the code).
   PERFORM 1
   FROM public.customers
   WHERE id = p_customer_id
@@ -47,8 +47,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
 
-  -- Idempotency replay runs before the program gate (key lock
-  -- serializes retries; failures are never stored).
+  -- Idempotency replay runs before the program gate.
   IF p_idempotency_key IS NOT NULL THEN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtext('loyalty_redeem:' || p_idempotency_key::text)
@@ -61,9 +60,9 @@ BEGIN
     END IF;
   END IF;
 
-  -- FOR UPDATE pins program state through settlement: a concurrent
-  -- disable/minimum change blocks instead of slipping under this read.
-  SELECT enabled, minimum_redemption_points INTO v_enabled, v_minimum
+  -- FOR UPDATE pins program state through settlement.
+  SELECT enabled, minimum_redemption_points, maximum_redemption_percentage
+  INTO v_enabled, v_minimum, v_max_redemption_pct
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
   FOR UPDATE;
@@ -228,11 +227,12 @@ BEGIN
         INSERT INTO public.reward_redemptions (
           merchant_id, customer_id, reward_id, points_spent,
           reward_type, reward_value, discount_code, expires_at,
-          minimum_order_amount, issuance_currency
+          minimum_order_amount, issuance_currency, max_redemption_percentage
         ) VALUES (
           p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
           v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at,
-          COALESCE(v_reward.minimum_order_amount, 0), v_currency
+          COALESCE(v_reward.minimum_order_amount, 0), v_currency,
+          v_max_redemption_pct
         )
         RETURNING id INTO v_redemption_id;
         EXIT;

@@ -13,10 +13,8 @@ import { lookupErrorResponse } from './lookup-error-response';
 
 /**
  * POST /api/storefront/discount/validate
- * Validates a discount code for storefront customers via the anon
- * client and a SECURITY DEFINER RPC. CSRF exemption: anonymous
- * checkout visitors lack tokens; proxy rate limiting and the RPC's
- * read-only behavior mitigate abuse.
+ * Validates a discount code via the anon client + SECURITY DEFINER
+ * RPC. CSRF exemption: proxy rate limiting + read-only RPC mitigate.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -73,9 +71,7 @@ export async function POST(request: NextRequest) {
       ? (parsedArray.data[0] ?? null)
       : (parsedSingle?.data ?? null);
 
-    // Loyalty fallback (issue #3165): RDM-* codes live in
-    // reward_redemptions, which the merchant-code lookup never reads.
-    // Only attempted when that lookup found nothing (errors 500 above).
+    // Loyalty fallback (issue #3165): RDM-* codes live elsewhere.
     if (!discountCode) {
       const { data: loyaltyData, error: loyaltyError } = await supabase.rpc(
         'get_loyalty_redemption_for_checkout',
@@ -102,9 +98,8 @@ export async function POST(request: NextRequest) {
         ? (parsedLoyaltyArray.data[0] ?? null)
         : (parsedLoyaltySingle?.data ?? null);
       const loyaltyValue = Number(loyaltyCode?.reward_value);
-      // Bridgeable shape only: discount types (plain 'discount' is
-      // fixed by convention, mirroring the order wrapper) + positive
-      // value. Other types fall through to the generic invalid.
+      // Bridgeable shape only: discount types ('discount' is fixed
+      // by convention) + positive value; others get generic invalid.
       if (
         loyaltyCode != null &&
         (loyaltyCode.reward_type === 'discount' ||
@@ -113,9 +108,8 @@ export async function POST(request: NextRequest) {
         Number.isFinite(loyaltyValue) &&
         loyaltyValue > 0
       ) {
-        // Dead codes collapse to the generic invalid an unknown code
-        // gets (no probing oracle); the order wrapper re-enforces
-        // state. Snapshot-governed: disabling a reward voids nothing.
+        // Dead codes collapse to generic invalid (no probing oracle);
+        // the order wrapper re-enforces state authoritatively.
         if (
           loyaltyCode.used ||
           (loyaltyCode.expires_at &&
@@ -127,14 +121,12 @@ export async function POST(request: NextRequest) {
           );
         }
         // Accepted oracle (low): the minimum message stays distinct
-        // (public catalog info, actionable, rate-limit bounded); the
-        // order wrapper re-enforces state authoritatively.
+        // (public catalog info, actionable, rate-limit bounded).
         if (
           loyaltyCode.minimum_order_amount != null &&
           cart_total < Number(loyaltyCode.minimum_order_amount)
         ) {
-          // Merchant currency for the threshold label. A failed
-          // lookup stays currency-neutral (no mislabeled threshold).
+          // Threshold label currency; failure stays currency-neutral.
           const { data: merchantRow, error: merchantError } = await supabase
             .from('merchants')
             .select('country, payout_currency')
@@ -159,10 +151,10 @@ export async function POST(request: NextRequest) {
             { status: 200 }
           );
         }
-        // Fixed codes keep their issuance currency (generic-invalid
-        // collapse; the order wrapper enforces for real).
+        // Fixed codes keep issuance currency (wrapper enforces).
         if (
-          loyaltyCode.reward_type !== 'discount_percentage' &&
+          (loyaltyCode.reward_type !== 'discount_percentage' ||
+            Number(loyaltyCode.minimum_order_amount) > 0) &&
           loyaltyCode.issuance_currency &&
           !(await isLoyaltyCodeCurrencyCurrent(
             supabase,
@@ -183,7 +175,15 @@ export async function POST(request: NextRequest) {
           {
             discount_type: loyaltyDiscountType,
             discount_value: loyaltyValue,
-            maximum_discount_amount: null,
+            // Max redemption percentage (mint snapshot) caps the share.
+            maximum_discount_amount:
+              loyaltyCode.max_redemption_percentage != null
+                ? Math.round(
+                    (cart_total *
+                      Number(loyaltyCode.max_redemption_percentage)) /
+                      100
+                  )
+                : null,
           },
           cart_total
         );

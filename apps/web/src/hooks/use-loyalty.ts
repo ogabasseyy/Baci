@@ -251,11 +251,9 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       return {
         colors:
           tierColors[tier as keyof typeof tierColors] || tierColors.bronze,
-        benefits:
-          benefits.length > 0
-            ? benefits
-            : tierBenefits[tier as keyof typeof tierBenefits] ||
-              tierBenefits.bronze,
+        // Authoritative even when empty: a configured rung with no
+        // multiplier/perks must not inherit hardcoded marketing copy.
+        benefits,
       };
     }
 

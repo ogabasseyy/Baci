@@ -62,6 +62,7 @@ function loyaltyRow(overrides: Record<string, unknown> = {}) {
     expires_at: null,
     used: false,
     issuance_currency: 'NGN',
+    max_redemption_percentage: null,
     reward_name: 'Probe reward',
     ...overrides,
   };
@@ -285,6 +286,38 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body.valid).toBe(false);
     expect(body.error).toBe('Minimum purchase of 50,000 required');
     expect(body.error).not.toMatch(/₦|₹|\$/);
+  });
+
+  it('caps the preview discount at the snapshotted max redemption percentage', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ reward_value: 5000, max_redemption_percentage: 25 })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body.valid).toBe(true);
+    expect(body.discount_amount).toBe(2500);
+  });
+
+  it('collapses a minimum-carrying percentage code after a currency change', async () => {
+    merchantRow = { country: 'US', payout_currency: 'USD' };
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [
+            loyaltyRow({
+              reward_type: 'discount_percentage',
+              reward_value: 10,
+              minimum_order_amount: 5000,
+            }),
+          ]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
   it('collapses a fixed code to invalid after a merchant currency change', async () => {

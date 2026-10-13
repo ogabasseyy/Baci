@@ -1464,4 +1464,78 @@ BEGIN
 END
 $$;
 
+-- 20. The bound receipt preserves variant-specific inner columns: a
+-- savings submit carries the redemption fields so continuations read
+-- the bound row like a direct RPC row.
+INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, expires_at) VALUES
+  ('cccccccc-f000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() + interval '7 days');
+INSERT INTO public.commerce_cart_lines (id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('dddddddd-f000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500);
+INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
+  ('99999999-9999-4999-8999-99999999996b', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', 'guest-a15', now() + interval '7 days', NULL);
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a15","cart_scope":"session","cart_id":"cccccccc-f000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-99999999996b"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_prep jsonb;
+BEGIN
+  SELECT public.commerce_cart_prepare_checkout(
+    'cccccccc-f000-4000-8000-000000000000', 1, 'prep-op-a15'
+  ) INTO v_prep;
+  IF NOT (v_prep ->> 'ok')::boolean THEN RAISE EXCEPTION 'prepare must succeed, got %', v_prep; END IF;
+  INSERT INTO test_ctx (key, value) VALUES ('a15_session', v_prep -> 'snapshot' ->> 'checkoutSessionId');
+END
+$$;
+RESET ROLE;
+SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
+SET ROLE authenticated;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.create_storefront_order_with_cart_binding(
+    'savings',
+    (SELECT value::uuid FROM test_ctx WHERE key = 'a15_session'),
+    1,
+    jsonb_build_object(
+      'p_merchant_id', '11111111-1111-4111-8111-111111111111',
+      'p_customer_email', 'buyer@example.com',
+      'p_customer_name', 'Buyer',
+      'p_items', jsonb_build_array(jsonb_build_object(
+        'product_id', '44444444-4444-4444-8444-444444444444',
+        'quantity', 1,
+        'price', 15.00
+      )),
+      'p_expected_total', 15.00,
+      'p_savings_goal_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010',
+      'p_savings_amount', 5.00,
+      'p_savings_idempotency_key', 'save-key-a15',
+      'p_checkout_idempotency_key', 'order-key-a15',
+      'p_checkout_request_hash', 'hash-a15'
+    )
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'savings submit must succeed, got %', v_result; END IF;
+  IF (v_result -> 'order' ->> 'savings_redemption_success')::boolean IS NOT TRUE THEN RAISE EXCEPTION 'receipt must carry savings success, got %', v_result; END IF;
+  IF (v_result -> 'order' ->> 'savings_redeemed_amount')::numeric <> 5.00 THEN RAISE EXCEPTION 'receipt must carry redeemed amount, got %', v_result; END IF;
+  IF v_result -> 'order' ->> 'savings_goal_id' <> 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010' THEN RAISE EXCEPTION 'receipt must carry savings goal, got %', v_result; END IF;
+  IF v_result -> 'order' ->> 'savings_redemption_id' IS NULL THEN RAISE EXCEPTION 'receipt must carry redemption id, got %', v_result; END IF;
+  IF v_result -> 'order' ->> 'savings_goal_status' <> 'active' THEN RAISE EXCEPTION 'receipt must carry goal status, got %', v_result; END IF;
+  IF (v_result -> 'order' ->> 'idempotency_replayed')::boolean THEN RAISE EXCEPTION 'fresh savings receipt must not flag replay, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+DO $$
+DECLARE
+  v_count integer;
+BEGIN
+  SELECT count(*) INTO v_count FROM public.orders WHERE checkout_idempotency_key = 'order-key-a15';
+  IF v_count <> 1 THEN RAISE EXCEPTION 'savings submit must create the order'; END IF;
+  SELECT count(*) INTO v_count FROM public.order_stub_calls WHERE variant = 'savings' AND idempotency_key = 'order-key-a15';
+  IF v_count <> 1 THEN RAISE EXCEPTION 'inner savings RPC must run exactly once'; END IF;
+  SELECT count(*) INTO v_count FROM public.commerce_carts
+  WHERE id = 'cccccccc-f000-4000-8000-000000000000' AND state = 'completed';
+  IF v_count <> 1 THEN RAISE EXCEPTION 'savings submit must close the cart'; END IF;
+END
+$$;
+
 ROLLBACK;

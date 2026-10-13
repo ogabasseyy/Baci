@@ -32,6 +32,7 @@ export const CheckoutPage: React.FC = () => {
     removeFromCart,
     sharedCartRef,
     refreshSharedCart,
+    syncStatus: sharedCartSyncStatus,
   } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
@@ -225,6 +226,7 @@ export const CheckoutPage: React.FC = () => {
       removeFromCart,
       sharedCartRef: checkoutSharedCartRef,
       refreshSharedCart,
+      sharedCartSyncStatus,
     },
     delivery: {
       session: delivery,

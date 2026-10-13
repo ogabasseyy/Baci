@@ -135,6 +135,64 @@ describe('submitCartBoundOrder', () => {
     expect(result).toMatchObject({ code, message, ok: false });
   });
 
+  it('passes variant-specific inner columns through the bound order', async () => {
+    const client = clientReturning({
+      binding: { ...rawBinding(), variant: 'savings' },
+      code: null,
+      ok: true,
+      order: rawOrder({
+        savings_goal_id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010',
+        savings_goal_status: 'active',
+        savings_redeemed_amount: 5,
+        savings_redemption_id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000010',
+        savings_redemption_success: true,
+      }),
+      replayed: false,
+    });
+
+    const result = await submitCartBoundOrder(
+      { client: client as never },
+      { args: ARGS, generation: 1, sessionId: SESSION_ID, variant: 'savings' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.order.savings_redemption_success).toBe(true);
+      expect(result.order.savings_redeemed_amount).toBe(5);
+      expect(result.order.savings_goal_id).toBe(
+        'aaaaaaaa-aaaa-4aaa-8aaa-000000000010'
+      );
+      expect(result.order.savings_redemption_id).toBe(
+        'bbbbbbbb-bbbb-4bbb-8bbb-000000000010'
+      );
+      expect(result.order.savings_goal_status).toBe('active');
+    }
+  });
+
+  it('leaves variant-specific columns undefined for the base receipt', async () => {
+    const client = clientReturning({
+      binding: rawBinding(),
+      code: null,
+      ok: true,
+      order: rawOrder(),
+      replayed: false,
+    });
+
+    const result = await submitCartBoundOrder(
+      { client: client as never },
+      { args: ARGS, generation: 1, sessionId: SESSION_ID, variant: 'base' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.order.savings_redemption_success).toBeUndefined();
+      expect(result.order.savings_redeemed_amount).toBeUndefined();
+      expect(result.order.savings_goal_id).toBeUndefined();
+      expect(result.order.savings_redemption_id).toBeUndefined();
+      expect(result.order.savings_goal_status).toBeUndefined();
+    }
+  });
+
   it('passes inner order rejections through with their message', async () => {
     const client = clientReturning(null, {
       code: 'P0001',

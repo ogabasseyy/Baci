@@ -146,6 +146,19 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
     // cart and submits again, never silently resubmitting changed lines.
     let sharedCartBinding: SharedCartOrderBinding | null = null;
     if (cart.sharedCartRef) {
+      // The binding pins the reviewed version, but the order items come
+      // from the display cart: submitting with unconfirmed optimistic
+      // lines would order lines outside the reviewed version. Wait for
+      // a clean sync so display and confirmed lines agree.
+      if (cart.sharedCartSyncStatus !== 'synced') {
+        if (cart.sharedCartSyncStatus === 'error') {
+          toast({ title: 'Cart Sync Failed', description: 'Your cart could not sync. Retry the sync and submit again.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Cart Syncing', description: 'Your cart is still syncing. Wait a moment and submit again.', variant: 'destructive' });
+        }
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
       const review = await prepareSharedCartCheckout({
         cartId: cart.sharedCartRef.cartId,
         expectedVersion: cart.sharedCartRef.version,

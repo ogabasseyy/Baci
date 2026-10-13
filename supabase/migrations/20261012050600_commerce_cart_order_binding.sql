@@ -561,33 +561,14 @@ BEGIN
     ) AS r;
   END IF;
 
-  -- The receipt order mirrors the inner row in snake_case so route and
-  -- dispatch continuations read it like a direct RPC row.
+  -- The receipt order mirrors the full inner row so route and dispatch
+  -- continuations read it like a direct RPC row, including
+  -- variant-specific columns (e.g. the savings redemption fields).
   -- `idempotency_replayed` tracks the binding: a replayed binding never
   -- created a new order, whatever the inner RPC reported.
   v_result := jsonb_build_object('ok', true, 'code', null, 'replayed', false,
-    'order', jsonb_build_object(
-      'id', v_order.id,
-      'order_number', v_order.order_number,
-      'tracking_token', v_order.tracking_token,
-      'subtotal', v_order.subtotal,
-      'shipping_fee', v_order.shipping_fee,
-      'discount_amount', v_order.discount_amount,
-      'tax_amount', v_order.tax_amount,
-      'total', v_order.total,
-      'customer_id', v_order.customer_id,
-      'customer_email', v_order.customer_email,
-      'customer_name', v_order.customer_name,
-      'customer_phone', v_order.customer_phone,
-      'payment_status', v_order.payment_status,
-      'shipping_status', v_order.shipping_status,
-      'payment_method', v_order.payment_method,
-      'shipping_address', v_order.shipping_address,
-      'merchant_id', v_order.merchant_id,
-      'tax_basis', v_order.tax_basis,
-      'gift_wrapping_fee', v_order.gift_wrapping_fee,
-      'idempotency_replayed', false
-    ),
+    'order', pg_catalog.to_jsonb(v_order)
+      || jsonb_build_object('idempotency_replayed', false),
     'binding', jsonb_build_object('sessionId', v_session.id, 'cartId', v_cart.id,
       'merchantId', v_session.merchant_id, 'checkout_generation', v_session.checkout_generation,
       'cartVersionReviewed', v_session.cart_version_reviewed, 'variant', p_variant));

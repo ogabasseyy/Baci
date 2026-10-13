@@ -10124,6 +10124,59 @@ describe('POST /api/orders — shared cart binding', () => {
     );
   });
 
+  it('submits a bound savings order with the redemption payload', async () => {
+    const savingsReceipt = {
+      ...BOUND_RECEIPT,
+      binding: { ...BOUND_RECEIPT.binding, variant: 'savings' },
+      order: {
+        ...BOUND_ORDER,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        savings_goal_status: 'paused',
+        savings_redeemed_amount: 500,
+        savings_redemption_id: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+        savings_redemption_success: true,
+      },
+    };
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: savingsReceipt,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        savings_amount: 500,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        use_savings_credit: true,
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_savings_amount: 500,
+          p_savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        }),
+        p_variant: 'savings',
+      })
+    );
+    const body = (await response.json()) as {
+      savings: {
+        amountUsed: number;
+        goalId: string;
+        redemptionId: string;
+      } | null;
+    };
+    expect(body.savings).toEqual({
+      amountUsed: 500,
+      goalId: '123e4567-e89b-12d3-a456-426614174555',
+      redemptionId: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+    });
+  });
+
   it('forwards cart line ids into the bound items payload', async () => {
     const supabase = await setupBinding({
       create_storefront_order_with_cart_binding: {

@@ -59,6 +59,13 @@ export interface BoundOrder {
   tax_basis: string;
   gift_wrapping_fee: number;
   idempotency_replayed: boolean;
+  // Savings-variant inner columns. Present only on savings receipts;
+  // the route requires them to report the redemption instead of 409.
+  savings_redemption_success?: boolean;
+  savings_redeemed_amount?: number | null;
+  savings_goal_id?: string | null;
+  savings_redemption_id?: string | null;
+  savings_goal_status?: string | null;
 }
 
 export interface OrderBindingReceipt {
@@ -152,6 +159,21 @@ function parseOrder(value: unknown): BoundOrder | null {
     order_number: value.order_number,
     payment_method: value.payment_method,
     payment_status: value.payment_status,
+    ...(typeof value.savings_redemption_success === 'boolean'
+      ? { savings_redemption_success: value.savings_redemption_success }
+      : {}),
+    ...(typeof value.savings_redeemed_amount === 'number'
+      ? { savings_redeemed_amount: value.savings_redeemed_amount }
+      : {}),
+    ...(typeof value.savings_goal_id === 'string'
+      ? { savings_goal_id: value.savings_goal_id }
+      : {}),
+    ...(typeof value.savings_redemption_id === 'string'
+      ? { savings_redemption_id: value.savings_redemption_id }
+      : {}),
+    ...(typeof value.savings_goal_status === 'string'
+      ? { savings_goal_status: value.savings_goal_status }
+      : {}),
     shipping_address: value.shipping_address ?? null,
     shipping_fee: value.shipping_fee,
     shipping_status: value.shipping_status,

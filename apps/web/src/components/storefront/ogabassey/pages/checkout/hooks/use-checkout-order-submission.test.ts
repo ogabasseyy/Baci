@@ -356,6 +356,7 @@ describe('useCheckoutOrderSubmission', () => {
     it('prepares the shared cart and binds the submit', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
@@ -386,6 +387,43 @@ describe('useCheckoutOrderSubmission', () => {
       );
     });
 
+    it.each(['pending', 'retrying'] as const)(
+      'waits for sync instead of submitting while %s',
+      async (syncStatus) => {
+        const context = freshContext();
+        context.cart.sharedCartRef = SHARED_REF;
+        context.cart.sharedCartSyncStatus = syncStatus;
+
+        const { result } = renderHook(() =>
+          useCheckoutOrderSubmission(context)
+        );
+        await act(async () => result.current.handlePlaceOrder());
+
+        expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+        expect(submitPreparedCheckout).not.toHaveBeenCalled();
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Cart Syncing' })
+        );
+        expect(context.processing.isOrderInFlightRef.current).toBe(false);
+      }
+    );
+
+    it('stops the submit when the shared cart failed to sync', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'error';
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Cart Sync Failed' })
+      );
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
+
     it('skips preparation for legacy carts', async () => {
       const context = freshContext();
 
@@ -406,6 +444,7 @@ describe('useCheckoutOrderSubmission', () => {
     it('refreshes the cart and stops the submit when the review goes stale', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
       const refreshSharedCart = vi.fn().mockResolvedValue(undefined);
       context.cart.refreshSharedCart = refreshSharedCart;
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
@@ -429,6 +468,7 @@ describe('useCheckoutOrderSubmission', () => {
     it('stops the submit when preparation fails', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         code: 'temporarily_unavailable',
         currentVersion: null,

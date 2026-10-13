@@ -514,14 +514,14 @@ export function useSharedCart(
     }
   }
 
-  async function refreshNow(): Promise<void> {
+  async function refreshNow(force = false): Promise<void> {
     const generation = generationRef.current;
-    if (!enabled || document.hidden) return;
+    if (!enabled || (!force && document.hidden)) return;
     // Adoption owns the first fetch: a foreground refresh racing a
     // deferred adopt would double-fetch and dispatch a bare poll
     // snapshot before the link (import, hydration, send-ready) runs.
     if (adoptOutcomeRef.current === 'unknown') return;
-    if (Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
+    if (!force && Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
     const result = await fetchSharedCartSnapshot();
     if (generationRef.current !== generation) return;
     if (!result.ok) return;
@@ -1126,7 +1126,10 @@ export function useSharedCart(
   }
 
   function refreshSharedCart(): Promise<void> {
-    return refreshNow();
+    // Explicit stale-review refresh: bypass coalescing and visibility
+    // guards so the next submit sees the live version. Adoption and
+    // generation guards still apply.
+    return refreshNow(true);
   }
 
   function retryImport(): void {

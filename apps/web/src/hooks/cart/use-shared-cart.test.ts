@@ -2031,6 +2031,95 @@ describe('useSharedCart negotiation and totals', () => {
     }
   });
 
+  it('refetches immediately even inside the coalescing window', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchSharedCartSnapshot)
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 3 }),
+          warnings: [],
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 4 }),
+          warnings: [],
+        });
+
+      const { result } = renderHook(() =>
+        useSharedCart({
+          merchantId: MERCHANT_ID,
+          merchantSlug: SLUG,
+          sessionGeneration: 1,
+        })
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1);
+
+      // No clock advance: an explicit stale-review refresh bypasses the
+      // 5s fetch coalescing so the next submit sees the live version.
+      await act(async () => {
+        await result.current.refreshSharedCart();
+      });
+
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2);
+      expect(result.current.version).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refetches while the document is hidden', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchSharedCartSnapshot)
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 3 }),
+          warnings: [],
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 4 }),
+          warnings: [],
+        });
+
+      const { result } = renderHook(() =>
+        useSharedCart({
+          merchantId: MERCHANT_ID,
+          merchantSlug: SLUG,
+          sessionGeneration: 1,
+        })
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1);
+
+      const hidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        value: true,
+      });
+      try {
+        await act(async () => {
+          await result.current.refreshSharedCart();
+        });
+      } finally {
+        if (hidden) Object.defineProperty(document, 'hidden', hidden);
+      }
+
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2);
+      expect(result.current.version).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('resolves refreshSharedCart without fetching when disabled', async () => {
     const { result } = renderHook(() =>
       useSharedCart({

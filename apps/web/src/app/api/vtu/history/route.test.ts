@@ -47,6 +47,7 @@ let merchantError: unknown = null;
 let merchantDataBySlug: Record<string, { id: string } | null> = {};
 let customerByUserIdData: { id: string; user_id: string | null } | null = null;
 let customerByEmailData: { id: string; user_id: string | null } | null = null;
+let customerLookupError: unknown = null;
 let transactionsData: Record<string, unknown>[] | null = null;
 let transactionsError: unknown = null;
 let paymentRowsData: Record<string, unknown>[] | null = null;
@@ -74,11 +75,11 @@ function createMockSupabase() {
       }),
       maybeSingle: vi.fn().mockImplementation(() => {
         if (filters.has('user_id')) {
-          return { data: customerByUserIdData, error: null };
+          return { data: customerByUserIdData, error: customerLookupError };
         }
 
         if (filters.has('email')) {
-          return { data: customerByEmailData, error: null };
+          return { data: customerByEmailData, error: customerLookupError };
         }
 
         return { data: null, error: null };
@@ -208,6 +209,7 @@ describe('GET /api/vtu/history', () => {
     mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
     customerByUserIdData = { id: 'customer-1', user_id: 'user-1' };
     customerByEmailData = null;
+    customerLookupError = null;
     transactionsData = [
       {
         id: 'tx-1',
@@ -1169,6 +1171,32 @@ describe('GET /api/vtu/history', () => {
   it('returns 500 (retryable) when the merchant lookup errors', async () => {
     merchantData = null;
     merchantError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the customer lookup errors', async () => {
+    // A transient DB blip must not present as empty history:
+    // pollers treat 2xx-empty as terminal (burning their finite
+    // budget) but retry 5xx (Codex R55 6rrMIW).
+    customerLookupError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the email-fallback lookup errors', async () => {
+    customerByUserIdData = null;
+    customerLookupError = { message: 'connection reset' };
     const { GET } = await import('./route');
 
     const response = await GET(makeRequest('?merchantSlug=ogabassey'));

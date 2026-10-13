@@ -13,7 +13,7 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-idempotency-store';
+import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-vtu-codec';
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {

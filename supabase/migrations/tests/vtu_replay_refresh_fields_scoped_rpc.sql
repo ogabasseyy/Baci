@@ -138,6 +138,21 @@ BEGIN
   IF n <> 0 THEN
     RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: non-owner read rows for a missing transaction';
   END IF;
+
+  -- Case 5: a sub-less JWT whose role is NOT service_role (an anon
+  -- caller after a future grant slip) must NOT take the JWT-less
+  -- passthrough — the same empty set for existing and missing rows
+  -- alike (Muse R55 role pin). Pre-pin this returned the row.
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  SELECT count(*) INTO n FROM public.get_vtu_replay_refresh_fields(v_tx);
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: sub-less non-service_role JWT read % row(s)', n;
+  END IF;
+  SELECT count(*) INTO n FROM public.get_vtu_replay_refresh_fields(v_missing);
+  IF n <> 0 THEN
+    RAISE EXCEPTION 'SCOPED-RPC-REGRESSION: sub-less non-service_role JWT read rows for a missing transaction';
+  END IF;
   RESET ROLE;
 END $$;
 

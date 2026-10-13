@@ -5247,8 +5247,7 @@ describe('fulfillPendingVtuTransaction', () => {
     const { supabase, update } = buildStrandedRowSupabase(
       { id: 'ledger-debit-1' },
       {
-        createdAt: '2026-10-21T00:00:00.000Z',
-        metadata: { walletDebited: true },
+        metadata: { submissionMarkerEra: true, walletDebited: true },
       }
     );
 

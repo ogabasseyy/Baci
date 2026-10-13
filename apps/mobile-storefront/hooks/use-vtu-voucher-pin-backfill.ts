@@ -20,8 +20,10 @@ import { useAuthStore } from '@/stores/auth-store';
 // OBSERVED completion.
 export const POLL_INTERVAL_MS = 3000;
 export const POLL_SLOW_INTERVAL_MS = 10_000;
+export const POLL_PATIENT_INTERVAL_MS = 60_000;
 export const FAST_POLL_ATTEMPTS = 10;
-export const MAX_POLL_ATTEMPTS = 43;
+export const SLOW_POLL_ATTEMPTS = 43;
+export const MAX_POLL_ATTEMPTS = 73;
 
 type BackfillApiType =
   | 'electricity'
@@ -257,13 +259,19 @@ export function useVtuVoucherPinBackfill({
       if (fetchCountRef.current >= MAX_POLL_ATTEMPTS) {
         return false;
       }
-      // Backoff mirrors web: 3s for the first 10 attempts, then 10s.
-      // 43 attempts span ~6 minutes — reconciliation excludes rows
-      // younger than 45s and its worker runs every 5 minutes, so a
-      // 27s loop could never observe a normally delayed settlement.
-      return fetchCountRef.current <= FAST_POLL_ATTEMPTS
-        ? POLL_INTERVAL_MS
-        : POLL_SLOW_INTERVAL_MS;
+      // Backoff mirrors web: 3s for the first 10 attempts, 10s to
+      // attempt 43 (~6 minutes), then a 60s patient lane to attempt
+      // 73 (~36 minutes). The reconciler rotates one 25-row page per
+      // 5-minute window, so a backlog row settles after a 6-minute
+      // loop gives up — and the retained entry would then replay the
+      // old vend as a later identical purchase (Codex R55 6rrU6M).
+      if (fetchCountRef.current <= FAST_POLL_ATTEMPTS) {
+        return POLL_INTERVAL_MS;
+      }
+      if (fetchCountRef.current <= SLOW_POLL_ATTEMPTS) {
+        return POLL_SLOW_INTERVAL_MS;
+      }
+      return POLL_PATIENT_INTERVAL_MS;
     },
     queryFn: (context) => {
       // Key layout: ['vtu', 'voucher-pin-backfill', userId, apiType,

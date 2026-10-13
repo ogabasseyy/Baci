@@ -2,11 +2,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useRef } from 'react';
 import { CONFIG } from '@/lib/config';
+import { scopePendingVtuKey } from '@/lib/pending-vtu-descriptor';
 import {
   forgetPendingVtuPurchase,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
-  scopePendingVtuKey,
 } from '@/lib/pending-vtu-idempotency';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { useAuthStore } from '@/stores/auth-store';

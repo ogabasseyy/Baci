@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
       merchantSlug,
       user: auth.user,
     });
-    if (resolution.kind === 'merchantError') {
+    if (
+      resolution.kind === 'merchantError' ||
+      resolution.kind === 'customerError'
+    ) {
       return NextResponse.json(
         { error: 'Failed to fetch history' },
         { status: 500 }

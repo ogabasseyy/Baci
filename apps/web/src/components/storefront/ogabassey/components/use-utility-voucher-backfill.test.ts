@@ -13,6 +13,7 @@ import {
   useUtilityVoucherBackfill,
   UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS,
   UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS,
+  UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS,
 } from './use-utility-voucher-backfill';
 
 describe('parseUtilityVoucherBackfill', () => {
@@ -367,8 +368,8 @@ describe('useUtilityVoucherBackfill', () => {
 
     const { result } = renderHook(() => useUtilityVoucherBackfill(input));
     await act(async () => {
-      // Past the ~6-minute backoff window: 10×3s + 33×10s + margin.
-      await vi.advanceTimersByTimeAsync(400_000);
+      // Past the full backoff window: 10×3s + 33×10s + 30×60s + margin.
+      await vi.advanceTimersByTimeAsync(2_200_000);
     });
 
     expect(result.current.successful).toBe(false);
@@ -579,6 +580,45 @@ describe('useUtilityVoucherBackfill', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(recallPendingVtuKey('{"hook":true}')).toBeUndefined();
+  });
+
+  it('settles a row that lands in the patient lane past the slow window', async () => {
+    // Reconciliation backlog: the row sits on a later 25-row page and
+    // settles ~20 minutes in — past the 6-minute slow window. The
+    // patient lane must still observe it and forget the entry, or a
+    // later identical purchase replays the old vend as new (6rrU6M).
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"hook-late":true}', 'key-hook-late');
+    notePendingVtuReference('{"hook-late":true}', 'VTU-1');
+    let calls = 0;
+    const fetchMock = mockHistory(() => {
+      calls += 1;
+      return calls <= UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS
+        ? { transactions: [pendingRow] }
+        : {
+            transactions: [
+              {
+                request_reference: 'VTU-1',
+                status: 'successful',
+                refund_pending: false,
+              },
+            ],
+          };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() =>
+      useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_200_000);
+    });
+
+    expect(result.current.successful).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(
+      UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS + 1
+    );
+    expect(recallPendingVtuKey('{"hook-late":true}')).toBeUndefined();
   });
 
   it('keeps hunting a token for pin-less bill successes', async () => {

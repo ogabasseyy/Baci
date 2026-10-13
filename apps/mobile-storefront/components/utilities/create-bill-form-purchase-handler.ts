@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  buildVtuPurchaseDescriptor,
   isStalePendingVtuSuccess,
   markPendingVtuCompleted,
   notePendingVtuReference,
@@ -263,13 +263,22 @@ export function createBillFormPurchaseHandler({
           // (fire-and-forget would let a quick retry re-pass on the
           // stale balance — `walletIsLoading` is false during
           // background refetches). Never rejects, so the original
-          // error below always survives.
-          await payment.refetchWallet();
+          // error below always survives. On-screen only: off-screen
+          // falls through to the never-fails refresh below (one
+          // refetch, and a rejection must not defeat the suppression
+          // by landing in the outer catch's Alert).
+          if (!getIsActive || getIsActive()) {
+            await payment.refetchWallet();
+          }
         }
         if (getIsActive && !getIsActive()) {
-          // Screen gone: rotation + refetch above already finalized the
-          // entry — suppress the failure UI (no Alert over the new
-          // screen).
+          // Screen gone: refresh (a 5xx may have committed while its
+          // response was lost, and the retained key re-serves the
+          // cached balance on reopen — without this the client gate
+          // validates against the pre-debit balance) then suppress
+          // the failure UI (no Alert over the new screen). Never-fails
+          // wrapper: the refresh must not surface as Payment Failed.
+          await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
         throw error;

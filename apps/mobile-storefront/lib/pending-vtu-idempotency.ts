@@ -26,20 +26,18 @@
  */
 
 import {
-  canonicalizeVtuRetryIdentity,
-  hashVtuScopeDescriptor,
-} from '@baci/shared';
+  hasLegacyVtuScopeKeys,
+  PERSISTED_VTU_KEY_TTL_MS,
+  parsePendingVtuSnapshot,
+  serializePendingVtuEntries,
+} from './pending-vtu-idempotency-codec';
 import {
   clearForgottenVtuScopes,
   clearPendingVtuSnapshot,
   forgottenVtuScopes,
-  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
   noteForgottenVtuScopes,
-  PERSISTED_VTU_KEY_TTL_MS,
-  parsePendingVtuSnapshot,
   persistPendingVtuEntries,
-  serializePendingVtuEntries,
 } from './pending-vtu-idempotency-store';
 
 /** Sequential mobile UX never has more than a couple of pendings in flight. */
@@ -118,38 +116,6 @@ const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
 hydratePendingVtuPurchases(initialPendingVtuSnapshot);
 if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
   persistPendingVtuPurchases();
-}
-
-/**
- * Binds a descriptor to the submitting owner + merchant. Callers MUST
- * scope ONCE per submission: a module-global scope would let an
- * account switch redirect one customer's completion onto another's.
- * Returns the SHA-256 digest (not the raw scope string): the
- * descriptor embeds recipient identifiers and the digest keeps them
- * out of the live map and the MMKV snapshot at rest.
- */
-export function scopePendingVtuKey(
-  ownerId: string | null | undefined,
-  merchantId: string | null | undefined,
-  descriptor: string
-): string {
-  return hashVtuScopeDescriptor(
-    `${merchantId ?? ''}:${ownerId ?? ''}:${descriptor}`
-  );
-}
-
-/**
- * Canonical descriptor for a wallet-only VTU payload, derived from
- * the shared retry-identity module (same field list the server
- * hashes — see its doc for the lockstep rationale). Field order is
- * fixed and absent values normalize to null, so two identical
- * payloads always describe identically regardless of key insertion
- * order.
- */
-export function buildVtuPurchaseDescriptor(
-  payload: Record<string, unknown>
-): string {
-  return JSON.stringify(canonicalizeVtuRetryIdentity(payload));
 }
 
 /**

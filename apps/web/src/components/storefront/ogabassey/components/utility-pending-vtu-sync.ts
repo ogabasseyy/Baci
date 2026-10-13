@@ -7,12 +7,14 @@
  * recall/remember/note/complete/stale operations on top.
  */
 import {
-  hasLegacyVtuScopeKeys,
   loadPendingVtuSnapshot,
-  parsePendingVtuSnapshot,
   savePendingVtuSnapshot,
-  serializePendingVtuEntries,
 } from './utility-pending-idempotency-store';
+import {
+  hasLegacyVtuScopeKeys,
+  parsePendingVtuSnapshot,
+  serializePendingVtuEntries,
+} from './utility-pending-vtu-codec';
 
 export interface PendingVtuPurchase {
   key: string;
@@ -34,12 +36,38 @@ export const pendingVtuPurchases = new Map<string, PendingVtuPurchase>();
 
 /**
  * Scopes deliberately deleted since the last persist (scope ->
- * deletion time). Sync imports snapshot tombstones here too, so a
- * completed key deleted in another tab is dropped locally instead
- * of written back on the next persist. Cleared on every persist
- * (the snapshot then carries the tombstones).
+ * deletion record). Sync imports snapshot tombstones here too, so
+ * a completed key deleted in another tab is dropped locally
+ * instead of written back on the next persist. Cleared on every
+ * persist (the snapshot then carries the tombstones).
+ *
+ * The record binds the deleted KEY generation, not just the scope:
+ * a newer in-flight key under the same scope must survive a
+ * tombstone written for an older generation (Codex R55 6rrMIj) —
+ * timestamp-only arbitration would erase it and its retry would
+ * mint fresh and double-debit. Keyless records (pre-binding
+ * snapshots) fall back to timestamp arbitration.
  */
-export const forgottenScopedKeys = new Map<string, number>();
+export interface ForgottenVtuScope {
+  forgottenAt: number;
+  key?: string;
+}
+
+export const forgottenScopedKeys = new Map<string, ForgottenVtuScope>();
+
+/**
+ * Records a deliberate deletion (single choke point so the key
+ * binding cannot be forgotten at one of the forget sites). Latest
+ * deletion wins per scope — remember() deletes the record, so a
+ * record always postdates the entry it names.
+ */
+export function noteForgottenVtuScope(
+  scoped: string,
+  forgottenAt: number,
+  key?: string
+): void {
+  forgottenScopedKeys.set(scoped, { forgottenAt, key });
+}
 
 /** Serializes live entries for localStorage (prunes TTL-expired). */
 export function serializePendingVtuPurchases(
@@ -47,9 +75,10 @@ export function serializePendingVtuPurchases(
 ): string {
   return serializePendingVtuEntries(
     pendingVtuPurchases,
-    [...forgottenScopedKeys].map(([scoped, forgottenAt]) => ({
+    [...forgottenScopedKeys].map(([scoped, record]) => ({
       scoped,
-      forgottenAt,
+      forgottenAt: record.forgottenAt,
+      ...(typeof record.key === 'string' ? { key: record.key } : {}),
     })),
     now
   );
@@ -87,14 +116,26 @@ export function hydratePendingVtuPurchases(
  */
 export function syncPendingVtuPurchasesFromSnapshot(): void {
   const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
-  for (const { scoped, forgottenAt } of snapshot.forgotten) {
+  for (const { scoped, forgottenAt, key } of snapshot.forgotten) {
     const live = pendingVtuPurchases.get(scoped);
-    if (live && live.rememberedAt <= forgottenAt) {
+    // Live-delete is KEY-bound (Codex R55 6rrMIj): a newer
+    // generation under the same scope survives an older
+    // generation's tombstone even when the tombstone's clock is
+    // later (stale tab, skewed clocks). Key equality ignores
+    // timestamps (causality beats clocks: same key means the live
+    // entry IS the deleted generation); keyless tombstones
+    // (pre-binding) fall back to timestamp arbitration.
+    if (
+      live &&
+      (key === undefined
+        ? live.rememberedAt <= forgottenAt
+        : live.key === key)
+    ) {
       pendingVtuPurchases.delete(scoped);
     }
     const known = forgottenScopedKeys.get(scoped);
-    if (known === undefined || forgottenAt > known) {
-      forgottenScopedKeys.set(scoped, forgottenAt);
+    if (known === undefined || forgottenAt > known.forgottenAt) {
+      forgottenScopedKeys.set(scoped, { forgottenAt, key });
     }
   }
   for (const [scoped, entry] of snapshot.entries) {
@@ -119,10 +160,20 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
       }
       continue;
     }
-    const tombstonedAt = forgottenScopedKeys.get(scoped);
+    // Entry-merge DELIBERATELY stays timestamp-bound (asymmetric
+    // with live-delete above): a zombie entry for an OLDER
+    // generation (stale tab that missed the intermediate forget)
+    // must still be suppressed, and only the timestamp proves it
+    // predates the deletion. Well-formed snapshots cannot hold a
+    // different-key entry older than their own tombstone, so this
+    // never suppresses a genuine newer generation.
+    const tombstone = forgottenScopedKeys.get(scoped);
     // A re-remembered entry (newer than the tombstone) still merges:
     // only the deleted generation is suppressed.
-    if (tombstonedAt !== undefined && entry.rememberedAt <= tombstonedAt) {
+    if (
+      tombstone !== undefined &&
+      entry.rememberedAt <= tombstone.forgottenAt
+    ) {
       continue;
     }
     pendingVtuPurchases.set(scoped, {

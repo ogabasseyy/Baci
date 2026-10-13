@@ -1,13 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   isFlaggedReferenceLessVtuRow,
   isMarkedUnsubmittedMonnifyVtuRow,
   isUnsubmittedPreparedVtuRow,
-  markVtuProviderSubmissionStarted,
-  STRANDED_UNSUBMITTED_MIN_CREATED_MS,
-  VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY,
+  VTU_SUBMISSION_MARKER_ERA_KEY,
 } from './vtu-flagged-recovery';
 import { STRANDED_PRE_VEND_STALE_MS } from './vtu-pre-vend-recovery';
+import { VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY } from './vtu-submission-marker';
 
 describe('isFlaggedReferenceLessVtuRow', () => {
   const staleAt = new Date(
@@ -145,17 +144,11 @@ describe('isUnsubmittedPreparedVtuRow', () => {
     Date.now() - STRANDED_PRE_VEND_STALE_MS - 1000
   ).toISOString();
   const freshAt = new Date(Date.now() - 1000).toISOString();
-  const markerEraAt = new Date(
-    STRANDED_UNSUBMITTED_MIN_CREATED_MS + 1000
-  ).toISOString();
-  const preMarkerAt = new Date(
-    STRANDED_UNSUBMITTED_MIN_CREATED_MS - 1000
-  ).toISOString();
   const base = {
-    created_at: markerEraAt,
+    created_at: new Date(Date.now() - 1000).toISOString(),
     error_message: null,
     id: 'vtu-1',
-    metadata: { walletDebited: true },
+    metadata: { walletDebited: true, [VTU_SUBMISSION_MARKER_ERA_KEY]: true },
     request_reference: 'VTU-REQ-1',
     status: 'processing' as const,
     transaction_id: null,
@@ -167,6 +160,21 @@ describe('isUnsubmittedPreparedVtuRow', () => {
     // marker absence proves no submission ran, so the row re-drives
     // with the same reference instead of requerying unknown forever.
     expect(isUnsubmittedPreparedVtuRow(base)).toBe(true);
+  });
+
+  it('recovers regardless of created_at once the era flag exists', () => {
+    // Deploy-safe by construction (Codex R55 6rrU6H): no date cutoff
+    // means no deploy-before-cutoff hole — even a row created
+    // minutes after an early deploy re-drives.
+    expect(
+      isUnsubmittedPreparedVtuRow({
+        ...base,
+        created_at: new Date(Date.now() - 1000).toISOString(),
+      })
+    ).toBe(true);
+    expect(isUnsubmittedPreparedVtuRow({ ...base, created_at: null })).toBe(
+      true
+    );
   });
 
   it('declines any row carrying the submission marker, even malformed', () => {
@@ -183,7 +191,7 @@ describe('isUnsubmittedPreparedVtuRow', () => {
         isUnsubmittedPreparedVtuRow({
           ...base,
           metadata: {
-            walletDebited: true,
+            ...base.metadata,
             [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: marker,
           },
         })
@@ -191,13 +199,16 @@ describe('isUnsubmittedPreparedVtuRow', () => {
     }
   });
 
-  it('declines pre-marker-era rows whose marker absence proves nothing', () => {
-    // Legacy purchases never knew the marker: a landed vend looks
+  it('declines rows without the marker-era flag, whose marker absence proves nothing', () => {
+    // Pre-merge purchases never knew the marker: a landed vend looks
     // identical to a crash strand, so these stay requery-only.
     expect(
-      isUnsubmittedPreparedVtuRow({ ...base, created_at: preMarkerAt })
+      isUnsubmittedPreparedVtuRow({
+        ...base,
+        metadata: { walletDebited: true },
+      })
     ).toBe(false);
-    expect(isUnsubmittedPreparedVtuRow({ ...base, created_at: null })).toBe(
+    expect(isUnsubmittedPreparedVtuRow({ ...base, metadata: null })).toBe(
       false
     );
   });
@@ -334,185 +345,5 @@ describe('isMarkedUnsubmittedMonnifyVtuRow', () => {
         },
       })
     ).toBe(false);
-  });
-});
-
-describe('markVtuProviderSubmissionStarted', () => {
-  function createSupabase(
-    updateError: { message: string } | null,
-    reread: {
-      data: Record<string, unknown> | null;
-      error: { message: string } | null;
-    } = { data: null, error: null }
-  ) {
-    const eq = vi.fn(() => Promise.resolve({ error: updateError }));
-    const update = vi.fn(() => ({ eq }));
-    const rereadMaybeSingle = vi.fn(() => Promise.resolve(reread));
-    const rereadEq = vi.fn(() => ({ maybeSingle: rereadMaybeSingle }));
-    const select = vi.fn(() => ({ eq: rereadEq }));
-    const supabase = { from: vi.fn(() => ({ select, update })) };
-    return { eq, rereadEq, select, supabase, update };
-  }
-
-  it('persists the marker and reflects it on the row', async () => {
-    const { eq, supabase, update } = createSupabase(null);
-    const row: { id: string; metadata: Record<string, unknown> } = {
-      id: 'vtu-1',
-      metadata: { walletDebited: true },
-    };
-
-    const result = await markVtuProviderSubmissionStarted({
-      row,
-      supabase: supabase as never,
-    });
-
-    expect(result).toBeNull();
-    expect(supabase.from).toHaveBeenCalledWith('vtu_transactions');
-    expect(update).toHaveBeenCalledWith({
-      metadata: expect.objectContaining({
-        walletDebited: true,
-        [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: expect.any(String),
-      }),
-    });
-    expect(eq).toHaveBeenCalledWith('id', 'vtu-1');
-    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toEqual(
-      expect.any(String)
-    );
-  });
-
-  it('reports the persist error without touching the row', async () => {
-    const { supabase } = createSupabase({ message: 'db down' });
-    const row = { id: 'vtu-1', metadata: { walletDebited: true } };
-
-    const result = await markVtuProviderSubmissionStarted({
-      row,
-      supabase: supabase as never,
-    });
-
-    expect(result).toEqual({ message: 'db down' });
-    expect(row.metadata).toEqual({ walletDebited: true });
-  });
-
-  it('adopts a marker the update committed but failed to report', async () => {
-    // Response lost during the marker RTT (Codex R54 6rrFRC): the
-    // re-read marker with no response reference is provably this
-    // worker's — no provider call ran on the linear path here — so
-    // adopt it and proceed to the vend instead of stranding the row.
-    const markerAt = new Date().toISOString();
-    const { rereadEq, select, supabase } = createSupabase(
-      { message: 'timeout' },
-      {
-        data: {
-          metadata: {
-            walletDebited: true,
-            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: markerAt,
-          },
-          status: 'processing',
-          transaction_id: null,
-        },
-        error: null,
-      }
-    );
-    const row: { id: string; metadata: Record<string, unknown> } = {
-      id: 'vtu-1',
-      metadata: { walletDebited: true },
-    };
-
-    const result = await markVtuProviderSubmissionStarted({
-      row,
-      supabase: supabase as never,
-    });
-
-    expect(result).toBeNull();
-    expect(select).toHaveBeenCalledWith('metadata, status, transaction_id');
-    expect(rereadEq).toHaveBeenCalledWith('id', 'vtu-1');
-    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(markerAt);
-  });
-
-  it('keeps the error when the re-read refutes the commit', async () => {
-    // Truly failed write (no marker), lost re-read, vanished row, or
-    // a status another worker moved: fail closed, row untouched.
-    const cases: Array<Record<string, unknown> | null> = [
-      {
-        metadata: { walletDebited: true },
-        status: 'processing',
-        transaction_id: null,
-      },
-      {
-        metadata: {
-          walletDebited: true,
-          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
-        },
-        status: 'successful',
-        transaction_id: null,
-      },
-      null,
-    ];
-    for (const data of cases) {
-      const { supabase } = createSupabase(
-        { message: 'timeout' },
-        { data, error: null }
-      );
-      const row = { id: 'vtu-1', metadata: { walletDebited: true } };
-
-      const result = await markVtuProviderSubmissionStarted({
-        row,
-        supabase: supabase as never,
-      });
-
-      expect(result).toEqual({ message: 'timeout' });
-      expect(row.metadata).toEqual({ walletDebited: true });
-    }
-
-    const { supabase: rereadDown } = createSupabase(
-      { message: 'timeout' },
-      { data: null, error: { message: 'db down' } }
-    );
-    const row = { id: 'vtu-1', metadata: { walletDebited: true } };
-    const result = await markVtuProviderSubmissionStarted({
-      row,
-      supabase: rereadDown as never,
-    });
-    expect(result).toEqual({ message: 'timeout' });
-    expect(row.metadata).toEqual({ walletDebited: true });
-  });
-
-  it('keeps the error when another worker persisted a response', async () => {
-    // Defense in depth (unreachable on the linear path): a re-read
-    // response reference means a provider call answered — adopting
-    // and vending would double-value.
-    for (const response of [
-      {
-        metadata: {
-          walletDebited: true,
-          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
-        },
-        status: 'processing',
-        transaction_id: 'kuda-ref-1',
-      },
-      {
-        metadata: {
-          walletDebited: true,
-          monnifyVendReference: 'VEND-1',
-          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
-        },
-        status: 'processing',
-        transaction_id: null,
-      },
-    ]) {
-      const { supabase } = createSupabase(
-        { message: 'timeout' },
-        { data: response, error: null }
-      );
-      const row = { id: 'vtu-1', metadata: { walletDebited: true } };
-
-      const result = await markVtuProviderSubmissionStarted({
-        row,
-        supabase: supabase as never,
-      });
-
-      expect(result).toEqual({ message: 'timeout' });
-      expect(row.metadata).toEqual({ walletDebited: true });
-    }
   });
 });

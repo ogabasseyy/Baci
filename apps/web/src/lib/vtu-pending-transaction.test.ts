@@ -258,6 +258,9 @@ describe('preparePendingVtuTransaction', () => {
           billerCode: 'MTN',
           productCode: '13',
           provider: 'monnify',
+          // Marker-era flag (Codex R55 6rrU6H): unconditional, so the
+          // unsubmitted proof never needs a deploy-coupled cutoff.
+          submissionMarkerEra: true,
         }),
         network_provider: 'MTN',
       })

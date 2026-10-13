@@ -765,7 +765,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
             delete: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
-                  eq: vi.fn().mockResolvedValue({ error: null }),
+                  eq: vi.fn(() => ({
+                    select: vi.fn(() => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { id: 'vtu-orphan' },
+                        error: null,
+                      }),
+                    })),
+                  })),
                 })),
               })),
             })),
@@ -792,6 +799,148 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       error: expect.stringMatching(/idempotency/i),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('PK-race recovery: marks the orphan failed when its delete fails, then replays the winner', async () => {
+    // Muse R55 HIGH: log-and-continue on a failed orphan delete
+    // would leave a pending orphan the client never references. The
+    // terminal failed mark closes it, and the cleanup outcome never
+    // masks the winner's replay.
+    let lookupCallCount = 0;
+    const winnerRow = {
+      key: VALID_KEY,
+      vtu_transaction_id: 'vtu-tx-winner',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      request_fingerprint: VALID_BODY_FINGERPRINT,
+    };
+    const markPayloads: Record<string, unknown>[] = [];
+    mockPrepare.mockResolvedValue({
+      transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
+      customer: { id: 'customer-1', email: 'c@example.com' },
+      merchant: { id: 'merchant-1' },
+    });
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-WINNER',
+      status: 'successful',
+    });
+    supabaseMockRef.current = {
+      from: vi.fn((table: string) => {
+        if (table === 'vtu_idempotency_keys') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(() => {
+                  lookupCallCount += 1;
+                  return Promise.resolve({
+                    data: lookupCallCount === 1 ? null : winnerRow,
+                    error: null,
+                  });
+                }),
+              })),
+            })),
+            insert: vi.fn(() =>
+              Promise.resolve({
+                data: null,
+                error: {
+                  message: 'duplicate key value violates unique constraint',
+                },
+              })
+            ),
+          };
+        }
+        if (table === 'merchants') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'merchant-1' },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+        if (table === 'customers') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'customer-1', email: 'c@example.com' },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+        if (table === 'vtu_transactions') {
+          return {
+            delete: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    select: vi.fn(() => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: null,
+                        error: { message: 'connection reset' },
+                      }),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    id: 'vtu-tx-mine',
+                    metadata: { provider: 'kuda' },
+                    status: 'pending',
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+            update: vi.fn((payload: Record<string, unknown>) => {
+              markPayloads.push(payload);
+              return {
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    select: vi.fn(() => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { id: 'vtu-tx-mine' },
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+              };
+            }),
+          };
+        }
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
+        };
+      }),
+      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(markPayloads).toHaveLength(1);
+    expect(markPayloads[0]).toMatchObject({
+      error_message: expect.stringContaining('no charge was made'),
+      status: 'failed',
+    });
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-winner' })
+    );
   });
 
   it('cross-customer collision: stored row owned by a different customer rejects with 400', async () => {
@@ -890,7 +1039,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
             delete: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
-                  eq: vi.fn().mockResolvedValue({ error: null }),
+                  eq: vi.fn(() => ({
+                    select: vi.fn(() => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { id: 'vtu-orphan' },
+                        error: null,
+                      }),
+                    })),
+                  })),
                 })),
               })),
             })),

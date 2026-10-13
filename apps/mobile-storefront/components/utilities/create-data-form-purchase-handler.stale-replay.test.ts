@@ -2,8 +2,8 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  buildVtuPurchaseDescriptor,
   clearPendingVtuKeys,
   isStalePendingVtuSuccess,
   markPendingVtuCompleted,
@@ -326,7 +326,7 @@ describe('data stale success replay', () => {
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 
-  it('suppresses an off-screen ambiguous rejection without rotating', async () => {
+  it('refreshes the wallet on an off-screen ambiguous rejection without rotating', async () => {
     mockChargeWalletForVtu.mockRejectedValueOnce(
       new HttpError(500, 'Gateway error')
     );
@@ -339,7 +339,11 @@ describe('data stale success replay', () => {
     });
 
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
-    expect(refetchWallet).not.toHaveBeenCalled();
+    // The 5xx may have committed while its response was lost: refresh
+    // so reopening does not validate against the pre-debit balance
+    // (Codex R55 6rrMIb). Rotation stays off (ambiguous keeps the
+    // key) and no Alert may fire over the destination screen.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 

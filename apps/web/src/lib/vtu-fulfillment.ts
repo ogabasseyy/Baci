@@ -30,7 +30,6 @@ import {
   isFlaggedReferenceLessVtuRow,
   isMarkedUnsubmittedMonnifyVtuRow,
   isUnsubmittedPreparedVtuRow,
-  markVtuProviderSubmissionStarted,
 } from '@/lib/vtu-flagged-recovery';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
@@ -48,6 +47,7 @@ import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
 } from '@/lib/vtu-refund-guard';
+import { markVtuProviderSubmissionStarted } from '@/lib/vtu-submission-marker';
 
 export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
 export { RetryableVtuError };

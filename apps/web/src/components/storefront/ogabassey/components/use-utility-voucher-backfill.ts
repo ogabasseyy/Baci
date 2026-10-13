@@ -15,8 +15,10 @@ import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 // plain effect loop with the same interval and attempt cap.
 export const UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS = 3000;
 export const UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS = 10_000;
+export const UTILITY_VOUCHER_BACKFILL_PATIENT_INTERVAL_MS = 60_000;
 export const UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS = 10;
-export const UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS = 43;
+export const UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS = 43;
+export const UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS = 73;
 
 const TAB_TO_HISTORY_TYPE: Record<string, string> = {
   airtime: 'airtime',
@@ -137,14 +139,25 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Backoff schedule: 3s for the first 10 attempts (fast provider
- * confirmations), then 10s. 43 attempts span ~6 minutes — enough to
- * cover a full reconciliation pass (45s cron age gate + 5-minute
- * voucher schedule) instead of giving up after 27s.
+ * confirmations), then 10s to attempt 43 (~6 minutes — covers a
+ * single reconciliation pass), then a 60s patient lane to attempt
+ * 73 (~36 minutes total). The reconciler rotates one 25-row page
+ * per 5-minute window, so a row on a later page of a backlog
+ * settles AFTER a 6-minute loop gives up — and since the stale
+ * guard only fires past an OBSERVED completion, the retained entry
+ * would then replay the old vend as a later identical purchase
+ * (Codex R55 6rrU6M). The patient lane keeps watching through ~7
+ * page rotations; each observation still settles the entry the
+ * moment terminality lands.
  */
 function backfillPollDelayMs(attempt: number): number {
-  return attempt <= UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS
-    ? UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
-    : UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS;
+  if (attempt <= UTILITY_VOUCHER_BACKFILL_FAST_ATTEMPTS) {
+    return UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS;
+  }
+  if (attempt <= UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS) {
+    return UTILITY_VOUCHER_BACKFILL_SLOW_INTERVAL_MS;
+  }
+  return UTILITY_VOUCHER_BACKFILL_PATIENT_INTERVAL_MS;
 }
 
 export function useUtilityVoucherBackfill({

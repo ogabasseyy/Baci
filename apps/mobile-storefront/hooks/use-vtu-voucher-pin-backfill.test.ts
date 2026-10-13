@@ -14,7 +14,9 @@ import {
   FAST_POLL_ATTEMPTS,
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL_MS,
+  POLL_PATIENT_INTERVAL_MS,
   POLL_SLOW_INTERVAL_MS,
+  SLOW_POLL_ATTEMPTS,
   useVtuVoucherPinBackfill,
 } from './use-vtu-voucher-pin-backfill';
 
@@ -148,15 +150,21 @@ describe('useVtuVoucherPinBackfill', () => {
         expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
       );
     }
-    for (let i = FAST_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+    for (let i = FAST_POLL_ATTEMPTS; i < SLOW_POLL_ATTEMPTS; i++) {
       await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
       await waitFor(() =>
         expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
       );
     }
+    for (let i = SLOW_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
 
-    // Advance two more slow intervals — cap must prevent more fetches.
-    await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS * 2);
+    // Advance two more patient intervals — cap must prevent more fetches.
+    await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS * 2);
     expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS);
     expect(result.current).toEqual({
       pin: null,
@@ -185,8 +193,14 @@ describe('useVtuVoucherPinBackfill', () => {
         expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
       );
     }
-    for (let i = FAST_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+    for (let i = FAST_POLL_ATTEMPTS; i < SLOW_POLL_ATTEMPTS; i++) {
       await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
+      await waitFor(() =>
+        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
+      );
+    }
+    for (let i = SLOW_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS);
       await waitFor(() =>
         expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
       );

@@ -1,11 +1,10 @@
 import { hashVtuScopeDescriptor } from '@baci/shared';
 import { createWalletIdempotencyKey } from './utility-checkout';
-import {
-  PERSISTED_VTU_KEY_TTL_MS,
-  clearPendingVtuSnapshot,
-} from './utility-pending-idempotency-store';
+import { clearPendingVtuSnapshot } from './utility-pending-idempotency-store';
+import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-vtu-codec';
 import {
   forgottenScopedKeys,
+  noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
@@ -87,7 +86,7 @@ export function recallPendingVtuKey(
   if (!pending) return undefined;
   if (now - pending.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
     pendingVtuPurchases.delete(payloadSignature);
-    forgottenScopedKeys.set(payloadSignature, now);
+    noteForgottenVtuScope(payloadSignature, now, pending.key);
     persistPendingVtuPurchases();
     return undefined;
   }
@@ -107,7 +106,7 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   for (const [scoped, entry] of pendingVtuPurchases) {
     if (now - entry.rememberedAt > PERSISTED_VTU_KEY_TTL_MS) {
       pendingVtuPurchases.delete(scoped);
-      forgottenScopedKeys.set(scoped, now);
+      noteForgottenVtuScope(scoped, now, entry.key);
       return;
     }
   }
@@ -187,7 +186,7 @@ export function forgetPendingVtuByReference(
       continue;
     }
     pendingVtuPurchases.delete(scoped);
-    forgottenScopedKeys.set(scoped, now);
+    noteForgottenVtuScope(scoped, now, pending.key);
     touched = true;
   }
   if (touched) {
@@ -242,8 +241,13 @@ export function isStalePendingVtuSuccess(
 }
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {
+  // Bind the deleted generation: a newer in-flight key under the
+  // same scope must survive this tombstone in other tabs (Codex
+  // R55 6rrMIj). Unknown scope (no live entry) degrades to a
+  // keyless tombstone with timestamp arbitration.
+  const pending = pendingVtuPurchases.get(payloadSignature);
   pendingVtuPurchases.delete(payloadSignature);
-  forgottenScopedKeys.set(payloadSignature, Date.now());
+  noteForgottenVtuScope(payloadSignature, Date.now(), pending?.key);
   persistPendingVtuPurchases();
 }
 

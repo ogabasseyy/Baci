@@ -7,6 +7,7 @@ import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
+import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -174,22 +175,24 @@ export async function POST(request: NextRequest) {
       });
     if (insertError) {
       // Likely a parallel submit won the PRIMARY KEY race. Two steps:
-      //   1. Delete our orphan vtu_transactions row: unreferenced from
-      //      the idempotency table, and a pending-scan reconciler could
-      //      otherwise re-fulfill it into a SECOND debit (the redeem
-      //      RPC's per-id idempotency would NOT block a fresh source).
+      //   1. Remove our orphan vtu_transactions row (verified delete
+      //      with a terminal failed-mark fallback): unreferenced from
+      //      the idempotency table, it must not survive pending — a
+      //      pending-scan reconciler could otherwise re-fulfill it
+      //      into a SECOND debit (the redeem RPC's per-id idempotency
+      //      would NOT block a fresh source).
       //   2. Re-fetch the winner's row and replay it.
-      const { error: deleteError } = await supabase
-        .from('vtu_transactions')
-        .delete()
-        .eq('id', prepared.transaction.id)
-        .eq('status', 'pending')
-        .eq('merchant_id', prepared.merchant.id);
-      if (deleteError) {
-        console.error('Failed to clean up orphan VTU row after key race:', {
-          error: deleteError.message,
-          transactionId: prepared.transaction.id,
-        });
+      // The cleanup outcome never masks the replay (Muse R55 HIGH).
+      const cleanupOutcome = await cleanupOrphanVtuTransactionAfterKeyRace({
+        merchantId: prepared.merchant.id,
+        supabase,
+        transactionId: prepared.transaction.id,
+      });
+      if (cleanupOutcome === 'unresolved') {
+        console.error(
+          'Orphan VTU cleanup unresolved after idempotency-key race; row may strand pending:',
+          { transactionId: prepared.transaction.id }
+        );
       }
       const racedExisting = await findExistingIdempotencyRow(
         supabase,

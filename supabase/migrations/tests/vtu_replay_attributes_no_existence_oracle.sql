@@ -88,6 +88,20 @@ BEGIN
   PERFORM public.set_vtu_transaction_replay_attributes(
     v_tx, '08012345678', 'VAL-OWNER'
   );
+
+  -- Case 5: a sub-less JWT whose role is NOT service_role (an anon
+  -- caller after a future grant slip) takes the silent skip — no
+  -- write, no P0002 on either existing or missing rows (Muse R55
+  -- role pin). Pre-pin the existing-row call wrote and the
+  -- missing-row call raised. Any raise fails this script.
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  PERFORM public.set_vtu_transaction_replay_attributes(
+    v_tx, '08000000000', 'VAL-INTRUDER'
+  );
+  PERFORM public.set_vtu_transaction_replay_attributes(
+    v_missing, '08000000000', 'VAL-INTRUDER'
+  );
   RESET ROLE;
 
   -- The non-owner calls must not have modified the row: only the

@@ -3,8 +3,8 @@ import { renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  buildVtuPurchaseDescriptor,
   clearPendingVtuKeys,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
@@ -563,7 +563,7 @@ describe('airtime stale success replay', () => {
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 
-  it('suppresses an off-screen ambiguous rejection without rotating', async () => {
+  it('refreshes the wallet on an off-screen ambiguous rejection without rotating', async () => {
     mockChargeWalletForVtu.mockRejectedValueOnce(
       new HttpError(500, 'Gateway error')
     );
@@ -577,7 +577,31 @@ describe('airtime stale success replay', () => {
     await result.current.handlePurchase();
 
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
-    expect(refetchWallet).not.toHaveBeenCalled();
+    // The 5xx may have committed while its response was lost: refresh
+    // so reopening does not validate against the pre-debit balance
+    // (Codex R55 6rrMIb). Rotation stays off (ambiguous keeps the
+    // key) and no Alert may fire over the destination screen.
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps an off-screen ambiguous error suppressed when the refresh rejects', async () => {
+    // Never-fails wrapper on the error path too: a refetch rejection
+    // must degrade to a stale balance, never defeat the suppression
+    // by landing in the outer catch's Alert.
+    mockChargeWalletForVtu.mockRejectedValueOnce(
+      new HttpError(500, 'Gateway error')
+    );
+    const refetchWallet = jest.fn(() =>
+      Promise.reject(new Error('wallet query exploded'))
+    );
+    const { result } = renderHandler({
+      refetchWallet,
+      getIsActive: () => false,
+    });
+    await result.current.handlePurchase();
+
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 

@@ -26,9 +26,9 @@ interface ResolveVtuMerchantInput {
 /**
  * Resolves the merchant row for a VTU prepare. Alias-aware (stale
  * tabs on renamed stores resolve via the alias table, live slug
- * wins) and strict (an alias-DB failure throws to a 500 with the key
- * kept instead of a spurious terminal). Throws 'Merchant not found'
- * when no merchant matches.
+ * wins). Strict callers get a throw on alias-DB failure (500, key
+ * kept); non-strict callers keep legacy lenient behavior (not-found).
+ * Throws 'Merchant not found' when no merchant matches.
  */
 export async function resolveVtuMerchant({
   merchantSlug,
@@ -44,7 +44,7 @@ export async function resolveVtuMerchant({
           .select('id, slug, business_name, paystack_subaccount_code')
           .eq('slug', s)
           .maybeSingle(),
-      { strict: true }
+      { strict: strictLookups }
     );
 
   // Strict: a transient lookup error must 500 (key kept), never

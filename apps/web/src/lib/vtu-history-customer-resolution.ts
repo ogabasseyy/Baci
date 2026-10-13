@@ -5,6 +5,7 @@ export type HistoryMerchantCustomerResolution =
   | { kind: 'ok'; merchantId: string; customerId: string }
   | { kind: 'merchantError' }
   | { kind: 'noMerchant' }
+  | { kind: 'customerError' }
   | { kind: 'noCustomer' };
 
 /**
@@ -57,12 +58,25 @@ export async function resolveHistoryMerchantCustomer({
     return { kind: 'noMerchant' };
   }
 
-  const { data: customerByUserId } = await supabase
-    .from('customers')
-    .select('id, user_id')
-    .eq('merchant_id', merchant.id)
-    .eq('user_id', user.id)
-    .maybeSingle();
+  // Customer lookups are strict like the merchant lookup above: a
+  // transient DB blip must 500 (retryable), never present as empty
+  // history — pollers would burn their finite retry budget on
+  // successful-looking empty responses (Codex R55 6rrMIW).
+  const { data: customerByUserId, error: customerByUserIdError } =
+    await supabase
+      .from('customers')
+      .select('id, user_id')
+      .eq('merchant_id', merchant.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+  if (customerByUserIdError) {
+    console.error(
+      'Failed to resolve VTU history customer by user id:',
+      customerByUserIdError
+    );
+    return { kind: 'customerError' };
+  }
 
   if (customerByUserId) {
     return {
@@ -75,12 +89,21 @@ export async function resolveHistoryMerchantCustomer({
   if (user.email) {
     // Keep this GET read-only. VTU checkout resolves and links email-matched
     // customers through resolveVtuCustomer before creating payment rows.
-    const { data: customerByEmail } = await supabase
-      .from('customers')
-      .select('id, user_id')
-      .eq('merchant_id', merchant.id)
-      .eq('email', user.email)
-      .maybeSingle();
+    const { data: customerByEmail, error: customerByEmailError } =
+      await supabase
+        .from('customers')
+        .select('id, user_id')
+        .eq('merchant_id', merchant.id)
+        .eq('email', user.email)
+        .maybeSingle();
+
+    if (customerByEmailError) {
+      console.error(
+        'Failed to resolve VTU history customer by email:',
+        customerByEmailError
+      );
+      return { kind: 'customerError' };
+    }
 
     // Tenant isolation: the email claim alone proves nothing (a guest
     // row pre-created with this email may belong to someone else, and

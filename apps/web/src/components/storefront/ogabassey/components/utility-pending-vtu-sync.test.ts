@@ -14,15 +14,16 @@ import {
 } from './utility-pending-idempotency';
 import {
   loadPendingVtuSnapshot,
-  parsePendingVtuSnapshot,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
+import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
   forgottenScopedKeys,
   hydratePendingVtuPurchases,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   serializePendingVtuPurchases,
+  syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
 
 describe('utility-pending-vtu-sync', () => {
@@ -386,5 +387,109 @@ describe('utility-pending-vtu-sync', () => {
     expect(
       parsePendingVtuSnapshot(loadPendingVtuSnapshot()).forgotten
     ).toHaveLength(1);
+  });
+});
+
+describe('keyed tombstones (6rrMIj)', () => {
+  beforeEach(() => {
+    clearPendingVtuKeys();
+  });
+
+  function seedLive(key: string, rememberedAt: number): void {
+    pendingVtuPurchases.set('SIG-GEN', {
+      key,
+      reference: null,
+      rememberedAt,
+      completedAt: null,
+    });
+  }
+
+  function saveTombstone(
+    tombstone: Record<string, unknown>,
+    entries: unknown[] = []
+  ): void {
+    savePendingVtuSnapshot(JSON.stringify({ entries, forgotten: [tombstone] }));
+  }
+
+  it('keeps a newer in-flight key under a foreign older-generation tombstone', () => {
+    // Codex R55 6rrMIj: tab A settled K1 (tombstone T1), then
+    // started an identical purchase (live K2). Stale tab B handles
+    // the old terminal result and tombstones K1 with a LATER clock
+    // (T2). Timestamp-only arbitration would erase live K2 and its
+    // retry would mint fresh and double-debit; the key binding
+    // keeps K2.
+    const now = Date.now();
+    seedLive('key-K2', now);
+    saveTombstone({ scoped: 'SIG-GEN', forgottenAt: now + 5000, key: 'key-K1' });
+
+    syncPendingVtuPurchasesFromSnapshot();
+
+    expect(recallPendingVtuKey('SIG-GEN')).toBe('key-K2');
+  });
+
+  it('deletes the live entry when the key matches, regardless of clock order', () => {
+    // Causality beats clocks: same key means the live entry IS the
+    // deleted generation, even when the tombstone clock predates it
+    // (skewed cross-tab clocks).
+    const now = Date.now();
+    seedLive('key-K1', now);
+    saveTombstone({ scoped: 'SIG-GEN', forgottenAt: now - 5000, key: 'key-K1' });
+
+    syncPendingVtuPurchasesFromSnapshot();
+
+    expect(recallPendingVtuKey('SIG-GEN')).toBeUndefined();
+  });
+
+  it('falls back to timestamp arbitration for keyless tombstones', () => {
+    // Pre-binding snapshots carry no key: an older live entry is
+    // still deleted (legacy behavior preserved through the deploy
+    // window until old tabs reload).
+    const now = Date.now();
+    seedLive('key-K2', now);
+    saveTombstone({ scoped: 'SIG-GEN', forgottenAt: now + 5000 });
+
+    syncPendingVtuPurchasesFromSnapshot();
+
+    expect(recallPendingVtuKey('SIG-GEN')).toBeUndefined();
+  });
+
+  it('still suppresses zombie older-generation entries by timestamp', () => {
+    // Entry-merge DELIBERATELY stays timestamp-bound: a stale tab
+    // that missed the intermediate forget must not resurrect its
+    // zombie entry via merge.
+    const now = Date.now();
+    savePendingVtuSnapshot(
+      JSON.stringify({
+        entries: [
+          [
+            'SIG-GEN',
+            {
+              key: 'key-K1',
+              reference: null,
+              rememberedAt: now - 60_000,
+              completedAt: null,
+            },
+          ],
+        ],
+        forgotten: [{ scoped: 'SIG-GEN', forgottenAt: now, key: 'key-K2' }],
+      })
+    );
+
+    syncPendingVtuPurchasesFromSnapshot();
+
+    expect(recallPendingVtuKey('SIG-GEN')).toBeUndefined();
+  });
+
+  it('records the deleted key generation on forget', () => {
+    rememberPendingVtuPurchase('SIG-GEN', 'key-K1');
+    forgetPendingVtuPurchase('SIG-GEN');
+
+    const forgotten = parsePendingVtuSnapshot(loadPendingVtuSnapshot())
+      .forgotten;
+    expect(forgotten).toHaveLength(1);
+    expect(forgotten[0]).toMatchObject({
+      scoped: 'SIG-GEN',
+      key: 'key-K1',
+    });
   });
 });

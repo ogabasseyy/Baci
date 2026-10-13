@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { STRANDED_PRE_VEND_STALE_MS } from './vtu-pre-vend-recovery';
+import { VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY } from './vtu-submission-marker';
 
 /** Structural shape the flagged-row predicate needs. */
 export interface FlaggedReferenceLessRowCandidate {
@@ -14,31 +14,19 @@ export interface FlaggedReferenceLessRowCandidate {
 }
 
 /**
- * Metadata key: ISO timestamp fulfill persists immediately BEFORE
- * the first provider submission. Marker absence on a stale
- * marker-era row proves no provider call ever ran (every submission
- * path writes it first), which is what lets the reconciler re-drive
- * the row with the same request reference instead of stranding the
- * debit forever — no provider idempotency needed, since the
- * reference submits for the first time.
+ * Marker-era flag prepare writes on every new vtu_transactions row
+ * (see preparePendingVtuTransaction). The unsubmitted proof keys
+ * off this flag's PRESENCE — never a date cutoff: a cutoff is only
+ * correct when the deploy lands after it, so rows created between
+ * an early deploy and the cutoff would strand despite being
+ * provably unsubmitted (Codex R55 6rrU6H). The flag ships with
+ * this PR, so its presence proves the row was prepared by
+ * marker-aware code regardless of when the deploy lands; its
+ * absence (every pre-merge row) proves nothing, and those rows
+ * keep today's behavior (requery-only, support-recoverable)
+ * rather than risk double value.
  */
-export const VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY =
-  'providerSubmissionStartedAt';
-
-/**
- * The submission marker shipped with this recovery (2026-10-20).
- * Rows created before it never knew the marker, so marker absence
- * on them proves nothing — re-driving one could double-credit a
- * legacy purchase whose provider call already landed. Only
- * marker-era rows are eligible for unsubmitted-row recovery. The
- * cutoff sits after the expected deploy: old code serving past it
- * would mint eligible-looking legacy strands, so do not backdate
- * it. Pre-cutoff strands keep today's behavior (requery-only,
- * support-recoverable) rather than risk double value.
- */
-export const STRANDED_UNSUBMITTED_MIN_CREATED_MS = Date.parse(
-  '2026-10-20T00:00:00.000Z'
-);
+export const VTU_SUBMISSION_MARKER_ERA_KEY = 'submissionMarkerEra';
 
 /**
  * True for a processing row the reconciliation claim declines (no
@@ -122,9 +110,10 @@ export function isFlaggedReferenceLessVtuRow(
  * any marker presence — even malformed — takes the requery-only
  * path, as does a Monnify vend reference (deploy-slip defense: old
  * code never wrote the marker but did persist references for landed
- * Monnify vends). Pre-marker-era rows are excluded too: their
- * marker absence proves nothing. Stale-only, same 5-minute proof
- * as pre-vend: a live worker is between persists, not past them.
+ * Monnify vends). Rows without the marker-era flag are excluded
+ * too: their marker absence proves nothing (pre-merge code never
+ * wrote the marker). Stale-only, same 5-minute proof as pre-vend:
+ * a live worker is between persists, not past them.
  */
 export function isUnsubmittedPreparedVtuRow(
   row: FlaggedReferenceLessRowCandidate,
@@ -157,17 +146,13 @@ export function isUnsubmittedPreparedVtuRow(
   if (typeof vendReference === 'string' && vendReference) {
     return false;
   }
-  // Legacy exclusion: pre-marker rows never knew the marker, so
-  // their marker absence is not unsubmitted evidence. Fail closed
-  // on missing or unparseable timestamps.
-  if (!row.created_at) {
-    return false;
-  }
-  const createdAtMs = new Date(row.created_at).getTime();
-  if (!Number.isFinite(createdAtMs)) {
-    return false;
-  }
-  if (createdAtMs < STRANDED_UNSUBMITTED_MIN_CREATED_MS) {
+  // Legacy exclusion: rows without the marker-era flag were
+  // prepared by pre-merge code that never knew the marker, so
+  // their marker absence is not unsubmitted evidence.
+  if (
+    row.metadata == null ||
+    !(VTU_SUBMISSION_MARKER_ERA_KEY in row.metadata)
+  ) {
     return false;
   }
   if (!row.updated_at) {
@@ -239,74 +224,4 @@ export function isMarkedUnsubmittedMonnifyVtuRow(
     return false;
   }
   return nowMs - updatedAtMs > STRANDED_PRE_VEND_STALE_MS;
-}
-
-/**
- * Persists the provider-submission marker immediately before the
- * first provider call (see VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY).
- * Returns the persist error message, or null on success (row
- * metadata is updated in place so downstream code sees the
- * marker). Fail closed: the caller must NOT vend when this fails —
- * without the marker the row is indistinguishable from a
- * submitted-but-unpersisted vend, which must never re-drive.
- *
- * Read-back verify (Codex R54 6rrFRC): the UPDATE may have
- * committed while its response was lost (timeout/kill during the
- * RTT). Without a re-read that row sits processing with the marker
- * and no provider reference — the reconciler can neither re-drive
- * it (marker presence fails the unsubmitted proof) nor settle it
- * (nothing to requery). A re-read marker with no response
- * reference is provably OURS — this worker never dispatched a
- * provider call on the linear path here, and every other vend
- * entry needs a stale-or-pending row — so adopt it and proceed to
- * the vend. Any other outcome (re-read error, vanished row, moved
- * status, or a response reference) keeps the original error and
- * the caller's CAS-guarded restore.
- */
-export async function markVtuProviderSubmissionStarted({
-  row,
-  supabase,
-}: {
-  row: { id: string; metadata?: Record<string, unknown> | null };
-  supabase: SupabaseClient;
-}): Promise<{ message: string } | null> {
-  const metadata = {
-    ...(row.metadata ?? {}),
-    [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
-  };
-  const { error } = await supabase
-    .from('vtu_transactions')
-    .update({ metadata })
-    .eq('id', row.id);
-  if (!error) {
-    row.metadata = metadata;
-    return null;
-  }
-  const { data: current, error: rereadError } = await supabase
-    .from('vtu_transactions')
-    .select('metadata, status, transaction_id')
-    .eq('id', row.id)
-    .maybeSingle();
-  if (rereadError || !current) {
-    return { message: error.message };
-  }
-  const currentMetadata =
-    current.metadata !== null &&
-    typeof current.metadata === 'object' &&
-    !Array.isArray(current.metadata)
-      ? (current.metadata as Record<string, unknown>)
-      : null;
-  const markerPresent =
-    currentMetadata !== null &&
-    VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in currentMetadata;
-  const responsePersisted =
-    (typeof current.transaction_id === 'string' &&
-      current.transaction_id.trim() !== '') ||
-    (typeof currentMetadata?.monnifyVendReference === 'string' &&
-      currentMetadata.monnifyVendReference.trim() !== '');
-  if (!markerPresent || responsePersisted || current.status !== 'processing') {
-    return { message: error.message };
-  }
-  row.metadata = currentMetadata;
-  return null;
 }

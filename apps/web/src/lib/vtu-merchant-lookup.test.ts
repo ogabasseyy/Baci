@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveVtuMerchant } from './vtu-merchant-lookup';
 
-const { mockGetCurrentSlugForAliasStrict } = vi.hoisted(() => ({
-  mockGetCurrentSlugForAliasStrict: vi.fn(),
-}));
+const { mockGetCurrentSlugForAlias, mockGetCurrentSlugForAliasStrict } =
+  vi.hoisted(() => ({
+    mockGetCurrentSlugForAlias: vi.fn(),
+    mockGetCurrentSlugForAliasStrict: vi.fn(),
+  }));
 
 vi.mock('@/lib/slug-alias-cache', () => ({
-  getCurrentSlugForAlias: vi.fn().mockResolvedValue(null),
+  getCurrentSlugForAlias: mockGetCurrentSlugForAlias,
   getCurrentSlugForAliasStrict: mockGetCurrentSlugForAliasStrict,
 }));
 
@@ -41,6 +43,7 @@ const MERCHANT = {
 describe('resolveVtuMerchant', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetCurrentSlugForAlias.mockResolvedValue(null);
     mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
   });
 
@@ -67,11 +70,29 @@ describe('resolveVtuMerchant', () => {
 
     const merchant = await resolveVtuMerchant({
       merchantSlug: 'old-slug',
+      strictLookups: true,
       supabase: supabase as never,
     });
 
     expect(merchant).toEqual(MERCHANT);
     expect(mockGetCurrentSlugForAliasStrict).toHaveBeenCalledWith('old-slug');
+  });
+
+  it('resolves a stale slug via the lenient alias fallback in legacy mode', async () => {
+    const supabase = supabaseWithMerchants({
+      'old-slug': { data: null, error: null },
+      'new-slug': { data: MERCHANT, error: null },
+    });
+    mockGetCurrentSlugForAlias.mockResolvedValue('new-slug');
+
+    const merchant = await resolveVtuMerchant({
+      merchantSlug: 'old-slug',
+      supabase: supabase as never,
+    });
+
+    expect(merchant).toEqual(MERCHANT);
+    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledWith('old-slug');
+    expect(mockGetCurrentSlugForAliasStrict).not.toHaveBeenCalled();
   });
 
   it('throws Merchant-not-found for unknown slugs', async () => {
@@ -94,9 +115,28 @@ describe('resolveVtuMerchant', () => {
     await expect(
       resolveVtuMerchant({
         merchantSlug: 'old-slug',
+        strictLookups: true,
         supabase: supabase as never,
       })
     ).rejects.toThrow(/alias lookup failed/);
+  });
+
+  it('legacy mode keeps Merchant-not-found on alias failures', async () => {
+    // Non-strict callers (legacy /api/vtu/purchase) must keep lenient
+    // behavior: a transient alias-DB error surfaces as not-found,
+    // never as a thrown alias-cache error (Codex R56 6rrhXx).
+    const supabase = supabaseWithMerchants({});
+    // The lenient cache swallows transient alias-DB errors into null;
+    // legacy callers therefore see plain not-found (Codex R56 6rrhXx).
+    mockGetCurrentSlugForAlias.mockResolvedValue(null);
+
+    await expect(
+      resolveVtuMerchant({
+        merchantSlug: 'old-slug',
+        supabase: supabase as never,
+      })
+    ).rejects.toThrow('Merchant not found');
+    expect(mockGetCurrentSlugForAliasStrict).not.toHaveBeenCalled();
   });
 
   it('strict lookups throw on transient merchant errors', async () => {

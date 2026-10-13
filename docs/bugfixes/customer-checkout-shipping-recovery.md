@@ -41,7 +41,8 @@ each RPC. Edits committed while the external quote request is in flight invalida
 the fingerprint at prepare; edits after preview invalidate confirmation.
 
 Preview uses the existing GIG adapter, authoritative order items and merchant
-sender, and preserves the selected service tier/carrier. The API signs the full
+sender, and preserves the selected service tier/carrier. Repeated trailing city/state text is removed from the carrier street while
+preserving the confirmed pin and separate locality fields. The API signs the full
 payload with the existing shipping quote route proof. PostgreSQL verifies it
 before storing the quote in a private preview table. Clients receive only an
 opaque preview UUID, redacted public quote and paid fee, never the proof,

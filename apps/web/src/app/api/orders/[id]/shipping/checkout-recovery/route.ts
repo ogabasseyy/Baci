@@ -14,6 +14,7 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
+import { checkoutRecoveryStreetAddress } from '@/lib/shipping/checkout-recovery-street-address';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
@@ -167,7 +168,14 @@ export async function POST(
     { ...order, order_items: mapAdminOrderGiglQuoteItems(order.order_items) },
     sender.sender,
     async () => productLookup,
-    parsed.data.receiver
+    {
+      ...parsed.data.receiver,
+      address: checkoutRecoveryStreetAddress(
+        parsed.data.receiver.address,
+        parsed.data.receiver.city,
+        parsed.data.receiver.state
+      ),
+    }
   );
   if (!built.ok)
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertQuoteReceiverMatchesOrder } from '@/lib/shipping/international-quote-order-guard';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -265,5 +266,20 @@ describe('paid checkout shipping recovery route', () => {
     mocks.quotes.mockResolvedValue([{ ...quote, serviceTier: 'express' }]);
     expect((await request()).status).toBe(503);
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a composed address compatible with the unchanged booking guard', async () => {
+    await request({
+      action: 'preview',
+      receiver: { ...receiver, address: '12 Test Street, Ikeja, Lagos' },
+    });
+    const staged = mocks.rpc.mock.calls.find(
+      ([name]) => name === 'prepare_customer_checkout_shipping_recovery'
+    );
+    const quoteRequest = staged?.[1].p_quote.quote_request;
+    expect(() =>
+      assertQuoteReceiverMatchesOrder(quoteRequest, {
+        shipping_address: quoteRequest.receiver,
+      })
+    ).not.toThrow();
   });
 });

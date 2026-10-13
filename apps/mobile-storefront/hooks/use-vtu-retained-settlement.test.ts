@@ -233,4 +233,39 @@ describe('useVtuRetainedSettlement', () => {
 
     expect(getPendingVtuSettlementPass()).toBeNull();
   });
+
+  it('detaches the active pass when the account switches mid-pass', async () => {
+    // Codex R67 6rwGM5: cleanup must not leave the new owner's submits
+    // awaiting the previous account's in-flight read until its timeout.
+    // The entry is tagged to user-1, so user-2's effect installs no
+    // replacement pass — only the detach clears the stale one.
+    rememberPendingVtuPurchase(
+      'mob-detach',
+      'key-detach',
+      buildPendingVtuScopeTag('user-1', 'test-merchant-id')
+    );
+    notePendingVtuReference('mob-detach', 'REF-DETACH');
+    let releaseFetch!: (value: Response) => void;
+    const fetchGate = new Promise<Response>((resolve) => {
+      releaseFetch = resolve;
+    });
+    mockFetchWithTimeout.mockReturnValueOnce(fetchGate);
+
+    const { rerender, unmount } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useVtuRetainedSettlement({ enabled }),
+      { initialProps: { enabled: true } }
+    );
+    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    expect(getPendingVtuSettlementPass()).not.toBeNull();
+
+    mockUseAuthStore.mockReturnValue('user-2');
+    rerender({ enabled: true });
+    await waitFor(() => expect(getPendingVtuSettlementPass()).toBeNull());
+
+    // The orphaned read still runs out (fail-open, forgets nothing).
+    releaseFetch(makeResponse({ transactions: [] }));
+    await fetchGate;
+    unmount();
+  });
 });

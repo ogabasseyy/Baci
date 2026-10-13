@@ -72,11 +72,7 @@ interface UseUtilityPurchaseReturn {
   transactionVoucherPin: string | null;
 }
 
-/**
- * Purchase orchestration: submit lifecycle + idempotency. Blocks
- * underfunded/loading/error submits; retains the key while processing
- * so resubmits replay instead of double-charging.
- */
+/** Purchase lifecycle + idempotency (unfunded/loading/error block). */
 export function useUtilityPurchase({
   activeTab,
   canFundByBankTransfer,
@@ -104,9 +100,10 @@ export function useUtilityPurchase({
   >(null);
   // Replays reuse the SAME transaction: never decrement twice.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-  // Per-render identity; user-first (customer-first flips on hydration).
+  // Per-render identity (user-first: customer-first flips on hydration).
   const latestIdentityRef = useRef<string | null>(null);
   latestIdentityRef.current = user?.id ?? customer?.id ?? null;
+  const submittingRef = useRef(false);
   const {
     captureAttemptKey,
     forgetScopedKey,
@@ -123,19 +120,15 @@ export function useUtilityPurchase({
     userId: user?.id,
   });
 
-  const handlePurchase = async (payload: UtilityCheckoutPayload) => {
-    // Settle-then-submit gate (R60), awaited BEFORE the retained peek
-    // (R66 6rvh_M): peeking first would bypass the balance gate on an
-    // entry the pass then proves terminal and forgets, so the capture
-    // mints fresh and the underfunded submit dies server-side instead
-    // of opening the funding flow. Branch-on-null keeps idle submits
-    // synchronously dispatched.
+  const handlePurchaseInner = async (payload: UtilityCheckoutPayload) => {
+    // Settle gate (R60) awaited BEFORE the peek (R66 6rvh_M): a stale
+    // peek would bypass, then mint fresh underfunded. Branch-on-null
+    // keeps idle submits synchronously dispatched.
     const settlementPass = getPendingVtuSettlementPass();
     if (settlementPass) {
       await settlementPass;
     }
-    // Hoisted above readiness: the retained peek must sign the same
-    // wallet payload the submit signs (shared builder, no drift).
+    // Peek signs the same payload the submit signs (shared builder).
     const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
     const names = [customer?.first_name, customer?.last_name].filter(Boolean);
     const customerName =
@@ -177,8 +170,7 @@ export function useUtilityPurchase({
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
     };
-    // The settlement pass was already awaited above the retained
-    // peek; the capture below recalls the same post-settle state.
+    // Pass already awaited above the peek: capture recalls post-settle.
     const result = await submitUtilityCheckout({
       payload,
       merchantSlug: merchantSlug || 'ogabassey',
@@ -192,8 +184,7 @@ export function useUtilityPurchase({
     });
 
     if (!isResultViewActive()) {
-      // Modal closed mid-flight: preserve like a suppressed switch —
-      // forgetting here would mint fresh on reopen and debit twice.
+      // Modal closed mid-flight: preserve, don't forget (reopen replays).
       finalizeSuppressedAttempt(captured.attempt, result);
       return;
     }
@@ -247,6 +238,16 @@ export function useUtilityPurchase({
       });
     }
     setLoading(false);
+  };
+
+  // In-flight guard (R67 6rwGM2): the settle await precedes loading
+  // state, so a sync-flipping ref must block repeat clicks.
+  const handlePurchase = (payload: UtilityCheckoutPayload) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    void handlePurchaseInner(payload).finally(() => {
+      submittingRef.current = false;
+    });
   };
 
   // Backfill proved the shown 202 terminal: forget its key + refetch.

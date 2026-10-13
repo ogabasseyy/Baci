@@ -174,6 +174,37 @@ describe('useUtilityPurchase', () => {
     expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a repeat submit while the settlement pass is pending', async () => {
+    // Codex R67 6rwGM2: the settle await runs before setLoading(true),
+    // so the Pay UI stays enabled during the wait — a synchronous
+    // in-flight guard must swallow the second click, not submit twice.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockGetSettlementPass.mockReturnValue(gate);
+    mockSubmit.mockResolvedValue({
+      kind: 'wallet-success',
+      reference: 'REF-DBL',
+      amount: 1000,
+      processing: false,
+    });
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {});
+    expect(mockSubmit).not.toHaveBeenCalled();
+
+    release();
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
+    expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
+  });
+
   it('binds the submit to the captured auth user id', async () => {
     mockSubmit.mockResolvedValue({
       kind: 'wallet-success',

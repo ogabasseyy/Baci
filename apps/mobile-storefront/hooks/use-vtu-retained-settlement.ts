@@ -90,6 +90,15 @@ export function useVtuRetainedSettlement({
     });
     return () => {
       cancelled = true;
+      // Detach (Codex R67 6rwGM5): without this, an account switch
+      // leaves the new owner's submits awaiting the previous
+      // account's pass until its timeout — their effect installs no
+      // replacement when they have no retained references. The
+      // orphaned pass still runs out (fetchVoucherPin re-verifies
+      // the polling account, so it forgets nothing foreign).
+      if (activeSettlementPass === pass) {
+        activeSettlementPass = null;
+      }
     };
   }, [enabled, ownerId, userId]);
 }

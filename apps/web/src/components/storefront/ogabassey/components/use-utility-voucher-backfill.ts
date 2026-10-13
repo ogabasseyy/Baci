@@ -221,11 +221,8 @@ export function useUtilityVoucherBackfill({
           const response = await fetchWithTimeout(
             `/api/vtu/history?${params.toString()}`,
             {
-              // Per-request bound: a hung read must not stall later
-              // attempts. Compatible composition (Codex R66 6rvh_R):
-              // AbortSignal.any/.timeout don't exist below the safari
-              // 15.4 floor — the shared helper composes a plain
-              // AbortController + setTimeout instead.
+              // Per-request bound (shared helper: no AbortSignal.any/
+              // .timeout below the safari 15.4 floor — R66 6rvh_R).
               signal: controller.signal,
               timeoutMs: UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
             }

@@ -234,6 +234,24 @@ class CapabilityContextTests(unittest.TestCase):
             repo = Path(root)
             subprocess.run(["git", "-C", str(repo), "init", "-q", "."], check=True, capture_output=True)
             self.assertIsNone(gate.changed_paths("f" * 40, cwd=repo), "unresolvable base must yield unknown, not empty")
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "cited.ts").write_text("export {};\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            git("mv", "cited.ts", "renamed.ts")
+            git("commit", "-q", "-m", "rename")
+            changed = gate.changed_paths(base, cwd=repo)
+            self.assertIn("cited.ts", changed, "rename source path must stay visible to the gate")
+            self.assertIn("renamed.ts", changed)
+            citing = {"capabilities": [{"source_refs": ["cited.ts"]}]}
+            self.assertTrue(gate.should_run(base, citing, changed), "renaming a cited source must run the suite")
 
     def test_binding_failures_are_detected_in_fixture_repo(self):
         import subprocess

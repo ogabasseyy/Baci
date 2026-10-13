@@ -30,6 +30,7 @@ jobs:
     outputs:
       version: ${{ steps.pin.outputs.version }}
       install_sha: ${{ steps.stage.outputs.install_sha }}
+      install_content_sha: ${{ steps.stage.outputs.install_content_sha }}
       pins_sha: ${{ steps.stage.outputs.pins_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,8 +52,11 @@ jobs:
           mkdir -p pin-files/.github/scripts/muse-review
           cp .github/scripts/muse-review/install.sh pin-files/.github/scripts/muse-review/install.sh
           cp .github/scripts/semgrep_sarif_pins.py pin-files/.github/scripts/semgrep_sarif_pins.py
-          echo "install_sha=$(sha256sum pin-files/.github/scripts/muse-review/install.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "pins_sha=$(sha256sum pin-files/.github/scripts/semgrep_sarif_pins.py | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          {
+            echo "install_sha=$(sha256sum pin-files/.github/scripts/muse-review/install.sh | awk '{print $1}')"
+            echo "install_content_sha=$(python3 .github/scripts/muse-pin-update.py --normalized-installer-sha pin-files/.github/scripts/muse-review/install.sh)"
+            echo "pins_sha=$(sha256sum pin-files/.github/scripts/semgrep_sarif_pins.py | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload the resolved pin files
         if: steps.pin.outcome == 'success'
@@ -121,6 +125,7 @@ jobs:
       - name: Verify the downloaded pin files landed byte-identical
         env:
           INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          INSTALL_CONTENT_SHA: ${{ needs.smoke.outputs.install_content_sha }}
           PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
         run: |
           set -euo pipefail
@@ -132,6 +137,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
           python3 .github/scripts/muse-pin-update.test.py
+          bash .github/scripts/muse-pin-update-selftests-complete.test.sh
           python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py .github/scripts/muse-pin-update.py
           bash .github/scripts/muse-review/test.sh
           bash .github/scripts/semgrep-sarif-filter.test.sh
@@ -149,6 +155,7 @@ jobs:
           HAS_PIN_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN != '' }}
           VERSION: ${{ needs.smoke.outputs.version }}
           INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          INSTALL_CONTENT_SHA: ${{ needs.smoke.outputs.install_content_sha }}
           PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
           REPO: ${{ github.repository }}
         run: |
@@ -170,7 +177,8 @@ jobs:
             # Full-file hash comparison: the whole trust files must be
             # byte-identical to the smoke-verified copies, not just
             # their version/checksum lines.
-            if [ "$(sha256sum "${RUNNER_TEMP}/existing-install.sh" | awk '{print $1}')" != "$INSTALL_SHA" ] \
+            existing_install_content_sha="$(python3 .github/scripts/muse-pin-update.py --normalized-installer-sha "${RUNNER_TEMP}/existing-install.sh")"
+            if [ "$existing_install_content_sha" != "$INSTALL_CONTENT_SHA" ] \
               || [ "$(sha256sum "${RUNNER_TEMP}/existing-pins.py" | awk '{print $1}')" != "$PINS_SHA" ]; then
               echo "::error::Existing pin-update branch $existing carries different pin files than the verified stable $VERSION; refusing to reuse it." >&2
               exit 1
@@ -184,7 +192,9 @@ jobs:
             checks="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | select(.conclusion != "skipped") | .name] | join("\n")')"
             grep -q '^Quality Gate' <<<"$checks" || gh workflow run ci.yml --ref "$existing" -f force_quality_gates=true
             grep -qx 'Semgrep SAST' <<<"$checks" || gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
-            grep -q '^Selftest (' <<<"$checks" || gh workflow run muse-review-selftest.yml --ref "$existing"
+            if ! printf '%s\n' "$checks" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
+              gh workflow run muse-review-selftest.yml --ref "$existing"
+            fi
             exit 0
           fi
           branch="automation/muse-code-pin-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"

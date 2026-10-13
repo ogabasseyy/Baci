@@ -16,6 +16,25 @@ SPEC.loader.exec_module(updater)
 
 
 class MusePinUpdateTests(unittest.TestCase):
+    def test_normalized_installer_hash_ignores_only_retrieval_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "install.sh"
+            prefix = 'MUSE_VERSION="1.5.0-R6100.2"\n'
+            suffix = 'SHA_X86_LINUX="' + "a" * 64 + '"\n'
+            path.write_text(prefix + "# retrieved (retrieved 2026-01-02 over TLS)\n" + suffix)
+            first = updater.normalized_installer_hash(path)
+            path.write_text(prefix + "# retrieved (retrieved 2026-01-09 over TLS)\n" + suffix)
+            self.assertEqual(updater.normalized_installer_hash(path), first)
+            path.write_text(prefix + "# retrieved (retrieved 2026-01-09 over TLS)\n" + suffix + "# changed\n")
+            self.assertNotEqual(updater.normalized_installer_hash(path), first)
+
+    def test_normalized_installer_hash_requires_one_retrieval_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "install.sh"
+            path.write_text('MUSE_VERSION="1.5.0-R6100.2"\n')
+            with self.assertRaisesRegex(ValueError, "manifest retrieval date"):
+                updater.normalized_installer_hash(path)
+
     def test_resolves_only_matching_public_sha256_manifest(self):
         channel = {
             "state": "public",

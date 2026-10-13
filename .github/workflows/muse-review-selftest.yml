@@ -84,6 +84,7 @@ jobs:
             static)
               python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
               python3 .github/scripts/muse-pin-update.test.py
+              bash .github/scripts/muse-pin-update-selftests-complete.test.sh
               for f in .github/scripts/muse-review/*.sh; do
                 bash -n "${f}"
               done

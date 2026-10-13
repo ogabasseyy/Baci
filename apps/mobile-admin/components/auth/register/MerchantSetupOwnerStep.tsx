@@ -24,6 +24,7 @@ interface MerchantSetupOwnerStepProps {
   onLastNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
   phone: string;
+  showNameFields?: boolean;
 }
 
 export function MerchantSetupOwnerStep({
@@ -36,6 +37,7 @@ export function MerchantSetupOwnerStep({
   onLastNameChange,
   onPhoneChange,
   phone,
+  showNameFields = true,
 }: MerchantSetupOwnerStepProps) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
@@ -65,26 +67,35 @@ export function MerchantSetupOwnerStep({
 
   return (
     <>
-      <MerchantSetupHero step="owner" />
+      <MerchantSetupHero
+        ownerFocus={showNameFields ? 'identity' : 'location'}
+        step="owner"
+      />
       <View style={setupStyles.formCard}>
         <View style={setupStyles.formCardHeader}>
           <View style={setupStyles.formCardIcon}>
             <Ionicons color={colors.primary} name="person-outline" size={21} />
           </View>
           <View style={setupStyles.formCardHeadingGroup}>
-            <Text style={setupStyles.formCardTitle}>Owner Details</Text>
+            <Text style={setupStyles.formCardTitle}>
+              {showNameFields ? 'Owner Details' : 'Your location'}
+            </Text>
             <Text style={setupStyles.formCardSubtitle}>
-              Required for your merchant profile
+              {showNameFields
+                ? 'Required for your merchant profile'
+                : 'Sets your store currency and payment options'}
             </Text>
           </View>
         </View>
         <View style={setupStyles.cardFields}>
-          <PersonNameFields
-            firstName={firstName}
-            lastName={lastName}
-            onFirstNameChange={onFirstNameChange}
-            onLastNameChange={onLastNameChange}
-          />
+          {showNameFields ? (
+            <PersonNameFields
+              firstName={firstName}
+              lastName={lastName}
+              onFirstNameChange={onFirstNameChange}
+              onLastNameChange={onLastNameChange}
+            />
+          ) : null}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Country / Region</Text>
             <View style={styles.countrySelector}>
@@ -111,7 +122,9 @@ export function MerchantSetupOwnerStep({
             </View>
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>
+              Phone Number{showNameFields ? '' : ' (Optional)'}
+            </Text>
             <View style={styles.phoneField}>
               <Pressable
                 accessibilityLabel={`Select phone country, currently ${selectedCountry.name}`}
@@ -128,7 +141,9 @@ export function MerchantSetupOwnerStep({
               </Pressable>
               <View style={styles.phoneFieldDivider} />
               <TextInput
-                accessibilityLabel="Phone Number"
+                accessibilityLabel={
+                  showNameFields ? 'Phone Number' : 'Phone Number (Optional)'
+                }
                 keyboardType="phone-pad"
                 onChangeText={(value) =>
                   onPhoneChange(

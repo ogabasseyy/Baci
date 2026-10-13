@@ -1,0 +1,37 @@
+services:
+  connector-gateway:
+    build:
+      context: ../../../..
+      dockerfile: apps/web/tools/connector-gateway/Dockerfile.production
+    image: baci-connector-gateway:r1
+    restart: unless-stopped
+    env_file:
+      - ${CONNECTOR_GATEWAY_ENV_FILE:-/etc/baci/muse-connector.env}
+    environment:
+      NODE_ENV: production
+      CONNECTOR_GATEWAY_ENABLED: "1"
+      CONNECTOR_GATEWAY_HOST: 0.0.0.0
+      CONNECTOR_GATEWAY_PORT: "3201"
+      CONNECTOR_GATEWAY_PUBLIC_BASE_URL: https://muse-api.usebaci.com
+      CONNECTOR_GATEWAY_TRUSTED_PROXIES: 172.31.253.1
+    ports:
+      - "127.0.0.1:3211:3201"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+      - /home/node/.cache:size=32m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      connector:
+        ipv4_address: 172.31.253.2
+
+networks:
+  connector:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.253.0/29
+          gateway: 172.31.253.1

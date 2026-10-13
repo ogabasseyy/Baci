@@ -9,13 +9,6 @@ const { mockComparePageContent } = vi.hoisted(() => ({
 }));
 
 const mockLoadComparePage = vi.fn();
-const mockNotFound = vi.fn(() => {
-  throw new Error('NEXT_NOT_FOUND');
-});
-
-vi.mock('next/navigation', () => ({
-  notFound: () => mockNotFound(),
-}));
 
 vi.mock('@/lib/seo-utils', () => ({
   getIndexableRobotsMetadata: () => ({
@@ -86,7 +79,6 @@ const comparePageModel = {
 
 beforeEach(() => {
   mockLoadComparePage.mockReset();
-  mockNotFound.mockClear();
   mockComparePageContent.mockReset();
   mockComparePageContent.mockImplementation(() => (
     <div>Compare page content</div>
@@ -143,41 +135,61 @@ describe('compare page metadata', () => {
     );
   });
 
-  it('calls notFound when the compare page loader returns null', async () => {
+  it('returns marker-free noindex metadata when the compare page loader returns null', async () => {
     mockLoadComparePage.mockResolvedValueOnce(null);
     const { generateMetadata } = await import('./page');
 
-    await expect(
-      generateMetadata({
-        params: Promise.resolve({
-          slug: 'ogabassey',
-          category: 'smartphones',
-          comparisonSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
-        }),
-      })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        slug: 'ogabassey',
+        category: 'smartphones',
+        comparisonSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
+      }),
+    });
 
-    expect(mockNotFound).toHaveBeenCalledTimes(1);
+    expect(metadata).toMatchObject({
+      title: 'Comparison not found',
+      alternates: null,
+      robots: { index: false, follow: true },
+    });
   });
 
-  it('calls notFound when the compare page model is not indexable', async () => {
+  it('returns marker-free noindex metadata for an unapproved compare model', async () => {
     mockLoadComparePage.mockResolvedValueOnce({
       ...comparePageModel,
       isIndexable: false,
     });
     const { generateMetadata } = await import('./page');
 
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        slug: 'ogabassey',
+        category: 'smartphones',
+        comparisonSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
+      }),
+    });
+
+    expect(metadata).toMatchObject({
+      title: 'Comparison not found',
+      alternates: null,
+      robots: { index: false, follow: true },
+    });
+  });
+
+  it('propagates metadata loader errors instead of turning them into not-found metadata', async () => {
+    const loaderError = new Error('compare metadata unavailable');
+    mockLoadComparePage.mockRejectedValueOnce(loaderError);
+    const { generateMetadata } = await import('./page');
+
     await expect(
       generateMetadata({
         params: Promise.resolve({
           slug: 'ogabassey',
-          category: 'smartphones',
-          comparisonSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
+          category: 'laptops',
+          comparisonSlug: 'dell-xps-15-9510-vs-macbook-air-13-inch-2020-intel',
         }),
       })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
-
-    expect(mockNotFound).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow(loaderError);
   });
 
   it('emits noindex metadata for legacy compare fallback pages', async () => {
@@ -196,7 +208,6 @@ describe('compare page metadata', () => {
       }),
     });
 
-    expect(mockNotFound).not.toHaveBeenCalled();
     expect(metadata.robots).toMatchObject({
       index: false,
       follow: true,

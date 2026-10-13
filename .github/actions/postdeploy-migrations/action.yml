@@ -1,0 +1,41 @@
+name: Drain storefront requests and apply postdeploy migrations
+description: Drain the previous Vercel revision, verify exact-main authority, and apply deferred migrations.
+
+inputs:
+  supabase-access-token:
+    description: Supabase Management API access token.
+    required: true
+  supabase-project-ref:
+    description: Supabase project reference.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check for pending deferred storefront migrations
+      id: pending-deferred-migrations
+      shell: bash
+      env:
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.supabase-access-token }}
+        SUPABASE_PROJECT_REF: ${{ inputs.supabase-project-ref }}
+      run: |
+        pending="$(.github/scripts/pending-postdeploy-migrations.sh)"
+        printf 'pending=%s\n' "$pending" >> "$GITHUB_OUTPUT"
+    # Only the first rollout has to wait for the previous revision's
+    # 300-second default window; later deploys have the 60-second route cap.
+    - name: Drain previous storefront order requests
+      if: steps.pending-deferred-migrations.outputs.pending == 'true'
+      shell: bash
+      run: sleep 305
+    - name: Verify exact-main deployment authority before postdeploy migrations
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: .github/scripts/current-main-deploy-guard.mjs
+    - name: Apply migrations deferred until application deploy
+      shell: bash
+      env:
+        MIGRATION_PHASE: postdeploy
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.supabase-access-token }}
+        SUPABASE_PROJECT_REF: ${{ inputs.supabase-project-ref }}
+      run: .github/scripts/apply-pending-migrations.sh

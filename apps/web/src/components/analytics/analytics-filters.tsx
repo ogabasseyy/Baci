@@ -10,9 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ADS_ANALYTICS_MAX_DAYS } from '@/lib/analytics/ads-sync-limits';
 import { cn } from '@/lib/utils';
+import type { AnalyticsCategory } from './analytics-category-nav';
 
 interface AnalyticsFiltersProps {
+  category: AnalyticsCategory;
   date: { from: Date | undefined; to: Date | undefined };
   onDateChange: (date: {
     from: Date | undefined;
@@ -23,6 +26,7 @@ interface AnalyticsFiltersProps {
 }
 
 export function AnalyticsFilters({
+  category,
   date,
   onDateChange,
   onExport,
@@ -34,7 +38,17 @@ export function AnalyticsFilters({
       animate={{ opacity: 1, y: 0 }}
       className={cn('flex items-center justify-between gap-4', className)}
     >
-      <DateRangePicker date={date} setDate={onDateChange} />
+      {category === 'segments' ? (
+        <span className="text-sm text-muted-foreground">
+          Segments show lifetime data
+        </span>
+      ) : (
+        <DateRangePicker
+          date={date}
+          maxRangeDays={category === 'ads' ? ADS_ANALYTICS_MAX_DAYS : undefined}
+          setDate={onDateChange}
+        />
+      )}
 
       <div className="flex items-center gap-2">
         <DropdownMenu>

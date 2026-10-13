@@ -29,10 +29,12 @@ export interface CheckoutAddressStepViewProps {
   isLoadingLocations: boolean;
   isLoadingQuotes: boolean;
   isLoadingSavedAddresses: boolean;
+  showLocationPickers: boolean;
   merchantPickupLocation?: MerchantPickupLocation;
   onAddressSelected: CheckoutDeliveryCardProps['onAddressSelected'];
   onAddressTextChanged: CheckoutDeliveryCardProps['onAddressTextChanged'];
   onChangeAccountPassword: (value: string) => void;
+  onContactEmailSettled: () => void;
   onOpenCityPicker: () => void;
   onOpenNewAddressEditor: () => void;
   onOpenStatePicker: () => void;

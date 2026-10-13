@@ -54,13 +54,15 @@ export function NegotiationUploadForm({
         placeholderTextColor={palette.gray[400]}
         autoCapitalize="none"
       />
-      <Text style={styles.inputLabel}>Phone / WhatsApp (optional)</Text>
+      <Text style={styles.inputLabel}>
+        Phone / WhatsApp (required for guest requests)
+      </Text>
       <Text style={styles.uploadHelp}>
         Add a number so the merchant can reach you about this offer.
       </Text>
       <TextInput
         style={styles.linkInput}
-        accessibilityLabel="Phone or WhatsApp number (optional)"
+        accessibilityLabel="Phone or WhatsApp number (required for guest requests)"
         value={phone}
         onChangeText={onPhoneChange}
         placeholder="e.g. 0803 123 4567"

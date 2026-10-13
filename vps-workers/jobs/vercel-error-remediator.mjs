@@ -5,9 +5,11 @@
 
 import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
+import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.mjs';
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
 import {
   groupErrorEvents,
+  MAX_JSONL_ROTATED_FILES,
   readJsonlLogEvents,
   selectRemediationCandidates,
 } from '../lib/vercel-error-events.mjs';
@@ -28,7 +30,12 @@ export async function runVercelErrorRemediator({
       if (!logPath) {
         throw new Error('VERCEL_ERROR_LOG_PATH is required');
       }
-      const rawEvents = readJsonlLogEvents(logPath);
+      const rawEvents = readJsonlLogEvents(logPath, {
+        maxRotatedFiles: readPositiveInt(
+          env.VERCEL_ERROR_LOG_MAX_ROTATED_FILES,
+          MAX_JSONL_ROTATED_FILES
+        ),
+      });
       const groups = groupErrorEvents(rawEvents);
       return selectRemediationCandidates(groups, {
         minOccurrences: readPositiveInt(
@@ -46,11 +53,9 @@ export async function runVercelErrorRemediator({
   return result;
 }
 
-async function main() {
-  config({ path: new URL('../.env', import.meta.url) });
-
+async function main(remediationLock) {
   try {
-    const result = await runVercelErrorRemediator();
+    const result = await runVercelErrorRemediator({ remediationLock });
     console.log(
       JSON.stringify(
         {
@@ -73,5 +78,10 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  await main();
+  config({ path: new URL('../.env', import.meta.url) });
+  const exitCode = await runRemediationJobWithGlobalLock({
+    main,
+    scriptPath: process.argv[1],
+  });
+  if (exitCode !== null) process.exitCode = exitCode;
 }

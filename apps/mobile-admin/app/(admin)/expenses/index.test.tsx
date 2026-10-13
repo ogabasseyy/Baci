@@ -1,29 +1,42 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
-import type { ComponentType, ReactNode } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { Text } from 'react-native';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-type TestBranchScope = { type: 'all' } | { type: 'branch'; branchId: string };
+type Access = {
+  canCreate: boolean;
+  canEdit: boolean;
+  canView: boolean;
+  error: Error | null;
+  isLoading: boolean;
+};
+
+const activeAccess: Access = {
+  canCreate: true,
+  canEdit: true,
+  canView: true,
+  error: null,
+  isLoading: false,
+};
 
 const mocks = vi.hoisted(() => ({
-  branchScope: { type: 'branch', branchId: 'branch-1' } as TestBranchScope,
-  flashListProps: [] as Array<{
-    stickyHeaderConfig?: unknown;
-    stickyHeaderIndices?: unknown;
-  }>,
-  queryCalls: [] as Array<{ method: string; args: unknown[] }>,
-  queryResult: { data: [], error: null } as {
-    data: unknown[] | null;
-    error: Error | null;
-  },
-  queryState: null as {
+  access: {
+    canCreate: true,
+    canEdit: true,
+    canView: true,
+    error: null,
+    isLoading: false,
+  } as Access,
+  queryCalls: [] as Array<{ args: unknown[]; method: string }>,
+  queryKeys: [] as unknown[][],
+  queryState: { data: [], error: null, isError: false, isLoading: false } as {
     data?: unknown[];
     error: Error | null;
     isError: boolean;
     isLoading: boolean;
-  } | null,
-  router: { back: vi.fn(), push: vi.fn() },
+  },
+  stackOptions: null as Record<string, unknown> | null,
 }));
 
 function makeQueryChain() {
@@ -31,21 +44,17 @@ function makeQueryChain() {
   const passthrough =
     (method: string) =>
     (...args: unknown[]) => {
-      mocks.queryCalls.push({ method, args });
+      mocks.queryCalls.push({ args, method });
       return chain;
     };
 
-  for (const method of ['select', 'eq', 'order']) {
+  for (const method of ['select', 'eq', 'gte', 'is', 'lte', 'order']) {
     chain[method] = passthrough(method);
   }
-  // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable and the component awaits this mock.
+  // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable and the screen awaits this mock.
   chain.then = (
-    resolve: (value: {
-      data: unknown[] | null;
-      error: Error | null;
-    }) => unknown,
-    reject?: (reason?: unknown) => unknown
-  ) => Promise.resolve(mocks.queryResult).then(resolve, reject);
+    resolve: (value: { data: unknown[]; error: null }) => unknown
+  ) => Promise.resolve({ data: [], error: null }).then(resolve);
   return chain;
 }
 
@@ -53,34 +62,38 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: ({
     enabled = true,
     queryFn,
+    queryKey,
   }: {
     enabled?: boolean;
     queryFn: () => Promise<unknown>;
+    queryKey: unknown[];
   }) => {
-    if (enabled) {
-      void queryFn();
-    }
-    return (
-      mocks.queryState ?? {
-        data: [],
-        error: null,
-        isError: false,
-        isLoading: false,
-      }
-    );
+    mocks.queryKeys.push(queryKey);
+    if (enabled) void queryFn();
+    return mocks.queryState;
   },
 }));
 
+vi.mock('@/hooks/useExpenseAccess', () => ({
+  useExpenseAccess: () => mocks.access,
+}));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({
     merchant: { id: 'merchant-1', payout_currency: 'NGN' },
   }),
 }));
-
 vi.mock('@/hooks/useBranchScope', () => ({
-  useBranchScope: () => ({ scope: mocks.branchScope }),
+  useBranchScope: () => ({ scope: { type: 'all' } }),
 }));
-
+vi.mock('@/hooks/useBranches', () => ({ useBranches: () => ({ data: [] }) }));
+vi.mock('@/hooks/useExpenseGroups', () => ({
+  useExpenseGroups: () => ({
+    allGroups: [],
+    error: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     colors: {
@@ -90,110 +103,94 @@ vi.mock('@/hooks/useTheme', () => ({
       primary: '#3b82f6',
       text: '#f8fafc',
       textMuted: '#94a3b8',
+      textOnPrimary: '#ffffff',
       textSecondary: '#cbd5e1',
     },
     isDark: true,
-    shadows: { md: {}, lg: {} },
+    shadows: { lg: {}, md: {} },
   }),
 }));
-
 vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: () => makeQueryChain(),
-  },
+  supabase: { from: () => makeQueryChain() },
 }));
-
+vi.mock('@/components/expenses/ExpenseFilterBar', () => ({
+  ExpenseFilterBar: ({ onOpen }: { onOpen: () => void }) => (
+    <button aria-label="Open expense filters" onClick={onOpen} type="button">
+      Filters
+    </button>
+  ),
+}));
+vi.mock('@/components/expenses/ExpenseFiltersSheet', () => ({
+  ExpenseFiltersSheet: ({
+    onApply,
+  }: {
+    onApply: (filters: unknown) => void;
+  }) => (
+    <button
+      aria-label="Apply a group filter"
+      onClick={() =>
+        onApply({
+          branchId: 'branch-2',
+          category: 'Travel',
+          datePreset: 'custom',
+          endDate: '2026-08-09',
+          groupId: '9ba1db37-69b5-4445-8a28-e90794b1841d',
+          startDate: '2026-08-03',
+        })
+      }
+      type="button"
+    >
+      Apply group filter
+    </button>
+  ),
+}));
 vi.mock('@shopify/flash-list', async () => {
-  const React = await import('react');
-
-  function renderEmptyComponent(
-    ListEmptyComponent?: ComponentType | ReactNode
-  ) {
-    if (ListEmptyComponent == null) {
-      return null;
-    }
-
-    if (React.isValidElement(ListEmptyComponent)) {
-      return ListEmptyComponent;
-    }
-
-    if (typeof ListEmptyComponent === 'function') {
-      return React.createElement(ListEmptyComponent);
-    }
-
-    return ListEmptyComponent;
-  }
-
   return {
     FlashList: ({
       data = [],
-      keyExtractor,
       ListEmptyComponent,
-      renderItem,
-      stickyHeaderConfig,
-      stickyHeaderIndices,
     }: {
-      data?: unknown[];
-      keyExtractor?: (item: unknown, index: number) => string;
-      ListEmptyComponent?: ComponentType | ReactNode;
-      renderItem: (input: { index: number; item: unknown }) => ReactNode;
-      stickyHeaderConfig?: unknown;
-      stickyHeaderIndices?: unknown;
-    }) =>
-      (() => {
-        mocks.flashListProps.push({ stickyHeaderConfig, stickyHeaderIndices });
-        return (
-          <section aria-label="expenses-list">
-            {data.length === 0
-              ? renderEmptyComponent(ListEmptyComponent)
-              : data.map((item, index) => (
-                  <div key={keyExtractor?.(item, index) ?? index}>
-                    {renderItem({ item, index })}
-                  </div>
-                ))}
-          </section>
-        );
-      })(),
+      data?: Array<{ key: string }>;
+      ListEmptyComponent?: ReactNode;
+    }) => (data.length === 0 ? ListEmptyComponent : <section />),
   };
 });
-
 vi.mock('expo-router', () => ({
   Stack: {
-    Screen: () => null,
+    Screen: ({ options }: { options: Record<string, unknown> }) => {
+      mocks.stackOptions = options;
+      return null;
+    },
   },
-  useRouter: () => mocks.router,
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
 }));
-
 vi.mock('@react-native-vector-icons/ionicons', () => ({
-  Ionicons: () => <Text>icon</Text>,
-
   default: () => <Text>icon</Text>,
   __esModule: true,
 }));
-
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children?: ReactNode }) => (
     <div>{children}</div>
   ),
 }));
-
 vi.mock('@/components/ui/ScreenSkeleton', () => ({
   ScreenSkeleton: () => <Text>loading</Text>,
 }));
-
 vi.mock('react-native', () => ({
-  StatusBar: () => null,
   Pressable: ({
+    accessibilityLabel,
     children,
     onPress,
   }: {
+    accessibilityLabel?: string;
     children?: ReactNode;
     onPress?: () => void;
   }) => (
-    <button onClick={() => onPress?.()} type="button">
+    <button aria-label={accessibilityLabel} onClick={onPress} type="button">
       {children}
     </button>
   ),
+  StatusBar: () => null,
   StyleSheet: { create: (styles: Record<string, unknown>) => styles },
   Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -204,179 +201,102 @@ import ExpensesScreen from './index';
 describe('ExpensesScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.flashListProps.length = 0;
+    mocks.access = { ...activeAccess };
     mocks.queryCalls.length = 0;
-    mocks.queryResult = { data: [], error: null };
-    mocks.queryState = null;
-    mocks.branchScope = { type: 'branch', branchId: 'branch-1' };
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('filters expenses by selected branch scope', () => {
-    render(<ExpensesScreen />);
-
-    expect(
-      mocks.queryCalls.some(
-        (call) =>
-          call.method === 'eq' &&
-          call.args[0] === 'merchant_id' &&
-          call.args[1] === 'merchant-1'
-      )
-    ).toBe(true);
-    expect(
-      mocks.queryCalls.filter(
-        (call) => call.method === 'eq' && call.args[0] === 'branch_id'
-      )
-    ).toEqual([{ method: 'eq', args: ['branch_id', 'branch-1'] }]);
-  });
-
-  it('does not filter expenses by branch in all-location scope', () => {
-    mocks.branchScope = { type: 'all' };
-
-    render(<ExpensesScreen />);
-
-    expect(
-      mocks.queryCalls.filter(
-        (call) => call.method === 'eq' && call.args[0] === 'branch_id'
-      )
-    ).toEqual([]);
-  });
-
-  it('renders the empty state when there are no expenses', () => {
+    mocks.queryKeys.length = 0;
     mocks.queryState = {
       data: [],
       error: null,
       isError: false,
       isLoading: false,
     };
+    mocks.stackOptions = null;
+  });
+
+  it('fails closed before expense, group, or branch queries when viewing is denied', () => {
+    mocks.access = {
+      canCreate: false,
+      canEdit: false,
+      canView: false,
+      error: null,
+      isLoading: false,
+    };
 
     render(<ExpensesScreen />);
 
-    expect(screen.getByText('No expenses recorded yet')).toBeInTheDocument();
+    expect(mocks.queryCalls).toEqual([]);
+    expect(
+      screen.getByText('You do not have permission to view expenses')
+    ).toBeInTheDocument();
   });
 
-  it('renders the loading skeleton when expenses are loading', () => {
+  it('renders a load error when the expense query fails', () => {
     mocks.queryState = {
       data: undefined,
-      error: null,
-      isError: false,
-      isLoading: true,
-    };
-
-    render(<ExpensesScreen />);
-
-    expect(screen.getByText('loading')).toBeInTheDocument();
-  });
-
-  it('renders expense rows returned by the query', () => {
-    mocks.queryState = {
-      data: [
-        {
-          amount: 12_500,
-          branch_id: 'branch-1',
-          category: 'Inventory',
-          date: '2026-05-05T00:00:00.000Z',
-          description: 'Office internet',
-          id: 'expense-1',
-          receipt_url: null,
-        },
-      ],
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-
-    render(<ExpensesScreen />);
-
-    expect(screen.getByText('Inventory')).toBeInTheDocument();
-    expect(screen.getByText('Office internet')).toBeInTheDocument();
-  });
-
-  it('renders grouped month headers with sticky header configuration', () => {
-    vi.useFakeTimers({
-      now: new Date('2026-07-05T12:00:00.000Z'),
-    });
-    mocks.queryState = {
-      data: [
-        {
-          amount: 12_500,
-          branch_id: 'branch-1',
-          category: 'Inventory',
-          date: '2026-05-05T00:00:00.000Z',
-          description: 'Office internet',
-          id: 'expense-1',
-          receipt_url: null,
-        },
-      ],
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-
-    render(<ExpensesScreen />);
-
-    expect(screen.getByText('May 2026')).toBeInTheDocument();
-    expect(screen.getByText('Office internet')).toBeInTheDocument();
-    expect(mocks.flashListProps.at(-1)).toEqual(
-      expect.objectContaining({
-        stickyHeaderConfig: { hideRelatedCell: true, zIndex: 10 },
-        stickyHeaderIndices: [0],
-      })
-    );
-  });
-
-  it('ignores malformed expense dates when calculating the monthly total', () => {
-    vi.useFakeTimers({
-      now: new Date('2026-05-20T12:00:00.000Z'),
-    });
-
-    mocks.queryState = {
-      data: [
-        {
-          amount: 12_500,
-          branch_id: 'branch-1',
-          category: 'Inventory',
-          date: '2026-05-05T00:00:00.000Z',
-          description: 'Office internet',
-          id: 'expense-1',
-          receipt_url: null,
-        },
-        {
-          amount: 99_999,
-          branch_id: 'branch-1',
-          category: 'Travel',
-          date: 'not-a-date',
-          description: 'Bad date row',
-          id: 'expense-2',
-          receipt_url: null,
-        },
-      ],
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-
-    expect(() => render(<ExpensesScreen />)).not.toThrow();
-    expect(screen.getByText('Total this Month')).toBeInTheDocument();
-    expect(screen.getAllByText(/12,500/)).toHaveLength(2);
-    expect(screen.getByText('Invalid date')).toBeInTheDocument();
-  });
-
-  it('shows an error state when expenses fail to load', () => {
-    mocks.queryState = {
-      data: undefined,
-      error: new Error('Database error'),
+      error: new Error('Network unavailable'),
       isError: true,
       isLoading: false,
     };
+    render(<ExpensesScreen />);
+    expect(screen.getByText('Could not load expenses')).toBeInTheDocument();
+  });
+
+  it('applies normalized date, category, branch, and UUID group constraints before awaiting the query', () => {
+    render(<ExpensesScreen />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open expense filters' })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Apply a group filter' })
+    );
+
+    expect(mocks.queryCalls).toEqual(
+      expect.arrayContaining([
+        { args: ['date', '2026-08-03'], method: 'gte' },
+        { args: ['date', '2026-08-09'], method: 'lte' },
+        { args: ['category', 'Travel'], method: 'eq' },
+        { args: ['branch_id', 'branch-2'], method: 'eq' },
+        {
+          args: ['group_id', '9ba1db37-69b5-4445-8a28-e90794b1841d'],
+          method: 'eq',
+        },
+      ])
+    );
+    expect(
+      mocks.queryCalls.find((call) => call.method === 'select')?.args[0]
+    ).toContain('group_id');
+    expect(mocks.queryKeys.at(-1)).toEqual(
+      expect.arrayContaining(['expenses', 'merchant-1'])
+    );
+    expect(screen.getByText('Filtered total')).toBeInTheDocument();
+  });
+
+  it('hides both creation controls without create access', () => {
+    mocks.access = { ...activeAccess, canCreate: false };
 
     render(<ExpensesScreen />);
 
-    expect(screen.getByText('Could not load expenses')).toBeInTheDocument();
-    expect(screen.getByText('Please try again later.')).toBeInTheDocument();
-    expect(screen.queryByText('Database error')).not.toBeInTheDocument();
+    expect(mocks.stackOptions).not.toBeNull();
+    expect(
+      screen.queryByText('Add your first expense')
+    ).not.toBeInTheDocument();
+    expect(mocks.stackOptions?.headerRight).toBeUndefined();
+  });
+
+  it('distinguishes no matching results from a merchant with no recorded expenses', () => {
+    render(<ExpensesScreen />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open expense filters' })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Apply a group filter' })
+    );
+
+    expect(
+      screen.getByText('No expenses match these filters')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('No expenses recorded yet')
+    ).not.toBeInTheDocument();
   });
 });

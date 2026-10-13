@@ -153,7 +153,7 @@ describe('UtilityModal', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('hides the bank-transfer CTA when the customer has no phone and no DVA yet', () => {
+  it('offers the bank-transfer CTA when the customer has no phone and needs a DVA', () => {
     harness.useAuth.mockReturnValue({
       customer: {
         id: 'customer-1',
@@ -182,8 +182,47 @@ describe('UtilityModal', () => {
     renderOpenModal();
 
     expect(
-      screen.queryByRole('button', { name: /pay with bank transfer/i })
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: /pay with bank transfer/i })
+    ).toBeInTheDocument();
+  });
+
+  it('shows an assigned DVA even when the customer has no phone', () => {
+    harness.useAuth.mockReturnValue({
+      customer: {
+        id: 'customer-1',
+        email: 'customer@example.com',
+        first_name: 'Test',
+        last_name: 'Customer',
+        phone: null,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      user: { email: 'customer@example.com', id: 'user-1', role: 'customer' },
+    });
+    harness.useWallet.mockReturnValue({
+      fundingAccount: {
+        accountName: 'OGB / TEST',
+        accountNumber: '9099887766',
+        bankName: 'Wema Bank',
+        provider: 'paystack',
+      },
+      payWithWallet: false,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: false,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 0,
+      walletDvaEnabled: true,
+      walletLoading: false,
+    });
+
+    renderOpenModal();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /pay with bank transfer/i })
+    );
+    expect(screen.getByText('9099887766')).toBeInTheDocument();
   });
 
   it('collapses an open funding panel when the customer switches mid-session', () => {

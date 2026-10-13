@@ -6,6 +6,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
+import { getBranchesQueryKey } from './branch-query-key';
+
+export { getBranchesQueryKey } from './branch-query-key';
+
 import {
   createBranch as createBranchViaApi,
   deactivateBranch as deactivateBranchViaApi,
@@ -46,12 +50,16 @@ function persistBranchId(branchId: string | null): void {
 const BRANCH_COLUMNS =
   'id, merchant_id, name, address, city, state, phone, manager_id, is_default, active, created_at, updated_at' as const;
 
-async function fetchBranches(merchantId: string): Promise<Branch[]> {
-  const { data, error } = await supabase
+async function fetchBranches(
+  merchantId: string,
+  includeInactive = false
+): Promise<Branch[]> {
+  let query = supabase
     .from('branches')
     .select(BRANCH_COLUMNS)
-    .eq('merchant_id', merchantId)
-    .eq('active', true)
+    .eq('merchant_id', merchantId);
+  if (!includeInactive) query = query.eq('active', true);
+  const { data, error } = await query
     .order('is_default', { ascending: false })
     .order('created_at', { ascending: true });
 
@@ -67,14 +75,18 @@ async function fetchBranches(merchantId: string): Promise<Branch[]> {
 /**
  * Hook to list all branches for the current merchant
  */
-export function useBranches() {
+export function useBranches({
+  includeInactive = false,
+}: {
+  includeInactive?: boolean;
+} = {}) {
   const { merchant } = useMerchant();
 
   return useQuery({
-    queryKey: ['branches', merchant?.id],
+    queryKey: getBranchesQueryKey(merchant?.id, includeInactive),
     queryFn: () => {
       if (!merchant?.id) throw new Error('No merchant');
-      return fetchBranches(merchant.id);
+      return fetchBranches(merchant.id, includeInactive);
     },
     enabled: !!merchant?.id,
     staleTime: 1000 * 60 * 5, // 5 minutes

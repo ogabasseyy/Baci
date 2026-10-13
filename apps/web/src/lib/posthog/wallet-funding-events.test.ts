@@ -36,11 +36,14 @@ describe('WALLET_FUNDING_TELEMETRY', () => {
 
   it('maps known API failure codes 1:1 and keeps the synthetic buckets', () => {
     expect(WALLET_FUNDING_TELEMETRY.reasons).toEqual({
+      customerNameRequired: 'CUSTOMER_NAME_REQUIRED',
       customerPhoneRequired: 'CUSTOMER_PHONE_REQUIRED',
+      disabledAccount: 'WALLET_DVA_DISABLED_ACCOUNT',
       gatewayNotConfigured: 'GATEWAY_NOT_CONFIGURED',
       paystackCustomerError: 'PAYSTACK_CUSTOMER_ERROR',
       paystackDvaError: 'PAYSTACK_DVA_ERROR',
       orderAliasConflict: 'WALLET_DVA_ORDER_ALIAS_CONFLICT',
+      pendingReviewConflict: 'WALLET_DVA_PENDING_REVIEW_CONFLICT',
       receiverConflict: 'WALLET_DVA_RECEIVER_CONFLICT',
       storageError: 'WALLET_DVA_STORAGE_ERROR',
       subaccountConflict: 'WALLET_DVA_SUBACCOUNT_CONFLICT',
@@ -55,11 +58,14 @@ describe('WALLET_FUNDING_TELEMETRY', () => {
     // member there without an entry above already fails `tsc` via the in-file
     // drift guard; this keeps the failure legible at test time too.
     const apiErrorCodes: CustomerWalletPaymentAccountErrorCode[] = [
+      'CUSTOMER_NAME_REQUIRED',
       'CUSTOMER_PHONE_REQUIRED',
       'GATEWAY_NOT_CONFIGURED',
       'PAYSTACK_CUSTOMER_ERROR',
       'PAYSTACK_DVA_ERROR',
+      'WALLET_DVA_DISABLED_ACCOUNT',
       'WALLET_DVA_ORDER_ALIAS_CONFLICT',
+      'WALLET_DVA_PENDING_REVIEW_CONFLICT',
       'WALLET_DVA_RECEIVER_CONFLICT',
       'WALLET_DVA_SUBACCOUNT_CONFLICT',
       'WALLET_DVA_STORAGE_ERROR',

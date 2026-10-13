@@ -10,6 +10,9 @@
 import type { Instrumentation } from 'next';
 import { getNextErrorDigest } from '@/lib/errors/next-error-digest';
 
+const reportedRateLimitBackends = new Set<string>();
+const pendingRateLimitBackends = new Set<string>();
+
 const QUERY_OR_HASH_PATTERN = /[?#]/;
 
 function stripQueryAndHash(path: string): string {
@@ -48,6 +51,11 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // The Places Legacy routes must put the API key in the URL. Their fetch
+    // calls opt out of @vercel/otel spans, so disable Next's separate fetch
+    // spans too; those spans include the full URL and do not honor that option.
+    process.env.NEXT_OTEL_FETCH_DISABLED = '1';
+
     const { registerOTel } = await import('@vercel/otel');
 
     registerOTel({
@@ -57,6 +65,47 @@ export async function register() {
         'deployment.environment':
           process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
       },
+    });
+
+    // Keep backend visibility in the existing server telemetry stream. Emit
+    // each fixed-cardinality outcome once per process to avoid per-request
+    // analytics traffic; the hook contains no request or provider details.
+    const [{ setRateLimitDiagnosticHook }, { captureServerEvent }] =
+      await Promise.all([
+        import('@/lib/rate-limit'),
+        import('@/lib/posthog/server'),
+      ]);
+    setRateLimitDiagnosticHook((diagnostic) => {
+      const key = `${diagnostic.backend}:${diagnostic.reason}`;
+      if (
+        reportedRateLimitBackends.has(key) ||
+        pendingRateLimitBackends.has(key)
+      ) {
+        return;
+      }
+      pendingRateLimitBackends.add(key);
+      let delivery: ReturnType<typeof captureServerEvent>;
+      try {
+        delivery = captureServerEvent('rate_limit_backend', {
+          backend: diagnostic.backend,
+          reason: diagnostic.reason,
+          telemetry_source: 'rate_limit',
+        });
+      } catch {
+        pendingRateLimitBackends.delete(key);
+        return;
+      }
+      void Promise.resolve(delivery).then(
+        (captured) => {
+          pendingRateLimitBackends.delete(key);
+          if (captured) {
+            reportedRateLimitBackends.add(key);
+          }
+        },
+        () => {
+          pendingRateLimitBackends.delete(key);
+        }
+      );
     });
 
     // Fail-loud (not fail-fatal): if this is a production deployment but

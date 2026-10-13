@@ -208,6 +208,7 @@ export function getVehicleTypeForWeight(totalWeight: number): VehicleType {
 }
 
 export function parseGiglProviderRateId(providerRateId?: string): {
+  senderStationId?: number;
   receiverStationId?: number;
   pickupOption: PickupOptions;
   vehicleType?: VehicleType;
@@ -228,6 +229,7 @@ export function parseGiglProviderRateId(providerRateId?: string): {
     vehicleTypeValue,
     serviceCentreIdValue,
     deliveryTypeValue,
+    senderStationIdValue,
   ] = providerRateId.split('_');
   if (providerCode !== 'GIGL') {
     return {
@@ -241,8 +243,10 @@ export function parseGiglProviderRateId(providerRateId?: string): {
   const vehicleType = Number(vehicleTypeValue);
   const serviceCentreId = Number(serviceCentreIdValue);
   const deliveryType = Number(deliveryTypeValue);
+  const senderStationId = Number(senderStationIdValue);
 
   return {
+    ...(Number.isFinite(senderStationId) ? { senderStationId } : {}),
     receiverStationId: Number.isFinite(receiverStationId)
       ? receiverStationId
       : undefined,
@@ -265,12 +269,14 @@ export function parseGiglProviderRateId(providerRateId?: string): {
 }
 
 export function buildGiglProviderRateId({
+  senderStationId,
   receiverStationId,
   pickupOption,
   vehicleType,
   serviceCentreId,
   deliveryType,
 }: {
+  senderStationId?: number;
   receiverStationId: number;
   pickupOption: PickupOptions;
   vehicleType: VehicleType;
@@ -284,5 +290,6 @@ export function buildGiglProviderRateId({
     vehicleType,
     serviceCentreId ?? 0,
     deliveryType,
+    ...(senderStationId === undefined ? [] : [senderStationId]),
   ].join('_');
 }

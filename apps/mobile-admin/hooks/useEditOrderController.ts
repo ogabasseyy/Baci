@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { resolveEditOrderDate } from '@/lib/edit-order-date';
 import {
   buildEditOrderPayload,
   type EditableOrderRecord,
@@ -8,6 +9,7 @@ import {
   mapOrderItemsForEdit,
   readShippingAddressValue,
 } from '@/lib/edit-order-payload';
+import { resolvePrefillDate } from '@/lib/edit-order-prefill-date';
 import { useUpdateOrder } from './orders/useUpdateOrder';
 import { useNewOrderController } from './useNewOrderController';
 import { useOrder } from './useOrders';
@@ -28,6 +30,7 @@ export function useEditOrderController() {
   const order = orderQuery.data as EditableOrderRecord | undefined;
   const {
     setCustomer,
+    setDate,
     setDeliveryInfo,
     setDiscount,
     setIsVatApplied,
@@ -62,6 +65,15 @@ export function useEditOrderController() {
     const sameAsCustomer =
       shippingName === customerName && shippingPhone === customerPhone;
 
+    const prefillDate = resolvePrefillDate({
+      invoiceDay: order.invoice_issue_date,
+      savedInstant: order.transaction_date ?? order.created_at,
+      source: order.source,
+    });
+    if (prefillDate) {
+      setDate(prefillDate);
+    }
+
     setCustomer({
       address,
       email: order.customer_email ?? '',
@@ -93,6 +105,7 @@ export function useEditOrderController() {
   }, [
     order,
     setCustomer,
+    setDate,
     setDeliveryInfo,
     setDiscount,
     setIsVatApplied,
@@ -115,6 +128,17 @@ export function useEditOrderController() {
       return;
     }
 
+    if (
+      order?.shipping_status === 'cancelled' ||
+      order?.shipping_status === 'returned'
+    ) {
+      Alert.alert(
+        'Order closed',
+        'This order is cancelled or returned and cannot be edited.'
+      );
+      return;
+    }
+
     if (!baseController.customer.name.trim()) {
       Alert.alert('Required', 'Please select a customer for this order');
       return;
@@ -122,6 +146,28 @@ export function useEditOrderController() {
 
     if (baseController.orderItems.length === 0) {
       Alert.alert('Required', 'Please add at least one product');
+      return;
+    }
+
+    if (!baseController.date || Number.isNaN(baseController.date.getTime())) {
+      Alert.alert(
+        'Invalid date',
+        'The selected date is invalid. Please pick the date again.'
+      );
+      return;
+    }
+
+    const orderDate = resolveEditOrderDate({
+      currentDate: baseController.date,
+      hasSavedOrder: Boolean(order),
+      savedCreatedAt: order?.created_at,
+      savedDay: order?.invoice_issue_date,
+      savedSource: order?.source,
+      savedTransactionDate: order?.transaction_date,
+    });
+
+    if (orderDate && orderDate.getTime() > Date.now()) {
+      Alert.alert('Invalid date', 'Order date cannot be in the future.');
       return;
     }
 
@@ -134,6 +180,7 @@ export function useEditOrderController() {
             ? order.customer_id !== baseController.customer.id
             : false,
           deliveryInfo: baseController.deliveryInfo,
+          orderDate,
           discount: baseController.discount,
           notes: baseController.notes,
           notifyCustomer,

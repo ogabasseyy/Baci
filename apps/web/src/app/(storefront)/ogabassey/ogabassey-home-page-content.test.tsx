@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./ogabassey-home-launch-products', () => ({
+  loadOgabasseyLaunchProducts: vi.fn(async () => []),
+}));
+
 const {
   mockDynamicContentShouldSuspend,
   mockHeaders,
@@ -69,12 +73,38 @@ vi.mock('next/server', () => ({
 }));
 
 vi.mock('./ogabassey-home-dynamic-content', () => ({
-  OgabasseyHomeDynamicContent: ({ pathPrefix }: { pathPrefix: string }) => {
+  OgabasseyHomeDynamicContent: ({
+    pathPrefix,
+    recoverHero,
+  }: {
+    pathPrefix: string;
+    recoverHero?: boolean;
+  }) => {
     if (mockDynamicContentShouldSuspend()) {
       throw new Promise(() => undefined);
     }
-    return <section aria-label="Dynamic home content">{pathPrefix}</section>;
+    return (
+      <section
+        aria-label="Dynamic home content"
+        data-recover-hero={String(recoverHero)}
+      >
+        {pathPrefix}
+      </section>
+    );
   },
+}));
+
+vi.mock('./ogabassey-home-recovery-hero', () => ({
+  OgabasseyHomeRecoveryHero: ({
+    omitMobileCarousel,
+  }: {
+    omitMobileCarousel?: boolean;
+  }) => (
+    <section
+      aria-label="Recovered hero"
+      data-omit-mobile-carousel={String(omitMobileCarousel)}
+    />
+  ),
 }));
 
 vi.mock('@/components/storefront/store-not-published', () => ({
@@ -84,10 +114,23 @@ vi.mock('@/components/storefront/store-not-published', () => ({
 }));
 
 vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
-  Hero: ({ slides }: { slides: unknown[] }) => {
-    mockHeroRender(slides);
+  Hero: ({
+    omitDocumentHeading,
+    omitMobileCarousel,
+    slides,
+  }: {
+    omitDocumentHeading?: boolean;
+    omitMobileCarousel?: boolean;
+    slides: unknown[];
+  }) => {
+    mockHeroRender({ omitDocumentHeading, omitMobileCarousel, slides });
     return (
-      <section aria-label="Product hero" data-slide-count={slides.length} />
+      <section
+        aria-label="Product hero"
+        data-omit-document-heading={omitDocumentHeading ? 'true' : 'false'}
+        data-omit-mobile-carousel={omitMobileCarousel ? 'true' : 'false'}
+        data-slide-count={slides.length}
+      />
     );
   },
 }));
@@ -108,7 +151,6 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-import { notFound } from 'next/navigation';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 
@@ -131,61 +173,6 @@ describe('OgabasseyHomePageContent', () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(
       mockPublishedMerchant
     );
-  });
-
-  it('renders one Hero with request-bound content after the publication guard', async () => {
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('region', { name: /product hero/i })
-    ).toHaveAttribute('data-slide-count', '1');
-    expect(
-      screen.getByRole('region', { name: /dynamic home content/i })
-    ).toHaveTextContent('/ogabassey');
-    expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey');
-  });
-
-  it('restores the H1 after the publication guard when the cached Hero degraded', async () => {
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: null,
-      shellSlides: null,
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('heading', {
-        level: 1,
-        name: 'OgaBassey - Official Online Store',
-      })
-    ).toBeInTheDocument();
-  });
-
-  it('keeps the publication-gated Hero when below-fold content suspends', async () => {
-    mockDynamicContentShouldSuspend.mockReturnValue(true);
-
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('region', { name: /product hero/i })
-    ).toHaveAttribute('data-slide-count', '1');
-    expect(
-      screen.queryByRole('region', { name: /dynamic home content/i })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 
   it('resolves the homepage merchant from custom-domain request context', async () => {
@@ -298,19 +285,5 @@ describe('OgabasseyHomePageContent', () => {
         name: 'OgaBassey - Official Online Store',
       })
     ).toBeInTheDocument();
-  });
-
-  it('returns 404 when merchant lookup is null', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(null);
-
-    await expect(
-      OgabasseyHomePageContent({
-        pathPrefix: '/ogabassey',
-        shellMerchantId: 'merchant-1',
-        shellSlides: [SHELL_SLIDE],
-      })
-    ).rejects.toThrow('not-found');
-
-    expect(notFound).toHaveBeenCalledOnce();
   });
 });

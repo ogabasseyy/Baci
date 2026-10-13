@@ -29,6 +29,9 @@ describe('product column constants', () => {
     expect(typeof WEB_PRODUCT_VARIANT_COLUMNS).toBe('string');
     expect(WEB_PRODUCT_VARIANT_COLUMNS.length).toBeGreaterThan(0);
     expect(tokenizeColumns(WEB_PRODUCT_VARIANT_COLUMNS)).toContain('condition');
+    expect(tokenizeColumns(WEB_PRODUCT_VARIANT_COLUMNS)).toContain(
+      'is_inventory_anchor'
+    );
   });
 
   it('no constant contains select(*)', () => {

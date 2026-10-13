@@ -8,7 +8,11 @@ import {
   type StorefrontReadResult,
 } from './storefront-read-result';
 
-const MERCHANT_SNAPSHOT_RUNTIME_DEADLINE_MS = 5_000;
+// Keep the per-RPC deadline aligned with the 10-second runtime transport
+// deadline in createStorefrontPublicReadFetch(). A shorter abort here turns
+// slow-but-valid Supabase responses into storefront Server Component errors
+// before the public client reaches its own bounded transport limit.
+const MERCHANT_SNAPSHOT_RUNTIME_DEADLINE_MS = 10_000;
 
 function merchantSnapshotDeadlineMs() {
   return MERCHANT_SNAPSHOT_RUNTIME_DEADLINE_MS;
@@ -20,6 +24,12 @@ function isBoundedStorefrontBuild() {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isRuntimeDeadlineAbort(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') return false;
+  const name = Reflect.get(error, 'name');
+  return name === 'AbortError' || name === 'TimeoutError';
 }
 
 export async function readStorefrontMerchantSnapshot(
@@ -42,7 +52,20 @@ export async function readStorefrontMerchantSnapshot(
           // Pinned by supabase/postgrest-timeout-retry.test.ts.
           .retry(false)
       : query;
-  const response = await boundedQuery;
+  let response: Awaited<typeof boundedQuery>;
+  try {
+    response = await boundedQuery;
+  } catch (error) {
+    if (!isRuntimeDeadlineAbort(error)) throw error;
+
+    const rejectedResult = resolveStorefrontReadResult({
+      operation: 'merchant_snapshot',
+      response: { data: null, error },
+      parse: (rows) => (Array.isArray(rows) ? (rows[0] ?? null) : null),
+    });
+    if (rejectedResult.status !== 'unavailable') throw error;
+    return rejectedResult;
+  }
 
   const result = resolveStorefrontReadResult({
     operation: 'merchant_snapshot',

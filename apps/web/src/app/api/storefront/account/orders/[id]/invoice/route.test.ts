@@ -331,6 +331,32 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
     expect(contentDisposition).not.toContain('\n');
   });
 
+  it('names type-325 downloads as proforma documents', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult()
+    );
+    const documentData = createDocumentData('ORD-2002');
+    documentData.invoiceData.invoice_type_code = '325';
+    vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(documentData);
+    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['proforma']));
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/account/orders/cfa945fc-9bf4-4485-857c-4d4374adf31f/invoice?merchantSlug=ogabassey'
+      ),
+      {
+        params: Promise.resolve({
+          id: 'cfa945fc-9bf4-4485-857c-4d4374adf31f',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toContain(
+      'proforma-ORD-2002.pdf'
+    );
+  });
+
   it('matches receipt item metadata by line id instead of invoice array position', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue(
       createAuthenticatedAuthResult()

@@ -91,17 +91,49 @@ describe('resolveProductPurgeCategorySegmentForRow', () => {
     ).toBe('gaming-laptops');
   });
 
-  it('uses the legacy text over the junction when there is no direct join', () => {
-    // Precedence: direct join → legacy text → junction. Text present suppresses
-    // the junction so the purge matches the storefront canonical.
-    expect(
-      resolveProductPurgeCategorySegmentForRow({
-        slug: 'ipad-air',
-        category: 'Tablets',
-        categories: null,
-        product_categories: [{ categories: { slug: 'junction-cat' } }],
-      })
-    ).toBe('tablets');
+  it('uses the active junction over legacy text when there is no direct join', () => {
+    // Precedence: direct join → active junction → legacy text. This keeps
+    // cache eviction aligned with the PDP snapshot after a direct category is
+    // retired.
+    const input = {
+      slug: 'ipad-air',
+      category: 'Tablets',
+      categories: null,
+      product_categories: [{ categories: { slug: 'junction-cat' } }],
+    };
+
+    const result = resolveProductPurgeCategorySegmentForRow(input);
+
+    expect(result).toBe('junction-cat');
+  });
+
+  it('ignores an inactive direct category and selects the lowest active junction id', () => {
+    const input = {
+      slug: 'pixel-6-pro',
+      category: 'Legacy Category',
+      categories: { is_active: false, slug: 'retired-category' },
+      product_categories: [
+        {
+          category_id: 'category-0',
+          categories: {
+            is_active: false,
+            slug: 'inactive-category',
+          },
+        },
+        {
+          category_id: 'category-z',
+          categories: { is_active: true, slug: 'z-category' },
+        },
+        {
+          category_id: 'category-a',
+          categories: { is_active: true, slug: 'a-category' },
+        },
+      ],
+    };
+
+    const result = resolveProductPurgeCategorySegmentForRow(input);
+
+    expect(result).toBe('a-category');
   });
 
   it('falls back to the junction when there is NO direct join and NO legacy text', () => {

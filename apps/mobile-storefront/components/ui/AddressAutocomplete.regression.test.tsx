@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet, View } from 'react-native';
+import type { FetchImplementation } from '@/types/fetch';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { clearPredictionCache } from './AddressAutocomplete.api';
 import { AddressSuggestionsProvider } from './address-suggestions-portal';
@@ -25,7 +26,7 @@ const prediction = {
   placeId: 'place-1',
   secondaryText: 'Ikeja, Lagos',
 };
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = jest.fn<FetchImplementation>();
 type MeasureFn = (
   callback: (x: number, y: number, width: number, height: number) => void
 ) => void;
@@ -81,6 +82,28 @@ describe('AddressAutocomplete regressions', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Loading address suggestions')).toBeNull();
+  });
+
+  it('starts the prediction request within the responsive debounce window', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ predictions: [] }),
+      text: async () => '',
+    } as Response);
+    renderField();
+    const input = screen.getByRole('combobox');
+    fireEvent(input, 'focus');
+    fireEvent.changeText(input, 'Allen');
+
+    await act(async () => {
+      jest.advanceTimersByTime(149);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the portal when the anchor width changes in place', async () => {

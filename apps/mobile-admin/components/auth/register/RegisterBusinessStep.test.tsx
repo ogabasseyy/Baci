@@ -84,7 +84,7 @@ vi.mock('@/hooks/useTheme', () => ({
 
 function renderStep({
   businessType = '',
-  onBack = vi.fn(),
+  onBack,
   slugError,
 }: {
   businessType?: string;
@@ -137,6 +137,14 @@ describe('RegisterBusinessStep business name normalization', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to about you' }));
 
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it('hides the about-you back action when owner details were already collected', () => {
+    renderStep();
+
+    expect(
+      screen.queryByRole('button', { name: 'Back to about you' })
+    ).not.toBeInTheDocument();
   });
 
   it('capitalizes every word typed or pasted into Business Name', () => {

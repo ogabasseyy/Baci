@@ -9,6 +9,7 @@
       "distribution": "internal"
     },
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
       "ios": {
         "simulator": false,
@@ -19,6 +20,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "autoIncrement": true,
       "env": {
         "EAS_BUILD_NPM_CLIENT": "pnpm"

@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import {
   mkdtempSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { runVercelErrorRemediator } from './vercel-error-remediator.mjs';
+import { runVercelErrorRemediator } from './vercel-error-remediator.test-harness.mjs';
 
 const silentLogger = {
   error: () => undefined,
@@ -41,7 +41,11 @@ describe('vercel remediator state lock', () => {
     const autofixRunner = () => {
       autofixCalls += 1;
       writeFileSync(lockPath, 'busy');
-      return { type: 'pr_opened', prUrl: 'https://example.test/pr/1' };
+      return {
+        branch: 'codex/vercel-remediation-lock-1',
+        prUrl: 'https://example.test/pr/1',
+        type: 'pr_opened',
+      };
     };
 
     await assert.rejects(
@@ -62,7 +66,9 @@ describe('vercel remediator state lock', () => {
       logger: silentLogger,
       now: () => nowMs,
     });
-    assert.equal(retry.candidates.length, 0);
+    assert.equal(retry.candidates.length, 1);
+    assert.equal(retry.candidates[0].lifecycleEvent, 'pr_recovered');
+    assert.equal(retry.candidates[0].autofixEligible, false);
     assert.equal(autofixCalls, 1);
     const autofixStatePath = configuredStatePath.replace(
       /\.json$/,

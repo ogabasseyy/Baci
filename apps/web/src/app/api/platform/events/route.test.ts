@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mock setup ---
 
-const mockUpsert = vi.fn();
+const mockInsert = vi.fn();
 const mockSettingsSingle = vi.fn();
+const mockCreateAdminClient = vi.fn(() => ({ from: mockFrom }));
 const mockFrom = vi.fn((table: string) => {
   if (table === 'platform_events') {
-    return { upsert: mockUpsert };
+    return { insert: mockInsert };
   }
   if (table === 'platform_settings') {
     return {
@@ -31,7 +32,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({ from: mockFrom })),
+  createAdminClient: mockCreateAdminClient,
 }));
 
 const mockSendGA4Event = vi.fn();
@@ -61,11 +62,31 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
 }
 
 describe('POST /api/platform/events', () => {
+  it('acknowledges an already-stored event without provider forwarding', async () => {
+    mockInsert.mockResolvedValueOnce({
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "platform_events_type_event_id_uidx"',
+      },
+    });
+    const response = await POST(
+      makeRequest({ event_type: 'landing_page_view', event_id: 'retry-1' })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      event_id: 'retry-1',
+      success: true,
+    });
+    expect(mockSettingsSingle).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-29T12:00:00.000Z'));
     vi.clearAllMocks();
     delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     delete process.env.EVENT_PIPELINE_DISABLE_LEGACY_FANOUT;
-    mockUpsert.mockResolvedValue({ data: null, error: null });
+    mockInsert.mockResolvedValue({ data: null, error: null });
     mockSettingsSingle.mockResolvedValue({
       data: {
         google_analytics_id: 'G-TEST',
@@ -78,6 +99,7 @@ describe('POST /api/platform/events', () => {
     mockSendGA4Event.mockResolvedValue(undefined);
     mockSendFacebookCAPIEvent.mockResolvedValue(undefined);
   });
+  afterEach(() => vi.useRealTimers());
 
   it('returns 400 for an unknown event_type', async () => {
     const res = await POST(makeRequest({ event_type: 'not_a_real_event' }));
@@ -109,7 +131,7 @@ describe('POST /api/platform/events', () => {
     );
 
     expect(res.status).toBe(400);
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
   it('inserts the event and returns success for a valid page view', async () => {
@@ -125,12 +147,11 @@ describe('POST /api/platform/events', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(mockUpsert).toHaveBeenCalledWith(
+    expect(mockInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         event_id: 'platform-event-1',
         event_type: 'landing_page_view',
-      }),
-      { ignoreDuplicates: true, onConflict: 'event_type,event_id' }
+      })
     );
   });
 
@@ -145,60 +166,32 @@ describe('POST /api/platform/events', () => {
 
     expect(first.status).toBe(200);
     expect(retry.status).toBe(200);
-    expect(mockUpsert).toHaveBeenCalledTimes(2);
+    expect(mockInsert).toHaveBeenCalledTimes(2);
   });
 
-  it('forwards the client-passed currency to GA4 and Facebook instead of discarding it', async () => {
-    await POST(
+  it.each([
+    undefined,
+    'true',
+    'false',
+  ])('never reads platform settings or forwards providers when legacy flag is %s', async (legacyFlag) => {
+    if (legacyFlag === undefined) {
+      delete process.env.EVENT_PIPELINE_DISABLE_LEGACY_FANOUT;
+    } else {
+      process.env.EVENT_PIPELINE_DISABLE_LEGACY_FANOUT = legacyFlag;
+    }
+
+    const response = await POST(
       makeRequest({
         event_type: 'platform_purchase',
-        merchant_id: MERCHANT_ID,
-        event_data: { value: 15_000, currency: 'ghs', order_id: 'order-1' },
-      })
-    );
-
-    await vi.waitFor(() => {
-      expect(mockSendGA4Event).toHaveBeenCalled();
-      expect(mockSendFacebookCAPIEvent).toHaveBeenCalled();
-    });
-
-    expect(mockSendGA4Event).toHaveBeenCalledWith(
-      'G-TEST',
-      'secret',
-      'purchase',
-      expect.any(Object),
-      expect.objectContaining({ value: 15_000, currency: 'GHS' })
-    );
-    expect(mockSendFacebookCAPIEvent).toHaveBeenCalledWith(
-      'pixel',
-      'token',
-      'Purchase',
-      expect.any(Object),
-      expect.objectContaining({ value: 15_000, currency: 'GHS' }),
-      undefined,
-      expect.stringMatching(/^platform_/)
-    );
-  });
-
-  it('falls back to the platform default currency (NGN) when the event carries none', async () => {
-    await POST(
-      makeRequest({
-        event_type: 'platform_purchase',
-        merchant_id: MERCHANT_ID,
         event_data: { value: 5000 },
       })
     );
 
-    await vi.waitFor(() => {
-      expect(mockSendGA4Event).toHaveBeenCalled();
-    });
-
-    expect(mockSendGA4Event).toHaveBeenCalledWith(
-      'G-TEST',
-      'secret',
-      'purchase',
-      expect.any(Object),
-      expect.objectContaining({ value: 5000, currency: 'NGN' })
-    );
+    expect(response.status).toBe(200);
+    expect(mockInsert).toHaveBeenCalled();
+    expect(mockSettingsSingle).not.toHaveBeenCalled();
+    expect(mockCreateAdminClient).not.toHaveBeenCalled();
+    expect(mockSendGA4Event).not.toHaveBeenCalled();
+    expect(mockSendFacebookCAPIEvent).not.toHaveBeenCalled();
   });
 });

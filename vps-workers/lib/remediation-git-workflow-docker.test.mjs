@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { REMEDIATION_VERIFY_COMMAND } from './remediation-codex-command.mjs';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { remediationGitWorkflowTestFixtures } from './remediation-git-workflow.test-helpers.mjs';
 
 const { candidate, makeRunner } = remediationGitWorkflowTestFixtures;
-const repoRoot = join(import.meta.dirname, '..', '..');
-
+const testContainerIdentity = { gid: 1001, uid: 1001 };
 const dockerEnvironment = {
   BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
   BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -20,10 +20,74 @@ const dockerEnvironment = {
 };
 
 describe('remediation Docker workflow', () => {
+  it('does not create a worktree when the configured image is unavailable', () => {
+    const { calls, runner: baseRunner } = makeRunner();
+    const runner = (command, args, options) => {
+      if (command === 'docker' && args[0] === 'image') {
+        calls.push([command, ...args]);
+        return {
+          status: 1,
+          stderr: 'Error response from daemon: pull access denied',
+          stdout: '',
+        };
+      }
+      return baseRunner(command, args, options);
+    };
+
+    assert.throws(
+      () =>
+        runRemediationAutofix({
+          candidate,
+          containerIdentity: testContainerIdentity,
+          env: dockerEnvironment,
+          runner,
+        }),
+      /configured BACI_CODEX_DOCKER_IMAGE is unavailable/
+    );
+    assert.equal(
+      calls.some((call) => call.join(' ').startsWith('git worktree add')),
+      false
+    );
+  });
+
+  it('removes a newly created worktree when the image disappears after preflight', () => {
+    const { calls, runner: baseRunner } = makeRunner();
+    const runner = (command, args, options) => {
+      if (command === 'docker' && args[0] === 'run') {
+        calls.push([command, ...args]);
+        return {
+          status: 1,
+          stderr: 'Unable to find image baci-codex-remediator:local locally',
+          stdout: '',
+        };
+      }
+      return baseRunner(command, args, options);
+    };
+
+    assert.throws(
+      () =>
+        runRemediationAutofix({
+          candidate,
+          containerIdentity: testContainerIdentity,
+          env: {
+            ...dockerEnvironment,
+            BACI_REMEDIATION_RUN_ID: 'image-race-run',
+          },
+          runner,
+        }),
+      /Unable to find image/
+    );
+    assert.equal(
+      calls.some((call) => call.join(' ').includes('worktree remove --force')),
+      true
+    );
+  });
+
   it('runs Codex in a hardened Docker container', () => {
     const { calls, runner } = makeRunner({ statusOutput: '' });
     const result = runRemediationAutofix({
       candidate,
+      containerIdentity: testContainerIdentity,
       env: {
         ...dockerEnvironment,
         BACI_REMEDIATION_OUTPUT_DIR: mkdtempSync(
@@ -34,12 +98,23 @@ describe('remediation Docker workflow', () => {
     });
 
     assert.equal(result.type, 'no_changes');
-    const dockerCall = calls.find(([command]) => command === 'docker');
+    const dockerCall = calls.find(
+      ([command, ...args]) =>
+        command === 'docker' &&
+        args.includes('--dangerously-bypass-approvals-and-sandbox')
+    );
     assert.ok(dockerCall);
     assert.equal(dockerCall.includes('--cap-drop'), true);
     assert.equal(dockerCall.includes('ALL'), true);
     assert.equal(
       dockerCall.includes('--dangerously-bypass-approvals-and-sandbox'),
+      true
+    );
+    assert.equal(
+      calls.some(
+        ([command, ...args]) =>
+          command === 'docker' && args.includes('--read-only')
+      ),
       true
     );
     assert.equal(
@@ -54,11 +129,20 @@ describe('remediation Docker workflow', () => {
 
   it('runs verification with dependency mounts', () => {
     const { calls, runner } = makeRunner();
+    const worktreeRoot = mkdtempSync(
+      join(tmpdir(), 'baci-remediation-worktrees-')
+    );
+    const dependencyRoot = mkdtempSync(
+      join(tmpdir(), 'baci-remediation-dependencies-')
+    );
+    mkdirSync(join(dependencyRoot, 'node_modules'));
     const result = runRemediationAutofix({
       candidate,
+      containerIdentity: testContainerIdentity,
       env: {
         ...dockerEnvironment,
-        BACI_REMEDIATION_DEPENDENCY_ROOT: repoRoot,
+        BACI_REMEDIATION_WORKTREE_ROOT: worktreeRoot,
+        BACI_REMEDIATION_DEPENDENCY_ROOT: dependencyRoot,
         BACI_REMEDIATION_RUN_ID: 'verify-run',
       },
       runner,
@@ -67,17 +151,44 @@ describe('remediation Docker workflow', () => {
     assert.equal(result.type, 'pr_opened');
     const verificationCall = calls.find(
       ([command, ...args]) =>
-        command === 'docker' && args.includes('pnpm turbo lint')
+        command === 'docker' &&
+        args.some((arg) => arg.includes(REMEDIATION_VERIFY_COMMAND))
     );
     assert.ok(verificationCall);
     assert.equal(
       verificationCall.includes(
-        `type=bind,src=${repoRoot}/node_modules,dst=/worktrees/abc123-verify-run/node_modules,readonly`
+        `type=bind,src=${dependencyRoot}/node_modules,dst=/opt/remediation-dependencies/node_modules,readonly`
       ),
       true
     );
+    const verificationScript = verificationCall.at(-1);
+    const verifyPosition = verificationScript.lastIndexOf(
+      REMEDIATION_VERIFY_COMMAND
+    );
+    assert.ok(verificationScript.indexOf('cp -a') < verifyPosition);
+    for (const relativePath of [
+      'node_modules',
+      'apps/web/node_modules',
+      'apps/mobile-admin/node_modules',
+      'apps/mobile-storefront/node_modules',
+    ]) {
+      assert.match(
+        verificationScript,
+        new RegExp(`cp -a \\"/opt/remediation-dependencies/${relativePath}`)
+      );
+    }
+    assert.match(
+      verificationScript,
+      new RegExp(` && ${REMEDIATION_VERIFY_COMMAND.replaceAll(' ', '\\s')}$`)
+    );
     assert.equal(
-      calls.some((call) => call.join(' ') === 'bash -lc pnpm turbo lint'),
+      verificationCall.includes('pnpm_config_store_dir=/pnpm-store'),
+      true
+    );
+    assert.equal(
+      calls.some(
+        (call) => call.join(' ') === `bash -lc ${REMEDIATION_VERIFY_COMMAND}`
+      ),
       false
     );
   });
@@ -95,6 +206,7 @@ describe('remediation Docker workflow', () => {
       () =>
         runRemediationAutofix({
           candidate,
+          containerIdentity: testContainerIdentity,
           env: {
             ...dockerEnvironment,
             BACI_REMEDIATION_RUN_ID: 'timeout-run',

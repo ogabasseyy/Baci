@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     return invalidInputResponse(parsed.error.flatten().fieldErrors);
   }
 
-  const { data, error } = await auth.supabase.rpc(
+  let { data, error } = await auth.supabase.rpc(
     'get_quiz_leaderboard_public_v2',
     {
       p_event_id: parsed.data.eventId,
@@ -47,6 +47,37 @@ export async function GET(request: NextRequest) {
     return rpcErrorResponse();
   }
 
+  // Keep this endpoint as the compatibility path for existing storefronts.
+  // Published events use the immutable final projection; active events use
+  // the bounded live projection instead of waiting for finalization.
+  if (
+    data &&
+    typeof data === 'object' &&
+    data !== null &&
+    'status' in data &&
+    data.status === 'live_hidden'
+  ) {
+    const live = await auth.supabase.rpc(
+      'get_quiz_live_leaderboard_public_v2',
+      {
+        p_event_id: parsed.data.eventId,
+      }
+    );
+    if (live.error) {
+      const clientErrorResponse = quizRpcClientErrorResponse(live.error);
+      if (clientErrorResponse) return clientErrorResponse;
+      logger.error({
+        error: live.error,
+        event: 'get_quiz_live_leaderboard',
+        eventId: parsed.data.eventId,
+        message: 'get_quiz_live_leaderboard RPC failed',
+        userId: auth.user.id,
+      });
+      return rpcErrorResponse();
+    }
+    data = live.data;
+  }
+
   const projection = quizLeaderboardProjectionSchema.safeParse(data);
   if (!projection.success) {
     logger.error({
@@ -63,9 +94,30 @@ export async function GET(request: NextRequest) {
     ? (mapQuizLeaderboardRows([projection.data.current_player])[0] ?? null)
     : null;
 
+  const participantCount = await auth.supabase.rpc(
+    'get_quiz_participant_count_public_v2',
+    { p_event_id: parsed.data.eventId }
+  );
+  if (participantCount.error) {
+    logger.warn({
+      error: participantCount.error,
+      event: 'get_quiz_participant_count',
+      eventId: parsed.data.eventId,
+      message:
+        'participant count unavailable; returning leaderboard without it',
+      userId: auth.user.id,
+    });
+  }
+
   return NextResponse.json({
     currentPlayer,
     entries: mapQuizLeaderboardRows(projection.data.entries),
+    participantCount:
+      typeof participantCount.data === 'number' &&
+      Number.isInteger(participantCount.data) &&
+      participantCount.data >= 0
+        ? participantCount.data
+        : null,
     status: projection.data.status,
   });
 }

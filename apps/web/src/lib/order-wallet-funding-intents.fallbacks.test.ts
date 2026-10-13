@@ -46,6 +46,32 @@ describe('createOrderWalletFundingIntent provisioning fallbacks', () => {
     });
   });
 
+  it('returns a typed missing-name fallback when checkout consent cannot provision a DVA', async () => {
+    const repository = createRepository({
+      ensureWalletPaymentAccount: vi.fn(() => {
+        throw new CustomerWalletPaymentAccountError(
+          'CUSTOMER_NAME_REQUIRED',
+          'Customer first and last names are required'
+        );
+      }),
+      resolveWalletPaymentAccount: vi.fn(async () => null),
+    });
+
+    const result = await createOrderWalletFundingIntent({
+      consent: true,
+      customer: { ...customer, first_name: null, last_name: null },
+      merchant,
+      orderId: 'order-1',
+      repository,
+      now: new Date('2026-05-26T12:00:00.000Z'),
+    });
+
+    expect(result).toEqual({
+      code: 'CUSTOMER_NAME_REQUIRED',
+      kind: 'fallback',
+    });
+  });
+
   it('returns a setup fallback when DVA provisioning throws an unexpected error', async () => {
     const repository = createRepository({
       ensureWalletPaymentAccount: vi.fn(() => {

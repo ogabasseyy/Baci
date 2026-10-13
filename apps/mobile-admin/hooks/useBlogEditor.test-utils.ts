@@ -40,8 +40,8 @@ vi.mock('react-native', () => ({
   },
 }));
 
-vi.mock('@/types/upload', () => ({
-  createUploadFile: (value: unknown) => value,
+vi.mock('@/lib/upload/createUploadFormData', () => ({
+  createUploadFormData: vi.fn().mockReturnValue(new FormData()),
 }));
 
 vi.mock('@/lib/supabase', () => ({

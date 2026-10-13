@@ -9,6 +9,9 @@
 
 INPUT=$(cat)
 
+# shellcheck source=quality-gate-environment.sh
+source "$(dirname "$0")/quality-gate-environment.sh"
+
 # CRITICAL: Prevent infinite loops — if Claude is already fixing from a prior block, let it stop.
 # Use `printf '%s\n'` rather than `echo` to feed jq — some echo implementations
 # (notably macOS /bin/sh) interpret backslash escapes by default, which would
@@ -155,50 +158,12 @@ fi
 
 cd "$ACTIVE_DIR" || exit 0
 
-# Check that new/modified source files have colocated test files
-# Exempt: types, config, index barrels, test files, route files, CSS, non-code files
-#
-# Scope: staged + untracked only (NOT unstaged). The session-end hook should
-# audit files actually about to ship, not accumulated WIP. Auditing the full
-# working tree against HEAD fires every session against any uncommitted work,
-# even when the current task touches none of it.
+# Check that new/modified source files have colocated test files.
+# Exempt rules live in ci_scripts/quality-gate-missing-tests.sh.
 MISSING_TESTS=""
-for FILE in $(git diff --name-only --cached --diff-filter=ACM 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null); do
-  # Strip trailing whitespace/CR from git output
-  FILE=$(echo "$FILE" | tr -d '\r' | xargs)
-  [ -z "$FILE" ] && continue
-  # Only check .ts/.tsx files in source directories
-  case "$FILE" in
-    apps/*/src/**/*.ts|apps/*/src/**/*.tsx|packages/*/src/**/*.ts|packages/*/src/**/*.tsx) ;;
-    *) continue ;;
-  esac
-  # Skip files that don't need tests
-  BASENAME=$(basename "$FILE")
-  case "$BASENAME" in
-    *.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx) continue ;;  # Already a test
-    *.d.ts) continue ;;                                      # Declaration files
-    index.ts|index.tsx) continue ;;                          # Barrel re-exports
-    page.tsx|layout.tsx|loading.tsx|error.tsx) continue ;;   # Next.js route files
-    not-found.tsx|template.tsx|default.tsx) continue ;;      # Next.js route files
-    global-error.tsx|route.ts) continue ;;                   # Next.js route/error files
-    globals.css|*.css) continue ;;                           # Style files
-  esac
-  case "$FILE" in
-    */types/*|*/types.ts|*/types.tsx) continue ;;            # Type-only files
-    */config/*|*/constants/*) continue ;;                    # Config/constants
-    */ui/*) continue ;;                                      # shadcn base components
-    */contexts/*) continue ;;                                # React context providers
-    */templates/*) continue ;;                               # Store templates
-  esac
-  # Derive expected test file path using bash parameter expansion
-  DIR=$(dirname "$FILE")
-  EXT="${BASENAME##*.}"
-  BASE="${BASENAME%.*}"
-  TEST_FILE="$DIR/$BASE.test.$EXT"
-  if [ ! -f "$TEST_FILE" ]; then
-    MISSING_TESTS="$MISSING_TESTS\n  - $FILE (expected: $TEST_FILE)"
-  fi
-done
+if [ -x "$ACTIVE_DIR/ci_scripts/quality-gate-missing-tests.sh" ]; then
+  MISSING_TESTS=$(sh "$ACTIVE_DIR/ci_scripts/quality-gate-missing-tests.sh" || true)
+fi
 
 if [ -n "$MISSING_TESTS" ]; then
   jq -n --arg reason "Missing test files for new/modified source files. Create colocated tests:\n$MISSING_TESTS\n\nSee .ruler/07-testing.md for test requirements." \
@@ -221,15 +186,47 @@ if [ ! -d node_modules ] || [ ! -x node_modules/.bin/turbo ]; then
   if [ "${QUALITY_GATE_SKIP_DEPS:-0}" = "1" ]; then
     exit 0
   fi
+  sparse_install='.github/scripts/pnpm-install-sparse-worktree.sh --frozen-lockfile'
+  if [ -x "$ACTIVE_DIR/ci_scripts/is-dep-less-worktree.sh" ] && sh "$ACTIVE_DIR/ci_scripts/is-dep-less-worktree.sh"; then
+    install_hint="Linked worktree: ensure node_modules symlinks to a full install, or run \`$sparse_install\`"
+  elif [ -x "$ACTIVE_DIR/ci_scripts/is-sparse-checkout.sh" ] && sh "$ACTIVE_DIR/ci_scripts/is-sparse-checkout.sh"; then
+    install_hint="Run \`$sparse_install\` in this sparse worktree"
+  else
+    install_hint='Run `pnpm install` in this worktree'
+  fi
   jq -n --arg reason "node_modules / turbo not installed in $(pwd). Either:
-  • Run \`pnpm install\` in this worktree, OR
+  • ${install_hint}, OR
   • Set QUALITY_GATE_SKIP_DEPS=1 (export it globally if you routinely work in dep-less worktrees and rely on PR CI to enforce the contract)" \
     '{"decision": "block", "reason": $reason}'
   exit 0
 fi
 
+# Resolve the turbo command and worktree-aware pnpm configuration via a
+# focused helper (keeps this stop hook under the 300-line budget).
+TURBO_CMD=()
+TURBO_SPARSE_FILTERS=()
+if [ -x "$ACTIVE_DIR/ci_scripts/resolve-turbo-cmd.sh" ]; then
+  _section=""
+  while IFS= read -r -d '' token; do
+    case "$token" in
+      ---ENV---) _section=env ;;
+      ---TURBO_CMD---) _section=cmd ;;
+      ---FILTERS---) _section=filters ;;
+      *)
+        if [ "$_section" = "env" ]; then
+          export "${token?}"
+        elif [ "$_section" = "cmd" ]; then TURBO_CMD+=("$token")
+        elif [ "$_section" = "filters" ]; then TURBO_SPARSE_FILTERS+=("$token")
+        fi ;;
+    esac
+  done < <(ACTIVE_DIR="$ACTIVE_DIR" bash "$ACTIVE_DIR/ci_scripts/resolve-turbo-cmd.sh")
+fi
+if [ ${#TURBO_CMD[@]} -eq 0 ]; then
+  TURBO_CMD=(pnpm turbo)
+fi
+
 # Run Biome lint check (~2-5s)
-LINT_RESULT=$(pnpm turbo lint 2>&1)
+LINT_RESULT=$("${TURBO_CMD[@]}" lint "${TURBO_SPARSE_FILTERS[@]}" 2>&1)
 LINT_EXIT=$?
 
 if [ $LINT_EXIT -ne 0 ]; then
@@ -240,10 +237,20 @@ if [ $LINT_EXIT -ne 0 ]; then
 fi
 
 # Run TypeScript type check (~10-30s)
-TYPE_RESULT=$(pnpm turbo typecheck 2>&1)
+TYPE_RESULT=$("${TURBO_CMD[@]}" typecheck "${TURBO_SPARSE_FILTERS[@]}" 2>&1)
 TYPE_EXIT=$?
 
 if [ $TYPE_EXIT -ne 0 ]; then
+  if echo "$TYPE_RESULT" | grep -q 'Command "turbo" not found'; then
+    jq -n --arg reason "Cannot run typecheck: turbo is not installed in $(pwd). Run \`pnpm install\` in this worktree (or set QUALITY_GATE_SKIP_DEPS=1 if you rely on CI)." \
+      '{"decision": "block", "reason": $reason}'
+    exit 0
+  fi
+  if echo "$TYPE_RESULT" | grep -q 'You can learn about all of the compiler options'; then
+    jq -n --arg reason "Typecheck failed because a workspace package is missing tsconfig.json (common in sparse worktrees). Expand sparse checkout, work from a full worktree, or rely on PR CI with QUALITY_GATE_SKIP_DEPS=1." \
+      '{"decision": "block", "reason": $reason}'
+    exit 0
+  fi
   TRIMMED=$(echo "$TYPE_RESULT" | tail -30)
   jq -n --arg reason "TypeScript errors detected. Fix all type errors before completing:\n\n$TRIMMED" \
     '{"decision": "block", "reason": $reason}'
@@ -251,7 +258,7 @@ if [ $TYPE_EXIT -ne 0 ]; then
 fi
 
 # Run tests (~5-30s)
-TEST_RESULT=$(pnpm turbo test 2>&1)
+TEST_RESULT=$("${TURBO_CMD[@]}" test "${TURBO_SPARSE_FILTERS[@]}" 2>&1)
 TEST_EXIT=$?
 
 if [ $TEST_EXIT -ne 0 ]; then

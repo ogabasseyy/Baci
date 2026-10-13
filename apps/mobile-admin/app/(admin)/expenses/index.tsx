@@ -1,244 +1,30 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
-import { FlashList } from '@shopify/flash-list';
-import { useQuery } from '@tanstack/react-query';
-import { isSameMonth, isValid, parseISO } from 'date-fns';
-import { Stack, useRouter } from 'expo-router';
-import { Pressable, StatusBar, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ExpenseListItem } from '@/components/expenses/ExpenseListItem';
-import { styles } from '@/components/expenses/expenses-list.styles';
-import {
-  type GroupedExpenseListItem,
-  groupExpensesByMonth,
-} from '@/components/expenses/expenses-list.utils';
+import { ExpenseListContent } from '@/components/expenses/ExpenseListContent';
+import { ExpenseStatusShell } from '@/components/expenses/ExpenseStatusShell';
 import { ScreenSkeleton } from '@/components/ui/ScreenSkeleton';
-import { useBranchScope } from '@/hooks/useBranchScope';
-import { useMerchant } from '@/hooks/useMerchant';
+import { useExpenseAccess } from '@/hooks/useExpenseAccess';
 import { useTheme } from '@/hooks/useTheme';
-import { getBranchScopeKey } from '@/lib/branch-scope-query';
-import { supabase } from '@/lib/supabase';
-import { formatCurrency } from '@/lib/utils';
-import { ExpenseSchema } from '@/schemas/expense';
 
 export default function ExpensesScreen() {
-  const { colors, shadows, isDark } = useTheme();
-  const router = useRouter();
-  const { merchant } = useMerchant();
-  const { scope } = useBranchScope();
-  const branchScopeKey = getBranchScopeKey(scope);
+  const { canCreate, canEdit, canView, error, isLoading } = useExpenseAccess();
+  const { colors } = useTheme();
 
-  const {
-    data: expenses,
-    isError: hasExpensesError,
-    isLoading,
-  } = useQuery({
-    queryKey: ['expenses', merchant?.id, branchScopeKey],
-    queryFn: async () => {
-      if (!merchant?.id) return [];
-      let query = supabase
-        .from('expenses')
-        .select(
-          'id, amount, category, description, date, receipt_url, branch_id'
-        )
-        .eq('merchant_id', merchant.id)
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
+  if (isLoading) {
+    return <ScreenSkeleton variant="list" cards={4} />;
+  }
 
-      if (scope.type === 'branch') {
-        query = query.eq('branch_id', scope.branchId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      return ExpenseSchema.array().parse(data ?? []);
-    },
-    enabled: !!merchant?.id,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const monthlyTotal = (() => {
-    if (!expenses) return 0;
-    const now = new Date();
-    return expenses
-      .filter((e) => {
-        const expenseDate = parseISO(e.date);
-        return isValid(expenseDate) && isSameMonth(expenseDate, now);
-      })
-      .reduce((sum, e) => sum + Number(e.amount), 0);
-  })();
-
-  const { data: groupedExpenses, stickyHeaderIndices } = groupExpensesByMonth(
-    expenses ?? []
-  );
-
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'Expenses',
-          headerLeft: () => (
-            <Pressable
-              onPress={() => router.back()}
-              style={styles.headerButton}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.text} />
-            </Pressable>
-          ),
-          headerRight: () => (
-            <Pressable
-              onPress={() => router.push('/expenses/new')}
-              style={styles.headerButton}
-            >
-              <Ionicons name="add" size={24} color={colors.primary} />
-            </Pressable>
-          ),
-        }}
+  if (error && !canView) {
+    return (
+      <ExpenseStatusShell
+        colors={colors}
+        errorMessage="Could not verify expense access. Please try again."
+        status="error"
       />
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        edges={['bottom']}
-      >
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+    );
+  }
 
-        {/* Summary Card */}
-        <View style={styles.summaryContainer}>
-          <View
-            style={[
-              styles.summaryCard,
-              { backgroundColor: colors.primary },
-              shadows.md,
-            ]}
-          >
-            <Text
-              style={[
-                styles.summaryLabel,
-                { color: colors.textOnPrimary, opacity: 0.8 },
-              ]}
-            >
-              Total this Month
-            </Text>
-            <Text
-              style={[styles.summaryAmount, { color: colors.textOnPrimary }]}
-            >
-              {formatCurrency(
-                monthlyTotal,
-                undefined,
-                merchant?.payout_currency || 'NGN'
-              )}
-            </Text>
-            <View style={styles.summaryTrend}>
-              <Ionicons
-                name="trending-up"
-                size={16}
-                color={colors.textOnPrimary}
-                style={{ opacity: 0.8 }}
-              />
-              <Text
-                style={[
-                  styles.summaryTrendText,
-                  { color: colors.textOnPrimary, opacity: 0.8 },
-                ]}
-              >
-                {' '}
-                recorded spending
-              </Text>
-            </View>
-          </View>
-        </View>
+  if (!canView) {
+    return <ExpenseStatusShell colors={colors} status="denied" />;
+  }
 
-        {/* Expenses List */}
-        {isLoading ? (
-          <ScreenSkeleton variant="list" cards={4} />
-        ) : hasExpensesError ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name="warning-outline"
-              size={64}
-              color={colors.textMuted}
-            />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Could not load expenses
-            </Text>
-            <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-              Please try again later.
-            </Text>
-          </View>
-        ) : (
-          <FlashList<GroupedExpenseListItem>
-            data={groupedExpenses}
-            renderItem={({ item }) => {
-              if (item.type === 'header') {
-                return (
-                  <View
-                    style={[
-                      styles.sectionHeader,
-                      { backgroundColor: colors.background },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.sectionHeaderLabel,
-                        { color: colors.textSecondary },
-                      ]}
-                      accessibilityRole="header"
-                    >
-                      {item.title}
-                    </Text>
-                  </View>
-                );
-              }
-              return <ExpenseListItem item={item.data} merchant={merchant} />;
-            }}
-            keyExtractor={(item) => item.key}
-            getItemType={(item) => item.type}
-            stickyHeaderIndices={stickyHeaderIndices}
-            stickyHeaderConfig={{
-              zIndex: 10,
-              hideRelatedCell: true,
-            }}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons
-                  name="receipt-outline"
-                  size={64}
-                  color={colors.textMuted}
-                />
-                <Text
-                  style={[styles.emptyText, { color: colors.textSecondary }]}
-                >
-                  No expenses recorded yet
-                </Text>
-                <Pressable
-                  style={[
-                    styles.emptyButton,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  onPress={() => router.push('/expenses/new')}
-                >
-                  <Text
-                    style={[styles.emptyButtonText, { color: colors.primary }]}
-                  >
-                    Add your first expense
-                  </Text>
-                </Pressable>
-              </View>
-            }
-          />
-        )}
-
-        {/* FAB */}
-        <Pressable
-          style={[styles.fab, { backgroundColor: colors.primary }, shadows.lg]}
-          onPress={() => router.push('/expenses/new')}
-        >
-          <Ionicons name="add" size={32} color={colors.textOnPrimary} />
-        </Pressable>
-      </SafeAreaView>
-    </>
-  );
+  return <ExpenseListContent canCreate={canCreate} canEdit={canEdit} />;
 }

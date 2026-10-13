@@ -11,6 +11,7 @@ import { MerchantSetupOwnerStep } from './MerchantSetupOwnerStep';
 import { MerchantSetupProgress } from './MerchantSetupProgress';
 import { RegisterBusinessStep } from './RegisterBusinessStep';
 import { getStyles } from './register.styles';
+import { requiresOwnerNameFields } from './requires-owner-name-fields';
 
 interface MerchantSetupFormData {
   firstName: string;
@@ -81,6 +82,9 @@ export function MerchantSetupForm() {
   const [isSlugEdited, setIsSlugEdited] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [setupStep, setSetupStep] = useState<1 | 2>(1);
+  const [collectOwnerNames, setCollectOwnerNames] = useState(() =>
+    user ? requiresOwnerNameFields(formData.firstName, formData.lastName) : true
+  );
   const hydratedUserId = useRef<string | null>(user?.id ?? null);
 
   useEffect(() => {
@@ -95,12 +99,18 @@ export function MerchantSetupForm() {
     hydratedUserId.current = user.id;
     if (userChanged) {
       setFormData(defaults);
+      setCollectOwnerNames(
+        requiresOwnerNameFields(defaults.firstName, defaults.lastName)
+      );
       setSetupStep(1);
       setIsSlugEdited(false);
       setSlugError(null);
       return;
     }
     if (wasUnauthenticated) {
+      setCollectOwnerNames(
+        requiresOwnerNameFields(defaults.firstName, defaults.lastName)
+      );
       setSetupStep(1);
     }
     setFormData((previous) =>
@@ -121,11 +131,10 @@ export function MerchantSetupForm() {
     return null;
   }
 
-  const requiresOwnerDetails =
-    !formData.firstName.trim() || !formData.lastName.trim();
+  const requiresOwnerDetails = collectOwnerNames;
 
   const continueToBusinessInfo = () => {
-    if (requiresOwnerDetails) {
+    if (requiresOwnerNameFields(formData.firstName, formData.lastName)) {
       Alert.alert(
         'Check Your Details',
         'Please enter your first and last name.'
@@ -252,6 +261,7 @@ export function MerchantSetupForm() {
           onLastNameChange={(value) => updateForm('lastName', value)}
           onPhoneChange={(value) => updateForm('phone', value)}
           phone={formData.phone}
+          showNameFields={requiresOwnerDetails}
         />
       ) : null}
       {setupStep === 2 ? (

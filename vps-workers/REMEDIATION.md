@@ -37,17 +37,83 @@ the configured page ceiling would leave a measurement gap.
 
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,
-runs Codex in an ephemeral Docker container with all Linux capabilities dropped,
-`no-new-privileges`, a tmpfs home, a read-only auth-file mount, and only the
-temporary worktree writable. The deploy script builds the pinned
+runs Codex in an ephemeral Docker container with `no-new-privileges`, a tmpfs
+home, a read-only auth-file mount, and, in implementation mode, the temporary
+worktree as the only writable repository bind mount. `/tmp` and `/codex-home`
+remain writable ephemeral tmpfs paths.
+Implementation containers drop all Linux capabilities; read-only research adds
+only the narrowly scoped DAC and identity capabilities needed for the parent
+Codex process to read auth and drops generated shells to the worker UID. The
+deploy script builds the pinned
 `Dockerfile.codex-remediator` image and injects its immutable commit tag into
 both remediation cron entries. The worker then inspects changed files, runs
-`BACI_REMEDIATION_VERIFY_COMMAND` without provider secrets in the same
-dependency-mounted remediator image, pushes a `codex/<source>-remediation-*`
+the immutable lint, typecheck, and test gates without provider secrets in the
+same dependency-mounted remediator image, pushes a `codex/<source>-remediation-*`
 branch, and opens a draft pull request. Each tick handles a bounded candidate
 batch so a noisy incident backlog cannot monopolize the worker.
+
+The case ledger records bounded case identity, category, lifecycle state,
+recurrence count, a short prior-outcome history, and up to three redacted,
+allowlisted representative samples. A sample can include a redacted message and
+up to 32 redacted stack-summary frames; it never retains arbitrary provider
+payloads. Operator reports and draft PR bodies use lifecycle evidence only; they
+do not include provider messages, routes, request IDs, deployment IDs, stack
+frames, or raw error details.
+An active draft linkage blocks another autofix even after the case becomes
+`quiet` following seven days without an observation; a later observation is
+recorded as recurrence for human review rather than opening another PR.
 
 The worker blocks protected changes to `proxy.ts`, payment/auth/webhook routes,
 payment libraries, migrations, GitHub workflows, and secret files. It never
 merges or requests auto-merge. Branch protection and human review remain
 authoritative; its GitHub token must not bypass required checks or reviews.
+
+Before Codex edits a remediation worktree, the worker runs a separate
+read-only research phase. That phase must reproduce and trace the evidence,
+check installed versions and primary documentation, compare at least two
+plausible fixes, and include an operational or non-code option only when one is
+plausibly available. It must report its confidence and validation plan in the
+required structured headings. If the report is missing, incomplete, or no
+defensible fix is identified, the worker stops before edits, verification, or
+commit. Only an accepted report starts the write-enabled implementation phase;
+that phase runs focused tests in the sandbox while the outer worker owns wider
+pnpm turbo gates. The remediator removes uncommitted failed worktrees and their per-run dependency
+stores by default. A committed-but-not-yet-pushed attempt keeps its worktree
+for push/PR recovery, but its dependency store is removed. Set
+`BACI_REMEDIATION_RETAIN_FAILED_WORKTREE=1` only for bounded debugging; even
+then, the dependency store is removed on terminal cleanup.
+
+The read-only research phase also uses the checked-in
+`config/codex-readonly-seccomp.json` profile. It is based on the pinned Moby
+seccomp/v0.2.3 profile (source:
+<https://github.com/moby/profiles/tree/seccomp/v0.2.3/seccomp>) and adds only
+`clone`, `clone3`, `mount`, `umount`, `umount2`, `unshare`, and `pivot_root`
+for the namespace operations that the sandboxed toolchain may request;
+the outer container enables `no-new-privileges` and keeps the worktree and
+dependency mounts read-only; implementation containers additionally drop all
+capabilities, while research uses only the narrowly scoped capabilities needed
+to protect its auth handoff. The generated research shell is replaced with a
+wrapper that drops to the worker UID before running `/bin/sh`, and the copied
+ source auth mount remains root-only; the bootstrap copies it into the
+Codex tmpfs, keeps that copy root-owned, and then execs Codex directly so
+the parent keeps the bootstrap root identity while generated shells stay
+unprivileged and cannot read the credential. Raw shell delegates stay in a root-only image directory and
+ are copied to a worker-owned temporary directory for that invocation, so
+ generated commands cannot select the privileged delegates directly.
+The inner read-only Codex invocation forces its legacy Landlock fallback instead
+of starting bubblewrap, because this VPS does not permit unprivileged user
+namespaces. Landlock keeps the read-only command's process-level filesystem and
+network policy (including blocked generated-command egress), while the outer
+Docker boundary remains authoritative: only ephemeral container tmpfs paths
+are writable and the container is removed after each run. Implementation runs
+still use the Docker boundary directly because they need a writable worktree
+and GitHub access. Do not replace this profile with `seccomp=unconfined`.
+
+`jobs/remediation-codex-canary.mjs` is a daily, Docker-only read-only check of
+the Codex toolchain. It shares the global remediation lock and writes its own
+`logs/remediation-codex-canary.log`. Set `BACI_REMEDIATION_CANARY_ENABLED=1`
+explicitly in the operator-managed `.env` to run it; otherwise it emits a single sanitized skipped JSONL
+record. Toolchain, quota, and authentication failures emit a sanitized JSONL
+failure record and use the configured remediation notification email when
+available. The canary never reads incident providers, creates a worktree,
+pushes, opens a pull request, merges, or deploys.

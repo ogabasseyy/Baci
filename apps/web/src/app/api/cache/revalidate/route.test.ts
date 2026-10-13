@@ -57,6 +57,13 @@ vi.mock('@/lib/get-merchant-blog-post-slugs', () => ({
     mockGetMerchantBlogPostSlugs(...args),
 }));
 
+// The article-URL lookup has its own suite; these route tests pin the purge
+// scheduling around it, so resolve an empty complete set here.
+vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
+  getPublishedBlogPostSlugsForProducts: () =>
+    Promise.resolve({ slugs: [], incomplete: false }),
+}));
+
 // Mock next/cache
 const mockRevalidatePath = vi.fn();
 const mockRevalidateTag = vi.fn();
@@ -79,6 +86,16 @@ const mockScheduleStorefrontProductPurge = vi.fn();
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
+}));
+const mockScheduleStorefrontHostnamePurge = vi.fn();
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleStorefrontHostnamePurge(...args),
+}));
+const mockExpireProductBlogCache = vi.fn();
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
 }));
 
 // ---- Import handler AFTER mocks ----
@@ -284,6 +301,7 @@ describe('POST /api/cache/revalidate', () => {
         'ogabassey',
         [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
       );
+      expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     });
 
     it('allows a products-only purge for staff with products:create only (mobile create flow)', async () => {
@@ -667,10 +685,12 @@ describe('POST /api/cache/revalidate', () => {
         );
 
         expect(res.status).toBe(200);
-        // Fell back to the caller's "Audio" text hint (→ "audio") for the segment.
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'ogabassey',
-          [{ slug: 'buds-pro', categorySegment: 'audio' }]
+        // Fell back to the caller's "Audio" text hint (→ "audio") for the
+        // segment, but the article set is incomplete without authoritative
+        // rows, so the route escalates to the hostname superset.
+        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+        expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+          'ogabassey'
         );
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringContaining(
@@ -780,10 +800,11 @@ describe('POST /api/cache/revalidate', () => {
         );
 
         expect(res.status).toBe(200);
-        // Only the current-location entry — the old-segment append is skipped.
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'ogabassey',
-          [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+        // The old-category articles cannot be enumerated, so the route
+        // escalates to the hostname superset instead of the product purge.
+        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+        expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+          'ogabassey'
         );
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringContaining('Failed to resolve previous category slugs'),

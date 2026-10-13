@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StorefrontDatabase } from '@/types/storefront-database';
 import { readStorefrontPdpSemanticEnrichment } from './storefront-pdp-semantic-enrichment';
+import { storefrontPdpSemanticReadCooldown } from './storefront-pdp-semantic-read-cooldown-singleton';
 
 const clusterRequest = {
   p_category_slug: 'smartphones',
@@ -28,6 +29,10 @@ function createClient(response: unknown) {
 }
 
 describe('readStorefrontPdpSemanticEnrichment', () => {
+  beforeEach(() => {
+    storefrontPdpSemanticReadCooldown.reset();
+  });
+
   it('loads inventory and guides through one bounded RPC and prioritizes linked guides', async () => {
     const duplicateGuide = {
       slug: 's25-guide',

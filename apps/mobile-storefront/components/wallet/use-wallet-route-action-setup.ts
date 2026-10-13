@@ -18,6 +18,7 @@ interface UseWalletRouteActionSetupParams {
   };
   customerId: string | undefined;
   routeAction: string | undefined;
+  routeSavingsGoalId?: string;
   /**
    * Per-navigation nonce from `/wallet?action=bank-transfer&intent=…`. Identifies
    * WHICH bank-transfer attempt this is, so a remount of the same attempt keeps
@@ -45,6 +46,7 @@ export function useWalletRouteActionSetup({
   bankTransfer,
   customerId,
   routeAction,
+  routeSavingsGoalId,
   routeIntentId,
   routeRequiredAmount,
   setFundAmount,
@@ -67,7 +69,9 @@ export function useWalletRouteActionSetup({
   // customerId is deliberately NOT in this key: async auth hydration flips it
   // undefined→id right after mount, and re-running applyWalletRouteAction then
   // would re-seed a fund URL's amount / reset panels mid-input.
-  const routeActionKey = `${routeAction ?? ''}|${routeRequiredAmount}|${walletReturnTo ?? ''}`;
+  const savingsRouteKey =
+    routeAction === 'savings' ? (routeSavingsGoalId ?? '') : '';
+  const routeActionKey = `${routeAction ?? ''}|${routeRequiredAmount}|${walletReturnTo ?? ''}|${savingsRouteKey}`;
   const [prevRouteActionKey, setPrevRouteActionKey] = useState(routeActionKey);
   if (prevRouteActionKey !== routeActionKey) {
     setPrevRouteActionKey(routeActionKey);

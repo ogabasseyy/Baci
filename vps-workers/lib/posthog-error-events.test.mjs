@@ -55,7 +55,7 @@ describe('PostHog remediation candidates', () => {
 
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].sample.source, 'posthog');
-    assert.equal(candidates[0].sample.category, 'Error tracking issue');
+    assert.equal(candidates[0].category, 'posthog_issue');
     assert.equal(candidates[0].sample.message, 'PostHog error tracking issue');
     assert.equal(candidates[0].sample.route, '(redacted PostHog location)');
     assert.equal(candidates[0].firstSeen, '2026-08-04T15:45:25Z');

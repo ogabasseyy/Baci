@@ -1,5 +1,10 @@
+import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import { buildStoreUrl } from '@/lib/store-url';
 import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
+import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
+import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
+import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 
@@ -22,7 +27,7 @@ async function loadModelFamilyAuthorityPage(args: {
       categorySlug: args.categorySlug,
       brandSlug: args.brandSlug,
     },
-    { includeRequestPathPrefix: false }
+    { includeGuideLinks: false, includeRequestPathPrefix: false }
   );
   if (!brandPage) return null;
 
@@ -35,6 +40,23 @@ async function loadModelFamilyAuthorityPage(args: {
   const countryContext = getCountryShoppingContext(brandPage.merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
   const heading = `${family.displayName} Phones and Prices${countrySuffix}`;
+  const supportedCategory =
+    args.categorySlug in CONTENT_CLUSTER_SUPPORT
+      ? (args.categorySlug as SupportedClusterCategory)
+      : null;
+  const guideContext = supportedCategory
+    ? {
+        pageKind: 'category' as const,
+        categorySlug: supportedCategory,
+        brands: [brandPage.brand.displayName, brandPage.brand.brandKey],
+        modelFamilySlug: family.familyKey,
+        productNames: products.map((product) => product.name),
+        productSlugs: products.map((product) => product.slug),
+      }
+    : null;
+  const guidePosts = guideContext
+    ? await loadPublishedClusterPostsSafely(brandPage.merchant.id, guideContext)
+    : [];
 
   return {
     ...brandPage,
@@ -48,6 +70,13 @@ async function loadModelFamilyAuthorityPage(args: {
     }).title,
     metaDescription: `Compare ${products.length} ${family.displayName} phones from ${brandPage.merchant.business_name}, with current prices, specifications, condition, and availability${countrySuffix}.`,
     products,
+    guideLinks: guideContext
+      ? buildCommercialGuideLinks({
+          storeUrl: buildStoreUrl(brandPage.merchant),
+          posts: guidePosts,
+          context: guideContext,
+        })
+      : [],
     brand: { ...brandPage.brand, displayName: family.displayName },
     familyLinks: [],
     breadcrumbItems: [

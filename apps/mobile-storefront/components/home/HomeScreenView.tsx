@@ -45,12 +45,14 @@ interface HomeScreenViewProps {
   onSearchCancel: () => void;
   onSearchQueryChange: (query: string) => void;
   onSearchSubmit: () => void;
+  onSeeAllResults: (query: string) => void;
   primaryColor: string;
   primaryProductGridIndex: number;
   refreshing: boolean;
   resolvedHeaderHeight: number;
   searchQuery: string;
   searchVisible: boolean;
+  showSearchMinLengthHint: boolean;
   selectedCategoryId: string | null;
   shouldRenderDecorations: boolean;
 }
@@ -75,6 +77,7 @@ export function HomeScreenView({
   onSearchCancel,
   onSearchQueryChange,
   onSearchSubmit,
+  onSeeAllResults,
   primaryColor,
   primaryProductGridIndex,
   refreshing,
@@ -83,6 +86,7 @@ export function HomeScreenView({
   searchVisible,
   selectedCategoryId,
   shouldRenderDecorations,
+  showSearchMinLengthHint,
 }: HomeScreenViewProps) {
   const colorScheme = useColorScheme();
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
@@ -121,9 +125,10 @@ export function HomeScreenView({
       {shouldRenderDecorations && <SnowEffect />}
       <StatusBar barStyle="light-content" />
 
-      {shouldRenderDecorations && (
+      {shouldRenderDecorations && !isElite && (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
           <GadgetPattern
+            colorScheme={colorScheme ?? 'light'}
             opacity={colorScheme === 'dark' ? 0.04 : 0.07}
             height={1500}
             color={colorScheme === 'dark' ? '#ffffff' : primaryColor}
@@ -141,7 +146,11 @@ export function HomeScreenView({
             },
           ]}
         >
-          <GadgetPattern opacity={0.25} height={ELITE_BACKDROP_HEIGHT} />
+          <GadgetPattern
+            colorScheme="dark"
+            opacity={0.14}
+            height={ELITE_BACKDROP_HEIGHT}
+          />
         </View>
       )}
 
@@ -206,6 +215,8 @@ export function HomeScreenView({
         topOffset={resolvedHeaderHeight}
         query={searchQuery}
         onQueryChange={onSearchQueryChange}
+        onSeeAllResults={onSeeAllResults}
+        showMinLengthHint={showSearchMinLengthHint}
         hideInput={true}
       />
     </View>

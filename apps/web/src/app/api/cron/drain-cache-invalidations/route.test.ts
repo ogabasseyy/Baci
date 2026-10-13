@@ -73,9 +73,10 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 1,
       completed: 1,
       failed: 0,
+      deadLettersPresent: false,
     });
     expect(rpc).toHaveBeenNthCalledWith(1, 'claim_cache_invalidations', {
-      p_batch_size: 2,
+      p_batch_size: 5,
       p_worker_id: expect.stringMatching(/^next-cron-/),
     });
     const finishArgs = rpc.mock.calls[1]?.[1];
@@ -106,6 +107,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 1,
       completed: 0,
       failed: 1,
+      deadLettersPresent: false,
     });
     expect(rpc).toHaveBeenNthCalledWith(
       2,
@@ -142,6 +144,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 2,
       completed: 1,
       failed: 1,
+      deadLettersPresent: false,
     });
     expect(rpc).toHaveBeenNthCalledWith(
       2,
@@ -185,6 +188,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 3,
       completed: 3,
       failed: 0,
+      deadLettersPresent: false,
     });
     expect(
       rpc.mock.calls.filter(([name]) => name === 'claim_cache_invalidations')
@@ -211,6 +215,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 10,
       completed: 10,
       failed: 0,
+      deadLettersPresent: false,
     });
     expect(
       rpc.mock.calls.filter(([name]) => name === 'claim_cache_invalidations')
@@ -244,6 +249,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       claimed: 2,
       completed: 2,
       failed: 0,
+      deadLettersPresent: false,
     });
     expect(
       rpc.mock.calls.filter(([name]) => name === 'claim_cache_invalidations')
@@ -263,11 +269,8 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
 
     const response = await GET(request());
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Cache invalidations require intervention',
-      code: 'cache_invalidation_dead_letter',
-    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ deadLettersPresent: true });
   });
 
   it('fails closed when the dead-letter alert state cannot be read', async () => {

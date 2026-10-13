@@ -14,6 +14,10 @@ export const WALLET_FUNDING_COPY = {
   feeNote: 'Bank transfers cost just 1% (capped at ₦300) — cheaper than card fees.',
   fundCta: 'Pay with Bank Transfer',
   fundCtaSubtitle: 'Transfer to your wallet account number — 1% fee, max ₦300',
+  invalidPhone:
+    'Please enter a valid Nigerian phone number (e.g., 08012345678)',
+  invalidName: 'Please enter both your first and last name',
+  nameSaveFailed: 'Could not save your name. Please try again.',
   orderPaymentInProgress:
     'Your account number is handling an order payment right now. Complete that payment first, then try again — reservations clear within about 90 minutes.',
   refreshCta: "I've sent it — refresh balance",
@@ -41,5 +45,6 @@ export const WALLET_FUNDING_COPY = {
   unavailable:
     'Bank transfer funding is not available right now. Please try again later.',
   walletRecommendedBadge: 'Recommended',
+  phoneSaveFailed: 'Could not save your phone number. Please try again.',
   zeroBalanceHint: 'Fund your wallet to pay without card fees',
 } as const;

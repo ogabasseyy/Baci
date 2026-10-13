@@ -1,0 +1,5 @@
+// Pending replay rows for merchant follow-up notification preference migrations.
+// Keep these bytes aligned with the checked-in migration files.
+export const FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS = `073009158808b2a75df6251c12dcaa5110c8ba65c8d166ef9df45520af6800a9 20260826130000_add_follow_up_notification_preference.sql
+5df571384c2ce0cc9396d7f2e752eb710ea8bd44816504ad8aaf7de4214d2597 20260826140000_read_follow_up_notification_preference_rpc.sql
+ad413b38e0df617994e0c4ad3cded3f856eecaa62fe16897cf682d6434d86920 20260827080000_bind_follow_up_notification_preference_to_invoice.sql`;

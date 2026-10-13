@@ -1,117 +1,101 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  getAdminMerchantHealthRows,
-  sortAdminMerchantHealthRows,
-} from '@/lib/admin-merchant-health';
+import { getAdminMerchantHealthPage } from '@/lib/admin-merchant-health';
 
-describe('getAdminMerchantHealthRows', () => {
-  it('uses the admin RPC when it is available', async () => {
-    const supabase = {
-      from: vi.fn(),
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          {
-            merchant_id: 'merchant-1',
-            business_name: 'Baci Store',
-            email: 'owner@example.com',
-            joined_at: '2026-03-20T10:00:00.000Z',
-            total_gmv: 400,
-            total_orders: 2,
-            last_order_date: '2026-03-19',
-            active_days: 2,
-            health_status: 'healthy',
-            storefront_slug: 'baci-store',
-          },
-        ],
-        error: null,
-      }),
-    };
+const query = {
+  health: 'all',
+  limit: 50,
+  offset: 0,
+  search: undefined,
+  sortBy: 'gmv',
+} as const;
 
-    const result = await getAdminMerchantHealthRows(supabase as never);
+const merchantRow = {
+  active_days: 4,
+  business_name: 'Baci Store',
+  email: 'owner@example.com',
+  excluded_non_ngn_or_unknown_paid_orders: 0,
+  health_status: 'at_risk',
+  joined_at: '2026-06-11T00:00:00.000Z',
+  last_order_date: '2026-06-01',
+  merchant_id: '11111111-1111-4111-8111-111111111111',
+  storefront_slug: 'baci-store',
+  total_count: 73,
+  total_gmv: 1_200,
+  total_orders: 2,
+};
 
-    expect(result.error).toBeNull();
-    expect(result.data).toHaveLength(1);
-    expect(supabase.from).not.toHaveBeenCalled();
-  });
-
-  it('returns the RPC error when the call fails', async () => {
-    const supabase = {
-      from: vi.fn(),
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: {
-          code: '42501',
-          message: 'permission denied',
-        },
-      }),
-    };
-
-    const result = await getAdminMerchantHealthRows(supabase as never);
-
-    expect(result.data).toEqual([]);
-    expect(result.error).toMatchObject({
-      code: '42501',
-      message: 'permission denied',
+describe('getAdminMerchantHealthPage', () => {
+  it('uses the bounded, server-sorted v2 RPC', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const result = await getAdminMerchantHealthPage({ rpc } as never, query);
+    expect(result).toMatchObject({ data: [], error: null, total: 0 });
+    expect(rpc).toHaveBeenCalledWith('get_admin_merchant_health_v2', {
+      p_health_status: null,
+      p_limit: 50,
+      p_offset: 0,
+      p_search: null,
+      p_sort_by: 'gmv',
     });
-    expect(supabase.from).not.toHaveBeenCalled();
-  });
-});
-
-describe('sortAdminMerchantHealthRows', () => {
-  const rows = [
-    {
-      active_days: 2,
-      business_name: 'Low GMV',
-      email: 'low@example.com',
-      health_status: 'healthy' as const,
-      joined_at: '2026-03-20T10:00:00.000Z',
-      last_order_date: '2026-03-19',
-      merchant_id: 'merchant-1',
-      storefront_slug: 'low-gmv',
-      total_gmv: 400,
-      total_orders: 2,
-    },
-    {
-      active_days: 1,
-      business_name: 'High GMV',
-      email: 'high@example.com',
-      health_status: 'new' as const,
-      joined_at: '2026-03-22T10:00:00.000Z',
-      last_order_date: null,
-      merchant_id: 'merchant-2',
-      storefront_slug: 'high-gmv',
-      total_gmv: 1200,
-      total_orders: 1,
-    },
-  ];
-
-  it('sorts admin merchant health rows by gmv, orders, and join date', () => {
-    expect(
-      sortAdminMerchantHealthRows(rows, 'gmv').map((row) => row.merchant_id)
-    ).toEqual(['merchant-2', 'merchant-1']);
-    expect(
-      sortAdminMerchantHealthRows(rows, 'orders').map((row) => row.merchant_id)
-    ).toEqual(['merchant-1', 'merchant-2']);
-    expect(
-      sortAdminMerchantHealthRows(rows, 'joined').map((row) => row.merchant_id)
-    ).toEqual(['merchant-2', 'merchant-1']);
   });
 
-  it('handles empty, single, equal, and malformed sort values safely', () => {
-    const malformedRows = [
-      { ...rows[0], joined_at: 'invalid-date', total_gmv: 'not-a-number' },
-      { ...rows[1], joined_at: '', total_gmv: '1200', total_orders: 2 },
-    ];
+  it('fails closed for malformed paged rows', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ merchant_id: 'not-a-uuid' }],
+      error: null,
+    });
+    const result = await getAdminMerchantHealthPage({ rpc } as never, query);
+    expect(result.error?.code).toBe('INVALID_MERCHANT_HEALTH_PAYLOAD');
+  });
 
-    expect(sortAdminMerchantHealthRows([], 'gmv')).toEqual([]);
-    expect(sortAdminMerchantHealthRows([rows[0]], 'orders')).toEqual([rows[0]]);
-    expect(
-      sortAdminMerchantHealthRows(malformedRows, 'gmv')[0]?.merchant_id
-    ).toBe('merchant-2');
-    expect(
-      sortAdminMerchantHealthRows(malformedRows, 'joined').map(
-        (row) => row.merchant_id
-      )
-    ).toEqual(['merchant-1', 'merchant-2']);
+  it('passes a selected health filter to the v2 RPC and returns its total', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [merchantRow], error: null });
+
+    const result = await getAdminMerchantHealthPage({ rpc } as never, {
+      ...query,
+      health: 'at_risk',
+    });
+
+    expect(rpc).toHaveBeenCalledWith('get_admin_merchant_health_v2', {
+      p_health_status: 'at_risk',
+      p_limit: 50,
+      p_offset: 0,
+      p_search: null,
+      p_sort_by: 'gmv',
+    });
+    expect(result).toMatchObject({
+      data: [merchantRow],
+      error: null,
+      total: 73,
+    });
+  });
+
+  it('returns the RPC error without treating its payload as a valid page', async () => {
+    const error = { code: '42501', message: 'Platform admin access required' };
+    const rpc = vi.fn().mockResolvedValue({ data: null, error });
+
+    await expect(
+      getAdminMerchantHealthPage({ rpc } as never, query)
+    ).resolves.toEqual({ data: [], error, total: 0 });
+  });
+
+  it('retains the matching total when an offset page has no rows', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [merchantRow], error: null });
+
+    const result = await getAdminMerchantHealthPage({ rpc } as never, {
+      ...query,
+      offset: 100,
+    });
+
+    expect(result).toEqual({ data: [], error: null, total: 73 });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'get_admin_merchant_health_v2', {
+      p_health_status: null,
+      p_limit: 1,
+      p_offset: 0,
+      p_search: null,
+      p_sort_by: 'gmv',
+    });
   });
 });

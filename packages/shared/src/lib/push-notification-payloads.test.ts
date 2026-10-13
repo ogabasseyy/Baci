@@ -26,6 +26,18 @@ describe('getAdminNotificationNavigationTarget', () => {
     });
   });
 
+  it('routes new invoice payloads directly to the affected order', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'new_invoice',
+        order_id: 'order-invoice-123',
+      })
+    ).toEqual({
+      screen: 'order',
+      params: { id: 'order-invoice-123' },
+    });
+  });
+
   it('falls back to the orders list when the admin payload lacks an order id', () => {
     expect(
       getAdminNotificationNavigationTarget({
@@ -225,7 +237,10 @@ describe('getStorefrontNotificationNavigationTarget', () => {
         type: 'customer_savings_reminder',
         goalId: 'goal-1',
       })
-    ).toEqual({ screen: 'wallet', params: { action: 'savings' } });
+    ).toEqual({
+      screen: 'wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-1' },
+    });
   });
 
   it('routes customer savings reminders without goal ids to the savings wallet action', () => {

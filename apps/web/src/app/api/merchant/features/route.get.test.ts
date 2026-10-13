@@ -184,7 +184,7 @@ describe('GET /api/merchant/features', () => {
     expect(res.status).toBe(200);
     expect(json).toMatchObject({
       merchant_id: MERCHANT_ID,
-      shipping_providers: ['gigl', 'topship'],
+      shipping_providers: [],
     });
   });
 

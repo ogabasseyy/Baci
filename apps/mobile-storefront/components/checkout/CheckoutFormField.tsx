@@ -38,6 +38,7 @@ type CheckoutFormFieldProps = {
   containerStyle?: ViewStyle;
   returnKeyType?: 'next' | 'done' | 'go';
   onSubmitEditing?: () => void;
+  onBlur?: () => void;
   transformText?: (value: string, previous: string) => string;
   maxLength?: number;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
@@ -56,6 +57,7 @@ export function CheckoutFormField({
   containerStyle,
   returnKeyType = 'next',
   onSubmitEditing,
+  onBlur: onFieldBlur,
   transformText,
   maxLength,
   autoCapitalize,
@@ -95,6 +97,7 @@ export function CheckoutFormField({
               onBlur={() => {
                 setIsFocused(false);
                 onBlur();
+                onFieldBlur?.();
               }}
               onChangeText={(text) => {
                 const processed = transformText

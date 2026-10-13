@@ -267,6 +267,18 @@ describe('MerchantSetupForm', () => {
     );
     expect(mocks.replace).not.toHaveBeenCalled();
   });
+  it('bugfix: keeps country selection after email signup without re-asking for name', () => {
+    render(<MerchantSetupForm />);
+
+    expect(screen.queryByLabelText('First Name')).toBeNull();
+    expect(screen.queryByLabelText('Last Name')).toBeNull();
+    expect(screen.getByText('Your location')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Country / Region, Nigeria' })
+    ).toBeTruthy();
+    expect(screen.queryByLabelText('Business Name')).toBeNull();
+  });
+
   it('requires missing social-auth names to be completed', async () => {
     mocks.authUser.user_metadata = {};
     render(<MerchantSetupForm />);

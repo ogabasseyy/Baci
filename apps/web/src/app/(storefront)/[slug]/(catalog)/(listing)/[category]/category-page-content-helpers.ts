@@ -6,6 +6,7 @@ import {
   type ProductKeySpecsRecord,
   type RawDbProduct,
 } from '@/lib/normalize-product';
+import type { Product as SeoProduct } from '@/lib/products';
 import { buildCategoryHubModel } from '@/lib/storefront-category/build-category-hub-model';
 import type {
   BrandAuthorityEntry,
@@ -31,6 +32,13 @@ const CONDITION_MAP: Record<string, OgabasseyProduct['condition']> = {
   Refurbished: 'refurbished',
   refurbished: 'refurbished',
 };
+
+function getGraphicsCard(
+  productKeySpecs: ProductKeySpecsRecord | null | undefined
+): string | undefined {
+  const gpu = productKeySpecs?.gpu;
+  return typeof gpu === 'string' && gpu.trim() ? gpu.trim() : undefined;
+}
 
 export function resolveCategoryPageName(
   data: CategoryPageData,
@@ -80,6 +88,7 @@ export function normalizeCategoryPageProducts(
       stock: normalized.stock,
       category_slug: normalized.category_slug,
       product_key_specs: normalized.product_key_specs ?? undefined,
+      graphics: getGraphicsCard(normalized.product_key_specs),
     };
   });
 }
@@ -142,4 +151,39 @@ export function hasMaintainedCategoryCompareHubLink(
 
     return pathname.endsWith(hubPathSuffix);
   });
+}
+
+export function toCollectionSchemaProduct(
+  product: StorefrontCategoryProduct
+): SeoProduct {
+  return {
+    id: String(product.id),
+    name: product.name,
+    description: product.description,
+    status: 'active',
+    price: product.rawPrice,
+    manage_stock: true,
+    stock: product.stock ?? 0,
+    image: product.image,
+    imageLarge: product.image,
+    imageHint: '',
+    brand: product.brand ?? '',
+    gtin: '',
+    mpn: '',
+    category: product.category,
+    category_slug: product.category_slug,
+    slug: product.slug,
+    // Case-insensitive comparison: DB values can be 'Refurbished' /
+    // 'refurbished' / 'REFURBISHED'. Normalising here prevents refurbished
+    // products from silently falling through to the `'new'` default.
+    condition: (() => {
+      const normalized = product.condition?.toLowerCase();
+      if (normalized === 'used') return 'used';
+      if (normalized === 'open box' || normalized === 'open_box')
+        return 'open_box';
+      if (normalized === 'refurbished') return 'refurbished';
+      return 'new';
+    })(),
+    product_key_specs: product.product_key_specs ?? undefined,
+  };
 }

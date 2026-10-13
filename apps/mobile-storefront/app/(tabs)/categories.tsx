@@ -148,6 +148,7 @@ export default function CategoriesScreen() {
         style={[styles.categoryImage, { backgroundColor: colors.muted }]}
         contentFit="cover"
         transition={300}
+        autoplay={false}
       />
       <View style={styles.categoryInfo}>
         <Text style={[styles.categoryName, { color: colors.text }]}>

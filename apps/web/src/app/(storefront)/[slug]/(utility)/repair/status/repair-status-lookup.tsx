@@ -10,6 +10,7 @@ import { fetchWithCsrf } from '@/lib/api-client';
 import type { RepairStatusResult } from '@/lib/repairs/status-lookup';
 
 interface RepairStatusLookupProps {
+  initialTicket?: string;
   slug: string;
 }
 
@@ -62,8 +63,11 @@ async function fetchRepairStatus(
   return { kind: 'not_found' };
 }
 
-export function RepairStatusLookup({ slug }: RepairStatusLookupProps) {
-  const [ticketNumber, setTicketNumber] = useState('');
+export function RepairStatusLookup({
+  initialTicket,
+  slug,
+}: RepairStatusLookupProps) {
+  const [ticketNumber, setTicketNumber] = useState(initialTicket ?? '');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RepairStatusResult | null>(null);

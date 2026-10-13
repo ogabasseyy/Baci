@@ -68,9 +68,19 @@ export function PhoneInput({
     // Sanitize: only digits
     let cleaned = text.replace(/[^0-9]/g, '');
 
-    // Strip leading zero for Nigerian numbers
-    if (selectedCountry.code === 'NG' && cleaned.startsWith('0')) {
-      cleaned = cleaned.slice(1);
+    if (selectedCountry.code === 'NG') {
+      // The input displays only the national number, but users commonly paste
+      // the complete +234/234 or 00 234 form. Strip that prefix before the
+      // controlled value is rebuilt so the country code is not duplicated.
+      if (cleaned.startsWith('00234')) {
+        cleaned = cleaned.slice(5);
+      } else if (cleaned.startsWith('234')) {
+        cleaned = cleaned.slice(3);
+      }
+      if (cleaned.startsWith('0')) {
+        cleaned = cleaned.slice(1);
+      }
+      cleaned = cleaned.slice(0, 10);
     }
 
     // Prepend country code
@@ -161,7 +171,13 @@ export function PhoneInput({
           autoComplete="tel"
           textContentType="telephoneNumber"
           accessibilityLabel={label || 'Phone number'}
-          maxLength={selectedCountry.maxLength || 15}
+          // Allow a complete Nigerian number to be pasted; handlePhoneChange
+          // canonicalizes it back to the ten-digit national value.
+          maxLength={
+            selectedCountry.code === 'NG'
+              ? undefined
+              : selectedCountry.maxLength || 15
+          }
           returnKeyType={returnKeyType}
           {...props}
         />

@@ -10,14 +10,50 @@ describe('remediation result artifact', () => {
     const outputDir = mkdtempSync(join(tmpdir(), 'baci-remediation-result-'));
 
     const path = writeRemediationResultArtifact({
-      candidate: { fingerprint: 'candidate/../../unsafe' },
+      candidate: {
+        category: 'vercel_runtime_exception',
+        fingerprint: 'candidate/../../unsafe',
+        source: 'vercel',
+      },
       output: 'No safe production change was identified.\n',
       outputDir,
     });
 
-    assert.equal(path, join(outputDir, 'candidate-------unsafe.result.md'));
+    assert.equal(
+      path,
+      join(
+        outputDir,
+        'vercel-vercel_runtime_exception-candidate-------unsafe.result.md'
+      )
+    );
     assert.match(readFileSync(path, 'utf8'), /No safe production change/);
     assert.equal(statSync(path).mode & 0o777, 0o600);
+  });
+
+  it('keeps results for same-fingerprint categories separate', () => {
+    const outputDir = mkdtempSync(join(tmpdir(), 'baci-remediation-result-'));
+    const runtimePath = writeRemediationResultArtifact({
+      candidate: {
+        category: 'vercel_runtime_exception',
+        fingerprint: 'shared',
+        source: 'vercel',
+      },
+      output: 'runtime result',
+      outputDir,
+    });
+    const timeoutPath = writeRemediationResultArtifact({
+      candidate: {
+        category: 'vercel_timeout',
+        fingerprint: 'shared',
+        source: 'vercel',
+      },
+      output: 'timeout result',
+      outputDir,
+    });
+
+    assert.notEqual(runtimePath, timeoutPath);
+    assert.match(readFileSync(runtimePath, 'utf8'), /runtime result/);
+    assert.match(readFileSync(timeoutPath, 'utf8'), /timeout result/);
   });
 
   it('does not write outside an explicitly configured output directory', () => {

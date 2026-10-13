@@ -384,7 +384,6 @@ describe('critical commerce selection helpers', () => {
       ])
     ).toEqual(['storage']);
   });
-
   it('handles empty, single-valued, and multi-axis option sets', () => {
     expect(getVariantAxesWithMultipleOptions([])).toEqual([]);
     expect(

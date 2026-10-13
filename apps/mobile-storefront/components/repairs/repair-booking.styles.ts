@@ -73,6 +73,11 @@ export const repairBookingStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  pickupUnavailableNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
+  },
 
   // Ticket success
   successIcon: {

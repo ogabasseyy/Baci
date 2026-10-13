@@ -131,6 +131,19 @@ describe('readAgenticMutationRequest', () => {
     );
   });
 
+  it('reads signed POST catalog queries without an idempotency key', async () => {
+    const result = await readAgenticQueryRequest({
+      request: request('{"query":"iphone"}', { includeIdempotency: false }),
+    });
+
+    expect(result).toMatchObject({
+      body: { query: 'iphone' },
+      idempotencyKey: '',
+      method: 'POST',
+      ok: true,
+    });
+  });
+
   it('rejects missing required idempotency keys', async () => {
     const result = await readAgenticMutationRequest({
       request: request('{}', { includeIdempotency: false }),

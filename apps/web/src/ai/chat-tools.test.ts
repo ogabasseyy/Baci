@@ -45,6 +45,40 @@ describe('getProductDetailsSchema', () => {
   });
 });
 
+describe('addToCartSchema', () => {
+  it('rejects a zero cart quantity', () => {
+    const input = { productId: 'prod-1', quantity: 0 };
+
+    const result = addToCartSchema.safeParse(input);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a fractional cart quantity', () => {
+    const input = { productId: 'prod-1', quantity: 1.5 };
+
+    const result = addToCartSchema.safeParse(input);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a cart quantity above the upper bound', () => {
+    const input = { productId: 'prod-1', quantity: 100 };
+
+    const result = addToCartSchema.safeParse(input);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts the inclusive maximum cart quantity', () => {
+    const input = { productId: 'prod-1', quantity: 99 };
+
+    const result = addToCartSchema.safeParse(input);
+
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('createVirtualAccountSchema', () => {
   it('validates full input', () => {
     const result = createVirtualAccountSchema.safeParse({

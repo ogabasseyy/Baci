@@ -103,12 +103,22 @@ export async function runPaidOrderSideEffects(
     actor: args.actor,
     executors: {
       ad_tracking_conversion: buildAdTrackingExecutor(args),
-      merchant_settlement: buildSettlementExecutor(args),
+      merchant_settlement: buildSettlementExecutor({
+        ...args,
+        orderPaymentMethod: args.order.payment_method,
+        orderShippingProvider: args.order.shipping_provider,
+        orderShippingFundingSource: args.order.shipping_funding_source,
+        orderShippingRetainedAmount:
+          args.order.shipping_platform_retained_amount,
+      }),
       paid_email: buildEmailExecutor({
         actor: args.actor,
+        emailMaxAttemptsPerSender: args.emailMaxAttemptsPerSender,
+        fallbackDeadlineMs: args.fallbackDeadlineMs,
         merchantDetails: merchant.data,
         merchantFetchError: merchant.error,
         order: args.order,
+        signal: args.signal,
       }),
     },
     gatewayResponse: args.gatewayResponse,

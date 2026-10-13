@@ -6,7 +6,8 @@
  */
 
 import { ZodError } from 'zod';
-import { env as validatedEnv } from '@/env';
+import { getJumiaEnvironment as readJumiaEnvironment } from '@/env';
+import { JumiaApiError } from '@/lib/jumia/jumia-api-error';
 import type { JumiaTokenResponse } from '@/schemas/jumia';
 import { JumiaTokenResponseSchema } from '@/schemas/jumia';
 
@@ -20,7 +21,7 @@ const BASE_URLS: Record<JumiaEnvironment, string> = {
 };
 
 export function getJumiaEnvironment(): JumiaEnvironment {
-  return validatedEnv.JUMIA_ENVIRONMENT;
+  return readJumiaEnvironment() ?? 'staging';
 }
 
 export function getJumiaBaseUrl(env?: JumiaEnvironment): string {
@@ -39,7 +40,7 @@ export const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 // the callback logs the resulting token-response shape so we can A/B which combo
 // (if any) makes Jumia mint refresh tokens. Drop this whole block + getJumiaAuthUrl's
 // `variant` arg + the cookie in connect/callback once we have an answer.
-type JumiaAuthUrlVariant = 'A' | 'B' | 'C' | 'D' | 'E';
+type JumiaAuthUrlVariant = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 const DEFAULT_AUTH_PARAMS: Record<string, string> = {
   scope: 'openid offline_access',
@@ -61,6 +62,8 @@ const VARIANT_AUTH_PARAMS: Record<
   D: { scope: 'offline_access', prompt: 'login', max_age: '0' },
   // E: combined — drop max_age and switch to consent
   E: { scope: 'openid offline_access', prompt: 'consent' },
+  // F: exact parameter set in Jumia's published authorization documentation.
+  F: { scope: 'openid', prompt: 'login' },
 };
 
 export function isJumiaAuthUrlVariant(
@@ -71,7 +74,8 @@ export function isJumiaAuthUrlVariant(
     value === 'B' ||
     value === 'C' ||
     value === 'D' ||
-    value === 'E'
+    value === 'E' ||
+    value === 'F'
   );
 }
 
@@ -103,16 +107,7 @@ export function getJumiaRedirectUri(appUrl: string): string {
 
 // ── OAuth: Code exchange ──
 
-export class JumiaApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public details?: unknown
-  ) {
-    super(`Jumia API Error (${status}): ${message}`);
-    this.name = 'JumiaApiError';
-  }
-}
+export { JumiaApiError } from '@/lib/jumia/jumia-api-error';
 
 function redactJumiaErrorDetails(raw: string): string {
   return raw
@@ -121,7 +116,10 @@ function redactJumiaErrorDetails(raw: string): string {
       '"$1":"[REDACTED]"'
     )
     .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
-    .replace(/(^|[?&])(client_secret|code)=[^&\s"]*/gi, '$1$2=[REDACTED]');
+    .replace(
+      /(^|[?&])(access_token|refresh_token|client_secret|code)=[^&\s"]*/gi,
+      '$1$2=[REDACTED]'
+    );
 }
 
 function safeStringifyJumiaErrorDetails(details: unknown): string {

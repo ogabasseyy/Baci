@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from '@jest/globals';
 
-// Patch-integrity guard for patches/expo-modules-jsi@57.0.3.patch.
+// Patch-integrity guard for the Expo Modules JSI Date guard.
 //
 // Xcode 26.2 (the CI macos-26 image) cannot resolve `abs` in this module's
 // Date guard: C++ interop pulls the C stdlib `abs` overloads into scope next
@@ -24,16 +24,19 @@ const dateGuardPath = join(
   jsiRoot,
   'apple/Sources/ExpoModulesJSI/Coding/JavaScriptCodable+Date.swift'
 );
+const runtimeSchedulerPath = join(
+  jsiRoot,
+  'apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h'
+);
 
 describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', () => {
-  it('keeps the patch pinned to expo-modules-jsi@57.0.3', () => {
-    // 57.0.4 ships this file byte-for-byte identical, so there is no upstream
-    // fix to bump to. If the transitive pin ever moves off 57.0.3, re-key the
-    // patch to the new version and update this assertion.
+  it('keeps the resolved Expo 57 package patched or on the upstream fix', () => {
+    // Expo 57.0.15 resolves expo-modules-jsi@57.0.5, which still needs the
+    // RuntimeScheduler constructor patch below.
     const pkg = JSON.parse(readFileSync(jsiPackageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('57.0.3');
+    expect(pkg.version).toBe('57.0.5');
   });
 
   it('applies the Double.magnitude guard and never the ambiguous abs() call', () => {
@@ -46,5 +49,80 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     // back (neither the original inline `abs(...) <= ...` nor an `abs(...)`
     // local — both were ambiguous under C++ interop).
     expect(source).not.toMatch(/\babs\s*\(/);
+  });
+
+  it('drops SWIFT_RETURNS_RETAINED from RuntimeScheduler constructors', () => {
+    expect(existsSync(runtimeSchedulerPath)).toBe(true);
+    const source = readFileSync(runtimeSchedulerPath, 'utf8');
+
+    expect(source).toContain(
+      'RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept'
+    );
+    expect(source).toContain('RuntimeScheduler() {}');
+    expect(source).not.toMatch(/SWIFT_RETURNS_RETAINED\s+RuntimeScheduler/);
+  });
+
+  it('keeps the expo-modules-jsi 57.0.5 RuntimeScheduler patch registered', () => {
+    const workspaceConfig = readFileSync(
+      join(__dirname, '../../pnpm-workspace.yaml'),
+      'utf8'
+    );
+    const lockfile = readFileSync(
+      join(__dirname, '../../pnpm-lock.yaml'),
+      'utf8'
+    );
+    const patchPath = join(
+      __dirname,
+      '../../patches/expo-modules-jsi@57.0.5.patch'
+    );
+    const patchHash = lockfile.match(
+      /^ {2}expo-modules-jsi@57\.0\.5: ([a-f0-9]{64})$/m
+    )?.[1];
+
+    expect(workspaceConfig).toContain(
+      'expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"'
+    );
+    expect(patchHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(existsSync(patchPath)).toBe(true);
+    expect(readFileSync(patchPath, 'utf8')).toContain(
+      '-  SWIFT_RETURNS_RETAINED RuntimeScheduler() {}'
+    );
+  });
+
+  it('keeps the storefront React Native 0.86.2 platform patch registered', () => {
+    const workspaceConfig = readFileSync(
+      join(__dirname, '../../pnpm-workspace.yaml'),
+      'utf8'
+    );
+    const lockfile = readFileSync(
+      join(__dirname, '../../pnpm-lock.yaml'),
+      'utf8'
+    );
+    const reactNativePatchPath = join(
+      __dirname,
+      '../../patches/react-native@0.86.2.patch'
+    );
+    const reactNativePatchHash = lockfile.match(
+      /^ {2}react-native@0\.86\.2: ([a-f0-9]{64})$/m
+    )?.[1];
+    const storefrontImporterStart = lockfile.indexOf(
+      '  apps/mobile-storefront:'
+    );
+    const storefrontImporterEnd = lockfile.indexOf(
+      '\n  apps/web:',
+      storefrontImporterStart
+    );
+
+    expect(workspaceConfig).toContain(
+      'react-native@0.86.2: patches/react-native@0.86.2.patch'
+    );
+    expect(reactNativePatchHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(
+      lockfile.slice(storefrontImporterStart, storefrontImporterEnd)
+    ).toContain(`version: 0.86.2(patch_hash=${reactNativePatchHash})`);
+    expect(existsSync(reactNativePatchPath)).toBe(true);
+    expect(readFileSync(reactNativePatchPath, 'utf8')).toContain(
+      'StatusBarModule.kt'
+    );
   });
 });

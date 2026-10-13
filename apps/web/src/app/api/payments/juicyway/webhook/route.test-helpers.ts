@@ -61,25 +61,64 @@ export const mockSupabase = {
 export const mockReconciliationInsert = vi
   .fn()
   .mockResolvedValue({ data: null, error: null });
+
+export function isOrdersEconomicsSelect(columns: unknown): boolean {
+  return (
+    typeof columns === 'string' &&
+    columns.includes('shipping_platform_retained_amount')
+  );
+}
+
+export function createOrdersEconomicsSelectMock(
+  economicsData: Record<string, unknown> | null = null
+) {
+  return {
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi
+      .fn()
+      .mockResolvedValue({ data: economicsData, error: null }),
+  };
+}
+
+export function wrapOrdersTableMock<T extends Record<string, unknown>>(
+  ordersTableMock: T,
+  economicsData: Record<string, unknown> | null = null
+) {
+  const economicsSelect = createOrdersEconomicsSelectMock(economicsData);
+  return {
+    ...ordersTableMock,
+    select: vi.fn((columns?: unknown) => {
+      if (isOrdersEconomicsSelect(columns)) {
+        return economicsSelect;
+      }
+      if (typeof ordersTableMock.select === 'function') {
+        return ordersTableMock.select(columns);
+      }
+      return {
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+    }),
+  };
+}
+
 export const mockAdminSupabase = {
-  from: vi.fn((table: string) => {
+  from: vi.fn((table?: string) => {
     if (table === 'reconciliation_review') {
       return { insert: mockReconciliationInsert };
     }
-    throw new Error(`Unexpected admin table: ${table}`);
+    return mockSupabase.from(table) as never;
   }),
   rpc: vi.fn().mockResolvedValue({ error: null }),
 };
 
 function resetAdminFromMock() {
-  mockAdminSupabase.from.mockImplementation((table: string) => {
-    if (table !== 'reconciliation_review') {
-      return mockSupabase.from(table) as never;
-    }
+  mockAdminSupabase.from.mockImplementation((table?: string) => {
     if (table === 'reconciliation_review') {
       return { insert: mockReconciliationInsert } as never;
     }
-    throw new Error(`Unexpected admin table: ${table}`);
+    return mockSupabase.from(table) as never;
   });
 }
 
@@ -211,16 +250,22 @@ export async function setupJuicywayWebhookTest(): Promise<
   vi.clearAllMocks();
   mockCreateServerClient.mockImplementation(() => mockSupabase);
   resetAdminFromMock();
-  mockSupabase.from.mockImplementation(() => ({
-    delete: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    select: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    update: vi.fn().mockReturnThis(),
-  }));
+  mockSupabase.from.mockImplementation((_table?: string) => {
+    const base = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      update: vi.fn().mockReturnThis(),
+    };
+    if (_table === 'orders') {
+      return wrapOrdersTableMock(base);
+    }
+    return base;
+  });
   process.env.JUICYWAY_BUSINESS_ID = 'test-business-id';
   vi.stubEnv('NODE_ENV', 'test');
 
@@ -276,8 +321,8 @@ export function wireProcessingMocks(
   const state = { txnUpdated: false, orderUpdated: false };
   let transactionCallCount = 0;
 
-  const fromMock = vi.fn((table) => {
-    if (table === 'transactions') {
+  const fromMock = vi.fn((_table?: string) => {
+    if (_table === 'transactions') {
       transactionCallCount++;
       if (transactionCallCount === 1) {
         return {
@@ -293,8 +338,8 @@ export function wireProcessingMocks(
         }),
       };
     }
-    if (table === 'orders') {
-      return {
+    if (_table === 'orders') {
+      return wrapOrdersTableMock({
         update: vi.fn(() => {
           state.orderUpdated = true;
           // Serves both the paid flip (.eq().neq().select().maybeSingle())
@@ -312,7 +357,7 @@ export function wireProcessingMocks(
           chain.select = vi.fn().mockReturnValue(chain);
           return chain;
         }),
-      };
+      });
     }
     // NOTE: `merchants` is intentionally NOT served by the anon client here.
     // The webhook reads merchant identity via the service-role client (see
@@ -334,18 +379,18 @@ export function wireProcessingMocks(
   // as anon), so the admin mock serves `merchants` in addition to the
   // service-role-locked `reconciliation_review` insert.
   (mockAdminSupabase as Record<string, unknown>).from = vi.fn(
-    (table: string) => {
-      if (table === 'merchants') {
+    (_table?: string) => {
+      if (_table === 'merchants') {
         return {
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
           single: vi.fn().mockResolvedValue({ data: merchant, error: null }),
         };
       }
-      if (table === 'reconciliation_review') {
+      if (_table === 'reconciliation_review') {
         return { insert: mockReconciliationInsert };
       }
-      return fromMock(table) as never;
+      return fromMock(_table) as never;
     }
   );
   mockAdminSupabase.rpc = vi.fn().mockResolvedValue({ error: null });

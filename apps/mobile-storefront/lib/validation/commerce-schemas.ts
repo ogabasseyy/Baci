@@ -41,6 +41,13 @@ export const ShippingAddressSchema = z.object({
     .optional(),
 });
 
+export const CheckoutContactSchema = ShippingAddressSchema.pick({
+  email: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+});
+
 export type ShippingAddressInput = z.infer<typeof ShippingAddressSchema>;
 
 type SchemaSafeParseResult<T> =

@@ -1,12 +1,11 @@
 import { cacheLife, cacheTag } from 'next/cache';
-import {
-  getCachedCategoryPageShellData,
-  getPublicSupabaseClient,
-} from '@/lib/cached-data';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
+import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 import { generateSlug } from '@/lib/seo-utils';
 import type { ComparableProductKeySpecs } from '@/lib/storefront-specs/spec-taxonomy';
 import { extractComparableKeySpecs } from './comparable-key-specs';
+import { getCachedCompareCategoryShell } from './get-cached-compare-category-shell';
+import type { StorefrontComparisonRevision } from './get-published-storefront-comparison-revision';
 
 export interface CompareCategoryInventoryProduct {
   slug: string;
@@ -128,7 +127,7 @@ function toInventoryProduct(
 export async function getCachedCompareCategoryInventory(
   merchantId: string,
   categorySlug: string,
-  storeSlug: string
+  comparisonRevision?: StorefrontComparisonRevision
 ): Promise<CompareCategoryInventory> {
   // LOCAL 'use cache' (not remote): this ~1MB entry is filled inside the
   // compare page model, whose large Vercel remote-cache SET (RemoteCacheHandler
@@ -137,26 +136,32 @@ export async function getCachedCompareCategoryInventory(
   // getCachedMerchant for the same remote→local rationale.
   'use cache';
   try {
-    // 'products' (revalidate 300), NOT 'categories' (3600): as a LOCAL entry
+    // 'products' (revalidate 1800), NOT 'categories' (3600): as a LOCAL entry
     // (see the directive note above), tag revalidation only evicts the mutating
     // instance, so bound cross-instance staleness of the embedded price to
-    // ~5min. This query is <1s, so more frequent refills are cheap.
+    // ~30min. This query is <1s, so refills remain inexpensive.
     cacheLife('products');
-    cacheTag(
-      'category-page-data',
-      'products',
-      'categories',
-      `products-${merchantId}`,
-      `categories-${merchantId}`
-    );
+    // Nested tags propagate to the shared manifest. Stock invalidations must
+    // not evict snapshots whose complete input key is a catalog revision.
+    if (comparisonRevision) {
+      cacheTag(`comparison-revision-${merchantId}-${comparisonRevision}`);
+    } else {
+      cacheTag(
+        'category-page-data',
+        'products',
+        'categories',
+        `products-${merchantId}`,
+        `categories-${merchantId}`
+      );
+    }
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }
 
-  const shell = await getCachedCategoryPageShellData(
+  const shell = await getCachedCompareCategoryShell(
     merchantId,
     categorySlug,
-    storeSlug
+    comparisonRevision
   );
   const fallbackName = shell.fallbackName ?? '';
 

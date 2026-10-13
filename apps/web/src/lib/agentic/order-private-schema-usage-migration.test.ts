@@ -149,7 +149,7 @@ describe('bugfix: public checkout wrappers lost private-schema usage', () => {
     );
 
     expect(workflow).toMatch(
-      /- name: Run migration replay regression test\s+if: needs\.changes\.outputs\.quiz_db == 'true'\s+run: pnpm --filter @baci\/web exec vitest run src\/lib\/agentic\/order-private-schema-usage-migration\.test\.ts/
+      /quality-db-replay:[\s\S]*?if: needs\.changes\.outputs\.quiz_db == 'true'[\s\S]*?- name: Run migration replay regression test\s+run: pnpm --filter @baci\/web exec vitest run src\/lib\/agentic\/order-private-schema-usage-migration\.test\.ts/
     );
     expect(filters).toContain(
       "'supabase/tests/storefront_order_private_schema_boundary*.sql'"

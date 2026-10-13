@@ -82,6 +82,23 @@ function collectStyleKeys(node: unknown): string[] {
   ];
 }
 
+function collectStyleValues(node: unknown, key: string): unknown[] {
+  if (node === null || node === undefined || typeof node !== 'object') {
+    return [];
+  }
+  if (Array.isArray(node))
+    return node.flatMap((child) => collectStyleValues(child, key));
+  if (!('props' in node)) return [];
+
+  const element = node as {
+    props: { children?: unknown; style?: Record<string, unknown> };
+  };
+  return [
+    ...(key in (element.props.style ?? []) ? [element.props.style?.[key]] : []),
+    ...collectStyleValues(element.props.children, key),
+  ];
+}
+
 function hasExactChildren(node: unknown, children: string): boolean {
   if (node === null || node === undefined || typeof node !== 'object') {
     return false;
@@ -115,6 +132,67 @@ describe('merchant blog OG image markup', () => {
     const element = renderMerchantFallback(createData(), 'Missing post');
 
     expect(collectText(element)).toContain('Missing post');
+  });
+
+  it('uses dark foreground text for a light merchant fallback background', () => {
+    const element = renderMerchantFallback(
+      createData({
+        merchantBrandColors: {
+          background: '#ffffff',
+          primary: '#0af',
+          accent: '#fc0',
+        },
+      }),
+      'Missing post'
+    );
+
+    expect(collectStyleValues(element, 'color')).toContain('#000000');
+  });
+
+  it('uses dark foreground text for a light primary-card background', () => {
+    const element = renderPrimaryCard(
+      createData({
+        merchantBrandColors: {
+          background: '#ffffff',
+          primary: '#0af',
+          accent: '#fc0',
+        },
+      })
+    );
+
+    expect(element.props.style).toMatchObject({ color: '#000000' });
+  });
+
+  it('uses readable foreground text across lightened gradient surfaces', () => {
+    const data = createData({
+      merchantBrandColors: {
+        background: '#747474',
+        primary: '#ffffff',
+        accent: '#ffffff',
+      },
+    });
+
+    const primaryCard = renderPrimaryCard(data);
+    const fallbackCard = renderMerchantFallback(data, 'Missing post');
+
+    expect(primaryCard.props.style).toMatchObject({ color: '#000000' });
+    expect(collectStyleValues(fallbackCard, 'color')).toContain('#000000');
+  });
+
+  it('uses the accessible foreground for category labels on light cards', () => {
+    const data = createData({
+      merchantBrandColors: {
+        background: '#ffffff',
+        primary: '#0af',
+        accent: '#ffffff',
+      },
+    });
+
+    const primaryCard = renderPrimaryCard(data);
+    const fallbackCard = renderMerchantFallback(data, 'Missing post');
+
+    expect(collectStyleValues(primaryCard, 'color')).not.toContain('#ffffff');
+    expect(collectStyleValues(fallbackCard, 'color')).not.toContain('#ffffff');
   });
 
   it('keeps branded fallback art free of unsupported Satori zIndex styles', () => {

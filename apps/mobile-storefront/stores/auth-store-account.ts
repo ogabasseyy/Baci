@@ -4,6 +4,7 @@ import {
 } from '../lib/account-deletion';
 import { createLogger } from '../lib/logger';
 import { getStoredPushToken } from '../lib/push-token-storage';
+import { clearQueryCachePreservingObservers } from '../lib/query-cache-observer-safety';
 import { queryClient } from '../lib/query-client';
 import { supabase } from '../lib/supabase';
 import type { AuthStoreGet, AuthStoreSet } from './auth-store.types';
@@ -17,9 +18,19 @@ import { useSavedStore } from './saved-store';
 
 const log = createLogger('AuthStore');
 
-function clearUserStores() {
-  queryClient.clear();
-  useCartStore.getState().clearCart();
+async function clearUserStores() {
+  try {
+    await useCartStore.getState().clearCart();
+  } catch (error) {
+    log.error('Failed to persist empty cart during account teardown:', error);
+    if (typeof useCartStore.setState === 'function') {
+      useCartStore.setState({
+        items: [],
+        lineSequence: 0,
+        cartWideNegotiationActive: false,
+      });
+    }
+  }
   useSavedStore.getState().clearSaved();
   useComparisonStore.getState().clearComparison();
   useQuizStore.getState().reset();
@@ -32,8 +43,11 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         set({ isLoading: true });
         const storedToken = await getStoredPushToken();
         await clearLocalAndDeactivatePushToken(storedToken);
-        await supabase.auth.signOut();
-        clearUserStores();
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError || !get()._authSubscription) {
+          clearQueryCachePreservingObservers(queryClient);
+        }
+        await clearUserStores();
         set({
           user: null,
           session: null,
@@ -60,10 +74,19 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
 
         const storedToken = await getStoredPushToken();
         await clearLocalAndDeactivatePushToken(storedToken);
-        await supabase.auth.signOut({ scope: 'local' }).catch((err) => {
-          log.warn('Local signOut failed after account deletion:', err);
-        });
-        clearUserStores();
+        let localSignOutError: unknown = null;
+        try {
+          ({ error: localSignOutError } = await supabase.auth.signOut({
+            scope: 'local',
+          }));
+        } catch (error) {
+          localSignOutError = error;
+          log.warn('Local signOut failed after account deletion:', error);
+        }
+        if (localSignOutError || !get()._authSubscription) {
+          clearQueryCachePreservingObservers(queryClient);
+        }
+        await clearUserStores();
         set({
           user: null,
           session: null,

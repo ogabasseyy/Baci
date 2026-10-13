@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import type { requireQuizUser } from '@/app/api/quiz/_shared/route-helpers';
 import { rpcErrorResponse } from '@/app/api/quiz/_shared/route-helpers';
 import { QuizVoucherTokenConfigError } from '@/lib/quiz-voucher-token';
-import type { RawPrizeClaim } from './submit-answer-voucher';
 import {
   addSignedPrizeClaim,
   normalizePrizeCondition,
   QUIZ_VOUCHER_TTL_MS,
+  type RawPrizeClaim,
   voucherTokenConfigResponse,
 } from './submit-answer-voucher';
 
@@ -104,62 +104,72 @@ async function getSubmittedAttemptScore(
 
 // FIX B: on a replayed final answer the RPC no longer returns the prizeClaim,
 // so recover the persisted, user-scoped product award and re-issue the signed
-// voucher. Without this a winner whose first response was lost sees "Practice
-// result recorded" with no claim button and the prize becomes unclaimable.
-async function getAttemptPrizeAwardClaim(
+// voucher. The projection RPC keeps this lookup available for v2/v3 awards
+// without relying on the legacy contract-version RLS policy on quiz_awards.
+export async function getAttemptPrizeAwardClaim(
   supabase: QuizSupabase,
   attemptId: string,
   userId: string
 ): Promise<{
   claim: RawPrizeClaim | null;
+  claimExpiresAt: string | null;
   createdAt: string | null;
   error: unknown;
 }> {
-  if (!supabase) return { claim: null, createdAt: null, error: null };
+  if (!supabase)
+    return { claim: null, claimExpiresAt: null, createdAt: null, error: null };
 
-  // Product-backed prizes are persisted as a single `store_credit` award per
-  // attempt (unique on attempt_id + award_type). A null product_id (a pure
-  // store-credit award) yields no claim via the guard below. Only an
-  // `approved` (unredeemed, non-void) award should surface a claim button — a
-  // replay after redemption/void must NOT re-issue a token.
-  const { data, error } = await supabase
-    .from('quiz_awards')
-    .select(
-      'id, product_id, variant_id, condition, created_at, customers!inner(user_id)'
-    )
-    .eq('attempt_id', attemptId)
-    .eq('customers.user_id', userId)
-    .eq('award_type', 'store_credit')
-    .eq('status', 'approved')
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    'get_quiz_attempt_prize_claim_v2',
+    { p_attempt_id: attemptId, p_user_id: userId }
+  );
 
-  if (error) return { claim: null, createdAt: null, error };
+  if (error)
+    return { claim: null, claimExpiresAt: null, createdAt: null, error };
   if (!data || typeof data !== 'object') {
-    return { claim: null, createdAt: null, error: null };
+    return { claim: null, claimExpiresAt: null, createdAt: null, error: null };
   }
 
   const record = data as {
+    awardId?: unknown;
+    claimExpiresAt?: unknown;
     condition?: unknown;
-    created_at?: unknown;
-    id?: unknown;
-    product_id?: unknown;
-    variant_id?: unknown;
+    createdAt?: unknown;
+    productId?: unknown;
+    variantId?: unknown;
   };
-  if (typeof record.id !== 'string' || typeof record.product_id !== 'string') {
-    return { claim: null, createdAt: null, error: null };
+  if (
+    typeof record.awardId !== 'string' ||
+    typeof record.productId !== 'string'
+  ) {
+    return { claim: null, claimExpiresAt: null, createdAt: null, error: null };
   }
 
   return {
     claim: {
-      awardId: record.id,
+      awardId: record.awardId,
       condition: normalizePrizeCondition(record.condition),
-      productId: record.product_id,
-      variantId:
-        typeof record.variant_id === 'string' ? record.variant_id : null,
+      productId: record.productId,
+      variantId: typeof record.variantId === 'string' ? record.variantId : null,
     },
-    createdAt: typeof record.created_at === 'string' ? record.created_at : null,
+    claimExpiresAt:
+      typeof record.claimExpiresAt === 'string' ? record.claimExpiresAt : null,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : null,
     error: null,
   };
+}
+
+function resolveReplayClaimExpiry(
+  claimExpiresAt: string | null,
+  createdAt: string | null
+): string | null {
+  if (claimExpiresAt) {
+    return Number.isFinite(Date.parse(claimExpiresAt)) ? claimExpiresAt : null;
+  }
+  if (!createdAt) return null;
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) return null;
+  return new Date(createdAtMs + QUIZ_VOUCHER_TTL_MS).toISOString();
 }
 
 export async function recoverReplayedAttemptResponse(
@@ -192,27 +202,24 @@ export async function recoverReplayedAttemptResponse(
 
   if (!award.claim) return NextResponse.json(baseResult);
 
-  // Re-issue with the ORIGINAL expiry (award mint time + TTL), not a fresh 7
-  // days, so replaying a days-old attempt cannot extend the redemption window.
-  // If the original window has already passed, the token mints expired and the
-  // orders route rejects it — the intended deadline still holds.
-  if (!award.createdAt) return rpcErrorResponse();
-  const awardCreatedAtMs = Date.parse(award.createdAt);
-  if (!Number.isFinite(awardCreatedAtMs)) return rpcErrorResponse();
-  const originalExpiresAtDate = new Date(
-    awardCreatedAtMs + QUIZ_VOUCHER_TTL_MS
+  // Re-issue with the persisted event-specific expiry, not a fresh fixed TTL,
+  // so replaying a days-old attempt cannot extend the redemption window. A
+  // legacy award predating claim_expires_at uses its original created-at TTL.
+  const claimExpiresAt = resolveReplayClaimExpiry(
+    award.claimExpiresAt,
+    award.createdAt
   );
-  if (!Number.isFinite(originalExpiresAtDate.getTime())) {
-    return rpcErrorResponse();
+  if (!claimExpiresAt) return rpcErrorResponse();
+  if (Date.parse(claimExpiresAt) <= Date.now()) {
+    return NextResponse.json({ ...baseResult, prizeEligible: false });
   }
-  const originalExpiresAt = originalExpiresAtDate.toISOString();
 
   try {
     return NextResponse.json(
       addSignedPrizeClaim(
         { ...baseResult, prizeClaim: award.claim },
         userId,
-        originalExpiresAt
+        claimExpiresAt
       )
     );
   } catch (tokenError) {

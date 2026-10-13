@@ -6,6 +6,7 @@ import {
   type AgenticMerchantContext,
   resolveAgenticMerchantContext,
 } from '@/lib/agentic/merchant-context';
+import { readAgenticQueryRequest } from '@/lib/agentic/mutation-request';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import {
   buildUcpCatalogProductsResponse,
@@ -20,18 +21,18 @@ import { ucpCatalogLookupRequestSchema } from '@/schemas/ucp-catalog-request';
 
 const CATALOG_CURRENCY = 'NGN';
 const PRODUCT_SELECT =
-  'id, merchant_id, name, description, price, images, slug, canonical_url, stock, stock_quantity, manage_stock, status, category, categories:category_id(slug), product_categories:product_categories(categories(slug))';
+  'id, merchant_id, name, description, price, images, slug, canonical_url, stock, stock_quantity, manage_stock, status, category, categories:category_id(slug, is_active), product_categories:product_categories(category_id, categories(slug, is_active))';
 
 export async function POST(request: NextRequest) {
   if (!verifyAgenticApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await readJsonBody(request);
-  if (!body.ok) {
-    return body.response;
+  const signedRequest = await readAgenticQueryRequest({ request });
+  if (!signedRequest.ok) {
+    return signedRequest.response;
   }
-  const parsed = ucpCatalogLookupRequestSchema.safeParse(body.value);
+  const parsed = ucpCatalogLookupRequestSchema.safeParse(signedRequest.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid request body', details: parsed.error.flatten() },
@@ -49,6 +50,10 @@ export async function POST(request: NextRequest) {
     .select(PRODUCT_SELECT)
     .eq('merchant_id', context.merchant.id)
     .eq('status', 'active')
+    .order('category_id', {
+      ascending: true,
+      referencedTable: 'product_categories',
+    })
     .in('id', parsed.data.ids)
     .limit(parsed.data.ids.length);
   if (error) {
@@ -75,10 +80,14 @@ export async function POST(request: NextRequest) {
       })
     );
 
+  const publishableProducts = products.filter(
+    (product): product is NonNullable<typeof product> => product !== null
+  );
+
   return NextResponse.json(
     buildUcpCatalogProductsResponse({
       capability: UCP_CATALOG_LOOKUP_CAPABILITY,
-      products,
+      products: publishableProducts,
     })
   );
 }
@@ -124,22 +133,4 @@ async function resolveCatalogContext(
       merchantSlug: merchant.slug,
     }),
   };
-}
-
-async function readJsonBody(
-  request: NextRequest
-): Promise<
-  { ok: true; value: unknown } | { ok: false; response: NextResponse }
-> {
-  try {
-    return { ok: true, value: await request.json() };
-  } catch {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      ),
-    };
-  }
 }

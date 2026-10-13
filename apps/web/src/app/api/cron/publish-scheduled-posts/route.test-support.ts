@@ -78,6 +78,7 @@ export function configurePublishFlow(
   options: {
     featureSettings?: Record<string, unknown>[];
     publishedPosts?: Record<string, unknown>[];
+    claimedPostIds?: string[];
   } = {}
 ) {
   mockSupabase.lte.mockResolvedValue({ data: posts, error: null });
@@ -92,7 +93,17 @@ export function configurePublishFlow(
       error: null,
     })
     .mockResolvedValueOnce({ data: options.publishedPosts ?? [], error: null })
-    .mockResolvedValueOnce({ error: null });
+    .mockImplementationOnce((_column, ids: string[]) => {
+      mockSupabase.select.mockResolvedValueOnce({
+        data: (options.claimedPostIds ?? ids).map((id) => ({ id })),
+        error: null,
+      });
+      return mockSupabase;
+    });
+  mockSupabase.select
+    .mockReturnValueOnce(mockSupabase)
+    .mockReturnValueOnce(mockSupabase)
+    .mockReturnValueOnce(mockSupabase);
 }
 
 export function createScheduledPost(overrides: Record<string, unknown> = {}) {

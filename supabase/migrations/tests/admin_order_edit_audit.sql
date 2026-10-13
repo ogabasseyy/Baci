@@ -395,7 +395,10 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', '', true);
 
   BEGIN
-    PERFORM public.update_admin_order(v_order_id, '{}'::jsonb);
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
+      v_order_id,
+      '{}'::jsonb
+    );
     RAISE EXCEPTION 'authenticated role without auth.uid unexpectedly edited order';
   EXCEPTION WHEN invalid_authorization_specification THEN
     IF SQLERRM NOT LIKE '%not_authenticated%' THEN
@@ -458,7 +461,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,
@@ -507,7 +510,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,
@@ -555,7 +558,7 @@ BEGIN
     END IF;
   END;
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     jsonb_build_object(
       'branch_id', null,
@@ -611,7 +614,7 @@ BEGIN
     RAISE EXCEPTION 'custom line item default did not persist as custom';
   END IF;
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     jsonb_build_object(
       'branch_id', null,
@@ -697,7 +700,7 @@ BEGIN
   WHERE order_id = v_order_id;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,
@@ -750,7 +753,7 @@ BEGIN
     line_id = 987654
   WHERE order_id = v_order_id;
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     jsonb_build_object(
       'branch_id', null,
@@ -806,7 +809,7 @@ BEGIN
   WHERE id = v_product_id;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,
@@ -866,7 +869,7 @@ BEGIN
   );
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,
@@ -940,7 +943,7 @@ BEGIN
     1
   );
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     jsonb_build_object(
       'branch_id', null,
@@ -1026,7 +1029,7 @@ BEGIN
   WHERE id = v_order_id;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       jsonb_build_object(
         'branch_id', null,

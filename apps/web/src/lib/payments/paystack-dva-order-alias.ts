@@ -27,6 +27,9 @@ export function isActiveOrderDvaAlias(
   row: Record<string, unknown>,
   asOf: Date
 ) {
+  if (row.assignment_customer_email_source === 'legacy_untrusted') {
+    return false;
+  }
   // A cancelled order's alias is never active, even if its payment_status is
   // still 'unpaid' and it is inside the 90-minute window. Otherwise a lingering
   // alias on a cancelled order would block wallet DVA top-up reconciliation.
@@ -67,10 +70,9 @@ export function isActiveOrderDvaAlias(
     expiresAt && !Number.isNaN(expiresAt.getTime())
       ? expiresAt.getTime()
       : Number.POSITIVE_INFINITY;
-  const upperBound = Math.min(
-    expiresAtMs,
-    windowAnchor.getTime() + NINETY_MINUTES_MS
-  );
+  const upperBound = Number.isFinite(expiresAtMs)
+    ? expiresAtMs
+    : windowAnchor.getTime() + NINETY_MINUTES_MS;
   const asOfMs = asOf.getTime();
 
   return asOfMs >= windowAnchor.getTime() && asOfMs <= upperBound;
@@ -88,7 +90,7 @@ export async function hasActivePaystackOrderDvaAlias({
   const { data, error } = await supabase
     .from('order_payment_accounts')
     .select(
-      'order_id, created_at, assigned_at, expires_at, orders!inner(id, payment_status, shipping_status)'
+      'order_id, assignment_customer_email_source, created_at, assigned_at, expires_at, orders!inner(id, payment_status, shipping_status)'
     )
     .eq('provider', 'paystack')
     .eq('account_number', accountNumber);

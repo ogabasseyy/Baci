@@ -60,6 +60,8 @@
 	<string>facebook_client_token_placeholder</string>
 	<key>FacebookDisplayName</key>
 	<string>Ogabassey</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>BaciTikTokBusinessAutoInitialize</key>
 	<false/>
 	<key>ITSAppUsesNonExemptEncryption</key>

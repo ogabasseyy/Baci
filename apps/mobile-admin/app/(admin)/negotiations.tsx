@@ -1,7 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { randomUUID } from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +29,14 @@ import { supabase } from '@/lib/supabase';
 
 type NegotiationRequest = NegotiationCardRequest;
 
+type ResolveNegotiationResponse = {
+  channel?: 'email';
+  manualContactAvailable?: boolean;
+  notified: boolean;
+  reason?: 'no_customer_email' | 'no_delivery_channel';
+  status: 'accepted' | 'rejected';
+};
+
 // Module-scope helpers keep try/throw out of the component body so React
 // Compiler can memoize the screen (try/finally + throw-in-try are bailouts).
 async function loadNegotiationRequests(
@@ -40,7 +50,7 @@ async function loadNegotiationRequests(
   const { data, error } = await supabase
     .from('negotiation_requests')
     .select(
-      'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_phone, created_at, evidence_url'
+      'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url'
     )
     .eq('merchant_id', merchantId)
     .order('created_at', { ascending: false });
@@ -57,6 +67,7 @@ async function loadNegotiationRequests(
 }
 
 export default function NegotiationsScreen() {
+  const isFocused = useIsFocused();
   const { merchant, isLoading: isMerchantLoading } = useMerchant();
   const { colors } = useTheme();
   const queryClient = useQueryClient();
@@ -75,16 +86,16 @@ export default function NegotiationsScreen() {
       if (!merchant?.id) throw new Error('Merchant not found');
       return loadNegotiationRequests(merchant.id);
     },
-    enabled: !!merchant?.id,
+    enabled: isFocused && !!merchant?.id,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    // The realtime channel only replays inserts while this screen is mounted, so
+    // Realtime updates are only received while this screen is focused, so
     // always refetch on (re)mount to surface negotiations submitted while the
     // queue was backgrounded/unmounted — cached rows still render instantly.
     refetchOnMount: 'always',
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       id,
       status,
     }: {
@@ -92,13 +103,31 @@ export default function NegotiationsScreen() {
       status: 'accepted' | 'rejected';
     }) => {
       if (!merchant?.id) throw new Error('Merchant not found');
-      await apiClient('/api/negotiations/resolve', {
-        method: 'POST',
-        body: JSON.stringify({ negotiationId: id, status }),
-      });
+      return apiClient<ResolveNegotiationResponse>(
+        '/api/negotiations/resolve',
+        {
+          method: 'POST',
+          body: JSON.stringify({ negotiationId: id, status }),
+        }
+      );
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (result.notified) {
+        Alert.alert(
+          'Customer notified',
+          result.channel === 'email'
+            ? 'The decision email was accepted for delivery.'
+            : 'The decision notification was sent.'
+        );
+      } else {
+        Alert.alert(
+          'Status updated',
+          result.manualContactAvailable
+            ? 'The customer was not notified automatically. Use Call or WhatsApp to follow up.'
+            : 'The request was updated, but the customer has no available delivery channel.'
+        );
+      }
       // Return the invalidation promise so the mutation stays pending (and the
       // accept/reject actions stay disabled) until the refetched status lands,
       // preventing a stale-status flash before the queue reconciles.
@@ -138,12 +167,15 @@ export default function NegotiationsScreen() {
   // Realtime updates subscription
   useEffect(() => {
     const merchantId = merchant?.id;
-    if (!merchantId) return;
+    if (!merchantId || !isFocused) return;
+    let active = true;
 
     // Supabase Realtime supports Postgres change filters; scope by merchant to
     // avoid refetching every connected merchant on unrelated inserts.
+    // Each effect owns a fresh channel: notification navigation can mount this
+    // screen twice, and removal of a previous subscription is asynchronous.
     const channel = supabase
-      .channel(`negotiation_updates:${merchantId}`)
+      .channel(`negotiation_updates:${merchantId}:${randomUUID()}`)
       .on(
         'postgres_changes',
         {
@@ -153,17 +185,25 @@ export default function NegotiationsScreen() {
           filter: `merchant_id=eq.${merchantId}`,
         },
         () => {
+          if (!active) return;
           queryClient.invalidateQueries({
             queryKey: ['negotiation_requests', merchantId],
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!active || status !== 'SUBSCRIBED') return;
+        // Recover missed changes only after Realtime is listening, including reconnects.
+        queryClient.invalidateQueries({
+          queryKey: ['negotiation_requests', merchantId],
+        });
+      });
 
     return () => {
+      active = false;
       supabase.removeChannel(channel);
     };
-  }, [merchant?.id, queryClient]);
+  }, [isFocused, merchant?.id, queryClient]);
 
   const loading = isMerchantLoading || (!!merchant?.id && isRequestsLoading);
   const actionLoadingId = updateStatusMutation.isPending

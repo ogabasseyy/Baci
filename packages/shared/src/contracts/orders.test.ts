@@ -7,12 +7,16 @@ import {
   normalizeOrderEditChangeCategory,
   shouldNotifyCustomerForOrderEdit,
   WEB_ORDER_COLUMNS,
+  WEB_ORDER_COLUMNS_PUBLIC,
   WEB_ORDER_ITEMS_COLUMNS,
   WEB_ORDER_WITH_ITEMS_QUERY,
 } from './orders';
 
 describe('order column constants', () => {
   const webColumns = WEB_ORDER_COLUMNS.split(',').map((column) =>
+    column.trim()
+  );
+  const publicWebColumns = WEB_ORDER_COLUMNS_PUBLIC.split(',').map((column) =>
     column.trim()
   );
   const mobileAdminColumns = MOBILE_ADMIN_ORDER_COLUMNS.split(',').map(
@@ -41,6 +45,8 @@ describe('order column constants', () => {
   it('MOBILE_ADMIN_ORDER_COLUMNS is a non-empty string', () => {
     expect(typeof MOBILE_ADMIN_ORDER_COLUMNS).toBe('string');
     expect(MOBILE_ADMIN_ORDER_COLUMNS.length).toBeGreaterThan(0);
+    expect(MOBILE_ADMIN_ORDER_COLUMNS).toContain('transaction_date');
+    expect(MOBILE_ADMIN_ORDER_COLUMNS).toContain('invoice_issue_date');
   });
 
   it('column constants do not use select(*)', () => {
@@ -58,9 +64,30 @@ describe('order column constants', () => {
     expect(webColumns).toContain('amount_paid');
   });
 
+  it('WEB_ORDER_COLUMNS includes payment breakdown basis fields', () => {
+    expect(webColumns).toEqual(
+      expect.arrayContaining(['gift_wrapping_fee', 'tax_basis'])
+    );
+  });
+
+  it('WEB_ORDER_COLUMNS_PUBLIC includes payment breakdown basis fields', () => {
+    expect(publicWebColumns).toEqual(
+      expect.arrayContaining(['gift_wrapping_fee', 'tax_basis'])
+    );
+  });
+
   it('includes branch_id in web and mobile admin order contracts', () => {
     expect(webColumns).toContain('branch_id');
     expect(mobileAdminColumns).toContain('branch_id');
+  });
+
+  it('includes delivery metadata in internal fulfillment projections', () => {
+    expect(webColumns).toEqual(
+      expect.arrayContaining(['delivery_method', 'airport_type'])
+    );
+    expect(mobileAdminColumns).toEqual(
+      expect.arrayContaining(['delivery_method', 'airport_type'])
+    );
   });
 
   it('includes mobile admin order detail fields required by the app', () => {

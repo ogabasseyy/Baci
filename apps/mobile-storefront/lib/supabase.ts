@@ -13,11 +13,10 @@ import { createClient, processLock } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { registerAuthRefreshLifecycle } from './auth/auth-refresh-lifecycle';
-import {
-  authSessionStorage,
-  getDefaultSupabaseAuthStorageKey,
-} from './auth/auth-session-storage';
+import { authSessionStorage } from './auth/auth-session-storage';
+import { getDefaultSupabaseAuthStorageKey } from './auth/supabase-auth-storage-key';
 import { createLogger } from './logger';
+import { createSupabaseAuthTimeoutFetch } from './supabase-auth-timeout-fetch';
 
 const log = createLogger('Supabase');
 
@@ -139,6 +138,12 @@ function createMemoryAuthStorage() {
   };
 }
 
+export const supabaseAuthStorage = isServerRuntime
+  ? undefined
+  : isNativeRuntime
+    ? authSessionStorage
+    : (getBrowserSessionStorage() ?? createMemoryAuthStorage());
+
 const authOptions = isServerRuntime
   ? {
       autoRefreshToken: false,
@@ -148,12 +153,12 @@ const authOptions = isServerRuntime
   : isNativeRuntime
     ? {
         ...nonServerAuthOptions,
-        storage: authSessionStorage,
+        storage: supabaseAuthStorage,
         lock: processLock,
       }
     : {
         ...nonServerAuthOptions,
-        storage: getBrowserSessionStorage() ?? createMemoryAuthStorage(),
+        storage: supabaseAuthStorage,
       };
 
 /**
@@ -162,6 +167,7 @@ const authOptions = isServerRuntime
 const supabaseClient = hasSupabaseCredentials
   ? createClient(validSupabaseUrl, supabaseClientKey, {
       auth: authOptions,
+      global: { fetch: createSupabaseAuthTimeoutFetch(fetch) },
     })
   : createMissingCredentialsClient();
 
@@ -218,5 +224,3 @@ export async function signOut() {
     throw error;
   }
 }
-
-export { CommerceError, calculateCommerce } from './commerce-brain';

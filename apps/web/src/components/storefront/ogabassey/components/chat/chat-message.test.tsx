@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatMessageBubble } from './chat-message';
 import type { ChatMessage } from './types';
 
+vi.mock('./agent-ui-event-renderer', () => ({
+  AgentUiEventRenderer: () => <div>Trusted product cards</div>,
+}));
+
 describe('ChatMessageBubble', () => {
   const onAddToCart = vi.fn();
 
@@ -112,6 +116,57 @@ describe('ChatMessageBubble', () => {
       />
     );
     expect(screen.getByText('How can I assist you today?')).toBeDefined();
+  });
+
+  it('renders validated UI events only on assistant messages', () => {
+    const message: ChatMessage = {
+      ...modelMessage,
+      uiEvents: [
+        {
+          intent: 'discover',
+          products: [
+            {
+              brand: null,
+              category: null,
+              description: null,
+              hasVariants: false,
+              id: 'product-1',
+              imageUrl: null,
+              manageStock: false,
+              name: 'Phone',
+              price: 10_000,
+              slug: null,
+              stock: null,
+            },
+          ],
+          title: 'Products I found',
+          type: 'present_products',
+        },
+      ],
+    };
+
+    const { unmount } = render(
+      <ChatMessageBubble
+        message={message}
+        index={0}
+        isSanta={false}
+        onAddToCart={onAddToCart}
+      />
+    );
+
+    expect(screen.getByText('Trusted product cards')).toBeDefined();
+
+    unmount();
+    render(
+      <ChatMessageBubble
+        message={{ ...message, role: 'user' }}
+        index={0}
+        isSanta={false}
+        onAddToCart={onAddToCart}
+      />
+    );
+
+    expect(screen.queryByText('Trusted product cards')).toBeNull();
   });
 
   it('shows santa action section when message has santaAction', () => {

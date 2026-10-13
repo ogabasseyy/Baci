@@ -52,6 +52,53 @@ describe('bank transfer param schemas', () => {
   });
 
   it.each([
+    {
+      label: 'coerces string totals to numbers',
+      orderTotal: '470000',
+      expected: 470000,
+    },
+    { label: 'accepts numeric totals', orderTotal: 470000, expected: 470000 },
+    { label: 'accepts a zero total', orderTotal: '0', expected: 0 },
+    {
+      label: 'treats blank totals as absent',
+      orderTotal: '   ',
+      expected: undefined,
+    },
+  ])('orderTotal $label', ({ orderTotal, expected }) => {
+    for (const schema of [
+      BankTransferParamsSchema,
+      WalletFundedBankTransferParamsSchema,
+    ]) {
+      const base =
+        schema === BankTransferParamsSchema
+          ? validLegacyParams
+          : validWalletFundedParams;
+      const result = schema.safeParse({ ...base, orderTotal });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.orderTotal).toBe(expected);
+      }
+    }
+  });
+
+  it.each([
+    ['-1'],
+    ['NaN'],
+    ['Infinity'],
+  ])('rejects non-finite or negative orderTotal %s', (orderTotal) => {
+    for (const schema of [
+      BankTransferParamsSchema,
+      WalletFundedBankTransferParamsSchema,
+    ]) {
+      const base =
+        schema === BankTransferParamsSchema
+          ? validLegacyParams
+          : validWalletFundedParams;
+      expect(schema.safeParse({ ...base, orderTotal }).success).toBe(false);
+    }
+  });
+
+  it.each([
     ['accountName', 'Account name is required'],
     ['accountNumber', 'Account number is required'],
     ['amount', 'Amount is required'],

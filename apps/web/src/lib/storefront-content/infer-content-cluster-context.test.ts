@@ -109,6 +109,18 @@ describe('inferContentClusterContext', () => {
     });
   });
 
+  it('does not infer ASUS from ROG inside ordinary words', () => {
+    expect(
+      inferContentClusterContext({
+        title: 'Progression and roguelike strategy tips',
+        excerpt: 'A practical guide to improving your run.',
+        category: 'Gaming',
+        tags: ['progress'],
+        keywords: ['roguelike'],
+      }).brands
+    ).not.toContain('asus');
+  });
+
   it('deduplicates brand matches when the post spans multiple supported categories', () => {
     expect(
       inferContentClusterContext({
@@ -119,6 +131,36 @@ describe('inferContentClusterContext', () => {
         keywords: ['smartphones', 'smart tvs'],
       }).brands
     ).toEqual(['samsung']);
+  });
+
+  it('normalizes currency-bearing metadata across all post fields', () => {
+    const context = inferContentClusterContext({
+      title: 'Best $50 Samsung Galaxy Watch deals',
+      excerpt: 'Compare US100 smartwatch options.',
+      category: 'Smartwatches',
+      tags: ['£200 Galaxy Watch'],
+      keywords: ['₦300 watch'],
+    });
+
+    expect(context).toMatchObject({
+      categorySlug: 'smartwatches',
+      brands: ['samsung'],
+    });
+    expect(context.tokens).toEqual(
+      expect.arrayContaining(['usd', '50', '100', 'gbp', '200', 'ngn', '300'])
+    );
+  });
+
+  it('applies joined-title corrections before alias-only brand inference', () => {
+    expect(
+      inferContentClusterContext({
+        title: 'AirPod 2 Buyer Guide',
+        excerpt: 'Which generation should you buy?',
+        category: 'Audio',
+        tags: [],
+        keywords: [],
+      }).brands
+    ).toContain('apple');
   });
 
   it('prefers the most specific explicit category alias over generic parent aliases', () => {

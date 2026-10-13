@@ -44,6 +44,19 @@ describe('remediation state', () => {
     ]);
   });
 
+  it('does not reserve or mark candidates without a state identity', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'remediation-state-unkeyed-'));
+    const path = join(directory, 'handled.json');
+    const unkeyed = { lastSeen: candidate.lastSeen, occurrences: 2 };
+    const state = createRemediationState({ path });
+
+    assert.deepEqual(state.pending([unkeyed]), []);
+    assert.equal(state.complete({ handledCandidates: [unkeyed] }), true);
+    const persisted = JSON.parse(readFileSync(path, 'utf8'));
+    assert.deepEqual(persisted.handled, {});
+    assert.deepEqual(persisted.reservations, {});
+  });
+
   it('keeps fallback evidence until reconciled state is persisted', () => {
     const directory = mkdtempSync(join(tmpdir(), 'remediation-state-'));
     const path = join(directory, 'handled.json');
@@ -107,6 +120,7 @@ describe('remediation state', () => {
 
     assert.deepEqual(state.pending([candidate]), []);
     assert.equal(state.complete({ handledCandidates: [candidate] }), false);
+    assert.equal(state.handledCandidates([candidate]), false);
   });
 
   it('recovers a candidate after a state lock becomes stale', () => {
@@ -191,6 +205,38 @@ describe('remediation state', () => {
     ]);
     assert.equal(state.acknowledgeNotification('report-1'), true);
     assert.deepEqual(createRemediationState({ path }).notifications(), []);
+  });
+
+  it('returns only due notification retries and persists their next attempt time', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'remediation-state-'));
+    const path = join(directory, 'handled.json');
+    const nowMs = Date.parse('2026-08-09T10:00:00.000Z');
+    const report = { html: '<p>incident</p>', subject: 'Incident', text: 'x' };
+    const state = createRemediationState({ now: () => nowMs, path });
+
+    assert.equal(state.complete({ notification: { id: 'due', report } }), true);
+    assert.equal(
+      state.complete({ notification: { id: 'deferred', report } }),
+      true
+    );
+    assert.equal(
+      state.scheduleNotificationRetry('deferred', '2026-08-09T10:01:00.000Z'),
+      true
+    );
+
+    assert.deepEqual(state.notifications({ limit: 10, nowMs }), [
+      { id: 'due', report },
+    ]);
+    const deferred = JSON.parse(readFileSync(path, 'utf8')).notifications
+      .deferred;
+    assert.equal(deferred.attempts, 1);
+    assert.equal(deferred.nextAttemptAt, '2026-08-09T10:01:00.000Z');
+    assert.deepEqual(
+      state
+        .notifications({ nowMs: Date.parse('2026-08-09T10:01:00.000Z') })
+        .map((entry) => entry.id),
+      ['due', 'deferred']
+    );
   });
 
   it('expires and caps notifications after inserting a new report', () => {

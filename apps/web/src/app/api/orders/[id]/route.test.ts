@@ -48,8 +48,12 @@ vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
   fileInventoryConfirmationFailureReview: vi.fn(),
 }));
 
-vi.mock('@/lib/shipping/book-order-shipment', () => ({
-  bookOrderShipment: vi.fn(),
+vi.mock('@/lib/shipping/run-claimed-order-wallet-or-checkout-booking', () => ({
+  runClaimedOrderWalletOrCheckoutBooking: vi.fn(),
+}));
+
+vi.mock('@/lib/shipping/load-order-gigl-settled-retained-amount', () => ({
+  loadOrderGiglSettledRetainedAmount: vi.fn(),
 }));
 
 vi.mock('@/lib/shipping/order-shipment-booking-lock', () => ({
@@ -61,12 +65,28 @@ vi.mock('@/lib/shipping/order-shipment-booking-utils', () => {
   class MockOrderShipmentBookingError extends Error {
     readonly code: string;
     readonly status: number;
+    readonly details?: {
+      availableBalance: number;
+      chargedAmount: number;
+      shortfall: number;
+    };
 
-    constructor(message: string, status: number, code: string) {
+    constructor(
+      message: string,
+      status: number,
+      code: string,
+      _providerReference?: string,
+      details?: {
+        availableBalance: number;
+        chargedAmount: number;
+        shortfall: number;
+      }
+    ) {
       super(message);
       this.name = 'OrderShipmentBookingError';
       this.status = status;
       this.code = code;
+      this.details = details;
     }
   }
 
@@ -90,12 +110,13 @@ import {
   SerializedInventoryUnavailableError,
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
-import { bookOrderShipment } from '@/lib/shipping/book-order-shipment';
+import { loadOrderGiglSettledRetainedAmount } from '@/lib/shipping/load-order-gigl-settled-retained-amount';
 import {
   claimOrderShipmentBooking,
   clearOrderShipmentBookingLock,
 } from '@/lib/shipping/order-shipment-booking-lock';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
+import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { PATCH } from './route';
 
 type ExistingOrder = {
@@ -103,12 +124,16 @@ type ExistingOrder = {
   order_number: string;
   shipping_status: string;
   payment_status: string;
+  payment_method?: string | null;
   is_credit_order: boolean;
   customer_id: string | null;
   selected_quote_id: string | null;
   shipping_provider: string | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
+  shipping_platform_retained_amount?: number | string | null;
   tracking_number: string | null;
   shipment_id: string | null;
+  shipping_address?: Record<string, unknown> | null;
 };
 
 type UpdatedOrder = {
@@ -170,6 +195,32 @@ function createSupabaseMock(
               error: null,
             })
           ),
+        };
+      }
+
+      if (table === 'merchant_settlements') {
+        const retained = Number(
+          existingOrder.shipping_platform_retained_amount ??
+            (existingOrder.shipping_funding_source === 'customer_checkout'
+              ? 1500
+              : 0)
+        );
+        const eqSourceId = vi.fn().mockResolvedValue({
+          data:
+            retained > 0
+              ? [
+                  {
+                    metadata: { retained_shipping_amount: retained },
+                    status: 'completed',
+                  },
+                ]
+              : [],
+          error: null,
+        });
+        const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+        const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+        return {
+          select: vi.fn(() => ({ eq: eqMerchant })),
         };
       }
 
@@ -378,7 +429,7 @@ describe('PATCH /api/orders/[id]', () => {
       error: 'Order must be processing before it can be marked as shipped.',
       code: 'ORDER_NOT_READY_TO_SHIP',
     });
-    expect(bookOrderShipment).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
   });
 
   it('rejects provider shipping when the order has no saved quote', async () => {
@@ -421,7 +472,7 @@ describe('PATCH /api/orders/[id]', () => {
         'This provider order does not have a saved shipping quote. Please re-quote before marking it as shipped.',
       code: 'MISSING_SHIPPING_QUOTE',
     });
-    expect(bookOrderShipment).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
   });
 
   it('books a provider shipment when the order is marked as shipped', async () => {
@@ -453,15 +504,11 @@ describe('PATCH /api/orders/[id]', () => {
       user: createMockUser(),
       supabase,
     });
-    vi.mocked(bookOrderShipment).mockResolvedValue({
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockResolvedValue({
       shipmentId: 'shipment-1',
       provider: 'TOPSHIP',
-      providerShipmentId: 'provider-shipment-1',
-      trackingNumber: 'TRACK-1',
-      carrierName: 'Topship',
       quoteId: 'quote-2',
-      estimatedDays: 2,
-      shipmentStatus: 'booked',
+      trackingNumber: 'TRACK-1',
     });
 
     const response = await PATCH(
@@ -478,10 +525,14 @@ describe('PATCH /api/orders/[id]', () => {
       'merchant-1',
       'order-1'
     );
-    expect(bookOrderShipment).toHaveBeenCalledWith(
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
       supabase,
       'merchant-1',
-      'order-1'
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+      }),
+      expect.any(Object)
     );
     expect(ordersUpdate).toHaveBeenCalledWith({
       selected_quote_id: 'quote-2',
@@ -493,6 +544,340 @@ describe('PATCH /api/orders/[id]', () => {
       tracking_number: 'TRACK-1',
     });
     expect(payload).toEqual({ order: updatedOrder });
+  });
+
+  it('invalidates a bound quote when the shipping address is edited', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+      shipment_id: null,
+      shipping_address: {
+        address: '1 Old Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    };
+    const updatedOrder: UpdatedOrder = {
+      id: 'order-1',
+      shipping_status: 'processing',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(
+      existingOrder,
+      updatedOrder
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(ordersUpdate).toHaveBeenCalledWith({
+      selected_quote_id: null,
+      shipping_address: {
+        address: '2 New Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    });
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
+  });
+
+  it('clears merchant-wallet funding when invalidating a bound GIGL quote', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'merchant_wallet',
+      tracking_number: null,
+      shipment_id: null,
+      shipping_address: {
+        address: '1 Old Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(existingOrder, {
+      id: 'order-1',
+      shipping_status: 'processing',
+      shipping_provider: 'GIGL',
+      tracking_number: null,
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(ordersUpdate).toHaveBeenCalledWith({
+      selected_quote_id: null,
+      shipping_funding_source: null,
+      shipping_address: {
+        address: '2 New Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    });
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: rejects funded checkout address edits before clearing the quote', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      payment_method: 'paystack',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'customer_checkout',
+      shipping_platform_retained_amount: 2500,
+      tracking_number: null,
+      shipment_id: null,
+      shipping_address: {
+        address: '1 Old Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(existingOrder, {
+      id: 'order-1',
+      shipping_status: 'processing',
+      shipping_provider: 'GIGL',
+      tracking_number: null,
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(loadOrderGiglSettledRetainedAmount).mockResolvedValue(2500);
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      code: 'FUNDED_CHECKOUT_ADDRESS_LOCKED',
+    });
+    expect(ordersUpdate).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
+    expect(loadOrderGiglSettledRetainedAmount).toHaveBeenCalledWith(
+      expect.anything(),
+      'merchant-1',
+      'order-1'
+    );
+  });
+
+  it('bugfix: locks partially_paid checkout address edits when retention exists', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'partially_paid',
+      payment_method: 'paystack',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'customer_checkout',
+      shipping_platform_retained_amount: 2500,
+      tracking_number: null,
+      shipment_id: null,
+      shipping_address: {
+        address: '1 Old Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(existingOrder, {
+      id: 'order-1',
+      shipping_status: 'processing',
+      shipping_provider: 'GIGL',
+      tracking_number: null,
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(loadOrderGiglSettledRetainedAmount).mockResolvedValue(2500);
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'FUNDED_CHECKOUT_ADDRESS_LOCKED',
+    });
+    expect(ordersUpdate).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: returns 409 when an active wallet charge blocks address edits', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'merchant_wallet',
+      tracking_number: null,
+      shipment_id: null,
+      shipping_address: {
+        address: '1 Old Street',
+        city: 'Lagos',
+        state: 'Lagos',
+      },
+    };
+    const orderSelectBuilder = createSelectBuilder({
+      data: existingOrder,
+      error: null,
+    });
+    const orderUpdateBuilder = createUpdateBuilder({
+      data: null,
+      error: {
+        message: 'active_shipping_charge_address_edit_blocked',
+        code: 'P0001',
+      },
+    });
+    const ordersUpdate = vi.fn(() => orderUpdateBuilder);
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'orders') {
+          return {
+            select: vi.fn(() => orderSelectBuilder),
+            update: ordersUpdate,
+          };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    } as unknown as SupabaseClient;
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'active_shipping_charge_address_edit_blocked',
+    });
+    expect(ordersUpdate).toHaveBeenCalled();
+  });
+
+  it('requires re-quoting instead of shipping after editing a bound address', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(existingOrder, {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: 'TRACK-1',
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({
+        shipping_status: 'shipped',
+        shipping_address: {
+          address: '2 New Street',
+          city: 'Lagos',
+          state: 'Lagos',
+        },
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'SHIPPING_QUOTE_INVALIDATED',
+    });
+    expect(ordersUpdate).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
   });
 
   it('persists paid provider shipment status before inventory confirmation and booking', async () => {
@@ -524,15 +909,11 @@ describe('PATCH /api/orders/[id]', () => {
       user: createMockUser(),
       supabase,
     });
-    vi.mocked(bookOrderShipment).mockResolvedValue({
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockResolvedValue({
       shipmentId: 'shipment-1',
       provider: 'TOPSHIP',
-      providerShipmentId: 'provider-shipment-1',
-      trackingNumber: 'TRACK-1',
-      carrierName: 'Topship',
       quoteId: 'quote-2',
-      estimatedDays: 2,
-      shipmentStatus: 'booked',
+      trackingNumber: 'TRACK-1',
     });
 
     const response = await PATCH(
@@ -560,7 +941,10 @@ describe('PATCH /api/orders/[id]', () => {
     ).toBeGreaterThan(ordersUpdate.mock.invocationCallOrder[0]);
     expect(
       vi.mocked(ensurePaidOrderInventoryConfirmed).mock.invocationCallOrder[0]
-    ).toBeLessThan(vi.mocked(bookOrderShipment).mock.invocationCallOrder[0]);
+    ).toBeLessThan(
+      vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mock
+        .invocationCallOrder[0]
+    );
     expect(ordersUpdate).toHaveBeenNthCalledWith(2, {
       selected_quote_id: 'quote-2',
       shipment_id: 'shipment-1',
@@ -569,6 +953,72 @@ describe('PATCH /api/orders/[id]', () => {
       shipping_provider: 'TOPSHIP',
       shipping_status: 'shipped',
       tracking_number: 'TRACK-1',
+    });
+  });
+
+  it('books prepaid GIGL checkout shipments using the requested paid status', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'pending',
+      payment_method: 'card',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'GIGL',
+      shipping_funding_source: 'customer_checkout',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const updatedOrder: UpdatedOrder = {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'GIGL',
+      tracking_number: 'TRACK-1',
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(
+      existingOrder,
+      updatedOrder
+    );
+
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockResolvedValue({
+      shipmentId: 'shipment-1',
+      provider: 'GIGL',
+      quoteId: 'quote-1',
+      trackingNumber: 'TRACK-1',
+    });
+
+    const response = await PATCH(
+      createPatchRequest({
+        payment_status: 'paid',
+        shipping_status: 'shipped',
+      }),
+      {
+        params: Promise.resolve({ id: 'order-1' }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+        shipping_provider: 'GIGL',
+      }),
+      expect.objectContaining({
+        paymentStatus: 'paid',
+      })
+    );
+    expect(ordersUpdate).toHaveBeenNthCalledWith(1, {
+      payment_status: 'paid',
     });
   });
 
@@ -728,7 +1178,7 @@ describe('PATCH /api/orders/[id]', () => {
       code: 'serialized_inventory_unavailable',
       error: 'serialized_inventory_unavailable',
     });
-    expect(bookOrderShipment).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
     expect(claimOrderShipmentBooking).not.toHaveBeenCalled();
     expect(ordersUpdate).toHaveBeenCalledWith({ payment_status: 'paid' });
     expect(
@@ -850,15 +1300,11 @@ describe('PATCH /api/orders/[id]', () => {
       status: 'claimed',
       lockToken: null,
     });
-    vi.mocked(bookOrderShipment).mockResolvedValue({
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockResolvedValue({
       shipmentId: 'shipment-1',
       provider: 'TOPSHIP',
-      providerShipmentId: 'provider-shipment-1',
-      trackingNumber: 'TRACK-1',
-      carrierName: 'Topship',
       quoteId: 'quote-2',
-      estimatedDays: 2,
-      shipmentStatus: 'booked',
+      trackingNumber: 'TRACK-1',
     });
 
     const response = await PATCH(
@@ -909,7 +1355,7 @@ describe('PATCH /api/orders/[id]', () => {
       user: createMockUser(),
       supabase,
     });
-    vi.mocked(bookOrderShipment).mockRejectedValue(
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
       new OrderShipmentBookingError(
         'Quote is already being used for shipping.',
         409,
@@ -930,10 +1376,14 @@ describe('PATCH /api/orders/[id]', () => {
       'merchant-1',
       'order-1'
     );
-    expect(bookOrderShipment).toHaveBeenCalledWith(
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
       supabase,
       'merchant-1',
-      'order-1'
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+      }),
+      expect.any(Object)
     );
     expect(response.status).toBe(409);
     expect(payload).toEqual({
@@ -942,6 +1392,61 @@ describe('PATCH /api/orders/[id]', () => {
     });
     expect(ordersUpdate).not.toHaveBeenCalled();
     expect(clearOrderShipmentBookingLock).not.toHaveBeenCalled();
+  });
+
+  it('returns the wallet snapshot when a merchant-wallet booking is short', async () => {
+    const existingOrder: ExistingOrder = {
+      id: 'order-1',
+      order_number: 'BACI-001',
+      shipping_status: 'processing',
+      payment_status: 'paid',
+      is_credit_order: false,
+      customer_id: null,
+      selected_quote_id: 'quote-1',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: null,
+      shipment_id: null,
+    };
+    const { supabase, ordersUpdate } = createSupabaseMock(existingOrder, {
+      id: 'order-1',
+      shipping_status: 'shipped',
+      shipping_provider: 'TOPSHIP',
+      tracking_number: 'TRACK-1',
+    });
+
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
+      new OrderShipmentBookingError(
+        'Insufficient merchant wallet balance.',
+        409,
+        'MERCHANT_WALLET_INSUFFICIENT',
+        undefined,
+        {
+          availableBalance: 1200,
+          chargedAmount: 4500,
+          shortfall: 3300,
+        }
+      )
+    );
+
+    const response = await PATCH(
+      createPatchRequest({ shipping_status: 'shipped' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Insufficient merchant wallet balance.',
+      code: 'MERCHANT_WALLET_INSUFFICIENT',
+      availableBalance: 1200,
+      chargedAmount: 4500,
+      shortfall: 3300,
+    });
+    expect(ordersUpdate).not.toHaveBeenCalled();
   });
 
   it('returns 500 when shipment booking fails unexpectedly', async () => {
@@ -978,7 +1483,7 @@ describe('PATCH /api/orders/[id]', () => {
       user: createMockUser(),
       supabase,
     });
-    vi.mocked(bookOrderShipment).mockRejectedValue(
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
       new Error('Topship wallet unavailable')
     );
 
@@ -995,10 +1500,14 @@ describe('PATCH /api/orders/[id]', () => {
       'merchant-1',
       'order-1'
     );
-    expect(bookOrderShipment).toHaveBeenCalledWith(
+    expect(runClaimedOrderWalletOrCheckoutBooking).toHaveBeenCalledWith(
       supabase,
       'merchant-1',
-      'order-1'
+      'order-1',
+      expect.objectContaining({
+        selected_quote_id: 'quote-1',
+      }),
+      expect.any(Object)
     );
     expect(response.status).toBe(500);
     expect(payload).toEqual({ error: 'Internal server error' });
@@ -1050,7 +1559,7 @@ describe('PATCH /api/orders/[id]', () => {
       error: 'Shipment booking is already in progress for this order.',
       code: 'SHIPMENT_BOOKING_IN_PROGRESS',
     });
-    expect(bookOrderShipment).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
     expect(ordersUpdate).not.toHaveBeenCalled();
   });
 
@@ -1096,7 +1605,7 @@ describe('PATCH /api/orders/[id]', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(bookOrderShipment).not.toHaveBeenCalled();
+    expect(runClaimedOrderWalletOrCheckoutBooking).not.toHaveBeenCalled();
     expect(ordersUpdate).toHaveBeenCalledWith({
       shipping_status: 'shipped',
     });

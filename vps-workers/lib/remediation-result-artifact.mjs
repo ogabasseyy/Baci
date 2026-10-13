@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { remediationArtifactKeyFor } from './remediation-artifact-key.mjs';
 
 export function writeRemediationResultArtifact({
   candidate,
@@ -10,16 +11,13 @@ export function writeRemediationResultArtifact({
     return undefined;
   }
 
-  const fingerprint = String(candidate.fingerprint || 'unknown').replace(
-    /[^a-zA-Z0-9_-]/g,
-    '-'
-  );
+  const artifactKey = remediationArtifactKeyFor(candidate);
   mkdirSync(outputDir, { recursive: true });
-  const path = join(outputDir, `${fingerprint}.result.md`);
+  const path = join(outputDir, `${artifactKey}.result.md`);
   writeFileSync(
     path,
     [
-      `# Codex investigation ${fingerprint}`,
+      `# Codex investigation ${artifactKey}`,
       '',
       String(output || '').trim(),
       '',

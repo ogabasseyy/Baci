@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# Provisions the immutable per-SHA application checkout for a worker
+# release. Called from prepare-worker-release.sh (VPS side) with the
+# staging dir and the deploying SHA; prints the provisioned checkout
+# path. Also directly executable for testing.
+# Usage: provision-immutable-checkout.sh <staging-dir> <expected-sha>
+#
+# Cron resolves BACI_REPO_DIR once per invocation, so an in-place `git
+# pull` would change what the already-installed schedule executes
+# immediately — before prepare, the migrations, or the capability smoke
+# complete. Instead each release gets an immutable per-SHA worktree that
+# is never pulled after creation; promote flips the BACI_REPO_DIR
+# symlink to it atomically under the deploy lock. Never pull the live
+# path in place.
+set -euo pipefail
+
+staging_dir="${1:?staging dir is required}"
+expected_sha="${2:?expected SHA is required}"
+env_file="$staging_dir/.env"
+
+# Single dotenv reader: BACI_REPO_DIR spellings (export prefix, spaces
+# around `=`, colon separator, quotes, comments, duplicates) must parse
+# exactly as the dotenv-grounded preflight validates them — a strict
+# ^KEY= match here would abort deployments the preflight accepted.
+# Primary: the copy prepare ships beside the staged tree; fallback: the
+# repo source (direct execution from a checkout for tests/debugging).
+dotenv_reader="$staging_dir/bin/gigl-dotenv.sh"
+if [ ! -f "$dotenv_reader" ]; then
+  dotenv_reader="$(cd "$(dirname "$0")" && pwd)/../../.github/scripts/gigl-dotenv.sh"
+fi
+if [ ! -f "$dotenv_reader" ]; then
+  echo "provision-immutable-checkout: missing gigl-dotenv.sh beside the staged tree and the repo." >&2
+  exit 1
+fi
+# shellcheck source=../../.github/scripts/gigl-dotenv.sh
+. "$dotenv_reader"
+
+# Last assignment wins inside the shared reader, matching dotenv, the
+# scoped-environment reader, and the flip: a stale line above the live
+# one must not provision the checkout under a directory promotion
+# ignores.
+repo_link="$(gigl_dotenv_value "$env_file" 'BACI_REPO_DIR')"
+
+case "$repo_link" in
+  /*) ;;
+  *)
+    echo "BACI_REPO_DIR must be an absolute path." >&2
+    exit 1
+    ;;
+esac
+
+checkout_base="$(dirname "$repo_link")"
+repo_dir="$checkout_base/app-$expected_sha"
+if [ ! -d "$repo_dir" ]; then
+  if ! git -C "$repo_link" fetch --quiet origin "$expected_sha" 2>/dev/null; then
+    echo "Cannot fetch $expected_sha on the VPS; push the deploying commit first." >&2
+    exit 1
+  fi
+  if ! git -C "$repo_link" worktree add --detach --quiet "$repo_dir" "$expected_sha" 2>/dev/null; then
+    echo "Cannot create the immutable checkout at $repo_dir; remove it and rerun." >&2
+    exit 1
+  fi
+fi
+
+if ! actual_sha="$(git -C "$repo_dir" rev-parse --verify HEAD 2>/dev/null)"; then
+  echo "Immutable checkout at $repo_dir is unusable; remove it with 'git worktree remove --force $repo_dir' and rerun." >&2
+  exit 1
+fi
+if [ -n "$(git -C "$repo_dir" status --porcelain=v1 --untracked-files=all)" ]; then
+  echo "Direct-worker checkout is dirty." >&2
+  exit 1
+fi
+if [ "$actual_sha" != "$expected_sha" ]; then
+  echo "Direct-worker checkout does not match the deploying commit." >&2
+  exit 1
+fi
+
+# The TS entrypoints cron executes must exist at this revision; the
+# wrappers below come from the staged worker tree instead.
+for script_path in \
+  apps/web/src/scripts/process-gigl-tracking.ts \
+  apps/web/src/scripts/process-petrock-reconciliation.ts \
+  apps/web/src/scripts/process-quiz-finalization.ts
+do
+  if [ ! -f "$repo_dir/$script_path" ]; then
+    echo "Direct-worker checkout is missing $script_path." >&2
+    exit 1
+  fi
+done
+
+for wrapper_path in \
+  "$staging_dir/bin/process-gigl-tracking.sh" \
+  "$staging_dir/bin/verify-gigl-tracking-worker-capability.sh" \
+  "$staging_dir/bin/process-petrock-reconciliation.sh" \
+  "$staging_dir/bin/process-quiz-finalization.sh"
+do
+  if [ ! -x "$wrapper_path" ]; then
+    echo "Missing or non-executable direct-worker wrapper: $wrapper_path" >&2
+    exit 1
+  fi
+done
+
+# A previous install may have been interrupted after linking tsx, so the
+# executable alone cannot prove completion: a successful install records
+# a marker (inside git-ignored node_modules, invisible to the dirty
+# check above and removed with the worktree), and an existing worktree
+# re-runs the frozen install unless BOTH the marker and the toolchain
+# are present. A failed re-run removes the marker it can no longer
+# vouch for.
+install_marker="$repo_dir/node_modules/.baci-deps-installed"
+install_toolchain_present=0
+if [ -x "$repo_dir/apps/web/node_modules/.bin/tsx" ] || [ -x "$repo_dir/node_modules/.bin/tsx" ]; then
+  install_toolchain_present=1
+fi
+if [ ! -f "$install_marker" ] || [ "$install_toolchain_present" != "1" ]; then
+  echo "Installing immutable checkout dependencies (shared pnpm store)."
+  # This SSH command does not source the staged worker .env, so the
+  # runtime default (run-web-script.sh) never reaches the install: skip
+  # the Puppeteer Chrome download explicitly, or a fresh host, a
+  # Puppeteer bump, or an unreachable download host fails the install
+  # before the smoke and blocks the worker rollout.
+  if ! (cd "$repo_dir" && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile); then
+    rm -f "$install_marker"
+    echo "Direct-worker checkout dependency install failed." >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$install_marker")"
+  printf '%s\n' "$expected_sha" > "$install_marker"
+fi
+
+tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"
+if [ ! -x "$tsx_bin" ]; then
+  # Mirror run-web-script.sh: a workspace-root install also satisfies the
+  # worker entrypoints, so validate the same fallback before failing.
+  tsx_bin="$repo_dir/node_modules/.bin/tsx"
+fi
+if [ ! -x "$tsx_bin" ] || ! "$tsx_bin" --version >/dev/null; then
+  echo "Direct-worker checkout is missing the reviewed web toolchain." >&2
+  exit 1
+fi
+
+# Re-point the STAGING env copy (never promoted: `.env*` is excluded) at
+# the provisioned checkout, so the capability smoke verifies the
+# candidate revision. The live .env keeps pointing at the release
+# symlink until promote flips it. Portable rewrite (no sed -i): delete
+# every `=`-spelling and append one canonical line last — surviving
+# colon/export/space forms sit above it and the shared reader is
+# last-wins, so the canonical line always governs. The temp file lives
+# beside its destination so the final mv is an atomic same-device
+# rename.
+tmp_env="$(mktemp "${env_file}.XXXXXX")" || exit 1
+grep -v -E '^[[:space:]]*(export[[:space:]]+)?BACI_REPO_DIR=' "$env_file" > "$tmp_env" || true
+printf 'BACI_REPO_DIR=%s\n' "$repo_dir" >> "$tmp_env"
+mv "$tmp_env" "$env_file"
+
+printf '%s\n' "$repo_dir"

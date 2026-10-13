@@ -20,6 +20,60 @@ const goal: WalletActiveSavingsGoal = {
 };
 
 describe('wallet-screen-savings.handlers', () => {
+  it('preserves the amount and operation key without announcing success for pending PiggyVest settlement', async () => {
+    const clearSavingsContributionAmount = jest.fn();
+    const clearIdempotencyKey = jest.fn();
+    const cancelSavingsReminder = jest.fn(async () => true);
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ status: 'pending' }),
+      clearSavingsContributionAmount,
+      clearIdempotencyKey,
+      cancelSavingsReminder,
+      createIdempotencyKey: () => 'pending-operation',
+      goal,
+      rawAmount: '4500',
+      refetchWallet: async () => ({}),
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
+    expect(clearIdempotencyKey).not.toHaveBeenCalled();
+    expect(cancelSavingsReminder).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Contribution pending',
+      expect.stringContaining('PiggyVest confirms')
+    );
+  });
+  it('clears the operation without announcing success for a terminal cancellation', async () => {
+    const clearSavingsContributionAmount = jest.fn();
+    const clearIdempotencyKey = jest.fn();
+    const cancelSavingsReminder = jest.fn(async () => true);
+    const refetchWallet = jest.fn(async () => ({}));
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ status: 'cancelled' }),
+      clearSavingsContributionAmount,
+      clearIdempotencyKey,
+      cancelSavingsReminder,
+      createIdempotencyKey: () => 'cancelled-operation',
+      goal,
+      rawAmount: '4500',
+      refetchWallet,
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
+    expect(cancelSavingsReminder).not.toHaveBeenCalled();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Contribution cancelled',
+      expect.stringContaining('funds were released')
+    );
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Savings updated',
+      expect.any(String)
+    );
+  });
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -44,6 +98,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution,
+      walletBalance: 5000,
     });
 
     expect(setIsAddingSavingsContribution).toHaveBeenNthCalledWith(1, true);
@@ -82,6 +137,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).toHaveBeenCalledTimes(1);
@@ -112,6 +168,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(cancelSavingsReminder).toHaveBeenCalledWith('goal-1');
@@ -128,6 +185,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '1000',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -154,6 +212,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount,
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -174,6 +233,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -201,6 +261,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution,
+      walletBalance: 5000,
     });
 
     expect(setIsAddingSavingsContribution).toHaveBeenNthCalledWith(1, true);
@@ -212,5 +273,28 @@ describe('wallet-screen-savings.handlers', () => {
       'Contribution failed'
     );
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not submit a contribution when the spendable wallet balance is too low', async () => {
+    const addSavingsContribution = jest.fn(async () => ({}));
+    const setIsAddingSavingsContribution = jest.fn();
+
+    await addSavingsContributionToGoal({
+      addSavingsContribution,
+      clearSavingsContributionAmount: jest.fn(),
+      createIdempotencyKey: () => 'savings-key-1',
+      goal,
+      rawAmount: '500',
+      refetchWallet: jest.fn(async () => undefined),
+      setIsAddingSavingsContribution,
+      walletBalance: 100,
+    });
+
+    expect(addSavingsContribution).not.toHaveBeenCalled();
+    expect(setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Fund wallet first',
+      'Your wallet has ₦100 available. Fund it before adding ₦500 to savings.'
+    );
   });
 });

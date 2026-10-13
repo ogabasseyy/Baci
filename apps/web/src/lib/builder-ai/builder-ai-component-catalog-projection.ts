@@ -1,48 +1,43 @@
 import {
-  type AiEditableComponentType,
-  aiEditableComponents,
-} from './builder-ai-component-definitions';
-import {
-  builderAiEnumProps,
-  builderAiNumberRanges,
-  getBuilderAiPropShape,
-} from './builder-ai-component-prop-validation';
+  builderDesignCapabilities,
+  builderDesignCapabilityAdapter,
+} from '@baci/shared/contracts';
 import { builderAiStructuredPropProjectionDetails } from './builder-ai-structured-prop-projection-details';
-import { getAiComponentDefinition } from './get-ai-component-definition';
-import { getBuilderAiPropMaximumLength } from './get-builder-ai-prop-maximum-length';
+import { getBuilderAiPropShape } from './get-builder-ai-prop-shape';
 
 export function getBuilderAiCatalogProjection() {
-  return Object.keys(aiEditableComponents).map((componentType) => {
-    const definition = getAiComponentDefinition(
-      componentType as AiEditableComponentType
-    );
-    return {
-      componentType,
-      editableProps: definition.editableProps.map((property) => {
-        const key = `${componentType}.${property}`;
-        const allowedValues = builderAiEnumProps[key];
-        const maximumLength = getBuilderAiPropMaximumLength(
-          componentType,
-          property
-        );
-        const range = builderAiNumberRanges[key];
-        return {
-          name: property,
-          shape: getBuilderAiPropShape(componentType, property),
-          ...(builderAiStructuredPropProjectionDetails[key] ?? {}),
-          ...(allowedValues ? { allowedValues } : {}),
-          ...(maximumLength ? { maximumLength } : {}),
-          ...(range
-            ? {
-                maximum: range[1],
-                minimum: range[0],
-                wholeNumber: range[2] === true,
-              }
-            : {}),
-        };
-      }),
-      insertable: definition.insertable === true,
-      protected: definition.protected === true,
-    };
-  });
+  return builderDesignCapabilities.components
+    .filter(({ aiEditable }) => aiEditable)
+    .map((capability) => {
+      const defaults = builderDesignCapabilityAdapter.getDefaults(
+        capability.componentType
+      );
+      return {
+        componentType: capability.componentType,
+        ...(Object.keys(defaults).length > 0 ? { defaults } : {}),
+        editableProps: Object.entries(capability.props).map(
+          ([property, descriptor]) => ({
+            name: property,
+            shape: getBuilderAiPropShape(capability.componentType, property),
+            ...(descriptor.enum ? { allowedValues: descriptor.enum } : {}),
+            ...(descriptor.maximumLength
+              ? { maximumLength: descriptor.maximumLength }
+              : {}),
+            ...(descriptor.minimum !== undefined
+              ? { minimum: descriptor.minimum }
+              : {}),
+            ...(descriptor.maximum !== undefined
+              ? { maximum: descriptor.maximum }
+              : {}),
+            ...(descriptor.wholeNumber ? { wholeNumber: true } : {}),
+            ...(builderAiStructuredPropProjectionDetails[
+              `${capability.componentType}.${property}`
+            ] ?? {}),
+          })
+        ),
+        insertable: capability.aiInsertable,
+        placement: capability.placement,
+        protected: capability.protected,
+      };
+    });
 }

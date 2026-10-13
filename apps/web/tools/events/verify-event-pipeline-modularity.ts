@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 // biome-ignore format: compact import preserves the verifier's own 300-line gate.
 import { collectProductionImportClosure, eventPipelineBoundaryManifest } from '../../src/lib/events/event-pipeline-boundary-manifest';
 import { readGitIndexSources } from './event-pipeline-git-content';

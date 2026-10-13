@@ -1,65 +1,18 @@
-import { jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import type { Block } from '@/types/blocks';
-import type { Product } from '@/types/product';
-import { HomeFeedList } from './HomeFeedList';
-import { useHomeProductFeed } from './use-home-product-feed';
+import {
+  feed,
+  GRID_BLOCKS,
+  mockBlockRendererModule,
+  mockFlashListModule,
+  mockScrollToOffset,
+  mockUseHomeProductFeed,
+  product,
+  setupHomeFeedMocks,
+} from './HomeFeedList-test-harness';
 
-const mockScrollToOffset = jest.fn();
-
-type MockHomeFeedListItem =
-  | { kind: 'product'; product: Product }
-  | { kind: 'product-list-end'; id: string };
-
-jest.mock('@shopify/flash-list', () => {
-  const React = jest.requireActual('react') as typeof import('react');
-  const { View } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-  const FlashList = React.forwardRef(
-    (props: Record<string, unknown>, ref: React.Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({
-        scrollToOffset: mockScrollToOffset,
-      }));
-      const {
-        data = [],
-        renderItem,
-        ListHeaderComponent,
-        ListFooterComponent,
-        ListEmptyComponent,
-        ...rest
-      } = props as {
-        data?: MockHomeFeedListItem[];
-        renderItem?: (info: {
-          item: MockHomeFeedListItem;
-          index: number;
-          target: 'Cell';
-        }) => React.ReactNode;
-        ListHeaderComponent?: React.ReactNode;
-        ListFooterComponent?: React.ReactNode;
-        ListEmptyComponent?: React.ReactNode;
-      };
-      return React.createElement(
-        View,
-        { testID: 'home-feed-list', ...rest },
-        ListHeaderComponent,
-        data.length === 0
-          ? ListEmptyComponent
-          : data.map((item, index) =>
-              React.createElement(
-                React.Fragment,
-                {
-                  key: item.kind === 'product' ? item.product.id : item.id,
-                },
-                renderItem?.({ item, index, target: 'Cell' })
-              )
-            ),
-        ListFooterComponent
-      );
-    }
-  );
-  return { __esModule: true, FlashList };
-});
+jest.mock('@shopify/flash-list', () => mockFlashListModule());
 
 jest.mock('./use-home-product-feed', () => ({
   useHomeProductFeed: jest.fn(),
@@ -69,16 +22,18 @@ jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: { text: '#000000' } }),
 }));
 
-jest.mock('@/components/storefront/BlockRenderer', () => {
-  const { View, Text } = jest.requireActual(
+jest.mock('@/components/storefront/BlockRenderer', () =>
+  mockBlockRendererModule()
+);
+
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual(
     'react-native'
   ) as typeof import('react-native');
   return {
-    BlockRenderer: ({ blocks }: { blocks: Block[] }) => (
-      <View testID="block-renderer">
-        <Text>{blocks.length}</Text>
-      </View>
-    ),
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
   };
 });
 
@@ -94,7 +49,7 @@ jest.mock('@/components/storefront/ProductCard', () => {
     'react-native'
   ) as typeof import('react-native');
   return {
-    ProductCard: ({ product }: { product: Product }) => (
+    ProductCard: ({ product }: { product: { id: string } }) => (
       <View testID="product-card" accessibilityLabel={product.id} />
     ),
   };
@@ -113,50 +68,6 @@ jest.mock('@/components/ui/Skeleton', () => {
   ) as typeof import('react-native');
   return { ProductGridSkeleton: () => <View testID="grid-skeleton" /> };
 });
-
-const mockUseHomeProductFeed = useHomeProductFeed as jest.MockedFunction<
-  typeof useHomeProductFeed
->;
-
-function product(id: string): Product {
-  return {
-    id,
-    name: `Product ${id}`,
-    slug: `product-${id}`,
-    price: 1000,
-    image: `https://cdn.example.com/${id}.jpg`,
-    images: [`https://cdn.example.com/${id}.jpg`],
-  };
-}
-
-function feed(
-  overrides: Partial<ReturnType<typeof useHomeProductFeed>> = {}
-): ReturnType<typeof useHomeProductFeed> {
-  return {
-    feedProducts: [product('p1'), product('p2')],
-    isLoading: false,
-    isError: false,
-    isFetching: false,
-    isRetrying: false,
-    hasMore: true,
-    loadMore: jest.fn(),
-    isLoadingMore: false,
-    currentVariant: 'grid',
-    filterBarProps: {} as ReturnType<
-      typeof useHomeProductFeed
-    >['filterBarProps'],
-    handleRetry: jest.fn(),
-    shouldShowInitialLoading: false,
-    shouldShowFatalError: false,
-    feedResetKey: 'reset-1',
-    ...overrides,
-  };
-}
-
-const GRID_BLOCKS = [
-  { type: 'CategoryRail', props: { id: 'rail' } },
-  { type: 'ProductGrid', props: { id: 'grid', title: 'Shop the collection' } },
-] as unknown as Block[];
 
 function renderList(props: Partial<Parameters<typeof HomeFeedList>[0]> = {}) {
   return render(
@@ -179,9 +90,10 @@ function renderList(props: Partial<Parameters<typeof HomeFeedList>[0]> = {}) {
   );
 }
 
+import { HomeFeedList } from './HomeFeedList';
+
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockUseHomeProductFeed.mockReturnValue(feed());
+  setupHomeFeedMocks();
 });
 
 describe('HomeFeedList', () => {

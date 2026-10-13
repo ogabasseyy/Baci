@@ -3,7 +3,6 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { UseFormSetValue } from 'react-hook-form';
 import type { FetchQuotesArgs } from '@/components/checkout/checkout-shipping.helpers';
 import type { ShippingQuote } from '@/components/checkout/types';
-import type { PlaceDetails } from '@/components/ui/AddressAutocomplete';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutShipping } from './use-checkout-shipping';
@@ -78,19 +77,6 @@ function createLocatedParams(
   return createParams({ watchedCity, watchedState });
 }
 
-function createPlace(overrides: Partial<PlaceDetails> = {}): PlaceDetails {
-  return {
-    city: 'ikeja',
-    country: 'Nigeria',
-    formattedAddress: '1 Test Way, Ikeja',
-    route: 'Test Way',
-    state: 'Lagos',
-    streetNumber: '1',
-    zip: '',
-    ...overrides,
-  };
-}
-
 describe('useCheckoutShipping', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -132,54 +118,6 @@ describe('useCheckoutShipping', () => {
     expect(result.current.shippingCities).toEqual([]);
     expect(result.current.isLoadingCities).toBe(false);
     expect(result.current.selectedQuoteId).toBe('');
-  });
-
-  it('applies a Google-suggested city once the matching city list loads', async () => {
-    const updateAddress = jest.fn();
-    const { rerender, result } = renderHook(
-      (props: ShippingParams) => useCheckoutShipping(props),
-      { initialProps: createParams() }
-    );
-    await waitFor(() =>
-      expect(result.current.shippingStates).toEqual(['Lagos'])
-    );
-
-    act(() => {
-      result.current.handleDeliveryAddressSelect(createPlace(), updateAddress);
-    });
-    rerender(createParams({ watchedState: 'Lagos' }));
-
-    expect(updateAddress).toHaveBeenCalledWith('1 Test Way, Ikeja');
-    await waitFor(() =>
-      expect(mockSetValue).toHaveBeenCalledWith('city', 'Ikeja', {
-        shouldValidate: true,
-      })
-    );
-  });
-
-  it('opens the city picker with a search seed when the suggested city has no match', async () => {
-    const updateAddress = jest.fn();
-    const { rerender, result } = renderHook(
-      (props: ShippingParams) => useCheckoutShipping(props),
-      { initialProps: createParams() }
-    );
-    await waitFor(() =>
-      expect(result.current.shippingStates).toEqual(['Lagos'])
-    );
-
-    act(() => {
-      result.current.handleDeliveryAddressSelect(
-        createPlace({ city: 'Magodo' }),
-        updateAddress
-      );
-    });
-    rerender(createParams({ watchedState: 'Lagos' }));
-
-    await waitFor(() => expect(result.current.showCityPicker).toBe(true));
-    expect(result.current.citySearch).toBe('Magodo');
-    expect(mockSetValue).not.toHaveBeenCalledWith('city', 'Magodo', {
-      shouldValidate: true,
-    });
   });
 
   it('requests quotes for door delivery once state and city are present', async () => {

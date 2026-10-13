@@ -23,7 +23,7 @@ describe('ShippingQuoteRow', () => {
           deliveryRange: '24-48 working hours',
           displayName: 'Port Harcourt Airport Delivery',
           id: 'airport-delivery',
-          price: 25_000,
+          price: 35_000,
         }}
         selectedAccentColor="#EF2B2D"
         selectedBackgroundColor={colors.card}
@@ -33,9 +33,9 @@ describe('ShippingQuoteRow', () => {
 
     expect(screen.getByText('Port Harcourt Airport Delivery')).toBeTruthy();
     expect(screen.getByText('By Air\nWithin 1–48 hours')).toBeTruthy();
-    expect(screen.getByText('₦25,000')).toBeTruthy();
+    expect(screen.getByText('₦35,000')).toBeTruthy();
     const quoteButton = screen.getByRole('button', {
-      name: /Select Port Harcourt Airport Delivery.*By Air.*Within 1–48 hours.*₦25,000/,
+      name: /Select Port Harcourt Airport Delivery.*By Air.*Within 1–48 hours.*₦35,000/,
     });
     expect(quoteButton).toHaveAccessibilityState({ selected: true });
 

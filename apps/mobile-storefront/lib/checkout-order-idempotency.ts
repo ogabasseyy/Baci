@@ -33,6 +33,7 @@ interface MobileCheckoutIdempotencyInput {
   savingsAmount?: number | null;
   savingsGoalId?: string | null;
   selectedQuoteId?: string | null;
+  shippingRateId?: string | null;
   shippingAddress: {
     address: string;
     city: string;
@@ -166,6 +167,7 @@ export function buildMobileCheckoutFingerprint(
     savingsAmount: normalizeNumber(input.savingsAmount),
     savingsGoalId: normalizeString(input.savingsGoalId),
     selectedQuoteId: normalizeString(input.selectedQuoteId),
+    shippingRateId: normalizeString(input.shippingRateId),
     shippingAddress: {
       address: normalizeString(input.shippingAddress.address),
       city: normalizeString(input.shippingAddress.city),

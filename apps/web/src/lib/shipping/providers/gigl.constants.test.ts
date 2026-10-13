@@ -90,6 +90,7 @@ describe('GIGL provider constants', () => {
     } = await import('./gigl.constants');
 
     const providerRateId = buildGiglProviderRateId({
+      senderStationId: 4,
       receiverStationId: 30,
       pickupOption: PickupOptions.ServiceCentre,
       vehicleType: VehicleType.Bike,
@@ -97,8 +98,9 @@ describe('GIGL provider constants', () => {
       deliveryType: GiglDeliveryType.GoFaster,
     });
 
-    expect(providerRateId).toBe('GIGL_30_1_1_575_1');
+    expect(providerRateId).toBe('GIGL_30_1_1_575_1_4');
     expect(parseGiglProviderRateId(providerRateId)).toEqual({
+      senderStationId: 4,
       receiverStationId: 30,
       pickupOption: PickupOptions.ServiceCentre,
       vehicleType: VehicleType.Bike,

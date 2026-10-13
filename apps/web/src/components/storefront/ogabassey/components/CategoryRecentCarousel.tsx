@@ -3,7 +3,7 @@
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { isExternalPlaceholderImageUrl } from '@/lib/image-utils';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import {
   AD_CONFIG,
   CATEGORY_CAROUSEL_AD_BOOT_DELAY_MS,

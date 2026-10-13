@@ -8,6 +8,16 @@ const directory = dirname(fileURLToPath(import.meta.url));
 
 for (const [wrapper, label, script] of [
   [
+    'process-gigl-tracking.sh',
+    'gigl-tracking',
+    'src/scripts/process-gigl-tracking.ts',
+  ],
+  [
+    'verify-gigl-tracking-worker-capability.sh',
+    'gigl-capability',
+    'src/scripts/verify-gigl-tracking-worker-capability.ts',
+  ],
+  [
     'process-petrock-reconciliation.sh',
     'petrock-reconciliation',
     'src/scripts/process-petrock-reconciliation.ts',
@@ -28,5 +38,10 @@ for (const [wrapper, label, script] of [
     );
     assert.match(source, new RegExp(`run-web-script\\.sh" ${label} ${script}`));
     assert.doesNotMatch(source, /CRON_SECRET|run-web-cron|https?:\/\//);
+    if (wrapper === 'process-quiz-finalization.sh') {
+      assert.match(source, /--once/);
+      assert.match(source, /--loop/);
+      assert.match(source, /src\/scripts\/process-quiz-finalization\.ts "\$@"/);
+    }
   });
 }

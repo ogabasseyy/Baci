@@ -1,74 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Merchant, Product } from './feed-types';
+import type { Merchant } from './feed-types';
 import { generateOpenAIFeed } from './legacy-feed-generator';
+import { createLegacyFeedTestFixtures } from './legacy-feed-generator.test-fixtures';
 
-const merchant: Merchant = {
-  id: 'merchant-1',
-  business_name: 'Ogabassey',
-  payout_currency: 'NGN',
-  slug: 'ogabassey',
-};
-
-function product(overrides: Partial<Product> = {}): Product {
-  return {
-    id: 'product-1',
-    name: 'Test Phone',
-    description: '<p>A strong phone</p>',
-    slug: 'test-phone',
-    price: 50_000,
-    images: ['https://cdn.example.com/phone.jpg'],
-    stock: 5,
-    ...overrides,
-  };
-}
-
-function parseLine(line: string | undefined): Record<string, unknown> {
-  if (!line) {
-    throw new Error('Expected feed line to be generated.');
-  }
-
-  return JSON.parse(line) as Record<string, unknown>;
-}
+const { merchant, parseLine, product } = createLegacyFeedTestFixtures();
 
 describe('generateOpenAIFeed', () => {
-  it('prefers verified feed manifest images over product image fallbacks', () => {
-    const [line] = generateOpenAIFeed(
-      [
-        product({
-          images: ['https://cdn.example.com/stale-product-image.jpg'],
-        }),
-      ],
-      merchant,
-      'https://ogabassey.com',
-      {
-        'product-1': [
-          {
-            verified_url: 'https://cdn.example.com/manifest-front.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: true,
-            position: 0,
-          },
-          {
-            verified_url: 'https://cdn.example.com/manifest-side.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: false,
-            position: 1,
-          },
-        ],
-      }
-    );
-    const parsed = parseLine(line);
-
-    expect(parsed.image_link).toBe(
-      'https://cdn.example.com/manifest-front.jpg'
-    );
-    expect(parsed.additional_image_links).toEqual([
-      'https://cdn.example.com/manifest-side.jpg',
-    ]);
-  });
-
   it('builds canonical policy URLs and normalizes trailing base URL slashes', () => {
     const [line] = generateOpenAIFeed(
       [product({ manage_stock: false, stock: 0 })],

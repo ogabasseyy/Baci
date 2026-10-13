@@ -34,6 +34,10 @@ describe('Sentry remediation candidates', () => {
 
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].sample.source, 'sentry');
+    assert.equal(candidates[0].source, 'sentry');
+    assert.equal(candidates[0].category, 'sentry_issue');
+    assert.equal(candidates[0].sample.organization, 'ogabassey');
+    assert.equal(candidates[0].sample.project, 'storefront');
     assert.equal(candidates[0].sample.message, 'Application Not Responding');
     assert.equal('user' in candidates[0].sample, false);
     assert.equal(

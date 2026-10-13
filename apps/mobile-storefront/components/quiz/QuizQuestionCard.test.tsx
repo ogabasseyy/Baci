@@ -2,7 +2,8 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { QuizAttempt } from '@/services/quiz-types';
 import { QuizQuestionCard } from './QuizQuestionCard';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const themeColors: QuizThemeColors = {
   background: '#fff',
@@ -75,6 +76,7 @@ describe('QuizQuestionCard', () => {
 
   it('submits the selected answer when one is chosen', () => {
     const props = renderCard({ selectedOptionId: 'b' });
+    expect(screen.getByLabelText('Selected answer')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Submit answer'));
 

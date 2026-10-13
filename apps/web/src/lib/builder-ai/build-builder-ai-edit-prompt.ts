@@ -2,12 +2,13 @@ import type {
   BuilderAiModelOperation,
   BuilderData,
 } from '@baci/shared/contracts';
+import { builderDesignCapabilities } from '@baci/shared/contracts';
 import {
-  aiEditableComponents,
   getBuilderAiCatalogProjection,
   isAiEditableComponent,
 } from './builder-ai-component-catalog';
 import { getBuilderAiAggregatePlanLimits } from './get-builder-ai-aggregate-plan-limits';
+import { getBuilderAiCapabilityPolicy } from './get-builder-ai-capability-policy';
 import { getBuilderAiContentCollectionEntries } from './get-builder-ai-content-collection-entries';
 import { getBuilderAiContentCollections } from './get-builder-ai-content-collections';
 import { getBuilderAiSpecialOperationGuidance } from './get-builder-ai-special-operation-guidance';
@@ -69,13 +70,6 @@ const baseThemeColorKeys = [
   'muted',
   'mutedForeground',
   'border',
-] as const;
-const editableThemeColorKeys = [
-  'primary',
-  'secondary',
-  'accent',
-  'background',
-  'foreground',
 ] as const;
 const themePresetNames = [
   'modern',
@@ -245,9 +239,13 @@ export function buildBuilderAiEditPrompt({
   currentConfig,
   prompt,
 }: PromptInput): string {
+  const capabilityPolicy = getBuilderAiCapabilityPolicy(
+    builderDesignCapabilities
+  );
   const operationGuidance = serializeQuotedData({
-    allowedComponentTypes: Object.keys(aiEditableComponents),
+    allowedComponentTypes: capabilityPolicy.allowedComponentTypes,
     aggregatePlanLimits: getBuilderAiAggregatePlanLimits(),
+    capabilityPolicy,
     catalog: getBuilderAiCatalogProjection(),
     currentState: getCurrentStateProjection(currentConfig),
     operationExamples,
@@ -256,7 +254,7 @@ export function buildBuilderAiEditPrompt({
     ).map(({ collection }) => collection),
     updateThemeOperation: {
       colors: {
-        allowedKeys: editableThemeColorKeys,
+        allowedKeys: capabilityPolicy.themeTokenKeys,
         minimumProperties: 1,
         valuePattern: '#RRGGBB',
       },

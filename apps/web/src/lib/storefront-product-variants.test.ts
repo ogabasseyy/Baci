@@ -153,4 +153,21 @@ describe('normalizeStorefrontProductVariants', () => {
       )[0]?.condition
     ).toBe(expectedCondition);
   });
+  it('preserves the effective serialized policy projected by the PDP RPC', () => {
+    expect(
+      normalizeStorefrontProductVariants(
+        [
+          {
+            id: 'strict',
+            stock_quantity: 0,
+            inventory_tracking_policy: 'serialized_strict',
+          },
+        ],
+        { merchantId: 'merchant', productId: 'product' }
+      )[0]
+    ).toMatchObject({
+      inventory_tracking_policy: 'serialized_strict',
+      stock_quantity: 0,
+    });
+  });
 });

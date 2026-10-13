@@ -2,16 +2,16 @@ import {
   buildCartSnapshot,
   buildNegotiationSingleItemInfo,
   normalizePhoneToE164,
+  normalizeStoredE164Phone,
   summarizeCartForItemInfo,
 } from '@baci/shared/lib';
+import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import type { CartItem } from '@/hooks/cart';
 import type { createClient } from '@/lib/supabase/client';
 import { toNegotiationCartLine } from './negotiation-modal-cart';
-import {
-  getContactValidationError,
-  NegotiationValidationError,
-  normalizeOptionalEmail,
-} from './negotiation-modal-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
+import { normalizeOptionalEmail } from './negotiation-email-normalization';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 const SESSION_KEY = 'ogabassey_guest_session';
 
@@ -26,6 +26,8 @@ export interface NegotiationRequestInput {
   offeredPrice: number;
   evidenceUrl?: string;
   customerEmail?: string | null;
+  /** Resolved by the modal before evidence upload; null is a known guest. */
+  customerId?: string | null;
   customerPhone?: string | null;
   variantId?: string;
   variantName?: string;
@@ -61,11 +63,24 @@ export async function insertNegotiationRequest(
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
-  if (authError) {
-    console.warn('Auth check failed, continuing as guest:', authError.message);
+  if (authError && (!isAuthSessionMissingError(authError) || user)) {
+    throw authError;
   }
 
+  const customerId = user?.id ?? null;
+  if (
+    request.customerId !== undefined &&
+    request.customerId !== customerId
+  ) {
+    throw new NegotiationValidationError(
+      'Customer session changed. Please try again.'
+    );
+  }
+
+  const accountEmail = normalizeOptionalEmail(user?.email);
+  const accountPhone = normalizeStoredE164Phone(user?.phone);
   const validationError = getContactValidationError({
+    allowMissingContact: Boolean(accountEmail || accountPhone),
     email: request.customerEmail ?? '',
     phone: request.customerPhone ?? '',
   });
@@ -73,8 +88,10 @@ export async function insertNegotiationRequest(
     throw new NegotiationValidationError(validationError);
   }
 
-  const normalizedPhone = normalizePhoneToE164(request.customerPhone);
-  const normalizedEmail = normalizeOptionalEmail(request.customerEmail);
+  const normalizedPhone =
+    normalizePhoneToE164(request.customerPhone) ?? accountPhone;
+  const normalizedEmail =
+    normalizeOptionalEmail(request.customerEmail) ?? accountEmail;
 
   const cartSnapshot =
     request.type === 'total'
@@ -93,7 +110,7 @@ export async function insertNegotiationRequest(
   const { error } = await supabase.from('negotiation_requests').insert({
     merchant_id: request.merchantId,
     session_id: getOrCreateSessionId(),
-    customer_id: user?.id ?? null,
+    customer_id: customerId,
     type: request.type,
     item_info:
       request.type === 'single'

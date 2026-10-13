@@ -32,7 +32,7 @@ interface GenerateReceiptPdfOptions {
   buyerReference?: string | null;
   complianceNote?: string;
   documentDate?: Date | string | null;
-  documentKind?: 'invoice' | 'receipt';
+  documentKind?: 'invoice' | 'proforma_invoice' | 'receipt';
   invoiceTypeCode?: string | null;
   dueDate?: Date | string | null;
   firsCsid?: string | null;
@@ -169,9 +169,9 @@ function formatOptionalReceiptDate(value: Date | string | null | undefined) {
 
 function getMerchantAddressLine(
   merchant: ReceiptMerchant,
-  documentKind: 'invoice' | 'receipt'
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt'
 ) {
-  if (documentKind === 'invoice' && merchant.registered_address) {
+  if (documentKind !== 'receipt' && merchant.registered_address) {
     const address = merchant.registered_address;
     const registeredAddressLine = [
       address.street,
@@ -384,13 +384,15 @@ export function generateReceiptPDF(
   const currency = order.currency || 'NGN';
   const isPaid = order.payment_status === 'paid';
   const documentKind = options.documentKind ?? (isPaid ? 'receipt' : 'invoice');
-  const isInvoice = documentKind === 'invoice';
+  const isInvoice = documentKind !== 'receipt';
   const documentLabel = isInvoice
     ? getInvoiceDocumentLabel(options.invoiceTypeCode)
     : 'RECEIPT';
   const displayDocumentDate =
     formatOptionalReceiptDate(options.documentDate) ||
-    formatReceiptDate(order.created_at);
+    formatReceiptDate(
+      order.invoice_issue_date ?? order.transaction_date ?? order.created_at
+    );
   const displayDueDate = formatOptionalReceiptDate(options.dueDate);
   const firsIrn = options.firsIrn?.trim();
   const firsCsid = options.firsCsid?.trim();
@@ -779,6 +781,8 @@ function getInvoiceDocumentLabel(invoiceTypeCode: string | null | undefined) {
       return 'PREPAYMENT INVOICE';
     case '389':
       return 'SELF-BILLED INVOICE';
+    case '325':
+      return 'PROFORMA INVOICE';
     default:
       return 'INVOICE';
   }

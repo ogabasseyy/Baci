@@ -6,14 +6,16 @@
  */
 
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  type DestinationLookupFn,
+  resolvePinnedDestination,
+} from './remote-destination-gate';
 // Relative path: scripts/ has no tsconfig and runs via `npx tsx` outside the
 // workspace package graph, so `@baci/shared/gmc-feed` won't resolve here.
 import {
   type ClassifiedImage,
-  getImageFormat,
-  replaceAvifWithJpg,
 } from '../../packages/shared/src/gmc-feed/index';
+import { verifyCdnImage } from './cdn-image-verifier';
 
 export interface VerificationResult {
   status:
@@ -36,83 +38,6 @@ const CONTENT_TYPE_TO_FORMAT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-/**
- * Verify a CDN-hosted image by checking the local filesystem.
- *
- * Maps `https://cdn.ogabassey.com/core-assets/...` to the local path
- * under `cdnBasePath`. For AVIF sources, checks if a sibling `.jpg`
- * derivative exists.
- *
- * @param fileExistsFn Injectable for testing — defaults to `fs.existsSync`
- */
-export function verifyCdnImage(
-  sourceUrl: string,
-  cdnBasePath: string,
-  fileExistsFn: (path: string) => boolean = existsSync
-): VerificationResult {
-  let url: URL;
-  try {
-    url = new URL(sourceUrl);
-  } catch {
-    return {
-      status: 'invalid',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `Invalid URL: ${sourceUrl}`,
-    };
-  }
-
-  // Prevent path traversal
-  const localPath = resolve(cdnBasePath, `.${url.pathname}`);
-  if (!localPath.startsWith(resolve(cdnBasePath))) {
-    return {
-      status: 'invalid',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `Path traversal detected: ${url.pathname}`,
-    };
-  }
-
-  const format = getImageFormat(sourceUrl);
-
-  // AVIF: check sibling .jpg derivative
-  if (format === 'avif') {
-    const jpgPath = localPath.replace(/\.avif$/i, '.jpg');
-    const jpgUrl = replaceAvifWithJpg(sourceUrl);
-
-    if (fileExistsFn(jpgPath)) {
-      return {
-        status: 'verified',
-        verified_url: jpgUrl,
-        verified_format: 'jpeg',
-        failure_reason: null,
-      };
-    }
-    return {
-      status: 'pending_derivative',
-      verified_url: jpgUrl,
-      verified_format: 'jpeg',
-      failure_reason: null,
-    };
-  }
-
-  // JPG/PNG/WebP: check file exists
-  if (fileExistsFn(localPath)) {
-    return {
-      status: 'verified',
-      verified_url: sourceUrl,
-      verified_format: format,
-      failure_reason: null,
-    };
-  }
-
-  return {
-    status: 'missing',
-    verified_url: null,
-    verified_format: null,
-    failure_reason: `File not found on CDN: ${url.pathname}`,
-  };
-}
 
 /** Single-overload fetch signature for easy mock injection. */
 export type FetchFn = (
@@ -152,24 +77,60 @@ export function getClassifiedImageVerificationUrl(
 /**
  * Verify a remote image URL via HTTP HEAD (with GET fallback on 405).
  *
+ * The fetch runs on a dispatcher pinned to the validated address, so the
+ * transport cannot re-resolve the hostname to a different destination.
+ *
  * @param fetchFn Injectable for testing — defaults to global `fetch`
+ * @param lookupFn Injectable DNS resolver, forwarded to the destination gate
  */
 export async function verifyRemoteImage(
   url: string,
-  fetchFn: FetchFn = globalThis.fetch
+  fetchFn: FetchFn = globalThis.fetch,
+  lookupFn?: DestinationLookupFn
 ): Promise<VerificationResult> {
+  const gate = await resolvePinnedDestination(url, lookupFn);
+  if ('failure' in gate) {
+    return {
+      status: gate.retryable ? 'pending_verification' : 'invalid',
+      verified_url: null,
+      verified_format: null,
+      failure_reason: gate.failure,
+    };
+  }
+  const { dispatcher } = gate;
   try {
     let response = await fetchFn(url, {
       method: 'HEAD',
+      redirect: 'manual',
+      dispatcher,
       signal: AbortSignal.timeout(10_000),
     });
+
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        status: 'invalid',
+        verified_url: null,
+        verified_format: null,
+        failure_reason: `Redirect rejected for ${url}`,
+      };
+    }
 
     // Fallback to GET if server doesn't support HEAD
     if (response.status === 405) {
       response = await fetchFn(url, {
         method: 'GET',
+        redirect: 'manual',
+        dispatcher,
         signal: AbortSignal.timeout(10_000),
       });
+      if (response.status >= 300 && response.status < 400) {
+        return {
+          status: 'invalid',
+          verified_url: null,
+          verified_format: null,
+          failure_reason: `Redirect rejected for ${url}`,
+        };
+      }
       // Cancel body consumption since we only need status and headers
       await response.body?.cancel();
     }
@@ -212,6 +173,9 @@ export async function verifyRemoteImage(
       verified_format: null,
       failure_reason: `${message} for ${url}`,
     };
+  } finally {
+    // Release the pinned sockets on every path, including early returns.
+    await dispatcher.close().catch(() => {});
   }
 }
 
@@ -219,7 +183,8 @@ export async function verifyCdnImageWithTransformFallback(
   sourceUrl: string,
   cdnBasePath: string,
   fileExistsFn: (path: string) => boolean = existsSync,
-  fetchFn: FetchFn = globalThis.fetch
+  fetchFn: FetchFn = globalThis.fetch,
+  lookupFn?: DestinationLookupFn
 ): Promise<VerificationResult> {
   const localVerification = verifyCdnImage(
     sourceUrl,
@@ -236,7 +201,8 @@ export async function verifyCdnImageWithTransformFallback(
 
   const transformedVerification = await verifyRemoteImage(
     transformedUrl,
-    fetchFn
+    fetchFn,
+    lookupFn
   );
 
   if (

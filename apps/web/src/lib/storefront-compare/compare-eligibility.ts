@@ -79,6 +79,21 @@ export function canPublishProductComparePage(input: {
   );
 }
 
+function normalizeComparableArray(value: unknown[]) {
+  return value.map(String).sort((left, right) => left.localeCompare(right));
+}
+
+function compareProductKeySpecValues(left: unknown, right: unknown) {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return (
+      JSON.stringify(normalizeComparableArray(left)) !==
+      JSON.stringify(normalizeComparableArray(right))
+    );
+  }
+
+  return left !== right;
+}
+
 export function buildProductCompareCandidate(input: {
   categorySlug: string;
   leftProduct: CompareProductInput;
@@ -89,8 +104,8 @@ export function buildProductCompareCandidate(input: {
   const overlappingKeys = Array.from(
     new Set([...Object.keys(leftSpecs), ...Object.keys(rightSpecs)])
   ).filter((key) => key in leftSpecs && key in rightSpecs);
-  const differentiatingSpecCount = overlappingKeys.filter(
-    (key) => leftSpecs[key] !== rightSpecs[key]
+  const differentiatingSpecCount = overlappingKeys.filter((key) =>
+    compareProductKeySpecValues(leftSpecs[key], rightSpecs[key])
   ).length;
 
   return {

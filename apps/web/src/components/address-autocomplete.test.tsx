@@ -9,6 +9,24 @@ vi.mock('@/lib/google-places', () => ({
 }));
 
 describe('AddressAutocomplete', () => {
+  it.each([
+    undefined,
+    'street-address',
+  ])('honors an explicit autocomplete value (%s)', (autoComplete) => {
+    render(
+      <AddressAutocomplete
+        aria-label="Address"
+        autoComplete={autoComplete}
+        value=""
+        onChange={() => undefined}
+      />
+    );
+    expect(screen.getByRole('textbox', { name: 'Address' })).toHaveAttribute(
+      'autocomplete',
+      autoComplete ?? 'new-password'
+    );
+  });
+
   it('forwards id to the rendered address input', () => {
     render(
       <>

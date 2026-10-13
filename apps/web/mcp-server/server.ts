@@ -1,3 +1,5 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
  * Ogabassey ChatGPT MCP Server
  *
@@ -13,17 +15,27 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { GuestCartStore } from './guest-cart-store';
+import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
+import { createGuestCartWorkerClient } from './guest-cart-worker-client';
+import { describeGuestCartStoreHealth } from './guest-cart-health';
+import { registerCartLinkTools } from './cart-link-tool';
+import { registerGuestCartTool } from './guest-cart-tool';
+import { createGracefulShutdown } from './server-shutdown';
+import { createCatalogImageUrlResolver } from './catalog-image-url';
+import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
+import { isIP } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
 import {
@@ -43,27 +55,48 @@ import {
 } from './agentic-checkout-client';
 import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
-import { resolveMcpSearchProductCondition } from './product-condition-filter';
-import { loadMcpSearchProducts } from './search-products-query';
-import { getMcpProductStockSummary } from './product-stock-summary';
+import { discoverMcpProducts } from './discover-products';
+import { formatSearchProductsResponse } from './format-search-products-response';
+import { embedDiscoveryText } from './gemini-discovery-embedding';
+import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
+import { getMcpOfferAvailability } from './product-offer-availability';
+import { buildMcpProductDetail } from './product-detail';
+import { loadMcpProductVariants } from './product-variants';
+import { serveProductImage } from './product-image-proxy';
+import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
+import { STORE_WIDGET_URI } from './widget-resource-uri';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { createSearchProductsToolConfig } from './search-products-tool-config';
+import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
+import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
+import { GiglProvider } from '../src/lib/shipping/providers/gigl';
+import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.constants';
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Worker JWT for guest-cart storage: minted offline with the
+// mcp_guest_cart_worker role claim, it can invoke only the three cart
+// RPCs. Neither the public anon key nor the RLS-bypassing service key
+// may back user-facing cart operations.
+const GUEST_CART_WORKER_TOKEN = process.env.MCP_GUEST_CART_WORKER_TOKEN;
 const OGABASSEY_SLUG = 'ogabassey';
+// Preserve GIG authentication and station caches across stateless MCP requests.
+const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
+const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
 const MCP_ALLOWED_HEADERS = 'content-type, mcp-protocol-version, mcp-session-id';
 const MCP_ALLOWED_METHODS = 'POST, GET, OPTIONS, DELETE, HEAD';
 const AGENTIC_CHECKOUT_TOOLS_ENABLED =
   process.env.MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS === '1' ||
   process.env.MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS === 'true';
-const ORDER_PAYMENT_TOOLS_ENABLED =
-  process.env.MCP_ENABLE_ORDER_PAYMENT_TOOLS === '1' ||
-  process.env.MCP_ENABLE_ORDER_PAYMENT_TOOLS === 'true';
+// These legacy tools accept buyer identifiers without authentication. Keep them
+// unavailable until they are rebuilt on an authorized customer session.
+const ORDER_PAYMENT_TOOLS_ENABLED = false;
 const AGENTIC_CHECKOUT_API_BASE_URL =
   process.env.MCP_AGENTIC_CHECKOUT_BASE_URL ?? 'https://ogabassey.com';
 const AGENTIC_CHECKOUT_API_KEY = getAgenticCredential(
@@ -80,12 +113,7 @@ type ConfiguredAgenticCheckoutClientConfig = AgenticCheckoutClientConfig & {
   signingKey: string;
 };
 
-interface McpProductVariantRow {
-  attributes: Record<string, unknown> | null;
-  price_override?: number | null;
-  product_id: string;
-  stock_quantity?: number | null;
-}
+
 
 function getAgenticCredential(primaryName: string, legacyName: string) {
   const primary = process.env[primaryName]?.trim();
@@ -174,16 +202,48 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !GUEST_CART_WORKER_TOKEN) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, MCP_GUEST_CART_WORKER_TOKEN'
   );
   process.exit(1);
 }
+// Log the effective trust-proxy mode once: when false behind a proxy,
+// rate limiting and the cart quota key on the proxy socket address and
+// every caller shares one bucket (see README). The value is explicit
+// per deploy; this line keeps it visible in deploy logs.
+console.log(
+  JSON.stringify({
+    type: 'lifecycle',
+    event: 'mcp-trust-proxy-mode',
+    trustProxyRealIp: process.env.MCP_TRUST_PROXY_REAL_IP === 'true',
+    timestamp: new Date().toISOString(),
+  })
+);
 
-// Create Supabase admin client
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+// Public shopping tools use the normal RLS-scoped anonymous client.
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guest carts persist through worker-scoped Postgres RPCs: no local
+// volume, no writer lock, safe to scale past one replica. (The
+// creation quota stays per-process, so N replicas admit N times the
+// single-host burst: over-admission, never over-refusal.)
+let guestCartClient: SupabaseClient;
+try {
+  guestCartClient = createGuestCartWorkerClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    GUEST_CART_WORKER_TOKEN
+  );
+} catch (error) {
+  // Static messages only: the token and its claims never reach logs.
+  console.error('FATAL: Invalid guest-cart worker token');
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+// The startup probe authenticates this same client before the store
+// below serves traffic; the probe needs no store state.
+const guestCartStore = new GuestCartStore(guestCartClient);
 
 // =============================================================================
 // RATE LIMITING
@@ -197,9 +257,11 @@ interface RateLimitEntry {
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
 function getClientIP(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
+  // Trust a forwarded client address only when the operator has verified that
+  // the private reverse proxy overwrites this header on every request.
+  const realIp = req.headers['x-real-ip'];
+  if (process.env.MCP_TRUST_PROXY_REAL_IP === 'true' && typeof realIp === 'string' && isIP(realIp.trim()) > 0) {
+    return realIp.trim();
   }
   return req.socket.remoteAddress || 'unknown';
 }
@@ -412,39 +474,7 @@ function formatPrice(price: number): string {
   return NGN_PRICE_FORMATTER.format(price);
 }
 
-/**
- * Ensure image URL is in a format ChatGPT can render.
- * - Converts .avif to .jpg (ChatGPT may not support AVIF)
- * - Fixes path mismatch: database has /products/, CDN has /core-assets/products/
- */
-function ensureJpgImageUrl(
-  imageUrl: string | null | undefined
-): string | undefined {
-  if (!imageUrl) return undefined;
-
-  let url = String(imageUrl);
-
-  // If it's a relative path or doesn't start with https, make it absolute
-  if (!url.startsWith('https://')) {
-    if (url.startsWith('/')) {
-      url = `https://cdn.ogabassey.com${url}`;
-    } else {
-      url = `https://cdn.ogabassey.com/${url}`;
-    }
-  }
-
-  // Fix path mismatch: database stores /products/ but CDN serves from /core-assets/products/
-  if (url.includes('/products/') && !url.includes('/core-assets/products/')) {
-    url = url.replace('/products/', '/core-assets/products/');
-  }
-
-  // Convert AVIF to JPG for better compatibility
-  if (url.endsWith('.avif')) {
-    url = url.replace(/\.avif$/, '.jpg');
-  }
-
-  return url;
-}
+const getSafeCatalogImageUrl = createCatalogImageUrlResolver(MCP_PUBLIC_ORIGIN);
 
 // =============================================================================
 // WIDGET HTML (CSP-compliant, no inline event handlers in production)
@@ -1049,8 +1079,18 @@ const widgetHtml = `<!DOCTYPE html>
       String(value ?? '').replace(/[&<>"']/g, (char) => ESCAPE_HTML_MAP[char]);
 
     const openLink = (url) => window.openai?.openExternal?.({ href: url }) || window.open(url, '_blank');
-    const productUrl = (slug) => 'https://ogabassey.com/ogabassey/' + encodeURIComponent(slug);
-    const cartUrl = (productId) => 'https://ogabassey.com/ogabassey/cart?item_id=' + encodeURIComponent(productId);
+    const productUrl = (slug) => 'https://ogabassey.com/products/' + encodeURIComponent(slug);
+    const cartUrl = (productId) => 'https://ogabassey.com/cart?item_id=' + encodeURIComponent(productId);
+    const hasOptionParams = (url) => {
+      if (typeof url !== 'string' || url === '') return false;
+      try {
+        const params = new URL(url).searchParams;
+        return params.has('variantId') || params.has('condition');
+      } catch { return false; }
+    };
+    // Option-bearing results open the PDP: the cart handoff rejects
+    // variant/condition products with "Choose product options".
+    const purchaseUrl = (p) => (hasOptionParams(p.url) ? p.url : cartUrl(p.id));
 
     const renderProducts = (products) => {
       if (!products?.length) {
@@ -1079,7 +1119,7 @@ const widgetHtml = `<!DOCTYPE html>
             '<p class="product-name">' + escapeHtml(p.name) + '</p>' +
             '<div class="product-meta">' +
               (p.brand ? '<span class="product-brand">' + escapeHtml(p.brand) + '</span>' : '') +
-              (p.in_stock !== false ? '<span class="in-stock">In Stock</span>' : '') +
+              '<span class="in-stock">' + (p.in_stock === true ? 'In Stock' : p.in_stock === false ? 'Out of Stock' : 'Confirm availability') + '</span>' +
             '</div>' +
             '<div class="price-row">' +
               '<span class="product-price">' + formatPrice(p.price) + '</span>' +
@@ -1091,10 +1131,10 @@ const widgetHtml = `<!DOCTYPE html>
             '</div>' +
           '</div>';
 
-        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(productUrl(p.slug)));
-        card.querySelector('.product-name')?.addEventListener('click', () => openLink(productUrl(p.slug)));
-        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
-        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
+        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
+        card.querySelector('.product-name')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
+        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
+        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
         return card;
       });
 
@@ -1131,14 +1171,20 @@ const widgetHtml = `<!DOCTYPE html>
       document.getElementById('support-btn')?.addEventListener('click', () => openLink('https://ogabassey.com/pages/faq'));
     };
 
+    const renderIncomplete = (message) => {
+      contentEl.textContent = message || 'Narrow your search to check prices accurately.';
+    };
+
     window.addEventListener('openai:set_globals', (e) => {
       const out = e.detail?.globals?.toolOutput;
-      if (out?.products) renderProducts(out.products);
+      if (out?.status === 'incomplete') renderIncomplete(out.message);
+      else if (out?.products) renderProducts(out.products);
       else if (out?.order) renderOrder(out.order);
     }, { passive: true });
     if (window.openai?.toolOutput) {
       const out = window.openai.toolOutput;
-      if (out.products) renderProducts(out.products);
+      if (out.status === 'incomplete') renderIncomplete(out.message);
+      else if (out.products) renderProducts(out.products);
       else if (out.order) renderOrder(out.order);
     }
   </script>
@@ -1181,7 +1227,7 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
-function createOgabasseyServer() {
+function createOgabasseyServer(options: { clientIp?: string } = {}) {
   const server = new McpServer({
     name: 'ogabassey-store',
     version: '1.0.0',
@@ -1190,15 +1236,34 @@ function createOgabasseyServer() {
   // Widget resource
   server.registerResource(
     'store-widget',
-    'ui://widget/store.html',
+    STORE_WIDGET_URI,
     { description: 'Ogabassey store widget' },
     async () => ({
       contents: [
         {
-          uri: 'ui://widget/store.html',
+          uri: STORE_WIDGET_URI,
           mimeType: 'text/html+skybridge',
           text: premiumWidgetHtml,
-          _meta: { 'openai/widgetPrefersBorder': true },
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              domain: MCP_PUBLIC_ORIGIN,
+              csp: {
+                connectDomains: [],
+                resourceDomains: [MCP_PUBLIC_ORIGIN],
+              },
+            },
+            'openai/widgetPrefersBorder': true,
+            'openai/widgetCSP': {
+              connect_domains: [],
+              resource_domains: [MCP_PUBLIC_ORIGIN],
+              redirect_domains: ['https://ogabassey.com'],
+            },
+            'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
+            'openai/ui': {
+              availableDisplayModes: ['inline', 'fullscreen'],
+            },
+          },
         },
       ],
     })
@@ -1207,185 +1272,56 @@ function createOgabasseyServer() {
   // Tool: Search products
   server.registerTool(
     'search_products',
-    {
-      title: 'Search Products',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Search for products in Ogabassey store. Returns rich details including variants (colors/sizes), stock confidence, and price trends. Always use this for general product queries.',
-      inputSchema: {
-        query: z
-          .string()
-          .max(100)
-          .optional()
-          .describe('Search query (product name, brand, or keywords)'),
-        condition: z
-          .enum(['new', 'used', 'open_box', 'refurbished'])
-          .optional()
-          .describe('Product condition'),
-        category: z
-          .string()
-          .max(50)
-          .optional()
-          .describe('Category (e.g., phones, laptops)'),
-        brand: z.string().max(50).optional().describe('Brand name'),
-        min_price: z.number().min(0).optional(),
-        max_price: z.number().min(0).optional(),
-        sort: z
-          .enum(['price_asc', 'price_desc', 'newest', 'relevance'])
-          .optional()
-          .default('relevance'),
-        limit: z.number().min(1).max(20).optional().default(10),
-      },
-      _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
-        'openai/toolInvocation/invoking': 'Searching catalog...',
-        'openai/toolInvocation/invoked': 'Search complete',
-      },
-    },
+    createSearchProductsToolConfig(STORE_WIDGET_URI),
     async (args) => {
       try {
         const merchantId = await getMerchantId();
         if (!merchantId) throw new Error('Merchant ID unavailable');
+        const semanticApiKey = process.env.GEMINI_API_KEY;
+        let queryEmbedding: Promise<number[]> | undefined;
 
-        const { products, sanitizedQuery, sawRankedRows } =
-          await loadMcpSearchProducts({
+        const discovery = await discoverMcpProducts({
             args,
             merchantId,
             sanitizeString,
+            semanticSearch: process.env.MCP_SEMANTIC_SEARCH_ENABLED === 'true' && semanticApiKey
+              ? async (query, offset) => {
+                  queryEmbedding ??= embedDiscoveryText({
+                    apiKey: semanticApiKey, kind: 'query', text: query,
+                  });
+                  return loadSemanticDiscoveryCandidateIds({
+                    embedding: await queryEmbedding, merchantId, offset, supabase,
+                  });
+                }
+              : undefined,
             supabase,
           });
 
-        if (sanitizedQuery && !sawRankedRows) {
+        const { priceScanComplete, sanitizedQuery, selectedProducts } = discovery;
+        const coverage = 'coverage' in discovery ? discovery.coverage : undefined;
+        if ('invalidIntentMessage' in discovery && discovery.invalidIntentMessage) {
+          const message = discovery.invalidIntentMessage;
+          return formatInvalidDiscoveryIntent(message);
+        }
+        if (!priceScanComplete) {
+          const message = 'incompleteReason' in discovery && discovery.incompleteReason === 'option_lookup_failed'
+            ? 'Product options are temporarily unavailable, so this search could not check all matching prices. Please try again.'
+            : 'This search could not check all matching products to confirm the requested prices or order. Add a category, brand, or more specific product name and try again.';
           return {
-            content: [
-              {
-                type: 'text',
-                text: `No specific products found for "${sanitizedQuery}". Try broader terms.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'incomplete', coverage: 'partial', message },
           };
         }
 
-        // Graceful fallback for empty results
-        if (!products || products.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No specific products found for "${sanitizedQuery || 'your criteria'}". Try broader terms.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
-          };
-        }
-
-        // 2. Normalization: Fetch Variants for valid products
-        const productIds = products
-          .filter((p) => p.has_variants)
-          .map((p) => p.id);
-        const variantsMap = new Map<string, McpProductVariantRow[]>();
-
-        if (productIds.length > 0) {
-          const { data: variants, error: variantsError } = await supabase
-            .from('product_variants')
-            .select('product_id, attributes, stock_quantity, price_override')
-            .in('product_id', productIds)
-            .eq('merchant_id', merchantId);
-
-          if (variantsError) {
-            console.error(
-              'Failed to fetch product variants for search:',
-              variantsError
-            );
-          } else {
-            (variants as McpProductVariantRow[] | null)?.forEach((variant) => {
-              const current = variantsMap.get(variant.product_id);
-              if (current) {
-                current.push(variant);
-              } else {
-                variantsMap.set(variant.product_id, [variant]);
-              }
-            });
-          }
-        }
-
-        // 3. Buyer Intelligence & Formatting
-        const formatted = products.map((p) => {
-          const stockSummary = getMcpProductStockSummary(p);
-
-          // Price Intelligence
-          const isDiscounted =
-            p.compare_at_price && p.compare_at_price > p.price;
-          const priceTrend = isDiscounted ? 'falling' : 'stable';
-
-          // Variant Summary (e.g., "Available in: Black, White")
-          const variants = (variantsMap.get(p.id) || []).filter(
-            (variant) =>
-              p.manage_stock !== true ||
-              Number(variant.stock_quantity ?? 0) > 0
-          );
-          const variantOptions: Record<string, Set<string>> = {};
-          variants.forEach((v) => {
-            Object.entries(v.attributes || {}).forEach(([key, val]) => {
-              if (!variantOptions[key]) variantOptions[key] = new Set();
-              variantOptions[key].add(String(val));
-            });
-          });
-          const availableOptions = Object.entries(variantOptions)
-            .map(([key, vals]) => `${key}: ${Array.from(vals).join(', ')}`)
-            .join(' | ');
-
-          return {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            price: p.price,
-            compare_at_price: p.compare_at_price,
-            image: ensureJpgImageUrl(p.images?.[0]?.url || p.images?.[0]),
-            condition: resolveMcpSearchProductCondition(p, args.condition),
-            brand: p.brand,
-            category: p.category,
-            in_stock: stockSummary.inStock,
-
-            // New Intelligence Fields
-            stock_level: stockSummary.level,
-            stock_confidence: stockSummary.confidence,
-            price_trend: priceTrend,
-            available_variants: availableOptions || 'Standard',
-            warranty: 'Standard Warranty',
-            in_the_box: undefined,
-            last_updated: p.updated_at,
-          };
+        return formatSearchProductsResponse({
+          selectedProducts,
+          sanitizedQuery,
+          coverage,
+          searchMode: 'structured',
+          semanticUnavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
+          requestedCondition: args.condition,
+          getSafeCatalogImageUrl,
         });
-
-        // 4. Construct Response
-        const count = formatted.length;
-        if (count === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No specific products found for "${sanitizedQuery || 'your criteria'}". Try broader terms.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
-          };
-        }
-        const resultText = `Found ${count} products. Top match: ${formatted[0].name} (${formatted[0].stock_level}).`;
-
-        return {
-          content: [{ type: 'text', text: resultText }],
-          structuredContent: {
-            status: 'success',
-            products: formatted,
-            meta: { total: count, query: sanitizedQuery },
-          },
-          _meta: {
-            'openai/outputTemplate': 'ui://widget/store.html',
-            'openai/widgetPrefersBorder': true,
-          },
-        };
       } catch (err: any) {
         console.error('Search Critical Error:', err);
         // Graceful Degradation (Unbreakable)
@@ -1406,81 +1342,9 @@ function createOgabasseyServer() {
     }
   );
 
-  // Tool: Add to Cart (Widget-accessible)
-  // This tool can be called from the widget iframe using window.openai.callTool
-  server.registerTool(
-    'add_to_cart',
-    {
-      title: 'Add to Cart',
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-      description:
-        'Add a product to the shopping cart. This tool is accessible from the in-chat widget for real-time cart updates.',
-      inputSchema: {
-        product_id: z.string().describe('The product ID to add to cart'),
-        quantity: z
-          .number()
-          .min(1)
-          .max(10)
-          .optional()
-          .default(1)
-          .describe('Quantity to add'),
-        session_id: z.string().optional().describe('Cart session identifier'),
-      },
-      _meta: {
-        'openai/widgetAccessible': true, // Enable widget-initiated calls
-        'openai/toolInvocation/invoking': 'Adding to cart...',
-        'openai/toolInvocation/invoked': 'Added to cart',
-      },
-    },
-    async (args) => {
-      try {
-        const merchantId = await getMerchantId();
-        if (!merchantId) {
-          return {
-            content: [{ type: 'text', text: '❌ Unable to access store.' }],
-          };
-        }
-
-        // For now, generate cart URL - in production this would update server-side cart
-        const cartUrl = `https://ogabassey.com/ogabassey/cart?item_id=${encodeURIComponent(args.product_id)}&qty=${args.quantity || 1}`;
-
-        // Get product details for confirmation message
-        const { data: product } = await supabase
-          .from('products')
-          .select('name, price')
-          .eq('id', args.product_id)
-          .eq('merchant_id', merchantId)
-          .single();
-
-        const productName = product?.name || 'Product';
-        const price = product?.price
-          ? NGN_PRICE_FORMATTER.format(product.price)
-          : '';
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `✅ **${productName}** added to cart!${price ? ` (${price})` : ''}\n\n[View Cart & Checkout](${cartUrl})`,
-            },
-          ],
-          structuredContent: {
-            success: true,
-            product_id: args.product_id,
-            product_name: productName,
-            quantity: args.quantity || 1,
-            cart_url: cartUrl,
-          },
-        };
-      } catch (error) {
-        console.error('Add to cart error:', error);
-        return {
-          content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
-        };
-      }
-    }
-  );
+  registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {
@@ -1779,13 +1643,14 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product',
     {
+      outputSchema: mcpToolOutputSchemas.get_product,
       title: 'Get Product Details',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
+        'openai/outputTemplate': STORE_WIDGET_URI,
         'openai/toolInvocation/invoking': 'Loading product...',
         'openai/toolInvocation/invoked': 'Product loaded',
       },
@@ -1795,7 +1660,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1815,7 +1680,7 @@ function createOgabasseyServer() {
               text: 'Please provide a valid product ID or product name.',
             },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'invalid_input' as const, message: 'Please provide a valid product ID or product name.' },
         };
       }
 
@@ -1823,9 +1688,9 @@ function createOgabasseyServer() {
       let productQuery = supabase
         .from('products')
         .select(`
-          id, name, slug, price, compare_at_price, images, description, stock_quantity,
+          id, name, slug, price, compare_at_price, images, description, stock_quantity, manage_stock,
           condition, condition_detail, brand, category, has_variants, has_condition_offers,
-          weight_value, weight_unit, dimensions, schema_markup
+          color, color_images, weight_value, weight_unit, dimensions, schema_markup
         `)
         .eq('merchant_id', merchantId)
         .eq('status', 'active');
@@ -1847,150 +1712,21 @@ function createOgabasseyServer() {
               message: productError.message,
             })
           );
+          const message = 'Product lookup is temporarily unavailable.';
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'unavailable' as const, message },
+          };
         }
         return {
           content: [
             { type: 'text', text: `Product "${lookupLabel}" not found.` },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'not_found' as const, message: `Product "${lookupLabel}" not found.` },
         };
       }
 
-      // Fetch variants if product has variants
-      let variants: Array<{
-        attributes: Record<string, string>;
-        price_override: number | null;
-        stock_quantity: number;
-        condition: string;
-        images: unknown[];
-      }> = [];
-      if (product.has_variants) {
-        const { data: variantData } = await supabase
-          .from('product_variants')
-          .select(
-            'attributes, price_override, stock_quantity, condition, images'
-          )
-          .eq('product_id', product.id)
-          .eq('merchant_id', merchantId);
-        variants = variantData || [];
-      }
-
-      // Fetch condition offers if available
-      let conditionOffers: Array<{
-        condition: string;
-        price: number;
-        stock_quantity: number;
-        grade: string | null;
-        condition_notes: string | null;
-      }> = [];
-      if (product.has_condition_offers) {
-        const { data: offerData } = await supabase
-          .from('product_offers')
-          .select('condition, price, stock_quantity, grade, condition_notes')
-          .eq('product_id', product.id)
-          .eq('status', 'active');
-        conditionOffers = offerData || [];
-      }
-
-      // Get rating from schema_markup if available
-      const rating = product.schema_markup?.aggregateRating?.ratingValue;
-      const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
-
-      const formatted = {
-        id: product.id,
-        name: product.name,
-        slug: product.slug,
-        price: product.price,
-        compare_at_price: product.compare_at_price,
-        image: product.images?.[0]?.url || product.images?.[0] || null,
-        condition: product.condition || 'new',
-        condition_detail: product.condition_detail,
-        brand: product.brand,
-        category: product.category,
-        in_stock: (product.stock_quantity || 0) > 0,
-        has_variants: product.has_variants,
-      };
-
-      // Build detailed text response
-      let text = `**${product.name}**\n\n`;
-      text += `**Price:** ${formatPrice(product.price)}`;
-      if (
-        product.compare_at_price &&
-        product.compare_at_price > product.price
-      ) {
-        const discount = Math.round(
-          (1 - product.price / product.compare_at_price) * 100
-        );
-        text += ` ~~${formatPrice(product.compare_at_price)}~~ (${discount}% off)`;
-      }
-      text += '\n';
-
-      // Condition info
-      if (product.condition && product.condition !== 'new') {
-        text += `**Condition:** ${product.condition}${product.condition_detail ? ` - ${product.condition_detail}` : ''}\n`;
-      }
-
-      // Brand & Category
-      if (product.brand) text += `**Brand:** ${product.brand}\n`;
-      if (product.category) text += `**Category:** ${product.category}\n`;
-
-      // Rating
-      if (rating) {
-        text += `**Rating:** ${rating}/5${reviewCount ? ` (${reviewCount} reviews)` : ''}\n`;
-      }
-
-      // Description
-      if (product.description) {
-        text += `\n${product.description}\n`;
-      }
-
-      // Variants summary
-      if (variants.length > 0) {
-        const colors = [
-          ...new Set(variants.map((v) => v.attributes?.color).filter(Boolean)),
-        ];
-        const storageOptions = [
-          ...new Set(
-            variants.map((v) => v.attributes?.storage).filter(Boolean)
-          ),
-        ];
-        if (colors.length > 0)
-          text += `\n**Available Colors:** ${colors.join(', ')}`;
-        if (storageOptions.length > 0)
-          text += `\n**Storage Options:** ${storageOptions.join(', ')}`;
-      }
-
-      // Condition offers summary
-      if (conditionOffers.length > 0) {
-        text += '\n\n**Available Conditions:**\n';
-        for (const offer of conditionOffers) {
-          text += `• ${offer.condition}${offer.grade ? ` (Grade ${offer.grade})` : ''}: ${formatPrice(offer.price)}`;
-          if (offer.stock_quantity > 0) text += ' - In Stock';
-          text += '\n';
-        }
-      }
-
-      // Stock & Link
-      text += `\n**Stock:** ${formatted.in_stock ? 'In Stock' : 'Out of Stock'}`;
-      text += `\n\n🔗 [View Product](https://ogabassey.com/ogabassey/${product.slug})`;
-
-      return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-          products: [formatted],
-          variants: variants.map((v) => ({
-            attributes: v.attributes,
-            price: v.price_override,
-            stock: v.stock_quantity,
-            condition: v.condition,
-          })),
-          condition_offers: conditionOffers,
-        },
-        _meta: {
-          'openai/outputTemplate': 'ui://widget/store.html',
-          'openai/widgetPrefersBorder': true,
-        },
-      };
+      return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl });
     }
   );
 
@@ -2011,7 +1747,7 @@ function createOgabasseyServer() {
           phone: z.string().max(20).optional().describe('Phone number'),
         },
         _meta: {
-          'openai/outputTemplate': 'ui://widget/store.html',
+          'openai/outputTemplate': STORE_WIDGET_URI,
           'openai/toolInvocation/invoking': 'Looking up order...',
           'openai/toolInvocation/invoked': 'Order found',
         },
@@ -2119,9 +1855,10 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_store_info',
     {
+      outputSchema: mcpToolOutputSchemas.get_store_info,
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description: 'Get information about Ogabassey store.',
+      description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
       inputSchema: {
         topic: z
           .enum(['contact', 'shipping', 'returns', 'payment', 'general'])
@@ -2136,136 +1873,32 @@ function createOgabasseyServer() {
     async (args) => {
       const info: Record<string, string> = {
         general:
-          "**Ogabassey** is Nigeria's premium destination for authentic tech products. We offer competitive prices and genuine products with warranty.\n\nWebsite: https://ogabassey.com",
+          '**Ogabassey** sells physical consumer electronics. Browse products and check current details at https://ogabassey.com.',
         contact:
-          '**Contact**\n\nWebsite: https://ogabassey.com\nWhatsApp: Available on website\n\nWe respond within 24 hours.',
+          '**Contact**\n\nUse the current Ogabassey help page: https://ogabassey.com/contact.',
         shipping:
-          '**Shipping**\n\n- Lagos: 1-2 days\n- Other states: 3-5 days\n- International: 7-14 days\n\nShipped via GIGL, Topship.',
+          '**Shipping**\n\nReview the current policy at https://ogabassey.com/shipping. Delivery availability, fees, and timing depend on the order and must be confirmed at checkout.',
         returns:
-          '**Returns**\n\n- 7-day return window\n- Original packaging required\n- Defective items exchanged/refunded',
+          '**Returns**\n\nReview eligibility and the current process at https://ogabassey.com/returns. Contact support before sending an item back.',
         payment:
-          '**Payment**\n\n- Bank Transfer\n- Card (Visa, Mastercard)\n- Pay on Delivery (Lagos)\n- Buy Now Pay Later',
+          '**Payment**\n\nAvailable payment methods are shown during checkout on https://ogabassey.com.',
       };
       return {
         content: [{ type: 'text', text: info[args.topic || 'general'] }],
+        structuredContent: { topic: args.topic || 'general', message: info[args.topic || 'general'] },
       };
     }
   );
-
-  // Tool: Get recommendations
-  server.registerTool(
-    'get_recommendations',
-    {
-      title: 'Get Recommendations',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description: 'Get product recommendations based on use case and budget.',
-      inputSchema: {
-        use_case: z
-          .string()
-          .min(1)
-          .max(50)
-          .describe('What the product is for (gaming, work, etc.)'),
-        budget: z
-          .number()
-          .min(0)
-          .max(1000000000)
-          .optional()
-          .describe('Max budget in NGN'),
-      },
-      _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
-        'openai/toolInvocation/invoking': 'Finding recommendations...',
-        'openai/toolInvocation/invoked': 'Recommendations ready',
-      },
-    },
-    async (args) => {
-      const merchantId = await getMerchantId();
-      if (!merchantId) {
-        return {
-          content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
-        };
-      }
-
-      const sanitizedUseCase = sanitizeString(args.use_case, 50).toLowerCase();
-      const keywords: Record<string, string[]> = {
-        gaming: ['gaming', 'pro', 'max'],
-        work: ['pro', 'business', 'macbook'],
-        photography: ['camera', 'pro', 'ultra'],
-        budget: ['lite', 'mini'],
-        student: ['ipad', 'laptop', 'air'],
-      };
-
-      const kws = keywords[sanitizedUseCase] || [sanitizedUseCase];
-
-      let query = supabase
-        .from('products')
-        .select(
-          'id, name, slug, price, compare_at_price, images, description, condition, brand, category'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .gt('stock_quantity', 0)
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      if (args.budget) {
-        query = query.lte('price', sanitizePrice(args.budget) ?? 1000000000);
-      }
-
-      const { data: products } = await query;
-
-      const filtered = (products || [])
-        .filter((p) =>
-          kws.some(
-            (kw) =>
-              p.name.toLowerCase().includes(kw) ||
-              p.description?.toLowerCase().includes(kw)
-          )
-        )
-        .slice(0, 4);
-
-      const final =
-        filtered.length > 0 ? filtered : (products || []).slice(0, 4);
-
-      const formatted = final.map((p) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: p.price,
-        image: ensureJpgImageUrl(p.images?.[0]),
-      }));
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Based on "${sanitizedUseCase}"${args.budget ? ` (budget: ${formatPrice(args.budget)})` : ''}, here are my recommendations:`,
-          },
-        ],
-        structuredContent: { products: formatted },
-        _meta: {
-          'openai/outputTemplate': 'ui://widget/store.html',
-          'openai/widgetPrefersBorder': true,
-        },
-      };
-    }
-  );
-  // [REMOVED] smart_recommend
-  // [REMOVED] estimate_trade_in
-  // [REMOVED] find_gift
-  // [REMOVED] calculate_installment
-  // [REMOVED] find_deals
-
 
   // Tool: Get product variants
   server.registerTool(
     'get_product_variants',
     {
+      outputSchema: mcpToolOutputSchemas.get_product_variants,
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get all available variants (colors, storage options, conditions) for a product. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/toolInvocation/invoking': 'Loading variants...',
@@ -2277,140 +1910,11 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { variants: [], condition_offers: [], status: 'unavailable', message: 'Store temporarily unavailable.' },
         };
       }
 
-      const sanitizedProductId = args.product_id
-        ? sanitizeString(args.product_id, 80)
-        : '';
-      const sanitizedName = args.product_name
-        ? sanitizeString(args.product_name, 100)
-        : '';
-      const lookupLabel = sanitizedProductId || sanitizedName;
-
-      if (!lookupLabel) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Please provide a valid product ID or product name.',
-            },
-          ],
-        };
-      }
-
-      // First find the product
-      let productQuery = supabase
-        .from('products')
-        .select('id, name, has_variants, has_condition_offers')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active');
-
-      productQuery = sanitizedProductId
-        ? productQuery.eq('id', sanitizedProductId)
-        : productQuery.ilike('name', `%${sanitizedName}%`);
-
-      const { data: product, error: productError } = await productQuery
-        .limit(1)
-        .single();
-
-      if (productError || !product) {
-        if (productError && productError.code !== 'PGRST116') {
-          console.error(
-            JSON.stringify({
-              type: 'error',
-              context: 'get_product_variants',
-              message: productError.message,
-            })
-          );
-        }
-        return {
-          content: [
-            { type: 'text', text: `Product "${lookupLabel}" not found.` },
-          ],
-        };
-      }
-
-      // Fetch variants
-      const { data: variants } = await supabase
-        .from('product_variants')
-        .select('attributes, price_override, stock_quantity, condition, sku')
-        .eq('product_id', product.id)
-        .eq('merchant_id', merchantId);
-
-      // Fetch condition offers
-      const { data: offers } = await supabase
-        .from('product_offers')
-        .select('condition, price, stock_quantity, grade, condition_notes')
-        .eq('product_id', product.id)
-        .eq('status', 'active');
-
-      if (
-        (!variants || variants.length === 0) &&
-        (!offers || offers.length === 0)
-      ) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `No variants available for "${product.name}".`,
-            },
-          ],
-        };
-      }
-
-      let text = `**Variants for ${product.name}:**\n\n`;
-
-      if (variants && variants.length > 0) {
-        // Group by attribute type
-        const colors = [
-          ...new Set(variants.map((v) => v.attributes?.color).filter(Boolean)),
-        ];
-        const storages = [
-          ...new Set(
-            variants.map((v) => v.attributes?.storage).filter(Boolean)
-          ),
-        ];
-        const sizes = [
-          ...new Set(variants.map((v) => v.attributes?.size).filter(Boolean)),
-        ];
-
-        if (colors.length > 0) text += `**Colors:** ${colors.join(', ')}\n`;
-        if (storages.length > 0)
-          text += `**Storage:** ${storages.join(', ')}\n`;
-        if (sizes.length > 0) text += `**Sizes:** ${sizes.join(', ')}\n`;
-
-        text += '\n**Available Combinations:**\n';
-        for (const v of variants.slice(0, 10)) {
-          const attrs = Object.entries(v.attributes || {})
-            .map(([k, val]) => `${k}: ${val}`)
-            .join(', ');
-          const price = v.price_override
-            ? formatPrice(v.price_override)
-            : 'Base price';
-          const stock = v.stock_quantity > 0 ? 'In Stock' : 'Out of Stock';
-          text += `• ${attrs} - ${price} (${stock})\n`;
-        }
-      }
-
-      if (offers && offers.length > 0) {
-        text += '\n**Condition Options:**\n';
-        for (const o of offers) {
-          const grade = o.grade ? ` (Grade ${o.grade})` : '';
-          const stock = o.stock_quantity > 0 ? 'In Stock' : 'Out of Stock';
-          text += `• ${o.condition}${grade}: ${formatPrice(o.price)} - ${stock}\n`;
-          if (o.condition_notes) text += `  Note: ${o.condition_notes}\n`;
-        }
-      }
-
-      return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-          product_name: product.name,
-          variants: variants || [],
-          condition_offers: offers || [],
-        },
-      };
+      return loadMcpProductVariants({ args, merchantId, supabase, sanitizeString, formatPrice, getSafeCatalogImageUrl });
     }
   );
 
@@ -2418,6 +1922,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'browse_categories',
     {
+      outputSchema: mcpToolOutputSchemas.browse_categories,
       title: 'Browse Categories',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of product categories available in the store.',
@@ -2432,23 +1937,21 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
-      // Get unique categories from products
-      const { data: products } = await supabase
-        .from('products')
-        .select('category')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .gt('stock_quantity', 0);
+      const categories = await loadMcpBrowseFacetValues({
+        supabase, merchantId, facet: 'category',
+      });
 
-      const categories = [
-        ...new Set((products || []).map((p) => p.category).filter(Boolean)),
-      ];
+      if (categories === null) {
+        const message = 'Category lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
+      }
 
       if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }] };
+        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
       }
 
       const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
@@ -2464,6 +1967,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_brands',
     {
+      outputSchema: mcpToolOutputSchemas.get_brands,
       title: 'Get Available Brands',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of brands available in the store.',
@@ -2484,29 +1988,22 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { brands: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
-      let query = supabase
-        .from('products')
-        .select('brand')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .gt('stock_quantity', 0);
+      const brands = await loadMcpBrowseFacetValues({
+        supabase, merchantId, facet: 'brand',
+        category: args.category ? sanitizeString(args.category, 50) : undefined,
+      });
 
-      if (args.category) {
-        const sanitizedCategory = sanitizeString(args.category, 50);
-        query = query.ilike('category', `%${sanitizedCategory}%`);
+      if (brands === null) {
+        const message = 'Brand lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { brands: [], status: 'unavailable' as const, message } };
       }
 
-      const { data: products } = await query;
-
-      const brands = [
-        ...new Set((products || []).map((p) => p.brand).filter(Boolean)),
-      ];
-
       if (brands.length === 0) {
-        return { content: [{ type: 'text', text: 'No brands found.' }] };
+        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [], status: 'empty' as const } };
       }
 
       const categoryText = args.category ? ` in ${args.category}` : '';
@@ -2527,225 +2024,14 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  // Tool: Get Shipping Quote / Calculate Delivery Fee
-  server.registerTool(
-    'get_shipping_quote',
-    {
-      title: 'Calculate Delivery Fee',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Calculate shipping/delivery cost based on location. Provides real-time quotes from multiple carriers (GIGL, Topship).',
-      inputSchema: {
-        state: z
-          .string()
-          .min(2)
-          .max(50)
-          .describe('Nigerian state for delivery (e.g., Lagos, Abuja, Rivers)'),
-        city: z
-          .string()
-          .min(2)
-          .max(100)
-          .optional()
-          .describe('City within the state'),
-        address: z
-          .string()
-          .max(200)
-          .optional()
-          .describe('Full delivery address'),
-        product_ids: z
-          .string()
-          .optional()
-          .describe('Comma-separated product IDs to calculate shipping for'),
-        estimated_weight: z
-          .number()
-          .optional()
-          .describe('Estimated total weight in kg (if products not specified)'),
-      },
-      _meta: {
-        'openai/toolInvocation/invoking': 'Calculating delivery fee...',
-        'openai/toolInvocation/invoked': 'Shipping quote ready',
-      },
-    },
-    async (args) => {
-      const merchantId = await getMerchantId();
-      if (!merchantId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '❌ Unable to calculate shipping. Please try again later.',
-            },
-          ],
-        };
-      }
-
-      const state = sanitizeString(args.state, 50);
-      const city = args.city ? sanitizeString(args.city, 100) : state;
-
-      // Nigerian states with shipping zones
-      const shippingZones: Record<
-        string,
-        {
-          zone: 'lagos' | 'southwest' | 'south' | 'north';
-          baseRate: number;
-          estimatedDays: string;
-        }
-      > = {
-        lagos: { zone: 'lagos', baseRate: 2500, estimatedDays: '1-2 days' },
-        ogun: { zone: 'southwest', baseRate: 3500, estimatedDays: '2-3 days' },
-        oyo: { zone: 'southwest', baseRate: 4000, estimatedDays: '2-3 days' },
-        osun: { zone: 'southwest', baseRate: 4000, estimatedDays: '2-3 days' },
-        ondo: { zone: 'southwest', baseRate: 4500, estimatedDays: '2-3 days' },
-        ekiti: { zone: 'southwest', baseRate: 4500, estimatedDays: '2-3 days' },
-        kwara: { zone: 'southwest', baseRate: 5000, estimatedDays: '3-4 days' },
-        abuja: { zone: 'north', baseRate: 5000, estimatedDays: '3-4 days' },
-        fct: { zone: 'north', baseRate: 5000, estimatedDays: '3-4 days' },
-        rivers: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        delta: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        edo: { zone: 'south', baseRate: 5000, estimatedDays: '3-4 days' },
-        'cross river': {
-          zone: 'south',
-          baseRate: 6000,
-          estimatedDays: '3-5 days',
-        },
-        'akwa ibom': {
-          zone: 'south',
-          baseRate: 6000,
-          estimatedDays: '3-5 days',
-        },
-        enugu: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        anambra: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        imo: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        abia: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        kano: { zone: 'north', baseRate: 6500, estimatedDays: '4-5 days' },
-        kaduna: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        plateau: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        kogi: { zone: 'north', baseRate: 5500, estimatedDays: '3-4 days' },
-        nassarawa: { zone: 'north', baseRate: 5500, estimatedDays: '3-4 days' },
-        niger: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        benue: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        taraba: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        adamawa: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        bauchi: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        gombe: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        borno: { zone: 'north', baseRate: 8000, estimatedDays: '5-7 days' },
-        yobe: { zone: 'north', baseRate: 8000, estimatedDays: '5-7 days' },
-        sokoto: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        kebbi: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        zamfara: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        katsina: { zone: 'north', baseRate: 7000, estimatedDays: '4-5 days' },
-        jigawa: { zone: 'north', baseRate: 7000, estimatedDays: '4-5 days' },
-        bayelsa: { zone: 'south', baseRate: 6500, estimatedDays: '3-5 days' },
-        ebonyi: { zone: 'south', baseRate: 6000, estimatedDays: '3-5 days' },
-      };
-
-      // Find matching state
-      const stateKey = state.toLowerCase();
-      const zoneInfo = shippingZones[stateKey] || {
-        zone: 'north',
-        baseRate: 7000,
-        estimatedDays: '4-6 days',
-      };
-
-      // Calculate weight-based adjustments
-      let weight = args.estimated_weight || 1;
-      let products: Array<{ name: string; weight?: number }> = [];
-
-      // If product IDs provided, fetch products and calculate weight
-      if (args.product_ids) {
-        const ids = args.product_ids
-          .split(',')
-          .map((id) => id.trim())
-          .filter(Boolean);
-        if (ids.length > 0) {
-          const { data: fetchedProducts } = await supabase
-            .from('products')
-            .select('id, name, weight')
-            .in('id', ids)
-            .eq('merchant_id', merchantId);
-
-          if (fetchedProducts && fetchedProducts.length > 0) {
-            products = fetchedProducts;
-            weight = fetchedProducts.reduce(
-              (sum, p) => sum + (p.weight || 0.5),
-              0
-            );
-          }
-        }
-      }
-
-      // Weight-based pricing adjustments
-      let weightMultiplier = 1;
-      if (weight > 5) weightMultiplier = 1.5;
-      else if (weight > 2) weightMultiplier = 1.25;
-      else if (weight > 1) weightMultiplier = 1.1;
-
-      const estimatedFee = Math.round(zoneInfo.baseRate * weightMultiplier);
-      const expressRate = Math.round(estimatedFee * 1.5);
-
-      // Shipping options
-      const options = [
-        {
-          name: 'Standard Delivery',
-          carrier: 'GIGL/Topship',
-          price: estimatedFee,
-          days: zoneInfo.estimatedDays,
-        },
-        {
-          name: 'Express Delivery',
-          carrier: 'Express Courier',
-          price: expressRate,
-          days: zoneInfo.zone === 'lagos' ? 'Same day' : '1-2 days faster',
-        },
-      ];
-
-      // Free shipping threshold
-      const freeShippingThreshold = 150000;
-      const freeShippingNote = `💡 **Free Shipping** on orders over ${formatPrice(freeShippingThreshold)}!`;
-
-      let text = `**🚚 Shipping to ${city}, ${state}**\n\n`;
-
-      if (products.length > 0) {
-        text += `**Items:**\n`;
-        products.forEach((p) => {
-          text += `• ${p.name}\n`;
-        });
-        text += `**Total Weight:** ${weight.toFixed(1)}kg\n\n`;
-      }
-
-      text += `**Delivery Options:**\n\n`;
-
-      options.forEach((opt) => {
-        text += `📦 **${opt.name}**\n`;
-        text += `   • ${formatPrice(opt.price)}\n`;
-        text += `   • ${opt.days}\n`;
-        text += `   • via ${opt.carrier}\n\n`;
-      });
-
-      text += `---\n${freeShippingNote}\n\n`;
-
-      if (zoneInfo.zone === 'lagos') {
-        text += `🏪 **Pickup Available!** Save on shipping by picking up from our Lagos location.`;
-      }
-
-      return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-          state,
-          city,
-          zone: zoneInfo.zone,
-          shipping_options: options,
-          estimated_weight: weight,
-          free_shipping_threshold: freeShippingThreshold,
-        },
-      };
+  registerDeliveryFeeInfoTool(server, sanitizeString, async (input) => {
+    const merchantId = await getMerchantId();
+    if (!merchantId || !isGiglRuntimeConfigured()) {
+      return { status: 'unavailable', message: 'Live GIG quotes are unavailable. Confirm delivery at checkout.', quotes: [] };
     }
-  );
-  // [REMOVED] save_delivery_address
-  // [REMOVED] get_related_products
-  // [REMOVED] suggest_cart_addons
-  // [REMOVED] set_price_alert
-  // [REMOVED] manage_wishlist
+    return loadDeliveryGiglQuotes(input, { supabase, merchantId, getQuotes: (request) => gigl.getQuotes(request) });
+  });
+
   // [REMOVED] ask_santa
 
 
@@ -3118,6 +2404,17 @@ const httpServer = createServer(
 
     const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
 
+    // Image loads have a separate bounded budget from MCP tool calls.
+    if (req.method === 'GET' && url.pathname.startsWith('/images/')) {
+      const imageLimit = checkProductImageRateLimit(ip);
+      if (!imageLimit.allowed) {
+        res.writeHead(429, { 'Retry-After': imageLimit.retryAfterSeconds }).end('Too Many Requests');
+        return;
+      }
+      await serveProductImage(url.pathname, res, undefined, url.search);
+      return;
+    }
+
     // Rate limiting
     const rateLimit = checkRateLimit(ip);
     res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX_REQUESTS);
@@ -3179,49 +2476,57 @@ const httpServer = createServer(
       return;
     }
 
-    // Health check endpoint
+    // ChatGPT uses the widget origin as a fallback for "Open in app".
+    // Keep its root shopper-facing; readiness lives at /health.
     if (req.method === 'GET' && url.pathname === '/') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          name: 'Ogabassey ChatGPT MCP Server',
-          version: '1.0.0',
-          status: 'ok',
-          timestamp: new Date().toISOString(),
-        })
-      );
+      res.writeHead(302, { Location: 'https://ogabassey.com' });
+      res.end();
       logAudit({
         timestamp: new Date().toISOString(),
         requestId,
         ip,
         method: 'GET',
         path: '/',
-        statusCode: 200,
+        statusCode: 302,
         durationMs: Date.now() - startTime,
       });
       return;
     }
 
-    // Readiness probe
+    // Readiness probe. Guest-cart storage rides along as a signal only: a
+    // degraded cart store must not flip the probe red, or catalog traffic
+    // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
+      const carts = describeGuestCartStoreHealth(guestCartStore);
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ status: 'healthy', database: 'connected' }));
+          res.end(
+            JSON.stringify({
+              status: 'healthy',
+              database: 'connected',
+              ...carts,
+            })
+          );
         } else {
           res.writeHead(503, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
               status: 'unhealthy',
               database: 'merchant not found',
+              ...carts,
             })
           );
         }
       } catch {
         res.writeHead(503, { 'content-type': 'application/json' });
         res.end(
-          JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
+          JSON.stringify({
+            status: 'unhealthy',
+            database: 'connection failed',
+            ...carts,
+          })
         );
       }
       return;
@@ -3250,7 +2555,7 @@ const httpServer = createServer(
       res.setHeader('Content-Type', 'text/html+skybridge; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.writeHead(200);
-      res.end(widgetHtml);
+      res.end(premiumWidgetHtml);
       logAudit({
         timestamp: new Date().toISOString(),
         requestId,
@@ -3274,7 +2579,7 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Allow-Headers', MCP_ALLOWED_HEADERS);
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const server = createOgabasseyServer();
+      const server = createOgabasseyServer({ clientIp: ip });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -3330,28 +2635,17 @@ const httpServer = createServer(
   }
 );
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+// Graceful shutdown (see server-shutdown.ts): drain in-flight requests,
+// then exit. Guest carts need no lock release: the Postgres version gate
+// serializes writers, so a replacement cannot corrupt a draining update.
+const gracefulShutdown = () =>
+  createGracefulShutdown({
+    closeServer: (done) => httpServer.close(done),
+    exit: (code) => process.exit(code),
+  })();
 
-process.on('SIGINT', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Unhandled rejection handler (fail closed - log and continue)
 process.on('unhandledRejection', (reason) => {
@@ -3364,7 +2658,7 @@ process.on('unhandledRejection', (reason) => {
   );
 });
 
-httpServer.listen(PORT, () => {
+function onListening() {
   const address = httpServer.address();
   const actualPort =
     typeof address === 'object' && address !== null ? address.port : PORT;
@@ -3394,4 +2688,12 @@ httpServer.listen(PORT, () => {
 ║    • Graceful shutdown                                         ║
 ╚════════════════════════════════════════════════════════════════╝
 `);
+}
+
+// The server listens only after the capability probe passes (see
+// guest-cart-startup-gate): a hung boot fails closed rather than
+// idling past the deploy's /health curl loop.
+gateStartupOnGuestCartCapability({
+  client: guestCartClient,
+  onReady: () => httpServer.listen(PORT, onListening),
 });

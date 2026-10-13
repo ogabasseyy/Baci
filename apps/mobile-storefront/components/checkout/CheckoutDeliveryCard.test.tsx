@@ -63,6 +63,7 @@ function CheckoutDeliveryCardHarness({
   isLoadingCities = false,
   isLoadingLocations = false,
   isLoadingSavedAddresses = false,
+  showLocationPickers = true,
   onAddressTextChanged = jest.fn(
     (text: string, updateAddress: (value: string) => void) =>
       updateAddress(text)
@@ -84,6 +85,7 @@ function CheckoutDeliveryCardHarness({
   isLoadingCities?: boolean;
   isLoadingLocations?: boolean;
   isLoadingSavedAddresses?: boolean;
+  showLocationPickers?: boolean;
   onAddressTextChanged?: (
     text: string,
     updateAddress: (value: string) => void
@@ -115,6 +117,7 @@ function CheckoutDeliveryCardHarness({
       isLoadingCities={isLoadingCities}
       isLoadingLocations={isLoadingLocations}
       isLoadingSavedAddresses={isLoadingSavedAddresses}
+      showLocationPickers={showLocationPickers}
       onAddressSelected={jest.fn()}
       onAddressTextChanged={onAddressTextChanged}
       onOpenCityPicker={onOpenCityPicker}
@@ -248,5 +251,12 @@ describe('CheckoutDeliveryCard', () => {
 
     expect(screen.getByText('City is required')).toBeTruthy();
     expect(screen.getByText('State is required')).toBeTruthy();
+  });
+
+  it('hides manual city and state selectors for a complete Google location', () => {
+    render(<CheckoutDeliveryCardHarness showLocationPickers={false} />);
+
+    expect(screen.queryByRole('button', { name: 'Select city' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select state' })).toBeNull();
   });
 });

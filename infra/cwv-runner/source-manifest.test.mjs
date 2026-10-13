@@ -14,6 +14,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import {
+  sourceManifestBytes,
+  TASK9_SOURCE_MANIFEST_MAX_BYTES,
+} from './source-manifest.mjs';
+
 const here = fileURLToPath(new URL('.', import.meta.url));
 const run = (cwd, args) =>
   execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -35,11 +40,18 @@ function repository() {
   writeFileSync(join(root, 'infra/cwv-runner/policy.json'), policy);
   writeFileSync(join(root, 'infra/cwv-runner/a.mjs'), 'export const a = 1;\n');
   writeFileSync(join(root, 'README.md'), 'base\n');
+  symlinkSync('README.md', join(root, 'unrelated-link'));
   writeFileSync(
     join(root, 'infra/cwv-runner/source-manifest.mjs'),
     readFileSync(join(here, 'source-manifest.mjs'))
   );
-  for (const name of ['canonical-json.mjs', 'policy.schema.mjs'])
+  for (const name of [
+    'canonical-json.mjs',
+    'policy.schema.mjs',
+    'source-manifest-git.mjs',
+    'source-manifest-objects.mjs',
+    'source-manifest-tree.mjs',
+  ])
     writeFileSync(
       join(root, 'infra/cwv-runner', name),
       readFileSync(join(here, name))
@@ -154,6 +166,19 @@ test('freeze-preflight binds only the reviewed Git tree and rejects a mutable po
   );
 });
 
+test('uses a handoff limit above the legacy one-megabyte manifest cap', () => {
+  assert.doesNotThrow(() =>
+    sourceManifestBytes({ value: 'x'.repeat(1_048_577) })
+  );
+  assert.throws(
+    () =>
+      sourceManifestBytes({
+        value: 'x'.repeat(TASK9_SOURCE_MANIFEST_MAX_BYTES),
+      }),
+    /source manifest exceeds size limit/
+  );
+});
+
 test('freeze and verify bind a sorted full source archive while retaining outside diff rows', (t) => {
   const context = repository();
   t.after(() => rmSync(context.root, { recursive: true, force: true }));
@@ -236,23 +261,4 @@ test('archive verifier rejects checksum, padding, and hidden trailing bytes', as
     Buffer.concat([archive, Buffer.from([1])]),
   ])
     assert.throws(() => verifySourceArchive(broken, entries));
-});
-
-test('source archive accepts the current 529-file sealed projection', async (t) => {
-  const context = repository();
-  t.after(() => rmSync(context.root, { recursive: true, force: true }));
-  const { createSourceArchive, verifySourceArchive } = await moduleFor(
-    context.root
-  );
-  const entries = Array.from({ length: 529 }, (_, index) => {
-    const bytes = Buffer.from(`member-${index}\n`);
-    return {
-      path: `infra/cwv-runner/member-${String(index).padStart(3, '0')}.mjs`,
-      mode: '100644',
-      blobSha256: createHash('sha256').update(bytes).digest('hex'),
-      bytes,
-    };
-  });
-  const archive = createSourceArchive(entries);
-  verifySourceArchive(archive, entries);
 });

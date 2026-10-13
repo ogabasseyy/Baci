@@ -1,4 +1,4 @@
-import type { Product, ProductSpecSection } from '../types';
+import type { Category, Product, ProductSpecSection } from '../types';
 
 export interface SearchResultProduct {
   id: string | number;
@@ -10,6 +10,8 @@ export interface SearchResultProduct {
   description?: string;
   rating?: number;
   category?: string;
+  category_slug?: string | null;
+  categories?: Category;
   condition?: string;
   brand?: string;
   product_key_specs?: Product['product_key_specs'];

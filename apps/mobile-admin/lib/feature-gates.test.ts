@@ -41,6 +41,38 @@ describe('baciFeatureGates', () => {
     ).toBe(false);
   });
 
+  it('keeps custom email domains limited to entitled paid plans', () => {
+    expect(
+      baciFeatureGates.hasFeature(
+        { plan_tier: 'pro', premium_features: [] },
+        'custom_email_domain'
+      )
+    ).toBe(true);
+    expect(
+      baciFeatureGates.hasFeature(
+        { plan_tier: 'starter', premium_features: [] },
+        'custom_email_domain'
+      )
+    ).toBe(false);
+    expect(
+      baciFeatureGates.hasFeature(
+        { plan_tier: 'free', premium_features: ['custom_email_domain'] },
+        'custom_email_domain'
+      )
+    ).toBe(true);
+    expect(
+      baciFeatureGates.hasFeature(
+        {
+          plan_expires_at: '2026-01-01T00:00:00.000Z',
+          plan_tier: 'pro',
+          premium_features: [],
+        },
+        'custom_email_domain',
+        new Date('2026-06-27T00:00:00.000Z')
+      )
+    ).toBe(false);
+  });
+
   it('blocks expired paid plans unless an explicit feature grant remains', () => {
     expect(
       baciFeatureGates.hasFeature(

@@ -50,7 +50,10 @@ describe('analytics chart components', () => {
   it('sets explicit minimum dimensions on responsive charts', () => {
     render(
       <>
-        <RevenueChart data={trendData} />
+        <RevenueChart
+          data={trendData}
+          valueFormatter={(value) => `NGN ${value.toLocaleString()}`}
+        />
         <OrdersChart data={trendData} />
         <SalesByChannelChart data={channelData} />
       </>

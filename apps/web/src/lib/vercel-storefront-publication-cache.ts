@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { dangerouslyDeleteByTag } from '@vercel/functions';
+import { dangerouslyDeleteByTag, invalidateByTag } from '@vercel/functions';
 
 // Vercel documents 16 tags per bulk REST purge. The runtime API shares the
 // purge control plane but does not publish a separate bulk limit, so use the
@@ -10,13 +10,19 @@ const MAX_TAGS_PER_DELETE = 16;
 type VercelStorefrontPublicationCacheResult =
   | {
       ok: true;
-      reason: 'deleted' | 'not_required' | 'not_running_on_vercel';
+      reason:
+        | 'deleted'
+        | 'invalidated'
+        | 'not_required'
+        | 'not_running_on_vercel';
     }
   | { ok: false; reason: 'request_failed' };
 
 interface VercelStorefrontPublicationCacheOptions {
   deleteByTag?: typeof dangerouslyDeleteByTag;
+  invalidateByTag?: typeof invalidateByTag;
   isVercel?: boolean;
+  mode?: 'delete' | 'invalidate';
 }
 
 /**
@@ -41,20 +47,26 @@ export async function purgeVercelStorefrontPublicationCache(
   }
 
   try {
+    const mode = options.mode ?? 'delete';
     const deleteByTag = options.deleteByTag ?? dangerouslyDeleteByTag;
+    const invalidate = options.invalidateByTag ?? invalidateByTag;
     for (
       let index = 0;
       index < uniqueTags.length;
       index += MAX_TAGS_PER_DELETE
     ) {
-      await deleteByTag(uniqueTags.slice(index, index + MAX_TAGS_PER_DELETE), {
-        revalidationDeadlineSeconds: 0,
-      });
+      const batch = uniqueTags.slice(index, index + MAX_TAGS_PER_DELETE);
+      if (mode === 'delete') {
+        await deleteByTag(batch, { revalidationDeadlineSeconds: 0 });
+      } else {
+        await invalidate(batch);
+      }
     }
-    return { ok: true, reason: 'deleted' };
+    return { ok: true, reason: mode === 'delete' ? 'deleted' : 'invalidated' };
   } catch (error) {
-    console.error('Vercel storefront publication cache deletion failed', {
+    console.error('Vercel storefront publication cache operation failed', {
       error,
+      mode: options.mode ?? 'delete',
       tags: uniqueTags,
     });
     return { ok: false, reason: 'request_failed' };

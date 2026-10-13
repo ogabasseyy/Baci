@@ -14,10 +14,7 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
-import {
-  fetchAdminProductSearchRows,
-  fetchAdminProductSuggestionCandidates,
-} from './product-search';
+import { fetchAdminProductSearchRows } from './product-search';
 
 function createQueryChain(result: {
   data?: unknown;
@@ -128,11 +125,11 @@ describe('admin product search helpers', () => {
         stock_filter: 'admin_in_stock',
       })
     );
-    expect(query.neq).toHaveBeenCalledWith('status', 'archived');
-    expect(query.eq).toHaveBeenCalledWith('manage_stock', true);
+    expect(query.or).toHaveBeenCalledTimes(1);
     expect(query.or).toHaveBeenCalledWith(
-      'stock_quantity.gt.0,and(stock_quantity.is.null,stock.gt.0),and(stock_quantity.lte.0,stock.gt.0)'
+      'and(status.neq.archived,stock_quantity.gt.0),and(status.neq.archived,stock_quantity.is.null,stock.gt.0),and(status.neq.archived,stock_quantity.lte.0,stock.gt.0),and(status.is.null,stock_quantity.gt.0),and(status.is.null,stock_quantity.is.null,stock.gt.0),and(status.is.null,stock_quantity.lte.0,stock.gt.0)'
     );
+    expect(query.eq).toHaveBeenCalledWith('manage_stock', true);
     expect(result.rows).toEqual([
       {
         id: 'prod-legacy',
@@ -170,130 +167,101 @@ describe('admin product search helpers', () => {
         stock_filter: 'admin_out_of_stock',
       })
     );
-    expect(query.neq).toHaveBeenCalledWith('status', 'archived');
-    expect(query.eq).toHaveBeenCalledWith('manage_stock', true);
+    expect(query.or).toHaveBeenCalledTimes(1);
     expect(query.or).toHaveBeenCalledWith(
-      'and(stock_quantity.is.null,stock.is.null),and(stock_quantity.is.null,stock.lte.0),and(stock_quantity.lte.0,stock.is.null),and(stock_quantity.lte.0,stock.lte.0)'
+      'and(status.neq.archived,stock_quantity.is.null,stock.is.null),and(status.neq.archived,stock_quantity.is.null,stock.lte.0),and(status.neq.archived,stock_quantity.lte.0,stock.is.null),and(status.neq.archived,stock_quantity.lte.0,stock.lte.0),and(status.is.null,stock_quantity.is.null,stock.is.null),and(status.is.null,stock_quantity.is.null,stock.lte.0),and(status.is.null,stock_quantity.lte.0,stock.is.null),and(status.is.null,stock_quantity.lte.0,stock.lte.0)'
     );
+    expect(query.eq).toHaveBeenCalledWith('manage_stock', true);
   });
 
-  it('fetches suggestion candidates in rpc rank order and excludes the current product', async () => {
+  it('excludes archived products from default product search results', async () => {
     const query = createQueryChain({
-      data: [
-        { id: 'prod-3', name: 'iPhone 14 Pro Max' },
-        { id: 'prod-2', name: 'iPhone 14 Pro' },
-      ],
+      data: [{ id: 'prod-archived', name: 'Samsung Galaxy A07 4GB 128GB' }],
+    });
+    query.or.mockImplementation(() => {
+      query.data = [];
+      return query;
     });
 
     mockRpc.mockResolvedValue({
-      data: [
-        { product_id: 'prod-1', relevance: 9.8, total_count: 3 },
-        { product_id: 'prod-3', relevance: 9.1, total_count: 3 },
-        { product_id: 'prod-2', relevance: 8.7, total_count: 3 },
-      ],
+      data: [{ product_id: 'prod-archived', relevance: 9.5, total_count: 1 }],
       error: null,
     });
     mockFrom.mockReturnValue(query);
 
-    const result = await fetchAdminProductSuggestionCandidates({
-      excludeProductId: 'prod-1',
-      limit: 2,
+    const result = await fetchAdminProductSearchRows({
+      cursor: 0,
+      filters: { search: 'a07' },
       merchantId: 'merchant-1',
-      productName: 'iphone 14 pro max',
+      pageSize: 20,
       selectColumns: 'id, name',
     });
 
     expect(mockRpc).toHaveBeenCalledWith(
       'search_products_v2',
-      expect.objectContaining({
-        parent_only: true,
-        result_limit: 12,
-        search_query: 'iphone 14 pro max',
-      })
+      expect.objectContaining({ status_filter: 'not_archived' })
     );
-    expect(result).toEqual([
-      { id: 'prod-3', name: 'iPhone 14 Pro Max' },
-      { id: 'prod-2', name: 'iPhone 14 Pro' },
+    expect(query.or).toHaveBeenCalledWith('status.neq.archived,status.is.null');
+    expect(result.rows).toEqual([]);
+  });
+
+  it('keeps archived products available to historical reconciliation searches', async () => {
+    const query = createQueryChain({
+      data: [{ id: 'prod-archived', name: 'Samsung Galaxy A07 4GB 128GB' }],
+    });
+
+    mockRpc.mockResolvedValue({
+      data: [{ product_id: 'prod-archived', relevance: 9.5, total_count: 1 }],
+      error: null,
+    });
+    mockFrom.mockReturnValue(query);
+
+    const result = await fetchAdminProductSearchRows({
+      cursor: 0,
+      filters: { includeArchived: true, search: 'a07' },
+      merchantId: 'merchant-1',
+      pageSize: 20,
+      selectColumns: 'id, name',
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'search_products_v2',
+      expect.objectContaining({ status_filter: null })
+    );
+    expect(query.or).not.toHaveBeenCalledWith(
+      'status.neq.archived,status.is.null'
+    );
+    expect(result.rows).toEqual([
+      { id: 'prod-archived', name: 'Samsung Galaxy A07 4GB 128GB' },
     ]);
   });
 
-  it('throws when ranked admin product search rpc fails', async () => {
-    mockRpc.mockResolvedValue({
-      data: null,
-      error: { message: 'rpc failed' },
-    });
-
-    await expect(
-      fetchAdminProductSearchRows({
-        cursor: 0,
-        filters: { search: 'iphone 14' },
-        merchantId: 'merchant-1',
-        pageSize: 20,
-        selectColumns: 'id, name',
-      })
-    ).rejects.toThrow('rpc failed');
-  });
-
-  it('throws when ranked admin product row lookup fails', async () => {
+  it('keeps legacy null-status products in default search results', async () => {
     const query = createQueryChain({
-      data: null,
-      error: { message: 'row fetch failed' },
+      data: [{ id: 'prod-legacy', name: 'Legacy Phone', status: null }],
     });
 
     mockRpc.mockResolvedValue({
-      data: [{ product_id: 'prod-1', relevance: 9.5, total_count: 1 }],
+      data: [{ product_id: 'prod-legacy', relevance: 9.5, total_count: 1 }],
       error: null,
     });
     mockFrom.mockReturnValue(query);
 
-    await expect(
-      fetchAdminProductSearchRows({
-        cursor: 0,
-        filters: { search: 'iphone 14' },
-        merchantId: 'merchant-1',
-        pageSize: 20,
-        selectColumns: 'id, name',
-      })
-    ).rejects.toThrow('row fetch failed');
-  });
-
-  it('throws when suggestion rpc fails', async () => {
-    mockRpc.mockResolvedValue({
-      data: null,
-      error: { message: 'suggestion rpc failed' },
+    const result = await fetchAdminProductSearchRows({
+      cursor: 0,
+      filters: { search: 'legacy phone' },
+      merchantId: 'merchant-1',
+      pageSize: 20,
+      selectColumns: 'id, name',
     });
 
-    await expect(
-      fetchAdminProductSuggestionCandidates({
-        excludeProductId: 'prod-1',
-        limit: 2,
-        merchantId: 'merchant-1',
-        productName: 'iphone 14 pro max',
-        selectColumns: 'id, name',
-      })
-    ).rejects.toThrow('suggestion rpc failed');
-  });
-
-  it('throws when suggestion row lookup fails', async () => {
-    const query = createQueryChain({
-      data: null,
-      error: { message: 'suggestion rows failed' },
-    });
-
-    mockRpc.mockResolvedValue({
-      data: [{ product_id: 'prod-3', relevance: 9.1, total_count: 1 }],
-      error: null,
-    });
-    mockFrom.mockReturnValue(query);
-
-    await expect(
-      fetchAdminProductSuggestionCandidates({
-        excludeProductId: 'prod-1',
-        limit: 2,
-        merchantId: 'merchant-1',
-        productName: 'iphone 14 pro max',
-        selectColumns: 'id, name',
-      })
-    ).rejects.toThrow('suggestion rows failed');
+    expect(mockRpc).toHaveBeenCalledWith(
+      'search_products_v2',
+      expect.objectContaining({ status_filter: 'not_archived' })
+    );
+    expect(query.or).toHaveBeenCalledWith('status.neq.archived,status.is.null');
+    expect(result.rows).toEqual([
+      { id: 'prod-legacy', name: 'Legacy Phone', status: null },
+    ]);
   });
 });

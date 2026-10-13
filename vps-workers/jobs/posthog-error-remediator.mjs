@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
 import { fetchPostHogRemediationCandidates } from '../lib/posthog-error-events.mjs';
+import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.mjs';
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
 
 export function runPostHogErrorRemediator({
@@ -8,6 +9,7 @@ export function runPostHogErrorRemediator({
   env = process.env,
   fetchFn = fetch,
   logger = console,
+  remediationLock,
 } = {}) {
   const outputDir =
     env.BACI_POSTHOG_REMEDIATION_OUTPUT_DIR || 'logs/posthog-error-remediator';
@@ -29,14 +31,14 @@ export function runPostHogErrorRemediator({
     env: remediatorEnvironment,
     fetchFn,
     logger,
+    remediationLock,
     workerName: 'posthog-error-remediator',
   });
 }
 
-async function main() {
-  config({ path: new URL('../.env', import.meta.url) });
+async function main(remediationLock) {
   try {
-    const result = await runPostHogErrorRemediator();
+    const result = await runPostHogErrorRemediator({ remediationLock });
     console.log(
       JSON.stringify(
         {
@@ -59,5 +61,10 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  await main();
+  config({ path: new URL('../.env', import.meta.url) });
+  const exitCode = await runRemediationJobWithGlobalLock({
+    main,
+    scriptPath: process.argv[1],
+  });
+  if (exitCode !== null) process.exitCode = exitCode;
 }

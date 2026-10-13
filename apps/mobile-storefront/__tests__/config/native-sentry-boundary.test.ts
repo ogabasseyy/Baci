@@ -29,11 +29,22 @@ describe('native Sentry initialization boundary', () => {
   });
 
   it('requires Sentry release credentials for native ANR symbolication', () => {
+    // Split-config indirection: release-environment detection moved from
+    // app.config.ts into the production builder it delegates to. Follow
+    // the delegation so the pin still covers the production config path.
     const appConfigSource = readFileSync(
       path.resolve(__dirname, '../../app.config.ts'),
       'utf8'
     );
-    expect(appConfigSource).toContain("process.env.CI === '1'");
+    const builderMatch = appConfigSource.match(
+      /require\('(\.\/config\/[^']+)'\)/
+    );
+    const productionSource = builderMatch
+      ? readFileSync(path.resolve(__dirname, '../..', builderMatch[1]), 'utf8')
+      : '';
+    expect(`${appConfigSource}\n${productionSource}`).toContain(
+      "process.env.CI === '1'"
+    );
 
     for (const workflowPath of [
       '../../../../.github/workflows/android-storefront-release.yml',
@@ -64,12 +75,22 @@ describe('native Sentry initialization boundary', () => {
       ),
       'utf8'
     );
+    const releaseScriptSource = readFileSync(
+      path.resolve(
+        __dirname,
+        '../../../../.github/scripts/android-storefront-release.sh'
+      ),
+      'utf8'
+    );
     const cleanupStep = workflowSource.slice(
       workflowSource.indexOf('- name: Clean up release credentials')
     );
+    const cleanupSource = `${cleanupStep}\n${releaseScriptSource.slice(
+      releaseScriptSource.indexOf('  cleanup)')
+    )}`;
 
-    expect(cleanupStep).toContain('if: always()');
-    expect(cleanupStep).toContain(
+    expect(cleanupSource).toContain('if: always()');
+    expect(cleanupSource).toContain(
       'apps/mobile-storefront/android/sentry.properties'
     );
   });

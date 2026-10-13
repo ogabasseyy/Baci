@@ -20,6 +20,7 @@ describe('Sentry mobile error remediator', () => {
       SENTRY_ORG: 'ogabassey',
       SENTRY_PROJECT: 'storefront',
     };
+    const observedAt = new Date(Date.now() - 60_000).toISOString();
     const fetchFn = async () =>
       new Response(
         JSON.stringify([
@@ -28,7 +29,7 @@ describe('Sentry mobile error remediator', () => {
             count: '2',
             title: 'Application Not Responding',
             culprit: 'MainActivity',
-            lastSeen: '2026-08-04T15:46:50Z',
+            lastSeen: observedAt,
           },
         ])
       );

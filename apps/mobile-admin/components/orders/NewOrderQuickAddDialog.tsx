@@ -19,6 +19,7 @@ export function NewOrderQuickAddDialog({
     handleContinueAsCustomItem,
     handleUseQuickAddProductMatch,
     isLoadingQuickAddProductMatches,
+    merchant,
     quickAddProductMatches,
     setCustomItem,
     setShowCustomItemModal,
@@ -26,6 +27,8 @@ export function NewOrderQuickAddDialog({
   } = controller;
 
   const priceInputRef = useRef<TextInput>(null);
+  const merchantCurrency =
+    merchant?.payout_currency?.trim().toUpperCase() || 'NGN';
 
   return (
     <AppDialogModal
@@ -53,36 +56,56 @@ export function NewOrderQuickAddDialog({
             setCustomItem((previous) => ({ ...previous, name: text }))
           }
           onSubmitEditing={() => priceInputRef.current?.focus()}
+          multiline
           placeholder="Item Name (e.g. Red Cake, Delivery)"
           placeholderTextColor={colors.textMuted}
           returnKeyType="next"
+          scrollEnabled={false}
           submitBehavior="submit"
           style={[
             styles.dialogInput,
+            styles.quickAddNameInput,
             { backgroundColor: colors.inputBg, color: colors.text },
           ]}
+          textAlignVertical="top"
           value={customItem.name}
         />
-        <TextInput
-          ref={priceInputRef}
-          keyboardType="numeric"
-          onChangeText={(text) => {
-            setCustomItem((previous) => ({
-              ...previous,
-              price: parseDecimalInput(text),
-            }));
-          }}
-          onSubmitEditing={() => Keyboard.dismiss()}
-          placeholder="Amount (0.00)"
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="done"
-          submitBehavior="blurAndSubmit"
+        <View
           style={[
-            styles.dialogInput,
-            { backgroundColor: colors.inputBg, color: colors.text },
+            styles.quickAddAmountRow,
+            { backgroundColor: colors.inputBg },
           ]}
-          value={formatPriceInput(customItem.price)}
-        />
+        >
+          <Text
+            accessibilityLabel={`Store currency ${merchantCurrency}`}
+            style={[
+              styles.quickAddAmountCurrency,
+              {
+                borderRightColor: colors.border,
+                color: colors.textSecondary,
+              },
+            ]}
+          >
+            {merchantCurrency}
+          </Text>
+          <TextInput
+            ref={priceInputRef}
+            keyboardType="numeric"
+            onChangeText={(text) => {
+              setCustomItem((previous) => ({
+                ...previous,
+                price: parseDecimalInput(text),
+              }));
+            }}
+            onSubmitEditing={() => Keyboard.dismiss()}
+            placeholder="Amount (0.00)"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="done"
+            submitBehavior="blurAndSubmit"
+            style={[styles.quickAddAmountInput, { color: colors.text }]}
+            value={formatPriceInput(customItem.price)}
+          />
+        </View>
         {quickAddProductMatches.length > 0 ? (
           <View style={styles.quickAddMatches}>
             <Text

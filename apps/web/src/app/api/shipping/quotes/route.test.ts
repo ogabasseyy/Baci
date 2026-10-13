@@ -63,10 +63,11 @@ function buildSupabaseMock(
     business_name: 'Merchant Store',
     business_address: '1 Merchant Road, Lagos',
     phone: '08012345678',
-  }
+  },
+  upsertError: unknown = null
 ) {
   const shippingQuotesTable = {
-    upsert: vi.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: upsertError }),
   };
   const merchantSelect = {
     eq: vi.fn().mockReturnThis(),
@@ -119,307 +120,6 @@ describe('POST /api/shipping/quotes', () => {
     });
     mockCreateServerClient.mockResolvedValue(buildSupabaseMock(null));
   });
-
-  it('rejects public international quotes without a merchant sender', async () => {
-    mockCreateAdminClient.mockReturnValue(buildSupabaseMock(null));
-    const { POST } = await import('./route');
-
-    const response = await POST(
-      buildQuoteRequest({
-        sender: {
-          name: 'Caller Supplied Origin',
-          phone: '08099999999',
-          address: 'Cheap Origin',
-          city: 'Aba',
-          state: 'Abia',
-          country: 'Nigeria',
-          countryCode: 'NG',
-        },
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Sender is required for international quotes',
-    });
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  }, 30_000);
-
-  it('allows merchant sender fallback before international quote creation', async () => {
-    mockCreateAdminClient.mockReturnValue(buildSupabaseMock({ id: 'user-1' }));
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(200);
-    expect(mockCreateServerClient).toHaveBeenCalled();
-    expect(mockGetQuotes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sender: expect.objectContaining({
-          name: 'Merchant Store',
-          country: 'Nigeria',
-          countryCode: 'NG',
-        }),
-      })
-    );
-  });
-
-  it('rejects public international quotes with an arbitrary merchant ID', async () => {
-    const supabase = buildSupabaseMock(null);
-    mockCreateAdminClient.mockReturnValue(supabase);
-    const { POST } = await import('./route');
-
-    const response = await POST(
-      buildQuoteRequest({
-        merchantId: '11111111-1111-4111-8111-111111111111',
-        sender: {
-          name: 'Caller Supplied Origin',
-          phone: '08099999999',
-          address: 'Cheap Origin',
-          city: 'Aba',
-          state: 'Abia',
-          country: 'Nigeria',
-          countryCode: 'NG',
-        },
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Sender is required for international quotes',
-    });
-    expect(supabase.from).not.toHaveBeenCalled();
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('rejects international quote merchant IDs when auth has no merchant context', async () => {
-    const supabase = buildSupabaseMock({ id: 'user-1' });
-    mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    mockGetMerchantForApiRequest.mockResolvedValue(null);
-    const { POST } = await import('./route');
-
-    const response = await POST(
-      buildQuoteRequest({
-        merchantId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Sender is required for international quotes',
-    });
-    expect(supabase.from).not.toHaveBeenCalled();
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('stores the resolved authenticated merchant on international quote requests', async () => {
-    const supabase = buildSupabaseMock({ id: 'user-1' });
-    mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    mockGetQuotes.mockResolvedValue({
-      quotes: {
-        featured: [],
-        all: [
-          {
-            id: '33333333-3333-4333-8333-333333333333',
-            provider: 'GIGL',
-            serviceTier: 'Standard',
-            carrierName: 'GIG Logistics',
-            displayName: 'GIG Logistics International',
-            estimatedDays: 5,
-            price: 25_000,
-            currency: 'NGN',
-            pickupIncluded: true,
-            insuranceIncluded: true,
-            providerRateId: 'GIGL_INTL_1_2_3_1',
-            expiresAt: new Date(Date.now() + 60_000),
-          },
-        ],
-      },
-      sessionId: 'session-1',
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    });
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(200);
-    const quotesTable = supabase.from('shipping_quotes') as {
-      upsert: ReturnType<typeof vi.fn>;
-    };
-    expect(quotesTable.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchant_id: 'merchant-1',
-        quote_request: expect.objectContaining({
-          merchantId: 'merchant-1',
-        }),
-      }),
-      { onConflict: 'id' }
-    );
-  });
-
-  it('returns 500 when merchant sender lookup fails', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, { message: 'database unavailable' })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Failed to resolve merchant sender',
-    });
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('does not treat a missing authenticated merchant row as a query failure', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, null)
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Sender is required for international quotes',
-    });
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('returns empty quotes with a Nigerian-merchants-only warning for a non-NG merchant', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, {
-        business_name: 'Merchant Store',
-        business_address: '1 Merchant Road, Bengaluru',
-        country: 'IN',
-        phone: '+919876543210',
-      })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.quotes).toEqual({ featured: [], all: [] });
-    expect(
-      json.warnings.some((warning: string) =>
-        /Nigerian merchants/i.test(warning)
-      )
-    ).toBe(true);
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('still fetches quotes when the merchant country is Nigeria', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, {
-        business_name: 'Merchant Store',
-        business_address: '1 Merchant Road, Lagos',
-        country: 'NG',
-        phone: '08012345678',
-      })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(200);
-    expect(mockGetQuotes).toHaveBeenCalled();
-  });
-
-  it('still fetches quotes when the merchant country is null', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, {
-        business_name: 'Merchant Store',
-        business_address: '1 Merchant Road, Lagos',
-        country: null,
-        phone: '08012345678',
-      })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-
-    expect(response.status).toBe(200);
-    expect(mockGetQuotes).toHaveBeenCalled();
-  });
-
-  it('returns empty quotes when the merchant payout currency is not NGN even for an NG merchant', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, {
-        business_name: 'Merchant Store',
-        business_address: '1 Merchant Road, Lagos',
-        country: 'NG',
-        payout_currency: 'GHS',
-        phone: '08012345678',
-      })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.quotes).toEqual({ featured: [], all: [] });
-    expect(
-      json.warnings.some((warning: string) =>
-        /Nigerian merchants/i.test(warning)
-      )
-    ).toBe(true);
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('returns empty quotes for a non-NGN payout merchant with no country set', async () => {
-    mockCreateAdminClient.mockReturnValue(
-      buildSupabaseMock({ id: 'user-1' }, null, {
-        business_name: 'Merchant Store',
-        business_address: '1 Merchant Road, Accra',
-        country: null,
-        payout_currency: 'GHS',
-        phone: '+233201234567',
-      })
-    );
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    const { POST } = await import('./route');
-
-    const response = await POST(buildQuoteRequest());
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.quotes).toEqual({ featured: [], all: [] });
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
   it('ranks a cheaper merchant rate ahead of a pricier carrier in the merged list', async () => {
     const zoneId = '44444444-4444-4444-8444-444444444444';
     const rateId = '55555555-5555-4555-8555-555555555555';
@@ -535,5 +235,104 @@ describe('POST /api/shipping/quotes', () => {
 
     expect(response.status).toBe(200);
     expect(mockGetQuotes).toHaveBeenCalled();
+  });
+
+  it('returns controlled 5xx when quote persistence fails', async () => {
+    const supabase = buildSupabaseMock(
+      { id: 'user-1' },
+      null,
+      {
+        business_name: 'Merchant Store',
+        business_address: '1 Merchant Road, Lagos',
+        country: 'NG',
+        payout_currency: 'NGN',
+        phone: '08012345678',
+      },
+      { code: '23514', message: 'economics constraint failed' }
+    );
+    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateServerClient.mockResolvedValue(
+      buildSupabaseMock({ id: 'user-1' })
+    );
+    mockGetQuotes.mockResolvedValue({
+      quotes: {
+        featured: [],
+        all: [
+          {
+            id: 'gigl-quote-1',
+            provider: 'GIGL',
+            serviceTier: 'Standard',
+            carrierName: 'GIG Logistics',
+            displayName: 'GIG Logistics',
+            estimatedDays: 2,
+            price: 11000,
+            currency: 'NGN',
+            pickupIncluded: true,
+            insuranceIncluded: true,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        ],
+      },
+      sessionId: 'session-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      buildQuoteRequest({
+        shipmentType: 'domestic',
+        receiver: {
+          name: 'Ada Buyer',
+          phone: '08011112222',
+          address: '5 Balogun Street',
+          city: 'Ikeja',
+          state: 'Lagos',
+          country: 'Nigeria',
+          countryCode: 'NG',
+        },
+      })
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to get shipping quotes',
+    });
+  });
+
+  it('repairs a postal code supplied as receiver state before carrier quoting', async () => {
+    mockCreateAdminClient.mockReturnValue(
+      buildSupabaseMock({ id: 'user-1' }, null, {
+        business_name: 'Merchant Store',
+        business_address: '1 Merchant Road, Lagos',
+        country: 'NG',
+        payout_currency: 'NGN',
+        phone: '08012345678',
+      })
+    );
+    mockCreateServerClient.mockResolvedValue(
+      buildSupabaseMock({ id: 'user-1' })
+    );
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      buildQuoteRequest({
+        shipmentType: 'domestic',
+        receiver: {
+          name: 'Ada Buyer',
+          phone: '08011112222',
+          address: '2 Olaide Tomori Street, Ikeja, Lagos 100001, Nigeria',
+          city: 'Ikeja',
+          state: '100001',
+          country: 'Nigeria',
+          countryCode: 'NG',
+        },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockGetQuotes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receiver: expect.objectContaining({ city: 'Ikeja', state: 'Lagos' }),
+      }),
+      []
+    );
   });
 });

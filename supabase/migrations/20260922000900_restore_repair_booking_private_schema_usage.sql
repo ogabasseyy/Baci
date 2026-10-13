@@ -1,0 +1,12 @@
+-- Public repair-booking wrapper is SECURITY INVOKER around an explicitly
+-- granted private implementation. The delegates hardening revoked schema
+-- USAGE on private from browser roles, so the wrapper can no longer resolve
+-- its private function and direct RPC bookings fail with PostgreSQL 42501
+-- for anon and authenticated callers (only service_role still resolves it).
+-- Restore lookup-only USAGE for the Data API roles, mirroring
+-- 20260804120000_restore_storefront_order_private_schema_usage.sql. Schema
+-- USAGE permits object lookup only: execution stays governed by the explicit
+-- per-function EXECUTE grants (private.create_repair_booking remains granted
+-- to anon, authenticated, and service_role only), and table access stays
+-- governed by RLS plus column grants.
+GRANT USAGE ON SCHEMA private TO anon, authenticated, service_role;

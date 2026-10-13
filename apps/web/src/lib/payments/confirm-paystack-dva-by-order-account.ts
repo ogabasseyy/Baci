@@ -84,7 +84,7 @@ export async function confirmPaystackDvaByOrderAccount({
   const { data: rows, error: lookupError } = await supabase
     .from('order_payment_accounts')
     .select(
-      'order_id, payable_amount, created_at, assigned_at, expires_at, orders!inner(id, merchant_id, customer_email, total, amount_paid, currency, payment_status, shipping_status, recorded_by_user_id)'
+      'order_id, payable_amount, assignment_customer_email, assignment_customer_email_source, created_at, assigned_at, expires_at, orders!inner(id, merchant_id, customer_email, total, amount_paid, currency, payment_status, shipping_status, recorded_by_user_id)'
     )
     .eq('provider', 'paystack')
     .eq('account_number', accountNumber);
@@ -220,9 +220,9 @@ export async function confirmPaystackDvaByOrderAccount({
   const winner = match.candidate;
   const currency = getPaystackDvaOrderCurrency(rows, winner.order_id) ?? 'NGN';
   const requiresPartialInvoiceBalanceCheck = winner.merchant_created === true;
-  const reservationFees = requiresPartialInvoiceBalanceCheck
-    ? calculatePlatformFee(Math.round(verifiedAmount.amount * 100))
-    : null;
+  const reservationFees = calculatePlatformFee(
+    Math.round(verifiedAmount.amount * 100)
+  );
 
   const { data: transactionId, error: reserveError } = await supabase.rpc(
     'create_payment_transaction',
@@ -232,9 +232,7 @@ export async function confirmPaystackDvaByOrderAccount({
       p_customer_email: customerEmail,
       p_customer_name: getPaystackCustomerName(customer) ?? customerEmail,
       p_gateway: 'paystack',
-      p_merchant_amount: reservationFees
-        ? reservationFees.merchantAmount / 100
-        : verifiedAmount.amount,
+      p_merchant_amount: reservationFees.merchantAmount / 100,
       p_merchant_id: winner.merchant_id,
       p_metadata: {
         dva_account_number: accountNumber,
@@ -246,7 +244,7 @@ export async function confirmPaystackDvaByOrderAccount({
         }),
       },
       p_order_id: winner.order_id,
-      p_platform_fee: reservationFees ? reservationFees.platformFee / 100 : 0,
+      p_platform_fee: reservationFees.platformFee / 100,
       p_reference: gatewayReference,
       p_session_id: null,
     }

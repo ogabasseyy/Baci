@@ -52,11 +52,12 @@ const merchant: AdminMerchantHealthRow = {
   email: 'owner@example.com',
   health_status: 'healthy',
   joined_at: '2026-03-20T10:00:00.000Z',
-  last_order_date: '2026-03-24T10:00:00.000Z',
+  last_order_date: '2026-03-24',
   merchant_id: '11111111-1111-4111-8111-111111111111',
   storefront_slug: 'baci-store',
   total_gmv: 1200,
   total_orders: 4,
+  excluded_non_ngn_or_unknown_paid_orders: 2,
 };
 
 describe('MerchantTable', () => {
@@ -64,7 +65,7 @@ describe('MerchantTable', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders merchant health, metrics, dates, and directory links', () => {
+  it('renders paid-sales activity, metrics, dates, and directory links', () => {
     render(
       <MerchantTable merchants={[merchant]} onInvalidStorefrontUrl={vi.fn()} />
     );
@@ -74,11 +75,16 @@ describe('MerchantTable', () => {
       '/admin/merchants/11111111-1111-4111-8111-111111111111'
     );
     expect(screen.getByText('owner@example.com')).toBeVisible();
-    expect(screen.getByText('Healthy')).toBeVisible();
+    expect(screen.getByText('Selling')).toBeVisible();
     expect(screen.getByText('₦1.2K')).toBeVisible();
+    expect(
+      screen.getByText('2 non-NGN/unknown paid order(s) excluded')
+    ).toBeVisible();
     expect(screen.getByText('4')).toBeVisible();
     expect(screen.getByText('Mar 24, 2026')).toBeVisible();
     expect(screen.getByText('Mar 20, 2026')).toBeVisible();
+    expect(screen.getByText('View Merchant 360')).toBeVisible();
+    expect(screen.queryByText('View merchant users')).not.toBeInTheDocument();
   });
 
   it('renders an empty table state when there are no merchants', () => {

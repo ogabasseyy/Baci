@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { styles } from './expense-detail.styles';
 import type { ExpenseStatusShellProps } from './types';
 
@@ -7,6 +7,7 @@ export function ExpenseStatusShell({
   status,
   colors,
   errorMessage,
+  onRetry,
 }: ExpenseStatusShellProps) {
   if (status === 'error') {
     return (
@@ -29,6 +30,15 @@ export function ExpenseStatusShell({
         <Text style={{ color: colors.textSecondary }}>
           {errorMessage ?? 'Please try again later.'}
         </Text>
+        {onRetry ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry"
+            onPress={onRetry}
+          >
+            <Text style={{ color: colors.primary }}>Retry</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -44,7 +54,9 @@ export function ExpenseStatusShell({
       <Text style={{ color: colors.textSecondary }}>
         {status === 'loading'
           ? 'Loading expense details...'
-          : 'Expense not found.'}
+          : status === 'denied'
+            ? (errorMessage ?? 'You do not have permission to view expenses')
+            : 'Expense not found.'}
       </Text>
     </View>
   );

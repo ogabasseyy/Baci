@@ -62,6 +62,7 @@ describe('OgabasseyImeiResults', () => {
     expect(screen.getByText('Find My iPhone')).toBeTruthy();
     expect(screen.getByText('SIM Lock')).toBeTruthy();
     expect(screen.getByText('Carrier')).toBeTruthy();
+    expect(document.querySelector('[data-imei-result]')).toBeInTheDocument();
   });
 
   it('renders the widened optional fields when the provider returns them', () => {

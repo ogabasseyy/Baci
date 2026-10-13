@@ -69,7 +69,9 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
   const contactEmail =
     firstNonEmptyTrimmed(merchant?.support_email, merchant?.email) ??
     'support@ogabassey.com';
-  const contactPhone = merchant?.phone || '+234 814 697 8921';
+  const contactPhone =
+    firstNonEmptyTrimmed(merchant?.support_phone, merchant?.phone) ??
+    '+234 814 697 8921';
   const contactAddress =
     firstNonEmptyTrimmed(merchant?.business_address) ??
     '2 Olaide Tomori St, Ikeja, Lagos';
@@ -248,7 +250,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
         </div>
 
         <div className="mt-8 pt-4 border-t border-store-border/40 text-center text-[10px] text-current/50">
-          <span suppressHydrationWarning>&copy; {new Date().getFullYear()} Ogabassey Ltd. All rights reserved.</span>
+          <span>&copy; {businessName}. All rights reserved.</span>
         </div>
       </div>
     </footer>

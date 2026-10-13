@@ -8,6 +8,8 @@ const runtimeState = vi.hoisted(() => ({
   isIos: true,
 }));
 
+vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
+
 vi.mock('@/config/runtime-platform', () => ({
   isRuntimePlatform: (platform: string) =>
     platform === 'ios' ? runtimeState.isIos : false,

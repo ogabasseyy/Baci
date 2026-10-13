@@ -7,6 +7,7 @@ export {
 } from './blog-post-image-html';
 export { wrapTrustedCdnInlineImagesInPicture } from './blog-trusted-cdn-inline-images';
 
+import { resolveBlogCatalogPrices } from '@/lib/resolve-blog-catalog-prices';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { buildStoreUrl } from '@/lib/store-url';
 import { unwrapDeadHtmlAnchors } from '@/lib/storefront-html-anchor-unwrapping';
@@ -120,6 +121,7 @@ function tryParseJson(content: unknown): unknown | null {
 }
 
 type ResolveBlogPostContentOptions = NormalizeStorefrontContentHrefOptions & {
+  catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];
   fallbackImageAlt?: string | null;
   /**
    * True when the page shell has already emitted an above-the-fold hero image
@@ -155,7 +157,13 @@ export async function resolveBlogPostContent(
       : content;
   const renderedContent =
     rawRenderedContent !== null && typeof rawRenderedContent === 'object'
-      ? normalizeBlogContentLinks(rawRenderedContent, options)
+      ? normalizeBlogContentLinks(
+          resolveBlogCatalogPrices(
+            { json: rawRenderedContent },
+            options.catalogPrices ?? { products: [] }
+          ).json,
+          options
+        )
       : rawRenderedContent;
   const isJson =
     renderedContent !== null && typeof renderedContent === 'object';
@@ -165,7 +173,12 @@ export async function resolveBlogPostContent(
   let legacyPriorityImageSources: string[] = [];
   if (!isJson) {
     const rawHtml = isHtml ? contentStr : await marked(contentStr || '');
-    const rewrittenHtml = rewriteHtmlStorefrontHrefs(rawHtml, options);
+    const pricedHtml =
+      resolveBlogCatalogPrices(
+        { html: rawHtml },
+        options.catalogPrices ?? { products: [] }
+      ).html ?? rawHtml;
+    const rewrittenHtml = rewriteHtmlStorefrontHrefs(pricedHtml, options);
     // Normalize each anchor's href before the callbacks: the checks match
     // root-relative paths. rewriteHtmlStorefrontHrefs already normalizes
     // quoted AND unquoted hrefs tag-by-tag, so this is defense-in-depth for

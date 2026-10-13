@@ -1,8 +1,11 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { getProductUrl } from '@/lib/seo-utils';
+import { resolveStorefrontProductCategory } from '@/lib/storefront-product-category-precedence';
 import { createPublicClient } from '@/lib/supabase/public';
 
 interface CanonicalPathJoinedCategory {
+  id?: string;
+  is_active?: boolean | null;
   name?: string;
   slug?: string;
 }
@@ -18,6 +21,7 @@ interface CanonicalPathProductRow {
     | null;
   product_categories:
     | {
+        category_id?: string | null;
         categories:
           | CanonicalPathJoinedCategory
           | CanonicalPathJoinedCategory[]
@@ -26,43 +30,15 @@ interface CanonicalPathProductRow {
     | null;
 }
 
-// PostgREST returns the to-one `categories:category_id` join as an object,
-// but normalize-product treats array shapes as reachable for this field, so
-// guard both and drop blank slugs the same way sitemap-data does.
-function firstJoinedCategory(
-  categories: CanonicalPathProductRow['categories']
-): CanonicalPathJoinedCategory | null {
-  const joined = Array.isArray(categories) ? categories[0] : categories;
-  const slug = joined?.slug?.trim();
-  return slug ? { name: joined?.name, slug } : null;
-}
-
-// Mirrors the category route's canonical decision, which is the arbiter for
-// categorized URLs: direct category_id join first, then the legacy category
-// text (getProductUrl derives it when no joined category is passed), and the
-// product_categories junction only when both are absent. Putting the junction
-// ahead of the text would emit links the category route's mismatch check
-// (direct join || slugified text) immediately 308s away from.
+// Mirrors the PDP snapshot's canonical decision, which is the arbiter for
+// categorized URLs: active direct category_id join first, then the active
+// product_categories junction. The legacy category text is only used when no
+// active joined category exists; otherwise content links would emit a stale
+// URL that the PDP immediately 308s to the relation-backed category.
 function normalizeJoinedCategory(
   row: CanonicalPathProductRow
 ): CanonicalPathJoinedCategory | null {
-  const direct = firstJoinedCategory(row.categories);
-  if (direct) {
-    return direct;
-  }
-
-  if (row.category?.trim()) {
-    return null;
-  }
-
-  for (const entry of row.product_categories ?? []) {
-    const junction = firstJoinedCategory(entry?.categories);
-    if (junction) {
-      return junction;
-    }
-  }
-
-  return null;
+  return resolveStorefrontProductCategory(row);
 }
 
 /**
@@ -112,10 +88,14 @@ export async function getCachedProductCanonicalPaths(
   const { data, error } = await supabase
     .from('products')
     .select(
-      'id, name, slug, category, categories:category_id(name, slug), product_categories(categories(name, slug))'
+      'id, name, slug, category, categories:category_id(name, slug, is_active), product_categories(category_id, categories(name, slug, is_active))'
     )
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
+    .order('category_id', {
+      ascending: true,
+      referencedTable: 'product_categories',
+    })
     .in('slug', productSlugs);
 
   if (error) {

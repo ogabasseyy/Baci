@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/client';
 import { fetchWithTimeout } from '@baci/shared/lib';
 
 export const NEGOTIATION_EVIDENCE_BUCKET = 'negotiation-evidence';
@@ -126,6 +125,11 @@ export async function uploadNegotiationEvidenceFile({
   const upload = await readEvidenceUploadResponse(response);
   const uploadContentType = upload.contentType || contentType;
   const uploadFile = createSignedUploadFile(file, uploadContentType);
+  // Lazily loaded: a static import pulled @supabase/ssr into every homepage
+  // load via footer-chrome -> cart-sidebar -> negotiation modal. The upload
+  // intent round-trip above already cost a network hop, so resolving the
+  // client here is invisible.
+  const { createClient } = await import('@/lib/supabase/client');
   const supabase = createClient();
   const { error } = await supabase.storage
     .from(NEGOTIATION_EVIDENCE_BUCKET)

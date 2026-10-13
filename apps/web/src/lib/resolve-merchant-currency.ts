@@ -37,6 +37,16 @@ const DEFAULT_CURRENCY_CODE = 'NGN';
 const DEFAULT_LOCALE = 'en-US';
 
 /**
+ * Shared platform-fallback currency config. Single source of truth for the
+ * NGN default so prompt builders and formatters cannot drift apart.
+ */
+export const DEFAULT_PLATFORM_CURRENCY_CONFIG: CurrencyConfig = {
+  code: DEFAULT_CURRENCY_CODE,
+  symbol: CURRENCY_SYMBOLS[DEFAULT_CURRENCY_CODE] ?? DEFAULT_CURRENCY_CODE,
+  locale: CURRENCY_DEFAULT_LOCALES[DEFAULT_CURRENCY_CODE] ?? DEFAULT_LOCALE,
+};
+
+/**
  * Minimal structural view of a merchant record. Extra fields are accepted and
  * ignored so callers can pass full merchant rows directly.
  */

@@ -85,6 +85,12 @@ vi.mock('@/components/dashboard/upgrade-modal', () => ({
   ),
 }));
 
+vi.mock('@/hooks/notifications-provider', () => ({
+  NotificationsProvider: ({ children }: { children: React.ReactNode }) => (
+    <section aria-label="Notifications Provider">{children}</section>
+  ),
+}));
+
 vi.mock('./client-layout', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="client-layout">{children}</div>
@@ -236,6 +242,20 @@ describe('DashboardProviders', () => {
     expect(
       screen.getByRole('region', { name: 'Product Provider' })
     ).toBeInTheDocument();
+  });
+
+  it('wraps children in NotificationsProvider', () => {
+    render(
+      <DashboardProviders>
+        <div>Content</div>
+      </DashboardProviders>
+    );
+
+    expect(
+      screen.getByRole('region', { name: 'Notifications Provider' })
+    ).toContainElement(
+      screen.getByRole('region', { name: 'Upgrade Modal Provider' })
+    );
   });
 
   it('wraps the dashboard shell in UpgradeModalProvider', () => {

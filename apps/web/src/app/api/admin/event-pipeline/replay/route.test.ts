@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   csrf: vi.fn(),
 }));
 vi.mock('@/lib/platform-admin-auth', () => ({
-  getPlatformAdminAuth: mocks.auth,
+  getPlatformAdminAuthForPermission: mocks.auth,
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
@@ -32,6 +32,17 @@ describe('POST /api/admin/event-pipeline/replay', () => {
 
     expect(response.status).toBe(401);
     expect(mocks.csrf).not.toHaveBeenCalled();
+  });
+
+  it('rejects read-only operations users before CSRF or replay work', async () => {
+    mocks.auth.mockResolvedValue({ status: 'forbidden' });
+
+    const response = await POST(request({}));
+
+    expect(response.status).toBe(403);
+    expect(mocks.auth).toHaveBeenCalledWith('operations.manage');
+    expect(mocks.csrf).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
   it('requires CSRF before validating replay input', async () => {
@@ -84,10 +95,10 @@ describe('POST /api/admin/event-pipeline/replay', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.createClient).toHaveBeenCalledWith('event-pipeline');
-    expect(rpc).toHaveBeenCalledWith('replay_event_deliveries_batch_v1', {
+    expect(mocks.auth).toHaveBeenCalledWith('operations.manage');
+    expect(rpc).toHaveBeenCalledWith('replay_event_deliveries_batch_admin_v2', {
       p_delivery_ids: ['019bbd89-8f5f-7f8c-a4fd-42b5d7e7a234'],
       p_replay_reason: 'Credential rotation verified',
-      p_replayed_by: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a230',
     });
   });
 
@@ -127,12 +138,11 @@ describe('POST /api/admin/event-pipeline/replay', () => {
       },
     });
     mocks.csrf.mockResolvedValue({ valid: true });
-    mocks.createClient.mockResolvedValue({
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: { message: 'filter failed' },
-      }),
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'filter failed' },
     });
+    mocks.createClient.mockResolvedValue({ rpc });
 
     const response = await POST(
       request({
@@ -147,5 +157,9 @@ describe('POST /api/admin/event-pipeline/replay', () => {
       code: 'replay_failed',
       error: 'Replay failed',
     });
+    expect(rpc).toHaveBeenCalledWith(
+      'select_event_pipeline_replay_ids_admin_v2',
+      expect.objectContaining({ p_destination: 'facebook' })
+    );
   });
 });

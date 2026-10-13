@@ -10,6 +10,7 @@ interface AnalyticsCardProps {
   title: string;
   value: string | number;
   change?: number;
+  changeLabel?: string;
   icon: React.ElementType;
   loading?: boolean;
   className?: string;
@@ -21,6 +22,7 @@ export function AnalyticsCard({
   title,
   value,
   change,
+  changeLabel,
   icon: Icon,
   loading,
   className,
@@ -75,9 +77,14 @@ export function AnalyticsCard({
               <div className="text-3xl font-bold tracking-tight text-foreground">
                 {value}
               </div>
-              {(change !== undefined || description) && (
+              {(change !== undefined || changeLabel || description) && (
                 <div className="flex items-center gap-2 text-xs">
-                  {change !== undefined && (
+                  {changeLabel ? (
+                    <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+                      <Minus className="size-3" />
+                      {changeLabel}
+                    </span>
+                  ) : change !== undefined ? (
                     <span
                       className={cn(
                         'flex items-center gap-1 px-2 py-0.5 rounded-full font-medium',
@@ -87,7 +94,7 @@ export function AnalyticsCard({
                       {getTrendIcon(trend)}
                       {formatMetricChange(change)}
                     </span>
-                  )}
+                  ) : null}
                   {description && (
                     <span className="text-muted-foreground truncate">
                       {description}

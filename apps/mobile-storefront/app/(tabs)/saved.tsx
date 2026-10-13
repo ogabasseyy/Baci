@@ -12,6 +12,7 @@ import { SAVED_LIST_BOTTOM_PADDING } from '@/constants/saved-list-layout';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { useSavedStore } from '@/stores/saved-store';
 
 const handleProductPress = (slug: string): void => {
@@ -138,9 +139,15 @@ export default function SavedTabScreen() {
             accessibilityLabel={`View ${item.name}`}
           >
             <Image
-              source={{ uri: item.image }}
+              source={createSafeBoundedImageSource({
+                fit: 'cover',
+                height: 80,
+                uri: item.image,
+                width: 80,
+              })}
               style={styles.productImage}
               contentFit="cover"
+              autoplay={false}
             />
             <View style={styles.productInfo}>
               <Text

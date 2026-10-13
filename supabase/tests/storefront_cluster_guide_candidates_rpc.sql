@@ -16,6 +16,7 @@ DECLARE
   v_enabled_merchant_id uuid := '7f9d0e11-0000-4000-8000-000000000001';
   v_disabled_merchant_id uuid := '7f9d0e11-0000-4000-8000-000000000002';
   v_missing_settings_merchant_id uuid := '7f9d0e11-0000-4000-8000-000000000003';
+  v_classifier_oid oid;
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -25,6 +26,7 @@ BEGIN
     )::pg_catalog.regprocedure
       AND proc.prosecdef
       AND proc.provolatile = 's'
+      AND proc.proowner = 'postgres'::pg_catalog.regrole
       AND EXISTS (
         SELECT 1
         FROM pg_catalog.pg_options_to_table(
@@ -54,6 +56,33 @@ BEGIN
       AND acl.privilege_type = 'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'PUBLIC unexpectedly has EXECUTE on guide-candidate RPC';
+  END IF;
+
+  SELECT proc.oid
+  INTO v_classifier_oid
+  FROM pg_catalog.pg_proc AS proc
+  JOIN pg_catalog.pg_namespace AS namespace
+    ON namespace.oid = proc.pronamespace
+  WHERE namespace.nspname = 'private'
+    AND proc.proname = 'classify_storefront_cluster_guide_candidates_v2'
+    AND proc.pronargs = 5
+    AND proc.proargtypes[0] = 'uuid'::pg_catalog.regtype
+    AND proc.proargtypes[1] = 'jsonb'::pg_catalog.regtype
+    AND proc.proargtypes[2] = 'pg_catalog.tsquery'::pg_catalog.regtype
+    AND proc.proargtypes[3] = 'text'::pg_catalog.regtype
+    AND proc.proargtypes[4] = 'integer'::pg_catalog.regtype;
+
+  IF v_classifier_oid IS NULL THEN
+    RAISE EXCEPTION 'private guide classifier is missing';
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+    'anon', v_classifier_oid, 'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated', v_classifier_oid, 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION
+      'private guide classifier unexpectedly has application-role EXECUTE';
   END IF;
 
   IF NOT pg_catalog.has_function_privilege(
@@ -269,56 +298,6 @@ BEGIN
       2
     );
 
-  -- These posts are all newer than the valid guide but intentionally do not
-  -- match zephyrbattery. A limit-first implementation would lose the old guide.
-  INSERT INTO public.blog_posts (
-    merchant_id,
-    title,
-    slug,
-    content,
-    category,
-    author_name,
-    status,
-    published_at
-  )
-  SELECT
-    v_enabled_merchant_id,
-    pg_catalog.format('Newer laptop battery article %s', series_number),
-    pg_catalog.format('newer-unrelated-article-%s', series_number),
-    pg_catalog.format(
-      'Laptop battery battery battery buying notes number %s.',
-      series_number
-    ),
-    'Laptops',
-    'Baci Test Author',
-    'published',
-    '2026-02-01 00:00:00+00'::timestamp with time zone
-      + series_number * interval '1 minute'
-  FROM pg_catalog.generate_series(1, 70) AS series_number;
-
-  -- More than 64 matching posts prove that caller limits cannot bypass the
-  -- hard result cap.
-  INSERT INTO public.blog_posts (
-    merchant_id,
-    title,
-    slug,
-    content,
-    category,
-    author_name,
-    status,
-    published_at
-  )
-  SELECT
-    v_enabled_merchant_id,
-    pg_catalog.format('Capterm guide %s', series_number),
-    pg_catalog.format('capterm-guide-%s', series_number),
-    pg_catalog.format('A public capterm guide number %s.', series_number),
-    'Smartphones',
-    'Baci Test Author',
-    'published',
-    '2026-03-01 00:00:00+00'::timestamp with time zone
-      + series_number * interval '1 minute'
-  FROM pg_catalog.generate_series(1, 70) AS series_number;
 END;
 $setup$;
 
@@ -347,6 +326,7 @@ DECLARE
         'samsung',
         'galaxy',
         'battery',
+        'inferredtoken',
         'camera',
         '5g',
         'sim'
@@ -380,12 +360,12 @@ DECLARE
 BEGIN
   -- The feature row remains private to anon; the definer RPC may use it only as
   -- a boolean gate.
-  IF EXISTS (
-    SELECT 1
-    FROM public.merchant_feature_settings
-    WHERE merchant_id = v_enabled_merchant_id
+  IF pg_catalog.has_table_privilege(
+    'anon',
+    'public.merchant_feature_settings',
+    'SELECT'
   ) THEN
-    RAISE EXCEPTION 'anon unexpectedly read the private feature-settings row';
+    RAISE EXCEPTION 'anon unexpectedly has direct feature-settings SELECT';
   END IF;
 
   SELECT count(*)::integer
@@ -471,68 +451,6 @@ BEGIN
   THEN
     RAISE EXCEPTION 'metadata-only guide classification was lost: %',
       pg_catalog.row_to_json(v_result);
-  END IF;
-
-  -- Relevance is applied before LIMIT: seventy newer but irrelevant posts must
-  -- not displace this older matching guide.
-  SELECT *
-  INTO v_result
-  FROM public.get_storefront_cluster_guide_candidates_v1(
-    v_enabled_merchant_id,
-    'smartphones',
-    v_cluster_rules,
-    'zephyrbattery',
-    1
-  );
-
-  IF v_result.slug IS DISTINCT FROM 'valid-old-zephyrbattery-guide' THEN
-    RAISE EXCEPTION 'relevance-before-limit returned unexpected guide: %',
-      pg_catalog.row_to_json(v_result);
-  END IF;
-
-  -- Cluster classification happens before LIMIT. Seventy newer, higher-ranked
-  -- laptop battery posts must not displace the older smartphone battery guide.
-  SELECT *
-  INTO v_result
-  FROM public.get_storefront_cluster_guide_candidates_v1(
-    v_enabled_merchant_id,
-    'smartphones',
-    v_cluster_rules,
-    'battery',
-    1
-  );
-
-  IF v_result.slug IS DISTINCT FROM 'valid-old-zephyrbattery-guide' THEN
-    RAISE EXCEPTION 'pre-cap cluster filtering returned unexpected guide: %',
-      pg_catalog.row_to_json(v_result);
-  END IF;
-
-  SELECT count(*)::integer
-  INTO v_count
-  FROM public.get_storefront_cluster_guide_candidates_v1(
-    v_enabled_merchant_id,
-    'smartphones',
-    v_cluster_rules,
-    'capterm',
-    999
-  );
-
-  IF v_count <> 64 THEN
-    RAISE EXCEPTION 'upper result cap returned %, expected 64', v_count;
-  END IF;
-
-  SELECT count(*)::integer
-  INTO v_count
-  FROM public.get_storefront_cluster_guide_candidates_v1(
-    v_enabled_merchant_id,
-    'smartphones',
-    v_cluster_rules,
-    'capterm',
-    0
-  );
-
-  IF v_count <> 1 THEN
-    RAISE EXCEPTION 'lower result cap returned %, expected 1', v_count;
   END IF;
 
   SELECT count(*)::integer

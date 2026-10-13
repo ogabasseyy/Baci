@@ -3,7 +3,10 @@ import {
   MAX_AI_PLAN_OPERATIONS,
   MAX_AI_PLAN_SUMMARY_OR_REFUSAL_REASON_CHARS,
 } from './limits';
-import { builderAiModelOperationSchema } from './model-plan-operation';
+import {
+  type BuilderAiModelOperation,
+  builderAiModelOperationSchema,
+} from './model-plan-operation';
 
 export const builderAiProposedPlanSchema = z.strictObject({
   operations: z
@@ -18,4 +21,8 @@ export const builderAiProposedPlanSchema = z.strictObject({
     .max(MAX_AI_PLAN_SUMMARY_OR_REFUSAL_REASON_CHARS),
 });
 
-export type BuilderAiProposedPlan = z.infer<typeof builderAiProposedPlanSchema>;
+export type BuilderAiProposedPlan = {
+  operations: BuilderAiModelOperation[];
+  status: 'proposed';
+  summary: string;
+};

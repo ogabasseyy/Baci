@@ -1,0 +1,163 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { recoverActiveQuizAttempt } from '@/services/quiz-attempt-recovery';
+import type { QuizV2Attempt } from '@/services/quiz-types';
+import { useQuizStore } from '@/stores/quiz-store';
+import { attempt } from '@/stores/quiz-store.test-utils';
+import { useQuizLobbyNavigation } from './useQuizLobbyNavigation';
+
+jest.mock('@/lib/get-quiz-device-fingerprint', () => ({
+  getQuizDeviceFingerprint: async () => null,
+}));
+jest.mock('@/services/quiz-attempt-recovery', () => ({
+  recoverActiveQuizAttempt: jest.fn(async () => ({
+    availability: 'pending_results',
+    attemptId: 'a',
+    serverNow: '2026-09-05T12:00:00Z',
+  })),
+}));
+const active: QuizV2Attempt = {
+  attemptId: 'a',
+  eventId: 'e',
+  eventEndsAt: '2026-09-05T12:05:00Z',
+  serverNow: '2026-09-05T12:00:00Z',
+  resultsAvailableAt: null,
+  status: 'in_progress',
+};
+afterEach(() => {
+  useQuizStore.getState().resetForAccountChange();
+  jest.clearAllMocks();
+});
+it('resumes a retained legacy attempt without requesting V2 recovery', async () => {
+  useQuizStore.setState({ status: 'ready', attempt, v2Attempt: null });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+
+  await act(async () => result.current.onResume(attempt.eventId));
+
+  expect(recoverActiveQuizAttempt).not.toHaveBeenCalled();
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'question',
+    attempt,
+    error: null,
+  });
+});
+it('keeps Resume retryable and exposes the error when recovery rejects', async () => {
+  jest
+    .mocked(recoverActiveQuizAttempt)
+    .mockRejectedValueOnce(new Error('Recovery failed'));
+  useQuizStore.setState({
+    status: 'ready',
+    v2Attempt: active,
+    v2LifecycleStatus: 'in_progress',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+
+  await act(async () => result.current.onResume('e'));
+
+  expect(recoverActiveQuizAttempt).toHaveBeenCalledTimes(1);
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'ready',
+    v2Attempt: active,
+    error: 'Recovery failed',
+  });
+  expect(result.current.resumeEventId).toBe('e');
+});
+it('coalesces repeated resume taps while recovery is starting', async () => {
+  useQuizStore.setState({
+    status: 'ready',
+    v2Attempt: active,
+    v2LifecycleStatus: 'in_progress',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+  await act(async () => {
+    await Promise.all([
+      result.current.onResume('e'),
+      result.current.onResume('e'),
+    ]);
+  });
+  expect(recoverActiveQuizAttempt).toHaveBeenCalledTimes(1);
+});
+it('preserves an active attempt when returning to the lobby and resumes through recovery', async () => {
+  useQuizStore.setState({
+    status: 'question',
+    v2Attempt: active,
+    v2LifecycleStatus: 'in_progress',
+    selectedEventId: 'e',
+  });
+  const ref = { current: null as (() => void) | null };
+  const dismissRecovery = jest.fn();
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({
+      backHandlerRef: ref,
+      dismissRecovery,
+      userId: 'u',
+    })
+  );
+  act(() => ref.current?.());
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'ready',
+    v2Attempt: active,
+  });
+  expect(dismissRecovery).toHaveBeenCalledWith('e');
+  expect(result.current.resumeEventId).toBe('e');
+  await act(async () => result.current.onResume('e'));
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'result',
+    v2LifecycleStatus: 'pending_results',
+    terminalContext: { attemptId: 'a' },
+  });
+});
+it('does not offer a submitted attempt as resumable', () => {
+  useQuizStore.setState({
+    status: 'ready',
+    v2Attempt: { ...active, status: 'submitted_pending_results' },
+    v2LifecycleStatus: 'pending_results',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+  expect(result.current.resumeEventId).toBeNull();
+});
+
+it('recovers an abandoned start after returning to the lobby without an attempt response', async () => {
+  useQuizStore.setState({
+    status: 'starting',
+    selectedEventId: 'e',
+    startRequestId: 'request',
+    recoveryUserId: 'u',
+  });
+  const ref = { current: null as (() => void) | null };
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({
+      backHandlerRef: ref,
+      dismissRecovery: jest.fn(),
+      userId: 'u',
+    })
+  );
+  act(() => ref.current?.());
+  expect(result.current.resumeEventId).toBe('e');
+  await act(async () => result.current.onResume('e'));
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'result',
+    v2LifecycleStatus: 'pending_results',
+    terminalContext: { attemptId: 'a' },
+  });
+});
+
+it('does not expose another account start request for recovery', () => {
+  useQuizStore.setState({
+    status: 'ready',
+    selectedEventId: 'e',
+    startRequestId: 'request',
+    recoveryUserId: 'other',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+  expect(result.current.resumeEventId).toBeNull();
+});

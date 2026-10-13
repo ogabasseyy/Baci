@@ -64,6 +64,21 @@ test('publishes Task 9 only into its authorized tree then freshly prepares the p
   assert.doesNotMatch(task9Operation, /\bfetch\(/);
 });
 
+test('hash-binds and delegates Task 9 composition to the focused helper', () => {
+  assert.match(source, /--compose-task9-bundle/);
+  assert.match(source, /--reviewed-helper-sha256/);
+  assert.match(source, /policy_snapshot="\$transaction_dir\/policy-compose\.json"/);
+  assert.match(
+    source,
+    /prepare_gh; \[ "\$\(sha256 "\$transaction_dir\/tools\/gh\/bin\/gh"\)" = "\$\(json_get "\$policy" supplyChainProvenance\.ownerCli\.binarySha256\)" \]/
+  );
+  assert.match(source, /\[ "\$\(sha256 "\$helper"\)" = "\$reviewed_helper_sha" \]/);
+  assert.match(source, /helper_copy="\$transaction_dir\/task9-compose-bundle\.sh"/);
+  assert.match(source, /\/bin\/cp -p -- "\$helper" "\$helper_copy"/);
+  assert.match(source, /\[ "\$\(sha256 "\$helper_copy"\)" = "\$reviewed_helper_sha" \]/);
+  assert.match(source, /exec "\$helper_copy" --transaction-dir/);
+});
+
 test('uses a rollback-armed, post-activation immutable Task 7 probe contract', () => {
   assert.match(source, /for probe_id in 0 1 2/);
   for (const operation of ['create-owned-probe-tag-object', 'create-owned-probe-ref', 'read-owned-probe-ref', 'rollback-owned-probe-ref', 'assert-owned-probe-duplicate-create', 'assert-owned-probe-update', 'assert-owned-probe-force-update', 'assert-owned-probe-delete'])

@@ -61,27 +61,18 @@ function createThenableRowsQuery(data: unknown[]) {
   return query;
 }
 
-function createTransactionInsertQuery({
+function createTransactionReadQuery({
   data = transactionRow,
   error = null,
 }: {
   data?: unknown;
   error?: unknown;
-}) {
-  const query: Record<string, unknown> = {};
-  const insert = vi.fn(() => query);
-  const select = vi.fn(() => query);
-  const single = vi.fn().mockResolvedValue({ data, error });
-  Object.assign(query, { insert, select, single });
-  return { insert, query };
-}
-
-function createTransactionRereadQuery(data = transactionRow) {
+} = {}) {
   const query: Record<string, unknown> = {};
   const select = vi.fn(() => query);
   const eq = vi.fn(() => query);
-  const maybeSingle = vi.fn().mockResolvedValue({ data, error: null });
-  Object.assign(query, { eq, maybeSingle, select });
+  const single = vi.fn().mockResolvedValue({ data, error });
+  Object.assign(query, { eq, select, single });
   return query;
 }
 
@@ -148,11 +139,13 @@ describe('confirmPaystackWalletDvaTopUp', () => {
 
   it('creates a pending wallet top-up transaction for a wallet DVA receiver', async () => {
     const orderAliasQuery = createThenableRowsQuery([]);
-    const { insert, query: insertQuery } = createTransactionInsertQuery({});
+    const rpc = vi.fn().mockResolvedValue({ data: 'txn-1', error: null });
+    const transactionQuery = createTransactionReadQuery();
     const supabase = {
+      rpc,
       from: vi.fn((table: string) => {
         if (table === 'order_payment_accounts') return orderAliasQuery;
-        if (table === 'transactions') return insertQuery;
+        if (table === 'transactions') return transactionQuery;
         throw new Error(`Unexpected table ${table}`);
       }),
     } as unknown as SupabaseClient;
@@ -172,17 +165,14 @@ describe('confirmPaystackWalletDvaTopUp', () => {
       kind: 'match',
       transaction: { id: 'txn-1', merchant_id: 'merchant-1' },
     });
-    expect(insert).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      'claim_paystack_wallet_dva_transaction',
       expect.objectContaining({
-        amount: 20000,
-        gateway: 'paystack',
-        gateway_reference: 'PSK_REF_1',
-        merchant_amount: 0,
-        merchant_id: 'merchant-1',
-        platform_fee: 0,
-        status: 'pending',
-        transaction_type: 'payment',
-        metadata: expect.objectContaining({
+        p_amount: 20000,
+        p_currency: 'NGN',
+        p_merchant_id: 'merchant-1',
+        p_reference: 'PSK_REF_1',
+        p_metadata: expect.objectContaining({
           customer_email: 'jane@example.com',
           customer_id: 'customer-1',
           transaction_type: 'wallet_topup',
@@ -224,7 +214,7 @@ describe('confirmPaystackWalletDvaTopUp', () => {
     expect(result).toMatchObject({
       body: { code: 'WALLET_DVA_ORDER_ALIAS_CONFLICT' },
       kind: 'review',
-      status: 409,
+      status: 200,
     });
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -235,21 +225,17 @@ describe('confirmPaystackWalletDvaTopUp', () => {
     expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 
-  it('re-reads the existing transaction when the gateway reference wins concurrently', async () => {
+  it('reuses the existing transaction id when the gateway reference was already claimed', async () => {
     const orderAliasQuery = createThenableRowsQuery([]);
-    const { query: insertQuery } = createTransactionInsertQuery({
-      data: null,
-      error: { code: '23505', message: 'duplicate gateway reference' },
-    });
-    const rereadQuery = createTransactionRereadQuery({
-      ...transactionRow,
-      id: 'txn-winner',
+    const rpc = vi.fn().mockResolvedValue({ data: 'txn-winner', error: null });
+    const rereadQuery = createTransactionReadQuery({
+      data: { ...transactionRow, id: 'txn-winner' },
     });
     const supabase = {
+      rpc,
       from: vi
         .fn()
         .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery)
         .mockReturnValueOnce(rereadQuery),
     } as unknown as SupabaseClient;
 
@@ -270,18 +256,13 @@ describe('confirmPaystackWalletDvaTopUp', () => {
     expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 
-  it('throws non-unique transaction insert errors', async () => {
+  it('throws wallet reference claim errors', async () => {
     const orderAliasQuery = createThenableRowsQuery([]);
-    const insertError = { code: 'XXXXX', message: 'boom' };
-    const { query: insertQuery } = createTransactionInsertQuery({
-      data: null,
-      error: insertError,
-    });
+    const claimError = { code: 'XXXXX', message: 'boom' };
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: claimError });
     const supabase = {
-      from: vi
-        .fn()
-        .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery),
+      rpc,
+      from: vi.fn().mockReturnValueOnce(orderAliasQuery),
     } as unknown as SupabaseClient;
 
     await expect(
@@ -292,6 +273,6 @@ describe('confirmPaystackWalletDvaTopUp', () => {
         supabase,
         verifiedAmount: { amount: 20000, currency: 'NGN' },
       })
-    ).rejects.toBe(insertError);
+    ).rejects.toBe(claimError);
   });
 });

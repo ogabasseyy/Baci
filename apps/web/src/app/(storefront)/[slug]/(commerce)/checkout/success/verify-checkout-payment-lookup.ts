@@ -1,0 +1,259 @@
+import {
+  isAbortError,
+  normalizeCurrencyCode,
+  normalizeTerminalStatus,
+  type VerifyCheckoutPaymentLookupHandlers,
+  type VerifyCheckoutPaymentLookupParams,
+} from './verify-checkout-payment-response';
+
+export {
+  type CheckoutVerificationStatus,
+  isAbortError,
+  isVerificationResponse,
+  normalizeCurrencyCode,
+  normalizeTerminalStatus,
+  type VerificationResponse,
+  type VerifyCheckoutPaymentLookupHandlers,
+  type VerifyCheckoutPaymentLookupParams,
+} from './verify-checkout-payment-response';
+
+// Only statuses proving capture reconcile: a refund is itself proof the
+// provider took the money. An ordinary cancelled row proves nothing —
+// maintenance flips stale unpaid orders to cancelled — so cancelled
+// orders fail as unpaid below instead of promising a refund.
+const RECONCILING_LOOKUP_PAYMENT_STATUSES = new Set(['refunded']);
+
+/**
+ * No-reference pass: resolves the order by ID instead of verifying a
+ * gateway reference. Returns false when no order identity exists and the
+ * caller should redirect back to checkout. Extracted from
+ * verify-checkout-payment.ts (300-line file limit).
+ */
+export async function verifyCheckoutPaymentByLookup(
+  {
+    merchantSlug,
+    orderId,
+    paymentMethod,
+    pendingRedvaultOrder,
+    trackingToken,
+    signal,
+  }: VerifyCheckoutPaymentLookupParams,
+  {
+    clearCart,
+    scheduleFailedRedirect,
+    setIsVerifying,
+    setOrderNumber,
+    setPaymentMethod,
+    setStatus,
+    capturePaymentCompleted,
+  }: VerifyCheckoutPaymentLookupHandlers
+): Promise<boolean> {
+  if (!orderId) {
+    return false;
+  }
+
+  setIsVerifying(true);
+  try {
+    const query = new URLSearchParams();
+    if (merchantSlug) query.set('merchant_slug', merchantSlug);
+    if (trackingToken) query.set('tracking_token', trackingToken);
+    const queryString = query.toString();
+    const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
+      queryString ? `?${queryString}` : ''
+    }`;
+    const response = await fetch(url, { signal });
+    const rawData = response.ok ? await response.json() : null;
+    // A tracking-token lookup resolves by token (p_order_id: null), so a
+    // stale or mismatched URL can return a different order than the path
+    // orderId. Require identity before treating the lookup as success —
+    // otherwise the branches below clear the cart and record
+    // payment_completed under the URL order ID with another order's
+    // number, total, and currency. A mismatch falls through to the
+    // failed-lookup fallbacks like any other unproven lookup.
+    const data =
+      rawData && trackingToken && rawData.id !== orderId ? null : rawData;
+    // The guest tracking RPC projects payment_status but never
+    // payment_method, so a real tracking response carries no method.
+    // Fall back to the proof-bound REDVAULT context (the session
+    // snapshot keyed on this order + uba_redvault selection) so the
+    // REDVAULT branches below stay reachable; an explicit RPC value
+    // always wins over the snapshot.
+    const lookupPaymentMethod =
+      typeof data?.payment_method === 'string' && data.payment_method
+        ? data.payment_method
+        : pendingRedvaultOrder
+          ? 'uba_redvault'
+          : undefined;
+    // Terminal states first: a fully refunded REDVAULT order keeps a
+    // non-paid payment status, and a cancelled one can stay unpaid
+    // with a cancelled shipping status. A canceled payment is terminal
+    // whatever shipping says (legacy rows flip payment without touching
+    // shipping) — both spellings normalize before either branch so the
+    // pending branch below can never wait on money that cannot settle.
+    // Neither terminal state is still processing.
+    const isCancelledShippingStatus =
+      normalizeTerminalStatus(data?.shipping_status) === 'cancelled';
+    const isCancelledPaymentStatus =
+      normalizeTerminalStatus(data?.payment_status) === 'cancelled';
+    const redvaultTerminalCancelled =
+      lookupPaymentMethod === 'uba_redvault' &&
+      data?.payment_status !== 'paid' &&
+      (isCancelledShippingStatus || isCancelledPaymentStatus);
+    const redvaultTerminalRefunded =
+      lookupPaymentMethod === 'uba_redvault' &&
+      data?.payment_status === 'refunded';
+    if (
+      data &&
+      lookupPaymentMethod === 'uba_redvault' &&
+      data.payment_status !== 'paid' &&
+      data.payment_status !== 'refunded' &&
+      !redvaultTerminalCancelled
+    ) {
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (redvaultTerminalCancelled) {
+      setPaymentMethod('uba_redvault');
+      setStatus('failed');
+      scheduleFailedRedirect();
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (redvaultTerminalRefunded) {
+      // A fully refunded order is terminal non-success: never present
+      // it as a payment success, and never clear the cart the shopper
+      // may have built since.
+      setPaymentMethod('uba_redvault');
+      setStatus('failed');
+      scheduleFailedRedirect();
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (data && (data.order_number || data.short_id)) {
+      const lookupPaymentStatus = normalizeTerminalStatus(data.payment_status);
+      if (RECONCILING_LOOKUP_PAYMENT_STATUSES.has(lookupPaymentStatus)) {
+        // A refunded order is terminal reconciliation, not a confirmed
+        // purchase: the cart stays intact for a fresh attempt.
+        setStatus('reconciling');
+        setOrderNumber(data.order_number || data.short_id);
+        if (data.payment_method) {
+          setPaymentMethod(data.payment_method);
+        }
+        return true;
+      }
+      if (lookupPaymentStatus === 'cancelled') {
+        // Ordinary cancelled rows prove no capture: terminal unpaid
+        // failure with the cart intact — never the "Payment Received"
+        // reconciliation view.
+        setStatus('failed');
+        setOrderNumber(data.order_number || data.short_id);
+        if (data.payment_method) {
+          setPaymentMethod(data.payment_method);
+        }
+        scheduleFailedRedirect();
+        return true;
+      }
+      // Offline methods confirm the ORDER, not a capture: an unpaid
+      // invoice or pay-on-delivery row is the expected created state
+      // (payment lands later, physically or via the emailed proforma),
+      // so these keep creation-success instead of the paid gate below.
+      // The order-creation path persists Pay on Delivery as 'pod'
+      // (pending-checkout-order.ts), while older rows and the generic
+      // checkout use 'pay_on_delivery': accept both like the orders
+      // route does, or unpaid POD orders stall on processing forever.
+      const isOfflineMethod =
+        data.payment_method === 'invoice' ||
+        data.payment_method === 'pay_on_delivery' ||
+        data.payment_method === 'pod';
+      if (!isOfflineMethod) {
+        if (
+          lookupPaymentStatus === 'failed' ||
+          lookupPaymentStatus === 'abandoned'
+        ) {
+          // Terminal provider outcomes (abandoned = the shopper left the
+          // gateway page; the attempt can never settle): failure state
+          // with the cart intact, mirroring the reference path.
+          setStatus('failed');
+          setOrderNumber(data.order_number || data.short_id);
+          if (data.payment_method) {
+            setPaymentMethod(data.payment_method);
+          }
+          scheduleFailedRedirect();
+          return true;
+        }
+        if (lookupPaymentStatus !== 'paid') {
+          // Existence is not capture: pending/unpaid/processing gateway
+          // rows stay pending for retry instead of clearing the cart
+          // and rendering payment success on an unproven order.
+          setStatus('pending');
+          setOrderNumber(data.order_number || data.short_id);
+          if (data.payment_method) {
+            setPaymentMethod(data.payment_method);
+          }
+          return true;
+        }
+      }
+      clearCart();
+      setStatus('success');
+      setOrderNumber(data.order_number || data.short_id);
+      if (data.payment_method) {
+        setPaymentMethod(data.payment_method);
+      }
+      if (lookupPaymentStatus === 'paid') {
+        const lookupTotal = Number(data.total);
+        const lookupCurrency = normalizeCurrencyCode(data.currency);
+        capturePaymentCompleted({
+          orderId,
+          orderNumber: data.order_number || data.short_id,
+          paymentMethod: data.payment_method || paymentMethod || 'paid_order',
+          ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
+          ...(lookupCurrency ? { currency: lookupCurrency } : {}),
+        });
+      }
+    } else if (pendingRedvaultOrder) {
+      // Fallback if API lookup fails: retain the REDVAULT cart instead of
+      // confirming an order the lookup could not see.
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    } else {
+      // Fallback if API lookup fails: the order is unproven (stale
+      // token/order pair, mismatched identity, or transient failure),
+      // so stay pending for retry instead of confirming a checkout
+      // that was never verified and clearing the cart.
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    }
+  } catch (error) {
+    // An aborted bound releases the lane for a retry; anything else
+    // falls back to the derived order number.
+    if (isAbortError(error)) {
+      // The lookup bound fired: the order state is unknown, so stay
+      // pending (the polling hook retries) instead of confirming an
+      // unverified order and clearing the cart.
+      if (pendingRedvaultOrder) {
+        setPaymentMethod('uba_redvault');
+      }
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+      return true;
+    } else {
+      console.error('Failed to fetch order details on success page:', error);
+    }
+    if (pendingRedvaultOrder) {
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    } else {
+      // Non-abort lookup error: same unproven-lookup rule as above —
+      // pending, never a success confirmation with a cleared cart.
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    }
+  } finally {
+    setIsVerifying(false);
+  }
+  return true;
+}

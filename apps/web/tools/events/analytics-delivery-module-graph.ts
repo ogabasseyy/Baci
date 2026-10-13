@@ -1,5 +1,5 @@
 import { dirname, extname, normalize } from 'node:path/posix';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { resolveLexicalModuleSpecifier } from './analytics-delivery-module-specifier';
 
 function parse(path: string, source: string): ts.SourceFile {

@@ -59,7 +59,7 @@ describe('buildMerchantTrustProfile', () => {
       supportPhone: '+2348000000000',
       socialLinks: {
         instagram: 'https://instagram.com/ogabassey',
-        twitter: 'https://twitter.com/ogabasseyhq',
+        twitter: 'https://x.com/ogabasseyhq',
       },
       businessAddress: '12 Allen Avenue, Ikeja, Lagos',
       registeredAddress: {
@@ -122,14 +122,14 @@ describe('buildMerchantTrustProfile', () => {
     });
   });
 
-  it('normalizes explicit x.com Twitter URLs to twitter.com', () => {
+  it('normalizes explicit X URLs to x.com', () => {
     const result = buildMerchantTrustProfile({
       social_media: {
         twitter: 'http://x.com/ogabasseyhq',
       },
     });
 
-    expect(result.socialLinks.twitter).toBe('https://twitter.com/ogabasseyhq');
+    expect(result.socialLinks.twitter).toBe('https://x.com/ogabasseyhq');
 
     const rootResult = buildMerchantTrustProfile({
       social_media: {
@@ -137,7 +137,7 @@ describe('buildMerchantTrustProfile', () => {
       },
     });
 
-    expect(rootResult.socialLinks.twitter).toBe('https://twitter.com');
+    expect(rootResult.socialLinks.twitter).toBe('https://x.com');
   });
 
   it('uses the shared social URL normalizer for supported platform handles', () => {

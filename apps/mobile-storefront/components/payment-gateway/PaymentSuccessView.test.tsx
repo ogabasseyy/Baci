@@ -40,6 +40,18 @@ describe('PaymentSuccessView', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+  it('returns primary card funding to the wallet, not an invented order', () => {
+    render(
+      <PaymentSuccessView
+        colors={Colors.light}
+        paymentKind={PAYMENT_KINDS.PRIMARY_WALLET_CARD}
+      />
+    );
+    expect(screen.getByText('Redirecting to your wallet...')).toBeOnTheScreen();
+    expect(
+      screen.queryByText('Redirecting to your order confirmation...')
+    ).toBeNull();
+  });
 
   it('renders order confirmation redirect copy by default', () => {
     render(<PaymentSuccessView colors={Colors.light} />);

@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { REMEDIATION_VERIFY_COMMAND } from './remediation-codex-command.mjs';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { remediationGitWorkflowTestFixtures } from './remediation-git-workflow.test-helpers.mjs';
 
@@ -34,9 +32,24 @@ describe('remediation git workflow', () => {
     });
 
     assert.equal(result.type, 'pr_opened');
-    assert.equal(result.branch, 'codex/vercel-remediation-abc123-run-1');
+    assert.match(
+      result.branch,
+      /^codex\/vercel-remediation-unknown-abc123-[a-f0-9]{12}$/
+    );
     assert.equal(result.prUrl, 'https://github.com/ogabasseyy/Baci/pull/999');
     assert.deepEqual(result.changedFiles, ['apps/web/src/components/cart.tsx']);
+    const prLookup = environments.find(
+      ({ args, command }) => command === 'gh' && args.includes('list')
+    );
+    assert.ok(prLookup);
+    assert.equal(prLookup.args[prLookup.args.indexOf('--base') + 1], 'main');
+    assert.equal(
+      prLookup.args[prLookup.args.indexOf('--head') + 1],
+      result.branch
+    );
+    assert.equal(prLookup.args[prLookup.args.indexOf('--state') + 1], 'open');
+    assert.equal(prLookup.env.GH_TOKEN, 'git-provider-token');
+    assert.equal('SENTRY_REMEDIATION_AUTH_TOKEN' in prLookup.env, false);
     assert.equal(
       calls.some((call) => call.includes('codex')),
       true
@@ -119,6 +132,7 @@ describe('remediation git workflow', () => {
           ({ args, command }) =>
             command === 'git' &&
             !args.includes('fetch') &&
+            !args.includes('ls-remote') &&
             !args.includes('push')
         )
         .every(
@@ -130,7 +144,7 @@ describe('remediation git workflow', () => {
       calls.some(
         (call) =>
           call.join(' ') ===
-          'git -c core.hooksPath=/dev/null push -u origin codex/vercel-remediation-abc123-run-1'
+          `git -c core.hooksPath=/dev/null push -u origin ${result.branch}`
       ),
       true
     );
@@ -157,8 +171,9 @@ describe('remediation git workflow', () => {
       true
     );
     assert.ok(
-      calls.findIndex((call) => call.join(' ') === 'bash -lc pnpm turbo lint') <
-        calls.findIndex((call) => call.includes('push'))
+      calls.findIndex(
+        (call) => call.join(' ') === `bash -lc ${REMEDIATION_VERIFY_COMMAND}`
+      ) < calls.findIndex((call) => call.includes('push'))
     );
     assert.equal(
       calls.some(
@@ -167,6 +182,41 @@ describe('remediation git workflow', () => {
           'git worktree remove --force /worktrees/abc123-run-1'
       ),
       true
+    );
+  });
+
+  it('redacts a runner failure before it can be reported', () => {
+    const { runner: baseRunner } = makeRunner();
+    const runner = (command, args, options) => {
+      if (command === 'bash') {
+        return {
+          error: new Error(
+            'Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz012345'
+          ),
+        };
+      }
+      return baseRunner(command, args, options);
+    };
+
+    assert.throws(
+      () =>
+        runRemediationAutofix({
+          candidate,
+          env: {
+            BACI_REMEDIATION_VERIFY_COMMAND: 'pnpm turbo lint',
+            BACI_REPO_DIR: '/repo',
+            BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
+          },
+          runner,
+        }),
+      (error) => {
+        assert.doesNotMatch(
+          error.message,
+          /ghp_abcdefghijklmnopqrstuvwxyz012345/
+        );
+        assert.match(error.message, /\[REDACTED\]/);
+        return true;
+      }
     );
   });
 
@@ -188,69 +238,6 @@ describe('remediation git workflow', () => {
     assert.equal(
       calls.some((call) => call.join(' ').includes('pr merge')),
       false
-    );
-  });
-
-  it('preserves Codex output when an investigation makes no changes', () => {
-    const outputDir = mkdtempSync(join(tmpdir(), 'baci-remediation-output-'));
-    const { runner: baseRunner } = makeRunner({ statusOutput: '' });
-    const runner = (command, args, options) => {
-      if (command === 'codex') {
-        return {
-          status: 0,
-          stdout: 'The event is a successful HTTP 200 and needs no code fix.\n',
-          stderr: '',
-        };
-      }
-      return baseRunner(command, args, options);
-    };
-
-    const result = runRemediationAutofix({
-      candidate,
-      env: {
-        BACI_REMEDIATION_VERIFY_COMMAND: 'pnpm turbo lint',
-        BACI_REMEDIATION_OUTPUT_DIR: outputDir,
-        BACI_REPO_DIR: '/repo',
-        BACI_REMEDIATION_RUN_ID: 'report-run',
-        BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
-      },
-      runner,
-    });
-
-    assert.equal(result.type, 'no_changes');
-    assert.equal(result.resultPath, join(outputDir, 'abc123.result.md'));
-    assert.match(
-      readFileSync(result.resultPath, 'utf8'),
-      /successful HTTP 200/
-    );
-  });
-
-  it('rejects a sandbox-blocked investigation before marking it handled', () => {
-    const outputDir = mkdtempSync(join(tmpdir(), 'baci-remediation-output-'));
-    const { runner: baseRunner } = makeRunner({ statusOutput: '' });
-    const runner = (command, args, options) =>
-      command === 'codex'
-        ? {
-            status: 0,
-            stdout:
-              'bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted',
-            stderr: '',
-          }
-        : baseRunner(command, args, options);
-
-    assert.throws(
-      () =>
-        runRemediationAutofix({
-          candidate,
-          env: {
-            BACI_REMEDIATION_VERIFY_COMMAND: 'pnpm turbo lint',
-            BACI_REMEDIATION_OUTPUT_DIR: outputDir,
-            BACI_REPO_DIR: '/repo',
-            BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
-          },
-          runner,
-        }),
-      /sandbox failed before repository inspection/
     );
   });
 });

@@ -262,9 +262,11 @@ describe('PuckStorefront', () => {
     const { rerender, unmount } = render(<PuckStorefront />);
 
     await screen.findByRole('status');
-    expect(
-      document.documentElement.style.getPropertyValue('--background')
-    ).toBe('0 0% 100%');
+    await waitFor(() =>
+      expect(
+        document.documentElement.style.getPropertyValue('--background')
+      ).toBe('0 0% 100%')
+    );
 
     mocks.config = buildCuratedStorefront({
       brandColors: {

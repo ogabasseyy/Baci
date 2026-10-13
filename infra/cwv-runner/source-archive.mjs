@@ -110,11 +110,18 @@ export function createSourceArchive(entries) {
   return archive;
 }
 const zeros = (value) => value.every((byte) => byte === 0);
-const field = (value, start, length) =>
-  value
-    .subarray(start, start + length)
-    .toString('ascii')
-    .replace(/\0+$/, '');
+const field = (value, start, length) => {
+  const bytes = value.subarray(start, start + length);
+  const end = bytes.indexOf(0);
+  const used = end < 0 ? bytes : bytes.subarray(0, end);
+  const text = used.toString('utf8');
+  if (
+    (end >= 0 && !zeros(bytes.subarray(end))) ||
+    !Buffer.from(text).equals(used)
+  )
+    fail('invalid tar utf8 field');
+  return text;
+};
 function readOctal(value, start, length) {
   const raw = field(value, start, length);
   if (!/^[0-7]+$/.test(raw)) fail('invalid tar octal field');

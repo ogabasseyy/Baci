@@ -1,16 +1,7 @@
-import { z } from 'zod';
-import { featuresPatchSchema } from './features-patch';
-import { heroPatchSchema } from './hero-patch';
-import { newsletterPatchSchema } from './newsletter-patch';
-import { testimonialPatchSchema } from './testimonial-patch';
-import { textPatchSchema } from './text-patch';
+import { getManifestComponentSchema } from './manifest-component-schema';
 
-export const componentPatchSchema = z.discriminatedUnion('componentType', [
-  heroPatchSchema,
-  textPatchSchema,
-  featuresPatchSchema,
-  testimonialPatchSchema,
-  newsletterPatchSchema,
-]);
+export const componentPatchSchema = getManifestComponentSchema('edit');
 
-export type BuilderAiComponentPatch = z.infer<typeof componentPatchSchema>;
+export type BuilderAiComponentPatch = Record<string, unknown> & {
+  componentType: string;
+};

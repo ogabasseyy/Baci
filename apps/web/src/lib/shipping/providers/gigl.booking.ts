@@ -1,6 +1,7 @@
 import { OrderShipmentBookingError } from '../order-shipment-booking-utils';
 import type { BookingRequest, ShipmentBookingResult } from '../types';
 import type { GiglApiClient } from './gigl.auth';
+import { resolveGiglBookingSenderStation } from './gigl.booking.station-binding';
 import {
   GIGL_BOOKING_TIMEOUT_MS,
   GIGL_DEFAULT_SPECIAL_PACKAGE_ID,
@@ -19,6 +20,14 @@ import {
 } from './gigl.international.booking';
 import { giglSchemas } from './gigl.schemas';
 import type { GiglStationsService } from './gigl.stations';
+
+function stationResolutionError(message: string) {
+  return new OrderShipmentBookingError(
+    message,
+    400,
+    'GIGL_STATION_RESOLUTION_FAILED'
+  );
+}
 
 export async function bookGiglShipment(
   apiClient: GiglApiClient,
@@ -42,23 +51,37 @@ export async function bookGiglShipment(
     selectedRate.vehicleType ?? getVehicleTypeForWeight(totalWeight);
 
   try {
-    const tokenData = await apiClient.getApiToken(
-      GIGL_BOOKING_TIMEOUT_MS,
-      signal
-    );
-    const senderStation = await stationsService.findStationForCity(
-      request.sender.city,
-      request.sender.state,
-      GIGL_BOOKING_TIMEOUT_MS,
-      signal
-    );
-
-    if (!senderStation) {
-      throw new Error('No GIGL station found for pickup location');
+    let tokenData: Awaited<ReturnType<GiglApiClient['getApiToken']>>;
+    try {
+      tokenData = await apiClient.getApiToken(GIGL_BOOKING_TIMEOUT_MS, signal);
+    } catch (error) {
+      if (error instanceof OrderShipmentBookingError) {
+        throw error;
+      }
+      if (signal.aborted || isGiglAbortError(error)) {
+        throw new OrderShipmentBookingError(
+          'GIGL API authentication timed out',
+          504,
+          'GIGL_AUTHENTICATION_FAILED'
+        );
+      }
+      throw new OrderShipmentBookingError(
+        error instanceof Error
+          ? error.message
+          : 'GIGL API authentication failed',
+        502,
+        'GIGL_AUTHENTICATION_FAILED'
+      );
     }
+    const senderStation = await resolveGiglBookingSenderStation(
+      stationsService,
+      selectedRate,
+      request.sender,
+      signal
+    );
 
     if (isStationPickup && selectedRate.receiverStationId === undefined) {
-      throw new Error('Invalid GIGL station pickup rate');
+      throw stationResolutionError('Invalid GIGL station pickup rate');
     }
 
     const selectedReceiverStation =
@@ -74,7 +97,7 @@ export async function bookGiglShipment(
       selectedRate.receiverStationId !== undefined &&
       !selectedReceiverStation
     ) {
-      throw new Error('Selected GIGL station was not found');
+      throw stationResolutionError('Selected GIGL station was not found');
     }
 
     const receiverStation =
@@ -87,7 +110,9 @@ export async function bookGiglShipment(
       ));
 
     if (!receiverStation) {
-      throw new Error('No GIGL station found for delivery location');
+      throw stationResolutionError(
+        'No GIGL station found for delivery location'
+      );
     }
 
     const selectedServiceCentre =
@@ -104,7 +129,9 @@ export async function bookGiglShipment(
       selectedRate.serviceCentreId !== undefined &&
       !selectedServiceCentre
     ) {
-      throw new Error('Selected GIGL service centre was not found');
+      throw stationResolutionError(
+        'Selected GIGL service centre was not found'
+      );
     }
 
     const bookingTokenData = apiClient.currentToken ?? tokenData;
@@ -161,8 +188,6 @@ export async function bookGiglShipment(
             },
             ShipmentDetails: {
               VehicleType: vehicleType,
-              DeliveryType: selectedRate.deliveryType,
-              PickupOptions: selectedRate.pickupOption,
               IsPriorityShipment:
                 selectedRate.deliveryType === GiglDeliveryType.GoFaster,
               IsCashOnDelivery: false,
@@ -232,6 +257,9 @@ export async function bookGiglShipment(
       rawResponse: bookingData,
     };
   } catch (error) {
+    if (error instanceof OrderShipmentBookingError) {
+      throw error;
+    }
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL booking timed out', {
         timeoutMs: GIGL_BOOKING_TIMEOUT_MS,

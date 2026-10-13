@@ -64,7 +64,7 @@ export function SettingsSectionRow({
             importantForAccessibility="no"
           />
         </View>
-        <View>
+        <View style={styles.rowText}>
           <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
           {subtitle ? (
             <Text style={[styles.rowSub, { color: computedSubtitleColor }]}>
@@ -73,7 +73,7 @@ export function SettingsSectionRow({
           ) : null}
         </View>
       </View>
-      {right}
+      <View style={styles.rowRight}>{right}</View>
     </Pressable>
   );
 }

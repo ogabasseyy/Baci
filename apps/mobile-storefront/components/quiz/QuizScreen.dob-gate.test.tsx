@@ -15,6 +15,13 @@ import {
 import { QuizServiceError } from '@/services/quiz-types';
 import { useQuizStore } from '@/stores/quiz-store';
 
+jest.mock('@/components/quiz/QuizMusicPlayer', () => ({
+  QuizMusicPlayer: () => null,
+}));
+jest.mock('@/components/quiz/QuizGameplayAdFooter', () => ({
+  QuizGameplayAdFooter: () => null,
+}));
+
 // The username gate pulls in additional modules (UsernamePrompt, the zod
 // username schema, the gate modal) that add one-time mount cost to whichever
 // test in this file runs first — that can push it past Jest's 5000ms default
@@ -84,12 +91,13 @@ jest.mock('@react-native-community/datetimepicker', () => ({
   },
 }));
 
+const quizEventNow = Date.now();
 const quizEvent: QuizEvent = {
-  endsAt: '2026-05-20T10:10:00.000Z',
+  endsAt: new Date(quizEventNow + 10 * 60 * 1000).toISOString(),
   id: 'event-1',
   prizeName: 'N50,000 store credit',
   questionCount: 3,
-  startsAt: '2026-05-20T10:00:00.000Z',
+  startsAt: new Date(quizEventNow - 60 * 1000).toISOString(),
   status: 'open',
   title: 'Daily Prize Quiz',
 };

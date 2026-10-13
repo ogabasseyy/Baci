@@ -148,7 +148,7 @@ describe('merchant analytics utils', () => {
     });
   });
 
-  it('keeps missing cost fields finite in top entity summaries', () => {
+  it('does not count selling price as profit when cost price is missing', () => {
     const result = buildTopEntities([
       item({
         costPrice: null,
@@ -159,7 +159,7 @@ describe('merchant analytics utils', () => {
       }),
     ]);
 
-    expect(result.totalProfit).toBe(100);
+    expect(result.totalProfit).toBe(0);
     expect(Number.isFinite(result.totalProfit)).toBe(true);
     expect(result.totalUnitsSold).toBe(2);
   });

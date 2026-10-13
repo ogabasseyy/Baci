@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import { adminGenerateHeroImagesRequestSchema } from '@/schemas/admin-generate-hero-images';
@@ -18,7 +18,7 @@ function toAuthErrorResponse(status: 'unauthenticated' | 'forbidden') {
  * POST /api/admin/generate-hero-images
  */
 export async function POST(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }
@@ -80,9 +80,16 @@ export async function POST(request: NextRequest) {
     const result = await generateHeroImageBatch(category, count);
 
     if (!result.success) {
+      logger.error({
+        message: 'Hero image generation failed',
+        error: result.error,
+      });
       return NextResponse.json(
-        { error: result.error || 'Failed to generate images' },
-        { status: 500 }
+        {
+          code: 'hero_image_generation_failed',
+          error: 'Unable to generate hero images.',
+        },
+        { status: 502 }
       );
     }
 
@@ -95,7 +102,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error({ message: 'Hero image generation API error', error });
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        code: 'hero_image_generation_failed',
+        error: 'Unable to generate hero images.',
+      },
       { status: 500 }
     );
   }
@@ -106,7 +116,7 @@ export async function POST(request: NextRequest) {
  * GET /api/admin/generate-hero-images
  */
 export async function GET() {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }

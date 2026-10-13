@@ -1,7 +1,11 @@
 import type { ProductKeySpecs } from '@/lib/products';
 import { stripHtmlTags } from '@/lib/sanitize-core';
+import { getFirstAcceptedSpecValue } from './get-first-accepted-spec-value';
 
 interface FeedDescriptionInput {
+  categories?: { name?: string | null; slug?: string | null } | null;
+  category?: string | null;
+  category_slug?: string | null;
   color?: string | null;
   description?: string | null;
   name: string;
@@ -50,23 +54,31 @@ function removeFeedOnlyBoilerplate(value: string) {
 }
 
 function buildWeightLabel(input: FeedDescriptionInput) {
-  const keySpecWeight = input.product_key_specs?.weight_g;
+  const keySpecWeight = getFirstAcceptedSpecValue(
+    input,
+    'weight_g',
+    input.product_key_specs?.weight_g
+  );
   if (typeof keySpecWeight === 'number' && Number.isFinite(keySpecWeight)) {
     return `${keySpecWeight}g`;
   }
 
+  const shippingWeight = input.weight_value;
   if (
-    typeof input.weight_value === 'number' &&
-    Number.isFinite(input.weight_value) &&
+    typeof shippingWeight === 'number' &&
+    Number.isFinite(shippingWeight) &&
+    shippingWeight > 0 &&
     input.weight_unit
   ) {
-    return `${input.weight_value}${input.weight_unit}`;
+    return `${shippingWeight}${input.weight_unit}`;
   }
 
   return undefined;
 }
 
 function getVariantAttribute(
+  input: FeedDescriptionInput,
+  specKey: string,
   attributes: FeedDescriptionInput['variant_attributes'],
   aliases: string[]
 ) {
@@ -84,7 +96,11 @@ function getVariantAttribute(
     }
 
     const normalizedValue = normalizeText(value);
-    if (normalizedValue) {
+    if (
+      normalizedValue &&
+      getFirstAcceptedSpecValue(input, specKey, normalizedValue) ===
+        normalizedValue
+    ) {
       return normalizedValue;
     }
   }
@@ -94,40 +110,71 @@ function getVariantAttribute(
 
 function buildSpecDetails(input: FeedDescriptionInput) {
   const specs = input.product_key_specs ?? {};
-  const color =
-    getVariantAttribute(input.variant_attributes, ['color', 'colour']) ||
-    normalizeText(input.color) ||
-    (typeof specs.available_colors === 'string'
-      ? normalizeText(specs.available_colors)
-      : undefined);
+  const colorValue = getFirstAcceptedSpecValue(
+    input,
+    'available_colors',
+    getVariantAttribute(input, 'available_colors', input.variant_attributes, [
+      'color',
+      'colour',
+    ]),
+    normalizeText(input.color),
+    specs.available_colors
+  );
+  const color = normalizeText(colorValue);
+  const screenSizeValue = getFirstAcceptedSpecValue(
+    input,
+    'screen_size_inches',
+    specs.screen_size_inches
+  );
   const screenSize =
-    typeof specs.screen_size_inches === 'number'
-      ? `${specs.screen_size_inches} inches`
+    typeof screenSizeValue === 'number'
+      ? `${screenSizeValue} inches`
       : undefined;
-  const screenResolution =
-    typeof specs.display_resolution === 'string'
-      ? normalizeText(specs.display_resolution)
-      : undefined;
+  const screenResolutionValue = getFirstAcceptedSpecValue(
+    input,
+    'display_resolution',
+    specs.display_resolution
+  );
+  const screenResolution = normalizeText(screenResolutionValue);
+  const ramValue = getFirstAcceptedSpecValue(
+    input,
+    'ram_gb',
+    getVariantAttribute(input, 'ram_gb', input.variant_attributes, [
+      'ram',
+      'memory',
+    ]),
+    specs.ram_gb
+  );
   const ram =
-    getVariantAttribute(input.variant_attributes, ['ram', 'memory']) ||
-    (typeof specs.ram_gb === 'number' ? `${specs.ram_gb}GB` : undefined);
-  const storage =
-    getVariantAttribute(input.variant_attributes, [
+    typeof ramValue === 'number' ? `${ramValue}GB` : normalizeText(ramValue);
+  const storageValue = getFirstAcceptedSpecValue(
+    input,
+    'storage_gb',
+    getVariantAttribute(input, 'storage_gb', input.variant_attributes, [
       'storage',
       'storage_capacity',
       'rom',
-    ]) ||
-    (typeof specs.storage_gb === 'number'
-      ? `${specs.storage_gb}GB`
-      : undefined);
+    ]),
+    specs.storage_gb
+  );
+  const storage =
+    typeof storageValue === 'number'
+      ? `${storageValue}GB`
+      : normalizeText(storageValue);
+  const rearCameraValue = getFirstAcceptedSpecValue(
+    input,
+    'main_camera_mp',
+    specs.main_camera_mp
+  );
   const rearCamera =
-    typeof specs.main_camera_mp === 'number'
-      ? `${specs.main_camera_mp}MP`
-      : undefined;
+    typeof rearCameraValue === 'number' ? `${rearCameraValue}MP` : undefined;
+  const frontCameraValue = getFirstAcceptedSpecValue(
+    input,
+    'front_camera_mp',
+    specs.front_camera_mp
+  );
   const frontCamera =
-    typeof specs.front_camera_mp === 'number'
-      ? `${specs.front_camera_mp}MP`
-      : undefined;
+    typeof frontCameraValue === 'number' ? `${frontCameraValue}MP` : undefined;
   const weight = buildWeightLabel(input);
 
   return [

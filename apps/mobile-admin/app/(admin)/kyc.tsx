@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useKycVerificationRefresh } from '@/hooks/useKycVerificationRefresh';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
+import { isBaciPaystackSettlementCountry } from '@/lib/is-baci-paystack-settlement-country';
 import { supabase } from '@/lib/supabase';
 
 interface VerificationStatus {
@@ -82,8 +83,9 @@ export default function KYCScreen() {
 
   const isOwner =
     !!user?.id && !!merchant?.user_id && user.id === merchant.user_id;
-  const supportsNigerianVerification =
-    merchant?.country?.trim().toUpperCase() === 'NG';
+  const supportsNigerianVerification = isBaciPaystackSettlementCountry(
+    merchant?.country
+  );
 
   const {
     data: status,

@@ -17,9 +17,11 @@ export default function AdminTemplatesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Templates</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Template Catalogue
+          </h1>
           <p className="text-muted-foreground">
-            Manage available storefront templates.
+            Review the storefront templates currently available to merchants.
           </p>
         </div>
       </div>

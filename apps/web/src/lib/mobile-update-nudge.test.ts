@@ -128,9 +128,10 @@ describe('notifyStorefrontUpdateAvailable', () => {
       .mockReturnValueOnce(selectChain)
       .mockReturnValueOnce(stampChain);
     mocks.createAdminClient.mockReturnValue({ from });
-    mocks.sendPushNotifications.mockResolvedValueOnce([
-      { status: 'ok', id: 'ticket-1' },
-    ]);
+    mocks.sendPushNotifications.mockResolvedValueOnce({
+      deliveryUncertain: false,
+      tickets: [{ status: 'ok', id: 'ticket-1' }],
+    });
 
     const { notifyStorefrontUpdateAvailable } = await import(
       './mobile-update-nudge'
@@ -162,5 +163,53 @@ describe('notifyStorefrontUpdateAvailable', () => {
       expect.any(Object),
       expect.objectContaining({ appType: 'admin', tokenCount: 1 })
     );
+    const sentMessages = mocks.sendPushNotifications.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    }[];
+    const recordedAttempt = mocks.recordPushAttempt.mock.calls.at(-1)?.[1] as {
+      payload: Record<string, unknown>;
+    };
+    expect(sentMessages[0]?.data.notification_id).toEqual(expect.any(String));
+    expect(recordedAttempt.payload.notification_id).toBe(
+      sentMessages[0]?.data.notification_id
+    );
+  });
+
+  it('stamps the whole batch when dispatch is uncertain', async () => {
+    const selectChain = createChainableMock([
+      { id: 'token-row-1', token: 'ExponentPushToken[1]' },
+      { id: 'token-row-2', token: 'ExponentPushToken[2]' },
+    ]);
+    const stampChain = createChainableMock();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(stampChain);
+    mocks.createAdminClient.mockReturnValue({ from });
+    // No 'ok' tickets, but the provider may have delivered: leaving
+    // the batch unstamped would reselect and duplicate the nudge on
+    // the next run.
+    mocks.sendPushNotifications.mockResolvedValueOnce({
+      deliveryUncertain: true,
+      tickets: [{ status: 'error', id: 'ticket-1' }, null],
+    });
+
+    const { notifyStorefrontUpdateAvailable } = await import(
+      './mobile-update-nudge'
+    );
+
+    await notifyStorefrontUpdateAvailable({
+      platform: 'android',
+      latestBuild: 125,
+      now: new Date('2026-06-28T12:00:00.000Z'),
+    });
+
+    expect(stampChain.update).toHaveBeenCalledWith({
+      last_update_push_at: '2026-06-28T12:00:00.000Z',
+    });
+    expect(stampChain.in).toHaveBeenCalledWith('id', [
+      'token-row-1',
+      'token-row-2',
+    ]);
   });
 });

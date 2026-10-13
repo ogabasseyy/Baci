@@ -8,6 +8,8 @@ import type {
 } from '@/app/api/feed/google-merchant/feed-builder';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import {
   MerchantNotFoundError,
   resolveFeedMerchant,
@@ -19,9 +21,12 @@ import {
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { googleMerchantFeedQuerySchema } from '@/schemas/google-merchant-feed-query';
 
 const UNLIMITED_STOCK_QUANTITY = 9999;
+
+const { normalizeParentProductIdentifiers } = productManufacturerIdentifiers;
 
 interface ResolvedTikTokImages {
   additionalImageUrls: string[];
@@ -52,17 +57,23 @@ function escapeXml(unsafe: string): string {
 }
 
 function resolveTikTokImages(
-  manifestEntries: ImageManifestMap[string] | undefined
+  manifestEntries: ImageManifestMap[string] | undefined,
+  excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedTikTokImages | null {
-  const entries = manifestEntries || [];
-  const primaryImageUrl = resolveGmcPrimaryImage(entries);
+  // Base rows use product-level imagery only: variant-scoped rows belong
+  // to another SKU and must not leak into the parent product row.
+  const entries = (manifestEntries || []).filter((entry) => !entry.variant_id);
+  const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
   if (!primaryImageUrl) {
     return null;
   }
 
   return {
     primaryImageUrl,
-    additionalImageUrls: resolveGmcAdditionalImages(entries),
+    additionalImageUrls: resolveGmcAdditionalImages(
+      entries,
+      excludeUrls
+    ).filter((url) => url !== primaryImageUrl),
   };
 }
 
@@ -158,7 +169,12 @@ function generateTikTokFeed(
       (product) => product.id && product.name?.trim() && product.price > 0
     )
     .map((product) => {
-      const images = resolveTikTokImages(imageManifest[product.id]);
+      const images = resolveTikTokImages(
+        imageManifest[product.id],
+        collectOfferClaimedImageUrls(
+          getEligibleConditionOffers(product.offers, product.condition)
+        )
+      );
       if (!images) {
         return null;
       }
@@ -168,6 +184,9 @@ function generateTikTokFeed(
         baseUrl: normalizedBaseUrl,
         product,
       });
+      // Rows carry parent identifiers only when they are usable non-blank
+      // strings; whitespace must not reach the feed.
+      const productIdentifiers = normalizeParentProductIdentifiers(product);
 
       return buildItemXml({
         additionalImageUrls: images.additionalImageUrls,
@@ -178,12 +197,12 @@ function generateTikTokFeed(
         currency,
         description: buildFeedDescription(product),
         googleProductCategory: product.google_product_category,
-        gtin: product.gtin,
+        gtin: productIdentifiers.gtin,
         id: product.id,
         imageUrl: images.primaryImageUrl,
         itemGroupId: product.sku || product.id,
         link: productUrl,
-        mpn: product.mpn,
+        mpn: productIdentifiers.mpn,
         price: product.price,
         productType: product.categories?.name || product.category,
         title: product.name,

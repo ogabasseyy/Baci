@@ -1,10 +1,11 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Alert, Image, Linking, Pressable, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, Text, View } from 'react-native';
 import { TrackOrderTimelineCard } from '@/components/track-order/TrackOrderTimelineCard';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { getCustomerOrderStatusMeta } from '@/lib/customer-order-status';
 import { TrackOrderContactCard } from './TrackOrderContactCard';
+import { TrackOrderItemsCard } from './TrackOrderItemsCard';
 import { trackOrderScreenStyles as styles } from './TrackOrderScreen.styles';
 import type { TrackOrderData } from './TrackOrderScreen.types';
 import {
@@ -161,69 +162,6 @@ function ShippingTrackingCard({
           </Pressable>
         )}
       </View>
-    </View>
-  );
-}
-
-function TrackOrderItemsCard({
-  colors,
-  currency,
-  items,
-}: {
-  colors: ColorsScheme;
-  currency: string;
-  items: TrackOrderData['items'];
-}) {
-  return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        Items ({items.length})
-      </Text>
-      {items.map((item) => (
-        <View
-          key={item.id}
-          style={[styles.itemRow, { borderBottomColor: colors.border }]}
-        >
-          {item.product_image ? (
-            <Image
-              source={{ uri: item.product_image }}
-              style={styles.itemImage}
-            />
-          ) : (
-            <View
-              style={[
-                styles.itemImagePlaceholder,
-                { backgroundColor: colors.border },
-              ]}
-            >
-              <Ionicons
-                name="cube-outline"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </View>
-          )}
-          <View style={styles.itemInfo}>
-            <Text
-              style={[styles.itemName, { color: colors.text }]}
-              numberOfLines={2}
-            >
-              {item.product_name}
-            </Text>
-            <Text style={[styles.itemQty, { color: colors.textSecondary }]}>
-              Qty: {item.quantity}
-            </Text>
-          </View>
-          <Text style={[styles.itemPrice, { color: colors.text }]}>
-            {formatTrackOrderPrice(item.total_price, currency)}
-          </Text>
-        </View>
-      ))}
     </View>
   );
 }

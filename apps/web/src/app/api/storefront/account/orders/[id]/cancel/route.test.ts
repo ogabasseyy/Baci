@@ -46,11 +46,27 @@ function makeRequest(body?: unknown) {
 
 const params = Promise.resolve({ id: ORDER_ID });
 
-function authOk() {
+function orderRow(paymentMethod: string | null) {
+  return {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data:
+              paymentMethod === null ? null : { payment_method: paymentMethod },
+            error: null,
+          }),
+        })),
+      })),
+    })),
+  };
+}
+
+function authOk(paymentMethod: string | null = 'card') {
   mockAuthenticateApiRequest.mockResolvedValue({
     user: { id: 'user-1' },
     error: null,
-    supabase: { rpc: mockRpc },
+    supabase: { rpc: mockRpc, ...orderRow(paymentMethod) },
   });
 }
 
@@ -232,5 +248,80 @@ describe('POST /api/storefront/account/orders/[id]/cancel', () => {
     const res = await POST(makeRequest({}), { params });
 
     expect(res.status).toBe(200);
+  });
+
+  it('routes REDVAULT orders through the scoped cancellation RPC', async () => {
+    authOk('uba_redvault');
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    const res = await POST(makeRequest({ reason: 'Changed my mind' }), {
+      params,
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'cancel_uba_redvault_order_as_customer',
+      {
+        p_order_id: ORDER_ID,
+        p_reason: 'Changed my mind',
+      }
+    );
+    expect(mockSendOrderCancellationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: ORDER_ID, cancelledBy: 'customer' })
+    );
+  });
+
+  it('maps a REDVAULT funds-in-flight rejection to 409', async () => {
+    authOk('uba_redvault');
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'redvault_customer_cancel_active', code: 'P0001' },
+    });
+
+    const res = await POST(makeRequest({}), { params });
+
+    expect(res.status).toBe(409);
+    expect(mockSendOrderCancellationEmail).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the generic RPC when the order row is unreadable', async () => {
+    authOk(null);
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    const res = await POST(makeRequest({}), { params });
+
+    expect(res.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith('cancel_order_as_customer', {
+      p_order_id: ORDER_ID,
+      p_reason: null,
+    });
+  });
+
+  it('fails closed when the payment-method lookup errors', async () => {
+    mockAuthenticateApiRequest.mockResolvedValue({
+      user: { id: 'user-1' },
+      error: null,
+      supabase: {
+        rpc: mockRpc,
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'connection reset' },
+              }),
+            })),
+          })),
+        })),
+      },
+    });
+
+    const res = await POST(makeRequest({}), { params });
+    const json = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(json.code).toBe('order_lookup_failed');
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockSendOrderCancellationEmail).not.toHaveBeenCalled();
   });
 });

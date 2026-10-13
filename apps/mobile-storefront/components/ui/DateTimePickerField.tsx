@@ -3,9 +3,22 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
-import { Pressable, Text, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useColorScheme } from '@/components/useColorScheme';
+import Colors, { RADIUS, SPACING, withAlpha } from '@/constants/Colors';
+import {
+  type DateTimeDisplayMode,
+  formatDateTimeDisplay,
+} from './format-date-time-display';
 
-type DateTimePickerFieldMode = 'date' | 'time';
+type DateTimePickerFieldMode = DateTimeDisplayMode;
 
 // The savings flow design defaults preferred debit time to 06:20 AM.
 const DEFAULT_TIME_HOUR = 6;
@@ -13,6 +26,7 @@ const DEFAULT_TIME_MINUTE = 20;
 
 type DateTimePickerFieldProps = {
   accessibilityLabel: string;
+  displayFormattedValue?: boolean;
   fieldStyle?: StyleProp<ViewStyle>;
   fallbackDisplay: string;
   label: string;
@@ -84,6 +98,7 @@ function formatPickerValue(date: Date, mode: DateTimePickerFieldMode) {
 
 export function DateTimePickerField({
   accessibilityLabel,
+  displayFormattedValue = false,
   fallbackDisplay,
   fieldStyle,
   label,
@@ -95,6 +110,9 @@ export function DateTimePickerField({
   wrapperStyle,
 }: DateTimePickerFieldProps) {
   const [isPickerVisible, setIsPickerVisible] = useState(false);
+  const [draftPickerValue, setDraftPickerValue] = useState<Date | null>(null);
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const pickerValue =
     parsePickerValue(value, mode) ??
     // The native picker requires a Date object; use today only at the UI
@@ -106,13 +124,38 @@ export function DateTimePickerField({
     selectedDate?: Date
   ) => {
     if (event.type === 'dismissed') {
+      setDraftPickerValue(null);
       setIsPickerVisible(false);
       return;
     }
 
     if (selectedDate) {
+      setDraftPickerValue(selectedDate);
       onChangeText(formatPickerValue(selectedDate, mode));
     }
+    // iOS spinner pickers emit `set` events while the user scrolls. Keep the
+    // picker mounted so the user can finish scrolling and submit the selected
+    // value with the form's Continue button. Android closes its native dialog
+    // after a selection.
+    if (Platform.OS !== 'ios') {
+      setIsPickerVisible(false);
+    }
+  };
+
+  const handleOpenPicker = () => {
+    setDraftPickerValue(pickerValue);
+    setIsPickerVisible(true);
+  };
+
+  const displayValue = displayFormattedValue
+    ? formatDateTimeDisplay(value, mode)
+    : value || fallbackDisplay;
+
+  const handleDone = () => {
+    const valueToCommit = draftPickerValue ?? pickerValue;
+    const formattedValue = formatPickerValue(valueToCommit, mode);
+    if (formattedValue !== value) onChangeText(formattedValue);
+    setDraftPickerValue(null);
     setIsPickerVisible(false);
   };
 
@@ -122,19 +165,109 @@ export function DateTimePickerField({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        onPress={() => setIsPickerVisible(true)}
+        onPress={handleOpenPicker}
         style={fieldStyle}
       >
-        <Text style={textStyle}>{value || fallbackDisplay}</Text>
+        <Text style={textStyle}>{displayValue}</Text>
       </Pressable>
-      {isPickerVisible ? (
-        <DateTimePicker
-          accessibilityLabel={accessibilityLabel}
-          mode={mode}
-          value={pickerValue}
-          onChange={handlePickerChange}
-        />
+      {isPickerVisible && Platform.OS === 'ios' ? (
+        <Modal
+          accessibilityViewIsModal
+          animationType="fade"
+          onRequestClose={() => setIsPickerVisible(false)}
+          transparent
+          visible
+        >
+          <View
+            style={[
+              styles.iosPickerOverlay,
+              { backgroundColor: withAlpha(colors.black, 0.5) },
+            ]}
+          >
+            <View
+              style={[styles.iosPickerSheet, { backgroundColor: colors.card }]}
+            >
+              <DateTimePicker
+                accessibilityLabel={accessibilityLabel}
+                display={mode === 'date' ? 'inline' : 'spinner'}
+                mode={mode}
+                is24Hour={
+                  displayFormattedValue && mode === 'time' ? false : undefined
+                }
+                locale={
+                  displayFormattedValue
+                    ? mode === 'time'
+                      ? 'en-US'
+                      : 'en-GB'
+                    : undefined
+                }
+                themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
+                value={pickerValue}
+                onChange={handlePickerChange}
+              />
+              <Pressable
+                accessibilityLabel={`Done selecting ${label}`}
+                accessibilityRole="button"
+                onPress={handleDone}
+                style={styles.iosPickerDone}
+              >
+                <Text
+                  style={[
+                    styles.iosPickerDoneText,
+                    { color: colors.primary },
+                    textStyle,
+                  ]}
+                >
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : isPickerVisible ? (
+        <View>
+          <DateTimePicker
+            accessibilityLabel={accessibilityLabel}
+            display="default"
+            mode={mode}
+            is24Hour={
+              displayFormattedValue && mode === 'time' ? false : undefined
+            }
+            locale={
+              displayFormattedValue
+                ? mode === 'time'
+                  ? 'en-US'
+                  : 'en-GB'
+                : undefined
+            }
+            themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
+            value={pickerValue}
+            onChange={handlePickerChange}
+          />
+        </View>
       ) : null}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  iosPickerDone: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  iosPickerDoneText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  iosPickerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  iosPickerSheet: {
+    borderTopLeftRadius: RADIUS['2xl'],
+    borderTopRightRadius: RADIUS['2xl'],
+    padding: SPACING.md,
+    width: '100%',
+  },
+});

@@ -1,9 +1,21 @@
 import { escapeHtmlAttribute, escapeHtmlText } from '@/lib/sanitize';
 import { sanitizeUrl } from '@/lib/sanitize-core';
+import {
+  buildConfirmationBalanceIntroHtml,
+  buildProformaIntroHtml,
+  buildProformaPaymentHtml,
+  isBalanceDueConfirmation,
+  resolveOrderCtaHref,
+  resolveProformaContext,
+} from './order-confirmation-proforma';
 import type { MerchantRegistrationInfo, OrderItem } from './shared';
-import { buildEscapedRegistrationLine, formatEmailMoney } from './shared';
+import {
+  buildOrderItemsHtml,
+  buildRegistrationFooterHtml,
+  formatEmailMoney,
+} from './shared';
 
-interface OrderConfirmationData extends MerchantRegistrationInfo {
+export interface OrderConfirmationData extends MerchantRegistrationInfo {
   orderNumber: string;
   customerName: string;
   items: OrderItem[];
@@ -19,6 +31,48 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
   merchantName: string;
   merchantUrl: string;
   currency?: string;
+  /**
+   * Unpaid invoice-method orders are proforma (325) quotations, not
+   * confirmed purchases: the body must use quotation semantics to match
+   * the "Proforma Invoice Generated" subject. Unpaid Pay for Me orders
+   * are payment requests: same transfer-instruction mechanics, but
+   * request (not quotation) semantics under their own kind — never
+   * collapsed to proforma.
+   */
+  documentKind?: 'confirmation' | 'proforma' | 'payment_request';
+  /**
+   * Order-specific tracking URL (see buildOrderTrackingLink: the
+   * /track-order page auto-resolves the token or order id plus email
+   * pair). The proforma CTA must point here — not at the storefront
+   * homepage — so customers can view the quoted invoice from the email.
+   * The tracking page shows status only: it cannot take payment, so the
+   * body must never promise payment through the link.
+   */
+  paymentLink?: string;
+  /**
+   * Dedicated virtual account assigned to an unpaid invoice order. The
+   * proforma body renders it as bank-transfer payment instructions —
+   * without these details the reader has no way to pay the quote.
+   */
+  virtualAccount?: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  };
+  /**
+   * Outstanding balance the transfer instructions charge: the full total
+   * minus credit already applied (wallet/savings/partial payment),
+   * matching the attached PDF's balance. Defaults to the full total for
+   * callers without partial coverage.
+   */
+  amountDue?: number;
+  /**
+   * Renders residual-balance transfer instructions on a commercial
+   * confirmation (credited-but-unpaid invoice): same mechanics as the
+   * proforma block, confirmation copy everywhere else. See
+   * ProformaEmailInput for the scoping contract.
+   */
+  balanceDueInstructions?: boolean;
 }
 
 /**
@@ -28,23 +82,23 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
 export function generateOrderConfirmationEmail(
   data: OrderConfirmationData
 ): string {
-  const itemsHtml = data.items
-    .map(
-      (item) => `
-    <tr>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-        <div style="font-weight: 600; color: #1e293b; font-size: 14px;">${escapeHtmlText(item.name)}</div>
-      </td>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 14px;">
-        ${item.quantity}
-      </td>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #1e293b; font-size: 14px;">
-        ${formatEmailMoney(item.price, data.currency)}
-      </td>
-    </tr>
-  `
-    )
-    .join('');
+  const isProforma = data.documentKind === 'proforma';
+  const isPaymentRequest = data.documentKind === 'payment_request';
+  // The proforma/request CTA opens the order-specific tracking page,
+  // which shows status only and cannot take payment (the quote itself
+  // travels as the attached PDF): label it as tracking, never as the
+  // document. Payment travels by bank transfer (details below).
+  const ctaHref = resolveOrderCtaHref(data);
+  const proforma = resolveProformaContext(data);
+  const proformaPaymentHtml = buildProformaPaymentHtml(data, proforma);
+  // A credited-but-unpaid invoice stays a commercial confirmation, but
+  // the recipient still needs the outstanding-balance instructions the
+  // confirmation path otherwise omits.
+  const hasBalanceDue = isBalanceDueConfirmation(data, proforma);
+  const proformaIntroHtml = hasBalanceDue
+    ? buildConfirmationBalanceIntroHtml(data, proforma)
+    : buildProformaIntroHtml(data, proforma);
+  const itemsHtml = buildOrderItemsHtml(data.items, data.currency);
 
   return `
 <!DOCTYPE html>
@@ -52,7 +106,7 @@ export function generateOrderConfirmationEmail(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Confirmation #${escapeHtmlText(data.orderNumber)}</title>
+  <title>${isProforma ? `Proforma Invoice #${escapeHtmlText(data.orderNumber)}` : isPaymentRequest ? `Payment Request #${escapeHtmlText(data.orderNumber)}` : `Order Confirmation #${escapeHtmlText(data.orderNumber)}`}</title>
   <style>
     @media only screen and (max-width: 600px) {
       .container { width: 100% !important; padding: 20px !important; }
@@ -85,8 +139,8 @@ export function generateOrderConfirmationEmail(
                 </tr>
                 <tr>
                   <td colspan="2" style="padding-top: 30px;">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.2;">Order #${escapeHtmlText(data.orderNumber)} Confirmed</h1>
-                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">Thank you for your purchase</p>
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.2;">${isProforma ? `Proforma Invoice #${escapeHtmlText(data.orderNumber)}` : isPaymentRequest ? `Payment Request #${escapeHtmlText(data.orderNumber)}` : `Order #${escapeHtmlText(data.orderNumber)} Confirmed`}</h1>
+                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">${isProforma ? 'A quotation for your review — no payment taken yet' : isPaymentRequest ? 'Share the transfer details below with your payer — no payment taken yet' : hasBalanceDue ? 'Your order is confirmed — an outstanding balance remains' : 'Thank you for your purchase'}</p>
                   </td>
                 </tr>
               </table>
@@ -98,7 +152,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable).
+                ${isProforma || isPaymentRequest || hasBalanceDue ? proformaIntroHtml : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -138,6 +192,7 @@ export function generateOrderConfirmationEmail(
               </div>
             </td>
           </tr>
+          ${proformaPaymentHtml}
 
           <!-- Addresses -->
           <tr>
@@ -168,8 +223,8 @@ export function generateOrderConfirmationEmail(
           <!-- CTA -->
           <tr>
             <td align="center" style="padding: 0 40px 40px 40px;">
-              <a href="${escapeHtmlAttribute(sanitizeUrl(data.merchantUrl))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
-                View Order
+              <a href="${escapeHtmlAttribute(sanitizeUrl(ctaHref))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
+                ${isProforma || isPaymentRequest ? 'Track Order Status' : 'View Order'}
               </a>
             </td>
           </tr>
@@ -180,12 +235,7 @@ export function generateOrderConfirmationEmail(
               <p style="margin: 0; font-size: 14px; color: #64748b;">
                 Questions? Reply to this email or contact us at <a href="${escapeHtmlAttribute(sanitizeUrl(data.merchantUrl))}" style="color: #ca8a04; text-decoration: none;">${escapeHtmlText(data.merchantName)}</a>
               </p>
-              ${(() => {
-                const reg = buildEscapedRegistrationLine(data);
-                return reg
-                  ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #94a3b8;">${reg}</p>`
-                  : '';
-              })()}
+              ${buildRegistrationFooterHtml(data)}
               <p style="margin: 20px 0 0 0; font-size: 12px; color: #94a3b8;">
                 &copy; ${new Date().getFullYear()} ${escapeHtmlText(data.merchantName)}. Powered by <strong>Baci</strong>.
               </p>
@@ -199,52 +249,5 @@ export function generateOrderConfirmationEmail(
 
 </body>
 </html>
-  `.trim();
-}
-
-/**
- * Generate plain text version of order confirmation
- */
-
-export function generateOrderConfirmationText(
-  data: OrderConfirmationData
-): string {
-  const itemsText = data.items
-    .map(
-      (item) =>
-        `${item.name} x${item.quantity} - ${formatEmailMoney(item.price, data.currency)}`
-    )
-    .join('\n');
-
-  return `
-Order Confirmed!
-
-Hi ${data.customerName},
-
-Your order has been confirmed and will be shipped soon.
-
-Order Number: #${data.orderNumber}
-
-Items Ordered:
-${itemsText}
-
-Subtotal: ${formatEmailMoney(data.subtotal, data.currency)}
-Shipping: ${formatEmailMoney(data.shippingFee, data.currency)}
-Total: ${formatEmailMoney(data.total, data.currency)}
-
-Shipping Address:
-${data.shippingAddress.address}
-${data.shippingAddress.city}, ${data.shippingAddress.state}
-Phone: ${data.shippingAddress.phone}
-
-What's next?
-You'll receive a shipping confirmation email with tracking information once your order is on its way.
-
-Visit Store: ${data.merchantUrl}
-
-If you have any questions about your order, please contact ${data.merchantName} directly.
-
----
-Powered by Baci - AI E-commerce Platform
   `.trim();
 }

@@ -1,5 +1,6 @@
 import {
   BUILDER_AI_CEREBRAS_MODEL,
+  BUILDER_AI_GOOGLE_MODEL,
   BUILDER_AI_GROQ_MODEL,
   BUILDER_AI_OPENROUTER_MODEL,
 } from './builder-ai-provider-catalog';
@@ -12,11 +13,15 @@ interface ProviderOrderEntry {
 export function hasCanonicalBuilderAiProviderOrder(
   providers: ProviderOrderEntry[]
 ): boolean {
-  const reliable = [
-    `cerebras:${BUILDER_AI_CEREBRAS_MODEL}`,
-    `groq:${BUILDER_AI_GROQ_MODEL}`,
+  const reliablePairs = [
+    [`google:${BUILDER_AI_GOOGLE_MODEL}`, `groq:${BUILDER_AI_GROQ_MODEL}`],
+    [`cerebras:${BUILDER_AI_CEREBRAS_MODEL}`, `groq:${BUILDER_AI_GROQ_MODEL}`],
   ];
-  if (!reliable.every((name, index) => providers[index]?.name === name)) {
+  if (
+    !reliablePairs.some((pair) =>
+      pair.every((name, index) => providers[index]?.name === name)
+    )
+  ) {
     return false;
   }
   return (

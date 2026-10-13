@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(directory, '..', '..');

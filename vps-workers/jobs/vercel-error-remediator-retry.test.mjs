@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { runVercelErrorRemediator } from './vercel-error-remediator.mjs';
+import { runVercelErrorRemediator } from './vercel-error-remediator.test-harness.mjs';
 
 const silentLogger = {
   error: () => undefined,

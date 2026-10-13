@@ -5,12 +5,26 @@ import {
 } from '@baci/shared';
 import { sanitizeSearchQuery } from '@/lib/sanitize';
 import { supabase } from '@/lib/supabase';
+import type { AdminProductStockFilter } from './product-search-filters';
+import {
+  applyAdminProductStockAndVisibilityFilter,
+  applyAdminProductStockFilter,
+} from './product-search-filters';
+
+export type { AdminProductStockFilter } from './product-search-filters';
+export {
+  ADMIN_EFFECTIVE_IN_STOCK_FILTER,
+  ADMIN_EFFECTIVE_LOW_STOCK_FILTER,
+  ADMIN_EFFECTIVE_OUT_OF_STOCK_FILTER,
+  applyAdminProductStockFilter,
+} from './product-search-filters';
 
 export type AdminProductStatus = 'active' | 'draft' | 'archived';
-export type AdminProductStockFilter = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export interface AdminProductSearchFilters {
   category?: string;
+  /** Include archived products for historical reconciliation workflows. */
+  includeArchived?: boolean;
   search?: string;
   status?: AdminProductStatus;
   stockFilter?: AdminProductStockFilter;
@@ -22,44 +36,12 @@ export interface AdminProductSearchPage<T extends { id: string }> {
   totalCount: number;
 }
 
-export const ADMIN_EFFECTIVE_IN_STOCK_FILTER =
-  'stock_quantity.gt.0,and(stock_quantity.is.null,stock.gt.0),and(stock_quantity.lte.0,stock.gt.0)';
-export const ADMIN_EFFECTIVE_LOW_STOCK_FILTER =
-  'and(stock_quantity.gt.0,stock_quantity.lte.5),and(stock_quantity.is.null,stock.gt.0,stock.lte.5),and(stock_quantity.lte.0,stock.gt.0,stock.lte.5)';
-export const ADMIN_EFFECTIVE_OUT_OF_STOCK_FILTER =
-  'and(stock_quantity.is.null,stock.is.null),and(stock_quantity.is.null,stock.lte.0),and(stock_quantity.lte.0,stock.is.null),and(stock_quantity.lte.0,stock.lte.0)';
-
 const ADMIN_SEARCH_STOCK_FILTERS: Record<AdminProductStockFilter, string> = {
   in_stock: 'admin_in_stock',
   low_stock: 'admin_low_stock',
   out_of_stock: 'admin_out_of_stock',
 };
 const ADMIN_SEARCH_VISIBLE_STATUS_FILTER = 'not_archived';
-
-type ProductFilterQuery<TQuery> = {
-  eq: (column: string, value: unknown) => TQuery;
-  or: (filters: string) => TQuery;
-};
-
-export function applyAdminProductStockFilter<
-  TQuery extends ProductFilterQuery<TQuery>,
->(query: TQuery, stockFilter: AdminProductStockFilter | undefined): TQuery {
-  if (stockFilter === 'out_of_stock') {
-    return query
-      .eq('manage_stock', true)
-      .or(ADMIN_EFFECTIVE_OUT_OF_STOCK_FILTER);
-  }
-
-  if (stockFilter === 'low_stock') {
-    return query.eq('manage_stock', true).or(ADMIN_EFFECTIVE_LOW_STOCK_FILTER);
-  }
-
-  if (stockFilter === 'in_stock') {
-    return query.eq('manage_stock', true).or(ADMIN_EFFECTIVE_IN_STOCK_FILTER);
-  }
-
-  return query;
-}
 
 function normalizeAdminSearchInput(search: string | undefined) {
   return sanitizeSearchQuery(search ?? '').trim();
@@ -72,8 +54,8 @@ function clampPositiveInteger(value: number, maximum: number) {
 
 function getAdminSearchStatusFilter(filters: AdminProductSearchFilters) {
   if (filters.status) return filters.status;
-  if (filters.stockFilter) return ADMIN_SEARCH_VISIBLE_STATUS_FILTER;
-  return null;
+  if (filters.includeArchived) return null;
+  return ADMIN_SEARCH_VISIBLE_STATUS_FILTER;
 }
 
 function getAdminSearchStockFilter(filters: AdminProductSearchFilters) {
@@ -147,10 +129,22 @@ export async function fetchAdminProductSearchRows<
   if (args.filters.category) {
     rowsQuery = rowsQuery.eq('category_id', args.filters.category);
   }
-  if (!args.filters.status && args.filters.stockFilter) {
-    rowsQuery = rowsQuery.neq('status', 'archived');
+  const shouldHideArchived =
+    !args.filters.status && !args.filters.includeArchived;
+  if (shouldHideArchived && args.filters.stockFilter) {
+    rowsQuery = applyAdminProductStockAndVisibilityFilter(
+      rowsQuery,
+      args.filters.stockFilter
+    );
+  } else {
+    if (shouldHideArchived) {
+      rowsQuery = rowsQuery.or('status.neq.archived,status.is.null');
+    }
+    rowsQuery = applyAdminProductStockFilter(
+      rowsQuery,
+      args.filters.stockFilter
+    );
   }
-  rowsQuery = applyAdminProductStockFilter(rowsQuery, args.filters.stockFilter);
 
   const { data, error } = await rowsQuery;
 

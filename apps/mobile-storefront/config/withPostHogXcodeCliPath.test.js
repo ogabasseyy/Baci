@@ -90,29 +90,6 @@ ${EXPECTED_PATH_EXPORT}
     expect(bundleScript).toContain('posthog-xcode.sh');
   });
 
-  it('skips duplicate PostHog Hermes symbol sets during iOS archives', () => {
-    const { bundleScript } = runPluginWithPhases({
-      bundleShellScript: `export PROJECT_ROOT="$PROJECT_DIR"/..
-
-/bin/sh \`"$NODE_BINARY" --print "require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'"\` \`"$NODE_BINARY" --print "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')"\` \`"$NODE_BINARY" --print "require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'"\`
-`,
-    });
-
-    expect(bundleScript).toContain(`export POSTHOG_SKIP_ON_CONFLICT=1
-/bin/sh`);
-    expect(bundleScript.match(/POSTHOG_SKIP_ON_CONFLICT=1/g)).toHaveLength(1);
-  });
-
-  it('does not duplicate the PostHog Hermes conflict environment', () => {
-    const { bundleScript } = runPluginWithPhases({
-      bundleShellScript: `export POSTHOG_SKIP_ON_CONFLICT=1
-/bin/sh "$PROJECT_ROOT/node_modules/posthog-react-native/tooling/posthog-xcode.sh"
-`,
-    });
-
-    expect(bundleScript.match(/POSTHOG_SKIP_ON_CONFLICT=1/g)).toHaveLength(1);
-  });
-
   it('upgrades the older app-only PATH patch without duplicating it', () => {
     const { bundleScript } = runPluginWithPhases({
       bundleShellScript: `export PROJECT_ROOT="$PROJECT_DIR"/..

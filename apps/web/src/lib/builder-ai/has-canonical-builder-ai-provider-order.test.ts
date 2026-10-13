@@ -4,7 +4,7 @@ import { hasCanonicalBuilderAiProviderOrder } from './has-canonical-builder-ai-p
 describe('hasCanonicalBuilderAiProviderOrder', () => {
   it('accepts the reliable pair and optional opportunistic tail only', () => {
     const reliablePair = [
-      { name: 'cerebras:gemma-4-31b' },
+      { name: 'google:gemma-4-31b-it' },
       { name: 'groq:openai/gpt-oss-120b' },
     ];
 
@@ -21,7 +21,7 @@ describe('hasCanonicalBuilderAiProviderOrder', () => {
     expect(
       hasCanonicalBuilderAiProviderOrder([
         { name: 'groq:openai/gpt-oss-120b' },
-        { name: 'cerebras:gemma-4-31b' },
+        { name: 'google:gemma-4-31b-it' },
       ])
     ).toBe(false);
     expect(

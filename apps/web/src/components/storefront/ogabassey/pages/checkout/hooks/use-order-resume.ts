@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PaymentMethod, ResumedOrder } from '../types';
+import { mapApiOrderToResumedOrder } from '../map-api-order-to-resumed-order';
+import type { PaymentMethod, PaymentTab, ResumedOrder } from '../types';
 
 interface SetCheckoutFieldsFn {
   (values: {
@@ -21,7 +22,7 @@ interface UseOrderResumeOptions {
   resumeOrderId: string | null;
   preferredGateway: 'credpal' | 'credit_direct' | null;
   setCheckoutFields: SetCheckoutFieldsFn;
-  setPaymentTab: (tab: 'full' | 'installments') => void;
+  setPaymentTab: (tab: PaymentTab) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
 }
 
@@ -48,23 +49,7 @@ async function fetchResumedOrder(
 
     const orderData = await res.json();
     return {
-      order: {
-        id: orderData.id,
-        short_id: orderData.short_id,
-        subtotal: orderData.subtotal,
-        shipping_cost: orderData.shipping_cost || 0,
-        total: orderData.total,
-        customer_name: orderData.customer_name,
-        customer_email: orderData.customer_email,
-        customer_phone: orderData.customer_phone,
-        shipping_address: orderData.shipping_address || {
-          address: '',
-          city: '',
-          state: '',
-          phone: '',
-        },
-        items: orderData.items || [],
-      },
+      order: mapApiOrderToResumedOrder(orderData),
       error: null,
     };
   } catch (error) {

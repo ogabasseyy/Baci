@@ -338,6 +338,90 @@ describe('paystack helpers', () => {
     });
   });
 
+  it('forwards an abort signal through the DVA chain and converts aborts to handled failures', async () => {
+    const { generatePaymentAccount } = await import('@/lib/paystack');
+    const controller = new AbortController();
+    const seenSignals: Array<AbortSignal | null | undefined> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        seenSignals.push(init?.signal ?? null);
+        if (init?.signal?.aborted) {
+          throw new DOMException('aborted', 'AbortError');
+        }
+        return {
+          ok: true,
+          json: async () => ({ status: true, message: 'ok', data: {} }),
+        };
+      })
+    );
+    controller.abort();
+
+    const result = await generatePaymentAccount({
+      email: 'a@b.co',
+      signal: controller.signal,
+    });
+
+    // Aborted before the first leg: handled failure (the provision
+    // module maps it to retryable), and the signal reached fetch.
+    expect(result.success).toBe(false);
+    expect(seenSignals).toEqual([controller.signal]);
+  });
+
+  it('threads the signal through every DVA leg and reuses an existing account', async () => {
+    const { generatePaymentAccount } = await import('@/lib/paystack');
+    const controller = new AbortController();
+    const seenSignals: Array<AbortSignal | null | undefined> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        seenSignals.push(init?.signal ?? null);
+        if (String(url).endsWith('/customer')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: true,
+              message: 'ok',
+              data: { id: 1, customer_code: 'CUS_1', email: 'a@b.co' },
+            }),
+          };
+        }
+        // Existing-DVA lookup: the retry converges on this account
+        // instead of creating a duplicate.
+        return {
+          ok: true,
+          json: async () => ({
+            status: true,
+            message: 'ok',
+            data: [
+              {
+                account_number: '1234567890',
+                account_name: 'Baci / Ada',
+                bank: { name: 'Wema Bank' },
+              },
+            ],
+          }),
+        };
+      })
+    );
+
+    const result = await generatePaymentAccount({
+      email: 'a@b.co',
+      signal: controller.signal,
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        bank_name: 'Wema Bank',
+        account_number: '1234567890',
+        account_name: 'Baci / Ada',
+        customer_code: 'CUS_1',
+      },
+    });
+    expect(seenSignals).toEqual([controller.signal, controller.signal]);
+  });
+
   it('extracts receiver account numbers from supported Paystack DVA webhook shapes', async () => {
     const { extractPaystackReceiverAccountNumber } = await import(
       '@/lib/paystack'

@@ -80,7 +80,7 @@ describe('callStorefrontPreflightRpc', () => {
     expect(rpcImpl).toHaveBeenCalledTimes(2);
   });
 
-  it('does not memoize a failed call, so a retry can succeed', async () => {
+  it('does not memoize a non-timeout failed call, so a retry can succeed', async () => {
     const rpcImpl = vi
       .fn()
       .mockResolvedValueOnce({
@@ -179,6 +179,24 @@ describe('callStorefrontPreflightRpc', () => {
 
     expect(result).toBeNull();
     expectFailOpenReason(consoleWarnSpy, 'parse');
+  });
+
+  it('treats an allowed empty rows array as an unknown storefront without a parse incident', async () => {
+    const rpcImpl = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const result = await callRpc(
+      'empty_unknown_fn',
+      { p_identifier: 'unknown.example' },
+      rpcImpl,
+      {},
+      { emptyResult: 'unknown' }
+    );
+
+    expect(result).toBeNull();
+    expect(consoleWarnSpy).not.toHaveBeenCalledWith(
+      '[storefront-internal-preflight] fail-open',
+      expect.objectContaining({ reason: 'parse' })
+    );
   });
 
   it('fails open without invoking rpcImpl when VERCEL_ENV is a non-production preview', async () => {

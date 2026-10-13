@@ -116,12 +116,12 @@ describe('StorefrontProductCard', () => {
     expect(screen.getByText('$100')).toBeInTheDocument();
   });
 
-  it('prefixes product links with the storefront merchant slug', () => {
+  it('prefixes product links only with the routing base path', () => {
     render(
       <StorefrontProductCard
         product={mockProduct}
         staggerClass=""
-        merchantSlug="test-store"
+        basePath="/test-store"
         onAddToCart={mockAddToCart}
         onUpdateQuantity={mockUpdateQuantity}
         onQuickView={mockQuickView}
@@ -134,7 +134,7 @@ describe('StorefrontProductCard', () => {
     );
   });
 
-  it('generates product links when merchantSlug is not provided', () => {
+  it('generates product links when basePath is not provided', () => {
     render(
       <StorefrontProductCard
         product={mockProduct}
@@ -148,12 +148,12 @@ describe('StorefrontProductCard', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', '/product/test');
   });
 
-  it('handles empty merchantSlug gracefully', () => {
+  it('handles empty domain-routing basePath gracefully', () => {
     render(
       <StorefrontProductCard
         product={mockProduct}
         staggerClass=""
-        merchantSlug=""
+        basePath=""
         onAddToCart={mockAddToCart}
         onUpdateQuantity={mockUpdateQuantity}
         onQuickView={mockQuickView}

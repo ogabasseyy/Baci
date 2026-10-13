@@ -59,7 +59,7 @@ export const ProductSchema = z
       .string()
       .optional()
       .transform((val) => (val ? sanitizeText(val, 200) : val)),
-    sku: z.string().min(1, 'SKU is required'),
+    sku: z.string().optional().default(''),
     price: z.number().min(0),
     cost_price: z.number().min(0).optional().default(0),
     stock_quantity: z.number().int().min(0),
@@ -110,6 +110,14 @@ export const ProductSchema = z
     variants: z.array(productVariantSchema).default([]),
   })
   .superRefine((data, context) => {
+    if (!data.has_variants && !data.sku.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'SKU is required',
+        path: ['sku'],
+      });
+    }
+
     if (!data.has_variants) {
       return;
     }

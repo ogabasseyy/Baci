@@ -4,9 +4,12 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { deriveMerchantLocation } from '@/lib/shipping/order-shipment-booking-utils';
+import { buildMerchantSenderInfo } from '@/lib/shipping/merchant-sender-location';
 import type { ShippingAddress } from '@/lib/shipping/types';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { resolveBodyOnlyMerchantSender } from './resolve-body-only-merchant-sender';
+import { resolveMerchantDetails } from './resolve-quote-merchant-details';
+import { resolveQuoteMerchantLookupClient } from './resolve-quote-merchant-lookup-client';
 
 type QuoteInput = {
   merchantId?: string;
@@ -14,24 +17,12 @@ type QuoteInput = {
   shipmentType: 'domestic' | 'international';
 };
 
-type MerchantDetails = {
-  business_address: string | null;
-  business_name: string | null;
-  phone: string | null;
-  country: string | null;
-  payout_currency: string | null;
-};
-
 export type QuoteMerchantContextResult =
   | {
       ok: true;
       merchantId?: string;
       senderInfo?: ShippingAddress;
-      /**
-       * Merchant's ISO country, when a merchant was resolved. The registered
-       * carriers are Nigerian, so the route returns an empty quote set for
-       * non-NG merchants instead of quoting Nigeria-origin rates.
-       */
+      /** Resolved merchant ISO country used to gate Nigeria-only carriers. */
       merchantCountry?: string | null;
       /**
        * Merchant's payout currency, when a merchant was resolved. The route
@@ -180,41 +171,6 @@ async function resolveStorefrontMerchantId(
   return domainRow?.merchant_id;
 }
 
-async function resolveMerchantDetails(
-  supabase: SupabaseClient,
-  merchantId: string
-): Promise<MerchantDetails | null | QuoteMerchantContextResult> {
-  const { data, error } = await supabase
-    .from('merchants')
-    .select('business_name, business_address, phone, country, payout_currency')
-    .eq('id', merchantId)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching merchant for sender info:', error);
-    return {
-      error: 'Failed to resolve merchant sender',
-      ok: false,
-      status: 500,
-    };
-  }
-
-  return (data as MerchantDetails | null) ?? null;
-}
-
-function buildSenderInfo(details: MerchantDetails): ShippingAddress {
-  const location = deriveMerchantLocation(details.business_address);
-  return {
-    name: details.business_name || 'Merchant',
-    phone: details.phone || '',
-    address: location.address,
-    city: location.city,
-    state: location.state,
-    country: 'Nigeria',
-    countryCode: 'NG',
-  };
-}
-
 export async function resolveQuoteMerchantContext({
   data,
   request,
@@ -254,25 +210,67 @@ export async function resolveQuoteMerchantContext({
     storefrontMerchantId ?? permittedAuthenticatedMerchantId ?? data.merchantId;
   const trustedSenderMerchantId =
     storefrontMerchantId ?? permittedAuthenticatedMerchantId;
-
+  // Older mobile clients omit x-baci-client. This public projection is safe
+  // without that advisory header; the body ID never grants private-table access.
+  const bodyOnlyMerchantId = !trustedSenderMerchantId ? merchantId : undefined;
   let senderInfo =
     data.shipmentType === 'international' ? undefined : data.sender;
   let merchantCountry: string | null | undefined;
   let merchantPayoutCurrency: string | null | undefined;
 
   if (trustedSenderMerchantId) {
+    const merchantLookupClient = await resolveQuoteMerchantLookupClient(
+      request,
+      supabase
+    );
     const details = await resolveMerchantDetails(
-      supabase,
+      merchantLookupClient,
       trustedSenderMerchantId
     );
     if (details && 'ok' in details) return details;
     if (details) {
       merchantCountry = details.country;
       merchantPayoutCurrency = details.payout_currency;
-      if (data.shipmentType === 'international' || !senderInfo) {
-        senderInfo = buildSenderInfo(details);
-      }
+      const merchantSender = buildMerchantSenderInfo({
+        businessAddress: details.business_address,
+        businessName: details.business_name,
+        phone: details.phone,
+        registeredAddress: null,
+        stateCode: details.state_code ?? null,
+      });
+      senderInfo = merchantSender ?? undefined;
     }
+  }
+
+  if (bodyOnlyMerchantId) {
+    const publicSenderResult = await resolveBodyOnlyMerchantSender(
+      request,
+      supabase,
+      bodyOnlyMerchantId
+    );
+    if (!publicSenderResult.ok) {
+      console.error('Error resolving public storefront shipping sender:', {
+        merchantId: bodyOnlyMerchantId,
+        error: publicSenderResult.error,
+      });
+      return {
+        error: 'Failed to resolve merchant sender',
+        ok: false,
+        status: 500,
+      };
+    }
+    if (!publicSenderResult.sender) {
+      return {
+        error:
+          data.shipmentType === 'international'
+            ? 'Sender is required for international quotes'
+            : 'Merchant shipping origin is not configured',
+        ok: false,
+        status: 400,
+      };
+    }
+    senderInfo = publicSenderResult.sender;
+    merchantCountry = publicSenderResult.country;
   }
 
   return {

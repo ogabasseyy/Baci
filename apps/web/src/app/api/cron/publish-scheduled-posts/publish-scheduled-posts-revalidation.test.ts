@@ -101,4 +101,44 @@ describe('scheduled-post publishing cron workflow', () => {
       consoleErrorSpy.mockRestore();
     }
   });
+
+  it('revalidates only rows claimed by a concurrent-safe update', async () => {
+    configurePublishFlow(
+      [
+        createScheduledPost({ id: 'post-1', slug: 'first-post' }),
+        createScheduledPost({ id: 'post-2', slug: 'second-post' }),
+      ],
+      { claimedPostIds: ['post-1'] }
+    );
+
+    const response = await POST(createCronRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.published).toEqual(['post-1']);
+    expect(mockRevalidateBlogPosts).toHaveBeenCalledWith(
+      expect.objectContaining({ postSlugs: ['first-post'] })
+    );
+    expect(mockDispatchZohoBlogCampaign).toHaveBeenCalledTimes(1);
+    expect(mockDispatchZohoBlogCampaign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        post: expect.objectContaining({ id: 'post-1' }),
+      })
+    );
+  });
+
+  it('does not revalidate or dispatch when another run claims every row', async () => {
+    configurePublishFlow(
+      [createScheduledPost({ id: 'post-1', slug: 'already-claimed' })],
+      { claimedPostIds: [] }
+    );
+
+    const response = await POST(createCronRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.published).toEqual([]);
+    expect(mockRevalidateBlogPosts).not.toHaveBeenCalled();
+    expect(mockDispatchZohoBlogCampaign).not.toHaveBeenCalled();
+  });
 });

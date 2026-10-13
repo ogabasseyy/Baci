@@ -1,10 +1,10 @@
 'use server';
 
-import { getCachedDashboardStats } from '@/lib/cached-data';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import {
   dashboardMerchantActionArgsSchema,
+  dashboardMetricsResultSchema,
   dashboardRecentSalesArgsSchema,
 } from '@/schemas/dashboard-actions';
 
@@ -98,23 +98,24 @@ export async function getDashboardMetrics(
       return getZeroDashboardMetrics();
     }
 
-    // OPTIMIZED: Use cached RPC function
-    // This uses stable caching (1 min) to prevent DB hammering on refresh
-    const stats = await getCachedDashboardStats(authorizedMerchantId);
+    // Keep the RPC on the authenticated request client so PostgreSQL can
+    // enforce the caller and merchant context. Do not move this user-facing
+    // read behind a service-role cache.
+    const { data: stats, error: statsError } = await supabase.rpc(
+      'get_sales_dashboard_stats',
+      { p_merchant_id: authorizedMerchantId }
+    );
 
-    // If RPC returns null/empty (shouldn't happen with our SQL logic but safe to handle)
-    if (!stats) {
+    if (statsError) {
+      throw statsError;
+    }
+
+    const parsedStats = dashboardMetricsResultSchema.safeParse(stats);
+    if (!parsedStats.success) {
       return getZeroDashboardMetrics();
     }
 
-    return {
-      revenue: stats.revenue,
-      customers: stats.customers,
-      orders: stats.orders,
-      activeNow: stats.activeNow,
-      fulfillmentRate: stats.fulfillmentRate,
-      aov: stats.aov,
-    };
+    return parsedStats.data;
   } catch (error) {
     console.error('Failed to fetch dashboard metrics:', error);
     return getZeroDashboardMetrics();

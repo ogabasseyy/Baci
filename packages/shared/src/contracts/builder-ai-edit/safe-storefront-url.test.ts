@@ -5,6 +5,7 @@ describe('safeStorefrontUrlSchema', () => {
   it('accepts storefront, anchor, and canonical HTTPS URLs', () => {
     for (const url of [
       '/collections/new',
+      '#',
       '#newsletter',
       'https://example.test/shop',
       'HTTPS://example.test/shop',
@@ -16,7 +17,6 @@ describe('safeStorefrontUrlSchema', () => {
   it.each([
     '//example.test',
     'https://',
-    '#',
     'https:example.test',
     'https:/example.test',
     'https://merchant:secret@example.test/private',

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import {
   OGABASSEY_APPLE_TOUCH_ICON_URL,
   OGABASSEY_DESCRIPTION,
@@ -18,6 +19,8 @@ import { buildHomeSeoDecision } from '@/lib/storefront-seo/build-home-seo-decisi
 import { toNextRobotsMetadata } from '@/lib/storefront-seo/to-next-robots-metadata';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
+import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
+import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
@@ -25,14 +28,6 @@ export function generateStaticParams(): Array<{ slug: string }> {
   return [OGABASSEY_DOMAIN_IDENTIFIER, OGABASSEY_TEMPLATE_ID].map((slug) => ({
     slug,
   }));
-}
-
-function isOgabasseyIdentifier(slug: string): boolean {
-  const normalizedSlug = slug.toLowerCase();
-  return (
-    normalizedSlug === OGABASSEY_TEMPLATE_ID ||
-    normalizedSlug === OGABASSEY_DOMAIN_IDENTIFIER
-  );
 }
 
 function getOgabasseyHomePathPrefix(slug: string): string {
@@ -147,7 +142,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  if (isOgabasseyIdentifier(slug)) {
+  if (isOgabasseyHomeIdentifier(slug)) {
     const merchant = await getRequestScopedMerchant(slug);
     const robots = toNextRobotsMetadata(
       buildHomeSeoDecision({
@@ -250,14 +245,29 @@ export async function generateMetadata({
   };
 }
 
-export default async function StorefrontPage({
+async function StorefrontHomeRoute({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
 
-  return isOgabasseyIdentifier(slug)
+  return isOgabasseyHomeIdentifier(slug)
     ? renderOgabasseyStaticHomePage(slug)
     : renderGenericStorefrontHomePage(params);
+}
+
+export default function StorefrontPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  return (
+    <>
+      <OgabasseyHomeCommittedLcp params={params} />
+      <Suspense fallback={null}>
+        <StorefrontHomeRoute params={params} />
+      </Suspense>
+    </>
+  );
 }

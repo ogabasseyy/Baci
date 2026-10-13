@@ -8,28 +8,39 @@ import {
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 
+interface MarkAllVisibleNotificationsResult {
+  remaining_unread_count: number;
+  updated_count: number;
+}
+
+function isMarkAllVisibleNotificationsResult(
+  value: unknown
+): value is MarkAllVisibleNotificationsResult {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('updated_count' in value) || !('remaining_unread_count' in value)) {
+    return false;
+  }
+
+  return (
+    typeof value.updated_count === 'number' &&
+    Number.isSafeInteger(value.updated_count) &&
+    value.updated_count >= 0 &&
+    typeof value.remaining_unread_count === 'number' &&
+    Number.isSafeInteger(value.remaining_unread_count) &&
+    value.remaining_unread_count >= 0
+  );
+}
+
 /**
  * PATCH /api/notifications/mark-all-read
  * Mark all unread notifications for the current merchant as read
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // CSRF protection for state-changing endpoints
-    const csrfCheck = await checkCsrfProtection(request);
-    if (!csrfCheck.valid) {
-      return (
-        csrfCheck.response ||
-        NextResponse.json(
-          { error: 'Invalid or missing CSRF token' },
-          { status: 403 }
-        )
-      );
-    }
-
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Authentication check
+    // Auth is intentionally evaluated before CSRF for every protected mutation.
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -51,16 +62,25 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
-    // Update all unread notifications to read, including dismissed ones
-    // for parity with the single-notification PATCH behavior.
-    const { error: updateError } = await supabase
-      .from('merchant_notifications')
-      .update({ read_at: new Date().toISOString() })
-      .eq('merchant_id', merchantId)
-      .is('read_at', null);
+    const csrfCheck = await checkCsrfProtection(request);
+    if (!csrfCheck.valid) {
+      return (
+        csrfCheck.response ||
+        NextResponse.json(
+          { error: 'Invalid or missing CSRF token' },
+          { status: 403 }
+        )
+      );
+    }
 
-    if (updateError) {
-      console.error('Error marking all notifications as read:', updateError);
+    const { data: result, error } = await supabase
+      .rpc('mark_all_visible_merchant_notifications_read_v1', {
+        p_merchant_id: merchantId,
+      })
+      .single();
+
+    if (error || !isMarkAllVisibleNotificationsResult(result)) {
+      console.error('Failed to mark all visible notifications as read');
       return NextResponse.json(
         { error: 'Failed to mark all notifications as read' },
         { status: 500 }
@@ -69,7 +89,8 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      unread_count: 0,
+      updated_count: result.updated_count,
+      unread_count: result.remaining_unread_count,
     });
   } catch (error) {
     console.error('Notifications mark all read PATCH error:', error);

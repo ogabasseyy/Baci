@@ -1,6 +1,4 @@
-import Ionicons, {
-  type IoniconsIconName,
-} from '@react-native-vector-icons/ionicons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -8,52 +6,54 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { styles } from '@/components/menu/menu.styles';
 import { SubscriptionStatusCard } from '@/components/settings/SubscriptionStatusCard';
 import { APP_VERSION_LABEL } from '@/constants/app-info';
-import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { RADIUS, SPACING } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { useAuth } from '@/hooks/useAuth';
+import { useExpenseAccess } from '@/hooks/useExpenseAccess';
 import { useMerchant } from '@/hooks/useMerchant';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useRevenueCat } from '@/hooks/useRevenueCat';
 import { useTheme } from '@/hooks/useTheme';
 import { baciFeatureGates, type MobileFeatureGate } from '@/lib/feature-gates';
-
-interface MenuItem {
-  id: string;
-  icon: IoniconsIconName;
-  label: string;
-  description?: string;
-  onPress: () => void;
-  iconColor?: string;
-  badge?: string;
-  destructive?: boolean;
-}
-
-interface MenuSection {
-  title: string;
-  items: MenuItem[];
-}
+import { isBaciPaystackSettlementCountry } from '@/lib/is-baci-paystack-settlement-country';
+import { createMenuSections, type MenuItem } from './menu-sections';
 
 export default function MenuScreen() {
+  const scrollRef = useAdminTabScrollToTop<ScrollView>('menu');
   const { colors, shadows, isDark } = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { resetOnboarding } = useOnboarding();
   const { isPro, customerInfo } = useRevenueCat();
   const { merchant, isLoading: isMerchantLoading } = useMerchant();
+  const {
+    canCreate: canCreateExpenses,
+    canManageIntegrations,
+    canView: canViewExpenses,
+  } = useExpenseAccess();
   const { unregisterPush } = usePushNotifications();
   const router = useRouter();
   const hasProSubscription =
     isPro || baciFeatureGates.hasFullProAccess(merchant);
   const isSubscriptionStatusLoading = !isPro && isMerchantLoading;
+  const isPaystackSettlementCountry = merchant
+    ? isBaciPaystackSettlementCountry(merchant.country)
+    : false;
+  const isMerchantOwner = Boolean(
+    user?.id && merchant?.user_id && user.id === merchant.user_id
+  );
 
   const canAccessFeature = (feature: MobileFeatureGate) =>
-    isPro || baciFeatureGates.hasFeature(merchant, feature);
+    feature === 'custom_email_domain'
+      ? baciFeatureGates.hasFeature(merchant, feature)
+      : isPro || baciFeatureGates.hasFeature(merchant, feature);
 
   const proBadge = (feature: MobileFeatureGate) =>
     canAccessFeature(feature) ? undefined : 'PRO';
@@ -90,196 +90,18 @@ export default function MenuScreen() {
     ]);
   };
 
-  const menuSections: MenuSection[] = [
-    {
-      title: 'Store',
-      items: [
-        {
-          id: 'customize',
-          icon: 'color-palette-outline',
-          label: 'Customize Website',
-          description: 'Colors, theme, and branding',
-          onPress: () => router.push('/customize'),
-        },
-        {
-          id: 'store-settings',
-          icon: 'storefront-outline',
-          label: 'Store Settings',
-          description: 'Name, logo, and store details',
-          onPress: () => router.push('/store-settings'),
-        },
-        {
-          id: 'social-media',
-          icon: 'share-social-outline',
-          label: 'Social Media',
-          description: 'Instagram, TikTok, X, Snapchat, Linkedin',
-          onPress: () => router.push('/social-media'),
-        },
-        {
-          id: 'marketplaces',
-          icon: 'cart-outline',
-          label: 'Marketplaces',
-          description: 'Connect Jumia, Konga, etc.',
-          badge: proBadge('marketplace_sync'),
-          onPress: () =>
-            openFeature('marketplace_sync', 'Marketplaces', '/sales-channels'),
-        },
-        {
-          id: 'payments',
-          icon: 'card-outline',
-          label: 'Payment Methods',
-          description: 'Configure payment options',
-          onPress: () => router.push('/payment-methods'),
-        },
-        {
-          id: 'staff-accounts',
-          icon: 'wallet-outline',
-          label: 'Staff Accounts',
-          description: 'Payment accounts for staff & branches',
-          onPress: () => router.push('/staff-accounts'),
-        },
-        {
-          id: 'shipping',
-          icon: 'car-outline',
-          label: 'Shipping',
-          description: 'Delivery zones and rates',
-          onPress: () => router.push('/shipping'),
-        },
-        {
-          id: 'tax',
-          icon: 'receipt-outline',
-          label: 'Tax',
-          description: 'VAT settings',
-          onPress: () => router.push('/tax'),
-        },
-        {
-          id: 'domains',
-          icon: 'globe-outline',
-          label: 'Domains',
-          description: 'Custom domain settings',
-          badge: proBadge('custom_domain'),
-          onPress: () => openFeature('custom_domain', 'Domains', '/domains'),
-        },
-      ],
-    },
-    {
-      title: 'Business',
-      items: [
-        {
-          id: 'analytics',
-          icon: 'analytics-outline',
-          label: 'Analytics',
-          description: 'Sales and traffic insights',
-          onPress: () => router.push('/analytics'),
-        },
-        {
-          id: 'transactions',
-          icon: 'cash-outline',
-          label: 'Transactions',
-          description: 'Review paid sales and update cost prices',
-          onPress: () => router.push('/transactions'),
-        },
-        {
-          id: 'growth-marketing',
-          icon: 'rocket-outline',
-          label: 'Growth & Marketing',
-          description: 'Pixels, CAPI, Setup',
-          badge: proBadge('growth_integrations'),
-          onPress: () =>
-            openFeature(
-              'growth_integrations',
-              'Growth & Marketing',
-              '/analytics-config'
-            ),
-        },
-        {
-          id: 'expenses',
-          icon: 'wallet-outline',
-          label: 'Expenses',
-          description: 'Track spending and receipts',
-          onPress: () => router.push('/expenses'),
-        },
-        {
-          id: 'discounts',
-          icon: 'pricetag-outline',
-          label: 'Discounts',
-          description: 'Coupons and promotions',
-          onPress: () => router.push('/discounts'),
-        },
-        {
-          id: 'negotiations',
-          icon: 'chatbubbles-outline',
-          label: 'Negotiation Requests',
-          description: 'Manage price negotiation requests',
-          onPress: () => router.push('/(admin)/negotiations'),
-        },
-        {
-          id: 'repairs',
-          icon: 'construct-outline',
-          label: 'Repair Bookings',
-          description: 'Manage repair service requests',
-          onPress: () => router.push('/(admin)/repairs'),
-        },
-        {
-          id: 'staff',
-          icon: 'people-outline',
-          label: 'Staff',
-          description: 'Team members and permissions',
-          onPress: () => router.push('/staff'),
-        },
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        {
-          id: 'help',
-          icon: 'help-circle-outline',
-          label: 'Help Center',
-          onPress: () => router.push('/help'),
-        },
-        {
-          id: 'contact',
-          icon: 'chatbubble-outline',
-          label: 'Contact Support',
-          onPress: () => router.push('/contact-support'),
-        },
-        {
-          id: 'feedback',
-          icon: 'star-outline',
-          label: 'Send Feedback',
-          onPress: () => router.push('/send-feedback'),
-        },
-      ],
-    },
-    {
-      title: 'Account',
-      items: [
-        {
-          id: 'profile',
-          icon: 'person-outline',
-          label: 'Profile',
-          description: 'Your account details',
-          onPress: () => router.push('/(admin)/profile'),
-        },
-        {
-          id: 'notifications',
-          icon: 'notifications-outline',
-          label: 'Notifications',
-          description: 'Push notification settings',
-          onPress: () => router.push('/(admin)/notifications'),
-        },
-        {
-          id: 'logout',
-          icon: 'log-out-outline',
-          label: 'Log Out',
-          onPress: handleLogout,
-          iconColor: colors.error,
-          destructive: true,
-        },
-      ],
-    },
-  ];
+  const menuSections = createMenuSections({
+    canCreateExpenses,
+    canManageIntegrations,
+    canViewExpenses,
+    destructiveColor: colors.error,
+    isMerchantOwner,
+    isPaystackSettlementCountry,
+    onFeaturePress: openFeature,
+    onLogout: handleLogout,
+    onNavigate: (pathname) => router.push(pathname),
+    proBadge,
+  });
 
   const renderMenuItem = (item: MenuItem) => (
     <Pressable
@@ -352,6 +174,7 @@ export default function MenuScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -447,91 +270,3 @@ export default function MenuScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-  title: {
-    fontSize: TYPOGRAPHY.size['3xl'],
-    fontFamily: TYPOGRAPHY.fontFamily.bold,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingTop: 0,
-  },
-  section: {
-    marginBottom: SPACING.xl,
-  },
-  sectionTitle: {
-    fontSize: TYPOGRAPHY.size.sm,
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-    marginBottom: SPACING.sm,
-    marginLeft: SPACING.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sectionCard: {
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    minHeight: 56,
-  },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  menuContent: {
-    flex: 1,
-  },
-  menuLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  menuLabel: {
-    fontSize: TYPOGRAPHY.size.md,
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-  },
-  menuDescription: {
-    fontSize: TYPOGRAPHY.size.sm,
-    fontFamily: TYPOGRAPHY.fontFamily.regular,
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontFamily: TYPOGRAPHY.fontFamily.bold,
-    letterSpacing: 0.5,
-  },
-  divider: {
-    height: 1,
-    marginLeft: 68,
-  },
-  version: {
-    textAlign: 'center',
-    fontSize: TYPOGRAPHY.size.sm,
-    fontFamily: TYPOGRAPHY.fontFamily.regular,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING['3xl'],
-  },
-});

@@ -20,7 +20,6 @@ describe('getEffectiveInventoryTrackingPolicy', () => {
       )
     ).toBe('serialized_then_unlimited');
   });
-
   it('inherits product policy if variant policy is inherit or null', () => {
     expect(
       getEffectiveInventoryTrackingPolicy('serialized_strict', 'inherit')

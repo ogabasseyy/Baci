@@ -115,35 +115,35 @@ describe('checkout idempotency key storage', () => {
     ).toBeUndefined();
   });
 
-  it('returns a key when storage reads fail', async () => {
+  it('blocks another order when storage reads fail', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage read failed');
     });
 
-    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).rejects.toThrow(
+      'Unable to read checkout recovery'
     );
   });
 
-  it('returns a key when storage writes fail', async () => {
+  it('blocks initiation when recovery cannot be saved', async () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage write failed');
     });
 
-    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).rejects.toThrow(
+      'Unable to save checkout recovery'
     );
     expect(
       window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
     ).toBeNull();
   });
 
-  it('returns a transient key without storage access for blank fingerprints', async () => {
+  it('rejects blank fingerprints without creating an untraceable attempt', async () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
 
-    await expect(getCheckoutIdempotencyKey('   ')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('   ')).rejects.toThrow(
+      'Unable to preserve checkout recovery'
     );
     expect(getItemSpy).not.toHaveBeenCalled();
     expect(setItemSpy).not.toHaveBeenCalled();

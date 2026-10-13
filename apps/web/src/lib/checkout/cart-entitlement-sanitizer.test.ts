@@ -190,6 +190,39 @@ describe('cart-entitlement-sanitizer', () => {
       expect(calculateCartTotal(mockCart, true)).toBe(3680);
     });
 
+    it('prices condition-offer lines at the retained catalog basis', () => {
+      const offerLine: CartItem = {
+        ...mockCart[0],
+        price: 600,
+        catalogPrice: 1000,
+      };
+      // Goods use catalog (1000 x 2), not the offer price (600 x 2): a
+      // merchant-rate tier between 1200 and 2000 must see 2000. Assurance
+      // still tracks the negotiated basis: 800 x 2 x 0.05 = 80.
+      expect(calculateCartCatalogSubtotal([offerLine], true)).toBe(2080);
+    });
+
+    it('falls back to the line price when the retained basis is invalid', () => {
+      const fallbackLine: CartItem = {
+        ...mockCart[0],
+        price: 600,
+        catalogPrice: Number.NaN,
+      };
+      expect(calculateCartCatalogSubtotal([fallbackLine], true)).toBe(1280);
+    });
+
+    it('pins assurance to the server rate instead of the item rate', () => {
+      const customRateCart: CartItem[] = [
+        {
+          ...mockCart[0],
+          assuranceRate: 0.09,
+        },
+      ];
+      // Goods use catalog: 1000 * 2 = 2000; assurance uses the 0.05 server
+      // default, not 0.09: 800 * 2 * 0.05 = 80. Line = 2080.
+      expect(calculateCartCatalogSubtotal(customRateCart, true)).toBe(2080);
+    });
+
     it('matches calculateCartTotal when negotiation is not entitled', () => {
       // Sanitizing strips the negotiated price, so goods and assurance both fall
       // back to the catalog price — the two calculations converge.

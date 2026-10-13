@@ -19,23 +19,28 @@
  */
 
 import crypto from 'node:crypto';
-import { generateText } from 'ai';
 import { headers } from 'next/headers';
 import z from 'zod';
-import { activeTextModel, checkRateLimit } from '@/ai/provider';
-import { createAiSdkAgenticChatTools } from '@/app/api/chat/chat-tool-runtime';
+import { checkRateLimit } from '@/ai/provider';
+import { withChatTenantHeader } from '@/app/api/chat/chat-tenant';
+import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
-import { ollamaAgenticChatTools } from '@/app/api/chat/ollama-chat-tools';
 import {
   bufferTextResponse,
   buildChatMessages,
   CUSTOMER_CHAT_TIMEOUT_MS,
   createClientClosedRequestResponse,
+  createRouteDeadline,
   createStaticChatFallbackResponse,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
+  withTimeout,
 } from '@/app/api/chat/route-helpers';
-import { AGENTIC_SYSTEM_PROMPT } from '@/config/agentic-chat-system-prompt';
+import {
+  GEMINI_PROVIDER_TIMEOUT_MS,
+  runChatProviderChain,
+} from '@/app/api/chat/run-chat-provider-chain';
+import { runOllamaChat } from '@/app/api/chat/run-ollama-chat';
 import {
   getAiChatModel,
   getAiChatProvider,
@@ -45,9 +50,9 @@ import {
   getOllamaBaseUrl,
   getOllamaBasicAuth,
 } from '@/env';
+import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import { getCurrencyConfig } from '@/lib/currency';
 import { createLlmChatResponse } from '@/lib/llm-chat';
-import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
-import type { OllamaToolCall } from '@/lib/ollama-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
 
 export const maxDuration = 120; // VPS-hosted Gemma can be slower on cold starts
@@ -71,59 +76,6 @@ const chatRequestSchema = z.object({
     .optional(),
 });
 
-const SIDE_EFFECTING_OLLAMA_TOOL_NAMES = new Set([
-  'createVirtualAccount',
-  'cancelOrder',
-]);
-
-function isSideEffectingOllamaToolCall(call: OllamaToolCall): boolean {
-  return SIDE_EFFECTING_OLLAMA_TOOL_NAMES.has(call.function.name);
-}
-
-function didOllamaToolCreateSideEffect(
-  toolName: string,
-  result: string
-): boolean {
-  try {
-    const parsed = JSON.parse(result) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) {
-      return false;
-    }
-
-    const maybeResult = parsed as {
-      accountNumber?: unknown;
-      orderId?: unknown;
-      success?: unknown;
-      status?: unknown;
-    };
-
-    if (toolName === 'cancelOrder') {
-      return (
-        maybeResult.success === true &&
-        maybeResult.status === 'cancelled' &&
-        typeof maybeResult.orderId === 'string' &&
-        maybeResult.orderId.length > 0
-      );
-    }
-
-    return (
-      (typeof maybeResult.orderId === 'string' &&
-        maybeResult.orderId.length > 0) ||
-      (maybeResult.success === true &&
-        typeof maybeResult.accountNumber === 'string' &&
-        maybeResult.accountNumber.length > 0)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function createRepeatedSideEffectToolResult(toolName: string): string {
-  return JSON.stringify({
-    error: `${toolName} already completed a commerce action in this chat turn. Use the existing tool result instead of calling it again.`,
-  });
-}
-
 function generateSessionId(ip: string): string {
   return crypto
     .createHash('sha256')
@@ -134,6 +86,14 @@ function generateSessionId(ip: string): string {
 
 export async function POST(req: Request) {
   try {
+    const remainingRouteMs = createRouteDeadline(CUSTOMER_CHAT_TIMEOUT_MS);
+    // Hold back one chain attempt for the Gemini fallback: without a
+    // reserve, a hung first-choice stage burns the whole route budget and
+    // the chain below runs with ~0ms, serving the static fallback without
+    // ever attempting Gemini.
+    const firstStageTimeoutMs = () =>
+      Math.max(0, remainingRouteMs() - GEMINI_PROVIDER_TIMEOUT_MS);
+
     const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');
     const realIp = headersList.get('x-real-ip');
@@ -180,6 +140,23 @@ export async function POST(req: Request) {
     const { messages, sessionId: providedSessionId } = validation.data;
     const sessionId = providedSessionId || generateSessionId(clientIp);
 
+    // The chat tools self-resolve this same tenant; resolving here fails the
+    // whole request closed (503) instead of letting providers run unscoped,
+    // and attests the resolving tenant on every response below. The lookup
+    // shares the request-wide deadline so a stalled dependency cannot push
+    // the handler past maxDuration before the providers start.
+    const tenant = await withTimeout(
+      resolveAgenticChatTenant(req),
+      remainingRouteMs(),
+      'Chat tenant lookup timed out'
+    ).catch(() => null);
+    if (!tenant) {
+      return new Response(
+        JSON.stringify({ error: 'Chat is unavailable for this storefront' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const sanitizedMessages = messages.map((msg) => ({
       ...msg,
       content: msg.role === 'user' ? sanitizeHtml(msg.content) : msg.content,
@@ -208,15 +185,25 @@ export async function POST(req: Request) {
           bearer,
           model: chatModel,
           messages: buildChatMessages(sanitizedMessages, chatModel, {
+            checkoutEnabled: tenant.agenticCheckoutEnabled,
+            currency: getCurrencyConfig(undefined, tenant.currencyCode),
+            merchantName: tenant.businessName,
             toolsEnabled: false,
           }),
           signal: req.signal,
-          timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
+          timeoutMs: firstStageTimeoutMs(),
         });
-        return await bufferTextResponse(llmResponse);
+        const bufferedResponse = await bufferTextResponse(llmResponse);
+        return withChatTenantHeader(
+          await negotiateChatAgentUiResponse(req, bufferedResponse),
+          tenant.merchantSlug
+        );
       } catch (error) {
         if (isChatAbortError(error, req.signal)) {
-          return createClientClosedRequestResponse();
+          return withChatTenantHeader(
+            createClientClosedRequestResponse(),
+            tenant.merchantSlug
+          );
         }
 
         console.warn(
@@ -229,85 +216,38 @@ export async function POST(req: Request) {
     if (!triedLlmServer && shouldTryOllama) {
       const ollamaBaseUrl = getOllamaBaseUrl();
       if (ollamaBaseUrl) {
-        const chatModel = getAiChatModel();
-        const basicAuth = getOllamaBasicAuth();
-        let ollamaSideEffectingToolExecuted = false;
-        const sideEffectingOllamaToolsWithEffects = new Set<string>();
-        try {
-          const ollamaResponse = await createOllamaAgenticChatResponse({
-            baseUrl: ollamaBaseUrl,
-            model: chatModel,
-            basicAuth,
-            messages: buildChatMessages(sanitizedMessages, chatModel, {
-              toolsEnabled: true,
-            }),
-            tools: ollamaAgenticChatTools,
-            executeToolCall: async (call) => {
-              const toolName = call.function.name;
-              if (
-                isSideEffectingOllamaToolCall(call) &&
-                sideEffectingOllamaToolsWithEffects.has(toolName)
-              ) {
-                return createRepeatedSideEffectToolResult(toolName);
-              }
-
-              const result = await executeAgenticChatToolForOllama(
-                call.function.name,
-                call.function.arguments,
-                sessionId
-              );
-
-              if (
-                isSideEffectingOllamaToolCall(call) &&
-                didOllamaToolCreateSideEffect(toolName, result)
-              ) {
-                sideEffectingOllamaToolsWithEffects.add(toolName);
-              }
-
-              return result;
-            },
-            onToolExecuted: (call, result) => {
-              if (
-                isSideEffectingOllamaToolCall(call) &&
-                didOllamaToolCreateSideEffect(call.function.name, result)
-              ) {
-                ollamaSideEffectingToolExecuted = true;
-              }
-            },
-            signal: req.signal,
-            timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
-          });
-          return await bufferTextResponse(ollamaResponse);
-        } catch (error) {
-          if (isChatAbortError(error, req.signal)) {
-            return createClientClosedRequestResponse();
-          }
-
-          const safeErrorMessage = getSafeChatBackendErrorMessage(error);
-          if (ollamaSideEffectingToolExecuted) {
-            console.warn(
-              '[Agentic Chat] Ollama request failed after executing commerce tools; returning static fallback:',
-              safeErrorMessage
-            );
-            return createStaticChatFallbackResponse();
-          }
-
-          console.warn(
-            '[Agentic Chat] Ollama request failed; falling back to Gemini:',
-            safeErrorMessage
-          );
+        const response = await runOllamaChat(req, sanitizedMessages, {
+          agenticCheckoutEnabled: tenant.agenticCheckoutEnabled,
+          baseUrl: ollamaBaseUrl,
+          model: getAiChatModel(),
+          basicAuth: getOllamaBasicAuth(),
+          currency: getCurrencyConfig(undefined, tenant.currencyCode),
+          merchantName: tenant.businessName,
+          timeoutMs: firstStageTimeoutMs(),
+          executeToolCall: (call) =>
+            executeAgenticChatToolForOllama(
+              call.function.name,
+              call.function.arguments,
+              sessionId,
+              tenant.agenticCheckoutEnabled
+            ),
+        });
+        if (response) {
+          return withChatTenantHeader(response, tenant.merchantSlug);
         }
       }
     }
 
-    let result: { text: string } | null = null;
+    let result: Awaited<ReturnType<typeof runChatProviderChain>> | null = null;
     try {
-      result = await generateText({
-        model: activeTextModel,
-        system: AGENTIC_SYSTEM_PROMPT,
+      result = await runChatProviderChain({
         messages: sanitizedMessages,
         abortSignal: req.signal,
-        tools: createAiSdkAgenticChatTools(sessionId),
+        agenticCheckoutEnabled: tenant.agenticCheckoutEnabled,
+        currency: getCurrencyConfig(undefined, tenant.currencyCode),
+        merchantName: tenant.businessName,
+        sessionId,
+        timeoutMs: remainingRouteMs(),
       });
     } catch (error) {
       if (isChatAbortError(error, req.signal)) {
@@ -315,18 +255,31 @@ export async function POST(req: Request) {
       }
 
       console.error(
-        '[Agentic Chat] Gemini fallback failed; returning static response:',
+        '[Agentic Chat] Cloud provider fallback failed; returning static response:',
         getSafeChatBackendErrorMessage(error)
       );
     }
 
     if (!result?.text.trim()) {
-      return createStaticChatFallbackResponse();
+      return withChatTenantHeader(
+        await negotiateChatAgentUiResponse(
+          req,
+          createStaticChatFallbackResponse()
+        ),
+        tenant.merchantSlug
+      );
     }
 
-    return new Response(result.text, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
+    return withChatTenantHeader(
+      await negotiateChatAgentUiResponse(
+        req,
+        new Response(result.text, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        }),
+        result.events
+      ),
+      tenant.merchantSlug
+    );
   } catch (error) {
     if (isChatAbortError(error, req.signal)) {
       return createClientClosedRequestResponse();

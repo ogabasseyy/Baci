@@ -1,3 +1,4 @@
+import { getCommerceVariantAxes } from '@baci/shared';
 import type { AdminProductVariant } from '@/lib/product-picker-variant-rows';
 import {
   formatAttributeLabel,
@@ -20,6 +21,10 @@ export interface VariantOptionGroup {
 }
 
 export type VariantOptionSelection = Record<string, string>;
+
+export interface VariantOptionGroupConfig {
+  declaration?: unknown;
+}
 
 const CAPACITY_OPTION_AXIS_KEYS = new Set([
   'capacity',
@@ -116,48 +121,65 @@ function variantMatchesSelection(
 
 export function buildVariantOptionGroups(
   variants: AdminProductVariant[],
-  selection: VariantOptionSelection
+  selection: VariantOptionSelection,
+  config: VariantOptionGroupConfig = {}
 ): VariantOptionGroup[] {
   const labelsByKey = new Map<string, string>();
   const valuesByKey = new Map<string, string[]>();
 
   for (const variant of variants) {
-    for (const entry of getVariantAttributeEntries(variant)) {
-      labelsByKey.set(entry.key, entry.label);
-      const values = valuesByKey.get(entry.key) ?? [];
-      if (!values.includes(entry.value)) {
-        values.push(entry.value);
+    // Use the coalesced map so aliased keys (gpu/graphics) contribute one value.
+    const attributeMap = getVariantAttributeMap(variant);
+    for (const [key, value] of Object.entries(attributeMap)) {
+      labelsByKey.set(key, formatAttributeLabel(key));
+      const values = valuesByKey.get(key) ?? [];
+      if (!values.includes(value)) {
+        values.push(value);
       }
-      valuesByKey.set(entry.key, values);
+      valuesByKey.set(key, values);
     }
   }
 
-  const knownKeys = new Set(valuesByKey.keys());
+  const commerceAxes = getCommerceVariantAxes(config.declaration, [
+    ...valuesByKey.keys(),
+  ]);
+  if (valuesByKey.has('condition') && !commerceAxes.includes('condition')) {
+    commerceAxes.unshift('condition');
+  }
+  const knownKeys = new Set(commerceAxes);
 
-  return getOrderedGroupKeys([...valuesByKey.keys()]).map((key) => ({
-    key,
-    label: labelsByKey.get(key) ?? formatAttributeLabel(key),
-    values: getSortedOptionValues(key, valuesByKey.get(key) ?? []).map(
-      (value) => ({
-        available: variants.some((variant) => {
-          const attributeMap = getVariantAttributeMap(variant);
-          return (
-            attributeMap[key] === value &&
-            variantMatchesSelection(variant, selection, key, knownKeys)
-          );
-        }),
-        label: value,
-        selected: selection[key] === value,
-        value,
-      })
-    ),
-  }));
+  return getOrderedGroupKeys(commerceAxes).flatMap((key) => {
+    const values = getSortedOptionValues(key, valuesByKey.get(key) ?? []);
+    if (values.length <= 1) {
+      return [];
+    }
+
+    return [
+      {
+        key,
+        label: labelsByKey.get(key) ?? formatAttributeLabel(key),
+        values: values.map((value) => ({
+          available: variants.some((variant) => {
+            const attributeMap = getVariantAttributeMap(variant);
+            return (
+              attributeMap[key] === value &&
+              variantMatchesSelection(variant, selection, key, knownKeys)
+            );
+          }),
+          label: value,
+          selected: selection[key] === value,
+          value,
+        })),
+      },
+    ];
+  });
 }
 
 export function completeSingleValueSelection(
   variants: AdminProductVariant[],
   selection: VariantOptionSelection,
-  initialGroups = buildVariantOptionGroups(variants, selection)
+  config: VariantOptionGroupConfig = {},
+  initialGroups = buildVariantOptionGroups(variants, selection, config)
 ): VariantOptionSelection {
   let nextSelection = selection;
   const maxPasses = Math.max(1, initialGroups.length);
@@ -166,7 +188,7 @@ export function completeSingleValueSelection(
     const groups =
       pass === 0
         ? initialGroups
-        : buildVariantOptionGroups(variants, nextSelection);
+        : buildVariantOptionGroups(variants, nextSelection, config);
     let changed = false;
 
     for (const group of groups) {
@@ -196,20 +218,64 @@ export function completeSingleValueSelection(
 
 export function resolveSelectedVariant(
   variants: AdminProductVariant[],
-  selection: VariantOptionSelection
+  selection: VariantOptionSelection,
+  config: VariantOptionGroupConfig = {}
 ): AdminProductVariant | null {
-  const groups = buildVariantOptionGroups(variants, selection);
-  if (
-    groups.length === 0 ||
-    groups.some((group) => !selection[group.key]?.trim())
-  ) {
-    return null;
+  const knownKeys = new Set(
+    getCommerceVariantAxes(
+      config.declaration,
+      variants.flatMap((variant) =>
+        getVariantAttributeEntries(variant).map((entry) => entry.key)
+      )
+    )
+  );
+  if (variants.some((variant) => getVariantAttributeMap(variant).condition)) {
+    knownKeys.add('condition');
   }
-
-  const knownKeys = new Set(groups.map((group) => group.key));
   const matches = variants.filter((variant) =>
     variantMatchesSelection(variant, selection, undefined, knownKeys)
   );
 
   return matches.length === 1 ? matches[0] : null;
+}
+
+export function selectVariantOption(
+  variants: AdminProductVariant[],
+  selection: VariantOptionSelection,
+  key: string,
+  value: string,
+  config: VariantOptionGroupConfig = {}
+): VariantOptionSelection {
+  const nextSelection = {
+    ...selection,
+    [key]: selection[key] === value ? '' : value,
+  };
+
+  if (!nextSelection[key]) {
+    return nextSelection;
+  }
+
+  const groupsForNewSelection = buildVariantOptionGroups(
+    variants,
+    { [key]: nextSelection[key] },
+    config
+  );
+
+  return Object.fromEntries(
+    Object.entries(nextSelection).filter(([candidateKey, selectedValue]) => {
+      if (!selectedValue || candidateKey === key) {
+        return Boolean(selectedValue);
+      }
+
+      const candidateGroup = groupsForNewSelection.find(
+        (group) => group.key === candidateKey
+      );
+
+      return Boolean(
+        candidateGroup?.values.some(
+          (option) => option.value === selectedValue && option.available
+        )
+      );
+    })
+  );
 }

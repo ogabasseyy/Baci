@@ -126,6 +126,22 @@ const mobileReadiness = {
 } satisfies MobileStoreReadiness;
 
 describe('SetupChecklist', () => {
+  async function expandDesktopChecklist() {
+    const trigger = await waitFor(() => {
+      const button = screen
+        .getAllByRole('button')
+        .find(
+          (candidate) =>
+            candidate.getAttribute('aria-controls') ===
+            'store-setup-checklist-details'
+        );
+      if (!button) return null;
+      if (button.getAttribute('aria-expanded') === 'true') return null;
+      return button as HTMLElement;
+    });
+    if (trigger) fireEvent.click(trigger);
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -136,6 +152,7 @@ describe('SetupChecklist', () => {
 
   it('announces the collapsed and expanded state of the setup item toggle', async () => {
     render(<SetupChecklist compact merchantId={readiness.merchantId} />);
+    await expandDesktopChecklist();
 
     const toggle = await screen.findByRole('button', {
       name: 'Show 2 more setup items',
@@ -162,6 +179,7 @@ describe('SetupChecklist', () => {
     } as Response);
 
     render(<SetupChecklist compact merchantId={readiness.merchantId} />);
+    await expandDesktopChecklist();
 
     expect(
       await screen.findByText('Failed to load your setup checklist.')
@@ -177,6 +195,7 @@ describe('SetupChecklist', () => {
     } as Response);
 
     render(<SetupChecklist compact merchantId={readiness.merchantId} />);
+    await expandDesktopChecklist();
 
     expect(
       await screen.findByText('Failed to load your setup checklist.')
@@ -185,6 +204,7 @@ describe('SetupChecklist', () => {
 
   it('resolves checklist item navigation in the web adapter', async () => {
     render(<SetupChecklist compact merchantId={readiness.merchantId} />);
+    await expandDesktopChecklist();
 
     expect(
       await screen.findByRole('link', { name: /add payment method/i })
@@ -210,6 +230,7 @@ describe('SetupChecklist', () => {
 
     render(<SetupChecklist compact merchantId={readiness.merchantId} />);
 
+    await expandDesktopChecklist();
     fireEvent.click(
       await screen.findByRole('button', { name: 'Publish Store' })
     );

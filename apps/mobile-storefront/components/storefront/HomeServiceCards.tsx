@@ -2,10 +2,7 @@ import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
 import { type Href, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
 import {
-  Animated,
-  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +18,6 @@ import Colors, {
   SPACING,
   withAlpha,
 } from '@/constants/Colors';
-import { HomeServiceCardBorderRunner } from './HomeServiceCardBorderRunner';
 
 type ServiceShortcut = {
   title: string;
@@ -60,7 +56,7 @@ const SERVICE_SHORTCUTS: ServiceShortcut[] = [
     accent: palette.emerald[500],
   },
   {
-    title: 'Super Quiz',
+    title: 'SuperQuiz',
     subtitle: 'Play for rewards',
     href: '/quiz',
     icon: 'trophy-outline',
@@ -72,7 +68,6 @@ const CARD_HEIGHT = 42;
 const COMPACT_CARD_HEIGHT = 38;
 const COMPACT_BREAKPOINT = 360;
 const CARD_GAP = SPACING.sm;
-const BORDER_RUNNER_DURATION = 6570;
 
 export function HomeServiceCards({
   placement = 'belowUtility',
@@ -83,27 +78,9 @@ export function HomeServiceCards({
   const { width } = useWindowDimensions();
   const isCompact = width < COMPACT_BREAKPOINT;
 
-  // Horizontal scroll: Scale down slightly so part of the last card (Super Quiz) is visible
+  // Horizontal scroll: Scale down slightly so part of the last card (SuperQuiz) is visible
   const cardWidth = isCompact ? 98 : 114;
   const cardHeight = isCompact ? COMPACT_CARD_HEIGHT : CARD_HEIGHT;
-  const [runnerProgress] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    runnerProgress.setValue(0);
-    const animation = Animated.loop(
-      Animated.timing(runnerProgress, {
-        toValue: 1,
-        duration: BORDER_RUNNER_DURATION,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [runnerProgress]);
 
   return (
     <View
@@ -122,11 +99,6 @@ export function HomeServiceCards({
         contentContainerStyle={styles.scrollContainer}
       >
         {SERVICE_SHORTCUTS.map((item) => {
-          const runnerColor = withAlpha(
-            item.accent,
-            colorScheme === 'dark' ? 0.94 : 0.86
-          );
-
           return (
             <View
               key={item.href.toString()}
@@ -143,12 +115,6 @@ export function HomeServiceCards({
                 },
               ]}
             >
-              <HomeServiceCardBorderRunner
-                cardHeight={cardHeight}
-                cardWidth={cardWidth}
-                color={runnerColor}
-                progress={runnerProgress}
-              />
               <Pressable
                 onPress={() => router.push(item.href)}
                 style={styles.cardPressable}

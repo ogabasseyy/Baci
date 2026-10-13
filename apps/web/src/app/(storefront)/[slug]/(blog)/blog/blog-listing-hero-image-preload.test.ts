@@ -102,4 +102,21 @@ describe('preloadOgabasseyRootBlogListingHeroImage', () => {
 
     expect(preloadBlogListingFeaturedImage).not.toHaveBeenCalled();
   });
+
+  it('selects the promoted listing post before falling back to the first post', async () => {
+    const { getBlogListingHeroPost } = await import(
+      './blog-listing-hero-image-preload'
+    );
+
+    expect(
+      getBlogListingHeroPost([
+        { featured: false, featured_image_url: 'first.png' },
+        { featured: true, featured_image_url: 'promoted.png' },
+      ])?.featured_image_url
+    ).toBe('promoted.png');
+    expect(
+      getBlogListingHeroPost([{ featured_image_url: 'first.png' }])
+        ?.featured_image_url
+    ).toBe('first.png');
+  });
 });

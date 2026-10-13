@@ -8,32 +8,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-
-const timeStringSchema = z
-  .string()
-  .regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)')
-  .nullable();
-
-const preferencesSchema = z
-  .object({
-    in_app_enabled: z.boolean().optional(),
-    banner_enabled: z.boolean().optional(),
-    quiet_hours_start: timeStringSchema.optional(),
-    quiet_hours_end: timeStringSchema.optional(),
-  })
-  .refine(
-    (data) => {
-      const hasStart =
-        data.quiet_hours_start !== null && data.quiet_hours_start !== undefined;
-      const hasEnd =
-        data.quiet_hours_end !== null && data.quiet_hours_end !== undefined;
-      return hasStart === hasEnd; // Both set or both unset
-    },
-    {
-      message: 'Both quiet hours start and end must be set together',
-      path: ['quiet_hours_start'],
-    }
-  );
+import { notificationPreferencesPatchSchema } from '@/schemas/notification-preferences';
 
 /**
  * GET /api/notifications/preferences
@@ -70,7 +45,7 @@ export async function GET() {
     const { data: preferences, error } = await supabase
       .from('notification_preferences')
       .select(
-        'id, merchant_id, in_app_enabled, banner_enabled, quiet_hours_start, quiet_hours_end, updated_at'
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
       )
       .eq('merchant_id', merchantId)
       .single();
@@ -90,8 +65,10 @@ export async function GET() {
         merchant_id: merchantId,
         in_app_enabled: true,
         banner_enabled: true,
+        follow_up_notifications_enabled: true,
         quiet_hours_start: null,
         quiet_hours_end: null,
+        quiet_hours_time_zone: 'Africa/Lagos',
         updated_at: null,
       });
     }
@@ -112,20 +89,11 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // CSRF protection
-    const { valid: csrfValid, response: csrfResponse } =
-      await checkCsrfProtection(request);
-    if (!csrfValid) {
-      return (
-        csrfResponse ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
-    }
-
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Authentication check
+    // Authenticate before evaluating CSRF so an unauthenticated request cannot
+    // distinguish CSRF policy details from a protected endpoint.
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -147,15 +115,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+
     // Parse request body
     const json = await request.json();
-    const validation = preferencesSchema.safeParse(json);
+    const validation = notificationPreferencesPatchSchema.safeParse(json);
 
     if (!validation.success) {
       return NextResponse.json(
         {
           error: 'Invalid request',
-          details: validation.error.flatten().fieldErrors,
+          details: z.flattenError(validation.error),
         },
         { status: 400 }
       );
@@ -172,16 +149,23 @@ export async function PATCH(request: NextRequest) {
       updates.in_app_enabled = body.in_app_enabled;
     if (body.banner_enabled !== undefined)
       updates.banner_enabled = body.banner_enabled;
+    if (body.follow_up_notifications_enabled !== undefined)
+      updates.follow_up_notifications_enabled =
+        body.follow_up_notifications_enabled;
     if (body.quiet_hours_start !== undefined)
       updates.quiet_hours_start = body.quiet_hours_start;
     if (body.quiet_hours_end !== undefined)
       updates.quiet_hours_end = body.quiet_hours_end;
+    if (body.quiet_hours_time_zone !== undefined)
+      updates.quiet_hours_time_zone = body.quiet_hours_time_zone;
 
     // Upsert preferences (create if not exists, update if exists)
     const { data: updated, error: updateError } = await supabase
       .from('notification_preferences')
       .upsert(updates, { onConflict: 'merchant_id' })
-      .select()
+      .select(
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+      )
       .single();
 
     if (updateError) {

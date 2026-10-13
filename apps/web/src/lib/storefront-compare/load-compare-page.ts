@@ -10,6 +10,7 @@ import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
+import { hasMaintainedProductCompareRoute } from '@/lib/storefront-compare/has-maintained-product-compare-route';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
   BuildCommercialGuideLinksContext,
@@ -30,6 +31,7 @@ import {
   type ProductComparisonMatrix,
 } from '@/lib/storefront-specs/spec-matrix';
 import type { ComparableProductKeySpecs } from '@/lib/storefront-specs/spec-taxonomy';
+import { buildCompareGuideContexts } from './build-compare-guide-contexts';
 import { extractComparableKeySpecs } from './comparable-key-specs';
 import {
   buildBrandCompareCandidate,
@@ -49,7 +51,7 @@ import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
 } from './get-cached-compare-category-inventory';
-import { getCachedMaintainedCompareRouteManifest } from './get-cached-maintained-compare-route-manifest';
+import { isSelfComparePair } from './is-self-compare-pair';
 
 interface CompareBreadcrumbItem {
   name: string;
@@ -453,6 +455,17 @@ async function loadComparePageForRequest(args: {
     return null;
   }
 
+  // This is the only missing-pair outcome known from the URL alone. Alias
+  // equivalence requires inventory/detail authority, so do not reject merely
+  // similar or canonicalized keys before the normal resolution path.
+  if (isSelfComparePair(parsed)) {
+    logCompareRouteMiss({
+      ...args,
+      reason: 'self_compare_pair',
+    });
+    return null;
+  }
+
   let core: CachedComparePageCore | null;
 
   try {
@@ -613,13 +626,13 @@ async function getCachedComparePageModel(
   // same RemoteCacheHandler failures.
   'use cache';
   try {
-    // 'products' (revalidate 300), NOT 'categories' (3600): now that this is a
+    // 'products' (revalidate 1800), NOT 'categories' (3600): now that this is a
     // LOCAL entry, tag revalidation only evicts the instance that handled the
     // mutation — other instances serve the prior snapshot until their window
     // lapses. This model embeds mutable product price/stock (via
     // getCachedProductWithDetails, itself local 'use cache' on the same
     // 'products' window), so match that window to bound cross-instance staleness
-    // of the embedded data to ~5min and cap how long each per-slug entry
+    // of the embedded data to ~30min and cap how long each per-slug entry
     // lingers in a lambda's local cache.
     cacheLife('products');
     cacheTag('category-page-data', 'products', 'categories', 'blog-posts');
@@ -674,8 +687,7 @@ async function getCachedComparePageModel(
 
   const inventory = await getCachedCompareCategoryInventory(
     merchant.id,
-    categorySlug,
-    merchantSlug
+    categorySlug
   );
 
   if (inventory.isCollection) {
@@ -705,27 +717,16 @@ async function getCachedComparePageModel(
   const rightProduct = normalizedProducts.find(
     (product) => product.slug === parsed.rightKey
   );
-  const curatedCompareSlugs = buildCuratedCompareSlugSet({
-    storeUrl,
-    categorySlug: args.categorySlug,
-    categoryName,
-    products: normalizedProducts,
-  });
-  const isCuratedCanonicalSlug = isCuratedCompareSlug(
-    parsed.canonicalSlug,
-    curatedCompareSlugs
-  );
   if (leftProduct && rightProduct) {
-    const maintainedRouteManifest = new Set(
-      await getCachedMaintainedCompareRouteManifest(
-        merchant.id,
-        args.categorySlug,
-        args.merchantSlug,
-        storeUrl
-      )
-    );
+    const isMaintainedRoute = await hasMaintainedProductCompareRoute({
+      merchantId: merchant.id,
+      merchantSlug: args.merchantSlug,
+      categorySlug: args.categorySlug,
+      comparisonSlug: parsed.canonicalSlug,
+      storeUrl,
+    });
 
-    if (!maintainedRouteManifest.has(parsed.canonicalSlug)) {
+    if (!isMaintainedRoute) {
       logCompareRouteMiss({
         ...args,
         canonicalSlug: parsed.canonicalSlug,
@@ -838,6 +839,17 @@ async function getCachedComparePageModel(
       `${leftDetails.name} vs ${rightDetails.name}`,
       countryContext
     );
+    const compareGuideContexts = buildCompareGuideContexts({
+      supportedClusterCategory,
+      leftBrand: leftDetails.brand,
+      rightBrand: rightDetails.brand,
+      leftName: leftDetails.name,
+      rightName: rightDetails.name,
+      leftLoadSlug: parsed.leftKey,
+      rightLoadSlug: parsed.rightKey,
+      leftBuildSlug: leftDetails.slug || parsed.leftKey,
+      rightBuildSlug: rightDetails.slug || parsed.rightKey,
+    });
     return {
       kind: 'product',
       canonicalSlug: parsed.canonicalSlug,
@@ -887,26 +899,21 @@ async function getCachedComparePageModel(
         isMaintainedCanonicalSlug: true,
         // Faithful to the pre-overlay contexts: the guide LOAD used the raw
         // parsed URL keys, the guide BUILD used the resolved detail slugs.
-        guideLoadContext: supportedClusterCategory
-          ? {
-              pageKind: 'compare',
-              categorySlug: supportedClusterCategory,
-              productSlugs: [parsed.leftKey, parsed.rightKey],
-            }
-          : null,
-        guideBuildContext: supportedClusterCategory
-          ? {
-              pageKind: 'compare',
-              categorySlug: supportedClusterCategory,
-              productSlugs: [
-                leftDetails.slug || parsed.leftKey,
-                rightDetails.slug || parsed.rightKey,
-              ],
-            }
-          : null,
+        ...compareGuideContexts,
       },
     };
   }
+
+  const curatedCompareSlugs = buildCuratedCompareSlugSet({
+    storeUrl,
+    categorySlug: args.categorySlug,
+    categoryName,
+    products: normalizedProducts,
+  });
+  const isCuratedCanonicalSlug = isCuratedCompareSlug(
+    parsed.canonicalSlug,
+    curatedCompareSlugs
+  );
 
   const brandCandidate = buildBrandCompareCandidate({
     categorySlug: args.categorySlug,

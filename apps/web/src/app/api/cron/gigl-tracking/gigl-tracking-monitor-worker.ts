@@ -7,7 +7,8 @@ import type { Database, Json } from '@/types/supabase';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
 
 const claimedMonitorSchema = z.object({
-  order_id: z.string().uuid(),
+  // Repair-pickup monitors enroll with null order_id; identity is shipment/epoch.
+  order_id: z.string().uuid().nullable(),
   shipment_id: z.string().uuid(),
   state: z.enum(['active', 'final_poll', 'paused']),
   tracking_epoch_id: z.string().uuid(),
@@ -25,7 +26,7 @@ export type GiglTrackingMonitorSummary = {
   success: true;
 };
 
-type WorkerSupabase = SupabaseClient<Database>;
+type WorkerSupabase = Pick<SupabaseClient<Database>, 'rpc'>;
 type TrackShipments = (
   trackingNumbers: readonly string[]
 ) => Promise<Map<string, TrackingResult>>;

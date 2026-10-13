@@ -22,6 +22,7 @@ function buildOpenApiDocument(baseUrl: string) {
         post: {
           operationId: 'searchCatalog',
           summary: 'Search the Ogabassey catalog',
+          security: [{ agenticBearerHmac: [] }],
           requestBody: {
             required: true,
             content: {
@@ -42,10 +43,36 @@ function buildOpenApiDocument(baseUrl: string) {
           },
         },
       },
+      '/api/agentic/catalog/lookup': {
+        post: {
+          operationId: 'lookupCatalog',
+          summary: 'Fetch multiple catalog products by ID',
+          security: [{ agenticBearerHmac: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/CatalogLookupRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Catalog products',
+              content: {
+                'application/json': {
+                  schema: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
       '/api/agentic/catalog/product': {
         post: {
           operationId: 'getCatalogProduct',
           summary: 'Fetch a product and its selected variants',
+          security: [{ agenticBearerHmac: [] }],
           requestBody: {
             required: true,
             content: {
@@ -221,6 +248,19 @@ function buildOpenApiDocument(baseUrl: string) {
             query: { type: 'string' },
             pagination: { type: 'object', additionalProperties: true },
           },
+        },
+        CatalogLookupRequest: {
+          type: 'object',
+          properties: {
+            ids: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 50,
+              items: { type: 'string' },
+            },
+            filters: { type: 'object', additionalProperties: true },
+          },
+          required: ['ids'],
         },
         CatalogProductRequest: {
           type: 'object',

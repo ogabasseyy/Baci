@@ -1,9 +1,10 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { pollImeiLookup } from './imei-poll-client';
 
 describe('pollImeiLookup', () => {
   it('returns a typed pending response', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({
           lookupId: '11111111-1111-4111-8111-111111111111',
@@ -26,7 +27,7 @@ describe('pollImeiLookup', () => {
   });
 
   it('returns a validated terminal result', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({
           data: {

@@ -240,4 +240,33 @@ describe('ProductOptionSelectors — dependent variant filtering', () => {
       screen.getByRole('button', { name: /128GB/i }),
     ).not.toBeDisabled();
   });
+
+  it('renders single-option axis label without duplicating the option value in the header', () => {
+    renderSelectors({
+      effectiveAxes: ['storage'],
+      getAxisOptions: () => ['2TB PCIe NVMe SSD'],
+      selectedAttributes: { storage: '2TB PCIe NVMe SSD' },
+    });
+
+    // The heading shows "STORAGE" only, and does not repeat "2TB PCIe NVMe SSD" in the label
+    const label = screen.getByText('STORAGE');
+    expect(label).toBeInTheDocument();
+    // The option value is present in the button
+    expect(
+      screen.getByRole('button', { name: /2TB PCIe NVMe SSD/i })
+    ).toBeInTheDocument();
+  });
+
+  it('renders multi-option axis label with the active selected value', () => {
+    renderSelectors({
+      effectiveAxes: ['storage'],
+      getAxisOptions: () => ['128GB', '256GB', '512GB'],
+      selectedAttributes: { storage: '256GB' },
+    });
+
+    expect(
+      screen.getByRole('button', { name: /Select 256GB storage/i })
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/STORAGE:/i)).toHaveTextContent('256GB');
+  });
 });

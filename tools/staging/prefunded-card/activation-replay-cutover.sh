@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+exec /usr/bin/ssh -t -o ServerAliveInterval=15 -o ConnectTimeout=15 bassey@82.29.190.219 'sudo /usr/bin/env -i HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C LC_ALL=C /bin/bash -c '"'"'set -euo pipefail; umask 077; root_dir=$(/usr/bin/mktemp -d /root/baci-replay-cutover.XXXXXXXX); /usr/bin/install -o root -g root -m 0600 /home/bassey/baci-replay-cutover-20260927/run-reviewed.sh "$root_dir/run-reviewed.sh"; printf '"'"'"'"'"'"'"'"'%s  %s\n'"'"'"'"'"'"'"'"' e692f5c16a307ba7c0bc991c12e1c3a2cd552933ddac66bfb0da7d2b4ee30189 "$root_dir/run-reviewed.sh" | /usr/bin/sha256sum -c -; exec /bin/bash "$root_dir/run-reviewed.sh"'"'"''

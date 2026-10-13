@@ -15,6 +15,7 @@ export interface ProductWithSelectionAxesLike<
   TVariant extends ProductDefaultVariantLike = ProductDefaultVariantLike,
 > extends ProductWithDefaultVariantLike<TVariant> {
   attributeAxes?: string[] | null;
+  offers?: Array<{ condition?: string | null }> | null;
   variant_attributes?: Record<string, string[] | null | undefined> | null;
 }
 
@@ -29,28 +30,7 @@ export interface ExtractedVariantSelectionParams {
   variantId?: string;
 }
 
-export type VariantSelectionParamResolutionType =
-  | 'none'
-  | 'variant_id'
-  | 'condition_only'
-  | 'condition_with_attributes'
-  | 'attribute_only'
-  | 'invalid_variant_id'
-  | 'zero_match'
-  | 'ambiguous';
-
-export interface VariantSelectionParamResolution<
-  TVariant extends ProductDefaultVariantLike = ProductDefaultVariantLike,
-> {
-  extracted: ExtractedVariantSelectionParams;
-  matches: TVariant[];
-  selectionInput: {
-    attributes?: Record<string, string>;
-    condition?: string;
-    variantId?: string;
-  };
-  type: VariantSelectionParamResolutionType;
-}
+// Resolution lives in ./product-selection-param-resolution (Boy Scout split).
 
 function normalizeParamKey(value: string | null | undefined) {
   if (typeof value !== 'string') {
@@ -297,95 +277,4 @@ export function findVariantSelectionMatches<
       normalizeConditionValue(variant.condition ?? product.condition) ===
       requestedCondition
   );
-}
-
-export function resolveVariantSelectionParamResolution<
-  TVariant extends ProductDefaultVariantLike,
->(
-  product: ProductWithSelectionAxesLike<TVariant>,
-  searchParams: SearchParamSource
-): VariantSelectionParamResolution<TVariant> {
-  const extracted = extractVariantSelectionParams(product, searchParams);
-
-  if (!extracted.hasRecognizedSelectionParams) {
-    return {
-      extracted,
-      matches: [],
-      selectionInput: {},
-      type: 'none',
-    };
-  }
-
-  if (extracted.hasVariantIdParam) {
-    const matches = findVariantSelectionMatches(
-      product,
-      { variantId: extracted.variantId },
-      { includeOutOfStock: true }
-    );
-
-    return {
-      extracted,
-      matches,
-      selectionInput: extracted.variantId
-        ? { variantId: extracted.variantId }
-        : {},
-      type: matches.length === 1 ? 'variant_id' : 'invalid_variant_id',
-    };
-  }
-
-  if (extracted.hasConditionParam && extracted.hasAttributeParams) {
-    const matches = findVariantSelectionMatches(
-      product,
-      {
-        attributes: extracted.attributes,
-        condition: extracted.condition,
-      },
-      { includeOutOfStock: true }
-    );
-
-    return {
-      extracted,
-      matches,
-      selectionInput:
-        matches.length === 1
-          ? {
-              attributes: extracted.attributes,
-              condition: extracted.condition,
-            }
-          : {},
-      type:
-        matches.length === 1
-          ? 'condition_with_attributes'
-          : matches.length === 0
-            ? 'zero_match'
-            : 'ambiguous',
-    };
-  }
-
-  if (extracted.hasConditionParam) {
-    const matches = findVariantSelectionMatches(
-      product,
-      { condition: extracted.condition },
-      { includeOutOfStock: true }
-    );
-
-    return {
-      extracted,
-      matches,
-      selectionInput:
-        matches.length > 0 && extracted.condition
-          ? { condition: extracted.condition }
-          : {},
-      type: matches.length > 0 ? 'condition_only' : 'zero_match',
-    };
-  }
-
-  return {
-    extracted,
-    matches: [],
-    selectionInput: {
-      attributes: extracted.attributes,
-    },
-    type: 'attribute_only',
-  };
 }

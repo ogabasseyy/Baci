@@ -5,6 +5,7 @@ import { QuizLaunchDialog } from './quiz-launch-dialog';
 
 const configuration = {
   difficulty: 'standard' as const,
+  endTouched: false,
   liveWindowMinutes: 5,
   mode: 'test' as const,
   prizeProduct: {
@@ -54,6 +55,31 @@ describe('QuizLaunchDialog', () => {
       within(dialog).getByRole('button', { name: /launch quiz/i })
     );
     expect(onConfirm).toHaveBeenCalledWith(review);
+  });
+
+  it('formats the scheduled window from Lagos-derived instants with the policy zone labeled', () => {
+    // Regression: the offset-free field values are Lagos wall clocks, so a
+    // browser-local parse would show an admin outside Africa/Lagos the
+    // wrong activation time. 10:00 entered in the fields means 10:00 Lagos
+    // (09:00 UTC), which the summary must reflect with the zone labeled.
+    render(
+      <QuizLaunchDialog
+        answerKeyReview={{ questions: [] }}
+        configuration={{
+          ...configuration,
+          scheduledEnd: '2026-10-01T12:00',
+          scheduledStart: '2026-10-01T10:00',
+          timingKind: 'scheduled',
+        }}
+        isLaunching={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const expected = `${new Date('2026-10-01T09:00:00.000Z').toLocaleString(undefined, { timeZone: 'Africa/Lagos' })} to ${new Date('2026-10-01T11:00:00.000Z').toLocaleString(undefined, { timeZone: 'Africa/Lagos' })} (Africa/Lagos)`;
+    expect(within(dialog).getByText(expected)).toBeInTheDocument();
   });
 
   it('shows an activation failure inside the dialog', () => {

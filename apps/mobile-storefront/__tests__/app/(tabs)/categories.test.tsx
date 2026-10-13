@@ -108,6 +108,7 @@ describe('CategoriesScreen', () => {
         source: expect.not.objectContaining({
           uri: expect.stringContaining('placehold.co'),
         }),
+        autoplay: false,
       })
     );
   });
@@ -133,6 +134,7 @@ describe('CategoriesScreen', () => {
     expect(mockImage).toHaveBeenCalledWith(
       expect.objectContaining({
         source: { uri: 'https://cdn.example.com/categories/phones.png' },
+        autoplay: false,
       })
     );
   });

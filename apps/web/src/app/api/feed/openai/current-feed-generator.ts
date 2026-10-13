@@ -1,7 +1,9 @@
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import {
@@ -22,19 +24,41 @@ function getOpenAIFeedImageUrls(
   product: Product,
   imageManifest: ImageManifestMap
 ): string[] {
-  const manifestEntries = imageManifest[product.id] || [];
-  const manifestPrimaryImage = resolveGmcPrimaryImage(manifestEntries);
+  // Product rows use product-level imagery only: variant-scoped rows
+  // belong to another SKU and must not leak into the parent row.
+  const manifestEntries = (imageManifest[product.id] || []).filter(
+    (entry) => !entry.variant_id
+  );
+  const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
+  const manifestPrimaryImage = resolveGmcPrimaryImage(
+    manifestEntries,
+    offerClaimedImageUrls
+  );
   if (manifestPrimaryImage) {
     return [
       manifestPrimaryImage,
-      ...resolveGmcAdditionalImages(manifestEntries),
+      ...resolveGmcAdditionalImages(
+        manifestEntries,
+        offerClaimedImageUrls
+      ).filter((url) => url !== manifestPrimaryImage),
     ];
   }
 
+  // The raw product-images fallback must honor the same exclusion:
+  // when an offer claims the manifest primary, it is usually the same
+  // URL the product row would otherwise restore here.
   return (
     product.images
       ?.map((image) => (typeof image === 'string' ? image : image.url))
-      .filter(isString) || []
+      .filter(isString)
+      .filter(
+        (url) =>
+          !isOfferClaimedImage(
+            { source_url: url, verified_url: url },
+            offerClaimedImageUrls,
+            manifestEntries
+          )
+      ) || []
   );
 }
 

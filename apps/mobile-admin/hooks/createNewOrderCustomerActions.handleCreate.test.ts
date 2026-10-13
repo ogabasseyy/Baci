@@ -290,19 +290,33 @@ describe('createNewOrderCustomerActions.handleCreateCustomer', () => {
 
     expect(createCustomer).toHaveBeenCalledWith({
       address: '12 Allen Avenue',
+      city: undefined,
       company_name: undefined,
+      country: undefined,
+      country_code: undefined,
       customer_type: 'individual',
       email: 'ada@example.com',
       first_name: 'Ada',
       last_name: 'Lovelace',
+      latitude: undefined,
+      longitude: undefined,
       phone: '08012345678',
+      state: undefined,
+      zip_code: undefined,
     });
-    expect(setCustomer).toHaveBeenCalledWith({
+    expect(setCustomer).toHaveBeenNthCalledWith(1, {
       address: '12 Allen Avenue',
+      city: '',
+      country: '',
+      countryCode: '',
       email: 'ada@example.com',
       id: 'customer-99',
+      latitude: undefined,
+      longitude: undefined,
       name: 'Ada Lovelace',
       phone: '08012345678',
+      postalCode: '',
+      state: '',
     });
     expect(setShowCustomerModal).toHaveBeenCalledWith(false);
     expect(setCustomerSearch).toHaveBeenCalledWith('');
@@ -341,19 +355,33 @@ describe('createNewOrderCustomerActions.handleCreateCustomer', () => {
 
     expect(createCustomer).toHaveBeenCalledWith({
       address: undefined,
+      city: undefined,
       company_name: 'Acme Ltd',
+      country: undefined,
+      country_code: undefined,
       customer_type: 'company',
       email: 'ops@acme.com',
       first_name: '',
       last_name: '',
+      latitude: undefined,
+      longitude: undefined,
       phone: '08012345678',
+      state: undefined,
+      zip_code: undefined,
     });
-    expect(setCustomer).toHaveBeenCalledWith({
+    expect(setCustomer).toHaveBeenNthCalledWith(1, {
       address: '',
+      city: '',
+      country: '',
+      countryCode: '',
       email: 'ops@acme.com',
       id: 'customer-77',
+      latitude: undefined,
+      longitude: undefined,
       name: 'Acme Ltd',
       phone: '08012345678',
+      postalCode: '',
+      state: '',
     });
   });
 

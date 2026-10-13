@@ -5,15 +5,29 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import type React from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { prioritizeSmartphoneProducts } from '@baci/shared/storefront';
+import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
 import { useDeferredActivation } from './deferred-shell-feature';
 import type {
   ProductGridInteractionBindingsValue,
   ProductGridParticle,
 } from './ProductGridInteractionBindings';
 import { DeferredAdUnit } from './deferred-ad-unit';
+import {
+  FALLBACK_RENDERED_IMAGE_COUNT,
+  PRODUCTS_PER_PAGE,
+} from './home-product-grid-constants';
+import {
+  loadDefaultInteractionBindingsModule,
+  loadDefaultInteractiveCardModule,
+} from './home-product-grid-interaction-loaders';
+import type {
+  PreviewCatalogModule,
+  ProductGridInteractionBindingsModule,
+  ProductGridItemModule,
+} from './home-product-grid-interaction-loaders';
+import { STATIC_BINDINGS } from './home-product-grid-static-bindings';
+import { useFallbackSwapPage } from './home-product-grid-fallback-swap';
 import { HomeProductGridCard } from './HomeProductGridCard';
-import type { ProductGridItemProps } from './ProductGridItem';
 import { hasRealProducts, useHomePreviewCatalog } from './useHomePreviewCatalog';
 import { useActivationFocusRestore } from './use-activation-focus-restore';
 import type { Product } from '../types';
@@ -24,22 +38,6 @@ const DeferredFloatingParticles = dynamic(
   { loading: () => null }
 );
 
-interface ProductGridInteractionBindingsModule {
-  ProductGridInteractionBindings: React.ComponentType<{
-    children: (
-      bindings: ProductGridInteractionBindingsValue
-    ) => React.ReactNode;
-  }>;
-}
-
-interface ProductGridItemModule {
-  ProductGridItem: React.ComponentType<ProductGridItemProps>;
-}
-
-interface PreviewCatalogModule {
-  products: Product[];
-}
-
 interface HomeProductGridProps {
   basePath?: string;
   storeSlug?: string;
@@ -47,34 +45,25 @@ interface HomeProductGridProps {
   title?: string;
   showViewAll?: boolean;
   initialDisplayCount?: number;
+  /**
+   * Replays a load-more tap captured on the static fallback before this
+   * grid mounted: the first page expands by one page on mount so the tap
+   * is not lost. One-shot — read only in the initial state.
+   */
+  replayLoadMore?: boolean;
+  /**
+   * The static fallback rendered the initial slice before this grid
+   * mounted: those cards keep the fallback's JPEG tier (no AVIF source)
+   * so the swap reuses the already-fetched bytes. Cards expanded later
+   * via load-more were never fallback-rendered and keep the AVIF tier.
+   * Set by the gate, whose fallback always commits first.
+   */
+  matchFallbackImageTier?: boolean;
   inlineAdBreakpoints?: number[];
   loadInteractionBindings?: () => Promise<ProductGridInteractionBindingsModule>;
   loadInteractiveCard?: () => Promise<ProductGridItemModule>;
   loadPreviewCatalog?: () => Promise<PreviewCatalogModule>;
 }
-
-const PRODUCTS_PER_PAGE = 20;
-const NO_PARTICLES: ProductGridParticle[] = [];
-
-const loadDefaultInteractionBindingsModule = () =>
-  import('./ProductGridInteractionBindings');
-
-const loadDefaultInteractiveCardModule = () => import('./ProductGridItem');
-
-const STATIC_BINDINGS: ProductGridInteractionBindingsValue = {
-  isAdded: () => false,
-  getCartQuantity: () => 0,
-  isWishlisted: () => false,
-  onAddToCart: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  onToggleWishlist: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  particles: NO_PARTICLES,
-};
 
 export function HomeProductGrid({
   basePath: explicitBasePath,
@@ -83,21 +72,19 @@ export function HomeProductGrid({
   title = 'Featured Products',
   showViewAll = true,
   initialDisplayCount = 8,
+  replayLoadMore = false,
+  matchFallbackImageTier = false,
   inlineAdBreakpoints = [8, 16],
   loadInteractionBindings,
   loadInteractiveCard,
   loadPreviewCatalog,
 }: HomeProductGridProps) {
-  const [displayCount, setDisplayCount] = useState(
-    Math.max(1, initialDisplayCount)
-  );
-  const [prevInitialDisplayCount, setPrevInitialDisplayCount] = useState(
-    initialDisplayCount
-  );
-  if (initialDisplayCount !== prevInitialDisplayCount) {
-    setPrevInitialDisplayCount(initialDisplayCount);
-    setDisplayCount(Math.max(1, initialDisplayCount));
-  }
+  const { displayCount, setDisplayCount, isFallbackTierIndex } =
+    useFallbackSwapPage({
+      initialDisplayCount,
+      replayLoadMore,
+      matchFallbackImageTier,
+    });
   const [InteractionBindings, setInteractionBindings] = useState<
     ProductGridInteractionBindingsModule['ProductGridInteractionBindings'] | null
   >(null);
@@ -214,7 +201,10 @@ export function HomeProductGrid({
                 <HomeProductGridCard
                   basePath={basePath}
                   product={product}
-                  deferImageLoading={index >= 2}
+                  deferImageLoading={
+                    index >= FALLBACK_RENDERED_IMAGE_COUNT
+                  }
+                  disableAvifTier={isFallbackTierIndex(index)}
                 />
               ) : (
                 <InteractiveCard
@@ -233,7 +223,10 @@ export function HomeProductGrid({
                   deferInteractiveChrome={deferInteractiveChrome}
                   interactiveChromeTimeoutMs={deferInteractiveChrome ? 0 : undefined}
                   interactiveChromeActivateOnIdle={!deferInteractiveChrome}
-                  deferImageLoading={index >= 2}
+                  deferImageLoading={
+                    index >= FALLBACK_RENDERED_IMAGE_COUNT
+                  }
+                  disableAvifTier={isFallbackTierIndex(index)}
                 />
               )}
 
@@ -257,7 +250,7 @@ export function HomeProductGrid({
               setDisplayCount((currentCount) => currentCount + PRODUCTS_PER_PAGE)
             }
             type="button"
-            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all duration-200 active:scale-95"
+            className="px-8 py-3 bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-semibold rounded-xl transition-all duration-200 active:scale-95"
           >
             Load More Products
           </button>

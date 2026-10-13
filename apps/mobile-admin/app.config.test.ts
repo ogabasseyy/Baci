@@ -54,6 +54,57 @@ describe('mobile-admin app config PostHog wiring', () => {
   });
 });
 
+describe('mobile-admin React Compiler configuration', () => {
+  it('enables the SDK 57 React Compiler experiment', async () => {
+    const { default: buildConfig } = await import('./app.config');
+    const config = buildConfig(TEST_CONFIG_CONTEXT);
+
+    expect(config.experiments?.reactCompiler).toBe(true);
+  });
+});
+
+describe('mobile-admin development client launcher config', () => {
+  it('launches the most recently opened project without a hardcoded server URL', async () => {
+    vi.stubEnv('EAS_BUILD_PROFILE', 'development');
+
+    const { default: buildConfig } = await import('./app.config');
+    const config = buildConfig(TEST_CONFIG_CONTEXT);
+    const devClientPlugin = config.plugins?.find(
+      (plugin) =>
+        (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-dev-client'
+    );
+
+    expect(devClientPlugin).toEqual([
+      'expo-dev-client',
+      expect.objectContaining({ launchMode: 'most-recent' }),
+    ]);
+    expect(devClientPlugin).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ defaultLaunchURL: expect.anything() }),
+      ])
+    );
+  });
+
+  it('does not inject a development server URL into production config', async () => {
+    vi.stubEnv('EAS_BUILD_PROFILE', 'production');
+    vi.stubEnv('EXPO_PUBLIC_API_URL', 'http://192.0.2.10:8081');
+
+    const { default: buildConfig } = await import('./app.config');
+    const config = buildConfig(TEST_CONFIG_CONTEXT);
+    const devClientPlugin = config.plugins?.find(
+      (plugin) =>
+        (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-dev-client'
+    );
+
+    expect(devClientPlugin).toEqual([
+      'expo-dev-client',
+      expect.objectContaining({ launchMode: 'most-recent' }),
+    ]);
+    expect(JSON.stringify(devClientPlugin)).not.toContain('192.0.2.10');
+    expect(JSON.stringify(devClientPlugin)).not.toContain('defaultLaunchURL');
+  });
+});
+
 describe('mobile-admin app config version resolution', () => {
   it('uses APP_VERSION as the versionName (Android release auto-increment)', async () => {
     vi.stubEnv('APP_VERSION', '2.0.640');

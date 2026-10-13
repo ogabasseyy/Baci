@@ -3,6 +3,7 @@ import {
   sanitizeWalletReturnTo,
   type WalletReturnHref,
 } from '@/lib/sanitize-wallet-return-to';
+import { PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME } from '@/schemas/primary-wallet-card';
 
 const trimmedRequiredString = (message: string) =>
   z.string().trim().min(1, message);
@@ -12,6 +13,20 @@ const trimmedOptionalString = (message: string) =>
 
 const optionalOrderIdentifier = z.string().trim().optional();
 const optionalTrackingToken = z.string().trim().optional();
+
+// Hostname-checked parsing instead of a tight path regex: the provider may
+// add path segments, hyphens, or query strings to a legitimate checkout URL.
+function isPaystackCheckoutUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === PRIMARY_WALLET_CARD_PAYSTACK_CHECKOUT_HOSTNAME
+    );
+  } catch {
+    return false;
+  }
+}
 
 const sanitizedReturnTo = z.preprocess(
   (value) => {
@@ -33,6 +48,18 @@ const optionalPositiveAmount = z.preprocess(
     .optional()
 );
 
+// Canonical order total (full order value incl. credits covered server-side).
+// Distinct from `amount`, which is the residual due at the gateway.
+const optionalOrderTotal = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.coerce
+    .number({ message: 'Order total must be a valid number' })
+    .finite('Order total cannot be Infinity or NaN')
+    .min(0, 'Order total cannot be negative')
+    .optional()
+);
+
 const paymentGatewayParamsObject = z.object({
   orderId: optionalOrderIdentifier,
   orderNumber: optionalOrderIdentifier,
@@ -44,9 +71,11 @@ const paymentGatewayParamsObject = z.object({
   ),
   reference: trimmedRequiredString('Reference is required'),
   amount: optionalPositiveAmount,
+  orderTotal: optionalOrderTotal,
   paymentKind: z
-    .enum(['order', 'vtu', 'wallet', 'savings_auth'])
+    .enum(['order', 'vtu', 'wallet', 'savings_auth', 'primary_wallet_card'])
     .default('order'),
+  paymentMethod: z.literal('uba_redvault').optional(),
   returnTo: sanitizedReturnTo,
   merchantId: trimmedOptionalString('Merchant id cannot be empty'),
   merchantSlug: trimmedOptionalString('Merchant slug cannot be empty'),
@@ -55,10 +84,54 @@ const paymentGatewayParamsObject = z.object({
   customerIdentifier: trimmedOptionalString(
     'Customer identifier cannot be empty'
   ),
+  // Initiating-user bind for primary card checkout: the fund flow stamps
+  // the user it guarded, so the mounted screen can block the WebView when
+  // a later account switch would otherwise let another user enter card
+  // details into the previous account's charge. Absent on legacy links,
+  // where only the completion-time ownership guard applies.
+  userId: z.uuid().optional(),
 });
 
 export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
   .superRefine((data, ctx) => {
+    if (
+      data.reference.startsWith('pvb-first-primary-') &&
+      data.paymentKind !== 'primary_wallet_card'
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['paymentKind'],
+        message: 'Primary card references cannot use legacy confirmation',
+      });
+    if (data.paymentKind === 'primary_wallet_card') {
+      if (
+        data.gateway !== 'paystack' ||
+        !z.uuid().safeParse(data.merchantId).success ||
+        !/^pvb-first-primary-[0-9a-f-]{36}$/.test(data.reference) ||
+        !z.uuid().safeParse(data.reference.slice('pvb-first-primary-'.length))
+          .success ||
+        !isPaystackCheckoutUrl(data.authorizationUrl) ||
+        data.amount === undefined
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paymentKind'],
+          message: 'Invalid primary wallet card context',
+        });
+      return;
+    }
+    if (
+      data.paymentMethod === 'uba_redvault' &&
+      (data.gateway !== 'paystack' ||
+        data.paymentKind !== 'order' ||
+        !data.orderId)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Invalid UBA payment context',
+        path: ['paymentMethod'],
+      });
+    }
     if (data.paymentKind === 'vtu') {
       if (!data.utilityType) {
         ctx.addIssue({
@@ -126,7 +199,9 @@ export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
     }
   })
   .transform((data) =>
-    data.paymentKind === 'wallet' || data.paymentKind === 'savings_auth'
+    data.paymentKind === 'wallet' ||
+    data.paymentKind === 'savings_auth' ||
+    data.paymentKind === 'primary_wallet_card'
       ? data
       : { ...data, returnTo: undefined }
   );

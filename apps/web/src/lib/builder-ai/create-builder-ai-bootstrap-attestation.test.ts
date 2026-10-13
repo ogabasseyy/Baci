@@ -3,7 +3,7 @@ import { createBuilderAiBootstrapAttestation } from './create-builder-ai-bootstr
 import { createBuilderAiProviderBindingTag } from './create-builder-ai-provider-binding-tag';
 
 const environment = {
-  CEREBRAS_API_KEY: 'cerebras-key',
+  GOOGLE_GENAI_API_KEY: 'google-key',
   GROQ_API_KEY: 'groq-key',
 };
 const now = new Date('2026-08-05T12:00:00.000Z');
@@ -13,9 +13,9 @@ describe('createBuilderAiBootstrapAttestation', () => {
     const attestation = createBuilderAiBootstrapAttestation(environment, now);
 
     expect(attestation?.values).toMatchObject({
-      CEREBRAS_BUILDER_ACCOUNT_REF: 'deployment:baci-production:cerebras',
-      CEREBRAS_BUILDER_DEPLOYMENT_TIER: 'provider-tier-unverified',
-      CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: now.toISOString(),
+      GOOGLE_BUILDER_ACCOUNT_REF: 'deployment:baci-production:google',
+      GOOGLE_BUILDER_DEPLOYMENT_TIER: 'provider-tier-unverified',
+      GOOGLE_BUILDER_RELEASE_ATTESTED_AT: now.toISOString(),
       GROQ_BUILDER_ACCOUNT_REF: 'deployment:baci-production:groq',
       GROQ_BUILDER_DEPLOYMENT_TIER: 'provider-tier-unverified',
       GROQ_BUILDER_RELEASE_ATTESTED_AT: now.toISOString(),
@@ -26,17 +26,15 @@ describe('createBuilderAiBootstrapAttestation', () => {
         'utf8'
       )
     ).toBeGreaterThanOrEqual(32);
-    expect(
-      attestation?.environment.CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG
-    ).toBe(
+    expect(attestation?.environment.GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG).toBe(
       createBuilderAiProviderBindingTag(
         {
-          accountRef: 'deployment:baci-production:cerebras',
+          accountRef: 'deployment:baci-production:google',
           approvedModel:
-            attestation?.values.CEREBRAS_BUILDER_APPROVED_MODEL ?? '',
+            attestation?.values.GOOGLE_BUILDER_APPROVED_MODEL ?? '',
           deploymentTier: 'provider-tier-unverified',
-          key: environment.CEREBRAS_API_KEY,
-          providerName: 'cerebras',
+          key: environment.GOOGLE_GENAI_API_KEY,
+          providerName: 'google',
           releaseAttestedAt: now.toISOString(),
         },
         attestation?.values.BUILDER_AI_PROVIDER_BINDING_PEPPER ?? ''
@@ -60,7 +58,7 @@ describe('createBuilderAiBootstrapAttestation', () => {
   it('does not construct a payload without both reliable provider credentials', () => {
     expect(
       createBuilderAiBootstrapAttestation(
-        { CEREBRAS_API_KEY: 'cerebras-key' },
+        { GOOGLE_GENAI_API_KEY: 'google-key' },
         now
       )
     ).toBeNull();
@@ -68,12 +66,12 @@ describe('createBuilderAiBootstrapAttestation', () => {
 
   it('trims credentials and creates a new pepper for each attestation', () => {
     const first = createBuilderAiBootstrapAttestation(
-      { CEREBRAS_API_KEY: ' cerebras-key ', GROQ_API_KEY: ' groq-key ' },
+      { GOOGLE_GENAI_API_KEY: ' google-key ', GROQ_API_KEY: ' groq-key ' },
       now
     );
     const second = createBuilderAiBootstrapAttestation(environment, now);
 
-    expect(first?.environment.CEREBRAS_API_KEY).toBe('cerebras-key');
+    expect(first?.environment.GOOGLE_GENAI_API_KEY).toBe('google-key');
     expect(first?.environment.GROQ_API_KEY).toBe('groq-key');
     expect(first?.values.BUILDER_AI_PROVIDER_BINDING_PEPPER).not.toBe(
       second?.values.BUILDER_AI_PROVIDER_BINDING_PEPPER
@@ -81,8 +79,8 @@ describe('createBuilderAiBootstrapAttestation', () => {
   });
 
   it.each([
-    [{ CEREBRAS_API_KEY: ' ', GROQ_API_KEY: 'groq-key' }],
-    [{ CEREBRAS_API_KEY: 'cerebras-key', GROQ_API_KEY: ' ' }],
+    [{ GOOGLE_GENAI_API_KEY: ' ', GROQ_API_KEY: 'groq-key' }],
+    [{ GOOGLE_GENAI_API_KEY: 'google-key', GROQ_API_KEY: ' ' }],
   ])('rejects blank reliable-provider credentials', (missingCredential) => {
     expect(
       createBuilderAiBootstrapAttestation(missingCredential, now)

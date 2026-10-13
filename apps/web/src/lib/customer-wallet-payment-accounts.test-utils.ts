@@ -59,6 +59,18 @@ export function createInsertErrorQuery(error: unknown) {
   return { insert, query };
 }
 
+export function createUpdateQuery(data: unknown) {
+  const query: Record<string, unknown> = {};
+  const update = vi.fn(() => query);
+  const eq = vi.fn(() => query);
+  const neq = vi.fn(() => query);
+  const select = vi.fn(() => query);
+  const single = vi.fn().mockResolvedValue({ data, error: null });
+  const maybeSingle = vi.fn().mockResolvedValue({ data, error: null });
+  Object.assign(query, { eq, maybeSingle, neq, select, single, update });
+  return { maybeSingle, neq, query, update };
+}
+
 export function createSelectRowsQuery(data: unknown[]) {
   const query: Record<string, unknown> = {};
   const select = vi.fn(() => query);

@@ -1,32 +1,29 @@
-import { getAiComponentDefinition } from './get-ai-component-definition';
-import { isAiEditableComponent } from './is-ai-editable-component';
+import { builderDesignCapabilityAdapter } from '@baci/shared/contracts';
 
 export type BuilderAiPropShape =
   | 'feature-list'
+  | 'faq-list'
+  | 'legal-section-list'
   | 'link'
   | 'link-list'
   | 'primitive'
   | 'url';
 
-const structuredPropShapes: Record<
-  string,
-  Record<string, BuilderAiPropShape>
-> = {
-  Features: { features: 'feature-list' },
-  Footer: { quickLinks: 'link-list' },
-  Header: { ctaButton: 'link', navigationLinks: 'link-list' },
-  Hero: { ctaLink: 'url' },
-};
-
 export function getBuilderAiPropShape(
   componentType: string,
   property: string
 ): BuilderAiPropShape | undefined {
-  if (
-    !isAiEditableComponent(componentType) ||
-    !getAiComponentDefinition(componentType).editableProps.includes(property)
-  ) {
-    return undefined;
-  }
-  return structuredPropShapes[componentType]?.[property] ?? 'primitive';
+  const descriptor =
+    builderDesignCapabilityAdapter.getCapability(componentType)?.props[
+      property
+    ];
+  if (!descriptor) return undefined;
+  if (descriptor.type === 'safe-link') return 'url';
+  if (descriptor.type === 'object') return 'link';
+  if (descriptor.type !== 'array') return 'primitive';
+  const members = Object.keys(descriptor.item?.properties ?? {});
+  if (members.includes('icon')) return 'feature-list';
+  if (members.includes('question')) return 'faq-list';
+  if (members.includes('heading')) return 'legal-section-list';
+  return 'link-list';
 }

@@ -15,6 +15,7 @@ interface TemplateBlogRendererProps {
   categoryGuide?: ReactNode;
   category?: string;
   searchQuery?: string;
+  hideFeaturedStory?: boolean;
 }
 
 export function TemplateBlogRenderer({
@@ -29,6 +30,7 @@ export function TemplateBlogRenderer({
   categoryGuide,
   category,
   searchQuery,
+  hideFeaturedStory,
 }: TemplateBlogRendererProps) {
   return (
     <>
@@ -42,6 +44,7 @@ export function TemplateBlogRenderer({
         categories={categories}
         category={category}
         searchQuery={searchQuery}
+        hideFeaturedStory={hideFeaturedStory}
       />
       {categoryGuide && (
         <div className="container mx-auto px-4 py-8">{categoryGuide}</div>

@@ -52,6 +52,7 @@ function buildShippingQuoteItemKey(item: CartItem): string {
     item.variant_id ?? '',
     item.quantity,
     getCartItemEffectivePrice(item),
+    item.hasAssurance ? (item.assuranceRate ?? 'default') : '',
   ]);
 }
 

@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
-import { fetchTransactionReviewRows } from '@/lib/fetch-transaction-review-rows';
-import { filterCancelledTransactionReviewRows } from '@/lib/filter-cancelled-transaction-review-rows';
-import { isTransactionReviewSchemaCacheError } from '@/lib/is-transaction-review-schema-cache-error';
+import {
+  fetchTransactionReviewRange,
+  mapTransactionReviewData,
+} from '@/lib/fetch-transaction-review-range';
+import { fetchTransactionReviewWithFallbacks } from '@/lib/fetch-transaction-review-with-fallbacks';
+import {
+  searchTransactionReviewOrders,
+  TRANSACTION_REVIEW_SEARCH_LIMIT,
+} from '@/lib/search-transaction-review-orders';
 import {
   buildTransactionReviewRangeFilters,
-  mapTransactionOrderRows,
+  filterTransactionOrders,
   type TransactionReviewItem,
   type TransactionReviewOrder,
-  type TransactionReviewOrderRow,
 } from '@/lib/transaction-review';
+import { filterOrdersForTransactionTab } from '@/lib/transaction-review-inputs';
+import { TRANSACTION_REVIEW_SELECTORS } from '@/lib/transaction-review-selectors';
 
 interface TransactionReviewRange {
   endDate?: Date;
@@ -18,167 +25,270 @@ interface TransactionReviewRange {
 
 export type { TransactionReviewItem, TransactionReviewOrder };
 
-const TRANSACTION_REVIEW_FULL_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, order_item_unit_costs(unit_index, cost_price, supplier_name, identifier_type, identifier_value), product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
-
 export const TRANSACTION_REVIEW_LEGACY_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
+  TRANSACTION_REVIEW_SELECTORS.legacy;
 
-const TRANSACTION_REVIEW_LEGACY_COMPAT_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
-
-const TRANSACTION_REVIEW_BASE_SELECT =
-  'id, order_number, created_at, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, name, price, quantity, fulfillment_data, products(cost_price, metadata, sku, fulfillment_details))';
-
-const TRANSACTION_REVIEW_BASE_COMPAT_SELECT =
-  'id, order_number, created_at, shipping_status, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, name, price, quantity, fulfillment_data, products(cost_price, metadata, sku, fulfillment_details))';
-
-function warnTransactionReviewQueryError(
-  stage: 'Base' | 'Full' | 'Legacy',
-  error: {
-    code?: string;
-    details?: string;
-    hint?: string;
-    message?: string;
-  } | null
+export function useTransactionReview(
+  range?: TransactionReviewRange,
+  options: {
+    enabled?: boolean;
+    exactDates?: boolean;
+    fetchAllRange?: boolean;
+    search?: string;
+    tab?: 'missing-costs' | 'paid';
+  } = {}
 ) {
-  if (__DEV__ && error) {
-    console.warn('[TransactionReview] select failed', { error, stage });
-  }
-}
-
-export function useTransactionReview(range?: TransactionReviewRange) {
   const { merchant } = useMerchant();
-  const startDateIso = range?.startDate
-    ? new Date(
-        Date.UTC(
-          range.startDate.getUTCFullYear(),
-          range.startDate.getUTCMonth(),
-          range.startDate.getUTCDate(),
-          0,
-          0,
-          0,
-          0
-        )
-      ).toISOString()
-    : undefined;
-  const endDateIso = range?.endDate
-    ? new Date(
-        Date.UTC(
-          range.endDate.getUTCFullYear(),
-          range.endDate.getUTCMonth(),
-          range.endDate.getUTCDate(),
-          23,
-          59,
-          59,
-          999
-        )
-      ).toISOString()
-    : undefined;
+  const trimmedSearch = options.search?.trim() ?? '';
+  const searching = trimmedSearch.length > 0;
+  const startDateIso = options.exactDates
+    ? range?.startDate?.toISOString()
+    : range?.startDate
+      ? new Date(
+          Date.UTC(
+            range.startDate.getUTCFullYear(),
+            range.startDate.getUTCMonth(),
+            range.startDate.getUTCDate(),
+            0,
+            0,
+            0,
+            0
+          )
+        ).toISOString()
+      : undefined;
+  const endDateIso = options.exactDates
+    ? range?.endDate?.toISOString()
+    : range?.endDate
+      ? new Date(
+          Date.UTC(
+            range.endDate.getUTCFullYear(),
+            range.endDate.getUTCMonth(),
+            range.endDate.getUTCDate(),
+            23,
+            59,
+            59,
+            999
+          )
+        ).toISOString()
+      : undefined;
   const { endDateFilter, startDateFilter } = buildTransactionReviewRangeFilters(
     startDateIso,
     endDateIso
   );
 
-  return useQuery<TransactionReviewOrder[]>({
-    queryKey: ['transaction-review', merchant?.id, startDateIso, endDateIso],
+  const query = useQuery({
+    queryKey: [
+      'transaction-review',
+      merchant?.id,
+      startDateIso,
+      endDateIso,
+      searching ? trimmedSearch : null,
+      Boolean(options.exactDates),
+      // The tab only changes fetching while searching (the missing-costs
+      // tab pages past the server cap); browsing filters client-side, so
+      // the key stays stable on tab switches there.
+      searching ? (options.tab ?? 'paid') : null,
+      // The summary scans the full bounded range while browsing reads one
+      // window: without this element both views would share a cache entry.
+      options.fetchAllRange ? 'fetch-all' : null,
+    ],
     queryFn: async () => {
       if (!merchant?.id) {
         throw new Error('Merchant context is not ready');
       }
 
-      let { data, error } = await fetchTransactionReviewRows({
+      if (searching) {
+        return searchTransactionReview(
+          merchant.id,
+          trimmedSearch,
+          options.tab ?? 'paid'
+        );
+      }
+
+      const { orders, truncated } = await fetchTransactionReviewRange({
         endDateFilter,
         endDateIso,
-        includeCancelledAt: true,
-        includeTransactionDate: true,
+        fetchAll: options.fetchAllRange,
         merchantId: merchant.id,
-        selectStatement: TRANSACTION_REVIEW_FULL_SELECT,
         startDateFilter,
         startDateIso,
       });
 
-      warnTransactionReviewQueryError('Full', error);
+      return { orders, searchTruncated: truncated };
+    },
+    enabled: Boolean(merchant?.id) && options.enabled !== false,
+    staleTime: 1000 * 60,
+  });
 
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const legacyResult = await fetchTransactionReviewRows({
-          endDateFilter,
-          endDateIso,
-          includeCancelledAt: true,
-          includeTransactionDate: true,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_LEGACY_SELECT,
-          startDateFilter,
-          startDateIso,
+  return {
+    ...query,
+    data: query.data?.orders,
+    searchTruncated: query.data?.searchTruncated ?? false,
+  };
+}
+
+// Pages of ranked RPC candidates fetched while a post-server filter (the
+// missing-costs tab) keeps the accumulated set short. Pages step by the
+// display cap with a one-row peek overlap, so five pages cover 501 ranked
+// candidates before stopping with a truncation notice.
+const TRANSACTION_REVIEW_TAB_SEARCH_MAX_PAGES = 5;
+
+async function hydrateSearchIds(merchantId: string, orderIds: string[]) {
+  // Hydrate only the ranked top-100: hydration re-sorts by transaction date
+  // with nulls last, so hydrating the peek row would let the display slice
+  // drop a recent null-date match in favor of an older dated one. The peek
+  // row exists only to detect truncation.
+  const pageIds = orderIds.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT);
+  const { data, error } = await fetchTransactionReviewWithFallbacks({
+    merchantId,
+    orderIds: pageIds,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Restore RPC rank: hydration sorts null transaction dates last, which
+  // would otherwise sink a recent null-date match below older dated rows
+  // in search results. Refinement and tab filters preserve this order.
+  const hydratedById = new Map(
+    mapTransactionReviewData(data).map((order) => [order.id, order])
+  );
+  return pageIds.flatMap((orderId) => {
+    const order = hydratedById.get(orderId);
+    return order ? [order] : [];
+  });
+}
+
+async function searchTransactionReview(
+  merchantId: string,
+  search: string,
+  tab: 'missing-costs' | 'paid'
+) {
+  const firstPage = await searchTransactionReviewOrders({
+    merchantId,
+    search,
+  });
+
+  if (firstPage.error) {
+    // Databases that predate the search RPC keep working through a capped
+    // client-side scan until the migration lands. Histories under the scan
+    // cap still match completely; larger ones surface a truncation notice
+    // alongside any displayed results.
+    if (firstPage.errorKind === 'missing-search-function') {
+      const { data, error, truncated } =
+        await fetchTransactionReviewWithFallbacks({
+          fetchAll: true,
+          merchantId,
         });
-
-        data = legacyResult.data;
-        error = legacyResult.error;
-
-        warnTransactionReviewQueryError('Legacy', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const baseResult = await fetchTransactionReviewRows({
-          endDateIso,
-          includeCancelledAt: true,
-          includeTransactionDate: false,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_BASE_SELECT,
-          startDateIso,
-        });
-
-        data = baseResult.data;
-        error = baseResult.error;
-
-        warnTransactionReviewQueryError('Base', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const legacyCompatResult = await fetchTransactionReviewRows({
-          endDateFilter,
-          endDateIso,
-          includeCancelledAt: false,
-          includeTransactionDate: true,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_LEGACY_COMPAT_SELECT,
-          startDateFilter,
-          startDateIso,
-        });
-
-        data = legacyCompatResult.data;
-        error = legacyCompatResult.error;
-
-        warnTransactionReviewQueryError('Legacy', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const baseCompatResult = await fetchTransactionReviewRows({
-          endDateIso,
-          includeCancelledAt: false,
-          includeTransactionDate: false,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_BASE_COMPAT_SELECT,
-          startDateIso,
-        });
-
-        data = baseCompatResult.data;
-        error = baseCompatResult.error;
-
-        warnTransactionReviewQueryError('Base', error);
-      }
 
       if (error) {
         throw new Error(error.message);
       }
 
-      return mapTransactionOrderRows(
-        filterCancelledTransactionReviewRows(
-          (data ?? []) as unknown as TransactionReviewOrderRow[]
-        )
+      const mapped = mapTransactionReviewData(data);
+      // The capped scan is fully in memory, so the tab filter applies
+      // before refinement and the display slice here (unlike the
+      // single-page RPC path, where the server cap binds first and the tab
+      // pages for the rest). Refinement judges visible items only, matching
+      // the paged path.
+      const orders = filterTransactionOrders(
+        tab === 'missing-costs'
+          ? filterOrdersForTransactionTab(mapped, 'missing-costs')
+          : mapped,
+        search
       );
-    },
-    enabled: Boolean(merchant?.id),
-    staleTime: 1000 * 60,
-  });
+
+      return {
+        orders: orders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
+        searchTruncated:
+          truncated || orders.length > TRANSACTION_REVIEW_SEARCH_LIMIT,
+      };
+    }
+
+    throw new Error(firstPage.error.message);
+  }
+
+  if (tab !== 'missing-costs') {
+    if (firstPage.orderIds.length === 0) {
+      return { orders: [], searchTruncated: false };
+    }
+
+    // The truncation signal comes from the pre-refinement id count:
+    // refinement can only shrink the set, so post-refinement length would
+    // hide capped results.
+    const orders = filterTransactionOrders(
+      await hydrateSearchIds(merchantId, firstPage.orderIds),
+      search
+    );
+
+    return {
+      orders: orders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
+      searchTruncated:
+        firstPage.orderIds.length > TRANSACTION_REVIEW_SEARCH_LIMIT,
+    };
+  }
+
+  // The missing-costs tab filters after the server cap, so page the ranked
+  // candidates until 100 post-tab orders accumulate or the source runs dry.
+  // A mid-paging failure throws rather than presenting a partial set.
+  const accumulated: TransactionReviewOrder[] = [];
+  const seenOrderIds = new Set<string>();
+  let orderIds = firstPage.orderIds;
+  for (
+    let pageIndex = 0;
+    pageIndex < TRANSACTION_REVIEW_TAB_SEARCH_MAX_PAGES;
+    pageIndex += 1
+  ) {
+    if (orderIds.length === 0) {
+      return { orders: accumulated, searchTruncated: false };
+    }
+
+    // Tab before refinement: refinement must judge the missing-cost items
+    // the tab keeps. Otherwise a mixed order would consume cap space and
+    // then vanish in the screen's final search filter.
+    const pageOrders = filterTransactionOrders(
+      filterOrdersForTransactionTab(
+        await hydrateSearchIds(merchantId, orderIds),
+        'missing-costs'
+      ),
+      search
+    );
+    // A full page carries the peek row; a short page means the source is
+    // exhausted. Rank shifts between pages can resurface ids, so drop
+    // repeats: they must neither render twice nor consume the cap. Only
+    // fresh orders dropped for cap space count toward truncation.
+    const freshOrders = pageOrders.filter((order) => {
+      const seen = seenOrderIds.has(order.id);
+      seenOrderIds.add(order.id);
+      return !seen;
+    });
+    const remaining = TRANSACTION_REVIEW_SEARCH_LIMIT - accumulated.length;
+    accumulated.push(...freshOrders.slice(0, remaining));
+    const pageFull = orderIds.length > TRANSACTION_REVIEW_SEARCH_LIMIT;
+    const truncated = pageFull || freshOrders.length > remaining;
+    if (!pageFull || accumulated.length >= TRANSACTION_REVIEW_SEARCH_LIMIT) {
+      return { orders: accumulated, searchTruncated: truncated };
+    }
+    if (pageIndex + 1 >= TRANSACTION_REVIEW_TAB_SEARCH_MAX_PAGES) {
+      // The page budget ran out with a full last page: more candidates
+      // may exist beyond the accumulated set. Checked before fetching so
+      // the final iteration never requests a page it would discard.
+      return { orders: accumulated, searchTruncated: true };
+    }
+
+    const nextPage = await searchTransactionReviewOrders({
+      merchantId,
+      offset: (pageIndex + 1) * TRANSACTION_REVIEW_SEARCH_LIMIT,
+      search,
+    });
+    if (nextPage.error) {
+      throw new Error(nextPage.error.message);
+    }
+    orderIds = nextPage.orderIds;
+  }
+
+  // Unreachable: the budget check above returns on the final iteration.
+  // Retained so every control-flow path returns a result.
+  return { orders: accumulated, searchTruncated: true };
 }

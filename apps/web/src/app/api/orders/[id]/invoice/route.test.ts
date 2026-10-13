@@ -307,6 +307,37 @@ describe('GET /api/orders/[id]/invoice', () => {
     );
   });
 
+  it('falls back to the transaction day when the issue date is null', async () => {
+    vi.mocked(createClient).mockReturnValue(
+      createSupabaseMock({
+        order: {
+          data: {
+            ...(orderResult.data as Record<string, unknown>),
+            invoice_issue_date: null,
+            transaction_date: '2026-03-05T10:00:00.000Z',
+          },
+          error: null,
+        },
+      }) as unknown as ReturnType<typeof createClient>
+    );
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(200);
+    const invoiceData = vi.mocked(generatePeppolInvoiceXml).mock
+      .calls[0]?.[0] as {
+      issue_date: Date;
+    };
+    // created_at is 2026-03-22 (recording day); the Peppol invoice must
+    // carry the Mar 5 transaction day instead.
+    expect(invoiceData.issue_date).toEqual(
+      new Date('2026-03-05T10:00:00.000Z')
+    );
+  });
+
   it('attaches order-level fulfillment items to their matching invoice lines', async () => {
     vi.mocked(createClient).mockReturnValue(
       createSupabaseMock({
@@ -834,6 +865,43 @@ describe('GET /api/orders/[id]/invoice', () => {
       expect.objectContaining({
         invoiceTypeCode: '381',
       })
+    );
+  });
+
+  it('skips Peppol artifacts for unpaid invoice proforma documents', async () => {
+    vi.mocked(createClient).mockReturnValue(
+      createSupabaseMock({
+        order: {
+          ...orderResult,
+          data: {
+            ...(orderResult.data as Record<string, unknown>),
+            payment_method: 'invoice',
+            payment_status: 'unpaid',
+            invoice_type_code: '380',
+          },
+        },
+      }) as unknown as ReturnType<typeof createClient>
+    );
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(generatePeppolInvoiceXml).not.toHaveBeenCalled();
+    expect(vi.mocked(generateReceiptBlob).mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        complianceNote: undefined,
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
+      })
+    );
+    expect(response.headers.get('Content-Disposition')).toContain(
+      'filename="proforma-ORD-1001.pdf"'
+    );
+    expect(response.headers.get('Content-Disposition')).toContain(
+      "filename*=UTF-8''proforma-ORD-1001.pdf"
     );
   });
 

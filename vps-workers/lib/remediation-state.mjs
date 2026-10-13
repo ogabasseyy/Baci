@@ -9,59 +9,19 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import { createRemediationFallbackStore } from './remediation-state-fallback.mjs';
+import {
+  matchingHandledEntry,
+  remediationObservationFor as observationFor,
+  remediationStateKeyFor,
+} from './remediation-state-key.mjs';
+import { normalizeRemediationNotifications } from './remediation-state-notifications.mjs';
 
 const MAX_ENTRIES = 2_000;
 const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const DEFAULT_RESERVATION_TTL_MS = 15 * 60 * 1_000;
 const DEFAULT_RETRY_DELAY_MS = 6 * 60 * 60 * 1_000;
 const STALE_LOCK_MS = 2 * 60 * 1_000;
-const observationFor = (candidate) =>
-  String(candidate.lastSeen || candidate.occurrences || 'observed');
-function fallbackMarkerPath(path, candidate) {
-  const key = Buffer.from(String(candidate.fingerprint || 'unknown'))
-    .toString('hex')
-    .slice(0, 160);
-  return `${path}.handled-fallback/${key}.json`;
-}
-function readFallbackObservation(path, candidate) {
-  try {
-    const marker = JSON.parse(
-      readFileSync(fallbackMarkerPath(path, candidate), 'utf8')
-    );
-    return typeof marker?.observation === 'string' ? marker.observation : null;
-  } catch {
-    return null;
-  }
-}
-function persistFallbackObservation(path, candidate, recordedAt) {
-  const markerPath = fallbackMarkerPath(path, candidate);
-  mkdirSync(dirname(markerPath), { recursive: true });
-  const temporaryPath = `${markerPath}.${process.pid}.tmp`;
-  writeFileSync(
-    temporaryPath,
-    `${JSON.stringify({ observation: observationFor(candidate), recordedAt })}\n`,
-    { mode: 0o600 }
-  );
-  renameSync(temporaryPath, markerPath);
-}
-function clearFallbackObservation(path, candidate) {
-  try {
-    unlinkSync(fallbackMarkerPath(path, candidate));
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-}
-function reconcileFallbackObservations(path, state, candidates, recordedAt) {
-  const reconciledCandidates = [];
-  for (const candidate of candidates) {
-    const observation = readFallbackObservation(path, candidate);
-    if (!observation) continue;
-    state.handled[candidate.fingerprint] = { observation, recordedAt };
-    delete state.reservations[candidate.fingerprint];
-    reconciledCandidates.push(candidate);
-  }
-  return reconciledCandidates;
-}
 function capHandledEntries(handled) {
   return Object.fromEntries(
     Object.entries(handled)
@@ -73,7 +33,6 @@ function capHandledEntries(handled) {
 }
 const isIsoDate = (value) =>
   typeof value === 'string' && Number.isFinite(Date.parse(value));
-
 function normalizeObservedEntries(value, timeField) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
@@ -90,27 +49,6 @@ function normalizeObservedEntries(value, timeField) {
     )
   );
 }
-
-function normalizeNotifications(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => {
-      const report = entry?.report;
-      return (
-        entry &&
-        typeof entry === 'object' &&
-        isIsoDate(entry.recordedAt) &&
-        report &&
-        typeof report.html === 'string' &&
-        typeof report.subject === 'string' &&
-        typeof report.text === 'string'
-      );
-    })
-  );
-}
-
 function readState(path) {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
@@ -119,14 +57,13 @@ function readState(path) {
     }
     return {
       handled: normalizeObservedEntries(parsed.handled, 'recordedAt'),
-      notifications: normalizeNotifications(parsed.notifications),
+      notifications: normalizeRemediationNotifications(parsed.notifications),
       reservations: normalizeObservedEntries(parsed.reservations, 'expiresAt'),
     };
   } catch {
     return { handled: {}, notifications: {}, reservations: {} };
   }
 }
-
 function persistState(path, state) {
   mkdirSync(dirname(path), { recursive: true });
   const temporaryPath = `${path}.${process.pid}.tmp`;
@@ -174,13 +111,13 @@ export function createRemediationState({
   reservationTtlMs = DEFAULT_RESERVATION_TTL_MS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 }) {
+  const fallbackStore = createRemediationFallbackStore(path);
   return {
     pending(candidates, { limit = Number.POSITIVE_INFINITY } = {}) {
       const nowMs = now();
       return withStateLock(path, nowMs, [], (state) => {
         const recordedAt = new Date(nowMs).toISOString();
-        const reconciledCandidates = reconcileFallbackObservations(
-          path,
+        const reconciledCandidates = fallbackStore.reconcile(
           state,
           candidates,
           recordedAt
@@ -197,17 +134,18 @@ export function createRemediationState({
         for (const candidate of candidates) {
           if (selected.length >= limit) break;
           const observation = observationFor(candidate);
+          const key = remediationStateKeyFor(candidate);
+          if (!key) continue;
           if (
-            state.handled[candidate.fingerprint]?.observation !== observation &&
-            state.reservations[candidate.fingerprint]?.observation !==
-              observation
+            state.handled[key]?.observation !== observation &&
+            state.reservations[key]?.observation !== observation
           ) {
             selected.push(candidate);
           }
         }
         const expiresAt = new Date(nowMs + reservationTtlMs).toISOString();
         for (const candidate of selected) {
-          state.reservations[candidate.fingerprint] = {
+          state.reservations[remediationStateKeyFor(candidate)] = {
             expiresAt,
             observation: observationFor(candidate),
             recordedAt,
@@ -215,7 +153,7 @@ export function createRemediationState({
         }
         persistState(path, state);
         for (const candidate of reconciledCandidates) {
-          clearFallbackObservation(path, candidate);
+          fallbackStore.clear(candidate);
         }
         return selected;
       });
@@ -230,18 +168,23 @@ export function createRemediationState({
       return withStateLock(path, nowMs, false, (state) => {
         const recordedAt = new Date(nowMs).toISOString();
         for (const candidate of handledCandidates) {
-          state.handled[candidate.fingerprint] = {
+          const key = remediationStateKeyFor(candidate);
+          if (!key) continue;
+          state.handled[key] = {
             observation: observationFor(candidate),
             recordedAt,
           };
-          delete state.reservations[candidate.fingerprint];
+          delete state.reservations[key];
         }
         for (const candidate of releaseCandidates) {
-          delete state.reservations[candidate.fingerprint];
+          const key = remediationStateKeyFor(candidate);
+          if (key) delete state.reservations[key];
         }
         const retryAt = new Date(nowMs + retryDelayMs).toISOString();
         for (const candidate of deferCandidates) {
-          state.reservations[candidate.fingerprint] = {
+          const key = remediationStateKeyFor(candidate);
+          if (!key) continue;
+          state.reservations[key] = {
             expiresAt: retryAt,
             observation: observationFor(candidate),
             recordedAt,
@@ -267,7 +210,7 @@ export function createRemediationState({
         );
         persistState(path, state);
         for (const candidate of handledCandidates) {
-          clearFallbackObservation(path, candidate);
+          fallbackStore.clear(candidate);
         }
         return true;
       });
@@ -275,16 +218,58 @@ export function createRemediationState({
     recordHandledFallback(candidates) {
       const recordedAt = new Date(now()).toISOString();
       for (const candidate of candidates) {
-        persistFallbackObservation(path, candidate, recordedAt);
+        if (remediationStateKeyFor(candidate)) {
+          fallbackStore.persist(candidate, recordedAt);
+        }
       }
     },
     mark(candidates) {
       return this.complete({ handledCandidates: candidates });
     },
-    notifications() {
-      return Object.entries(readState(path).notifications).map(
-        ([id, entry]) => ({ id, report: entry.report })
+    handledCandidates(candidates) {
+      return withStateLock(path, now(), false, ({ handled }) =>
+        candidates.filter((candidate) =>
+          Boolean(matchingHandledEntry(handled, candidate))
+        )
       );
+    },
+    notifications({ limit = Number.POSITIVE_INFINITY, nowMs = now() } = {}) {
+      const maximum =
+        Number.isSafeInteger(limit) && limit > 0
+          ? limit
+          : Number.POSITIVE_INFINITY;
+      return Object.entries(readState(path).notifications)
+        .filter(
+          ([, entry]) =>
+            !entry.nextAttemptAt || Date.parse(entry.nextAttemptAt) <= nowMs
+        )
+        .sort(
+          ([, left], [, right]) =>
+            Date.parse(left.nextAttemptAt || left.recordedAt) -
+              Date.parse(right.nextAttemptAt || right.recordedAt) ||
+            left.recordedAt.localeCompare(right.recordedAt)
+        )
+        .slice(0, maximum)
+        .map(([id, entry]) => ({
+          ...(entry.attempts ? { attempts: entry.attempts } : {}),
+          id,
+          report: entry.report,
+        }));
+    },
+    scheduleNotificationRetry(id, nextAttemptAt) {
+      if (!isIsoDate(nextAttemptAt)) return false;
+      const nowMs = now();
+      return withStateLock(path, nowMs, false, (state) => {
+        const notification = state.notifications[id];
+        if (!notification) return true;
+        notification.attempts = Math.min(
+          (notification.attempts || 0) + 1,
+          Number.MAX_SAFE_INTEGER
+        );
+        notification.nextAttemptAt = nextAttemptAt;
+        persistState(path, state);
+        return true;
+      });
     },
     acknowledgeNotification(id) {
       const nowMs = now();

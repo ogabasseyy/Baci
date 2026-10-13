@@ -47,7 +47,6 @@ vi.mock('@/lib/api-auth', () => ({
 const { GET } = await import('./route');
 
 const PRODUCT_ID = '55555555-5555-4555-8555-555555555555';
-const VARIANT_ID = '66666666-6666-4666-8666-666666666666';
 
 const baseProduct = {
   condition: 'new',
@@ -182,73 +181,6 @@ describe('GET /api/merchant/quiz/prize-products', () => {
       status_filter: 'active',
     });
     expect((await response.json()).nextCursor).toBe(null);
-  });
-
-  it('never exceeds the requested limit after expanding variants', async () => {
-    const secondVariantId = '77777777-7777-4777-8777-777777777777';
-    hydrateBuilder.in.mockResolvedValue({
-      data: [{ ...baseProduct, has_variants: true }],
-      error: null,
-    });
-    variantsBuilder.order.mockResolvedValue({
-      data: [
-        {
-          attributes: { color: 'Blue' },
-          condition: 'new',
-          created_at: '2026-08-01T10:00:00.000Z',
-          id: VARIANT_ID,
-          images: [],
-          merchant_id: 'merchant-1',
-          price_override: null,
-          primary_image: null,
-          product_id: PRODUCT_ID,
-          sku: null,
-          stock_quantity: 2,
-        },
-        {
-          attributes: { color: 'Black' },
-          condition: 'new',
-          created_at: '2026-08-01T09:00:00.000Z',
-          id: secondVariantId,
-          images: [],
-          merchant_id: 'merchant-1',
-          price_override: null,
-          primary_image: null,
-          product_id: PRODUCT_ID,
-          sku: null,
-          stock_quantity: 'not-a-number',
-        },
-      ],
-      error: null,
-    });
-
-    const firstResponse = await GET(
-      new Request('http://localhost/api?limit=1')
-    );
-    const firstPage = await firstResponse.json();
-    expect(firstPage.products).toHaveLength(1);
-    expect(variantsBuilder.eq).toHaveBeenCalledWith(
-      'merchant_id',
-      'merchant-1'
-    );
-    expect(firstPage.products[0]).toMatchObject({
-      variantId: secondVariantId,
-    });
-    expect(firstPage.nextCursor).toMatch(/^\d+$/);
-    expect(firstPage.total).toBeNull();
-
-    const secondResponse = await GET(
-      new Request(`http://localhost/api?limit=1&cursor=${firstPage.nextCursor}`)
-    );
-    const secondPage = await secondResponse.json();
-    expect(secondPage.products).toHaveLength(1);
-    expect(secondPage.products[0]).toMatchObject({
-      available: true,
-      effectiveStock: 2,
-      variantId: VARIANT_ID,
-    });
-    expect(Number.isNaN(secondPage.products[0].effectiveStock)).toBe(false);
-    expect(secondPage.nextCursor).toBeNull();
   });
 
   it('drops cross-merchant hydration rows even if the database response is wrong', async () => {

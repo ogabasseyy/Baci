@@ -20,6 +20,13 @@ const MERCHANT_SLUG = Constants.expoConfig?.extra?.merchantSlug;
 const MERCHANT_DOMAIN = Constants.expoConfig?.extra?.merchantDomain;
 
 let posthogClient: PostHog | null = null;
+let analyticsUnavailable = false;
+const MAX_PENDING_EVENTS = 50;
+const pendingEvents: Array<{
+  name: string;
+  properties?: Record<string, unknown>;
+  timestamp: string;
+}> = [];
 
 function getAnalyticsSuperProperties(): AnalyticsProperties {
   return (
@@ -76,6 +83,7 @@ function sanitizeAnalyticsPersonProperties(
 
 export function initAnalytics(): void {
   if (!POSTHOG_API_KEY) {
+    analyticsUnavailable = true;
     log.warn('PostHog API key not configured');
     return;
   }
@@ -125,9 +133,23 @@ export function initAnalytics(): void {
     });
 
     registerAnalyticsSuperProperties();
+    while (pendingEvents.length > 0) {
+      const event = pendingEvents.shift();
+      if (event) {
+        posthogClient.capture(
+          event.name,
+          {
+            ...sanitizeAnalyticsProperties(event.properties),
+          },
+          { timestamp: new Date(event.timestamp) }
+        );
+      }
+    }
 
     log.info('PostHog initialized');
   } catch (error) {
+    analyticsUnavailable = true;
+    pendingEvents.length = 0;
     log.error('Failed to initialize PostHog:', error);
   }
 }
@@ -182,7 +204,16 @@ export function trackEvent(
   eventName: string,
   properties?: Record<string, unknown>
 ): void {
-  if (!posthogClient) return;
+  if (!posthogClient) {
+    if (analyticsUnavailable) return;
+    if (pendingEvents.length >= MAX_PENDING_EVENTS) pendingEvents.shift();
+    pendingEvents.push({
+      name: eventName,
+      properties,
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
 
   posthogClient.capture(eventName, {
     ...sanitizeAnalyticsProperties(properties),

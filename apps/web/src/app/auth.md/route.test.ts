@@ -37,6 +37,7 @@ describe('GET /auth.md', () => {
     expect(body).toContain('credential_types_supported: api_key');
     expect(body).toContain('bearer_hmac');
     expect(body).toContain('Authorization: Bearer <credential>');
+    expect(body).toContain('read-only catalog');
     expect(body).toContain('approved\nintegrations after review');
     expect(body).toContain('409 responses as recoverable checkout');
   });

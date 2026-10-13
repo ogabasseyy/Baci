@@ -72,6 +72,7 @@ function selectCandidates(issues, env, projectId) {
 
     return [
       {
+        category: 'posthog_issue',
         fingerprint: createHash('sha256')
           .update(`posthog:${projectId}:${issueId}`)
           .digest('hex')
@@ -80,7 +81,6 @@ function selectCandidates(issues, env, projectId) {
         lastSeen: safeTimestamp(issue?.last_seen ?? issue?.lastSeen),
         occurrences,
         sample: {
-          category: 'Error tracking issue',
           issueId,
           message: 'PostHog error tracking issue',
           route: '(redacted PostHog location)',

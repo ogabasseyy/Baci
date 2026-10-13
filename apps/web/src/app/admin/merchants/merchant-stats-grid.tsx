@@ -8,6 +8,7 @@ import {
   Clock,
   XCircle,
 } from 'lucide-react';
+import { ADMIN_MERCHANT_SALES_ACTIVITY } from '@/config/admin-merchant-sales-activity';
 import { cn } from '@/lib/utils';
 import type { HealthFilter } from './merchant-health-filter';
 
@@ -43,7 +44,7 @@ const STAT_ITEMS: Array<{
     filter: 'healthy',
     icon: CheckCircle,
     iconClass: 'text-emerald-500',
-    label: 'Healthy',
+    label: ADMIN_MERCHANT_SALES_ACTIVITY.healthy.label,
     ringClass: 'ring-emerald-500',
     valueKey: 'healthy',
   },
@@ -52,7 +53,7 @@ const STAT_ITEMS: Array<{
     filter: 'at_risk',
     icon: AlertTriangle,
     iconClass: 'text-amber-500',
-    label: 'At Risk',
+    label: ADMIN_MERCHANT_SALES_ACTIVITY.at_risk.label,
     ringClass: 'ring-amber-500',
     valueKey: 'atRisk',
   },
@@ -61,7 +62,7 @@ const STAT_ITEMS: Array<{
     filter: 'churned',
     icon: XCircle,
     iconClass: 'text-destructive',
-    label: 'Churned',
+    label: ADMIN_MERCHANT_SALES_ACTIVITY.churned.label,
     ringClass: 'ring-destructive',
     valueKey: 'churned',
   },
@@ -70,7 +71,7 @@ const STAT_ITEMS: Array<{
     filter: 'new',
     icon: Clock,
     iconClass: 'text-indigo-500',
-    label: 'New (No Sales)',
+    label: ADMIN_MERCHANT_SALES_ACTIVITY.new.label,
     ringClass: 'ring-indigo-500',
     valueKey: 'new',
   },

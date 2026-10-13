@@ -41,7 +41,7 @@ export function QuizPrizeClaimPanel({
         </Text>
       ) : (
         <Text style={styles.prizeClaimHint}>
-          Add it to your cart to complete your claim.
+          Continue to checkout to complete your claim.
         </Text>
       )}
 

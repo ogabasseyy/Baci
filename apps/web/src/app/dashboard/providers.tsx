@@ -9,6 +9,7 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { MotionNonceProvider } from '@/contexts/MotionNonceProvider';
 import { NonceProvider, useNonce } from '@/contexts/NonceProvider';
 import { ProductProvider } from '@/contexts/product-context';
+import { NotificationsProvider } from '@/hooks/notifications-provider';
 import type { MerchantData, StaffAccess } from '@/hooks/use-merchant';
 import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import DashboardClientLayout from './client-layout';
@@ -33,6 +34,7 @@ interface DashboardProvidersProps {
   initialUser?: User | null;
   initialMerchant?: MerchantData | null;
   initialStaffAccess?: StaffAccess;
+  agenticMerchantSlug?: string | null;
   nonce?: string;
 }
 
@@ -43,6 +45,7 @@ export function DashboardProviders({
   initialUser,
   initialMerchant,
   initialStaffAccess,
+  agenticMerchantSlug,
   nonce,
 }: DashboardProvidersProps) {
   return (
@@ -51,6 +54,7 @@ export function DashboardProviders({
         initialUser={initialUser}
         initialMerchant={initialMerchant}
         initialStaffAccess={initialStaffAccess}
+        agenticMerchantSlug={agenticMerchantSlug}
       >
         {children}
       </DashboardProvidersContent>
@@ -63,6 +67,7 @@ function DashboardProvidersContent({
   initialUser,
   initialMerchant,
   initialStaffAccess,
+  agenticMerchantSlug,
 }: DashboardProvidersContentProps) {
   const { nonce } = useNonce();
 
@@ -82,11 +87,15 @@ function DashboardProvidersContent({
             initialStaffAccess={initialStaffAccess}
           >
             <ProductProvider>
-              <UpgradeModalProvider>
-                <DashboardClientLayout>
-                  <ThemedDashboardLayout>{children}</ThemedDashboardLayout>
-                </DashboardClientLayout>
-              </UpgradeModalProvider>
+              <NotificationsProvider>
+                <UpgradeModalProvider>
+                  <DashboardClientLayout
+                    agenticMerchantSlug={agenticMerchantSlug}
+                  >
+                    <ThemedDashboardLayout>{children}</ThemedDashboardLayout>
+                  </DashboardClientLayout>
+                </UpgradeModalProvider>
+              </NotificationsProvider>
             </ProductProvider>
           </MerchantProvider>
         </AuthProvider>

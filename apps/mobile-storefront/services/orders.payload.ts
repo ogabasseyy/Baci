@@ -45,7 +45,10 @@ export function buildOrderPayload({
     ...(request.discount_code ? { discount_code: request.discount_code } : {}),
     payment_method: request.payment_method,
     selected_quote_id: request.selected_quote_id ?? null,
+    shipping_rate_id: request.shipping_rate_id ?? null,
     shipping_provider: request.shipping_provider ?? null,
+    delivery_method: request.delivery_method,
+    airport_type: request.airport_type,
     payment_status: getInitialPaymentStatus(request.payment_method),
     shipping_status: 'pending',
     shipping_address: {

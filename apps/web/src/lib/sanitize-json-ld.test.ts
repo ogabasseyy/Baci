@@ -63,6 +63,32 @@ describe('sanitizeSchemaMarkup', () => {
     expect(result.offer.price).toBe('\\u003cscript\\u003e');
     expect(result.offer.currency).toBe('NGN');
   });
+
+  it('repairs a lone high surrogate in property names', () => {
+    const key = `high-${String.fromCharCode(0xd83e)}`;
+
+    expect(sanitizeSchemaMarkup({ [key]: 'value' })).toEqual({
+      'high-�': 'value',
+    });
+  });
+
+  it('repairs a lone low surrogate in property names', () => {
+    const key = `low-${String.fromCharCode(0xdd1e)}`;
+
+    expect(sanitizeSchemaMarkup({ [key]: 'value' })).toEqual({
+      'low-�': 'value',
+    });
+  });
+
+  it('preserves an own __proto__ property in both sanitization paths', () => {
+    const schema = JSON.parse('{"__proto__":"value"}');
+    const sanitized = sanitizeSchemaMarkup(schema);
+    const serialized = JSON.parse(safeJsonLdStringify(schema));
+
+    expect(Object.hasOwn(sanitized, '__proto__')).toBe(true);
+    expect(Object.entries(sanitized)).toContainEqual(['__proto__', 'value']);
+    expect(Object.entries(serialized)).toContainEqual(['__proto__', 'value']);
+  });
 });
 
 describe('safeJsonLdStringify', () => {
@@ -86,5 +112,54 @@ describe('safeJsonLdStringify', () => {
     );
     expect(parsed.line).toBe('one\u2028two\u2029three');
     expect(parsed.price).toBe(5000);
+  });
+
+  it('replaces a truncated surrogate without changing valid emoji', () => {
+    const truncatedEmoji = `broken ${String.fromCharCode(0xd83e)}...`;
+    const schema = {
+      description: truncatedEmoji,
+      name: '🧩 Upgradeable laptop',
+    };
+
+    const result = safeJsonLdStringify(schema);
+
+    expect(JSON.parse(result)).toMatchObject({
+      description: 'broken �...',
+      name: '🧩 Upgradeable laptop',
+    });
+    expect(result).not.toContain('\\ud83e');
+  });
+
+  it('replaces a lone low surrogate', () => {
+    const schema = {
+      description: `broken ${String.fromCharCode(0xdd1e)}...`,
+    };
+
+    const result = safeJsonLdStringify(schema);
+
+    expect(JSON.parse(result)).toMatchObject({
+      description: 'broken �...',
+    });
+    expect(result).not.toContain('\\udd1e');
+  });
+
+  it('repairs a lone high surrogate in property names', () => {
+    const key = `high-${String.fromCharCode(0xd83e)}`;
+    const result = safeJsonLdStringify({ [key]: 'value' });
+
+    expect(JSON.parse(result)).toEqual({ 'high-�': 'value' });
+    expect(result).not.toContain('\\ud83e');
+  });
+
+  it('repairs a lone low surrogate in property names', () => {
+    const key = `low-${String.fromCharCode(0xdd1e)}`;
+    const result = safeJsonLdStringify({ [key]: 'value' });
+
+    expect(JSON.parse(result)).toEqual({ 'low-�': 'value' });
+    expect(result).not.toContain('\\udd1e');
+  });
+
+  it('returns an empty string for an undefined schema', () => {
+    expect(safeJsonLdStringify(undefined)).toBe('');
   });
 });

@@ -11,6 +11,9 @@
     "tsconfig*.json"
   ],
   "globalPassThroughEnv": [
+    "BACI_REAL_PNPM",
+    "PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN",
+    "PNPM_CONFIG_ALLOW_UNUSED_PATCHES",
     "CEREBRAS_API_KEY",
     "GROQ_API_KEY",
     "OPENROUTER_API_KEY",

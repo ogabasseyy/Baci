@@ -62,7 +62,8 @@ export function OrderPipelineBreakdowns({
         <CardHeader>
           <CardTitle>Payment Pipeline</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Order settlement stages for the {periodLabel}
+            Order counts include all recorded currencies; amounts and value
+            shares are NGN-only for orders created in the {periodLabel}
           </p>
         </CardHeader>
         <CardContent>
@@ -76,7 +77,7 @@ export function OrderPipelineBreakdowns({
                     <div>
                       <p className="font-medium">{status.label}</p>
                       <p className="text-sm text-muted-foreground">
-                        {status.orders} orders,{' '}
+                        {status.orders} orders across all currencies,{' '}
                         {formatPercent(status.shareOfOrders)} of order volume
                       </p>
                     </div>
@@ -89,7 +90,8 @@ export function OrderPipelineBreakdowns({
                     value={Number(status.shareOfAmount.toFixed(2))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {formatPercent(status.shareOfAmount)} of gross order value
+                    {formatPercent(status.shareOfAmount)} of NGN gross order
+                    value
                   </p>
                 </div>
               ))}
@@ -106,7 +108,8 @@ export function OrderPipelineBreakdowns({
         <CardHeader>
           <CardTitle>Fulfillment Pipeline</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Shipping and delivery backlog for the {periodLabel}
+            Order counts include all recorded currencies; amounts and value
+            shares are NGN-only for orders created in the {periodLabel}
           </p>
         </CardHeader>
         <CardContent>
@@ -120,7 +123,7 @@ export function OrderPipelineBreakdowns({
                     <div>
                       <p className="font-medium">{status.label}</p>
                       <p className="text-sm text-muted-foreground">
-                        {status.orders} orders,{' '}
+                        {status.orders} orders across all currencies,{' '}
                         {formatPercent(status.shareOfOrders)} of order volume
                       </p>
                     </div>
@@ -133,7 +136,8 @@ export function OrderPipelineBreakdowns({
                     value={Number(status.shareOfAmount.toFixed(2))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {formatPercent(status.shareOfAmount)} of gross order value
+                    {formatPercent(status.shareOfAmount)} of NGN gross order
+                    value
                   </p>
                 </div>
               ))}
@@ -150,7 +154,8 @@ export function OrderPipelineBreakdowns({
         <CardHeader>
           <CardTitle>Paid Order Methods</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Payment method mix across settled orders in the {periodLabel}
+            NGN paid-order method mix for orders created in the {periodLabel}.
+            Other currencies are excluded.
           </p>
         </CardHeader>
         <CardContent>
@@ -164,8 +169,9 @@ export function OrderPipelineBreakdowns({
                     <div>
                       <p className="font-medium">{method.label}</p>
                       <p className="text-sm text-muted-foreground">
-                        {method.orders} paid orders,{' '}
-                        {formatPercent(method.shareOfPaidAmount)} of paid GMV
+                        {method.orders} NGN paid orders,{' '}
+                        {formatPercent(method.shareOfPaidAmount)} of NGN paid
+                        GMV
                       </p>
                     </div>
                     <p className="text-sm font-semibold">

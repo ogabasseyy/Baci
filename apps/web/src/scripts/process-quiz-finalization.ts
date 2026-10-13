@@ -9,6 +9,12 @@ interface CliLogger {
   info(message: string, summary: string): void;
 }
 
+const LOOP_DELAY_MS = 1_000;
+type Delay = (milliseconds: number) => Promise<void>;
+
+const defaultDelay: Delay = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 const QUIZ_DIRECT_WORKER_REQUIRED_ENV = [
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -25,7 +31,7 @@ const ENV_BOOLEAN_VALUES = new Set([
   'yes',
 ]);
 
-function hasQuizDirectWorkerEnv(env: NodeJS.ProcessEnv) {
+function hasQuizDirectWorkerEnv(env: Partial<NodeJS.ProcessEnv>) {
   if (
     !QUIZ_DIRECT_WORKER_REQUIRED_ENV.every((name) =>
       Boolean(env[name]?.trim())
@@ -68,7 +74,7 @@ export async function runQuizFinalizationCli({
   logger = console,
   runJob = finalizeDueQuizEvents,
 }: {
-  env?: NodeJS.ProcessEnv;
+  env?: Partial<NodeJS.ProcessEnv>;
   logger?: CliLogger;
   runJob?: typeof finalizeDueQuizEvents;
 } = {}): Promise<number> {
@@ -87,9 +93,44 @@ export async function runQuizFinalizationCli({
   }
 }
 
+export async function runQuizFinalizationLoop({
+  delay = defaultDelay,
+  env = process.env,
+  logger = console,
+  runJob = finalizeDueQuizEvents,
+}: {
+  delay?: Delay;
+  env?: Partial<NodeJS.ProcessEnv>;
+  logger?: CliLogger;
+  runJob?: typeof finalizeDueQuizEvents;
+} = {}): Promise<number> {
+  if (!hasQuizDirectWorkerEnv(env)) {
+    logger.error('[quiz-finalization] preflight failed');
+    return 1;
+  }
+  for (;;) {
+    try {
+      const result = await runJob();
+      logger.info(
+        '[quiz-finalization] completed',
+        sanitizeQuizSummary(result)
+      );
+      if (result.status >= 500) {
+        logger.error('[quiz-finalization] failed');
+      }
+      await delay(LOOP_DELAY_MS);
+    } catch {
+      logger.error('[quiz-finalization] failed');
+      return 1;
+    }
+  }
+}
+
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === invokedPath) {
-  runQuizFinalizationCli().then((exitCode) => {
+  const mode = process.argv[2] ?? '--once';
+  const runner = mode === '--loop' ? runQuizFinalizationLoop() : runQuizFinalizationCli();
+  runner.then((exitCode) => {
     process.exitCode = exitCode;
   });
 }

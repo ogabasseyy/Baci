@@ -31,6 +31,16 @@ describe('vercel error events', () => {
     assert.equal(event.deploymentId, 'dpl_123');
   });
 
+  it('removes query and fragment values from Vercel route evidence', () => {
+    const event = normalizeVercelLogEvent({
+      level: 'error',
+      message: 'Error: stable',
+      path: '/orders?email=alice@example.com&token=secret#profile',
+    });
+
+    assert.equal(event.route, '/orders');
+  });
+
   it('classifies runtime errors and 5xx responses but ignores expected noise', () => {
     assert.equal(
       isErrorEvent(
@@ -172,5 +182,59 @@ describe('vercel error events', () => {
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].occurrences, 2);
     assert.equal(candidates[0].sample.route, '/api/payments/verify');
+  });
+
+  it('separates runtime exceptions, timeouts, and HTTP 5xx candidates', () => {
+    const candidates = selectRemediationCandidates(
+      groupErrorEvents([
+        { level: 'error', message: 'Unhandled exception', route: '/runtime' },
+        { level: 'error', message: 'Unhandled exception', route: '/runtime' },
+        { level: 'error', message: 'Function timed out', route: '/timeout' },
+        { level: 'error', message: 'Function timed out', route: '/timeout' },
+        {
+          level: 'info',
+          message: 'GET /health 503',
+          route: '/health',
+          statusCode: 503,
+        },
+        {
+          level: 'info',
+          message: 'GET /health 503',
+          route: '/health',
+          statusCode: 503,
+        },
+      ]),
+      { minOccurrences: 2 }
+    );
+
+    assert.deepEqual(candidates.map((candidate) => candidate.category).sort(), [
+      'vercel_http_5xx',
+      'vercel_runtime_exception',
+      'vercel_timeout',
+    ]);
+    assert.equal(
+      candidates.every((candidate) => candidate.source === 'vercel'),
+      true
+    );
+  });
+
+  it('does not merge same-fingerprint events from distinct Vercel categories', () => {
+    const candidates = selectRemediationCandidates(
+      groupErrorEvents([
+        { level: 'error', message: 'Error: request failed', route: '/orders' },
+        {
+          level: 'info',
+          message: 'Error: request failed',
+          route: '/orders',
+          statusCode: 500,
+        },
+      ]),
+      { minOccurrences: 1 }
+    );
+
+    assert.deepEqual(candidates.map((candidate) => candidate.category).sort(), [
+      'vercel_http_5xx',
+      'vercel_runtime_exception',
+    ]);
   });
 });

@@ -14,13 +14,13 @@
 // match is accepted; multiple late matches remain ambiguous for review.
 //
 //   paid_at IN [assignment timestamp,
-//               LEAST(account_expires_at, assignment timestamp + 90 min)]
+//               account_expires_at when present, else assignment + 90 min]
 //
 // Lower bound = DVA assignment time (we don't accept payments
 // predating the DVA — defensive against ref-replay).
-// Upper bound respects Paystack's expires_at if returned, else
-// `created_at + 1h DVA countdown + 30min inter-bank settlement grace`
-// = 90 minutes total.
+// Upper bound respects the persisted expires_at when returned. If no expiry
+// was stored, use `created_at + 1h DVA countdown + 30min inter-bank settlement
+// grace` = 90 minutes total.
 
 const KOBO_TOLERANCE = 1; // ±₦0.01
 const NINETY_MINUTES_MS = 90 * 60 * 1000;
@@ -33,9 +33,9 @@ export type DvaMatchCandidate = {
   total_kobo: number;
   // Residual amount after wallet/savings credits, when persisted.
   payable_amount_kobo?: number | null;
-  // Current collectible balance. Candidate normalization prefers the order
-  // ledger once any amount has been recorded, otherwise the persisted DVA
-  // payable amount remains the checkout fallback.
+  // Current collectible balance. Candidate normalization preserves the
+  // assignment snapshot for merchant-created invoices while capping
+  // storefront orders at their current order remainder.
   outstanding_amount_kobo?: number | null;
   // Only merchant-created invoices may infer an underpayment as intentional.
   merchant_created?: boolean;
@@ -89,12 +89,14 @@ export function matchPaystackDvaCandidates(
     return true;
   });
 
-  const exactMatches = identityMatches.filter(
+  const applicableMatches = selectApplicableCandidatePerOrder(identityMatches);
+
+  const exactMatches = applicableMatches.filter(
     (candidate) =>
       Math.abs(expectedAmountKobo(candidate) - context.verifiedAmountKobo) <=
       KOBO_TOLERANCE
   );
-  const partialMatches = identityMatches.filter((candidate) => {
+  const partialMatches = applicableMatches.filter((candidate) => {
     const expected = expectedAmountKobo(candidate);
     return (
       candidate.merchant_created === true &&
@@ -128,6 +130,41 @@ export function matchPaystackDvaCandidates(
   return { kind: 'none' };
 }
 
+function selectApplicableCandidatePerOrder(
+  candidates: readonly DvaMatchCandidate[]
+): DvaMatchCandidate[] {
+  const latestByOrder = new Map<string, DvaMatchCandidate>();
+
+  for (const candidate of candidates) {
+    const current = latestByOrder.get(candidate.order_id);
+    if (!current || isNewerCandidate(candidate, current)) {
+      latestByOrder.set(candidate.order_id, candidate);
+    }
+  }
+
+  return [...latestByOrder.values()];
+}
+
+function isNewerCandidate(
+  candidate: DvaMatchCandidate,
+  current: DvaMatchCandidate
+): boolean {
+  const candidateAssignedAt = (
+    candidate.account_assigned_at ?? candidate.account_created_at
+  ).getTime();
+  const currentAssignedAt = (
+    current.account_assigned_at ?? current.account_created_at
+  ).getTime();
+  if (candidateAssignedAt !== currentAssignedAt) {
+    return candidateAssignedAt > currentAssignedAt;
+  }
+
+  return (
+    candidate.account_created_at.getTime() >
+    current.account_created_at.getTime()
+  );
+}
+
 function expectedAmountKobo(candidate: DvaMatchCandidate): number {
   return (
     candidate.outstanding_amount_kobo ??
@@ -144,7 +181,7 @@ function isInsideProtectedWindow(
     candidate.account_assigned_at ?? candidate.account_created_at;
   const upperBoundFromGrace = assignedAt.getTime() + NINETY_MINUTES_MS;
   const upperBound = candidate.account_expires_at
-    ? Math.min(candidate.account_expires_at.getTime(), upperBoundFromGrace)
+    ? candidate.account_expires_at.getTime()
     : upperBoundFromGrace;
   return paidAtMs <= upperBound;
 }

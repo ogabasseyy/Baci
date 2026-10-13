@@ -20,7 +20,7 @@ interface RegisterBusinessStepProps {
   firstName: string;
   formData: RegisterFormData;
   isLoading: boolean;
-  onBack: () => void;
+  onBack?: () => void;
   onBusinessTypeChange: (typeId: BusinessTypeId) => void;
   onLaunchStore: () => void;
   onOtherBusinessTypeChange: (text: string) => void;

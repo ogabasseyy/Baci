@@ -1,107 +1,62 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getAdminMerchantUserDirectory } from '@/lib/admin-merchant-users';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import { getAdminMerchant360 } from '@/lib/admin-merchant-360';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import { adminMerchantRouteParamsSchema } from '@/schemas/admin-merchant-route-params';
 
 type RouteContext = {
-  params: Promise<{
-    merchantId: string;
-  }>;
+  params: Promise<{ merchantId: string }>;
 };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const parseResult = adminMerchantRouteParamsSchema.safeParse(
-      await context.params
-    );
-    if (!parseResult.success) {
-      return NextResponse.json(
-        {
-          error: parseResult.error.issues[0]?.message ?? 'Invalid merchant ID',
-          code: 'INVALID_MERCHANT_ID',
-        },
-        { status: 400 }
-      );
-    }
-
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'User not associated with a merchant' },
-        { status: 404 }
-      );
-    }
-
-    if (merchantContext.staffAccess.isStaff) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-    }
-
-    const { data: adminCheck, error: adminCheckError } = await supabase
-      .from('merchants')
-      .select('is_platform_admin')
-      .eq('id', merchantContext.merchantId)
-      .maybeSingle();
-
-    if (adminCheckError) {
-      console.error('Admin merchant users admin check error:', adminCheckError);
-      return NextResponse.json(
-        { error: 'Failed to verify admin access' },
-        { status: 500 }
-      );
-    }
-
-    if (!adminCheck?.is_platform_admin) {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      );
-    }
-
-    const { data, error } = await getAdminMerchantUserDirectory(
-      supabase,
-      parseResult.data.merchantId
-    );
-
-    if (error) {
-      console.error('Admin merchant users query error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch merchant users' },
-        { status: 500 }
-      );
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    console.info('Admin merchant users directory read:', {
-      generatedAt: data.generatedAt,
-      totalUsers:
-        data.users.staff.length +
-        data.users.customers.length +
-        data.users.unmatchedAppUsers.length +
-        1,
-    });
-
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Admin merchant users route error:', error);
+  const auth = await getPlatformAdminAuthForPermission('merchants.read');
+  if (auth.status !== 'authenticated') {
     return NextResponse.json(
-      { error: 'Failed to fetch merchant users' },
-      { status: 500 }
+      {
+        error: auth.status === 'unauthenticated' ? 'Unauthorized' : 'Forbidden',
+      },
+      { status: auth.status === 'unauthenticated' ? 401 : 403 }
     );
   }
+
+  const parseResult = adminMerchantRouteParamsSchema.safeParse(
+    await context.params
+  );
+  if (!parseResult.success) {
+    return NextResponse.json(
+      {
+        code: 'INVALID_MERCHANT_ID',
+        error: parseResult.error.issues[0]?.message ?? 'Invalid merchant ID',
+      },
+      { status: 400 }
+    );
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await getAdminMerchant360(
+    supabase,
+    parseResult.data.merchantId
+  );
+
+  if (error) {
+    console.error('[Admin merchant 360] Query failed:', { code: error.code });
+    return NextResponse.json(
+      { error: 'Failed to fetch merchant operations' },
+      { status: error.code === '42501' ? 403 : 500 }
+    );
+  }
+
+  if (!data) {
+    return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
+  }
+
+  console.info('[Admin merchant 360] Snapshot read:', {
+    customerCount: data.summary.customerUsers,
+    generatedAt: data.generatedAt,
+    staffCount: data.summary.staffUsers,
+  });
+
+  return NextResponse.json(data, {
+    headers: { 'Cache-Control': 'private, no-store' },
+  });
 }

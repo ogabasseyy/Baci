@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
 import { AI_RATE_LIMITS, checkRateLimit } from '@/ai/provider';
+import { parseRequestedMerchantId } from '@/app/api/branches/branch-route-utils';
 import {
   generateAnalyticsInsightsWithOllama,
   isAnalyticsInsightsOllamaConfigured,
@@ -213,8 +214,15 @@ async function handleInsightsRequest(request: Request) {
   }
   const { supabase, user } = auth;
 
+  const requestedMerchant = parseRequestedMerchantId(request);
+  if (requestedMerchant.response) {
+    return requestedMerchant.response;
+  }
+
   // Get merchant context (supports both owners and staff members)
-  const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+  const merchantContext = await getMerchantForApiRequest(supabase, user.id, {
+    requestedMerchantId: requestedMerchant.merchantId,
+  });
   if (!merchantContext) {
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   }

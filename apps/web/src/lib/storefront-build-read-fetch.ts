@@ -48,6 +48,11 @@ export function createStorefrontBuildReadFetch(fetcher: typeof fetch) {
     const [input, init = {}] = args;
     await acquireStorefrontBuildReadSlot(init.signal);
     try {
+      // A waiter released in the same tick its signal aborted must not issue
+      // the fetch: post-abort calls reject with Next's "prerender complete"
+      // error and squat on the slot while failing. Throw the abort reason
+      // instead — the slot still releases via finally, so nothing leaks.
+      if (init.signal?.aborted) throw abortReason(init.signal);
       return await fetcher(input, init);
     } finally {
       releaseStorefrontBuildReadSlot();

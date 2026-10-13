@@ -10,6 +10,7 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { resolveProductPurgeCategorySegmentForRow } from '@/lib/storefront-product-purge-urls';
 import { archiveProductRequestSchema } from '@/schemas/archive-product';
@@ -22,8 +23,8 @@ const paramsSchema = z.object({
  * The archived product row shape: slug/name + legacy text `category` + the
  * `category_id` direct join + the `product_categories` junction, so the
  * Cloudflare purge resolves the same join-driven canonical segment the
- * storefront served (PR #2914 precedence: direct join → legacy text →
- * junction). Archiving only flips `status`, so the row (and its junction rows)
+ * storefront served (PR #2914 precedence: active direct join → active
+ * junction → legacy text). Archiving only flips `status`, so the row (and its junction rows)
  * survive the update — the `update(...).select(...)` reuse avoids a separate
  * pre-read.
  */
@@ -95,7 +96,7 @@ export async function PATCH(
     // eviction below resolves the row's canonical category segment. All three
     // are immutable in this handler and survive the status flip.
     .select(
-      'id, slug, status, name, category, categories:category_id(slug), product_categories(categories(slug))'
+      'id, slug, status, name, category, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
     )
     .single<ArchivedProductRow>();
 
@@ -132,7 +133,7 @@ export async function PATCH(
       .select('slug')
       .eq('id', merchantContext.merchantId)
       .single<{ slug: string | null }>();
-    scheduleStorefrontProductPurge(merchantRow?.slug, [
+    const purgeEntries = [
       {
         slug: purgeSlug,
         categorySegment: resolveProductPurgeCategorySegmentForRow({
@@ -143,7 +144,22 @@ export async function PATCH(
           product_categories: product.product_categories,
         }),
       },
-    ]);
+    ];
+    // Evict the archived PDP immediately; relationship/category fallback reads
+    // for linked articles are queued below so they cannot delay the response.
+    scheduleStorefrontProductPurge(merchantRow?.slug, purgeEntries);
+    // Keep relationship/category fallback reads out of the archive response.
+    // The product purge is queued after the response and the helper hard-
+    // expires the merchant's related-blog cache before scheduling article URLs.
+    scheduleProductBlogPurgeAfterResponse({
+      supabase: auth.supabase,
+      merchantId: merchantContext.merchantId,
+      merchantSlug: merchantRow?.slug,
+      productIds: [product.id],
+      entries: purgeEntries,
+      categorySlugs: [purgeEntries[0]?.categorySegment],
+      skipProductPurge: true,
+    });
   } catch (purgeError) {
     console.warn('Skipped Cloudflare product purge after archive', {
       purgeError,

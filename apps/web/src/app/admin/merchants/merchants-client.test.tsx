@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HealthFilter, MerchantStats } from './merchant-stats-grid';
+import type {
+  AdminMerchantHealthRow,
+  AdminMerchantsResponse,
+} from '@/types/admin-merchants';
+import type { HealthFilter } from './merchant-health-filter';
 
 const mockApiGet = vi.fn();
 const mockToast = vi.fn();
@@ -14,161 +18,166 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-vi.mock('./merchant-stats-grid', () => ({
-  MerchantStatsGrid: ({
-    activeFilter,
-    onFilterChange,
-    stats,
+vi.mock('./merchant-directory-card', () => ({
+  MerchantDirectoryCard: ({
+    filteredMerchants,
+    healthFilter,
+    loading,
+    onHealthFilterChange,
+    onSearchQueryChange,
+    onSortByChange,
+    searchQuery,
+    sortBy,
   }: {
-    activeFilter: HealthFilter;
-    onFilterChange: (filter: HealthFilter) => void;
-    stats: MerchantStats;
+    filteredMerchants: AdminMerchantHealthRow[];
+    healthFilter: HealthFilter;
+    loading: boolean;
+    onHealthFilterChange: (filter: HealthFilter) => void;
+    onSearchQueryChange: (search: string) => void;
+    onSortByChange: (sortBy: string) => void;
+    searchQuery: string;
+    sortBy: string;
   }) => (
     <div>
-      <span>active-filter:{activeFilter}</span>
-      <span>stats-total:{stats.total}</span>
-      <span>stats-at-risk:{stats.atRisk}</span>
-      <button type="button" onClick={() => onFilterChange('at_risk')}>
+      <p>rows:{filteredMerchants.length}</p>
+      <p>health:{healthFilter}</p>
+      <p>loading:{String(loading)}</p>
+      <p>sort:{sortBy}</p>
+      <input
+        aria-label="Search merchants"
+        value={searchQuery}
+        onChange={(event) => onSearchQueryChange(event.target.value)}
+      />
+      <button type="button" onClick={() => onHealthFilterChange('at_risk')}>
         Filter at risk
       </button>
-    </div>
-  ),
-}));
-
-vi.mock('./merchant-table', () => ({
-  MerchantTable: ({
-    merchants,
-  }: {
-    merchants: Array<{ business_name: string | null; merchant_id: string }>;
-  }) => (
-    <div>
-      <span>table-count:{merchants.length}</span>
-      {merchants.map((merchant) => (
-        <p key={merchant.merchant_id}>{merchant.business_name}</p>
-      ))}
+      <button type="button" onClick={() => onSortByChange('orders')}>
+        Sort by orders
+      </button>
     </div>
   ),
 }));
 
 import { MerchantsClient } from './merchants-client';
 
-Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-  configurable: true,
-  value: () => false,
-});
-Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-  configurable: true,
-  value: () => undefined,
-});
-
-const merchantRows = [
+const merchantRows: AdminMerchantHealthRow[] = [
   {
     active_days: 10,
     business_name: 'Baci Store',
     email: 'owner@example.com',
+    excluded_non_ngn_or_unknown_paid_orders: 2,
     health_status: 'healthy',
     joined_at: '2026-03-20T10:00:00.000Z',
-    last_order_date: '2026-03-24T10:00:00.000Z',
+    last_order_date: '2026-03-24',
     merchant_id: 'merchant-1',
     total_gmv: 1200,
     total_orders: 12,
   },
-  {
-    active_days: 1,
-    business_name: 'Quiet Store',
-    email: 'quiet@example.com',
-    health_status: 'at_risk',
-    joined_at: '2026-03-21T10:00:00.000Z',
-    last_order_date: null,
-    merchant_id: 'merchant-2',
-    total_gmv: 50,
-    total_orders: 1,
-  },
-] as const;
+];
+
+function merchantResponse(
+  total = merchantRows.length,
+  offset = 0
+): AdminMerchantsResponse {
+  return {
+    data: merchantRows,
+    generatedAt: '2026-08-05T10:00:00.000Z',
+    pagination: { limit: 50, offset, total },
+  };
+}
 
 describe('MerchantsClient', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue(merchantResponse());
     mockToast.mockReset();
-    mockApiGet.mockResolvedValue({
-      data: merchantRows,
-      generatedAt: '2026-03-24T10:00:00.000Z',
+  });
+
+  it('requests server-backed health, search, and sort filters', async () => {
+    const user = userEvent.setup();
+    render(<MerchantsClient initialMerchants={merchantRows} />);
+
+    await user.click(screen.getByRole('button', { name: 'Filter at risk' }));
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenLastCalledWith(
+        '/api/admin/merchants?health=at_risk&limit=50&offset=0&sortBy=gmv'
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Sort by orders' }));
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenLastCalledWith(
+        '/api/admin/merchants?health=at_risk&limit=50&offset=0&sortBy=orders'
+      );
     });
   });
 
-  it('fetches merchants, renders stats, and filters by search and health', async () => {
+  it('debounces search input into one deterministic server request', async () => {
     const user = userEvent.setup();
-
-    render(
-      <MerchantsClient
-        initialHealthFilter="all"
-        initialMerchants={[...merchantRows]}
-      />
-    );
-
-    expect(screen.getByText('Baci Store')).toBeVisible();
-    expect(screen.getByText('Quiet Store')).toBeVisible();
-    expect(screen.getByText('stats-total:2')).toBeVisible();
-    expect(screen.getByText('stats-at-risk:1')).toBeVisible();
-    expect(screen.getByText('Showing 2 of 2 merchants')).toBeVisible();
+    render(<MerchantsClient initialMerchants={merchantRows} />);
 
     await user.type(
-      screen.getByPlaceholderText('Search merchants...'),
-      'quiet'
+      screen.getByRole('textbox', { name: 'Search merchants' }),
+      'quiet store'
     );
 
-    expect(screen.getByText('table-count:1')).toBeVisible();
-    expect(screen.queryByText('Baci Store')).not.toBeInTheDocument();
-    expect(screen.getByText('Quiet Store')).toBeVisible();
-
-    await user.clear(screen.getByPlaceholderText('Search merchants...'));
-    await user.click(screen.getByRole('button', { name: 'Filter at risk' }));
-
-    expect(screen.getByText('active-filter:at_risk')).toBeVisible();
-    expect(screen.getByText('table-count:1')).toBeVisible();
-    expect(screen.getByText('Quiet Store')).toBeVisible();
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledTimes(1);
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/admin/merchants?health=all&limit=50&offset=0&sortBy=gmv&search=quiet+store'
+      );
+    });
   });
 
-  it('shows an error toast when fetching merchants fails', async () => {
+  it('shows a generic failure state when the server-backed request fails', async () => {
     const user = userEvent.setup();
     mockApiGet.mockRejectedValue(new Error('network failed'));
-
-    render(<MerchantsClient initialHealthFilter="all" initialMerchants={[]} />);
+    render(<MerchantsClient initialMerchants={merchantRows} />);
 
     await user.click(screen.getByRole('button', { name: /refresh/i }));
 
     await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          description: 'Failed to load merchant data.',
-          variant: 'destructive',
-        })
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Merchant data could not load.'
       );
     });
-    expect(screen.getByText('No merchants found')).toBeVisible();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Failed to load merchant data.',
+        variant: 'destructive',
+      })
+    );
   });
 
-  it('refetches merchants when the sort changes', async () => {
+  it('requests the final valid page and disables Next at the directory cap', async () => {
     const user = userEvent.setup();
-
+    mockApiGet.mockResolvedValue(merchantResponse(10_100, 10_000));
     render(
       <MerchantsClient
-        initialHealthFilter="all"
-        initialMerchants={[...merchantRows]}
+        initialMerchants={merchantRows}
+        initialQuery={{
+          health: 'all',
+          limit: 50,
+          offset: 9_950,
+          search: undefined,
+          sortBy: 'gmv',
+        }}
+        initialTotal={10_100}
       />
     );
 
-    expect(screen.getByText('Baci Store')).toBeVisible();
-
-    await user.click(screen.getByRole('combobox', { name: /sort merchants/i }));
-    await user.click(
-      await screen.findByRole('option', { name: 'Most Orders' })
-    );
-
+    await user.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() => {
-      expect(mockApiGet).toHaveBeenCalledWith(
-        '/api/admin/merchants?sortBy=orders'
+      expect(mockApiGet).toHaveBeenLastCalledWith(
+        '/api/admin/merchants?health=all&limit=50&offset=10000&sortBy=gmv'
       );
     });
+
+    expect(
+      screen.getByText(/configured 10,000-row merchant directory boundary/i)
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
   });
 });

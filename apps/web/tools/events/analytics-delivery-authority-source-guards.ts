@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { readsCredentialEnvironment } from './analytics-delivery-environment-access-analysis';
 
 type VerifiedAtom = (node: ts.Expression) => boolean;

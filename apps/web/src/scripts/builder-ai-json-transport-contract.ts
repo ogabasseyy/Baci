@@ -3,7 +3,7 @@ export interface BuilderAiJsonTransportProviderDescriptor {
   opportunistic?: boolean;
 }
 
-const APPROVED_CEREBRAS_MODEL_NAME = 'gemma-4-31b';
+const APPROVED_GOOGLE_MODEL_NAME = 'gemma-4-31b-it';
 const APPROVED_GROQ_MODEL_NAME = 'openai/gpt-oss-120b';
 const PINNED_OPENROUTER_NAME = 'openrouter:google/gemma-4-31b-it:free';
 
@@ -28,7 +28,7 @@ function hasCanonicalProviderOrder(
   providers: BuilderAiJsonTransportProviderDescriptor[]
 ): boolean {
   const reliableProviders = [
-    `cerebras:${APPROVED_CEREBRAS_MODEL_NAME}`,
+    `google:${APPROVED_GOOGLE_MODEL_NAME}`,
     `groq:${APPROVED_GROQ_MODEL_NAME}`,
   ];
   return (

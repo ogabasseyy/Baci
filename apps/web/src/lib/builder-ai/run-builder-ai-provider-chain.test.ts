@@ -20,7 +20,7 @@ vi.mock('ai', () => ({
 }));
 
 const providers = [
-  { model: { id: 'cerebras' } as never, name: 'cerebras:gemma-4-31b' },
+  { model: { id: 'google' } as never, name: 'google:gemma-4-31b-it' },
   { model: { id: 'groq' } as never, name: 'groq:openai/gpt-oss-120b' },
 ];
 const validPlan = {
@@ -39,6 +39,31 @@ describe('runBuilderAiProviderChain', () => {
   beforeEach(() => {
     builderAiProviderCooldown.resetForTests();
     vi.clearAllMocks();
+  });
+
+  it('accepts the previously attested Cerebras pair during the Google rollout', async () => {
+    const transitionProviders = [
+      {
+        model: { id: 'cerebras' } as never,
+        name: 'cerebras:gemma-4-31b',
+      },
+      providers[1] as (typeof providers)[number],
+    ];
+    vi.mocked(generateText).mockResolvedValueOnce({
+      output: validPlan,
+    } as never);
+
+    await expect(
+      runBuilderAiProviderChain({
+        currentConfig: builderAiEditTestFixture.request.currentConfig,
+        deadlineAt: Date.now() + 5_000,
+        prompt: 'Update the hero',
+        providerChain: transitionProviders,
+        signal: new AbortController().signal,
+      })
+    ).resolves.toEqual(validPlan);
+
+    expect(generateText).toHaveBeenCalledOnce();
   });
 
   it('falls through malformed JSON and sends schema-free JSON transport', async () => {

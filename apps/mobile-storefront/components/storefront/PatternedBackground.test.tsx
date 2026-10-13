@@ -1,21 +1,60 @@
-import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { PatternedBackground } from './PatternedBackground';
 
 const mockGadgetPattern = jest.fn(
-  (_props: { color: string; height: number; opacity: number }) => (
-    <Text>GadgetPattern</Text>
-  )
+  (_props: {
+    color: string;
+    colorScheme: 'light' | 'dark';
+    height: number;
+    opacity: number;
+  }) => <Text>GadgetPattern</Text>
 );
 
 jest.mock('./GadgetPattern', () => ({
-  GadgetPattern: (props: { color: string; height: number; opacity: number }) =>
-    mockGadgetPattern(props),
+  GadgetPattern: (props: {
+    color: string;
+    colorScheme: 'light' | 'dark';
+    height: number;
+    opacity: number;
+  }) => mockGadgetPattern(props),
 }));
 
 describe('PatternedBackground', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('bounds the gradient to the measured 812-point screen instead of 1500 points', () => {
+    render(<PatternedBackground backgroundColor="#FAFAFA" isDark={false} />);
+
+    fireEvent(screen.getByTestId('patterned-background-clip'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 812 } },
+    });
+
+    expect(mockGadgetPattern).toHaveBeenLastCalledWith(
+      expect.objectContaining({ height: 812 })
+    );
+  });
+
+  it('resizes the gradient when the container changes orientation', () => {
+    render(<PatternedBackground backgroundColor="#111111" isDark />);
+    const clip = screen.getByTestId('patterned-background-clip');
+    fireEvent(clip, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 812 } },
+    });
+
+    fireEvent(clip, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 812, height: 375 } },
+    });
+
+    expect(mockGadgetPattern).toHaveBeenLastCalledWith(
+      expect.objectContaining({ height: 375, opacity: 0.04, color: '#ffffff' })
+    );
+  });
+
   it('uses the light brand pattern over the supplied background', () => {
     render(<PatternedBackground backgroundColor="#FAFAFA" isDark={false} />);
 
@@ -24,7 +63,8 @@ describe('PatternedBackground', () => {
     });
     expect(mockGadgetPattern).toHaveBeenCalledWith({
       color: BRAND.primary,
-      height: 1500,
+      colorScheme: 'light',
+      height: 0,
       opacity: 0.07,
     });
   });
@@ -34,7 +74,8 @@ describe('PatternedBackground', () => {
 
     expect(mockGadgetPattern).toHaveBeenCalledWith({
       color: '#ffffff',
-      height: 1500,
+      colorScheme: 'dark',
+      height: 0,
       opacity: 0.04,
     });
   });

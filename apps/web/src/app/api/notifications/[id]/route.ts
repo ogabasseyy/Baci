@@ -7,7 +7,11 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-import type { UpdateMerchantNotificationInput } from '@/types/notifications';
+import { merchantNotificationWithDetailsSchema } from '@/schemas/merchant-notification-list-result';
+import {
+  notificationIdSchema,
+  updateMerchantNotificationSchema,
+} from '@/schemas/notifications';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,7 +23,6 @@ interface RouteParams {
  */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await params;
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
@@ -45,7 +48,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
-    // Fetch notification
+    const { id: rawId } = await params;
+    const id = notificationIdSchema.safeParse(rawId);
+    if (!id.success) {
+      return NextResponse.json(
+        { error: 'Invalid notification ID' },
+        { status: 400 }
+      );
+    }
+    const now = new Date().toISOString();
+    const unexpiredNotificationFilter = `expires_at.is.null,expires_at.gt.${now}`;
+
+    // An individual recipient record has the same parent visibility rules as
+    // the notification list. Do not reveal or mutate a pending/sent-expired
+    // parent merely because a caller knows its recipient row ID.
     const { data: notification, error } = await supabase
       .from('merchant_notifications')
       .select(`
@@ -56,7 +72,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         dismissed_at,
         banner_dismissed_at,
         created_at,
-        notification:notifications (
+        notification:notifications!inner (
           id,
           title,
           message,
@@ -67,11 +83,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           action_label,
           expires_at,
           created_at,
-          is_system
+          is_system,
+          delivery_state,
+          sent_at
         )
       `)
-      .eq('id', id)
+      .eq('id', id.data)
       .eq('merchant_id', merchantId)
+      .eq('notification.delivery_state', 'sent')
+      .or(unexpiredNotificationFilter, { referencedTable: 'notification' })
       .single();
 
     if (error || !notification) {
@@ -81,9 +101,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    return NextResponse.json(notification);
-  } catch (error) {
-    console.error('Notification GET error:', error);
+    const parsedNotification =
+      merchantNotificationWithDetailsSchema.safeParse(notification);
+    if (!parsedNotification.success) {
+      console.error('Failed to fetch notification', {
+        errorCode: 'invalid_notification_result',
+      });
+      return NextResponse.json(
+        { error: 'Failed to fetch notification' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(parsedNotification.data);
+  } catch {
+    console.error('Unexpected failure fetching notification');
     return NextResponse.json(
       { error: 'Failed to fetch notification' },
       { status: 500 }
@@ -97,21 +129,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    // CSRF protection
-    const { valid: csrfValid, response: csrfResponse } =
-      await checkCsrfProtection(request);
-    if (!csrfValid) {
-      return (
-        csrfResponse ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
-    }
-
-    const { id } = await params;
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
-    // Authentication check
+    // Authentication is deliberately the first protected operation. In
+    // particular, unauthenticated callers must not receive a CSRF verdict.
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -133,30 +155,84 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
-    // Parse request body
-    const body: UpdateMerchantNotificationInput = await request.json();
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+
+    const { id: rawId } = await params;
+    const id = notificationIdSchema.safeParse(rawId);
+    if (!id.success) {
+      return NextResponse.json(
+        { error: 'Invalid notification ID' },
+        { status: 400 }
+      );
+    }
+
+    const json: unknown = await request.json().catch(() => null);
+    if (json === null) {
+      return NextResponse.json(
+        { error: 'Invalid notification update' },
+        { status: 400 }
+      );
+    }
+    const body = updateMerchantNotificationSchema.safeParse(json);
+    if (!body.success) {
+      return NextResponse.json(
+        { error: 'Invalid notification update' },
+        { status: 400 }
+      );
+    }
 
     // Build update object
     const updates: Record<string, unknown> = {};
 
-    if (body.read === true) {
+    if (body.data.read === true) {
       updates.read_at = new Date().toISOString();
-    } else if (body.read === false) {
+    } else if (body.data.read === false) {
       updates.read_at = null;
     }
 
-    if (body.dismissed === true) {
+    if (body.data.dismissed === true) {
       updates.dismissed_at = new Date().toISOString();
     }
 
-    if (body.banner_dismissed === true) {
+    if (body.data.banner_dismissed === true) {
       updates.banner_dismissed_at = new Date().toISOString();
     }
 
-    if (Object.keys(updates).length === 0) {
+    const now = new Date().toISOString();
+    const unexpiredNotificationFilter = `expires_at.is.null,expires_at.gt.${now}`;
+
+    // Update filters cannot safely express a parent-table join. First prove
+    // that the recipient row is currently visible, final, and unexpired; RLS
+    // repeats this parent check at write time to close the expiry race.
+    const { data: recipient, error: recipientError } = await supabase
+      .from('merchant_notifications')
+      .select('id, notification:notifications!inner(id)')
+      .eq('id', id.data)
+      .eq('merchant_id', merchantId)
+      .eq('notification.delivery_state', 'sent')
+      .or(unexpiredNotificationFilter, { referencedTable: 'notification' })
+      .maybeSingle();
+
+    if (recipientError) {
+      console.error('Failed to validate notification recipient', {
+        errorCode: recipientError.code || 'unknown',
+      });
       return NextResponse.json(
-        { error: 'No fields to update' },
-        { status: 400 }
+        { error: 'Failed to update notification' },
+        { status: 500 }
+      );
+    }
+    if (!recipient) {
+      return NextResponse.json(
+        { error: 'Notification not found' },
+        { status: 404 }
       );
     }
 
@@ -164,13 +240,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: updated, error: updateError } = await supabase
       .from('merchant_notifications')
       .update(updates)
-      .eq('id', id)
+      .eq('id', id.data)
       .eq('merchant_id', merchantId)
-      .select()
+      .select(
+        'id, notification_id, merchant_id, read_at, dismissed_at, banner_dismissed_at, created_at'
+      )
       .single();
 
     if (updateError) {
-      console.error('Error updating notification:', updateError);
+      console.error('Failed to update notification', {
+        errorCode: updateError.code || 'unknown',
+      });
       return NextResponse.json(
         { error: 'Failed to update notification' },
         { status: 500 }
@@ -184,20 +264,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Get updated unread count
-    const { count: unreadCount } = await supabase
+    // Keep this exact filter set in sync with GET /api/notifications.
+    const { count: unreadCount, error: unreadCountError } = await supabase
       .from('merchant_notifications')
-      .select('id', { count: 'exact', head: true })
+      .select('id, notification:notifications!inner(id)', {
+        count: 'exact',
+        head: true,
+      })
       .eq('merchant_id', merchantId)
+      .eq('in_app_visible', true)
       .is('read_at', null)
-      .is('dismissed_at', null);
+      .is('dismissed_at', null)
+      .eq('notification.delivery_state', 'sent')
+      .or(unexpiredNotificationFilter, { referencedTable: 'notification' });
+
+    if (unreadCountError) {
+      console.error('Failed to count unread notifications after update', {
+        errorCode: unreadCountError.code || 'unknown',
+      });
+    }
 
     return NextResponse.json({
       ...updated,
-      unread_count: unreadCount || 0,
+      unread_count: unreadCountError ? null : (unreadCount ?? 0),
     });
-  } catch (error) {
-    console.error('Notification PATCH error:', error);
+  } catch {
+    console.error('Unexpected failure updating notification');
     return NextResponse.json(
       { error: 'Failed to update notification' },
       { status: 500 }

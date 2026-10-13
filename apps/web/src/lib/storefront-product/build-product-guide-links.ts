@@ -1,4 +1,5 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import { buildCommercialGuideDescription } from '@/lib/storefront-content/build-commercial-guide-description';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
   ContentClusterKind,
@@ -22,18 +23,6 @@ function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
   });
 }
 
-function buildGuideDescription(post: PublishedClusterPost) {
-  const excerpt = post.excerpt?.trim();
-
-  if (excerpt) {
-    return excerpt;
-  }
-
-  return post.reading_time_minutes
-    ? `${post.reading_time_minutes} minute guide`
-    : 'Read the full guide';
-}
-
 function inferPriorityGuideKind(
   post: PublishedClusterPost
 ): ContentClusterKind {
@@ -47,7 +36,7 @@ function buildPriorityProductGuideLinks(input: {
   return input.posts.map((post) => ({
     href: `${input.storeUrl}/blog/${post.slug}`,
     title: post.title,
-    description: buildGuideDescription(post),
+    description: buildCommercialGuideDescription(post),
     kind: inferPriorityGuideKind(post),
   }));
 }
@@ -78,6 +67,7 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
         pageKind: 'product',
         categorySlug: input.categorySlug as SupportedClusterCategory,
         brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
+        productNames: [input.currentProduct.name],
         productSlugs: [input.currentProduct.slug],
       },
     }),

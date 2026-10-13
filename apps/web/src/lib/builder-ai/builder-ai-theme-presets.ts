@@ -1,3 +1,4 @@
+import { builderDesignCapabilities } from '@baci/shared/contracts';
 import { getContrastRatio, meetsWCAGAA } from '@/lib/color-utils';
 import { defaultTheme, type ThemeConfiguration } from '@/lib/theme-config';
 import {
@@ -51,12 +52,7 @@ const presets = {
 } as const;
 
 type PresetName = keyof typeof presets;
-type BaseColors = Partial<
-  Pick<
-    ThemeConfiguration['colors'],
-    'accent' | 'background' | 'foreground' | 'primary' | 'secondary'
-  >
->;
+type BaseColors = Record<string, string | undefined>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -126,15 +122,12 @@ function getAccessibleTextColor(background: string): string {
   return getContrastRatio(background, '#000000') >= 4.5 ? '#000000' : '#FFFFFF';
 }
 
-function assertBaseColors(colors: BaseColors | undefined): void {
+function assertBaseColors(
+  colors: BaseColors | undefined,
+  themeTokenKeys: readonly string[]
+): void {
   if (!colors) return;
-  const allowed = new Set([
-    'accent',
-    'background',
-    'foreground',
-    'primary',
-    'secondary',
-  ]);
+  const allowed = new Set(themeTokenKeys);
   for (const [token, color] of Object.entries(colors)) {
     if (
       !allowed.has(token) ||
@@ -148,12 +141,13 @@ function assertBaseColors(colors: BaseColors | undefined): void {
 
 export function applyBuilderAiTheme(
   currentTheme: unknown,
-  patch: { colors?: BaseColors; preset?: PresetName }
+  patch: { colors?: BaseColors; preset?: PresetName },
+  themeTokenKeys: readonly string[] = builderDesignCapabilities.themeTokenKeys
 ): { theme: ValidBuilderAiThemeConfiguration } {
   if (patch.preset && !Object.hasOwn(presets, patch.preset)) {
     throw new Error('Unknown visual preset');
   }
-  assertBaseColors(patch.colors);
+  assertBaseColors(patch.colors, themeTokenKeys);
   const base = validateBuilderAiThemeConfiguration(
     merge(defaultTheme, isRecord(currentTheme) ? currentTheme : {})
   );

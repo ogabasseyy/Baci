@@ -1,5 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readDeliveredTokens } from '@/lib/expo-push-retry';
+import { logger } from '@/lib/logger';
+import type { JumiaOrder } from '@/schemas/jumia';
+import type { ExistingJumiaOrderRow } from './order-sync-mappers';
 import { JUMIA_NOTIFICATION_MARKER_RETRY_CODES } from './order-sync-notification-retry-codes';
+import type {
+  buildExistingJumiaCacheEntry,
+  notifySyncedJumiaOrder,
+} from './order-sync-operations';
 
 const NOTIFICATION_SENT_UPDATE_ATTEMPTS = 3;
 const NOTIFICATION_SENT_UPDATE_RETRY_DELAY_MS = 25;
@@ -34,6 +42,199 @@ export function getJumiaNotificationAttemptKey(
   jumiaOrderId: string
 ) {
   return `${encodeURIComponent(merchantId)}:${encodeURIComponent(jumiaOrderId)}`;
+}
+
+/**
+ * Reports whether a new-order push for this Jumia order was already
+ * delivered, consulting the durable push-attempt log. When the provider
+ * accepts a push but the notification marker write keeps failing, the
+ * sync cursor parks with `notification_sent` false and the next run
+ * would resend; this pre-dispatch check closes that resend hole.
+ *
+ * Fails open: a lookup failure returns false so first-time
+ * notifications are never suppressed by a best-effort dedup query.
+ */
+export async function shouldSkipDeliveredJumiaNotification(
+  supabase: SupabaseClient,
+  merchantId: string,
+  jumiaOrderId: string
+): Promise<boolean> {
+  // A previous run may have delivered the push while the marker write
+  // failed; the durable attempt log suppresses the resend and the stale
+  // marker is repaired best-effort so later runs skip via the cheap check.
+  const alreadyDelivered = await hasSentJumiaOrderNotification(
+    supabase,
+    merchantId,
+    jumiaOrderId
+  );
+  if (!alreadyDelivered) return false;
+  await markJumiaNotificationSent(supabase, merchantId, jumiaOrderId);
+  return true;
+}
+
+export async function hasSentJumiaOrderNotification(
+  supabase: SupabaseClient,
+  merchantId: string,
+  jumiaOrderId: string
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('push_notification_attempts')
+      .select('id')
+      .eq('merchant_id', merchantId)
+      .eq('notification_type', 'new_order')
+      .eq('payload->>jumia_order_id', jumiaOrderId)
+      // Only fully delivered pushes suppress a resend. A partial_failure
+      // row means some devices never got the alert, so the next run must
+      // deliver again (at-least-once) rather than skip.
+      .in('status', ['sent']);
+    if (error || !data) return false;
+    return data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export interface SendJumiaOrderNotificationArgs {
+  merchantId: string;
+  integrationId: string;
+  order: JumiaOrder;
+  canonicalOrderId: string;
+  notificationKey: string;
+  attemptedNotificationKeys: Set<string>;
+  existingJumiaOrders: Map<string, ExistingJumiaOrderRow>;
+  notifySyncedJumiaOrder: typeof notifySyncedJumiaOrder;
+  buildExistingJumiaCacheEntry: typeof buildExistingJumiaCacheEntry;
+  onNotified: () => void;
+}
+
+/**
+ * Returns the union of tokens already reached by earlier partial attempts
+ * for this order, so a retry resends only to the failed subset instead of
+ * duplicating alerts on delivered devices.
+ */
+export async function getDeliveredJumiaNotificationTokens(
+  supabase: SupabaseClient,
+  merchantId: string,
+  jumiaOrderId: string
+): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('push_notification_attempts')
+      .select('payload')
+      .eq('merchant_id', merchantId)
+      .eq('payload->>jumia_order_id', jumiaOrderId)
+      .eq('status', 'partial_failure');
+    if (error || !data) {
+      return [];
+    }
+    const delivered = new Set<string>();
+    for (const row of data) {
+      for (const token of readDeliveredTokens(row.payload)) {
+        delivered.add(token);
+      }
+    }
+    return [...delivered];
+  } catch {
+    // A failed lookup must not fail the order: fall back to notifying all
+    // tokens, matching hasSentJumiaOrderNotification's mercy rule.
+    return [];
+  }
+}
+
+/**
+ * Sends the new-order push unless a previous run already delivered it,
+ * then persists the notification marker. Reports delivery through
+ * `onNotified` once every recipient succeeds (even when a later marker
+ * write fails). Throws when delivery or the marker write fails so the
+ * sync cursor parks the order for retry; partial delivery stays
+ * unmarked so the failed subset is retried on the next run.
+ */
+export async function sendJumiaOrderNotification(
+  supabase: SupabaseClient,
+  args: SendJumiaOrderNotificationArgs
+): Promise<void> {
+  if (
+    await shouldSkipDeliveredJumiaNotification(
+      supabase,
+      args.merchantId,
+      args.order.id
+    )
+  ) {
+    return;
+  }
+  args.attemptedNotificationKeys.add(args.notificationKey);
+  const deliveredTokens = await getDeliveredJumiaNotificationTokens(
+    supabase,
+    args.merchantId,
+    args.order.id
+  );
+  const rawNotificationResult = await args.notifySyncedJumiaOrder(
+    args.merchantId,
+    args.order,
+    args.canonicalOrderId,
+    deliveredTokens.length > 0 ? { excludeTokens: deliveredTokens } : undefined
+  );
+  if (!rawNotificationResult) {
+    logger.warn({
+      message: 'Jumia order notification returned no delivery result',
+      merchantId: args.merchantId,
+      integrationId: args.integrationId,
+      jumiaOrderId: args.order.id,
+      baciOrderId: args.canonicalOrderId,
+    });
+  }
+  const notificationResult = rawNotificationResult ?? {
+    sent: 0,
+    failed: 0,
+    errors: [],
+  };
+  // A partial batch (some pushes accepted, some rejected) must not mark
+  // the order notified: the parked cursor's next run would otherwise skip
+  // delivery and the failed devices would never be alerted.
+  const fullyNotified =
+    notificationResult.sent > 0 &&
+    notificationResult.failed === 0 &&
+    notificationResult.errors.length === 0;
+  if (fullyNotified) {
+    args.onNotified();
+    // The push provider accepted the notification. Keep duplicated Jumia
+    // pages in this run from rebuilding a stale cache row as unnotified.
+    args.existingJumiaOrders.set(
+      args.order.id,
+      args.buildExistingJumiaCacheEntry(
+        args.order.id,
+        true,
+        args.canonicalOrderId
+      )
+    );
+    const notificationUpdateError = await markJumiaNotificationSent(
+      supabase,
+      args.merchantId,
+      args.order.id
+    );
+    if (notificationUpdateError) {
+      const markerErrorMessage = `Failed to mark Jumia notification as sent: ${notificationUpdateError.message}`;
+      logger.error({
+        message: 'Failed to mark Jumia order notification as sent',
+        merchantId: args.merchantId,
+        integrationId: args.integrationId,
+        jumiaOrderId: args.order.id,
+        error: notificationUpdateError,
+      });
+      throw new Error(markerErrorMessage);
+    }
+  }
+  if (notificationResult.failed > 0 || notificationResult.errors.length > 0) {
+    const failureDetails = [
+      ...notificationResult.errors,
+      notificationResult.failed > 0 &&
+        `${notificationResult.failed} push notification(s) failed`,
+    ].filter(Boolean);
+    throw new Error(
+      `Failed to notify merchant for Jumia order: ${failureDetails.join('; ')}`
+    );
+  }
 }
 
 export async function markJumiaNotificationSent(

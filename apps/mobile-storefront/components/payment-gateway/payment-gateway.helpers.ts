@@ -17,6 +17,7 @@ export const PAYMENT_KINDS = {
   SAVINGS_AUTH: 'savings_auth',
   VTU: 'vtu',
   WALLET: 'wallet',
+  PRIMARY_WALLET_CARD: 'primary_wallet_card',
 } as const;
 
 export type PaymentKind = (typeof PAYMENT_KINDS)[keyof typeof PAYMENT_KINDS];
@@ -43,6 +44,46 @@ export const isPaymentCompletionRedirect = (url: string): boolean => {
   } catch {
     return false;
   }
+};
+
+/**
+ * Extracts the provider payment reference (Paystack `trxref`, or a plain
+ * `reference` param) from a navigated URL, if present.
+ */
+export const getPaymentRedirectReference = (
+  url: string
+): string | undefined => {
+  try {
+    const parsedUrl = new URL(url);
+    for (const key of ['trxref', 'reference']) {
+      const value = parsedUrl.searchParams.get(key)?.trim();
+      if (value) return value;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Whether a completion-redirect URL belongs to this checkout session: a
+ * redirect carrying a provider reference must carry OURS — otherwise it is
+ * an unrelated navigation (or replayed callback) that must not complete.
+ */
+export const isSessionPaymentCompletionRedirect = (
+  url: string,
+  sessionReference?: string
+): boolean => {
+  if (!isPaymentCompletionRedirect(url)) return false;
+  const redirectReference = getPaymentRedirectReference(url);
+  if (
+    redirectReference &&
+    sessionReference &&
+    redirectReference !== sessionReference.trim()
+  ) {
+    return false;
+  }
+  return true;
 };
 
 export const isPaymentCancellationRedirect = (url: string): boolean => {

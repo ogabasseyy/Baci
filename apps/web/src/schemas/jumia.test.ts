@@ -267,7 +267,7 @@ const validShipmentProvidersResponse = {
         {
           id: '550e8400-e29b-41d4-a716-44665544000c',
           name: 'GIG Logistics',
-          requireTrackingCode: true,
+          trackingCodeRequired: true,
         },
       ],
     },
@@ -278,8 +278,9 @@ const validPackV2Response = {
   success: {
     packages: [
       {
-        orderItems: '550e8400-e29b-41d4-a716-44665544000b',
-        trackingNumber: 'TRK-001',
+        orderItems: ['550e8400-e29b-41d4-a716-44665544000b'],
+        trackingCode: 'TRK-001',
+        countryCode: 'NG',
       },
     ],
     total: 1,
@@ -294,8 +295,9 @@ const validReadyToShipResponse = {
   success: {
     packages: [
       {
-        orderItems: '550e8400-e29b-41d4-a716-44665544000b',
+        orderItems: ['550e8400-e29b-41d4-a716-44665544000b'],
         trackingNumber: 'TRK-001',
+        countryCode: 'NG',
       },
     ],
     total: 1,
@@ -311,6 +313,7 @@ const validCancelResponse = {
     orderItems: [
       {
         id: '550e8400-e29b-41d4-a716-44665544000b',
+        countryCode: 'NG',
         cancellationReason: {
           id: '550e8400-e29b-41d4-a716-44665544000d',
           description: 'Out of stock',
@@ -329,9 +332,10 @@ const validPrintLabelsResponse = {
   success: {
     labels: [
       {
-        orderItems: '550e8400-e29b-41d4-a716-44665544000b',
+        orderItemIds: ['550e8400-e29b-41d4-a716-44665544000b'],
         trackingNumber: 'TRK-001',
-        label: 'https://labels.jumia.com/label-001.pdf',
+        countryCode: 'NG',
+        label: 'bGFiZWxfY29udGVudA==',
       },
     ],
     total: 1,
@@ -954,7 +958,7 @@ describe('Jumia Vendor API Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects shipment provider missing requireTrackingCode', () => {
+    it('rejects shipment provider missing trackingCodeRequired', () => {
       const result = JumiaShipmentProvidersResponseSchema.safeParse({
         orderItems: [
           {
@@ -987,7 +991,7 @@ describe('Jumia Vendor API Schemas', () => {
         error: {
           packages: [
             {
-              orderItems: '550e8400-e29b-41d4-a716-44665544000b',
+              orderItems: ['550e8400-e29b-41d4-a716-44665544000b'],
               error: 'Item already packed',
             },
           ],
@@ -1090,8 +1094,8 @@ describe('Jumia Vendor API Schemas', () => {
       );
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.success?.labels[0].label).toContain(
-          'labels.jumia.com'
+        expect(result.data.success?.labels[0].label).toBe(
+          'bGFiZWxfY29udGVudA=='
         );
       }
     });
@@ -1107,7 +1111,11 @@ describe('Jumia Vendor API Schemas', () => {
       const result = JumiaPrintLabelsResponseSchema.safeParse({
         success: {
           labels: [
-            { orderItems: 'ITEM-1', label: 'https://labels.jumia.com/x.pdf' },
+            {
+              orderItemIds: ['ITEM-1'],
+              countryCode: 'NG',
+              label: 'bGFiZWxfY29udGVudA==',
+            },
           ],
           total: 1,
         },
@@ -1165,6 +1173,21 @@ describe('Jumia Vendor API Schemas', () => {
         ...noItems,
         feedItems: [],
       });
+      expect(result.success).toBe(true);
+    });
+
+    it('parses rejected feed items without a provider product id', () => {
+      const result = JumiaFeedDetailsResponseSchema.safeParse({
+        ...validFeedDetailsResponse,
+        feedItems: [
+          {
+            ...validFeedDetailsResponse.feedItems[0],
+            status: 'FAILED',
+            productSid: undefined,
+          },
+        ],
+      });
+
       expect(result.success).toBe(true);
     });
 

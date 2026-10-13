@@ -137,6 +137,48 @@ describe('scheduleIdleBoot', () => {
     readyState.mockRestore();
   });
 
+  it('reports which trigger fired the callback', () => {
+    // Arrange
+    const idle = stubRequestIdleCallback();
+
+    // Act: idle period → 'idle'.
+    const idleCallback = vi.fn();
+    const cancelIdle = scheduleIdleBoot(idleCallback, { timeoutMs: 4000 });
+    idle.run();
+
+    // Assert
+    expect(idleCallback).toHaveBeenCalledOnce();
+    expect(idleCallback).toHaveBeenCalledWith('idle');
+    cancelIdle();
+
+    // Act: first interaction → 'interaction'.
+    const interactionCallback = vi.fn();
+    scheduleIdleBoot(interactionCallback, { timeoutMs: 4000 });
+    window.dispatchEvent(new Event('pointerdown'));
+
+    // Assert
+    expect(interactionCallback).toHaveBeenCalledOnce();
+    expect(interactionCallback).toHaveBeenCalledWith('interaction');
+  });
+
+  it('reports the hard timeout trigger', () => {
+    // Arrange
+    vi.useFakeTimers();
+    const readyState = vi
+      .spyOn(document, 'readyState', 'get')
+      .mockReturnValue('loading');
+    const callback = vi.fn();
+
+    // Act
+    scheduleIdleBoot(callback, { timeoutMs: 4000 });
+    vi.advanceTimersByTime(4000);
+
+    // Assert
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith('timeout');
+    readyState.mockRestore();
+  });
+
   it('runs the callback at most once across triggers', () => {
     // Arrange
     const idle = stubRequestIdleCallback();

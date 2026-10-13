@@ -79,4 +79,36 @@ describe('OrderDetailsShippingSection', () => {
     expect(container).toBeInTheDocument();
     expect(container).toHaveAttribute('role', 'summary');
   });
+
+  it('renders persisted airport metadata for fulfillment', () => {
+    render(
+      <OrderDetailsShippingSection
+        address="12 Marina Street, Lagos Island, Lagos"
+        airportType="delivery"
+        colors={colors}
+        deliveryMethod="airport"
+      />
+    );
+
+    expect(screen.getByText('Delivery Method')).toBeInTheDocument();
+    expect(screen.getByText('Airport Delivery')).toBeInTheDocument();
+    expect(screen.getByText('Airport Type')).toBeInTheDocument();
+    expect(screen.getByText('Delivery')).toBeInTheDocument();
+  });
+
+  it('labels airport pickup orders as pickup', () => {
+    render(
+      <OrderDetailsShippingSection
+        address="12 Marina Street, Lagos Island, Lagos"
+        airportType="pickup"
+        colors={colors}
+        deliveryMethod="airport"
+      />
+    );
+
+    expect(screen.getByText('Airport Pickup')).toBeInTheDocument();
+    expect(screen.getByText('Airport Type')).toBeInTheDocument();
+    expect(screen.getByText('Pickup')).toBeInTheDocument();
+    expect(screen.queryByText('Airport Delivery')).not.toBeInTheDocument();
+  });
 });

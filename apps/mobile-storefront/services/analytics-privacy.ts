@@ -48,6 +48,8 @@ const IDENTIFIER_CONTEXT_TOKENS = new Set([
   'cart',
   'carts',
   'checkout',
+  'notification',
+  'notifications',
   'order',
   'orders',
   'payment',

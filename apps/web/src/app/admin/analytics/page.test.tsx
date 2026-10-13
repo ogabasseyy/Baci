@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -106,6 +107,7 @@ const analyticsResponse = {
   ],
   signupSources: [],
   summary: {
+    activeMerchantChange: 20,
     activeMerchants: 12,
     aovChange: -10,
     avgGmvPerMerchant: 100,
@@ -113,10 +115,14 @@ const analyticsResponse = {
     grossGmv: 1000,
     grossOrders: 2,
     gmvChange: 50,
-    netToMerchants: 90,
+    excludedNonNgnOrUnknownGrossOrders: 0,
+    excludedNonNgnOrUnknownPaidOrders: 0,
+    recordedMerchantNet: null,
     orderChange: 25,
-    platformRevenue: 10,
-    processorFees: 2,
+    recordedPlatformFees: null,
+    recordedProcessorFees: null,
+    reportingCurrency: 'NGN',
+    sellingMerchants: 2,
     totalGmv: 700,
     totalMerchants: 20,
     totalOrders: 1,
@@ -131,15 +137,19 @@ const analyticsResponse = {
   ],
 };
 
+function createAnalyticsResponse(status = 200): Response {
+  return new Response(JSON.stringify(analyticsResponse), {
+    headers: { 'Content-Type': 'application/json' },
+    status,
+  });
+}
+
 describe('AnalyticsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        json: async () => analyticsResponse,
-        ok: true,
-      }) as unknown as typeof fetch
+      vi.fn().mockResolvedValue(createAnalyticsResponse())
     );
   });
 
@@ -156,8 +166,21 @@ describe('AnalyticsPage', () => {
       );
     });
 
-    expect(await screen.findByText('Active Merchants')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Merchants with Session Activity')
+    ).toBeInTheDocument();
     expect(await screen.findByText('12')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /NGN-only reporting; orders created in the selected window/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/order metrics use the order-created date/i)
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/2 made ngn paid sales/i)
+    ).toBeInTheDocument();
     expect(await screen.findByText('Payment Pipeline')).toBeInTheDocument();
     expect(await screen.findByText('Paid')).toBeInTheDocument();
     expect(await screen.findByText('Fulfillment Pipeline')).toBeInTheDocument();
@@ -176,5 +199,59 @@ describe('AnalyticsPage', () => {
       expect(container).toHaveAttribute('data-min-width', '0');
       expect(container).toHaveAttribute('data-min-height', '0');
     }
+  });
+
+  it('shows a persistent retry state instead of convincing zero metrics when loading fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(createAnalyticsResponse());
+
+    render(<AnalyticsPage />);
+
+    expect(
+      await screen.findByText('Analytics unavailable')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('₦0.00')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(
+      await screen.findByText('Merchants with Session Activity')
+    ).toBeInTheDocument();
+    expect(await screen.findByText('12')).toBeInTheDocument();
+  });
+
+  it('keeps prior analytics figures and reports a non-blocking error when refresh fails', async () => {
+    const user = userEvent.setup();
+    let resolveRefresh: (response: Response) => void = () => undefined;
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(createAnalyticsResponse())
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRefresh = resolve;
+          })
+      );
+
+    render(<AnalyticsPage />);
+
+    expect(await screen.findByText('12')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Refreshing live analytics'
+    );
+    expect(screen.getByText('12')).toBeInTheDocument();
+
+    resolveRefresh(new Response(null, { status: 500 }));
+
+    expect(
+      await screen.findByText('Analytics refresh failed')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Merchants with Session Activity')
+    ).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
   });
 });

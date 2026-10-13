@@ -92,6 +92,17 @@ describe('paystack DVA order alias helpers', () => {
     expect(isActive).toBe(true);
   });
 
+  it('honors an explicit invoice expiry beyond the default wallet window', () => {
+    const alias = orderAliasRow({
+      assigned_at: '2026-05-22T10:00:00.000Z',
+      expires_at: '2026-05-22T12:00:00.000Z',
+    });
+
+    expect(
+      isActiveOrderDvaAlias(alias, new Date('2026-05-22T11:45:00.000Z'))
+    ).toBe(true);
+  });
+
   it('treats expired, malformed, and paid aliases as inactive', () => {
     const asOf = new Date('2026-05-22T10:30:00.000Z');
 
@@ -136,6 +147,17 @@ describe('paystack DVA order alias helpers', () => {
           },
         }),
         new Date('2026-05-22T11:30:00.000Z')
+      )
+    ).toBe(false);
+  });
+
+  it('treats a legacy-untrusted alias as inactive even when in-window', () => {
+    expect(
+      isActiveOrderDvaAlias(
+        orderAliasRow({
+          assignment_customer_email_source: 'legacy_untrusted',
+        }),
+        new Date('2026-05-22T10:30:00.000Z')
       )
     ).toBe(false);
   });

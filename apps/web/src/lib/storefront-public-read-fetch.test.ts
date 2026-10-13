@@ -9,6 +9,23 @@ describe('createStorefrontPublicReadFetch', () => {
     vi.restoreAllMocks();
   });
 
+  it('returns locally without contacting Supabase during offline CI builds', async () => {
+    vi.stubEnv('BACI_STOREFRONT_BUILD_READS', 'offline');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('network access must remain disabled'));
+
+    const response = await createStorefrontPublicReadFetch()(
+      'https://production-project.supabase.co/rest/v1/products'
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      message: 'Storefront reads are disabled for this build',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('starts each queued build request with a full 30-second transport budget', async () => {
     vi.stubEnv('BACI_STOREFRONT_BUILD_READS', 'bounded');
     const releases: Array<() => void> = [];

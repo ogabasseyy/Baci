@@ -11,6 +11,8 @@ import {
   type AddToCartParams,
   addToCartSchema,
   type CancelOrderParams,
+  CHECKOUT_TOOL_NAMES,
+  type CheckoutToolName,
   type CheckPaymentStatusParams,
   type CreateVirtualAccountParams,
   cancelOrderSchema,
@@ -25,7 +27,122 @@ import {
   TOOL_DESCRIPTIONS,
 } from '@/ai/chat-tools';
 
-export function createAiSdkAgenticChatTools(sessionId: string) {
+function didAiSdkToolCreateSideEffect(
+  toolName: string,
+  result: string
+): boolean {
+  try {
+    const parsed = JSON.parse(result) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return false;
+    }
+
+    const maybeResult = parsed as {
+      accountNumber?: unknown;
+      orderId?: unknown;
+      success?: unknown;
+      status?: unknown;
+    };
+
+    if (toolName === 'cancelOrder') {
+      return (
+        maybeResult.success === true &&
+        maybeResult.status === 'cancelled' &&
+        typeof maybeResult.orderId === 'string' &&
+        maybeResult.orderId.length > 0
+      );
+    }
+
+    return (
+      (typeof maybeResult.orderId === 'string' &&
+        maybeResult.orderId.length > 0) ||
+      (maybeResult.success === true &&
+        typeof maybeResult.accountNumber === 'string' &&
+        maybeResult.accountNumber.length > 0)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface CreateAiSdkAgenticChatToolsOptions {
+  agenticCheckoutEnabled?: boolean;
+  onSideEffect?: (toolName: string) => void;
+  onToolResult?: (
+    toolName: string,
+    result: unknown,
+    context?: { quantity?: number }
+  ) => void;
+}
+
+// A `type` (not an `interface`) so the map keeps an implicit index
+// signature and stays assignable to the AI SDK `ToolSet`.
+export type AgenticChatToolMap = {
+  searchProducts: {
+    description: string;
+    inputSchema: typeof searchProductsSchema;
+    execute: (params: SearchProductsParams) => Promise<string>;
+  };
+  getProductDetails: {
+    description: string;
+    inputSchema: typeof getProductDetailsSchema;
+    execute: (params: GetProductDetailsParams) => Promise<string>;
+  };
+  createVirtualAccount: {
+    description: string;
+    inputSchema: typeof createVirtualAccountSchema;
+    execute: (params: CreateVirtualAccountParams) => Promise<string>;
+  };
+  checkPaymentStatus: {
+    description: string;
+    inputSchema: typeof checkPaymentStatusSchema;
+    execute: (params: CheckPaymentStatusParams) => Promise<string>;
+  };
+  cancelOrder: {
+    description: string;
+    inputSchema: typeof cancelOrderSchema;
+    execute: (params: CancelOrderParams) => Promise<string>;
+  };
+  getRecommendations: {
+    description: string;
+    inputSchema: typeof getRecommendationsSchema;
+    execute: (params: GetRecommendationsParams) => Promise<string>;
+  };
+  addToCart: {
+    description: string;
+    inputSchema: typeof addToCartSchema;
+    execute: (params: AddToCartParams) => Promise<string>;
+  };
+};
+
+export type ReadOnlyAgenticChatToolMap = Omit<
+  AgenticChatToolMap,
+  CheckoutToolName
+>;
+
+// The overloads keep the return type honest about the checkout gate: callers
+// that statically disable checkout cannot type-check a checkout tool call,
+// while enabled callers (and the default) keep the full map.
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options?: CreateAiSdkAgenticChatToolsOptions & {
+    agenticCheckoutEnabled?: true;
+  }
+): AgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options: CreateAiSdkAgenticChatToolsOptions & {
+    agenticCheckoutEnabled: false;
+  }
+): ReadOnlyAgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options?: CreateAiSdkAgenticChatToolsOptions
+): AgenticChatToolMap | ReadOnlyAgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options: CreateAiSdkAgenticChatToolsOptions = {}
+): AgenticChatToolMap | ReadOnlyAgenticChatToolMap {
   // The AI SDK executes a single step's tool calls concurrently (Promise.all).
   // A model that emits the SAME side-effecting call twice in one step (a common
   // uncertainty pattern) would otherwise run each independently — inserting a
@@ -56,12 +173,13 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
     return pending;
   };
 
-  return {
+  const tools: AgenticChatToolMap = {
     searchProducts: {
       description: TOOL_DESCRIPTIONS.searchProducts,
       inputSchema: searchProductsSchema,
       execute: async (params: SearchProductsParams) => {
         const result = await handleSearchProducts(params);
+        options.onToolResult?.('searchProducts', result);
         return JSON.stringify(result);
       },
     },
@@ -70,6 +188,7 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
       inputSchema: getProductDetailsSchema,
       execute: async (params: GetProductDetailsParams) => {
         const result = await handleGetProductDetails(params);
+        options.onToolResult?.('getProductDetails', result);
         return JSON.stringify(result);
       },
     },
@@ -80,8 +199,18 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
       execute: (params: CreateVirtualAccountParams) =>
         dedupeSideEffect(
           `createVirtualAccount:${JSON.stringify(params)}`,
-          async () =>
-            JSON.stringify(await handleCreateVirtualAccount(params, sessionId))
+          async () => {
+            const toolResult = await handleCreateVirtualAccount(
+              params,
+              sessionId
+            );
+            options.onToolResult?.('createVirtualAccount', toolResult);
+            const result = JSON.stringify(toolResult);
+            if (didAiSdkToolCreateSideEffect('createVirtualAccount', result)) {
+              options.onSideEffect?.('createVirtualAccount');
+            }
+            return result;
+          }
         ),
     },
     checkPaymentStatus: {
@@ -89,6 +218,7 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
       inputSchema: checkPaymentStatusSchema,
       execute: async (params: CheckPaymentStatusParams) => {
         const result = await handleCheckPaymentStatus(params, sessionId);
+        options.onToolResult?.('checkPaymentStatus', result);
         return JSON.stringify(result);
       },
     },
@@ -100,15 +230,22 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
       // scope, order reference, customer email, and cancellable order status.
       // Side-effecting: dedupe concurrent duplicate cancels of the same order.
       execute: (params: CancelOrderParams) =>
-        dedupeSideEffect(`cancelOrder:${JSON.stringify(params)}`, async () =>
-          JSON.stringify(await handleCancelOrder(params))
-        ),
+        dedupeSideEffect(`cancelOrder:${JSON.stringify(params)}`, async () => {
+          const toolResult = await handleCancelOrder(params);
+          options.onToolResult?.('cancelOrder', toolResult);
+          const result = JSON.stringify(toolResult);
+          if (didAiSdkToolCreateSideEffect('cancelOrder', result)) {
+            options.onSideEffect?.('cancelOrder');
+          }
+          return result;
+        }),
     },
     getRecommendations: {
       description: TOOL_DESCRIPTIONS.getRecommendations,
       inputSchema: getRecommendationsSchema,
       execute: async (params: GetRecommendationsParams) => {
         const result = await handleGetRecommendations(params);
+        options.onToolResult?.('getRecommendations', result);
         return JSON.stringify(result);
       },
     },
@@ -117,8 +254,29 @@ export function createAiSdkAgenticChatTools(sessionId: string) {
       inputSchema: addToCartSchema,
       execute: async (params: AddToCartParams) => {
         const result = await handleAddToCart(params);
+        options.onToolResult?.('addToCart', result, {
+          quantity: params.quantity,
+        });
         return JSON.stringify(result);
       },
     },
   };
+
+  // When the tenant disables agentic checkout, the model must not even see
+  // the commerce tools — execution-time fail-closed alone still lets it
+  // promise payments and cancellations it cannot fulfil. Payment-status
+  // checks go too: the handler is guaranteed to report not_found without a
+  // checkout-capable tenant, which would mislead customers about real
+  // payments. The Omit return type keeps the type honest about the removed
+  // keys so no caller can type-check a checkout tool call that would
+  // throw at runtime.
+  if (options.agenticCheckoutEnabled === false) {
+    const readOnlyTools: Partial<AgenticChatToolMap> = { ...tools };
+    for (const name of CHECKOUT_TOOL_NAMES) {
+      delete readOnlyTools[name];
+    }
+    return readOnlyTools as ReadOnlyAgenticChatToolMap;
+  }
+
+  return tools;
 }

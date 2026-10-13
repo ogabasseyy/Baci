@@ -13,5 +13,5 @@ export const walletSettingsSchema = z.object({
       'sunday',
     ])
     .optional(),
-  minPayoutAmount: z.number().min(100).max(10_000_000).optional(),
+  minPayoutAmount: z.number().finite().min(1000).max(10_000_000).optional(),
 });

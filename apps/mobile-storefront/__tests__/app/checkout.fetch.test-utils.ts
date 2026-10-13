@@ -1,5 +1,5 @@
 export function createCheckoutFetchMock() {
-  return jest.fn(async (input: string | URL | Request) => {
+  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const requestUrl =
       typeof input === 'string'
         ? input
@@ -48,11 +48,34 @@ export function createCheckoutFetchMock() {
     }
 
     if (requestUrl.includes('/api/payments/initialize')) {
+      // Bank-transfer initializations request a DVA (payment_type: 'dva')
+      // and the initializer validates the returned virtual account
+      // details before routing; mirror a complete account so legacy
+      // bank-transfer fallbacks can reach their destination screen.
+      let paymentType: unknown;
+      try {
+        const rawBody = init?.body;
+        paymentType =
+          typeof rawBody === 'string'
+            ? (JSON.parse(rawBody) as { payment_type?: unknown }).payment_type
+            : undefined;
+      } catch {
+        paymentType = undefined;
+      }
       return {
         json: async () => ({
           authorization_url: 'https://checkout.paystack.com/order-1',
           reference: 'ref-order-1',
           success: true,
+          ...(paymentType === 'dva'
+            ? {
+                dva: {
+                  account_name: 'Test Account',
+                  account_number: '0123456789',
+                  bank_name: 'Test Bank',
+                },
+              }
+            : {}),
         }),
         ok: true,
       } as Response;

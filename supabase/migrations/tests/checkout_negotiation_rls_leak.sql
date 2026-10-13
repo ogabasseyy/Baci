@@ -147,8 +147,15 @@ BEGIN
   VALUES (v_session, v_merchant_id, 'victim@example.com', '08000000000', '1234567890');
 
   INSERT INTO public.negotiation_requests
-    (merchant_id, customer_id, session_id, type, offered_price)
-  VALUES (v_merchant_id, v_customer_id, v_session, 'single', 1000);
+    (merchant_id, customer_id, customer_email, session_id, type, offered_price)
+  VALUES (
+    v_merchant_id,
+    v_customer_id,
+    'rls-customer@example.com',
+    v_session,
+    'single',
+    1000
+  );
 
   RESET ROLE;
 

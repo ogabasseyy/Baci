@@ -22,6 +22,7 @@ function renderDrawer(
       onClearFilters={vi.fn()}
       onClose={onClose}
       paginationProductCount={7}
+      showPriceFilter={true}
       {...overrides}
     />
   );

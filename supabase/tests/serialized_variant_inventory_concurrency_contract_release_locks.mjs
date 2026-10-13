@@ -1,0 +1,266 @@
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryExceptionHandlers } from './serialized_variant_inventory_concurrency_contract_exception_handlers.mjs';
+import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
+import { serializedInventorySelectInto } from './serialized_variant_inventory_concurrency_contract_select_into.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
+
+function releaseLockMatches(source) {
+  const searchableSource = serializedInventoryNestedQueries.maskNestedQueries(
+    serializedInventorySqlParser.maskSqlLiterals(source, {
+      preserveStrings: true,
+    })
+  );
+  const query =
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)(?:ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+)?FOR\s+UPDATE\s+OF\s+vi\b(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
+      searchableSource
+    );
+  if (
+    !query ||
+    /\b(?:LIMIT|OFFSET|FETCH|FALSE)\b|\bNOT\s+TRUE\b/i.test(query[1]) ||
+    !/ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i.test(
+      query[0]
+    )
+  )
+    return false;
+  const statusComparisons = [
+    ...query[1].matchAll(
+      /\bvi\s*\.\s*status\s*(=|<>|!=|IS\s+(?:NOT\s+)?DISTINCT\s+FROM)\s*'([^']+)'/gi
+    ),
+  ];
+  if (
+    statusComparisons.some(
+      ([, operator, value]) =>
+        operator !== '=' || value.toLowerCase() !== 'reserved'
+    ) ||
+    /\bNOT\s*\(\s*vi\s*\.\s*status\s*=\s*'reserved'/i.test(query[1])
+  ) {
+    return false;
+  }
+  const contradictoryScopePredicates = [
+    [
+      /vi\s*\.\s*order_id\s+IS\s+NULL\b/i,
+      /vi\s*\.\s*order_id\s*(?:<>|!=|IS\s+DISTINCT\s+FROM)\s*/i,
+      /vi\s*\.\s*order_id\s*=(?!\s*p_order_id\b)/i,
+    ],
+    [
+      /vi\s*\.\s*merchant_id\s+IS\s+NULL\b/i,
+      /vi\s*\.\s*merchant_id\s*(?:<>|!=|IS\s+DISTINCT\s+FROM)\s*/i,
+      /vi\s*\.\s*merchant_id\s*=(?!\s*p_merchant_id\b)/i,
+    ],
+  ];
+  if (
+    contradictoryScopePredicates.some((predicates) =>
+      predicates.some((predicate) => predicate.test(query[1]))
+    )
+  ) {
+    return false;
+  }
+  if (
+    ![...releaseScopePatterns].every((predicate) =>
+      serializedInventorySqlParser.isRequiredConjunct(query[1], predicate)
+    )
+  ) {
+    return false;
+  }
+  if (hasUnrecognizedReleaseConjunct(query[1])) {
+    return false;
+  }
+  return (
+    !/\b(?:vi|variant_inventory)\s*\.\s*(?!order_id\b|merchant_id\b|status\b)[a-z_][a-z0-9_]*\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/i.test(
+      query[1]
+    ) && !/\bpv\s*\.\s*[a-z_][a-z0-9_]*/i.test(query[1])
+  );
+}
+
+const releaseScopePatterns = [
+  /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
+  /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
+  /vi\s*\.\s*status\s*=\s*'reserved'/i,
+];
+
+function hasUnrecognizedReleaseConjunct(where) {
+  return serializedInventorySqlParser
+    .splitTopLevel(
+      serializedInventorySqlParser.unwrapOuterParentheses(where),
+      'AND'
+    )
+    .some((branch) => {
+      const unwrapped =
+        serializedInventorySqlParser.unwrapOuterParentheses(branch);
+      return !releaseScopePatterns.some((pattern) => {
+        pattern.lastIndex = 0;
+        const matched = pattern.test(unwrapped);
+        pattern.lastIndex = 0;
+        return matched;
+      });
+    });
+}
+
+function hasTargetStatusWhitelist(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(
+    serializedInventorySqlParser.stripSqlComments(source),
+    { preserveStrings: true }
+  );
+  const defaultStatus =
+    /\bv_target_status\s+text\s*:=\s*COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)\s*;/i.exec(
+      executable
+    );
+  const guard =
+    /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      executable
+    );
+  let guardBranches;
+  try {
+    guardBranches = guard
+      ? serializedInventoryBranches.extractIfArms(
+          executable,
+          /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN\b/i
+        )
+      : undefined;
+  } catch {
+    guardBranches = undefined;
+  }
+  const hasTopLevelException = (branch) => {
+    const masked = serializedInventorySqlParser.maskSqlLiterals(branch);
+    let depth = 0;
+    let caseDepth = 0;
+    for (const token of masked.matchAll(
+      /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+    )) {
+      if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+      else if (/^END\s+CASE/i.test(token[0]))
+        caseDepth = Math.max(0, caseDepth - 1);
+      else if (/^IF\b/i.test(token[0])) depth += 1;
+      else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+      else if (depth === 0 && caseDepth === 0) return true;
+    }
+    return false;
+  };
+  const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN/i.exec(
+    executable
+  );
+  const guardEnd = guard ? guard.index + guard[0].length : -1;
+  const authGuard =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i.exec(
+      executable
+    );
+  const scopeStart =
+    authGuard && guardEnd > authGuard.index ? authGuard.index : guardEnd;
+  const statusReassignment =
+    guard && dispatch && guardEnd < dispatch.index
+      ? /(?:^|[;\n])\s*v_target_status\s*(?::=|=(?!=))/i.test(
+          executable.slice(guardEnd, dispatch.index)
+        )
+      : true;
+  const scopeWindow =
+    guard && dispatch && guardEnd < dispatch.index
+      ? executable.slice(scopeStart, dispatch.index)
+      : null;
+  const scopeReassignment =
+    scopeWindow === null
+      ? true
+      : /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/i.test(
+          scopeWindow
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_merchant_id'
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_order_id'
+        );
+  return Boolean(
+    defaultStatus &&
+      guard &&
+      guardBranches &&
+      hasTopLevelException(guardBranches.thenBranch) &&
+      dispatch &&
+      defaultStatus.index < guard.index &&
+      !statusReassignment &&
+      !scopeReassignment &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        dispatch.index
+      )
+  );
+}
+
+function hasTopLevelException(source) {
+  const masked = serializedInventorySqlParser.maskSqlLiterals(source);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return true;
+  }
+  return false;
+}
+
+function hasMerchantAuthorizationGuard(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(
+    serializedInventorySqlParser.stripSqlComments(source),
+    { preserveStrings: true }
+  );
+  const guardPattern =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i;
+  const guard = guardPattern.exec(executable);
+  if (!guard) return false;
+  const orderLock =
+    /FROM\s+public\s*\.\s*orders\b[\s\S]*?\bFOR\s+UPDATE\b/i.exec(executable);
+  const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i.exec(
+    executable
+  );
+  try {
+    const branches = serializedInventoryBranches.extractIfArms(
+      executable,
+      guardPattern
+    );
+    return (
+      hasTopLevelException(branches.thenBranch) &&
+      /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(branches.thenBranch) &&
+      !serializedInventoryExceptionHandlers.enclosingAuthorizationHandler(
+        executable,
+        guard.index
+      ) &&
+      orderLock !== null &&
+      dispatch !== null &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        orderLock.index
+      ) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        dispatch.index
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+function findReleaseEvent(source, targetStatus) {
+  const eventName =
+    targetStatus === 'available' ? 'reservation_released' : 'returned';
+  return new RegExp(
+    `PERFORM\\s+private\\s*\\.\\s*record_variant_inventory_event\\s*\\(\\s*v_unit\\s*\\.\\s*id\\s*,\\s*p_merchant_id\\s*,\\s*v_unit\\s*\\.\\s*product_id\\s*,\\s*v_unit\\s*\\.\\s*variant_id\\s*,\\s*'${eventName}'\\s*,\\s*'reserved'\\s*,\\s*'${targetStatus}'\\s*,\\s*p_order_id\\s*,\\s*v_unit\\s*\\.\\s*order_item_id\\b[\\s\\S]*?\\);`,
+    'i'
+  ).exec(source);
+}
+
+export const serializedInventoryReleaseLocks = {
+  findReleaseEvent,
+  hasMerchantAuthorizationGuard,
+  hasTargetStatusWhitelist,
+  releaseLockMatches,
+};

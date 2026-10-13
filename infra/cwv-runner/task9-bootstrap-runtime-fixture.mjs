@@ -99,11 +99,13 @@ function envelopeFor({ archive, node, rows, source }) {
     nodeVersion: process.version,
   };
   const provenance = {
+    archiveSha256: '4'.repeat(64),
     artifact: 'node',
     checksumSha256: '1'.repeat(64),
     keyringSha256: '2'.repeat(64),
     schemaVersion: 1,
     sha256: runtime.nodeSha256,
+    executableSha256: runtime.nodeSha256,
     signatureSha256: '3'.repeat(64),
     version: runtime.nodeVersion,
   };
@@ -154,7 +156,11 @@ function envelopeFor({ archive, node, rows, source }) {
 
 export function createExactBootstrapBundle(
   root,
-  { policyBytes = Buffer.from('{"authority":{}}') } = {}
+  {
+    policyBytes = Buffer.from(
+      `{"authority":{},"supplyChain":{"node":{"ownerDarwinArm64Sha256":"${'4'.repeat(64)}"}},"supplyChainProvenance":{"node":{"checksumsSha256":"${'1'.repeat(64)}","keyringSha256":"${'2'.repeat(64)}","signatureSha256":"${'3'.repeat(64)}"}}}`
+    ),
+  } = {}
 ) {
   const bundleDir = join(root, 'bundle');
   const launcher = join(root, 'task9-bootstrap-launcher.mjs');
@@ -175,7 +181,7 @@ export function createExactBootstrapBundle(
     baseSha: 'a'.repeat(40),
     entries: [],
     mergeSha: 'd'.repeat(40),
-    policyCanonicalSha256: digest(canonicalJson({ authority: {} })),
+    policyCanonicalSha256: digest(canonicalJson(JSON.parse(policyBytes))),
     policyFileSha256: digest(rows.find(({ path }) => path.endsWith('/policy.json')).bytes),
     prNumber: 9,
     reviewedHeadSha: 'e'.repeat(40),

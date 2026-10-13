@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -118,7 +119,11 @@ describe('GiglProvider international shipments', () => {
       carrierName: 'GIG Logistics',
       displayName: 'GIG Logistics - International Express',
       isStationPickup: false,
-      price: 114_534,
+      price: 125_987.94,
+      providerCost: 114_534.49,
+      platformMargin: 11_453.45,
+      marginBasisPoints: 1000,
+      pricingVersion: 'gigl_platform_margin_v1',
       currency: 'NGN',
       providerRateId: 'GIGL_INTL_2_0_0_1',
     });
@@ -255,8 +260,56 @@ describe('GiglProvider international shipments', () => {
 
     expect(quotes).toHaveLength(1);
     expect(quotes[0]).toMatchObject({
-      price: 95_000,
+      price: 104_500,
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
+  });
+
+  it('marks a provider failure when every rate lacks booking selectors', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [
+              {
+                GrandTotal: 114_534.49,
+                LogisticCompany: 0,
+                DeliveryType: 2,
+              },
+              {
+                GrandTotal: 95_000,
+                LogisticCompany: 1,
+                DeliveryType: 2,
+              },
+            ],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+    const quotes = await provider.getQuotes({
+      ...quoteRequest,
+      shipmentType: 'international',
+      receiver: {
+        ...quoteRequest.receiver,
+        address: '123 Queen Street West',
+        city: 'Toronto',
+        state: 'Ontario',
+        country: 'Canada',
+        countryCode: 'CA',
+      },
+    });
+
+    expect(quotes).toEqual([]);
+    expect(quoteProviderFailure.get(quotes)?.message).toBe(
+      'GIGL international rates lacked booking selectors'
+    );
   });
 });

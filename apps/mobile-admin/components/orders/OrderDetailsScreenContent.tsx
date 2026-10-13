@@ -138,7 +138,9 @@ export function OrderDetailsScreenContent({
           />
           <OrderDetailsShippingSection
             address={controller.formatAddress(order.shipping_address)}
+            airportType={order.airport_type}
             colors={controller.colors}
+            deliveryMethod={order.delivery_method}
           />
 
           <OrderAuditTrailCard

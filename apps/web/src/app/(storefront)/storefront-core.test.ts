@@ -15,15 +15,33 @@ const storefrontCoreCss = readFileSync(cssPath, 'utf8');
  * overrides, because the bug was caused by the base header row clipping the
  * lazily mounted autocomplete layer before desktop/mobile overrides apply.
  */
-const cssRuleFor = (selector: string) => {
+const cssRuleFor = (selector: string, css = storefrontCoreCss) => {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = storefrontCoreCss.match(
+  const match = css.match(
     new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`)
   );
   return match?.groups?.body ?? '';
 };
 
 describe('storefront-core OgaBassey navbar layering', () => {
+  it('reserves the actual header height at mobile and desktop breakpoints', () => {
+    const loadingCss = readFileSync(
+      join(dirname(cssPath), 'storefront-header-loading.css'),
+      'utf8'
+    );
+    expect(storefrontCoreCss).toMatch(
+      /@import\s+['"]\.\/storefront-header-loading\.css['"]\s*;/
+    );
+    const headerSlot = cssRuleFor(
+      '.ogabassey-header-chrome-loading',
+      loadingCss
+    );
+    expect(headerSlot).toMatch(/min-height\s*:\s*132px/);
+    expect(loadingCss).toMatch(
+      /@media\s*\(min-width\s*:\s*768px\)\s*\{\s*\.ogabassey-header-chrome-loading\s*\{\s*min-height\s*:\s*128px;/
+    );
+  });
+
   it('allows search autocomplete suggestions to render above the secondary nav instead of being clipped by the black header row', () => {
     expect(cssRuleFor('.ogabassey-navbar__top')).toContain('overflow: visible');
     expect(cssRuleFor('.ogabassey-navbar__search-wrap')).toContain(

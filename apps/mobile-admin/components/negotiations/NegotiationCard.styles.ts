@@ -165,6 +165,10 @@ export const negotiationCardStyles = StyleSheet.create({
     gap: 12,
     marginBottom: SPACING.md,
   },
+  contactEmail: {
+    fontSize: 12,
+    marginBottom: SPACING.xs,
+  },
   contactButton: {
     flex: 1,
     height: 40,
@@ -178,7 +182,16 @@ export const negotiationCardStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.gray[200],
   },
+  emailButton: {
+    borderWidth: 1,
+    borderColor: palette.gray[200],
+  },
   callButtonText: {
+    color: palette.gray[700],
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  emailButtonText: {
     color: palette.gray[700],
     fontWeight: '600',
     fontSize: 13,
@@ -190,6 +203,22 @@ export const negotiationCardStyles = StyleSheet.create({
     color: palette.white,
     fontWeight: '600',
     fontSize: 13,
+  },
+  contactWarning: {
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginBottom: SPACING.md,
+  },
+  contactWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
   actionRow: {
     flexDirection: 'row',

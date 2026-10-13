@@ -10,9 +10,10 @@ export interface ProductWithCategory {
   canonical_url: string | null;
   images: unknown;
   updated_at: string | null;
-  categories: { slug: string | null } | null;
+  categories: { is_active?: boolean | null; slug: string | null } | null;
   product_categories?: Array<{
-    categories: { slug: string | null } | null;
+    category_id?: string | null;
+    categories: { is_active?: boolean | null; slug: string | null } | null;
   }> | null;
 }
 

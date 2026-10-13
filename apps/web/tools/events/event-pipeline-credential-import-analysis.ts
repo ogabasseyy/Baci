@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { parseEventPipelineTypeScriptSource } from '../../src/lib/events/event-pipeline-typescript-source';
 import { analyticsDeliveryModuleGraph as moduleGraph } from './analytics-delivery-module-graph';
 import { serviceRoleCredentialAuthority } from './event-pipeline-service-role-credential-analysis';
@@ -14,6 +14,7 @@ const ENV_PATH = 'apps/web/src/env.ts';
 // deliberately absent, so any import that also pulls one still fails closed.
 const SAFE_ENV_BINDINGS = new Set([
   'getAppUrl',
+  'getJumiaEnvironment',
   'getSupabaseAnonKey',
   'getSupabaseUrl',
 ]);

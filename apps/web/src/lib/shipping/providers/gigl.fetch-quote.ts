@@ -1,3 +1,4 @@
+import { priceGiglQuote } from '../gigl-platform-pricing';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import {
@@ -79,16 +80,19 @@ export async function fetchGiglQuote(
         status: response.status,
         error,
       });
-      return null;
+      throw new Error(`GIGL quote request failed (${response.status})`);
     }
     if (envelope?.status !== 200) {
-      return null;
+      throw new Error(
+        `GIGL quote request failed (${envelope?.status ?? 'unknown'})`
+      );
     }
     const priceData = apiClient.parseEnvelopeData(
       envelope,
       giglSchemas.priceData,
       'price'
     );
+    const pricing = priceGiglQuote(priceData.GrandTotal);
     const isStationPickup = pickupOption === PickupOptions.ServiceCentre;
     const serviceName =
       deliveryType === GiglDeliveryType.GoFaster ? 'GoFaster' : 'GoStandard';
@@ -109,11 +113,16 @@ export async function fetchGiglQuote(
       deliveryRange: '1-3 working days',
       minDays: 1,
       maxDays: 3,
-      price: Math.round(priceData.GrandTotal),
+      price: pricing.price,
+      providerCost: pricing.providerCost,
+      platformMargin: pricing.platformMargin,
+      marginBasisPoints: pricing.marginBasisPoints,
+      pricingVersion: pricing.pricingVersion,
       currency: 'NGN',
       pickupIncluded: true,
       insuranceIncluded: true,
       providerRateId: buildGiglProviderRateId({
+        senderStationId: senderStation.StationId,
         receiverStationId: receiverStation.StationId,
         pickupOption,
         vehicleType: getVehicleTypeForWeight(totalWeight),
@@ -143,6 +152,6 @@ export async function fetchGiglQuote(
       throw error;
     }
     io.log('error', 'Error fetching GIGL quote', { error: String(error) });
-    return null;
+    throw error;
   }
 }

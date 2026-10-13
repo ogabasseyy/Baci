@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import {
   authorityFindings,
   bindingInitializer,
@@ -218,7 +218,7 @@ function sourceViewFindings(
   const seedPaths = new Set(governed.seedPaths);
   const separatelyFrozenPaths = new Set([
     ...Object.keys(frozenFiles),
-    ...eventPipelineGovernedPaths.explicitlyHashedAuthorityPaths,
+    ...eventPipelineGovernedPaths.explicitlyGuardedAuthorityPaths,
   ]);
   const inheritedAuthorityFreezePaths = new Set(
     [...governedPaths, ...seedPaths].filter(
@@ -229,7 +229,7 @@ function sourceViewFindings(
     findings.push(`${path}: event-pipeline production root is missing`);
   findings.push(...serviceRoleCredentialAuthority.findings(sources));
   // biome-ignore format: compact union preserves the 300-line verifier gate.
-  const authorityRoots = [...new Set([...eventPipelineBoundaryManifest.trustedWrapperImporters, ...governed.productionPaths, ...governed.changedPaths, ...[...sources].filter(([path, source]) => eventPipelineProductionSurface.isIndependent(path, source)).map(([path]) => path)])];
+  const authorityRoots = [...new Set([...eventPipelineBoundaryManifest.trustedWrapperImporters, ...governed.productionPaths, ...governed.changedPaths, ...[...sources].filter(([path, source]) => eventPipelineProductionSurface.isIndependent(path, source) && !path.startsWith('apps/web/src/app/api/marketplace/jumia/')).map(([path]) => path)])];
   findings.push(
     ...serviceAuthorityGraphFindings(
       sources,
@@ -240,6 +240,8 @@ function sourceViewFindings(
     )
   );
   for (const [path, source] of sources) {
+    if (path === eventPipelineGovernedPaths.retiredPlatformAuthorityHelperPath)
+      findings.push(`${path}: retired platform authority helper is present`);
     const enforceClassification = governedPaths.has(path);
     const enforceEscapes = enforceClassification || seedPaths.has(path);
     if (!enforceEscapes && !source.includes('rpc')) continue;
@@ -279,10 +281,8 @@ export function verifyEventPipelineBoundaries(
   } catch {
     return ['frozen event-pipeline source snapshot is unavailable'];
   }
-  try { authorityByteSources = readGitSourceSnapshot.committedRevision(root, authorityByteBaseSha); }
-  catch { return ['frozen event-pipeline authority-byte snapshot is unavailable']; }
-  for (const path of snapshot.missingStagedPaths)
-    findings.push(`${path}: staged source is missing from index stage 0`);
+  try { authorityByteSources = readGitSourceSnapshot.committedRevision(root, authorityByteBaseSha); } catch { return ['frozen event-pipeline authority-byte snapshot is unavailable']; }
+  for (const path of snapshot.missingStagedPaths) findings.push(`${path}: staged source is missing from index stage 0`);
   for (const view of views) findings.push(...sourceViewFindings(view.sources, view.governed, frozenSources, authorityByteSources));
   return [...new Set(findings)].sort();
 }

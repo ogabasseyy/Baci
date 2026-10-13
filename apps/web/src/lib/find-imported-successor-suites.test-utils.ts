@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 
 function moduleExpression(node: ts.Node): ts.Expression | undefined {
   if (

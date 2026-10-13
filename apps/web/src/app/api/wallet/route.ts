@@ -1,7 +1,11 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import {
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import { walletSettingsSchema } from '@/schemas/wallet';
 
@@ -30,101 +34,64 @@ export async function GET() {
         { status: 404 }
       );
     }
+    const access = toUserAccess(merchantContext);
+    if (!hasPermission(access, 'analytics', 'view')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const merchantId = merchantContext.merchantId;
 
-    // Get or create wallet
-    const { error: walletCreateError } = await supabase.rpc(
-      'get_or_create_merchant_wallet',
-      {
-        p_merchant_id: merchantId,
-      }
-    );
-    if (walletCreateError) {
-      console.error('Failed to get or create wallet:', walletCreateError);
-      return NextResponse.json(
-        { error: 'Failed to initialize wallet' },
-        { status: 500 }
-      );
-    }
-
-    // Get wallet details with summary (includes upcoming settlements)
+    // Reading a wallet must not initialize one: an otherwise harmless GET was
+    // previously a staff-reachable write through a SECURITY DEFINER RPC.
     const { data: walletSummary, error: summaryError } = await supabase.rpc(
       'get_wallet_summary',
       { p_merchant_id: merchantId }
     );
 
-    // Fallback to basic wallet if function doesn't exist yet
     if (summaryError) {
-      const { data: wallet, error: walletError } = await supabase
-        .from('merchant_wallets')
-        .select(
-          'id, available_balance, pending_balance, upcoming_balance, upcoming_count, total_earned, total_withdrawn, auto_payout_enabled, auto_payout_day, min_payout_amount, last_payout_at, last_payout_amount'
-        )
-        .eq('merchant_id', merchantId)
-        .single();
-
-      if (walletError) {
-        console.error('Failed to get wallet:', walletError);
-        return NextResponse.json(
-          { error: 'Failed to get wallet' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        wallet: {
-          id: wallet.id,
-          availableBalance: Number(wallet.available_balance),
-          pendingBalance: Number(wallet.pending_balance),
-          upcomingBalance: Number(wallet.upcoming_balance || 0),
-          upcomingCount: wallet.upcoming_count || 0,
-          totalEarned: Number(wallet.total_earned),
-          totalWithdrawn: Number(wallet.total_withdrawn),
-          autoPayoutEnabled: wallet.auto_payout_enabled,
-          autoPayoutDay: wallet.auto_payout_day,
-          minPayoutAmount: Number(wallet.min_payout_amount),
-          lastPayoutAt: wallet.last_payout_at,
-          lastPayoutAmount: wallet.last_payout_amount
-            ? Number(wallet.last_payout_amount)
-            : null,
-          canWithdraw: Number(wallet.available_balance) >= 1000,
-          nextSettlementDate: null,
-          nextSettlementAmount: null,
-        },
-      });
-    }
-
-    const summary = walletSummary?.[0];
-    if (!summary) {
+      console.error('Failed to get wallet summary:', summaryError);
       return NextResponse.json(
         { error: 'Failed to get wallet summary' },
         { status: 500 }
       );
     }
 
-    // PERFORMANCE: Use Promise.all to fetch independent queries concurrently
-    const [{ data: pendingSettlements }, { data: walletSettings }] =
-      await Promise.all([
-        // Get pending settlements for detailed view
-        supabase
-          .from('merchant_settlements')
-          .select(
-            'id, net_amount, gateway, source_type, expected_settlement_date, description'
-          )
-          .eq('merchant_id', merchantId)
-          .eq('status', 'pending')
-          .order('expected_settlement_date', { ascending: true })
-          .limit(10),
+    const summary = walletSummary?.[0];
+    if (!summary) {
+      // A newly created merchant may not have a wallet row yet. Keep this
+      // read-only endpoint usable without initializing one as a side effect.
+      return NextResponse.json({
+        wallet: {
+          id: null,
+          availableBalance: 0,
+          pendingBalance: 0,
+          upcomingBalance: 0,
+          upcomingCount: 0,
+          totalEarned: 0,
+          totalWithdrawn: 0,
+          autoPayoutEnabled: true,
+          autoPayoutDay: 'monday',
+          minPayoutAmount: 1000,
+          lastPayoutAt: null,
+          lastPayoutAmount: null,
+          canWithdraw: false,
+          nextSettlementDate: null,
+          nextSettlementAmount: null,
+        },
+        pendingSettlements: [],
+      });
+    }
 
-        // Get wallet settings
-        supabase
-          .from('merchant_wallets')
-          .select(
-            'auto_payout_enabled, auto_payout_day, min_payout_amount, last_payout_at, last_payout_amount'
-          )
-          .eq('id', summary.wallet_id)
-          .single(),
-      ]);
+    // PERFORMANCE: settlements are still read directly; payout settings come from
+    // the permission-checked wallet summary RPC projection.
+    const { data: pendingSettlements } = await supabase
+      .from('merchant_settlements')
+      .select(
+        'id, net_amount, gateway, source_type, expected_settlement_date, description'
+      )
+      .eq('merchant_id', merchantId)
+      .eq('status', 'pending')
+      .order('expected_settlement_date', { ascending: true })
+      .limit(10);
 
     return NextResponse.json({
       wallet: {
@@ -135,14 +102,17 @@ export async function GET() {
         upcomingCount: summary.upcoming_count,
         totalEarned: Number(summary.total_earned),
         totalWithdrawn: Number(summary.total_withdrawn),
-        autoPayoutEnabled: walletSettings?.auto_payout_enabled ?? true,
-        autoPayoutDay: walletSettings?.auto_payout_day ?? 'monday',
-        minPayoutAmount: Number(walletSettings?.min_payout_amount || 1000),
-        lastPayoutAt: walletSettings?.last_payout_at,
-        lastPayoutAmount: walletSettings?.last_payout_amount
-          ? Number(walletSettings.last_payout_amount)
+        autoPayoutEnabled: summary.auto_payout_enabled,
+        autoPayoutDay: summary.auto_payout_day,
+        minPayoutAmount: Number(summary.min_payout_amount),
+        lastPayoutAt: summary.last_payout_at,
+        lastPayoutAmount: summary.last_payout_amount
+          ? Number(summary.last_payout_amount)
           : null,
-        canWithdraw: summary.can_withdraw,
+        // Manual payouts are intentionally disabled until the payout worker
+        // can reserve funds and reconcile provider outcomes. Keep every
+        // consumer aligned with /api/payouts/request, which is fail-closed.
+        canWithdraw: false,
         nextSettlementDate: summary.next_settlement_date,
         nextSettlementAmount: summary.next_settlement_amount
           ? Number(summary.next_settlement_amount)
@@ -172,15 +142,6 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // CSRF protection - prevents cross-site request forgery attacks
-    const { valid, response } = await checkCsrfProtection(request);
-    if (!valid) {
-      return (
-        response ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
-    }
-
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
@@ -192,6 +153,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // CSRF protection - prevents cross-site request forgery attacks
+    const { valid, response } = await checkCsrfProtection(request);
+    if (!valid) {
+      return (
+        response ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+
     // Get merchant (supports both owners and staff)
     const merchantContext = await getMerchantForApiRequest(supabase, user.id);
     if (!merchantContext) {
@@ -201,6 +171,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
     const merchantId = merchantContext.merchantId;
+    if (!merchantContext.staffAccess.isOwner) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     let body: unknown;
     try {
@@ -238,11 +211,24 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Update wallet settings
+    // Only the owner-scoped RPC may materialize a wallet. Authenticated table
+    // grants deliberately allow settings UPDATE but not INSERT/UPSERT.
+    const { data: walletId, error: walletError } = await supabase.rpc(
+      'get_or_create_merchant_wallet',
+      { p_merchant_id: merchantId }
+    );
+    if (walletError || typeof walletId !== 'string') {
+      console.error('Failed to initialize wallet settings:', walletError);
+      return NextResponse.json(
+        { error: 'Failed to update settings' },
+        { status: 500 }
+      );
+    }
+
     const { error: updateError } = await supabase
       .from('merchant_wallets')
       .update(updates)
-      .eq('merchant_id', merchantId);
+      .eq('id', walletId);
 
     if (updateError) {
       console.error('Failed to update wallet settings:', updateError);

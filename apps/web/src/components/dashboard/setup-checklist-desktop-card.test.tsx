@@ -44,12 +44,45 @@ describe('SetupChecklistDesktopCard', () => {
       />
     );
 
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Ready to Launch.*100% complete.*Setup complete/,
+      })
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Publish Store' }));
     fireEvent.click(
       screen.getByRole('button', { name: 'Dismiss setup checklist' })
     );
     expect(onPublish).toHaveBeenCalledOnce();
     expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the setup checklist collapsed by default', () => {
+    render(
+      <SetupChecklistDesktopCard
+        compact={false}
+        dismissible
+        displayItems={[]}
+        incompleteItems={[]}
+        onDismiss={vi.fn()}
+        onPublish={vi.fn()}
+        publishing={false}
+        readiness={{ ...readiness, isPublished: true, overallProgress: 64 }}
+        requiredIncomplete={[]}
+        setShowAll={vi.fn()}
+        showAll={false}
+      />
+    );
+
+    const trigger = screen.getByRole('button', {
+      name: /Store is Live.*64% complete.*Required setup complete/,
+    });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Setup Progress')).toBeInTheDocument();
   });
 
   it('hides publish and dismiss actions when they are unavailable', () => {

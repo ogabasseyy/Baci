@@ -160,6 +160,27 @@ describe('MobileLcpHeroImage', () => {
     ).not.toHaveAttribute('sizes');
   });
 
+  it('lets the first mobile product image fill its column instead of rendering as an 80px thumbnail', () => {
+    const { container } = render(
+      <MobileLcpHeroImage
+        alt="Samsung Galaxy A27 5G"
+        imageFit="contain"
+        shouldPrioritizeImage={true}
+        src={HERO_MOBILE_LCP_SRC}
+      />
+    );
+
+    const picture = container.querySelector('picture');
+    const lcpImage = screen.getByRole('img', {
+      name: 'Samsung Galaxy A27 5G',
+    });
+
+    expect(picture).toHaveClass('h-full', 'w-full');
+    expect(picture).not.toHaveClass('max-h-20', 'max-w-20');
+    expect(lcpImage).toHaveClass('h-full', 'w-full');
+    expect(lcpImage).not.toHaveClass('max-h-20', 'max-w-20');
+  });
+
   it('keeps the img fallback transparent so desktop does not fetch the mobile source', () => {
     render(
       <MobileLcpHeroImage

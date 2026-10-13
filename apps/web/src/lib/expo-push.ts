@@ -11,6 +11,7 @@ import Expo, {
 } from 'expo-server-sdk';
 import { getExpoAccessToken } from '@/env';
 import { chunkArray, SUPABASE_IN_FILTER_CHUNK_SIZE } from '@/lib/chunk-array';
+import { preparePushNotificationPayload } from '@/lib/prepare-push-notification-payload';
 import { filterPushTokensByShipmentUpdateCapability } from '@/lib/push-token-capability';
 import {
   getPushTokenDeactivationReason,
@@ -19,8 +20,14 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   type DeliveryStartOptions,
+  type PushChunkDelivery,
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
+import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
+import {
+  createDeliveryStartBoundary,
+  unknownDeliveryOutcome,
+} from './push-delivery-boundary';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -67,6 +74,10 @@ export interface NotificationSendResult {
   sent: number;
   failed: number;
   errors: string[];
+  /** The provider call or ticket processing may have delivered a push. */
+  deliveryOutcome?: 'unknown';
+  /** Tokens whose ticket was accepted, for retrying only the failed subset. */
+  succeededTokens?: string[];
 }
 
 /**
@@ -79,6 +90,11 @@ export type NotificationChannel =
   | 'general'
   | 'admin'
   | 'promotions';
+
+type MerchantNotificationOptions = DeliveryStartOptions & {
+  /** Skip these tokens (already delivered on an earlier partial attempt). */
+  excludeTokens?: string[];
+};
 
 // ── Core send functions ──────────────────────────────────────────────────────
 
@@ -104,7 +120,7 @@ export async function sendPushNotification(
     },
   ];
 
-  const tickets = await sendPushNotifications(messages);
+  const { tickets } = await sendPushNotifications(messages);
   return tickets[0];
 }
 
@@ -114,11 +130,13 @@ export async function sendPushNotification(
  * - Validates tokens with `Expo.isExpoPushToken()`
  * - Chunks messages to stay within Expo API limits
  * - Returns a ticket per original message (invalid tokens get synthetic error tickets)
+ * - Reports `deliveryUncertain` when a provider request threw: the
+ *   outcome is unknown, never inferred from ticket error codes
  */
 export function sendPushNotifications(
   messages: ExpoPushMessage[],
   options?: DeliveryStartOptions
-): Promise<ExpoPushTicket[]> {
+): Promise<PushChunkDelivery> {
   return sendPushNotificationChunks(_getExpo(), messages, {
     onDeliveryStart: options?.onDeliveryStart,
     onDeliveryRejected: options?.onDeliveryRejected,
@@ -136,7 +154,7 @@ export async function notifyMerchant(
   body: string,
   data?: Record<string, unknown>,
   channelId: NotificationChannel = 'general',
-  options?: DeliveryStartOptions
+  options?: MerchantNotificationOptions
 ): Promise<NotificationSendResult> {
   const supabase = createAdminClient();
 
@@ -149,7 +167,7 @@ export async function notifyMerchant(
       .eq('app_type', 'admin'),
     options?.requiredShipmentUpdateCapability
   );
-  const { data: tokens, error } = await tokenQuery;
+  const { data: fetchedTokens, error } = await tokenQuery;
 
   if (error) {
     console.error('Error fetching push tokens:', error);
@@ -168,7 +186,14 @@ export async function notifyMerchant(
     return result;
   }
 
-  if (!tokens || tokens.length === 0) {
+  // Retries exclude tokens an earlier partial attempt already reached, so
+  // delivered devices never get duplicates.
+  const tokens = excludeDeliveredTokens(
+    fetchedTokens ?? [],
+    options?.excludeTokens
+  );
+
+  if (tokens.length === 0) {
     const result = { sent: 0, failed: 0, errors: [] };
     await recordPushAttempt(supabase, {
       merchantId,
@@ -197,19 +222,30 @@ export async function notifyMerchant(
   }));
 
   let result: NotificationSendResult;
+  const deliveryBoundary = createDeliveryStartBoundary(
+    options?.onDeliveryStart
+  );
   try {
-    const tickets = await sendPushNotifications(messages, options);
+    const { deliveryUncertain, tickets } = await sendPushNotifications(
+      messages,
+      {
+        ...options,
+        onDeliveryStart: deliveryBoundary.markDeliveryStarted,
+      }
+    );
 
     result = await processTickets(tickets, tokens, supabase, {
       merchantId,
       appType: 'admin',
       channel: channelId,
       notificationType: readNotificationType(data),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
       sent: 0,
       failed: tokens.length,
+      ...unknownDeliveryOutcome(deliveryBoundary.wasDeliveryStarted()),
       errors: [
         error instanceof Error ? error.message : 'Unknown push send error',
       ],
@@ -242,6 +278,7 @@ export async function notifyCustomer(
   options?: { merchantId?: string } & DeliveryStartOptions
 ): Promise<NotificationSendResult> {
   const supabase = createAdminClient();
+  const payload = preparePushNotificationPayload(data);
 
   // Merchant-specific notifications (e.g. wallet credits) must scope to the
   // tokens registered for that merchant's storefront — a user with tokens
@@ -270,10 +307,10 @@ export async function notifyCustomer(
       userId,
       appType: 'storefront',
       channel: channelId,
-      notificationType: readNotificationType(data),
+      notificationType: readNotificationType(payload),
       title,
       body,
-      payload: data,
+      payload,
       tokenCount: 0,
       result,
     });
@@ -287,10 +324,10 @@ export async function notifyCustomer(
       userId,
       appType: 'storefront',
       channel: channelId,
-      notificationType: readNotificationType(data),
+      notificationType: readNotificationType(payload),
       title,
       body,
-      payload: data,
+      payload,
       tokenCount: 0,
       result,
     });
@@ -301,7 +338,7 @@ export async function notifyCustomer(
     to: t.token,
     title,
     body,
-    data,
+    data: payload,
     sound: 'default' as const,
     channelId,
     priority: (channelId === 'orders' ? 'high' : 'default') as
@@ -311,17 +348,21 @@ export async function notifyCustomer(
 
   let result: NotificationSendResult;
   try {
-    const tickets = await sendPushNotifications(messages, {
-      onDeliveryStart: options?.onDeliveryStart,
-      onDeliveryRejected: options?.onDeliveryRejected,
-    });
+    const { deliveryUncertain, tickets } = await sendPushNotifications(
+      messages,
+      {
+        onDeliveryStart: options?.onDeliveryStart,
+        onDeliveryRejected: options?.onDeliveryRejected,
+      }
+    );
 
     result = await processTickets(tickets, tokens, supabase, {
       merchantId: options?.merchantId,
       userId,
       appType: 'storefront',
       channel: channelId,
-      notificationType: readNotificationType(data),
+      notificationType: readNotificationType(payload),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
@@ -338,10 +379,10 @@ export async function notifyCustomer(
     userId,
     appType: 'storefront',
     channel: channelId,
-    notificationType: readNotificationType(data),
+    notificationType: readNotificationType(payload),
     title,
     body,
-    payload: data,
+    payload,
     tokenCount: tokens.length,
     result,
   });
@@ -413,12 +454,14 @@ export async function notifyAdminUserDevices(
 
   let result: NotificationSendResult;
   try {
-    const tickets = await sendPushNotifications(messages);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
     result = await processTickets(tickets, tokens, supabase, {
       userId,
       appType: 'admin',
       channel: channelId,
       notificationType: readNotificationType(data),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
@@ -452,6 +495,12 @@ export interface TicketContext {
   appType?: 'admin' | 'storefront';
   channel?: string;
   notificationType?: string;
+  /**
+   * Carried from the chunk-delivery catch path: a provider request
+   * threw without a definitive response. Never inferred from ticket
+   * error codes — Expo's own `ExpoError` tickets are definitive.
+   */
+  deliveryUncertain?: boolean;
 }
 
 /**
@@ -505,8 +554,10 @@ export async function processTickets(
   supabase: ReturnType<typeof createAdminClient>,
   context?: TicketContext
 ): Promise<NotificationSendResult> {
+  const deliveryUnknown = context?.deliveryUncertain === true;
   let sent = 0;
   let failed = 0;
+  const succeededTokens: string[] = [];
   // Aggregate failures by error code so a 200-token send with one broken
   // token logs one actionable line instead of raw per-ticket noise.
   const errorAggregates = new Map<
@@ -529,6 +580,7 @@ export async function processTickets(
     const ticket = tickets[i];
     if (ticket.status === 'ok') {
       sent++;
+      succeededTokens.push(tokens[i].token);
       // Store ok tickets for receipt polling (they have a ticket.id)
       ticketsToStore.push({
         ticket_id: ticket.id,
@@ -640,7 +692,15 @@ export async function processTickets(
     }
   }
 
-  return { sent, failed, errors };
+  // Omit the key when empty so fully-failed batches keep the historical
+  // result shape (the field is optional).
+  return {
+    sent,
+    failed,
+    errors,
+    ...unknownDeliveryOutcome(deliveryUnknown),
+    ...(succeededTokens.length > 0 ? { succeededTokens } : {}),
+  };
 }
 
 export interface PushAttemptContext extends TicketContext {
@@ -676,6 +736,13 @@ function derivePushAttemptStatus(
   return 'failed';
 }
 
+const PUSH_ATTEMPT_INSERT_ATTEMPTS = 3;
+const PUSH_ATTEMPT_INSERT_RETRY_DELAY_MS = 100;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function recordPushAttempt(
   supabase: ReturnType<typeof createAdminClient>,
   context: PushAttemptContext
@@ -684,7 +751,10 @@ export async function recordPushAttempt(
     context.notificationType ??
     (typeof context.payload?.type === 'string' ? context.payload.type : null);
 
-  const { error } = await supabase.from('push_notification_attempts').insert({
+  // Persist per-token delivery state: retries read the union of delivered
+  // tokens across partial attempts and resend only to the failed subset.
+  const deliveredTokens = context.result.succeededTokens ?? [];
+  const attemptRow = {
     merchant_id: context.merchantId ?? null,
     user_id: context.userId ?? null,
     app_type: context.appType ?? 'admin',
@@ -692,16 +762,38 @@ export async function recordPushAttempt(
     notification_type: notificationType,
     title: context.title,
     body: context.body,
-    payload: context.payload ?? {},
+    payload: withDeliveredTokens(context.payload, deliveredTokens),
     token_count: context.tokenCount,
     sent_count: context.result.sent,
     failed_count: context.result.failed,
     status: derivePushAttemptStatus(context.tokenCount, context.result),
     errors: context.result.errors,
-  });
+  };
 
-  if (error) {
-    console.error('Failed to store push attempt:', error);
+  // A lost attempt row blinds the next retry's exclusion set and duplicates
+  // alerts on delivered devices, so transient write failures are retried.
+  for (let attempt = 1; ; attempt++) {
+    const { error } = await supabase
+      .from('push_notification_attempts')
+      .insert(attemptRow);
+    if (!error) {
+      return;
+    }
+    if (attempt >= PUSH_ATTEMPT_INSERT_ATTEMPTS) {
+      // Last resort: log loudly with enough context for manual
+      // reconciliation. The delivery result is intentionally NOT failed
+      // here — failing a delivered batch would park it for retry with an
+      // empty exclusion set and duplicate alerts on every device, which is
+      // worse than a missing log row.
+      console.error('Failed to store push attempt:', error, {
+        merchantId: context.merchantId ?? null,
+        notificationType,
+        tokenCount: context.tokenCount,
+        deliveredTokenCount: deliveredTokens.length,
+      });
+      return;
+    }
+    await sleep(PUSH_ATTEMPT_INSERT_RETRY_DELAY_MS * attempt);
   }
 }
 
@@ -1026,6 +1118,7 @@ export async function notifyPriceDrop(
   );
 }
 
+export { notifyNewInvoice } from './invoice-notifications';
 export type {
   StorefrontUpdateNudgeParams,
   StorefrontUpdateNudgeResult,

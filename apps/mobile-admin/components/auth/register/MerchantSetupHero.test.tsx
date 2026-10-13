@@ -50,6 +50,17 @@ describe('MerchantSetupHero', () => {
     expect(screen.queryByText(/Welcome/)).not.toBeInTheDocument();
   });
 
+  it('uses location-focused copy when names are already known', () => {
+    render(<MerchantSetupHero ownerFocus="location" step="owner" />);
+
+    expect(screen.getByText('Where is your business?')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Choose your country so we can set currency and local payment options.'
+      )
+    ).toBeInTheDocument();
+  });
+
   it('welcomes the owner on business setup and exposes the back action', () => {
     const onBack = vi.fn();
     render(

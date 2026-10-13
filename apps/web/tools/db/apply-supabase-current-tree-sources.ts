@@ -88,6 +88,60 @@ const replaySourceReplacements = new Map<string, ReplaySourceReplacement>([
         '605a0d48a4f116e67ee626ff173b66c6c80cefa77ad606a3813aa1ea6deda62a',
     },
   ],
+  [
+    'supabase/migrations/20260811135000_harden_paystack_chat_order_relationship.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260813192730_repair_harden_paystack_chat_order_relationship.sql',
+      sourceSha256:
+        '210c24070e7295dcdec19e10d33dd456a1dbc24891812cc74b4bfddeff808456',
+    },
+  ],
+  [
+    'supabase/migrations/20260811140000_harden_paystack_manual_reconciliation_review_contracts.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260814153213_repair_harden_paystack_manual_reconciliation_review_contracts.sql',
+      sourceSha256:
+        '4ed01fb7657a37530a4bdb5de152b4bf869e4b2ddaf7bc04c29f7ca131207408',
+    },
+  ],
+  [
+    'supabase/migrations/20260812170000_quiz_materialized_final_rankings_v2.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260814230000_repair_quiz_materialized_final_rankings_v2.sql',
+      sourceSha256:
+        '1b3eec0aa6d442ab9f3a61149e0839a0cad6aab80ea567200c815b9e2c98dee5',
+    },
+  ],
+  [
+    'supabase/migrations/20260812173500_quiz_event_results_v2_deny_client_policy.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260815000000_repair_quiz_event_results_v2_deny_client_policy.sql',
+      sourceSha256:
+        '2a1d2341ec3631c74b9d44043db1f67f80b51012a796aea6477231bedfab98ef',
+    },
+  ],
+  [
+    'supabase/migrations/20260815103000_capture_private_expense_receipt_cleanup.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260815220000_repair_capture_private_expense_receipt_cleanup.sql',
+      sourceSha256:
+        '64530e9b7d94d9e2f832a8464593af977cb0af18c727a1a1b54c62310550997b',
+    },
+  ],
+  [
+    'supabase/migrations/20260921100200_enforce_merchant_shipping_provider_policy.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260926130000_repair_shipping_provider_policy_audit.sql',
+      sourceSha256:
+        'c89fb79e44148fe68caf65d99aed81de7a1ffd0d42b6ff85fbd41d9d98eceda3',
+    },
+  ],
 ]);
 
 const replaySourceSupersessions = new Map<string, ReplaySourceSupersession>([

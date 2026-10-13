@@ -8,24 +8,39 @@ type ServiceModule = typeof import('../lib/supabase/service') & {
 type SyncModule = typeof import('../lib/jumia/order-sync') & {
   default?: typeof import('../lib/jumia/order-sync');
 };
+type CredentialModule = typeof import('../lib/jumia/server-credential-client') & {
+  default?: typeof import('../lib/jumia/server-credential-client');
+};
 
 export async function runJumiaOrderSyncCli(): Promise<number> {
   const serviceModule = (await import('../lib/supabase/service')) as ServiceModule;
   const syncModule = (await import('../lib/jumia/order-sync')) as SyncModule;
+  const credentialModule = (await import(
+    '../lib/jumia/server-credential-client'
+  )) as CredentialModule;
   const createServiceClient =
     serviceModule.createServiceClient ??
     serviceModule.default?.createServiceClient;
   const syncJumiaOrdersForActiveIntegrations =
     syncModule.syncJumiaOrdersForActiveIntegrations ??
     syncModule.default?.syncJumiaOrdersForActiveIntegrations;
+  const createJumiaCredentialServiceClient =
+    credentialModule.createJumiaCredentialServiceClient ??
+    credentialModule.default?.createJumiaCredentialServiceClient;
 
   if (!createServiceClient) throw new Error('Missing dependency: createServiceClient');
   if (!syncJumiaOrdersForActiveIntegrations) {
     throw new Error('Missing dependency: syncJumiaOrdersForActiveIntegrations');
   }
+  if (!createJumiaCredentialServiceClient) {
+    throw new Error(
+      'Missing dependency: createJumiaCredentialServiceClient'
+    );
+  }
 
   const result = await syncJumiaOrdersForActiveIntegrations(
-    createServiceClient()
+    createServiceClient(),
+    { credentialClient: createJumiaCredentialServiceClient() }
   );
 
   console.log(

@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = jest.fn<FetchImplementation>();
 global.fetch = mockFetch;
 jest.mock('@/lib/supabase', () => ({
   supabase: {
@@ -31,6 +32,7 @@ describe('fetchQuizLeaderboard', () => {
         JSON.stringify({
           currentPlayer,
           entries: [currentPlayer],
+          participantCount: 1,
           status: 'published',
         }),
         { status: 200 }
@@ -41,6 +43,7 @@ describe('fetchQuizLeaderboard', () => {
     ).resolves.toEqual({
       currentPlayer,
       entries: [currentPlayer],
+      participantCount: 1,
       status: 'published',
     });
     expect(

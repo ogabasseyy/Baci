@@ -18,6 +18,7 @@ interface Insight {
 interface AIInsightsPanelProps {
   className?: string;
   activeCategory: AnalyticsCategory;
+  merchantId?: string;
 }
 
 // Default placeholder insights shown while AI loads
@@ -44,6 +45,7 @@ const CATEGORY_KEYWORDS: Partial<Record<AnalyticsCategory, readonly string[]>> =
   } as const;
 
 interface FetchInsightsCallbacks {
+  merchantId?: string;
   signal: AbortSignal;
   setInsights: (insights: Insight[]) => void;
   setError: (value: boolean) => void;
@@ -52,6 +54,7 @@ interface FetchInsightsCallbacks {
 }
 
 async function fetchInsights({
+  merchantId,
   signal,
   setInsights,
   setError,
@@ -60,6 +63,7 @@ async function fetchInsights({
 }: FetchInsightsCallbacks) {
   try {
     const response = await fetch('/api/analytics/insights', {
+      headers: merchantId ? { 'x-baci-merchant-id': merchantId } : undefined,
       signal,
       // Don't block on this request
       priority: 'low' as RequestPriority,
@@ -93,6 +97,7 @@ async function fetchInsights({
 export function AIInsightsPanel({
   className,
   activeCategory,
+  merchantId,
 }: AIInsightsPanelProps) {
   const [insights, setInsights] = useState<Insight[]>(placeholderInsights);
   const [loading, setLoading] = useState(true);
@@ -102,17 +107,36 @@ export function AIInsightsPanel({
 
   useEffect(() => {
     const controller = new AbortController();
+    let isCurrentRequest = true;
+    setInsights(placeholderInsights);
+    setLoading(true);
+    setError(false);
+    setCurrentIndex(0);
 
     fetchInsights({
+      merchantId,
       signal: controller.signal,
-      setInsights,
-      setError,
-      setLoading,
-      startTransition,
+      setInsights: (value) => {
+        if (isCurrentRequest) setInsights(value);
+      },
+      setError: (value) => {
+        if (isCurrentRequest) setError(value);
+      },
+      setLoading: (value) => {
+        if (isCurrentRequest) setLoading(value);
+      },
+      startTransition: (callback) => {
+        startTransition(() => {
+          if (isCurrentRequest) callback();
+        });
+      },
     });
 
-    return () => controller.abort();
-  }, []);
+    return () => {
+      isCurrentRequest = false;
+      controller.abort();
+    };
+  }, [merchantId]);
 
   // Filter insights based on active category
   const filteredInsights =

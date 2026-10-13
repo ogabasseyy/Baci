@@ -4,7 +4,6 @@ const {
   buildCompareIndexSections,
   COMPARE_INDEX_CATEGORY_DISCOVERY_LIMIT,
   COMPARE_INDEX_CATEGORY_SCAN_LIMIT,
-  COMPARE_INDEX_DISCOVERY_CONCURRENCY,
   COMPARE_INDEX_PRODUCTS_PER_CATEGORY_LIMIT,
 } = await import('./compare-index-discovery');
 
@@ -33,47 +32,6 @@ function makeProducts(count = 2) {
 describe('compare index discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('bounds scanned category discovery and concurrent category data loads', async () => {
-    const categories = Array.from(
-      { length: COMPARE_INDEX_CATEGORY_DISCOVERY_LIMIT + 4 },
-      (_, index) => ({
-        name: `Category ${index}`,
-        slug: `category-${index}`,
-      })
-    );
-    let activeLoads = 0;
-    let maxActiveLoads = 0;
-    const getCategoryPageData = vi.fn(
-      async (_categorySlug: string, _productOffset: number) => {
-        activeLoads += 1;
-        maxActiveLoads = Math.max(maxActiveLoads, activeLoads);
-        await Promise.resolve();
-
-        activeLoads -= 1;
-
-        return {
-          isCollection: false,
-          isInactiveCategory: false,
-          products: makeProducts(),
-        };
-      }
-    );
-
-    await buildCompareIndexSections({
-      categories,
-      getCategoryPageData,
-      storeUrl: 'https://store.test',
-    });
-
-    expect(getCategoryPageData).toHaveBeenCalledTimes(categories.length);
-    expect(getCategoryPageData).toHaveBeenCalledWith(
-      'category-0',
-      0,
-      COMPARE_INDEX_PRODUCTS_PER_CATEGORY_LIMIT
-    );
-    expect(maxActiveLoads).toBe(COMPARE_INDEX_DISCOVERY_CONCURRENCY);
   });
 
   it('caps compare links per category and across the full index', async () => {

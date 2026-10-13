@@ -1,8 +1,10 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition, toAsciiLowerCase } from '@baci/shared/lib';
 import { storefrontProductFilters } from '../src/lib/storefront-product-filters';
 
 export type McpSearchProductRow = {
   id: string;
+  discovery_metadata?: unknown;
+  description?: string | null;
   available_conditions?: unknown;
   brand?: string | null;
   category?: string | null;
@@ -13,6 +15,7 @@ export type McpSearchProductRow = {
   has_condition_offers?: boolean | null;
   has_variants?: boolean | null;
   images?: unknown;
+  inventory_tracking_policy?: string | null;
   manage_stock?: boolean | null;
   name?: string | null;
   price?: number | null;
@@ -175,18 +178,16 @@ export function matchesMcpPostHydrationFilters(
 ) {
   if (
     filters.category &&
-    !String(product.category ?? '')
-      .toLowerCase()
-      .includes(filters.category.toLowerCase())
+    !toAsciiLowerCase(String(product.category ?? ''))
+      .includes(toAsciiLowerCase(filters.category))
   ) {
     return false;
   }
 
   if (
     filters.brand &&
-    !String(product.brand ?? '')
-      .toLowerCase()
-      .includes(filters.brand.toLowerCase())
+    !toAsciiLowerCase(String(product.brand ?? ''))
+      .includes(toAsciiLowerCase(filters.brand))
   ) {
     return false;
   }

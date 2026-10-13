@@ -1,0 +1,300 @@
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
+import { assertCanonicalOriginPushUrls, assertCleanWorkerDeployEnv, CANONICAL_REPOSITORY, originRepoSlug } from './release-remote-validation.mjs';
+import { createRunner, runWorkerDeploy } from './release-subprocess.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const repository = CANONICAL_REPOSITORY;
+const workerHost = 'bassey@82.29.190.219';
+const coordinationId = randomUUID();
+const { command, gh, vercelApi } = createRunner(root);
+
+const vercelProjectId = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
+const vercelScope = `teamId=team_P85yMqd79TPq8aSGSt2kojWY&projectId=${vercelProjectId}`;
+
+function readServingDeploymentId() {
+  let alias;
+  try {
+    alias = JSON.parse(
+      vercelApi(`/v4/aliases/ogabassey.com?${vercelScope}`)
+    );
+  } catch (error) {
+    // A transient non-JSON error page or empty response is a retryable
+    // transport failure, not auth: keep the original message so
+    // preflight does not misdirect the operator to re-authenticate.
+    const unreadable = new Error(`serving alias response unreadable; retry the read (${error.message})`);
+    unreadable.keepOriginalMessage = true;
+    throw unreadable;
+  }
+  if (!/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId ?? '')) {
+    const unidentified = new Error('cannot identify the serving deployment from the alias response');
+    unidentified.keepOriginalMessage = true;
+    throw unidentified;
+  }
+  return alias.deploymentId;
+}
+
+export function assertVercelAccess(readAlias = readServingDeploymentId) {
+  try {
+    readAlias();
+  } catch (error) {
+    if (error && error.keepOriginalMessage) throw error;
+    throw new Error(
+      'operator Vercel CLI must provide `vercel api` (>= 50.5.1) with production project access; upgrade vercel or re-authenticate and retry'
+    );
+  }
+}
+
+// Covers the sequential job allowance (10 + 50 + 10 + 150 = 220 min:
+// vps-drain-readiness, db-migrations, gigl-worker-capability,
+// deploy-production) plus queue and environment-approval slack, so
+// a healthy slow release is never abandoned while it may publish.
+export const RUN_WATCH_TIMEOUT_MS = 300 * 60 * 1000;
+// Worker deploy + verify steps are single-digit minutes when healthy;
+// 30 minutes bounds a hung deploy.sh or SSH session loudly.
+export const WORKER_STEP_TIMEOUT_MS = 30 * 60 * 1000;
+
+export async function waitForRunCompletion(runId, readStatus, options = {}) {
+  const { pollMs = 10000, timeoutMs = RUN_WATCH_TIMEOUT_MS, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), onWait = null } = options;
+  const started = Date.now();
+  for (;;) {
+    const reading = await readStatus();
+    const status = reading?.status ?? reading;
+    // Approval gating parks a run at completed/action_required: not done.
+    if (status === 'completed' && reading?.conclusion !== 'action_required' && (typeof reading === 'string' || reading?.conclusion)) return;
+    if (Date.now() - started >= timeoutMs) {
+      const error = new Error(`timed out waiting for workflow run ${runId} to complete; inspect the run before retrying`);
+      error.indeterminateDispatch = true;
+      throw error;
+    }
+    if (onWait) onWait(status, Date.now() - started);
+    await sleep(pollMs);
+  }
+}
+
+export function parseJobsPayload(text, runId) {
+  try {
+    return JSON.parse(text).jobs;
+  } catch {
+    throw new Error(`workflow run ${runId} jobs unreadable; inspect preceding gh diagnostics`);
+  }
+}
+
+// gh --jq emits raw unquoted scalars for string results: never
+// JSON.parse them. Empty (or literal null) means the field is absent.
+export function parseGhJqString(output, label) {
+  const value = String(output ?? '').trim();
+  if (!value || value === 'null') throw new Error(`${label} unreadable; inspect preceding gh diagnostics`);
+  return value;
+}
+
+export function readWorkflowRunStatus(ghInvoke, runId) {
+  const fields = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status, .conclusion] | @tsv']) ?? '').split('\t');
+  if (fields.length !== 2 || !fields[0].trim() || fields[0].trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
+  return { status: fields[0].trim(), conclusion: fields[1].trim() };
+}
+
+export function shouldHoldReleaseLock(error) {
+  return error?.indeterminateDispatch === true;
+}
+
+export function assertServingDeploymentStable(firstId, secondId) {
+  if (firstId !== secondId) {
+    throw new Error('live production deployment changed during verification; reconcile before retrying');
+  }
+}
+
+export function assertRemovableLockPath(lockPath) {
+  if (basename(resolve(lockPath)) !== 'baci-production-release.lock') {
+    throw new Error(`refusing to remove unexpected lock path: ${lockPath}`);
+  }
+}
+
+// Pagination is manual and capped: one gh call per page, each holding at
+// most 100 full run objects (~400KB, inside the default 1MB spawn
+// buffer). gh's --paginate would concatenate the unbounded full
+// history through a single buffer until ENOBUFS blocks every release.
+// Five pages (500 runs) generously cover the newest-first windows
+// every caller needs: the just-dispatched run, in-flight guards, and
+// concurrent siblings are all minutes old.
+export const RUNS_PAGE_SIZE = 100;
+export const RUNS_MAX_PAGES = 5;
+
+export function slimWorkflowRun(run) {
+  return {
+    databaseId: run.id, headSha: run.head_sha, status: run.status, conclusion: run.conclusion, event: run.event, title: run.display_title,
+  };
+}
+
+export const DISPATCH_DISCOVERY_ATTEMPTS = 36;
+export const DISPATCH_DISCOVERY_POLL_MS = 5000;
+
+// Two-phase dispatch discovery: the new dispatch is newest-first, so
+// phase 1 polls page 1 only (36 x 5s against slow API visibility);
+// once a candidate is visible, phase 2 runs one full pagination to
+// confirm it and enforce cross-page ambiguity. Worst case ~41 API
+// calls instead of ~180. A phase-1 ambiguity throws immediately.
+export async function findProductionDispatchRun(readPage, readAll, baseline, coordinationId, commit, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  for (let attempt = 0; attempt < DISPATCH_DISCOVERY_ATTEMPTS; attempt++) {
+    const visible = selectCoordinatedRun(readPage(), baseline, coordinationId, commit);
+    if (visible) {
+      return selectCoordinatedRun(readAll(), baseline, coordinationId, commit);
+    }
+    await sleep(DISPATCH_DISCOVERY_POLL_MS);
+  }
+  // Tag at the source: any direct caller checking
+  // shouldHoldReleaseLock must hold on unknown outcome, not just the
+  // coordinateRelease wrapper that re-tags today.
+  const exhausted = new Error('dispatch outcome unknown; inspect GitHub before retrying');
+  exhausted.indeterminateDispatch = true;
+  throw exhausted;
+}
+
+export function parseRunAttempt(text) {
+  // parseInt('1abc') -> 1 would release the lock as attempt 1: require
+  // the whole string to be a positive safe integer, else fail closed.
+  const value = String(text ?? '').trim();
+  if (!/^[1-9][0-9]*$/.test(value)) return null;
+  const count = Number(value);
+  return Number.isSafeInteger(count) ? count : null;
+}
+
+export function readRuns(filter, paginate = false) {
+  const runs = [];
+  const lastPage = paginate ? RUNS_MAX_PAGES : 1;
+  for (let page = 1; page <= lastPage; page++) {
+    const endpoint = `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`;
+    const text = gh(['api', endpoint]);
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error(`workflow run listing for ${filter} returned invalid JSON; inspect preceding gh diagnostics`);
+    }
+    if (!Array.isArray(payload.workflow_runs)) {
+      throw new Error(`workflow run listing for ${filter} returned no runs payload; inspect preceding gh diagnostics`);
+    }
+    runs.push(...payload.workflow_runs.map(slimWorkflowRun));
+    if (payload.workflow_runs.length < RUNS_PAGE_SIZE) break;
+  }
+  return runs;
+}
+
+async function main() {
+  if (process.argv.slice(2).join(' ') !== '--approve-production --approve-prebuilt-fallback') {
+    throw new Error('requires --approve-production --approve-prebuilt-fallback; never run from a publishing workflow');
+  }
+  const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
+  const lockPath = releaseLockPath(root, commonDirectory);
+  // Live-alias verification shells to `vercel api` (shipped in CLI
+  // 50.5.1). Preflight a real scoped read before acquiring the lock:
+  // `--help` would pass without authentication, deferring auth
+  // failures until after publication. A purely local precondition
+  // failure must not leave a lock behind, and the probes need no
+  // mutual exclusion.
+  assertVercelAccess();
+  assertCleanWorkerDeployEnv();
+  acquireReleaseLock(lockPath);
+  let holdLock = false;
+  try {
+    const result = await coordinateRelease({
+      verifyCheckout: async () => {
+        if (command('git', ['status', '--porcelain', '--untracked-files=all'])) throw new Error('release checkout must be clean');
+        // Both directions: a forked pushurl would send the promote
+        // barrier and record where production cannot see them, while a
+        // forked fetch URL would make the worker in-flight guard query
+        // the fork and miss active canonical runs. Without an explicit
+        // pushurl the push query falls back to the fetch URL.
+        if (originRepoSlug(command('git', ['remote', 'get-url', 'origin'], true, { trim: false }).replace(/\n$/, '')) !== repository.toLowerCase()) {
+          throw new Error('release checkout must use the canonical repository');
+        }
+        assertCanonicalOriginPushUrls(command('git', ['remote', 'get-url', '--push', '--all', 'origin'], true, { trim: false }), (args) => command('git', args, true, { trim: false }));
+        return command('git', ['rev-parse', 'HEAD']);
+      },
+      readMain: async () => parseGhJqString(gh(['api', `repos/${repository}/git/ref/heads/main`, '--jq', '.object.sha // empty']), 'main ref'),
+      listRuns: async () => [...IN_FLIGHT_RUN_STATUSES]
+        .flatMap(status => readRuns(`status=${status}`, true)),
+      listCoordinatedRuns: async () => readRuns('event=workflow_dispatch', true),
+      // Generous explicit bounds so a hung deploy or SSH session
+      // fails loudly instead of wedging the operator session forever
+      // with the lock held; healthy runs take single-digit minutes.
+      updateWorkers: async () => runWorkerDeploy(() => command('bash', ['vps-workers/deploy.sh'], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS })),
+      verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
+        `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
+      dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
+        '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
+      findRun: async (commit, baseline) => findProductionDispatchRun(
+        () => readRuns('event=workflow_dispatch', false),
+        () => readRuns('event=workflow_dispatch', true),
+        baseline,
+        coordinationId,
+        commit
+      ),
+      // Poll the run endpoint, not `gh run watch`: watch requires
+      // checks:read and cannot authenticate with fine-grained PATs,
+      // while the Actions API reads work. Status and conclusion ride
+      // one call so the waiter sees approval-parked runs as waiting.
+      watchRun: async runId => waitForRunCompletion(
+        runId,
+        async () => readWorkflowRunStatus(gh, runId),
+        {
+          onWait: (status, elapsedMs) =>
+            process.stderr.write(`waiting on run ${runId}: ${status} (${Math.round(elapsedMs / 1000)}s)\n`),
+        }
+      ),
+      cancelRun: async runId => gh(['run', 'cancel', String(runId), '--repo', repository]),
+      readJobs: async runId => parseJobsPayload(gh(['run', 'view', String(runId), '--repo', repository, '--json', 'jobs']), runId),
+      readAttemptCount: async runId => {
+        // Null (API error or unparseable) fails closed in the
+        // coordinator: an unreadable attempt count cannot rule out a
+        // superseded promoting attempt.
+        try {
+          return parseRunAttempt(gh(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '.run_attempt // empty']));
+        } catch {
+          return null;
+        }
+      },
+      verifyLive: async commit => {
+        const deploymentId = readServingDeploymentId();
+        const deployment = JSON.parse(vercelApi(`/v13/deployments/${deploymentId}?${vercelScope}`));
+        assertLiveDeployment(deployment, commit, vercelProjectId);
+        // Close the alias-to-deployment TOCTOU window: the alias may
+        // have flipped to another deployment between the two reads.
+        assertServingDeploymentStable(deploymentId, readServingDeploymentId());
+      },
+    }, coordinationId);
+    process.stdout.write(`${JSON.stringify({ ...result, status: 'live_release_verified' })}\n`);
+  } catch (error) {
+    if (shouldHoldReleaseLock(error)) {
+      holdLock = true;
+      process.stderr.write(`indeterminate dispatch outcome; release lock held at ${lockPath} — reconcile existing runs before removing it\n`);
+    }
+    throw error;
+  } finally {
+    if (!holdLock) {
+      assertRemovableLockPath(lockPath);
+      // force: the lock lives for the whole multi-hour release and
+      // operators may remove it manually mid-run; cleanup must never
+      // throw ENOENT and mask the real release outcome.
+      rmSync(lockPath, { recursive: true, force: true });
+    }
+  }
+}
+
+const invokedDirectly = (() => {
+  try {
+    return !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  main().catch(error => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
+}

@@ -6,7 +6,6 @@ import type { ThemeColors } from '@/constants/theme';
 import { ProductImageCard } from './ProductImageCard';
 
 vi.mock('@/components/ui/SafeImage', () => ({
-  __esModule: true,
   default: ({ source }: { source: { uri: string } }) => (
     <img alt="Product preview" data-src={source.uri} />
   ),
@@ -43,10 +42,30 @@ vi.mock('react-native', async () => {
       absoluteFillObject: {},
       create: (styles: Record<string, unknown>) => styles,
     },
-    Text: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('span', null, children),
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
+    Text: ({
+      accessibilityLabel,
+      children,
+    }: {
+      accessibilityLabel?: string;
+      children?: React.ReactNode;
+    }) =>
+      React.createElement(
+        'span',
+        { 'aria-label': accessibilityLabel },
+        children
+      ),
+    View: ({
+      accessibilityLabel,
+      children,
+    }: {
+      accessibilityLabel?: string;
+      children?: React.ReactNode;
+    }) =>
+      React.createElement(
+        'div',
+        { 'aria-label': accessibilityLabel },
+        children
+      ),
   };
 });
 
@@ -90,9 +109,9 @@ describe('ProductImageCard', () => {
       />
     );
 
-    expect(
-      screen.getByRole('img', { name: 'Product preview' })
-    ).toHaveAttribute('data-src', 'https://example.com/image.jpg');
+    const image = screen.getByRole('img', { name: 'Product preview' });
+
+    expect(image).toHaveAttribute('data-src', 'https://example.com/image.jpg');
     expect(screen.getByText('Change Image')).toBeInTheDocument();
   });
 

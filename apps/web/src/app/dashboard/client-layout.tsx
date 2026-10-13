@@ -1,39 +1,5 @@
 'use client';
 
-import {
-  BarChart3,
-  Bot,
-  ChevronDown,
-  FileText,
-  Gift,
-  Globe,
-  LayoutDashboard,
-  LayoutTemplate,
-  Loader2,
-  LogOut,
-  Megaphone,
-  Menu,
-  MessageCircle,
-  Newspaper,
-  Package,
-  Paintbrush,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Search,
-  Settings,
-  ShoppingCart,
-  Store,
-  Tag,
-  Trophy,
-  UploadCloud,
-  User,
-  UserCog,
-  Users,
-  Wallet,
-  Wrench,
-} from 'lucide-react';
-import type { Route } from 'next';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   type Dispatch,
@@ -42,44 +8,20 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { BagIcon } from '@/components/bag-icon';
-
 import { useUpgradeModal } from '@/components/dashboard/upgrade-modal';
-import { Logo } from '@/components/logo';
 import { NotificationBanner } from '@/components/notifications/notification-banner';
-import { NotificationCenter } from '@/components/notifications/notification-center';
-import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import { useToast } from '@/hooks/use-toast';
-import { COUNTRIES, getCountryByCode } from '@/lib/countries';
-import { FEATURES, isPlanTier, type PlanTier } from '@/lib/feature-flags';
-import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
-import { asRoute } from '@/lib/routes';
-import { cn } from '@/lib/utils';
+import { getCountryByCode } from '@/lib/countries';
+import { buildDashboardStoreUrl } from '@/lib/dashboard-store-url';
+import { DashboardHeaderActions } from './dashboard-header-actions';
+import { DashboardMobileBottomNav } from './dashboard-mobile-bottom-nav';
+import { DashboardMobileNav } from './dashboard-mobile-nav';
+import { DashboardNavCapsule } from './dashboard-nav-capsule';
+import { filterDashboardNavItems } from './dashboard-nav-filter';
+import { flattenDashboardNavItems } from './dashboard-nav-flatten';
+import { buildDashboardNavItems } from './dashboard-nav-items';
 import {
   buildSmartNavStorageKey,
   getSmartShortcutItems,
@@ -87,68 +29,12 @@ import {
   recordSmartNavUsage,
   type SmartNavUsage,
 } from './smart-nav';
+import { useOrdersCount } from './use-orders-count';
 
 // The original layout is now a client component to prevent hydration errors.
 
-type DashboardNavItem = {
-  id: string;
-  href: Route;
-  icon: typeof LayoutDashboard;
-  label: string;
-  badge?: number;
-  badgeVariant?: 'default' | 'destructive';
-  children?: DashboardNavItem[];
-};
-
-function flattenDashboardNavItems(
-  items: DashboardNavItem[]
-): DashboardNavItem[] {
-  return items.flatMap((item) => {
-    const { children, ...itemWithoutChildren } = item;
-    return [itemWithoutChildren, ...flattenDashboardNavItems(children ?? [])];
-  });
-}
-
-// Module-scope helper: dynamic import() expressions are not yet supported by
-// React Compiler inside component bodies, so the lazy Supabase load lives here.
-async function fetchOrdersCount(merchantId: string): Promise<number> {
-  const { createClient } = await import('@/lib/supabase/client');
-  const supabase = createClient();
-  const { count, error } = await supabase
-    .from('orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('merchant_id', merchantId);
-
-  if (error) {
-    return 0;
-  }
-
-  return count || 0;
-}
-
-function getDashboardPlanTier(planTier: string | null | undefined): PlanTier {
-  return isPlanTier(planTier) ? planTier : 'free';
-}
-
-function isDashboardPaidPlan(
-  planTier: PlanTier,
-  planExpiresAt: string | null | undefined
-): boolean {
-  if (planTier === 'free') {
-    return false;
-  }
-
-  if (!planExpiresAt) {
-    return true;
-  }
-
-  const expiryTime = Date.parse(planExpiresAt);
-  return Number.isFinite(expiryTime) && expiryTime > Date.now();
-}
-
-function formatPlanTierLabel(planTier: PlanTier): string {
-  return planTier.charAt(0).toUpperCase() + planTier.slice(1);
-}
+// Re-exported so existing importers keep working; the type lives in ./dashboard-nav-items.
+export type { DashboardNavItem } from './dashboard-nav-items';
 
 // Module-scope helper: syncs the persisted smart-nav usage from localStorage
 // once the merchant id is known (post-hydration external-store read).
@@ -164,145 +50,21 @@ function loadSmartNavUsage(
   setUsage(readSmartNavUsage(window.localStorage, storageKey));
 }
 
-const StoreLink = ({
-  isMobile = false,
-  isCollapsed,
-  merchantLoading,
-  storeUrl,
-  customDomain,
-}: {
-  isMobile?: boolean;
-  isCollapsed: boolean;
-  merchantLoading: boolean;
-  storeUrl: string;
-  customDomain?: string;
-}) => {
-  const baseClassName = isMobile
-    ? 'mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 text-muted-foreground'
-    : cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground',
-        isCollapsed && 'justify-center'
-      );
-
-  const isReady = !merchantLoading && storeUrl !== '#';
-
-  if (!isReady) {
-    const loadingContent = (
-      <div className={cn(baseClassName, 'opacity-50 cursor-not-allowed')}>
-        <Loader2
-          className={cn(
-            'size-4 motion-safe:animate-spin',
-            isMobile && 'size-5'
-          )}
-        />
-        {!isCollapsed && !isMobile && 'Visit Store'}
-        {isMobile && 'Visit Store'}
-      </div>
-    );
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{loadingContent}</TooltipTrigger>
-          <TooltipContent side="right">Loading store…</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  const displayUrl = (() => {
-    try {
-      const url = new URL(storeUrl);
-      return url.hostname;
-    } catch {
-      return 'Visit Store';
-    }
-  })();
-
-  const linkContent = (
-    <>
-      <Store className={isMobile ? 'size-5' : 'size-4'} />
-      {!isCollapsed && !isMobile && (
-        <span className="font-medium text-foreground">{displayUrl}</span>
-      )}
-      {isMobile && (
-        <span className="font-medium text-foreground">{displayUrl}</span>
-      )}
-    </>
-  );
-
-  // Validate that storeUrl is safe (relative or from trusted domain)
-  // Only allow:
-  // 1. Relative paths starting with /
-  // 2. localhost URLs (development only)
-  // 3. URLs ending with .usebaci.com (production)
-  // 4. Custom domains that match merchant's custom_domain
-  const isSafeUrl = (() => {
-    if (storeUrl.startsWith('/') && !storeUrl.startsWith('//')) return true;
-    if (storeUrl.startsWith('http://localhost:')) return true;
-
-    try {
-      const url = new URL(storeUrl);
-      const trustedDomain =
-        process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-
-      // Allow custom domains that match merchant's custom_domain
-      if (customDomain && url.hostname === customDomain) {
-        return true;
-      }
-
-      // Ensure the hostname ends with our trusted domain (prevents subdomain takeover)
-      return (
-        url.hostname.endsWith(`.${trustedDomain}`) ||
-        url.hostname === trustedDomain
-      );
-    } catch {
-      return false;
-    }
-  })();
-  let safeHref: Route = asRoute('/');
-  if (isSafeUrl) {
-    safeHref = asRoute(storeUrl);
-  }
-
-  return (
-    <Link
-      href={safeHref}
-      className={cn(baseClassName, 'transition-all hover:text-primary')}
-    >
-      {isCollapsed && !isMobile ? (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>{linkContent}</span>
-            </TooltipTrigger>
-            <TooltipContent side="right">Visit Store</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        linkContent
-      )}
-    </Link>
-  );
-};
-
 export default function DashboardClientLayout({
   children,
+  agenticMerchantSlug,
 }: {
   children: React.ReactNode;
+  agenticMerchantSlug?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { open: openUpgradeModal } = useUpgradeModal();
   const { merchant, loading: merchantLoading, updateMerchant } = useMerchant();
   const { user, loading: authLoading, signOut } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCapsuleExpanded, setIsCapsuleExpanded] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [smartNavUsage, setSmartNavUsage] = useState<SmartNavUsage>({});
-  useToast(); // Keep toast available for potential future use
-
-  // Orders count for sidebar badge - fetched lazily to not block initial render
-  const [ordersCount, setOrdersCount] = useState(0);
 
   // NOTE: Auth and onboarding redirects are now handled SERVER-SIDE in layout.tsx.
   // This effect is only for handling edge cases like session expiry during navigation.
@@ -318,64 +80,8 @@ export default function DashboardClientLayout({
     return () => clearTimeout(timer);
   }, [user, authLoading, router]);
 
-  // Auto-collapse sidebar on main content interaction
-  useEffect(() => {
-    const mainContent = document.getElementById('main-content');
-    if (!mainContent) return;
-
-    const handleInteraction = (event: Event) => {
-      // Only auto-collapse on desktop and if sidebar is expanded
-      if (window.innerWidth >= 768 && !isCollapsed) {
-        if (event.type === 'click') {
-          setIsCollapsed(true);
-        } else if (event.type === 'scroll') {
-          const target = event.target as HTMLElement;
-          // Calculate 5% of the scrollable height
-          const threshold = (target.scrollHeight - target.clientHeight) * 0.05;
-
-          // If scrolled more than 5% and threshold is valid (not 0)
-          if (threshold > 0 && target.scrollTop > threshold) {
-            setIsCollapsed(true);
-          }
-        }
-      }
-    };
-
-    // Collapse on click or scroll (with threshold)
-    mainContent.addEventListener('click', handleInteraction);
-    mainContent.addEventListener('scroll', handleInteraction);
-
-    return () => {
-      mainContent.removeEventListener('click', handleInteraction);
-      mainContent.removeEventListener('scroll', handleInteraction);
-    };
-  }, [isCollapsed]);
-
-  // Orders count fetch effect
-  useEffect(() => {
-    let isMounted = true;
-
-    // Only fetch if merchant exists and we're on dashboard
-    // This is a lightweight call just for the badge count
-    if (merchant?.id && ordersCount === 0) {
-      // Use a simpler query just for count instead of full metrics
-      fetchOrdersCount(merchant.id)
-        .then((count) => {
-          if (isMounted) {
-            setOrdersCount(count);
-          }
-        })
-        .catch(() => {
-          if (isMounted) {
-            setOrdersCount(0);
-          }
-        });
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [merchant?.id, ordersCount]);
+  // Orders count for the sidebar badge - fetched lazily to not block initial render
+  const ordersCount = useOrdersCount(merchant?.id);
 
   useEffect(() => {
     if (!merchant?.id) {
@@ -388,31 +94,8 @@ export default function DashboardClientLayout({
   const selectedCountry = merchant?.country
     ? getCountryByCode(merchant.country)
     : null;
-  const planTier = getDashboardPlanTier(merchant?.plan_tier);
-  const isPaidPlan = isDashboardPaidPlan(planTier, merchant?.plan_expires_at);
-  const planTierLabel = formatPlanTierLabel(planTier);
 
-  const getStoreUrl = () => {
-    if (!merchant?.slug) return '#';
-
-    const isDevelopment = process.env.NODE_ENV === 'development';
-
-    if (isDevelopment) {
-      // In development, use localhost with direct slug path
-      return `http://localhost:3000/${merchant.slug}`;
-    }
-
-    // In production, prioritize custom domain
-    if (merchant.custom_domain) {
-      return `https://${merchant.custom_domain}`;
-    }
-
-    // Fallback to subdomain URL
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    return `https://${merchant.slug}.${rootDomain}`;
-  };
-
-  const storeUrl = getStoreUrl();
+  const storeUrl = buildDashboardStoreUrl(merchant);
 
   const handleSignOut = async () => {
     await signOut();
@@ -420,226 +103,15 @@ export default function DashboardClientLayout({
     window.location.href = '/login';
   };
 
-  const navItems: DashboardNavItem[] = [
-    {
-      id: 'dashboard',
-      href: '/dashboard' as Route,
-      icon: LayoutDashboard,
-      label: 'Dashboard',
-    },
-    {
-      id: 'analytics',
-      href: '/dashboard/analytics' as Route,
-      icon: BarChart3,
-      label: 'Analytics',
-    },
-    {
-      id: 'orders',
-      href: '/dashboard/orders' as Route,
-      icon: ShoppingCart,
-      label: 'Orders',
-      badge: ordersCount > 0 ? ordersCount : undefined,
-    },
-    {
-      id: 'products',
-      href: '/dashboard/products' as Route,
-      icon: Package,
-      label: 'Products',
-    },
-    {
-      id: 'repairs',
-      href: '/dashboard/repairs' as Route,
-      icon: Wrench,
-      label: 'Repairs',
-    },
-    {
-      id: 'marketing',
-      href: '/dashboard/marketing' as Route,
-      icon: Megaphone,
-      label: 'Marketing',
-      children: [
-        {
-          id: 'discount-codes',
-          href: '/dashboard/marketing/discount-codes' as Route,
-          icon: Tag,
-          label: 'Discount Codes',
-        },
-      ],
-    },
-    {
-      id: 'blog',
-      href: '/dashboard/blog' as Route,
-      icon: Newspaper,
-      label: 'Blog',
-    },
-    {
-      id: 'marketplaces',
-      href: '/dashboard/channels' as Route,
-      icon: Store,
-      label: 'Marketplaces',
-    },
-    {
-      id: 'domains',
-      href: '/dashboard/domains' as Route,
-      icon: Globe,
-      label: 'Domains',
-    },
-    {
-      id: 'migrations',
-      href: '/dashboard/migrations' as Route,
-      icon: UploadCloud,
-      label: 'Migrations',
-    },
-    {
-      id: 'customers',
-      href: '/dashboard/customers' as Route,
-      icon: Users,
-      label: 'Customers',
-    },
-    {
-      id: 'staff',
-      href: '/dashboard/staff' as Route,
-      icon: UserCog,
-      label: 'Staff',
-    },
-    {
-      id: 'loyalty',
-      href: '/dashboard/loyalty' as Route,
-      icon: Gift,
-      label: 'Loyalty',
-    },
-    {
-      id: 'quiz',
-      href: '/dashboard/quiz' as Route,
-      icon: Trophy,
-      label: 'Quiz',
-    },
-    {
-      id: 'santa',
-      href: '/dashboard/santa' as Route,
-      icon: MessageCircle,
-      label: 'Santa Campaign',
-    },
-    {
-      id: 'wallet',
-      href: '/dashboard/wallet' as Route,
-      icon: Wallet,
-      label: 'Wallet',
-    },
-    {
-      id: 'seo',
-      href: '/dashboard/seo' as Route,
-      icon: Search,
-      label: 'SEO',
-    },
-    {
-      id: 'agentic',
-      href: '/dashboard/agentic' as Route,
-      icon: Bot,
-      label: 'Agentic',
-    },
-    {
-      id: 'pages',
-      href: '/dashboard/pages' as Route,
-      icon: FileText,
-      label: 'Pages',
-      // Badge disabled temporarily
-    },
-    {
-      id: 'templates',
-      href: '/dashboard/templates' as Route,
-      icon: LayoutTemplate,
-      label: 'Templates',
-    },
-    {
-      id: 'customize',
-      icon: Paintbrush,
-      label: 'Customize Website',
-      href: '/builder' as Route,
-    },
-    {
-      id: 'settings',
-      href: '/dashboard/settings' as Route,
-      icon: Settings,
-      label: 'Settings',
-    },
-  ];
-
   const { hasPermission, staffAccess } = useMerchant();
 
-  // Map labels/paths to resources in role_permissions table
-  const resourceMap: Record<string, string> = {
-    Dashboard: 'dashboard',
-    Analytics: 'analytics',
-    Orders: 'orders',
-    Products: 'products',
-    Repairs: 'repairs',
-    Customers: 'customers',
-    Staff: 'staff',
-    Loyalty: 'marketing', // Loyalty is part of marketing permissions
-    Quiz: 'marketing',
-    'Santa Campaign': 'marketing',
-    Wallet: 'wallet', // Assuming wallet exists, check role_permissions
-    SEO: 'marketing',
-    Agentic: 'integrations',
-    Domains: 'settings',
-    Pages: 'pages',
-    Blog: 'marketing', // Blog is usually under marketing, or its own 'blog'
-    Marketing: 'marketing',
-    'Discount Codes': 'marketing',
-    Templates: 'builder',
-    'Customize Website': 'builder',
-    Marketplaces: 'integrations',
-    Settings: 'settings',
-  };
+  const navItems = buildDashboardNavItems(ordersCount);
 
-  const canShowNavItem = (item: DashboardNavItem) => {
-    // Santa Campaign is special (only for ogabassey)
-    if (item.label === 'Santa Campaign' && merchant?.slug !== 'ogabassey') {
-      return false;
-    }
-
-    // Repairs catalogue is gated to electronics/gadgets merchants. The page
-    // itself handles the feature-flag empty state for enabled business types.
-    if (
-      item.label === 'Repairs' &&
-      !isRepairsBusinessType(merchant?.business_type)
-    ) {
-      return false;
-    }
-
-    // Owners always see everything
-    if (staffAccess.isOwner) return true;
-
-    if (item.label === 'Migrations') {
-      return (
-        hasPermission('settings', 'edit') ||
-        hasPermission('orders', 'edit') ||
-        hasPermission('products', 'create')
-      );
-    }
-
-    const resource = resourceMap[item.label];
-    if (resource) {
-      // For menu visibility, we generally check for 'view' permission
-      return hasPermission(resource, 'view');
-    }
-
-    return true;
-  };
-
-  const filteredNavItems = navItems.flatMap((item): DashboardNavItem[] => {
-    if (!canShowNavItem(item)) {
-      return [];
-    }
-
-    const children = item.children?.filter(canShowNavItem);
-    return [
-      {
-        ...item,
-        children: children && children.length > 0 ? children : undefined,
-      },
-    ];
+  const filteredNavItems = filterDashboardNavItems(navItems, {
+    merchant,
+    agenticMerchantSlug,
+    staffAccess,
+    hasPermission,
   });
 
   const smartNavItems = getSmartShortcutItems({
@@ -662,146 +134,6 @@ export default function DashboardClientLayout({
     setSmartNavUsage(nextUsage);
   };
 
-  const renderDesktopNavItem = (
-    item: DashboardNavItem,
-    key: string,
-    options: { isSubItem?: boolean } = {}
-  ) => {
-    const isExactActive = pathname === item.href;
-    const hasActiveChild =
-      item.children?.some((child) => pathname === child.href) ?? false;
-    const isSectionActive =
-      item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`);
-    const isActive = isExactActive || hasActiveChild || isSectionActive;
-
-    return (
-      <Link
-        key={key}
-        href={item.href}
-        aria-current={isExactActive ? 'page' : undefined}
-        onClick={() => handleNavItemClick(item.id)}
-        className={cn(
-          'flex items-center transition-all duration-200 group relative overflow-hidden',
-          options.isSubItem
-            ? 'ml-7 gap-2 rounded-xl px-3 py-2 text-[13px]'
-            : 'gap-3 rounded-full px-4 py-3',
-          isActive && !options.isSubItem
-            ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
-            : 'text-muted-foreground hover:bg-white/50 dark:hover:bg-white/10 hover:text-foreground',
-          isActive &&
-            options.isSubItem &&
-            'bg-primary/10 text-foreground ring-1 ring-primary/15',
-          isCollapsed && !options.isSubItem && 'justify-center px-2'
-        )}
-      >
-        {!isActive && (
-          <div className="absolute inset-0 bg-linear-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        )}
-
-        <item.icon
-          className={cn(
-            'shrink-0 transition-transform group-hover:scale-110',
-            options.isSubItem ? 'size-4' : 'size-5',
-            isActive && !options.isSubItem && 'animate-pulse-subtle'
-          )}
-          aria-hidden="true"
-        />
-
-        {!isCollapsed && <span className="truncate">{item.label}</span>}
-
-        {!isCollapsed && item.badge && (
-          <Badge
-            variant={item.badgeVariant || 'default'}
-            className={cn(
-              'ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px]',
-              item.badgeVariant === 'destructive'
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-accent text-accent-foreground'
-            )}
-          >
-            {item.label === 'Pages' ? '!' : item.badge}
-          </Badge>
-        )}
-      </Link>
-    );
-  };
-
-  const renderMobileNavItem = (
-    item: DashboardNavItem,
-    key: string,
-    options: { isSubItem?: boolean } = {}
-  ) => {
-    const isExactActive = pathname === item.href;
-    const hasActiveChild =
-      item.children?.some((child) => pathname === child.href) ?? false;
-    const isSectionActive =
-      item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`);
-    const isActive = isExactActive || hasActiveChild || isSectionActive;
-
-    return (
-      <Link
-        key={key}
-        href={item.href}
-        aria-current={isExactActive ? 'page' : undefined}
-        onClick={() => {
-          handleNavItemClick(item.id);
-          setIsSheetOpen(false);
-        }}
-        className={cn(
-          'flex items-center rounded-xl text-sm font-medium transition-all',
-          options.isSubItem ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3',
-          isActive
-            ? 'bg-primary text-primary-foreground shadow-md'
-            : 'text-muted-foreground hover:bg-muted'
-        )}
-      >
-        <item.icon className={options.isSubItem ? 'size-4' : 'size-5'} />
-        {item.label}
-        {item.badge && (
-          <Badge className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-accent text-accent-foreground px-1.5 text-[10px]">
-            {item.label === 'Pages' ? '!' : item.badge}
-          </Badge>
-        )}
-      </Link>
-    );
-  };
-
-  const renderDesktopNavTree = (item: DashboardNavItem) => (
-    <div key={item.id} className="grid gap-1">
-      {renderDesktopNavItem(item, item.id)}
-      {!isCollapsed && item.children && item.children.length > 0 && (
-        <ul
-          aria-label={`${item.label} submenu`}
-          className="grid list-none gap-1 pl-0"
-        >
-          {item.children.map((child) => (
-            <li key={child.id}>
-              {renderDesktopNavItem(child, child.id, { isSubItem: true })}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-
-  const renderMobileNavTree = (item: DashboardNavItem) => (
-    <div key={item.id} className="grid gap-1">
-      {renderMobileNavItem(item, item.id)}
-      {item.children && item.children.length > 0 && (
-        <ul
-          aria-label={`${item.label} submenu`}
-          className="ml-6 grid list-none gap-1 border-l border-border pl-3"
-        >
-          {item.children.map((child) => (
-            <li key={child.id}>
-              {renderMobileNavItem(child, child.id, { isSubItem: true })}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-
   // While checking auth OR if auth has succeeded but we are still waiting for the merchant,
   // show a full-page loading screen. This prevents content flashes and incorrect redirects.
   if (authLoading || (user && merchantLoading)) {
@@ -822,292 +154,40 @@ export default function DashboardClientLayout({
     <>
       {/* Skip link for keyboard navigation */}
 
-      <div
-        className={cn(
-          'grid min-h-screen w-full transition-all',
-          isCollapsed ? 'md:grid-cols-[120px_1fr]' : 'md:grid-cols-[300px_1fr]'
-        )}
-      >
-        {/* Sidebar - Glassmorphic & Floating */}
-        <div className="hidden md:block relative z-20">
-          <div
-            className={cn(
-              'sticky top-4 rounded-3xl border border-white/20 bg-white/60 dark:bg-black/40 backdrop-blur-xl shadow-xl transition-all duration-300 flex flex-col overflow-hidden ml-4 mb-4',
-              'h-[calc(100vh-2rem)]',
-              isCollapsed ? 'w-[100px]' : 'w-[280px]'
-            )}
-          >
-            {/* Sidebar Header */}
-            <div
-              className={cn(
-                'flex h-20 items-center px-6',
-                isCollapsed && 'justify-center px-2'
-              )}
-            >
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 font-semibold transition-transform hover:scale-105"
-              >
-                {isCollapsed ? <BagIcon width={32} height={32} /> : <Logo />}
-                {!isCollapsed && <span className="sr-only">Baci</span>}
-              </Link>
-            </div>
+      <DashboardNavCapsule
+        expanded={isCapsuleExpanded}
+        items={filteredNavItems}
+        pathname={pathname}
+        onExpandedChange={setIsCapsuleExpanded}
+        onNavigate={handleNavItemClick}
+        onUpgrade={() => openUpgradeModal('ai_product_descriptions')}
+      />
 
-            {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-4 px-3 custom-scrollbar">
-              <TooltipProvider>
-                <div className="grid gap-3 text-sm font-medium">
-                  {smartNavItems.length > 0 && (
-                    <nav aria-label="Smart shortcuts" className="grid gap-2">
-                      {!isCollapsed && (
-                        <span className="px-4 text-[10px] font-semibold uppercase text-muted-foreground/70">
-                          Smart shortcuts
-                        </span>
-                      )}
-                      {smartNavItems.map((item) =>
-                        renderDesktopNavItem(item, `smart-${item.id}`)
-                      )}
-                      <div className="my-2 h-px bg-linear-to-r from-transparent via-border to-transparent" />
-                    </nav>
-                  )}
-                  <nav className="grid gap-2" aria-label="Main navigation">
-                    {filteredNavItems.map(renderDesktopNavTree)}
-                    <div className="my-4 h-px bg-linear-to-r from-transparent via-border to-transparent" />
-                    <StoreLink
-                      isMobile={false}
-                      isCollapsed={isCollapsed}
-                      merchantLoading={merchantLoading}
-                      storeUrl={storeUrl}
-                      customDomain={merchant?.custom_domain}
-                    />
-                  </nav>
-                </div>
-              </TooltipProvider>
-            </div>
-
-            {/* Sidebar Footer (Upgrade Card) */}
-            <div className="p-4 mt-auto">
-              {!isCollapsed &&
-                (isPaidPlan ? (
-                  <div className="relative overflow-hidden rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-foreground shadow-lg">
-                    <div className="absolute -right-4 -top-4 size-24 rounded-full bg-emerald-400/15 blur-2xl" />
-                    <div className="relative z-10 flex items-center justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold">Baci {planTierLabel}</h4>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Active subscription
-                        </p>
-                      </div>
-                      <Badge className="bg-emerald-500 text-white hover:bg-emerald-500">
-                        {planTierLabel}
-                      </Badge>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary to-primary/80 p-4 text-primary-foreground shadow-lg">
-                    <div className="absolute -right-4 -top-4 size-24 rounded-full bg-white/10 blur-2xl" />
-                    <h4 className="font-semibold relative z-10">
-                      Upgrade to Pro
-                    </h4>
-                    <p className="text-xs text-primary-foreground/80 mt-1 mb-3 relative z-10">
-                      Unlock AI superpowers & unlimited support.
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="w-full shadow-sm relative z-10 text-primary font-semibold"
-                      type="button"
-                      onClick={() =>
-                        openUpgradeModal(FEATURES.AI_PRODUCT_DESCRIPTIONS)
-                      }
-                    >
-                      Upgrade
-                    </Button>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-
+      <div className="grid min-h-screen w-full md:grid-cols-[92px_1fr]">
+        <div aria-hidden="true" className="hidden md:block" />
         {/* Main Content Area */}
         <div className="flex flex-col relative min-h-screen overflow-x-hidden">
-          {/* Collapse Button - Floating */}
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              'fixed top-8 z-30 hidden md:flex rounded-full shadow-lg border border-white/20 bg-white/80 dark:bg-black/40 dark:border-white/10 backdrop-blur-md transition-all duration-300 hover:scale-110',
-              isCollapsed ? 'left-[100px]' : 'left-[280px]'
-            )}
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="size-4" />
-            ) : (
-              <PanelLeftClose className="size-4" />
-            )}
-            <span className="sr-only">
-              {isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            </span>
-          </Button>
+          <DashboardMobileNav
+            pathname={pathname}
+            isSheetOpen={isSheetOpen}
+            onSheetOpenChange={setIsSheetOpen}
+            items={filteredNavItems}
+            smartItems={smartNavItems}
+            userEmail={user?.email}
+            onNavItemClick={handleNavItemClick}
+            onSignOut={handleSignOut}
+          />
 
-          {/* Mobile Header */}
-          <header className="flex h-16 items-center gap-4 border-b bg-white/50 dark:bg-black/50 backdrop-blur-md px-4 md:hidden sticky top-0 z-20 transition-all duration-300">
-            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 md:hidden"
-                >
-                  <Menu className="size-5" />
-                  <span className="sr-only">Toggle navigation menu</span>
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="flex flex-col w-[280px] p-0 border-r-0 bg-transparent shadow-none"
-              >
-                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-                {/* Mobile Sheet Content - Reusing Glass Style */}
-                <div className="h-full w-full rounded-r-3xl border-r border-y border-white/20 bg-white/90 dark:bg-black/90 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden">
-                  <div className="flex h-20 items-center px-6 border-b border-white/10">
-                    <Link
-                      href="/dashboard"
-                      className="flex items-center gap-2 font-semibold"
-                    >
-                      <Logo />
-                    </Link>
-                  </div>
-                  <div className="grid gap-3 p-4 overflow-y-auto">
-                    {smartNavItems.length > 0 && (
-                      <nav aria-label="Smart shortcuts" className="grid gap-2">
-                        <span className="px-4 text-[10px] font-semibold uppercase text-muted-foreground/70">
-                          Smart shortcuts
-                        </span>
-                        {smartNavItems.map((item) =>
-                          renderMobileNavItem(item, `mobile-smart-${item.id}`)
-                        )}
-                        <div className="my-1 h-px bg-border" />
-                      </nav>
-                    )}
-                    <nav className="grid gap-2" aria-label="Main navigation">
-                      {filteredNavItems.map(renderMobileNavTree)}
-                    </nav>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <div className="flex-1 flex justify-end items-center gap-2">
-              <ThemeToggle />
-              <NotificationCenter />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    aria-label="User menu"
-                  >
-                    <User className="size-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut}>
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </header>
-
-          {/* Desktop Header Actions (Refactored to Block for safety) */}
-          <div className="hidden md:flex w-full justify-end items-center gap-3 px-6 pt-6 pb-2 z-20 bg-background/50 backdrop-blur-xs sticky top-0">
-            <div className="flex items-center gap-2 p-1.5 rounded-full bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/20 shadow-sm ml-auto">
-              <StoreLink
-                isMobile={false}
-                isCollapsed={false}
-                merchantLoading={merchantLoading}
-                storeUrl={storeUrl}
-                customDomain={merchant?.custom_domain}
-              />
-              <div className="w-px h-4 bg-border/50" />
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 rounded-full px-3 gap-2 hover:bg-white/50"
-                    aria-label="Select country"
-                  >
-                    {merchantLoading ? (
-                      <Loader2 className="size-3 animate-spin" />
-                    ) : selectedCountry ? (
-                      <span className="text-lg leading-none">
-                        {selectedCountry.flag}
-                      </span>
-                    ) : (
-                      '🌐'
-                    )}
-                    <ChevronDown className="size-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[200px]">
-                  <DropdownMenuLabel>Select Country</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {COUNTRIES.map((country) => (
-                    <DropdownMenuItem
-                      key={country.code}
-                      onSelect={() => updateMerchant({ country: country.code })}
-                    >
-                      <span className="mr-2 text-lg">{country.flag}</span>
-                      <span>{country.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <div className="w-px h-4 bg-border/50" />
-
-              <ThemeToggle />
-              <NotificationCenter />
-
-              <div className="w-px h-4 bg-border/50" />
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 rounded-full hover:bg-white/50"
-                    aria-label="User menu"
-                  >
-                    <User className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => router.push('/dashboard/settings')}
-                  >
-                    Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleSignOut}
-                    className="text-red-500"
-                  >
-                    <LogOut className="mr-2 size-4" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
+          <DashboardHeaderActions
+            merchantLoading={merchantLoading}
+            storeUrl={storeUrl}
+            customDomain={merchant?.custom_domain}
+            selectedCountry={selectedCountry}
+            onSelectCountry={(countryCode) =>
+              updateMerchant({ country: countryCode })
+            }
+            onSignOut={handleSignOut}
+          />
 
           <main
             id="main-content"
@@ -1127,80 +207,12 @@ export default function DashboardClientLayout({
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-t border-white/20 safe-bottom">
-        <div className="flex items-center justify-around h-16 px-2">
-          <Link
-            href="/dashboard"
-            onClick={() => handleNavItemClick('dashboard')}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 w-16 h-full transition-colors',
-              pathname === '/dashboard'
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <LayoutDashboard className="size-5" />
-            <span className="text-[10px] font-medium">Home</span>
-          </Link>
-          <Link
-            href="/dashboard/orders"
-            onClick={() => handleNavItemClick('orders')}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 w-16 h-full transition-colors relative',
-              pathname === '/dashboard/orders'
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <div className="relative">
-              <ShoppingCart className="size-5" />
-              {ordersCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-background">
-                  {ordersCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] font-medium">Orders</span>
-          </Link>
-          <Link
-            href="/dashboard/products"
-            onClick={() => handleNavItemClick('products')}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 w-16 h-full transition-colors',
-              pathname === '/dashboard/products'
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Package className="size-5" />
-            <span className="text-[10px] font-medium">Products</span>
-          </Link>
-          <Link
-            href="/dashboard/customers"
-            onClick={() => handleNavItemClick('customers')}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 w-16 h-full transition-colors',
-              pathname === '/dashboard/customers'
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Users className="size-5" />
-            <span className="text-[10px] font-medium">Customers</span>
-          </Link>
-          <button
-            type="button"
-            onClick={() => setIsSheetOpen(true)}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1 w-16 h-full transition-colors text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Menu className="size-5" />
-            <span className="text-[10px] font-medium">Menu</span>
-          </button>
-        </div>
-      </div>
+      <DashboardMobileBottomNav
+        pathname={pathname}
+        ordersCount={ordersCount}
+        onNavItemClick={handleNavItemClick}
+        onMenuClick={() => setIsSheetOpen(true)}
+      />
     </>
   );
 }

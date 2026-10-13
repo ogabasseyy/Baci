@@ -1139,7 +1139,7 @@ export const builderConfig: Config<
       permissions: { delete: true, duplicate: true },
       fields: {
         title: { type: 'text' },
-        columns: { type: 'number', min: 1, max: 4 },
+        columns: { type: 'number', min: 2, max: 4 },
         limit: { type: 'number', min: 1, max: 24 },
         category: { type: 'text', label: 'Filter by Category (optional)' },
         sortBy: {

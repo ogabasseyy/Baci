@@ -13,11 +13,13 @@ export function useQuizEventTimer({
   eventEndsAt,
   isActive,
   onExpire,
+  shouldTick = isActive,
   serverClockOffsetMs = 0,
 }: {
   eventEndsAt: string | null;
   isActive: boolean;
   onExpire: () => void;
+  shouldTick?: boolean;
   serverClockOffsetMs?: number;
 }): { remainingSeconds: number; hasEnded: boolean } {
   const deadlineMs = eventEndsAt ? Date.parse(eventEndsAt) : Number.NaN;
@@ -30,6 +32,7 @@ export function useQuizEventTimer({
 
   useEffect(() => {
     firedRef.current = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
     const evaluate = () => {
       const remaining = getEventRemainingMs(deadlineMs, serverClockOffsetMs);
       setRemainingMs(remaining);
@@ -37,18 +40,27 @@ export function useQuizEventTimer({
         firedRef.current = true;
         onExpireRef.current();
       }
+      if (remaining === 0 && intervalId) {
+        clearInterval(intervalId);
+        intervalId = undefined;
+      }
     };
     evaluate();
-    if (!isActive || !Number.isFinite(deadlineMs)) return;
-    const intervalId = setInterval(evaluate, TICK_INTERVAL_MS);
+    if (
+      !shouldTick ||
+      !Number.isFinite(deadlineMs) ||
+      getEventRemainingMs(deadlineMs, serverClockOffsetMs) === 0
+    )
+      return;
+    intervalId = setInterval(evaluate, TICK_INTERVAL_MS);
     const subscription = AppState.addEventListener('change', (next) => {
       if (next === 'active') evaluate();
     });
     return () => {
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
       subscription?.remove?.();
     };
-  }, [deadlineMs, isActive, serverClockOffsetMs]);
+  }, [deadlineMs, isActive, serverClockOffsetMs, shouldTick]);
 
   return {
     hasEnded: remainingMs === 0,

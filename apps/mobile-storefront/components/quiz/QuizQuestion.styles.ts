@@ -1,0 +1,135 @@
+import { StyleSheet } from 'react-native';
+import type { QuizThemeColors } from './quiz-theme';
+
+export function createQuizQuestionStyles(colors: QuizThemeColors) {
+  return StyleSheet.create({
+    questionCard: { gap: 18, paddingBottom: 24, paddingTop: 4 },
+    questionHeader: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    questionCount: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    questionPosition: {
+      alignItems: 'baseline',
+      flexDirection: 'row',
+      gap: 6,
+    },
+    questionEyebrow: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '900',
+      letterSpacing: 1.2,
+    },
+    timerBadge: {
+      alignItems: 'center',
+      backgroundColor: colors.primaryLowOpacity,
+      borderRadius: 999,
+      flexDirection: 'row',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    timerBadgeText: {
+      color: colors.primary,
+      fontSize: 14,
+      fontVariant: ['tabular-nums'],
+      fontWeight: '900',
+    },
+    timerBadgeUrgent: { backgroundColor: `${colors.error}1A` },
+    timerBadgeUrgentText: { color: colors.error },
+    progressTrack: {
+      backgroundColor: colors.muted,
+      borderRadius: 4,
+      height: 6,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      backgroundColor: colors.primary,
+      borderRadius: 4,
+      height: 6,
+    },
+    eventDeadlineRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: -8,
+    },
+    eventDeadline: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    question: {
+      color: colors.text,
+      fontSize: 26,
+      fontWeight: '900',
+      letterSpacing: -0.5,
+      lineHeight: 34,
+      marginBottom: 2,
+    },
+    answersList: { gap: 12 },
+    answerButton: {
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 12,
+      minHeight: 68,
+      paddingHorizontal: 16,
+    },
+    answerButtonSelected: {
+      backgroundColor: colors.primaryLowOpacity,
+      borderColor: colors.primary,
+      borderWidth: 1,
+    },
+    answerButtonDisabled: { opacity: 0.48 },
+    answerLetter: {
+      alignItems: 'center',
+      backgroundColor: colors.muted,
+      borderRadius: 999,
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '900',
+      height: 30,
+      lineHeight: 30,
+      overflow: 'hidden',
+      textAlign: 'center',
+      width: 30,
+    },
+    answerLetterSelected: {
+      backgroundColor: colors.primary,
+      color: colors.primaryForeground,
+    },
+    answerSelectionIcon: {
+      alignItems: 'center',
+      height: 23,
+      justifyContent: 'center',
+      width: 23,
+    },
+    answerText: {
+      color: colors.text,
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    answerHint: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    answerHintRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 6,
+      justifyContent: 'center',
+    },
+  });
+}

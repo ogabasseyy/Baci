@@ -5,9 +5,29 @@ import Colors from '@/constants/Colors';
 import type { Product } from '@/types/product';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 
-jest.mock('expo-image', () => ({
-  Image: () => null,
-}));
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+    }) => {
+      const viewProps = {
+        autoplay,
+        accessible: true,
+        accessibilityRole: 'image',
+        accessibilityLabel,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
 
 const products: Product[] = [
   {
@@ -99,6 +119,17 @@ describe('WalletSavingsDeviceSwapModal', () => {
     ).toHaveAccessibilityState({ disabled: true });
   });
 
+  describe('bugfix: animated wallet product images', () => {
+    it('does not autoplay replacement device images', () => {
+      renderSwapModal();
+
+      expect(
+        screen.getAllByRole('image', { name: 'iPhone 15 Pro' })[0]?.props
+          .autoplay
+      ).toBe(false);
+    });
+  });
+
   it('shows loading and empty states', () => {
     const { rerender } = renderSwapModal({ isLoading: true });
 
@@ -173,4 +204,35 @@ describe('WalletSavingsDeviceSwapModal', () => {
 
     expect(screen.queryByText('Change savings device')).toBeNull();
   });
+});
+
+it('loads a cached device before offering its exact variants and never submits preview pricing', async () => {
+  const onSelectDevice = jest.fn();
+  const resolveProduct = jest
+    .fn<() => Promise<Product>>()
+    .mockResolvedValue(products[0]);
+  render(
+    <WalletSavingsDeviceSwapModal
+      colors={Colors.light}
+      currentAmount={100000}
+      isLoading={false}
+      isPending={false}
+      visible
+      searchValue="iphone"
+      onClose={jest.fn()}
+      onSearchChange={jest.fn()}
+      onSelectDevice={onSelectDevice}
+      products={[
+        { ...products[0], price: 1, variants: [], searchPreview: true },
+      ]}
+      resolveProduct={resolveProduct}
+    />
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Select iPhone 15 Pro' }));
+  expect(onSelectDevice).not.toHaveBeenCalled();
+  await screen.findByRole('button', { name: /Select iPhone 15 Pro.*256GB/ });
+  fireEvent.press(
+    screen.getByRole('button', { name: /Select iPhone 15 Pro.*256GB/ })
+  );
+  expect(onSelectDevice).toHaveBeenCalledWith(products[0], 'variant-256');
 });

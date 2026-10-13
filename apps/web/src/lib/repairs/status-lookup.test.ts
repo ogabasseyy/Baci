@@ -17,6 +17,9 @@ const row = {
   created_at: '2026-07-01T00:00:00.000Z',
   updated_at: '2026-07-05T00:00:00.000Z',
   tracking_number: 'TRK-1',
+  pickup_payment_status: 'booked',
+  pickup_fee: 8250,
+  pickup_currency: 'NGN',
 };
 
 describe('lookupRepairStatus', () => {
@@ -46,6 +49,9 @@ describe('lookupRepairStatus', () => {
         createdAt: '2026-07-01T00:00:00.000Z',
         updatedAt: '2026-07-05T00:00:00.000Z',
         trackingNumber: 'TRK-1',
+        pickupPaymentStatus: 'booked',
+        pickupFee: 8250,
+        pickupCurrency: 'NGN',
       },
     });
   });
@@ -104,5 +110,24 @@ describe('lookupRepairStatus', () => {
     if (outcome.found) {
       expect(outcome.result.deviceLabel).toBe('Device');
     }
+  });
+
+  it('omits a non-numeric pickup fee from the public result', async () => {
+    const { supabase } = makeSupabase({
+      data: [{ ...row, pickup_fee: 'not-a-number' }],
+      error: null,
+    });
+
+    const outcome = await lookupRepairStatus(
+      supabase,
+      'm-1',
+      1042,
+      'ada@x.com'
+    );
+
+    expect(outcome).toMatchObject({
+      found: true,
+      result: { pickupFee: null },
+    });
   });
 });

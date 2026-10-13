@@ -1,5 +1,8 @@
-import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildInternationalBookingRequest,
+  buildInternationalSupabaseMock,
+} from './route.international.test-fixtures';
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -35,164 +38,12 @@ vi.mock('@/lib/shipping', () => ({
   },
 }));
 
-function buildBookingRequest(): NextRequest {
-  return new Request('https://usebaci.com/api/shipping/book', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId: '11111111-1111-4111-8111-111111111111',
-      carrierId: 'GIGL',
-      quoteId: '22222222-2222-4222-8222-222222222222',
-      sender: {
-        name: 'Merchant Store',
-        phone: '+2348011111111',
-        address: '1 Merchant Road',
-        city: 'Lagos',
-        state: 'Lagos',
-        country: 'Nigeria',
-        countryCode: 'NG',
-      },
-      receiver: {
-        name: 'Jane Customer',
-        phone: '+14165550123',
-        address: '999 New Address',
-        city: 'Vancouver',
-        state: 'British Columbia',
-        country: 'Canada',
-        countryCode: 'CA',
-      },
-      items: [{ name: 'Phone', quantity: 1, weight: 1, value: 500000 }],
-    }),
-  }) as unknown as NextRequest;
-}
-
-function buildSupabaseMock({
-  matchingDestination = false,
-  selectedQuoteId = '22222222-2222-4222-8222-222222222222',
-}: {
-  matchingDestination?: boolean;
-  selectedQuoteId?: string | null;
-} = {}) {
-  const quoteReceiver = matchingDestination
-    ? {
-        name: 'Old Recipient',
-        phone: '',
-        address: '999 New Address',
-        city: 'Vancouver',
-        state: 'British Columbia',
-        country: 'Canada',
-        countryCode: 'CA',
-      }
-    : {
-        name: 'Old Recipient',
-        phone: '',
-        address: '123 Queen Street West',
-        city: 'Toronto',
-        state: 'Ontario',
-        country: 'Canada',
-        countryCode: 'CA',
-      };
-  const ordersSelectChain = {
-    eq: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({
-      data: {
-        id: '11111111-1111-4111-8111-111111111111',
-        merchant_id: 'merchant-1',
-        selected_quote_id: selectedQuoteId,
-        shipping_status: 'pending',
-        shipping_address: {
-          address: '999 New Address',
-          city: 'Vancouver',
-          state: 'British Columbia',
-          country: 'Canada',
-          countryCode: 'CA',
-        },
-        order_items: [{ name: 'Phone', quantity: 1, price: 500000 }],
-      },
-      error: null,
-    }),
-  };
-  const mutationChain = {
-    eq: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    single: vi
-      .fn()
-      .mockResolvedValue({ data: { id: 'shipment-1' }, error: null }),
-  };
-  const quotesSelectChain = {
-    eq: vi.fn().mockReturnThis(),
-    single: vi.fn().mockImplementation(() => {
-      expect(quotesSelectChain.eq).toHaveBeenCalledWith(
-        'merchant_id',
-        'merchant-1'
-      );
-      return Promise.resolve({
-        data: {
-          id: '22222222-2222-4222-8222-222222222222',
-          merchant_id: 'merchant-1',
-          provider: 'GIGL',
-          provider_rate_id: 'GIGL_INTL_1_2_3_1',
-          provider_metadata: {},
-          quote_request: {
-            merchantId: 'merchant-1',
-            sessionId: 'session-1',
-            shipmentType: 'international',
-            sender: {
-              name: 'Quoted Merchant Store',
-              phone: '+2348099999999',
-              address: '7 Quoted Origin',
-              city: 'Ikeja',
-              state: 'Lagos',
-              country: 'Nigeria',
-              countryCode: 'NG',
-            },
-            receiver: quoteReceiver,
-            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 500000 }],
-          },
-          expires_at: new Date(Date.now() + 60_000).toISOString(),
-          price: 4500,
-          currency: 'NGN',
-          estimated_days: 2,
-        },
-        error: null,
-      });
-    }),
-  };
-
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'user-1' } },
-        error: null,
-      }),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'orders') {
-        return {
-          select: vi.fn(() => ordersSelectChain),
-          update: vi.fn(() => mutationChain),
-        };
-      }
-      if (table === 'shipping_quotes') {
-        return {
-          select: vi.fn(() => quotesSelectChain),
-          update: vi.fn(() => mutationChain),
-        };
-      }
-      if (table === 'shipments') {
-        return { insert: vi.fn(() => mutationChain) };
-      }
-      throw new Error(`Unexpected table: ${table}`);
-    }),
-  };
-}
-
 describe('POST /api/shipping/book GIGL international guards', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckCsrfProtection.mockResolvedValue({ valid: true });
     mockCookies.mockResolvedValue({});
-    mockCreateClient.mockReturnValue(buildSupabaseMock());
+    mockCreateClient.mockReturnValue(buildInternationalSupabaseMock());
     mockGetMerchantForApiRequest.mockResolvedValue({
       merchantId: 'merchant-1',
       businessName: 'Merchant Store',
@@ -203,7 +54,7 @@ describe('POST /api/shipping/book GIGL international guards', () => {
   it('rejects a saved international quote that no longer matches the order', async () => {
     const { POST } = await import('./route');
 
-    const response = await POST(buildBookingRequest());
+    const response = await POST(buildInternationalBookingRequest());
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -216,13 +67,13 @@ describe('POST /api/shipping/book GIGL international guards', () => {
 
   it('rejects quote IDs that are not selected on the merchant order', async () => {
     mockCreateClient.mockReturnValue(
-      buildSupabaseMock({
+      buildInternationalSupabaseMock({
         selectedQuoteId: '33333333-3333-4333-8333-333333333333',
       })
     );
     const { POST } = await import('./route');
 
-    const response = await POST(buildBookingRequest());
+    const response = await POST(buildInternationalBookingRequest());
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -233,7 +84,7 @@ describe('POST /api/shipping/book GIGL international guards', () => {
 
   it('books GIGL international shipments with the saved quote sender', async () => {
     mockCreateClient.mockReturnValue(
-      buildSupabaseMock({ matchingDestination: true })
+      buildInternationalSupabaseMock({ matchingDestination: true })
     );
     mockBookShipment.mockResolvedValue({
       provider: 'GIGL',
@@ -244,7 +95,7 @@ describe('POST /api/shipping/book GIGL international guards', () => {
     });
     const { POST } = await import('./route');
 
-    const response = await POST(buildBookingRequest());
+    const response = await POST(buildInternationalBookingRequest());
 
     expect(response.status).toBe(201);
     expect(mockBookShipment).toHaveBeenCalledWith(
@@ -267,7 +118,10 @@ describe('POST /api/shipping/book GIGL international guards', () => {
 
   it('allows direct booking to bind a valid quote when the order has no saved quote', async () => {
     mockCreateClient.mockReturnValue(
-      buildSupabaseMock({ matchingDestination: true, selectedQuoteId: null })
+      buildInternationalSupabaseMock({
+        matchingDestination: true,
+        selectedQuoteId: null,
+      })
     );
     mockBookShipment.mockResolvedValue({
       provider: 'GIGL',
@@ -278,9 +132,59 @@ describe('POST /api/shipping/book GIGL international guards', () => {
     });
     const { POST } = await import('./route');
 
-    const response = await POST(buildBookingRequest());
+    const response = await POST(buildInternationalBookingRequest());
 
     expect(response.status).toBe(201);
     expect(mockBookShipment).toHaveBeenCalledOnce();
+  });
+
+  it('does not require a current merchant origin for a stored international quote', async () => {
+    mockCreateClient.mockReturnValue(
+      buildInternationalSupabaseMock({
+        matchingDestination: true,
+        merchantSenderAvailable: false,
+      })
+    );
+    mockBookShipment.mockResolvedValue({
+      provider: 'GIGL',
+      providerShipmentId: 'provider-1',
+      trackingNumber: 'GIGL-TRACK-1',
+      carrierName: 'GIG Logistics',
+      status: 'processing',
+    });
+    const { POST } = await import('./route');
+
+    const response = await POST(buildInternationalBookingRequest());
+
+    expect(response.status).toBe(201);
+    expect(mockBookShipment).toHaveBeenCalledWith(
+      'GIGL',
+      expect.objectContaining({
+        sender: expect.objectContaining({
+          address: '7 Quoted Origin',
+          countryCode: 'NG',
+        }),
+      })
+    );
+  });
+
+  it('rejects an international quote whose stored sender is missing', async () => {
+    mockCreateClient.mockReturnValue(
+      buildInternationalSupabaseMock({
+        matchingDestination: true,
+        storedSenderAvailable: false,
+      })
+    );
+    const { POST } = await import('./route');
+
+    const response = await POST(buildInternationalBookingRequest());
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        'The saved international shipping quote is missing its sender. Please get a new quote before shipping.',
+      code: 'INTERNATIONAL_QUOTE_SENDER_MISSING',
+    });
+    expect(mockBookShipment).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/env', () => ({
   env: {
-    NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN: 'https://cdn.ogabassey.com',
+    // Deliberately distinct from DEFAULT_BLOG_MEDIA_CDN_ORIGIN so
+    // the suite proves the default CDN stays trusted under an
+    // override, matching the shared media trust set.
+    NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN: 'https://cdn.override.example.com',
     NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
   },
 }));
@@ -64,6 +67,21 @@ describe('merchant blog OG image security helpers', () => {
       true
     );
     expect(isAllowedBlogOgImageUrl(platformUrl, 'merchant-1')).toBe(false);
+  });
+
+  it('trusts the deploy override CDN alongside the default', () => {
+    expect(
+      isAllowedBlogOgImageUrl(
+        'https://cdn.override.example.com/media/platform/blog/launch-faster.png',
+        { kind: 'platform' }
+      )
+    ).toBe(true);
+    expect(
+      isAllowedBlogOgImageUrl(
+        'https://cdn.override.example.com/media/merchant-1/blog/raw.jpg',
+        'merchant-1'
+      )
+    ).toBe(true);
   });
 
   it('allows logos only from trusted HTTPS origins', () => {

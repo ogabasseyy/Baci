@@ -51,7 +51,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     handleSend,
     handleSubmit,
     handleAddSantaWishToCart,
-  } = useOgabasseyChat({ isSanta });
+  } = useOgabasseyChat({
+    isSanta,
+    storefrontSlug: merchant?.merchant?.slug,
+  });
 
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
   // storefront page instead of sending a chat message.

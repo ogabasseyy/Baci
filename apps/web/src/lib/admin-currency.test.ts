@@ -3,6 +3,7 @@ import {
   formatAdminCompactCurrency,
   formatAdminCurrency,
   formatAdminThresholdCurrency,
+  formatAdminThresholdCurrencyForCode,
 } from '@/lib/admin-currency';
 
 describe('admin-currency', () => {
@@ -40,5 +41,11 @@ describe('admin-currency', () => {
     expect(formatAdminThresholdCurrency(null)).toBe('₦0.00');
     expect(formatAdminThresholdCurrency(undefined)).toBe('₦0.00');
     expect(formatAdminThresholdCurrency(-1)).toBe('-₦1.00');
+  });
+
+  it('formats merchant money using its explicit currency without an NGN fallback', () => {
+    expect(formatAdminThresholdCurrencyForCode(1200, 'USD')).toBe('$1.2K');
+    expect(formatAdminThresholdCurrencyForCode(1200, 'UNK')).toBe('UNK 1.2K');
+    expect(formatAdminThresholdCurrencyForCode(1200, 'ZZZ')).toBe('ZZZ 1.2K');
   });
 });

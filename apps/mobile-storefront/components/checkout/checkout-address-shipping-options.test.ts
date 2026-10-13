@@ -72,13 +72,28 @@ describe('getCheckoutAddressShippingOptions', () => {
       selectedQuoteId: 'door',
       shippingQuotes: [doorQuote],
       watchedCity: 'Ikeja',
-      watchedState: 'Lagos',
+      watchedState: 'Rivers',
     });
 
     expect(options.effectiveSelectedQuoteId).toBe('airport-delivery');
-    expect(options.localAirportQuote.displayName).toBe(
+    expect(options.localAirportQuote?.displayName).toBe(
       'Ikeja Airport Delivery'
     );
+  });
+
+  it('does not invent a local airport quote when only GIGL GoFaster is available', () => {
+    const options = getCheckoutAddressShippingOptions({
+      deliveryMethod: 'airport',
+      selectedQuote: airQuote,
+      selectedQuoteId: 'air',
+      shippingQuotes: [doorQuote, airQuote],
+      watchedCity: 'Ikeja',
+      watchedState: 'Lagos',
+    });
+
+    expect(options.localAirportQuote).toBeUndefined();
+    expect(options.airShippingQuotes).toEqual([airQuote]);
+    expect(options.effectiveSelectedQuoteId).toBe('air');
   });
 
   it('does not expose a GoFaster selection as the selected door quote', () => {

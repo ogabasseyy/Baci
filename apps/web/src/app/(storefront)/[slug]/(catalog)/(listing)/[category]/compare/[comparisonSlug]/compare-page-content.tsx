@@ -1,5 +1,6 @@
-import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import type { BreadcrumbList, FAQPage, ItemList } from 'schema-dts';
+import { StorefrontRouteNotFoundContent } from '@/app/(storefront)/[slug]/storefront-route-not-found-content';
 import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
@@ -7,6 +8,8 @@ import {
   buildProductCompareItemListSchema,
 } from '@/lib/storefront-compare/compare-schema';
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
+import { isDomainIdentifier } from '@/lib/validation';
 import { CompareRelatedLinks } from './compare-related-links';
 import {
   type ProductCompareSchemaProduct,
@@ -65,7 +68,23 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
   });
 
   if (!page || (!page.isIndexable && !page.isLegacyFallback)) {
-    notFound();
+    // Missing compare pairs are route data, not render failures. Keep this
+    // response marker-free after the storefront PPR boundary has streamed.
+    const routePrefix = getStorefrontPathPrefix(
+      await headers(),
+      resolvedParams.slug
+    );
+    return (
+      <StorefrontRouteNotFoundContent
+        backHref={
+          isDomainIdentifier(resolvedParams.slug) || routePrefix === ''
+            ? '/'
+            : `/${resolvedParams.slug}`
+        }
+        message="This comparison is unavailable or has moved."
+        title="Comparison not found"
+      />
+    );
   }
 
   const schemas = buildComparePageSchemas({

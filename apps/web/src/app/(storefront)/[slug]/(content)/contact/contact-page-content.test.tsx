@@ -48,6 +48,12 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
+// The Contact page is imported directly by the route; stub it to keep the
+// heavy page module out of this test's module graph.
+vi.mock('@/components/storefront/ogabassey/pages/help-support', () => ({
+  OgabasseyV2HelpSupport: vi.fn(() => null),
+}));
+
 vi.mock('../pages/contact/contact-page-client', () => ({
   ContactPageClient: ({ children }: { children?: ReactNode }) => (
     <div>Contact UI{children}</div>

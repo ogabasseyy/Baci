@@ -69,8 +69,11 @@ export interface BuildCommercialGuideLinksContext {
   pageKind: CommercialGuidePageKind;
   categorySlug: SupportedClusterCategory;
   brands?: string[];
+  modelFamilySlug?: string;
   priceBandSlug?: string;
+  productBrands?: Array<string | null>;
   productSlugs?: string[];
+  productNames?: string[];
 }
 
 export interface BuildCommercialGuideLinksInput {

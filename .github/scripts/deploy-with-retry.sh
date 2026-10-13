@@ -22,7 +22,8 @@ BACKOFF_SECONDS=${BACKOFF_SECONDS:-15}
 # attempt so a hung deploy is terminated and its created deployment promoted.
 # Set to 0 to disable the cap.
 DEPLOY_ATTEMPT_TIMEOUT_SECONDS=${DEPLOY_ATTEMPT_TIMEOUT_SECONDS:-1200}
-# Cap for the promote command so a hung `vercel promote` cannot run forever.
+# Cap for promote-shaped commands so a hung `vercel promote` (or the
+# overlap `vercel rollback`, which reuses this budget) cannot run forever.
 PROMOTE_TIMEOUT_SECONDS=${PROMOTE_TIMEOUT_SECONDS:-120}
 # How many times to (re)try promoting a captured deployment before giving up on
 # it. Retrying the SAME target absorbs a transient promote failure (network blip
@@ -35,8 +36,33 @@ PROMOTE_ATTEMPTS=${PROMOTE_ATTEMPTS:-2}
 # Optional exact-main authority check. The production workflow binds this to a
 # fail-closed GitHub ref verifier. Tests and non-production callers may omit it.
 DEPLOY_CURRENT_MAIN_GUARD=${DEPLOY_CURRENT_MAIN_GUARD:-}
+# Optional worker-promote overlap check. The production workflow binds this
+# to the publish-side overlap refusal: the pre-publish step is only a
+# point-in-time check before a deployment step that may run ~55 minutes,
+# and a promote recorded after that step would otherwise publish off a
+# stale latch/SHA read. Checked immediately before EVERY promote attempt
+# (a record written during the deploy, a backoff, or an earlier attempt
+# blocks the promotion) AND immediately after (a record written during
+# the promote itself rolls the publish back to the captured previous
+# production deployment). Tests and non-production callers may omit it.
+DEPLOY_PROMOTE_OVERLAP_CHECK=${DEPLOY_PROMOTE_OVERLAP_CHECK:-}
 deploy_command=("$@")
+# The deploy command prefix is static per process: resolve it once for
+# the promote/rollback command-shape dispatch in the overlap helper.
+promote_first_command="$(basename "${deploy_command[0]}")"
+promote_second_command="${deploy_command[1]:-}"
+promote_third_command="${deploy_command[2]:-}"
 last_deployment_target=""
+# Post-promote overlap exclusion (capture + verify + rollback): split
+# to keep this file under the 300-line limit.
+retry_lib_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy-with-retry-overlap.sh
+. "$retry_lib_dir/deploy-with-retry-overlap.sh"
+# Rollback target for the post-promote overlap exclusion: captured
+# ONCE before the first staging (see the attempt loop) and reused by
+# every promote in this process.
+captured_previous_production_target=""
+previous_production_captured=0
 
 run_current_main_guard() {
   if [ -z "$DEPLOY_CURRENT_MAIN_GUARD" ]; then
@@ -93,26 +119,41 @@ remember_deployment_target() {
 }
 
 run_promote_command() {
-  local first_command
-  local second_command
-  local third_command
-
-  first_command="$(basename "${deploy_command[0]}")"
-  second_command="${deploy_command[1]:-}"
-  third_command="${deploy_command[2]:-}"
+  local overlap_bound
 
   if ! run_current_main_guard; then
     echo "The current-main deployment guard refused to promote ${last_deployment_target}." >&2
     return 1
   fi
 
-  if [ "$first_command" = "pnpm" ] && [ "$second_command" = "exec" ] && [ "$third_command" = "vercel" ]; then
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" "${deploy_command[1]}" "${deploy_command[2]}" promote "$last_deployment_target" --yes
-  elif [ "$first_command" = "npx" ] && [ "$second_command" = "vercel" ]; then
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" "${deploy_command[1]}" promote "$last_deployment_target" --yes
-  else
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" promote "$last_deployment_target" --yes
+  overlap_bound=0
+  if [ -n "$DEPLOY_PROMOTE_OVERLAP_CHECK" ]; then
+    overlap_bound=1
+    if ! "$DEPLOY_PROMOTE_OVERLAP_CHECK"; then
+      echo "The worker-promote overlap check refused to promote ${last_deployment_target}." >&2
+      return 1
+    fi
   fi
+
+  if ! _run_vercel_promote "$last_deployment_target"; then
+    # Ambiguous failure (server-side effect with a client-side error):
+    # resolve the alias and verify/roll back before returning.
+    if [ "$overlap_bound" = "1" ] && recover_ambiguous_promote "$last_deployment_target" "$captured_previous_production_target"; then
+      return 0
+    fi
+    return 1
+  fi
+
+  # Durable half of the exclusion (helper): a promote recorded DURING
+  # the promote above rolls back to the pre-staging capture here.
+  # Retries re-enter above and refuse at the pre-check (the record
+  # now lists this run), so the rollback runs exactly once.
+  if [ "$overlap_bound" = "1" ]; then
+    if ! verify_post_promote_overlap "$last_deployment_target" "$captured_previous_production_target"; then
+      return 1
+    fi
+  fi
+  return 0
 }
 
 # Promote last_deployment_target, retrying a transient promote failure before
@@ -156,6 +197,26 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     exit "$guard_status"
   fi
   echo "Deploy attempt $attempt/$MAX_ATTEMPTS..."
+  # Capture the rollback target BEFORE the first staging: `vercel
+  # deploy --prod` creates a staged production-target deployment,
+  # after which newest-production queries return our own candidate
+  # instead of the deployment serving production. Once per process:
+  # later attempts reuse it (their own staged candidates would
+  # pollute a fresh read). A failed capture fails the attempt
+  # WITHOUT staging anything, so the retry re-captures cleanly.
+  if [ -n "$DEPLOY_PROMOTE_OVERLAP_CHECK" ] && [ "$previous_production_captured" = "0" ]; then
+    if ! captured_previous_production_target="$(capture_previous_production_deployment)"; then
+      echo "The worker-promote overlap check refused deploy attempt ${attempt}: no rollback target could be captured." >&2
+      if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+        sleep "$BACKOFF_SECONDS"
+      fi
+      continue
+    fi
+    previous_production_captured=1
+    if [ -z "$captured_previous_production_target" ]; then
+      echo "WARNING: no previous production deployment found; overlap rollbacks in this run will fail loud instead." >&2
+    fi
+  fi
   attempt_log="$(mktemp)"
 
   set +e

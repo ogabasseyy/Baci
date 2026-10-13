@@ -30,12 +30,14 @@ export type AnalyticsCategory = (typeof VALID_CATEGORIES)[number];
 interface AnalyticsCategoryNavProps {
   activeCategory: AnalyticsCategory;
   onCategoryChange: (category: AnalyticsCategory) => void;
+  visibleCategories?: readonly AnalyticsCategory[];
   className?: string;
 }
 
 export function AnalyticsCategoryNav({
   activeCategory,
   onCategoryChange,
+  visibleCategories = VALID_CATEGORIES,
   className,
 }: AnalyticsCategoryNavProps) {
   const categories: {
@@ -60,37 +62,39 @@ export function AnalyticsCategoryNav({
         className
       )}
     >
-      {categories.map((category) => {
-        const isActive = activeCategory === category.id;
-        const Icon = category.icon;
+      {categories
+        .filter((category) => visibleCategories.includes(category.id))
+        .map((category) => {
+          const isActive = activeCategory === category.id;
+          const Icon = category.icon;
 
-        return (
-          <button
-            type="button"
-            key={category.id}
-            onClick={() => onCategoryChange(category.id)}
-            aria-current={isActive ? 'page' : undefined}
-            className={cn(
-              'relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              isActive
-                ? 'text-white'
-                : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
-            )}
-          >
-            {isActive && (
-              <motion.div
-                layoutId="activeCategory"
-                className="absolute inset-0 bg-primary rounded-full shadow-md shadow-primary/25"
-                transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-              />
-            )}
-            <span className="relative z-10 flex items-center gap-2">
-              <Icon className="size-4" />
-              {category.label}
-            </span>
-          </button>
-        );
-      })}
+          return (
+            <button
+              type="button"
+              key={category.id}
+              onClick={() => onCategoryChange(category.id)}
+              aria-current={isActive ? 'page' : undefined}
+              className={cn(
+                'relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                isActive
+                  ? 'text-white'
+                  : 'text-foreground/70 hover:text-foreground hover:bg-muted/50'
+              )}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="activeCategory"
+                  className="absolute inset-0 bg-primary rounded-full shadow-md shadow-primary/25"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-2">
+                <Icon className="size-4" />
+                {category.label}
+              </span>
+            </button>
+          );
+        })}
     </div>
   );
 }

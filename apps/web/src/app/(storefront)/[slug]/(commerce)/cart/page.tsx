@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
+import { CommerceRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { CartPageWrapper } from '@/components/storefront/ogabassey/pages/cart-page-wrapper';
 import {
   getCachedMerchant,
@@ -30,7 +32,11 @@ export default async function CartPage({
     notFound();
   }
 
-  return <CartContent merchantId={merchant.id} />;
+  return (
+    <Suspense fallback={<CommerceRouteLoading />}>
+      <CartContent merchantId={merchant.id} />
+    </Suspense>
+  );
 }
 
 async function CartContent({ merchantId }: { merchantId: string }) {

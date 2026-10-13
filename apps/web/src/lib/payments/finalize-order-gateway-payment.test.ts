@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   ensurePaidOrderInventoryConfirmed: vi.fn(),
   fileInventoryConfirmationFailureReview: vi.fn(),
   handlePaymentForCancelledOrder: vi.fn(),
+  captureOrHoldRedvaultPayment: vi.fn(),
   notifyNewOrder: vi.fn(),
   notifyPaymentReceived: vi.fn(),
   persistPaidOrderSideEffectRetry: vi.fn(),
@@ -45,6 +46,9 @@ vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
   fileInventoryConfirmationFailureReview:
     mocks.fileInventoryConfirmationFailureReview,
 }));
+vi.mock('@/lib/payments/redvault-capture-hold', () => ({
+  captureOrHoldRedvaultPayment: mocks.captureOrHoldRedvaultPayment,
+}));
 vi.mock('@/lib/payments/handle-payment-for-cancelled-order', () => ({
   handlePaymentForCancelledOrder: mocks.handlePaymentForCancelledOrder,
 }));
@@ -69,6 +73,9 @@ vi.mock('@/lib/payments/settle-captured-order-payment', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.clearPaymentSideEffectSeed.mockResolvedValue(undefined);
+  mocks.captureOrHoldRedvaultPayment.mockResolvedValue({
+    kind: 'not_redvault',
+  });
   // Reviews file durably by default; a false return means the ops row could
   // not be written, which callers must treat as a retryable failure.
   mocks.handlePaymentForCancelledOrder.mockResolvedValue(true);
@@ -81,6 +88,46 @@ beforeEach(() => {
 });
 
 describe('finalizeOrderGatewayPayment', () => {
+  it('holds a REDVAULT capture before every paid-order branch', async () => {
+    mocks.captureOrHoldRedvaultPayment.mockResolvedValue({
+      duplicate: false,
+      kind: 'captured_held',
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        wonTransactionFlip: true,
+      })
+    );
+
+    expect(outcome).toEqual({
+      duplicate: false,
+      kind: 'captured_held',
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+    expect(mocks.completeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before the already-paid settlement-only fallback when REDVAULT holding fails', async () => {
+    mocks.captureOrHoldRedvaultPayment.mockRejectedValue(
+      new Error('redvault capture RPC unavailable')
+    );
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        wonTransactionFlip: false,
+      })
+    );
+
+    expect(outcome.kind).toBe('capture_hold_failed');
+    expect(mocks.completeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+  });
+
   it('returns completion_failed when the atomic RPC fails', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue({
       error: new Error('boom'),
@@ -195,6 +242,7 @@ describe('finalizeOrderGatewayPayment', () => {
     );
 
     expect(outcome).toEqual({
+      capturedOnPaidOrder: false,
       healed: false,
       kind: 'completed',
       orderNumber: null,
@@ -214,6 +262,22 @@ describe('finalizeOrderGatewayPayment', () => {
           platform_fee: 1165.81,
         }),
       })
+    );
+  });
+
+  it('forwards the email attempt cap to the paid-order side effects', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(completion());
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        emailMaxAttemptsPerSender: 1,
+      })
+    );
+
+    expect(outcome).toMatchObject({ kind: 'completed' });
+    expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledWith(
+      expect.objectContaining({ emailMaxAttemptsPerSender: 1 })
     );
   });
 
@@ -291,6 +355,74 @@ describe('finalizeOrderGatewayPayment', () => {
     expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a stale pending flip when the outbox names this transaction the payer', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({
+        already_completed: true,
+        order_already_paid: true,
+        order_updated: false,
+      })
+    );
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(
+        buildSupabase(
+          { data: richOrderRow },
+          {
+            outboxRows: [
+              {
+                error: 'rpc_seed_pending_drain',
+                status: 'failed',
+                step: 'merchant_settlement',
+                transaction_id: 'txn-1',
+              },
+            ],
+          }
+        ),
+        // A concurrent writer completed this row after the caller
+        // snapshotted it as pending: the payer evidence proves this is
+        // a same-transaction replay, not a new capture.
+        { wonTransactionFlip: true }
+      )
+    );
+
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: false,
+      kind: 'completed',
+    });
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+    expect(mocks.notifyPaymentReceived).toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a pending-row capture on a legacy paid order with no outbox history', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({
+        already_completed: false,
+        order_already_paid: true,
+        order_updated: false,
+      })
+    );
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }, { outboxRows: [] }), {
+        wonTransactionFlip: true,
+      })
+    );
+
+    // Another payment won the order race and no outbox row names a
+    // payer: the pending flip is the only fresh-capture signal, so the
+    // capture settles instead of misclassifying as a legacy replay.
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    expect(mocks.settleCapturedOrderPayment).toHaveBeenCalledTimes(1);
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
+
   it('skips the drain on a pure replay with no outbox history (legacy completion)', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(
       completion({
@@ -362,7 +494,10 @@ describe('finalizeOrderGatewayPayment', () => {
       )
     );
 
-    expect(outcome).toMatchObject({ kind: 'completed' });
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
     expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
     // The customer was already confirmed for the paying transaction: these
     // captured funds owe settlement only, outside the order-scoped outbox.

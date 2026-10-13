@@ -55,6 +55,7 @@ export function OrderDetailsScreenModals({
         canUseProvider={controller.providerBookingAvailable}
         fulfillmentDetails={controller.fulfillmentDetails}
         fulfillmentItemIndex={controller.fulfillmentItemIndex}
+        giglShipping={controller.giglShipping}
         hasExistingFulfillment={Boolean(
           order.fulfillment_details?.imei ||
             order.fulfillment_details?.serialNumber ||

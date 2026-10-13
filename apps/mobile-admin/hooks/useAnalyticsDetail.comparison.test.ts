@@ -118,6 +118,9 @@ describe('fetchAnalyticsDetailComparison', () => {
     expect(orderItemsSelect).toEqual(
       expect.stringContaining('product_variants(cost_price)')
     );
+    expect(orderItemsSelect).toEqual(
+      expect.stringContaining('order_item_unit_costs(cost_price, unit_index)')
+    );
     expect(orderItemsSelect).not.toEqual(
       expect.stringContaining('products!inner(cost_price)')
     );

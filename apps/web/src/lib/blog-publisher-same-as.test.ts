@@ -31,7 +31,7 @@ describe('buildBlogPublisherSameAs', () => {
       'https://instagram.com/ogabassey',
       'https://facebook.com/ogabassey',
       'https://www.tiktok.com/@ogabassey',
-      'https://twitter.com/ogabassey',
+      'https://x.com/ogabassey',
       'https://youtube.com/@ogabassey',
       'https://linkedin.com/company/ogabassey',
       'https://www.snapchat.com/@ogabassey',

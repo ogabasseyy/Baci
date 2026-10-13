@@ -52,13 +52,13 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: RepairPage, generateMetadata } = await import('./page');
+const { generateMetadata, RepairPageResolved } = await import('./page');
 
 function callRepairPage(
   slug: string,
   searchParams: Record<string, string> = {}
 ) {
-  return RepairPage({
+  return RepairPageResolved({
     params: Promise.resolve({ slug }),
     searchParams: Promise.resolve(searchParams),
   });
@@ -83,7 +83,7 @@ describe('RepairPage', () => {
     mockGetRepairDeviceDetailBySlug.mockResolvedValue(deviceDetail);
   });
 
-  it('renders crawler-visible repair guidance before the booking wizard', async () => {
+  it('renders crawler-visible repair guidance below the booking wizard', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       id: 'merchant-1',
       business_name: 'Ogabassey',

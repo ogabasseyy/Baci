@@ -2,34 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { normalizeSocialUrl } from './social';
 
 describe('normalizeSocialUrl', () => {
-  it('normalizes Twitter handles to twitter.com for crawler compatibility', () => {
+  it('normalizes X handles to the current x.com profile URL', () => {
     expect(normalizeSocialUrl('@ogabasseyy', 'twitter')).toBe(
-      'https://twitter.com/ogabasseyy'
+      'https://x.com/ogabasseyy'
     );
   });
 
-  it('rewrites existing x.com profile URLs to twitter.com for Twitter links', () => {
+  it('canonicalizes X profile URLs on x.com', () => {
     expect(normalizeSocialUrl('https://x.com/ogabasseyy', 'twitter')).toBe(
-      'https://twitter.com/ogabasseyy'
+      'https://x.com/ogabasseyy'
     );
     expect(normalizeSocialUrl('https://www.x.com/ogabasseyy', 'twitter')).toBe(
-      'https://twitter.com/ogabasseyy'
+      'https://x.com/ogabasseyy'
     );
     expect(normalizeSocialUrl('http://x.com/ogabasseyy', 'twitter')).toBe(
-      'https://twitter.com/ogabasseyy'
+      'https://x.com/ogabasseyy'
     );
     expect(normalizeSocialUrl('HTTPS://x.com/ogabasseyy', 'twitter')).toBe(
-      'https://twitter.com/ogabasseyy'
+      'https://x.com/ogabasseyy'
     );
     expect(normalizeSocialUrl('https://x.com', 'twitter')).toBe(
-      'https://twitter.com'
+      'https://x.com'
     );
     expect(normalizeSocialUrl('https://x.com?lang=en', 'twitter')).toBe(
-      'https://twitter.com?lang=en'
+      'https://x.com?lang=en'
     );
     expect(normalizeSocialUrl('https://www.x.com#profile', 'twitter')).toBe(
-      'https://twitter.com#profile'
+      'https://x.com#profile'
     );
+  });
+
+  it('canonicalizes legacy Twitter profile URLs to x.com', () => {
+    expect(
+      normalizeSocialUrl('https://twitter.com/ogabasseyy', 'twitter')
+    ).toBe('https://x.com/ogabasseyy');
   });
 
   it('does not rewrite Twitter content or reserved routes as profile URLs', () => {

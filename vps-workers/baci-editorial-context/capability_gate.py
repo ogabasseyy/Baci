@@ -38,9 +38,23 @@ def map_cited_filenames(text):
 def map_link_targets(text, map_dir="docs/product"):
     """Repository-local Markdown link destinations, normalized to repo paths."""
     targets = set()
-    for target in re.findall(r"\]\(([^)\s]+)\)", text):
-        if "://" in target or target.startswith(("#", "mailto:")):
+    for match in re.finditer(r"\]\(", text):
+        # Balanced-parenthesis scan: link destinations such as
+        # ../../apps/web/src/app/(platform)/features/page.tsx contain
+        # parentheses, so a [^)] character class truncates them.
+        depth = 1
+        i = match.end()
+        while i < len(text) and depth:
+            if text[i] == "(":
+                depth += 1
+            elif text[i] == ")":
+                depth -= 1
+            i += 1
+        target = text[match.end() : i - 1].strip()
+        if not target or "://" in target or target.startswith(("#", "mailto:")):
             continue
+        # Optional quoted title after the destination; angle-bracket form.
+        target = target.split()[0].strip().strip("<>")
         normalized = Path(map_dir, target).as_posix()
         parts = []
         for part in normalized.split("/"):
@@ -133,6 +147,24 @@ def freshness_required(register, changed):
     return _touches_unverified_refs(register, changed)
 
 
+def requires_register_update(register, changed):
+    """A fresh register whose unverified sources changed needs re-review.
+
+    Freshness alone cannot catch this: the register is still inside its
+    evidence window, the content digest excludes unverified refs by design,
+    and provenance ignores them too. A change to an unverified cited source
+    (e.g. the pricing page gaining wholesale support) can therefore leave a
+    stale "not established by this audit" claim reaching writers with every
+    check green. The same change must re-review the register in the same PR.
+    Unknown inputs fail closed elsewhere; here there is nothing to enforce.
+    """
+    if changed is None or register is None:
+        return False
+    if REGISTER_PATH in changed or _register_stale(register):
+        return False
+    return _touches_unverified_refs(register, changed)
+
+
 def should_run(base, register, changed):
     if changed is None:
         return True
@@ -151,6 +183,12 @@ def main():
         except (OSError, ValueError):
             register = None  # Broken register: run the suite for its diagnosis.
         changed = changed_paths(base)
+        if requires_register_update(register, changed):
+            print(
+                "unverified capability sources changed without a register re-review; "
+                f"update {REGISTER_PATH} (reviewed_at + digests) in this change"
+            )
+            return 1
         if register is not None and not should_run(base, register, changed):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0

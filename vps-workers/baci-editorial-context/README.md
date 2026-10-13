@@ -38,14 +38,18 @@ without inspection.
 Owner operations: re-review the register at least every 14 days — a stale
 register makes the lane fail closed to the "Register unavailable" prompt text,
 so watch for that fallback in writer output. At deploy time, record the
-register's `evidence_digest` from the reviewed repo copy and confirm the same
-digest appears in generated writer prompts; a mismatch means the deployed
-register is not the reviewed one. The pin is mandatory, not optional: set
-`BACI_CAPABILITY_REGISTER_DIGEST` to the register's `claims_digest` (printed
-by `register_digests.py`) in the writer environment — the runtime recomputes
-the claims digest from the register's actual content and compares it to the
-pin, so until it is set (and whenever content differs), the lane fails closed
-and platform-marketing prompts run without capability evidence. Treat write access to the
+register's `claims_digest` (printed by `register_digests.py`) from the reviewed
+repo copy into the writer environment as `BACI_CAPABILITY_REGISTER_DIGEST`.
+The pin is mandatory, not optional: the runtime recomputes the claims digest
+from the register's actual content (capabilities, `reviewed_at`,
+`source_revision`, `review_scope`) and refuses unless the pin equals that
+recomputed value — never the stored `claims_digest` field, and never the
+`evidence_digest` field. Re-digesting a tampered register changes the
+recomputed value, so a pin recorded at review time keeps failing closed; an
+unset pin refuses as well. Until the pin is set (and whenever content
+differs), the lane fails closed and platform-marketing prompts run without
+capability evidence. The `evidence_digest` field and the Register SHA256
+printed into each prompt are editorial cross-checks, not the pin. Treat write access to the
 register path (`BACI_CAPABILITY_REGISTER_PATH`) as prompt control: the file is
 operator-reviewed evidence whose text reaches the writer prompt, so only
 trusted operators may write it, and the hash printed into each prompt is the

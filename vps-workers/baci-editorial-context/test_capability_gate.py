@@ -172,6 +172,53 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertTrue(gate.freshness_required(fresh, None))
         self.assertTrue(gate.freshness_required(None, bound_change))
 
+    def test_map_link_targets_parse_balanced_parentheses(self):
+        text = "See [Public features](../../apps/web/src/app/(platform)/features/page.tsx) and [map](other.md)."
+        targets = gate.map_link_targets(text)
+        self.assertIn("apps/web/src/app/(platform)/features/page.tsx", targets)
+        self.assertNotIn("apps/web/src/app/(platform", targets)
+        self.assertIn("docs/product/other.md", targets)
+        self.assertEqual(gate.map_link_targets("See [x](https://example.com/a_(b)) and [y](#frag)."), set())
+
+    def test_requires_register_update(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        fresh = {"reviewed_at": now, "capabilities": [
+            {"status": "code_evidenced", "source_refs": ["apps/web/src/lib/feeds.ts"]},
+            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
+        unverified_change = {"apps/web/src/app/(platform)/pricing/page.tsx"}
+        # Fresh register + unverified source changed + register untouched: re-review required.
+        self.assertTrue(gate.requires_register_update(fresh, unverified_change))
+        # Register updated in the same change: the digest binds the new content.
+        self.assertFalse(gate.requires_register_update(fresh, unverified_change | {gate.REGISTER_PATH}))
+        # Unrelated change: no re-review.
+        self.assertFalse(gate.requires_register_update(fresh, {"apps/web/src/lib/other.ts"}))
+        # Stale register: the freshness hard gate (not this rule) owns the failure.
+        self.assertFalse(gate.requires_register_update(stale, unverified_change))
+        # Unknown inputs: fail closed elsewhere, nothing to enforce here.
+        self.assertFalse(gate.requires_register_update(fresh, None))
+        self.assertFalse(gate.requires_register_update(None, unverified_change))
+
+    def test_main_rejects_unverified_change_without_register_update(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        register = {"reviewed_at": now, "capabilities": [
+            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps(register))
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                with patch.object(gate, "changed_paths", return_value={"apps/web/src/app/(platform)/pricing/page.tsx"}):
+                    with patch.object(gate.subprocess, "run", side_effect=AssertionError("suite must not run")):
+                        with patch.dict(os.environ, {"BASE_SHA": "b" * 40, "BACI_REGISTER_REQUIRE_FRESH": "1"}):
+                            self.assertEqual(gate.main(), 1)
+            finally:
+                os.chdir(previous)
+
     def test_register_digests_cli_reproduces_shipped_digests(self):
         repo = Path(__file__).resolve().parents[2]
         register_path = repo / "docs/product/baci-capabilities.json"

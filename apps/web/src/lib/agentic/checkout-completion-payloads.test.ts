@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAgenticCheckoutOrderPayload,
   buildPaymentPendingSessionUpdate,
+  readAgenticSharedCartBinding,
 } from '@/lib/agentic/checkout-completion-payloads';
 
 const buyer = {
@@ -150,5 +151,49 @@ describe('agentic checkout completion payloads', () => {
     });
 
     expect(payload.customer_name).toBe('Ada');
+  });
+});
+
+describe('readAgenticSharedCartBinding', () => {
+  const COMPLETE = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+
+  it('reads a complete binding from session metadata', () => {
+    expect(
+      readAgenticSharedCartBinding({
+        agentic: { shared_cart: COMPLETE },
+      })
+    ).toEqual(COMPLETE);
+  });
+
+  it('returns null for linkage-only metadata without a prepared session', () => {
+    expect(
+      readAgenticSharedCartBinding({
+        agentic: { shared_cart: { cart_id: COMPLETE.cart_id } },
+      })
+    ).toBeNull();
+  });
+
+  it('returns null for malformed bindings', () => {
+    expect(readAgenticSharedCartBinding({})).toBeNull();
+    expect(readAgenticSharedCartBinding(null)).toBeNull();
+    expect(
+      readAgenticSharedCartBinding({
+        agentic: {
+          shared_cart: { ...COMPLETE, checkout_generation: 0 },
+        },
+      })
+    ).toBeNull();
+    expect(
+      readAgenticSharedCartBinding({
+        agentic: {
+          shared_cart: { ...COMPLETE, checkout_session_id: '' },
+        },
+      })
+    ).toBeNull();
   });
 });

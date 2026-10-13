@@ -95,6 +95,13 @@ export interface CartContextType {
   isHydrated: boolean;
   /** Present only when the provider delegates to the shared server cart. */
   sharedCartEnabled?: boolean;
+  /**
+   * Authoritative cart identity for checkout binding. Null until the
+   * shared snapshot is adopted; absent in legacy mode.
+   */
+  sharedCartRef?: { cartId: string; version: number } | null;
+  /** Refetches the authoritative snapshot; absent in legacy mode. */
+  refreshSharedCart?: () => Promise<void>;
   /** Last-confirmed-plus-pending sync state; absent in legacy mode. */
   syncStatus?: SharedCartSyncStatus;
   /** Last sync failure code, cleared on the next success. */

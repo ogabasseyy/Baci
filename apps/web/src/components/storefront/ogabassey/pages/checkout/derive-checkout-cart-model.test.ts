@@ -59,4 +59,24 @@ describe('deriveCheckoutCartModel', () => {
     expect(changedQuantity.quoteItemsFingerprint).toBe('phone:3:800');
     expect(changedPrice.quoteItemsFingerprint).toBe('phone:2:750');
   });
+
+  it('carries the shared cart ref for bound checkout', () => {
+    const ref = {
+      cartId: '22222222-2222-4222-8222-222222222222',
+      version: 3,
+    };
+    const model = deriveCheckoutCartModel(negotiatedCart, true, ref);
+
+    expect(model.sharedCartRef).toEqual(ref);
+    expect(model.checkoutCartTotal).toBe(1680);
+  });
+
+  it('leaves the shared cart ref null for legacy carts', () => {
+    expect(
+      deriveCheckoutCartModel(negotiatedCart, true).sharedCartRef
+    ).toBeNull();
+    expect(
+      deriveCheckoutCartModel(negotiatedCart, true, null).sharedCartRef
+    ).toBeNull();
+  });
 });

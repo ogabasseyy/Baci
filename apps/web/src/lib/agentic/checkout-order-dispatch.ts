@@ -5,6 +5,7 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
+import { submitCartBoundOrder } from '@/lib/cart/order-binding';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -55,6 +56,43 @@ export interface AgenticCheckoutOrderResult {
   statusText: string;
 }
 
+function boundOrderFailureResult(code: string): AgenticCheckoutOrderResult {
+  if (code === 'unauthorized') {
+    return {
+      data: { error: 'Shared cart binding is not permitted for this caller' },
+      error: 'Shared cart binding is not permitted for this caller',
+      ok: false,
+      orderId: undefined,
+      status: 403,
+      statusText: 'Forbidden',
+    };
+  }
+  if (code === 'invalid_item') {
+    return {
+      data: { error: 'Unable to create order' },
+      error: 'Unable to create order',
+      ok: false,
+      orderId: undefined,
+      status: 500,
+      statusText: 'Internal Server Error',
+    };
+  }
+  const error =
+    code === 'expired'
+      ? 'Shared checkout session expired; review the cart again'
+      : code === 'not_found'
+        ? 'Shared checkout session not found; start checkout again'
+        : 'Shared cart changed during checkout; refresh the cart and retry';
+  return {
+    data: { error },
+    error,
+    ok: false,
+    orderId: undefined,
+    status: 409,
+    statusText: 'Conflict',
+  };
+}
+
 export async function createAgenticCheckoutOrder(
   orderPayload: Record<string, unknown>,
   supabase: SupabaseClient
@@ -80,6 +118,9 @@ export async function createAgenticCheckoutOrder(
       assurance_fee: hasAssurance
         ? calculateAssuranceFee(itemPrice, item.quantity)
         : 0,
+      // Shared-cart line provenance for bound orders (traceability;
+      // the binding RPC revalidates the cart version itself).
+      ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
       condition: item.condition,
       has_assurance: hasAssurance,
       image_url: item.imageUrl ?? item.image_url ?? null,
@@ -168,59 +209,93 @@ export async function createAgenticCheckoutOrder(
     };
   }
 
-  const { data: orderRows, error: orderError } = await supabase.rpc(
-    'create_storefront_order',
-    {
-      p_ad_tracking: body.ad_tracking ?? null,
-      p_customer_email: body.customer_email,
-      p_customer_name: body.customer_name,
-      p_customer_phone: body.customer_phone ?? null,
-      p_discount_amount: body.discount_amount,
-      p_items: orderItemsPayload,
-      p_merchant_id: body.merchant_id,
-      p_notes: body.notes ?? null,
-      p_payment_method: body.payment_method,
-      p_payment_status: body.payment_status,
-      p_selected_quote_id: body.selected_quote_id || null,
-      p_shipping_address: body.shipping_address || null,
-      p_shipping_fee: body.shipping_fee,
-      p_shipping_provider: body.shipping_provider ?? null,
-      p_shipping_status: body.shipping_status,
-      p_source: body.source,
-      p_tax_amount: computedTaxAmount,
-      // Codex P1 (PR #1622 round 7): forward `p_gift_wrapping_fee`
-      // through to the RPC. The agentic
-      // `calculateCheckoutSession` doesn't quote gift wrapping
-      // today, so `body.gift_wrapping_fee` is currently the Zod
-      // default 0 — but the schema accepts the field, and
-      // omitting it from the RPC call left a silent
-      // under-quote path waiting for the first agentic flow that
-      // does pass it. The RPC's `gift_wrapping_fee_negative`
-      // guard + the column's CHECK `>= 0` jointly clamp invalid
-      // input.
-      p_gift_wrapping_fee: body.gift_wrapping_fee,
-      // Codex P1 (PR #1622 round 8): forward
-      // `body.expected_total` to enable the RPC's
-      // `order_total_mismatch` parity guard for agentic flows.
-      // Today `calculateCheckoutSession` doesn't quote VAT, so
-      // the agentic completion payload never includes
-      // `expected_total` and this is `null` (parity check
-      // skipped — matches existing behavior; fabricating a
-      // value from the VAT-exclusive quote would break every
-      // VAT-registered agentic checkout with a mismatch the
-      // agent can't recover from until session calc learns
-      // VAT). When `calculateCheckoutSession` is upgraded to
-      // emit a VAT-inclusive total (deferred follow-up tracked
-      // separately), `buildOrderRpcPayload` will start setting
-      // `expected_total` and this wiring activates the parity
-      // guard automatically — no second round trip here.
-      p_expected_total:
-        typeof body.expected_total === 'number' ? body.expected_total : null,
-      p_tracking_number: body.tracking_number ?? null,
-      // Agentic checkout is API-key scoped, not tied to a customer auth session.
-      p_user_id: null,
-    }
-  );
+  const orderRpcArgs = {
+    p_ad_tracking: body.ad_tracking ?? null,
+    p_customer_email: body.customer_email,
+    p_customer_name: body.customer_name,
+    p_customer_phone: body.customer_phone ?? null,
+    p_discount_amount: body.discount_amount,
+    p_items: orderItemsPayload,
+    p_merchant_id: body.merchant_id,
+    p_notes: body.notes ?? null,
+    p_payment_method: body.payment_method,
+    p_payment_status: body.payment_status,
+    p_selected_quote_id: body.selected_quote_id || null,
+    p_shipping_address: body.shipping_address || null,
+    p_shipping_fee: body.shipping_fee,
+    p_shipping_provider: body.shipping_provider ?? null,
+    p_shipping_status: body.shipping_status,
+    p_source: body.source,
+    p_tax_amount: computedTaxAmount,
+    // Codex P1 (PR #1622 round 7): forward `p_gift_wrapping_fee`
+    // through to the RPC. The agentic
+    // `calculateCheckoutSession` doesn't quote gift wrapping
+    // today, so `body.gift_wrapping_fee` is currently the Zod
+    // default 0 — but the schema accepts the field, and
+    // omitting it from the RPC call left a silent
+    // under-quote path waiting for the first agentic flow that
+    // does pass it. The RPC's `gift_wrapping_fee_negative`
+    // guard + the column's CHECK `>= 0` jointly clamp invalid
+    // input.
+    p_gift_wrapping_fee: body.gift_wrapping_fee,
+    // Codex P1 (PR #1622 round 8): forward
+    // `body.expected_total` to enable the RPC's
+    // `order_total_mismatch` parity guard for agentic flows.
+    // Today `calculateCheckoutSession` doesn't quote VAT, so
+    // the agentic completion payload never includes
+    // `expected_total` and this is `null` (parity check
+    // skipped — matches existing behavior; fabricating a
+    // value from the VAT-exclusive quote would break every
+    // VAT-registered agentic checkout with a mismatch the
+    // agent can't recover from until session calc learns
+    // VAT). When `calculateCheckoutSession` is upgraded to
+    // emit a VAT-inclusive total (deferred follow-up tracked
+    // separately), `buildOrderRpcPayload` will start setting
+    // `expected_total` and this wiring activates the parity
+    // guard automatically — no second round trip here.
+    p_expected_total:
+      typeof body.expected_total === 'number' ? body.expected_total : null,
+    p_tracking_number: body.tracking_number ?? null,
+    // Agentic checkout is API-key scoped, not tied to a customer auth session.
+    p_user_id: null,
+  };
+
+  // Shared-cart checkouts submit through the binding RPC, which runs the
+  // same base order RPC inside the final transaction and closes the
+  // reviewed cart generation atomically. Binding-level failures return
+  // early; inner order rejections fall through to the existing mapper.
+  const sharedCartBinding = body.shared_cart ?? null;
+  const bound = sharedCartBinding
+    ? await submitCartBoundOrder(
+        { client: supabase },
+        {
+          args: orderRpcArgs as Record<string, unknown>,
+          generation: sharedCartBinding.checkout_generation,
+          sessionId: sharedCartBinding.checkout_session_id,
+          variant: 'base',
+        }
+      )
+    : null;
+  if (
+    bound &&
+    !bound.ok &&
+    bound.code !== 'order_rejected' &&
+    bound.code !== 'temporarily_unavailable'
+  ) {
+    return boundOrderFailureResult(bound.code);
+  }
+  const { data: orderRows, error: orderError } = bound
+    ? {
+        data: bound.ok ? bound.order : null,
+        error: bound.ok
+          ? null
+          : // Inner rejections reuse the direct-path shape (code carries
+            // the message) so the mapper below behaves identically.
+            bound.code === 'order_rejected'
+            ? { code: bound.message, message: bound.message }
+            : { code: 'XX000', message: bound.message },
+      }
+    : await supabase.rpc('create_storefront_order', orderRpcArgs);
 
   const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
   if (orderError || !order) {

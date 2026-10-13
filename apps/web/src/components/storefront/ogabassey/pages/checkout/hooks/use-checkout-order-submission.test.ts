@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
@@ -10,6 +11,9 @@ import type { CheckoutOrderSubmissionContext } from './checkout-order-submission
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 
 vi.mock('@/hooks/use-toast', () => ({ toast: vi.fn() }));
+vi.mock('@/hooks/cart/shared-cart-client', () => ({
+  prepareSharedCartCheckout: vi.fn(),
+}));
 vi.mock('../handlers/direct-payment', () => ({
   executeResumedDirectPayment: vi.fn().mockResolvedValue(undefined),
 }));
@@ -308,5 +312,138 @@ describe('useCheckoutOrderSubmission', () => {
     expect(context.processing.isOrderInFlightRef.current).toBe(false);
     expect(prepareCheckoutOrderSubmission).not.toHaveBeenCalled();
     expect(submitPreparedCheckout).not.toHaveBeenCalled();
+  });
+
+  describe('shared cart binding', () => {
+    const SHARED_REF = {
+      cartId: '22222222-2222-4222-8222-222222222222',
+      version: 3,
+    };
+    const REVIEW = {
+      cartId: SHARED_REF.cartId,
+      cartVersion: 3,
+      checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+      currency: 'NGN',
+      generation: 1,
+      merchantId: 'merchant-1',
+      subtotalMinor: 25000,
+      unavailableCount: 0,
+    };
+
+    function freshContext() {
+      const context = createContext();
+      context.resumed.order = null;
+      context.resumed.preferredGateway = null;
+      vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+        kind: 'ready',
+        delivery: {
+          address: {},
+          finalAddress: '1 Main St',
+          finalCity: 'Lagos',
+          finalState: 'Lagos',
+          merchantRateId: null,
+          shippingProvider: null,
+        },
+        identity: {
+          checkoutFingerprint: 'fp-1',
+          items: [],
+          normalizedPaymentMethod: 'paystack',
+        },
+      } as unknown as PrepareCheckoutOrderSubmissionResult);
+      return context;
+    }
+
+    it('prepares the shared cart and binds the submit', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: true,
+        replayed: false,
+        review: REVIEW,
+        sessionReused: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(prepareSharedCartCheckout).toHaveBeenCalledWith({
+        cartId: SHARED_REF.cartId,
+        expectedVersion: 3,
+        operationId: expect.any(String),
+      });
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          identity: expect.objectContaining({
+            sharedCartBinding: {
+              cart_id: SHARED_REF.cartId,
+              cart_version: 3,
+              checkout_generation: 1,
+              checkout_session_id: REVIEW.checkoutSessionId,
+            },
+          }),
+        })
+      );
+    });
+
+    it('skips preparation for legacy carts', async () => {
+      const context = freshContext();
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          identity: expect.not.objectContaining({
+            sharedCartBinding: expect.anything(),
+          }),
+        })
+      );
+    });
+
+    it('refreshes the cart and stops the submit when the review goes stale', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      const refreshSharedCart = vi.fn().mockResolvedValue(undefined);
+      context.cart.refreshSharedCart = refreshSharedCart;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        code: 'refresh_required',
+        currentVersion: 4,
+        ok: false,
+        retryable: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(refreshSharedCart).toHaveBeenCalledTimes(1);
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Cart Changed' })
+      );
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
+
+    it('stops the submit when preparation fails', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        code: 'temporarily_unavailable',
+        currentVersion: null,
+        ok: false,
+        retryable: true,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Checkout Unavailable' })
+      );
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
   });
 });

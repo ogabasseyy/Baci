@@ -82,6 +82,8 @@ export interface UseSharedCartResult {
   toggleAssurance: (cartItemId: string) => void;
   retryPendingSync: () => void;
   retryImport: () => void;
+  /** Refetches the authoritative snapshot (checkout review refresh). */
+  refreshSharedCart: () => Promise<void>;
 }
 
 type AdoptOutcome = 'unknown' | 'session' | 'bootstrap' | 'none' | 'expired';
@@ -1123,6 +1125,10 @@ export function useSharedCart(
     });
   }
 
+  function refreshSharedCart(): Promise<void> {
+    return refreshNow();
+  }
+
   function retryImport(): void {
     if (!enabled) return;
     const generation = generationRef.current;
@@ -1211,6 +1217,9 @@ export function useSharedCart(
       isHydrated: true,
       removeFromCart: noop,
       repriceLine: noop,
+      refreshSharedCart: async () => {
+        // Disabled hook: nothing to refresh.
+      },
       retryImport: noop,
       retryPendingSync: noop,
       syncError: null,
@@ -1234,6 +1243,7 @@ export function useSharedCart(
     isHydrated: hydrated,
     removeFromCart,
     repriceLine,
+    refreshSharedCart,
     retryImport,
     retryPendingSync,
     syncError: state.syncError,

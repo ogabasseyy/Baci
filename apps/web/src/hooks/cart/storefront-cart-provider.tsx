@@ -964,6 +964,11 @@ export function StorefrontCartProvider({
           syncStatus: shared.syncStatus,
           syncError: shared.syncError,
           retryPendingSync: shared.retryPendingSync,
+          sharedCartRef:
+            shared.cartId && shared.version !== null
+              ? { cartId: shared.cartId, version: shared.version }
+              : null,
+          refreshSharedCart: shared.refreshSharedCart,
         }
       : {}),
   };

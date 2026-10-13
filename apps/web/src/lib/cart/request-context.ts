@@ -303,7 +303,8 @@ export type CartQuotaOperation =
   | 'snapshot'
   | 'handoff_issue'
   | 'handoff_redeem'
-  | 'handoff_preview';
+  | 'handoff_preview'
+  | 'checkout_prepare';
 
 export interface CartQuotaInput {
   operation: CartQuotaOperation;
@@ -336,6 +337,8 @@ const CART_QUOTA_BUDGETS: Record<
   handoff_issue: { limit: 60, windowMs: 60 * 60 * 1000 },
   handoff_redeem: { limit: 120, windowMs: 60 * 60 * 1000 },
   handoff_preview: { limit: 120, windowMs: 60 * 1000 },
+  // Checkout review preparation: per-submit plus refresh retries.
+  checkout_prepare: { limit: 60, windowMs: 60 * 1000 },
 };
 
 type WindowCounter = { count: number; resetTime: number };

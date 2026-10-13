@@ -302,6 +302,10 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  create_storefront_order_with_cart_binding?: {
+    data: unknown;
+    error: unknown;
+  };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
@@ -10020,5 +10024,250 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
       shipping_rate_name: 'Nationwide Delivery',
       shipping_pickup_details: null,
     });
+  });
+});
+
+describe('POST /api/orders — shared cart binding', () => {
+  const SHARED_CART = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  const BOUND_ORDER = {
+    ...baseOrderRow,
+    customer_email: 'customer@example.com',
+    customer_name: 'Test Customer',
+    customer_phone: '08012345678',
+    discount_amount: 0,
+    gift_wrapping_fee: 0,
+    idempotency_replayed: false,
+    merchant_id: MERCHANT_ID,
+    payment_method: 'paystack',
+    payment_status: 'unpaid',
+    shipping_address: null,
+    shipping_status: 'pending',
+    tax_amount: 0,
+    tax_basis: 'exclusive',
+    tracking_token: 'tok-123',
+  };
+  const BOUND_RECEIPT = {
+    binding: {
+      cartId: SHARED_CART.cart_id,
+      cartVersionReviewed: 3,
+      checkout_generation: 1,
+      merchantId: MERCHANT_ID,
+      sessionId: SHARED_CART.checkout_session_id,
+      variant: 'base',
+    },
+    code: null,
+    ok: true,
+    order: BOUND_ORDER,
+    replayed: false,
+  };
+
+  async function setupBinding(overrides: RpcOverrides) {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const supabase = buildMockSupabase(overrides, {
+      productRows: [{ id: 'p-1', price: 1000 }],
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(AUTH_USER_ID),
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+    return supabase;
+  }
+
+  function bindingRequest(extra: Record<string, unknown> = {}) {
+    return new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        shared_cart: SHARED_CART,
+        ...extra,
+      }),
+    });
+  }
+
+  it('submits a bound base order through the binding RPC', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: expect.objectContaining({
+          p_merchant_id: MERCHANT_ID,
+          p_customer_email: 'customer@example.com',
+        }),
+        p_generation: 1,
+        p_session_id: SHARED_CART.checkout_session_id,
+        p_variant: 'base',
+      }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('forwards cart line ids into the bound items payload', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        items: [
+          {
+            cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+            name: 'Widget',
+            price: 1000,
+            product_id: 'p-1',
+            quantity: 1,
+          },
+        ],
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_items: expect.arrayContaining([
+            expect.objectContaining({
+              cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              product_id: 'p-1',
+            }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('keeps the direct path when no binding is sent', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order: { data: [baseOrderRow], error: null },
+    });
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(baseOrderPayload),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('maps a stale binding to 409 with a refresh code', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_stale' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_STALE');
+  });
+
+  it('maps an expired session to 409', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_expired' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_SESSION_EXPIRED');
+  });
+
+  it('maps a binding authorization failure to 403', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_unauthorized' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(403);
+    expect((await readJson(response)).code).toBe(
+      'SHARED_CART_BINDING_FORBIDDEN'
+    );
+  });
+
+  it('keeps legacy mapping for inner order rejections on the bound path', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'order_total_mismatch' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+    expect(await readJson(response)).toMatchObject({
+      details: 'order_total_mismatch',
+      error: 'Failed to create order',
+    });
+  });
+
+  it('accepts a replayed binding as the same order', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: {
+          ...BOUND_RECEIPT,
+          order: { ...BOUND_ORDER, idempotency_replayed: true },
+          replayed: true,
+        },
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+    const payload = await readJson(response);
+
+    // Replays answer 200 (not 201): the receipt's idempotency flag flows
+    // through the same replay branch as direct idempotent replays.
+    expect(response.status).toBe(200);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({ p_variant: 'base' })
+    );
+    expect(payload.order?.id ?? payload.id).toBe('order-id');
   });
 });

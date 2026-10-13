@@ -212,6 +212,38 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     expect(result.current.cartTotal).toBe(100);
   });
 
+  it('exposes the shared cart ref and refresh for checkout binding', async () => {
+    mockAdopted();
+    vi.mocked(fetchSharedCartProducts).mockResolvedValue(
+      new Map([['prod-1', product()]])
+    );
+    const { result } = renderHook(() => useCart(), {
+      wrapper: delegatedWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    await waitFor(() => expect(result.current.cart).toHaveLength(1));
+
+    expect(result.current.sharedCartRef).toEqual({
+      cartId: CART_ID,
+      version: 3,
+    });
+    expect(typeof result.current.refreshSharedCart).toBe('function');
+  });
+
+  it('leaves the shared cart ref empty in legacy mode', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantId={MERCHANT_ID} merchantSlug={SLUG}>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    expect(result.current.sharedCartEnabled).not.toBe(true);
+    expect(result.current.sharedCartRef ?? null).toBeNull();
+  });
+
   it('sends versioned commands for delegated actions', async () => {
     mockAdopted([], 3);
     vi.mocked(sendSharedCartCommand).mockResolvedValue({

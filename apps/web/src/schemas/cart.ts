@@ -86,6 +86,12 @@ export const sharedCartMutationRequestSchema = z.strictObject({
   operationId: operationIdSchema,
 });
 
+export const sharedCartPrepareRequestSchema = z.strictObject({
+  cartId: z.uuid(),
+  expectedVersion: z.number().int().min(1),
+  operationId: operationIdSchema,
+});
+
 export const createCartRequestSchema = z.strictObject({
   currency: z
     .string()

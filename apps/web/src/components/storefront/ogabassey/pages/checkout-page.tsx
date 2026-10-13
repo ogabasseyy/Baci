@@ -25,7 +25,14 @@ import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-finan
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 export const CheckoutPage: React.FC = () => {
-  const { cart, clearCart, isHydrated, removeFromCart } = useCart();
+  const {
+    cart,
+    clearCart,
+    isHydrated,
+    removeFromCart,
+    sharedCartRef,
+    refreshSharedCart,
+  } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
 
@@ -47,7 +54,8 @@ export const CheckoutPage: React.FC = () => {
     checkoutCartTotal,
     itemSubtotal,
     quoteItemsFingerprint,
-  } = deriveCheckoutCartModel(cart, hasPriceNegotiation);
+    sharedCartRef: checkoutSharedCartRef,
+  } = deriveCheckoutCartModel(cart, hasPriceNegotiation, sharedCartRef);
 
   // Paystack (and its DVA-backed bank transfer) settle NGN only — mirror the
   // PaymentStep gating so a non-NGN checkout never renders rails the
@@ -215,6 +223,8 @@ export const CheckoutPage: React.FC = () => {
       checkoutCartTotal,
       clearCart,
       removeFromCart,
+      sharedCartRef: checkoutSharedCartRef,
+      refreshSharedCart,
     },
     delivery: {
       session: delivery,

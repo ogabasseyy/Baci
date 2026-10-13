@@ -230,4 +230,38 @@ describe('convertUcpCartToCheckout', () => {
       'merchant-1'
     );
   });
+
+  it('returns 409 refresh_required when the cart migrated to the shared cart', async () => {
+    const { checkoutInsertChain, from } = createSupabaseMock({
+      cartResult: {
+        data: {
+          cart_id: 'cart_123',
+          cart_items: [{ id: 'product-1', quantity: 1 }],
+          checkout_session_id: null,
+          currency: 'NGN',
+          migrated_to_cart_id: 'cart-shared-1',
+          status: 'active',
+        },
+        error: null,
+      },
+    });
+
+    const response = await convertUcpCartToCheckout({
+      cartId: 'cart_123',
+      merchant,
+      mutation,
+      requestUrl: 'http://localhost/api/agentic/carts/cart_123/checkout',
+      supabase: { from } as never,
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      cart_id: 'cart-shared-1',
+      code: 'refresh_required',
+    });
+    // The retired row must not convert through the legacy path: no
+    // checkout session, no cart link write.
+    expect(checkoutInsertChain.insert).not.toHaveBeenCalled();
+  });
 });

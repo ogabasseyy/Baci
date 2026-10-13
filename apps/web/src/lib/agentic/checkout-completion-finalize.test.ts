@@ -783,4 +783,102 @@ describe('finalizeAgenticCheckoutPayment', () => {
     expect(revalidateProductSlugs).not.toHaveBeenCalled();
     expect(revalidateDashboard).toHaveBeenCalledExactlyOnceWith('merchant-1');
   });
+
+  it('forwards a complete shared-cart binding from metadata to dispatch', async () => {
+    const claimChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([
+      claimChain,
+      markerChain,
+      finalChain,
+    ]);
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      data: { order: { id: 'order-1' } },
+      error: undefined,
+      ok: true,
+      orderId: 'order-1',
+      status: 201,
+      statusText: 'Created',
+    });
+    const sharedCart = {
+      cart_id: '223e4567-e89b-12d3-a456-426614174000',
+      cart_version: 3,
+      checkout_generation: 1,
+      checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+    };
+
+    const response = await finalizeAgenticCheckoutPayment({
+      ...finalizeInput(supabase),
+      metadata: { agentic: { shared_cart: sharedCart } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ shared_cart: sharedCart }),
+      expect.anything()
+    );
+  });
+
+  it('omits linkage-only shared-cart metadata from the order payload', async () => {
+    const claimChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([
+      claimChain,
+      markerChain,
+      finalChain,
+    ]);
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      data: { order: { id: 'order-1' } },
+      error: undefined,
+      ok: true,
+      orderId: 'order-1',
+      status: 201,
+      statusText: 'Created',
+    });
+
+    await finalizeAgenticCheckoutPayment({
+      ...finalizeInput(supabase),
+      metadata: {
+        agentic: {
+          shared_cart: {
+            cart_id: '223e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      },
+    });
+
+    expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
+      expect.not.objectContaining({ shared_cart: expect.anything() }),
+      expect.anything()
+    );
+  });
+
+  it('propagates a binding conflict from dispatch instead of masking it', async () => {
+    const claimChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const releaseChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([claimChain, releaseChain]);
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      data: { error: 'Shared cart changed during checkout; refresh and retry' },
+      error: 'Shared cart changed during checkout; refresh and retry',
+      ok: false,
+      orderId: undefined,
+      status: 409,
+      statusText: 'Conflict',
+    });
+
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: 'Shared cart changed during checkout; refresh and retry',
+    });
+    expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 409 })
+    );
+  });
 });

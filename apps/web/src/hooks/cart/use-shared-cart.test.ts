@@ -1987,4 +1987,63 @@ describe('useSharedCart negotiation and totals', () => {
     // 2×100 + 1×50, plus 5% assurance on the covered line.
     expect(result.current.cartTotal).toBeCloseTo(252.5, 2);
   });
+
+  it('exposes a manual refresh that refetches a stale snapshot', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchSharedCartSnapshot)
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 3 }),
+          warnings: [],
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          snapshot: snapshot({ version: 4 }),
+          warnings: [],
+        });
+
+      const { result } = renderHook(() =>
+        useSharedCart({
+          merchantId: MERCHANT_ID,
+          merchantSlug: SLUG,
+          sessionGeneration: 1,
+        })
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1);
+      expect(result.current.version).toBe(3);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+      await act(async () => {
+        await result.current.refreshSharedCart();
+      });
+
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2);
+      expect(result.current.version).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves refreshSharedCart without fetching when disabled', async () => {
+    const { result } = renderHook(() =>
+      useSharedCart({
+        enabled: false,
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+
+    await act(async () => {
+      await result.current.refreshSharedCart();
+    });
+    expect(fetchSharedCartSnapshot).not.toHaveBeenCalled();
+  });
 });

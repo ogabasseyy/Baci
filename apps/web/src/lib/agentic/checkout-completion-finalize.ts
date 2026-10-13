@@ -6,6 +6,7 @@ import type {
 import {
   buildAgenticCheckoutOrderPayload,
   buildPaymentPendingSessionUpdate,
+  readAgenticSharedCartBinding,
 } from '@/lib/agentic/checkout-completion-payloads';
 import {
   type AgenticCheckoutBuyer,
@@ -135,12 +136,18 @@ export async function finalizeAgenticCheckoutPayment({
       ? markedOrderId.trim()
       : null;
   if (!orderId) {
-    const orderPayload = buildAgenticCheckoutOrderPayload({
-      buyer,
-      dvaAccount,
-      session: orderSession,
-      sessionCalc: orderSessionCalc,
-    });
+    // A session with a prepared shared-cart binding submits bound; anything
+    // else stays on the legacy path.
+    const sharedCartBinding = readAgenticSharedCartBinding(metadata);
+    const orderPayload = {
+      ...buildAgenticCheckoutOrderPayload({
+        buyer,
+        dvaAccount,
+        session: orderSession,
+        sessionCalc: orderSessionCalc,
+      }),
+      ...(sharedCartBinding ? { shared_cart: sharedCartBinding } : {}),
+    };
     let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
     try {
       orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
@@ -176,6 +183,14 @@ export async function finalizeAgenticCheckoutPayment({
         status: orderResult.status,
         statusText: orderResult.statusText,
       });
+      // Binding conflicts (stale/expired/forbidden) are actionable: the
+      // agent refreshes the cart and retries. Everything else stays masked.
+      if (orderResult.status === 409 || orderResult.status === 403) {
+        return respond(
+          { error: orderResult.error || 'Shared cart binding conflict' },
+          orderResult.status as 409 | 403
+        );
+      }
       return respond({ error: 'Order creation failed' }, 500);
     }
     const createdOrderId = orderResult.orderId;

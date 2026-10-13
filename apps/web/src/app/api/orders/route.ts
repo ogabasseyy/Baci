@@ -7,6 +7,11 @@ import {
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
+import {
+  ORDER_BINDING_RPC_NAMES,
+  selectOrderBindingVariant,
+  submitCartBoundOrder,
+} from '@/lib/cart/order-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -453,6 +458,49 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function sharedCartBindingFailureStatus(code: string): number {
+  switch (code) {
+    case 'unauthorized':
+      return 403;
+    case 'invalid_item':
+      return 500;
+    default:
+      return 409;
+  }
+}
+
+function sharedCartBindingFailureBody(code: string): Record<string, string> {
+  switch (code) {
+    case 'refresh_required':
+      return {
+        code: 'SHARED_CART_STALE',
+        error:
+          'Your cart changed during checkout. Refresh to review the latest cart.',
+      };
+    case 'not_found':
+      return {
+        code: 'SHARED_CART_SESSION_NOT_FOUND',
+        error:
+          'This checkout session is no longer available. Start checkout again.',
+      };
+    case 'expired':
+      return {
+        code: 'SHARED_CART_SESSION_EXPIRED',
+        error: 'This checkout session expired. Review your cart again.',
+      };
+    case 'unauthorized':
+      return {
+        code: 'SHARED_CART_BINDING_FORBIDDEN',
+        error: 'This cart cannot be submitted for checkout.',
+      };
+    default:
+      return {
+        code: 'SHARED_CART_BINDING_FAILED',
+        error: 'Failed to submit the shared cart. Please try again.',
+      };
+  }
+}
+
 // POST /api/orders - Create new order from storefront
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
 // Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
@@ -519,6 +567,8 @@ export async function POST(request: NextRequest) {
       savings_goal_id,
       // User ID
       user_id,
+      // Shared server cart binding (optional; absent for legacy checkouts)
+      shared_cart,
     } = body;
 
     if (user && user_id && user_id !== user.id) {
@@ -948,6 +998,9 @@ export async function POST(request: NextRequest) {
 
       return {
         product_id: getOrderItemProductId(item),
+        // Shared-cart line provenance for bound orders (traceability;
+        // the binding RPC revalidates the cart version itself).
+        ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
@@ -2079,13 +2132,14 @@ export async function POST(request: NextRequest) {
         : {}),
     };
 
-    const orderCreateRpcName = requestedSavingsRedemption
-      ? 'create_storefront_order_with_savings'
-      : hasVoucherItem
-        ? 'create_storefront_order_with_quiz_voucher'
-        : discountCodeId
-          ? 'create_storefront_order_with_discount_code'
-          : 'create_storefront_order';
+    // One variant rule for both paths: legacy checkouts call the variant
+    // RPC directly, bound checkouts route it through the cart binding.
+    const orderVariant = selectOrderBindingVariant({
+      discountCodeId,
+      hasVoucherItem,
+      requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
+    });
+    const orderCreateRpcName = ORDER_BINDING_RPC_NAMES[orderVariant];
 
     const orderCreateRpcArgs = requestedSavingsRedemption
       ? {
@@ -2197,10 +2251,43 @@ export async function POST(request: NextRequest) {
       }
       return redvaultCheckoutResponse;
     }
-    const { data: orderRows, error: orderError } = await orderRpcClient.rpc(
-      orderCreateRpcName,
-      orderCreateRpcArgs
-    );
+    // Shared-cart checkouts submit through the binding RPC, which runs
+    // the same variant RPC inside the final transaction and closes the
+    // reviewed cart generation atomically. Binding-level failures return
+    // early; inner order rejections keep their message and fall through
+    // to the existing mapper below.
+    const bound = shared_cart
+      ? await submitCartBoundOrder(
+          { client: orderRpcClient },
+          {
+            args: orderCreateRpcArgs as Record<string, unknown>,
+            generation: shared_cart.checkout_generation,
+            sessionId: shared_cart.checkout_session_id,
+            variant: orderVariant,
+          }
+        )
+      : null;
+    if (
+      bound &&
+      !bound.ok &&
+      bound.code !== 'order_rejected' &&
+      bound.code !== 'temporarily_unavailable'
+    ) {
+      return NextResponse.json(sharedCartBindingFailureBody(bound.code), {
+        status: sharedCartBindingFailureStatus(bound.code),
+      });
+    }
+    const { data: orderRows, error: orderError } = bound
+      ? {
+          data: bound.ok ? bound.order : null,
+          error: bound.ok
+            ? null
+            : {
+                code: bound.code === 'order_rejected' ? 'P0001' : 'XX000',
+                message: bound.message,
+              },
+        }
+      : await orderRpcClient.rpc(orderCreateRpcName, orderCreateRpcArgs);
 
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
 

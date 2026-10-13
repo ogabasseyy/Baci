@@ -36,6 +36,10 @@ export interface CheckoutOrderSubmissionContext {
     checkoutCartTotal: number;
     clearCart: () => void;
     removeFromCart: ReturnType<typeof useCart>['removeFromCart'];
+    /** Authoritative cart identity for bound checkout; absent for legacy carts. */
+    sharedCartRef?: { cartId: string; version: number } | null;
+    /** Refetches the authoritative snapshot; absent for legacy carts. */
+    refreshSharedCart?: () => Promise<void>;
   };
   contact: Pick<Form, 'customerEmail' | 'customerPhone' | 'firstName' | 'lastName' | 'newsletterOptIn'>;
   delivery: {

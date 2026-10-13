@@ -1,7 +1,9 @@
 'use client';
 
+import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import type { SharedCartOrderBinding } from '../types';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
@@ -138,7 +140,41 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       return;
     }
 
-    await submitPreparedCheckout({ ...context, merchant }, prepared);
+    // Shared carts review the authoritative cart first; the order submit
+    // binds to the returned session and generation. A stale review
+    // refreshes the cart view and stops: the shopper reviews the updated
+    // cart and submits again, never silently resubmitting changed lines.
+    let sharedCartBinding: SharedCartOrderBinding | null = null;
+    if (cart.sharedCartRef) {
+      const review = await prepareSharedCartCheckout({
+        cartId: cart.sharedCartRef.cartId,
+        expectedVersion: cart.sharedCartRef.version,
+        operationId: crypto.randomUUID(),
+      });
+      if (!review.ok) {
+        if (review.code === 'refresh_required') {
+          await cart.refreshSharedCart?.();
+          toast({ title: 'Cart Changed', description: 'Your cart changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Checkout Unavailable', description: 'We could not review your cart. Please try again.', variant: 'destructive' });
+        }
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      sharedCartBinding = {
+        cart_id: review.review.cartId,
+        cart_version: review.review.cartVersion,
+        checkout_generation: review.review.generation,
+        checkout_session_id: review.review.checkoutSessionId,
+      };
+    }
+
+    await submitPreparedCheckout(
+      { ...context, merchant },
+      sharedCartBinding
+        ? { ...prepared, identity: { ...prepared.identity, sharedCartBinding } }
+        : prepared
+    );
   };
 
   return { handlePlaceOrder };

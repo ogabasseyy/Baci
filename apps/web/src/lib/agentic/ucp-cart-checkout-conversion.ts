@@ -28,6 +28,7 @@ import {
   buildUcpCartCheckoutLinkUpdate,
   coerceNullableJsonRecord,
   coerceUcpCartItems,
+  UcpCartMigratedError,
 } from '@/lib/agentic/ucp-cart-storage';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -122,6 +123,22 @@ export async function convertUcpCartToCheckout({
     return respond({ error: 'Database error' }, 500);
   }
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
+
+  // A migrated cart is retired: its authority moved to the shared
+  // canonical cart, so the legacy conversion path must not create an
+  // (unbound) order for it. The caller refreshes onto the canonical
+  // cart and checks out there with the cart binding instead.
+  if (cartResult.cart.migratedToCartId) {
+    const migrated = new UcpCartMigratedError(cartResult.cart.migratedToCartId);
+    return respond(
+      {
+        cart_id: migrated.cartId,
+        code: migrated.code,
+        error: migrated.message,
+      },
+      409
+    );
+  }
 
   if (cartResult.cart.status === 'converted') {
     if (!cartResult.cart.checkout_session_id) {

@@ -1,0 +1,96 @@
+import type { NextRequest } from 'next/server';
+import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { prepareCartCheckout } from '@/lib/cart/checkout-transition';
+import {
+  checkCartQuota,
+  readCartJsonBody,
+  resolveCartRequestContext,
+} from '@/lib/cart/request-context';
+import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
+import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import { verifyCartSessionProof } from '@/lib/cart/session-proof';
+import { checkCsrfProtection } from '@/lib/csrf';
+import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import { createAnonClient } from '@/lib/supabase/anon';
+import { sharedCartPrepareRequestSchema } from '@/schemas/cart';
+
+/**
+ * POST /api/storefront/cart/checkout
+ *
+ * Reviews the current authoritative cart for checkout: validated lines,
+ * estimates and one active session reference. Never submits an order or
+ * starts payment. Version drift fails with the live version so the
+ * client reconciles instead of submitting stale lines.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const csrf = await checkCsrfProtection(request);
+    if (!csrf.valid) {
+      return cartErrorResponse('forbidden');
+    }
+
+    const rawBody = await readCartJsonBody(request);
+    if (!rawBody.ok) {
+      return cartErrorResponse('invalid_request');
+    }
+    const parsedBody = sharedCartPrepareRequestSchema.safeParse(rawBody.body);
+    if (!parsedBody.success) {
+      return cartErrorResponse('invalid_request');
+    }
+
+    const context = await resolveCartRequestContext(request, {
+      merchant: {
+        resolveAlias: getCurrentSlugForAlias,
+        rpcClient: createAnonClient(),
+      },
+      requireScope: 'session',
+      verify: (proof) =>
+        verifyCartSessionProof(proof, {
+          environment: getCartProofEnvironment(),
+        }),
+      wrongScopeError: 'not_found',
+    });
+    if (!context.ok) {
+      return cartErrorResponse(context.error);
+    }
+
+    const quota = await checkCartQuota({
+      merchantId: context.merchant.id,
+      operation: 'checkout_prepare',
+      subject: context.principal.principalId,
+    });
+    if (!quota.allowed) {
+      return cartErrorResponse('quota_exceeded');
+    }
+
+    const result = await prepareCartCheckout(
+      {
+        client: createCartScopedClient(context.principal),
+        principal: context.principal,
+      },
+      {
+        cartId: parsedBody.data.cartId,
+        expectedVersion: parsedBody.data.expectedVersion,
+        operationId: parsedBody.data.operationId,
+      }
+    );
+    if (!result.ok) {
+      return cartErrorResponse(
+        result.code,
+        result.currentVersion === null
+          ? undefined
+          : { currentVersion: result.currentVersion }
+      );
+    }
+    return cartJsonResponse({
+      replayed: result.replayed,
+      sessionReused: result.sessionReused,
+      snapshot: result.snapshot,
+    });
+  } catch (error) {
+    console.error('Unexpected error in POST /api/storefront/cart/checkout:', {
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+    return cartErrorResponse('temporarily_unavailable');
+  }
+}

@@ -527,3 +527,173 @@ describe('agentic checkout order dispatch', () => {
     );
   });
 });
+
+describe('agentic checkout order dispatch — shared cart binding', () => {
+  const SHARED_CART = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  const BOUND_ENVELOPE = {
+    binding: {
+      cartId: SHARED_CART.cart_id,
+      cartVersionReviewed: 3,
+      checkout_generation: 1,
+      merchantId: merchantId,
+      sessionId: SHARED_CART.checkout_session_id,
+      variant: 'base',
+    },
+    code: null,
+    ok: true,
+    order: {
+      customer_email: 'buyer@example.com',
+      customer_id: null,
+      customer_name: 'Ada Lovelace',
+      customer_phone: '+2348012345678',
+      discount_amount: 0,
+      gift_wrapping_fee: 0,
+      id: 'order-1',
+      idempotency_replayed: false,
+      merchant_id: merchantId,
+      order_number: 'ORD-1',
+      payment_method: 'bank_transfer',
+      payment_status: 'pending',
+      shipping_address: null,
+      shipping_fee: 0,
+      shipping_status: 'pending',
+      subtotal: 500_000,
+      tax_amount: 0,
+      tax_basis: 'exclusive',
+      total: 500_000,
+      tracking_token: 'tok-1',
+    },
+    replayed: false,
+  };
+
+  function boundPayload(extra: Record<string, unknown> = {}) {
+    return { ...orderPayload(), shared_cart: SHARED_CART, ...extra };
+  }
+
+  function dispatchClient(rpc: ReturnType<typeof vi.fn>) {
+    return { from: makeFromStub(), rpc } as unknown as SupabaseClient;
+  }
+
+  it('submits a bound base order through the binding RPC', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1', status: 201 });
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: expect.objectContaining({
+          p_customer_email: 'buyer@example.com',
+          p_merchant_id: merchantId,
+        }),
+        p_generation: 1,
+        p_session_id: SHARED_CART.checkout_session_id,
+        p_variant: 'base',
+      }
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('forwards cart line ids into the bound items payload', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    await createAgenticCheckoutOrder(
+      boundPayload({
+        items: [
+          {
+            cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+            name: 'Phone',
+            price: 500_000,
+            product_id: 'product-1',
+            quantity: 1,
+          },
+        ],
+      }),
+      dispatchClient(rpc)
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_items: [
+            expect.objectContaining({
+              cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              product_id: 'product-1',
+            }),
+          ],
+        }),
+      })
+    );
+  });
+
+  it('maps a stale binding to 409 with a refresh error', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_checkout_stale' },
+    });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    expect(result.error).toMatch(/refresh/i);
+  });
+
+  it('maps an expired session to 409 and forbidden bindings to 403', async () => {
+    const expired = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_checkout_expired' },
+    });
+    expect(
+      await createAgenticCheckoutOrder(boundPayload(), dispatchClient(expired))
+    ).toMatchObject({ ok: false, status: 409 });
+
+    const forbidden = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_order_unauthorized' },
+    });
+    expect(
+      await createAgenticCheckoutOrder(
+        boundPayload(),
+        dispatchClient(forbidden)
+      )
+    ).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('keeps legacy mapping for inner order rejections on the bound path', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'order_total_mismatch' },
+    });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({
+      error: 'order_total_mismatch',
+      ok: false,
+      status: 400,
+    });
+  });
+});

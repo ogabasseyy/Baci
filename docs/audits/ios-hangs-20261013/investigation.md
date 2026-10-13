@@ -1,0 +1,136 @@
+# iOS keyboard and gradient hangs — 13 October 2026
+
+## Evidence and boundaries
+
+Investigated in the isolated `codex/ios-keyboard-render-hangs` worktree from main
+`3804086a22800d7c0aca0956e6394b06c92fc169`. The primary checkout's unrelated edits
+were preserved. Sentry events were read through the existing private VPS worker
+credentials; no credentials or customer input were retained.
+
+- [BACI-MOBILE-STOREFRONT-45](https://ogabassey-services-limited.sentry.io/issues/153139900/),
+  event `0dfe9ecda6fa43eca0799c39826be0f7`: React Native attributed-text update enters
+  UIKit autofill and blocks on its keyboard task queue for 5.0–5.8 seconds.
+  Breadcrumbs include checkout, Credit Direct, cancellation, a product screen and
+  a later cart removal alert. The sampled stack does not identify the text field.
+- [BACI-MOBILE-STOREFRONT-3A](https://ogabassey-services-limited.sentry.io/issues/146307054/),
+  event `681447da9f124cdda223a150798538e2`: `LinearGradientLayer.display`,
+  `setLayerContents` and `CGContextDrawLinearGradient` occupy the main thread for
+  3.5–4.3 seconds. The installed Expo 57.0.1 implementation still synchronously
+  allocates and shades a bitmap at display scale for the whole layer bounds.
+- [BACI-MOBILE-STOREFRONT-2T](https://ogabassey-services-limited.sentry.io/issues/143807900/),
+  event `2056de45321240e8b4a417ea2b650fee`: WebKit's `elementDidFocus` enters UIKit
+  keyboard layout. This approximately 79-second hang occurs in the hosted Credit
+  Direct flow. Its stack contains no React Native input or keyboard-preload frame.
+  The app-field changes below do not establish a fix for this separate case.
+- The watchdog event in group 2N has no stack establishing its termination cause.
+  It is not a confirmed out-of-memory diagnosis or a verified fix in this task.
+
+These retained events occurred on 12 October in iOS release
+`com.ogabassey.app@2.1.559+559`. The keyboard/gradient samples have serious thermal
+state and low free memory on iPhone10,6/iOS 16.7.16. Those conditions are context,
+not proof of cause. Release 559 lacks attached source-commit provenance; the
+current checkout must not be represented as its exact shipped dependency tree.
+
+## Changes
+
+1. Checkout email and phone inputs previously changed the native edit immediately
+   when removing whitespace, separators or a phone prefix. Their controlled
+   `value` therefore differed from the autofill event while UIKit still owned the
+   keyboard. `useNativeInputDraft` now echoes the original native edit until blur
+   while the form immediately receives the same normalized email/phone data as
+   before. External value changes replace the draft, and stale drafts cannot
+   reappear when the form returns to an earlier value. Autofill remains enabled.
+2. Phone limits apply to normalized digits, allowing formatted numbers to contain
+   separators without prematurely exhausting the native character limit. Country
+   selection clears the draft, and the caller's blur callback remains intact.
+3. A version-pinned pnpm patch makes Expo's gradient layer a `CAGradientLayer`.
+   It removes application bitmap allocation/shading from the display path while
+   retaining colors, normalized endpoints, partial/custom/default locations,
+   dynamic-color refresh, presentation-layer copies and immediate prop updates.
+   It applies to both mobile consumers; Android's renderer is unchanged. Storefront
+   already disables Expo precompiled modules so release prebuild compiles the
+   patched source. This requires a new native iOS build, not an OTA-only update.
+
+The text changes eliminate a confirmed active-field rewrite in app code. They
+reduce a trigger matching the UIKit sample; unit tests cannot prove that every
+OS keyboard deadlock, including the hosted WebKit case, is eliminated.
+
+## Verification
+
+- Email regressions failed before the fix (3 assertions) and phone autofill
+  preservation failed before its fix (1 assertion). The phone-limit review fix
+  also had two failing regressions before correction, including simulated native
+  typing with a formatted US number.
+- Final targeted checkout/form/phone run: 3 suites, 29 tests passed. It covers
+  canonical form data during editing, raw native text, blur settlement, deletion,
+  external resets, repeated normalized values, formatted non-Nigerian input and
+  digit caps.
+- Full storefront suite: 1,440 suites, 8,577 tests passed.
+- Full monorepo lint/typecheck: 10 tasks passed. Final affected-app lint/typecheck
+  after the phone-limit change: 2 tasks passed. Existing lint warnings remain.
+- Platform drift: passed, no new platform branches or forbidden patterns.
+- `bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh`:
+  compiles and executes the installed production layer against macOS QuartzCore,
+  replacing only Expo's platform import with the corresponding native color type.
+  The unpatched layer fails the composition assertion. The patched layer passes
+  composition, absence of an application-assigned CGImage, stop positions,
+  defaults, color-count changes, presentation copies and clearing. The same
+  installed source also passes UIKit typechecking for arm64 iOS Simulator with
+  deployment target 16.4.
+- Diagnostic host benchmark at 375×1500 points, 20 changed-color displays:
+  unpatched 537.7 ms, patched 26.2 ms. This is a host comparison, not a production
+  iPhone latency measurement or an enforced timing threshold.
+- CodeRabbit initial review raised one valid minor phone-limit issue; corrected
+  with regressions. Final staged/uncommitted review completed with 0 issues and
+  included all 12 changed code/config/test files, including the native patch.
+
+- Full monorepo tests: 5 of 6 package tasks passed. Web had 7,666 passing files,
+  3 failing files and 57 skipped files (49,056 passing tests). Two failures are
+  intentional checkout-integrity safeguards: the current lockfile differs from
+  uncommitted HEAD, and the tooling worktree contains uncommitted changes.
+  These tests require a clean committed checkout. The third failure was a
+  10-second timeout in a synthetic large Git inventory; its isolated rerun
+  passed all 8 tests in 4.7 seconds. No safeguard was weakened. After restoring the temporary native QA files and
+  committing the fixes as `376b4a8103`, both Git-integrity test files passed
+  (2 tests, 20.1 seconds) from a clean checkout. All three initial failures
+  therefore passed their scoped reruns; the complete 30-minute monorepo suite
+  was not rerun.
+
+## Simulator component checks
+
+The full Debug app built successfully against Xcode 27 after an incremental retry.
+The first cold build's ExpoModulesJSI packaging script emitted error diagnostics
+while still producing its framework; the retry succeeded in 127 seconds. The
+patched gradient compiled as part of the real Expo module.
+
+The available simulator is iPhone 18 Pro / iOS 27.0. The current Expo template
+fails before React loads because it lacks the scene lifecycle required for apps
+built against SDK 27. [Apple documents this requirement](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle).
+For local component QA only, a temporary scene adapter connected the existing
+window. Expo's development-launcher loading cover also remained above the React
+screen; LLDB identified and removed that temporary cover. Neither workaround is
+part of the fix. This is not a passing production launch or end-to-end checkout
+test with Xcode 27; that compatibility work remains separate.
+
+Using the real CheckoutFormField, PhoneInput, AppKeyboardProvider and a 1,500-point
+GadgetPattern in a temporary entry point, runtime assertions verified:
+
+- Email retains an internal space while the form stores `demo@example.com`; blur
+  removes the space from the displayed native field.
+- `0801 234 5678` and `+234 801 234 5678` remain formatted during editing and both
+  immediately store `+2348012345678`; blur shows the national digits.
+- An external reset while the phone field is focused clears both canonical form
+  values and native edits.
+- Twenty redraw button actions completed while the keyboard was active. LLDB's
+  native hierarchy showed the counter at 20 and the patched gradient layer at
+  402 by 1,500 points; the screenshot showed the composed gradient and inputs.
+
+The initial cold keyboard automation delivered a partial email; a repeat after
+keyboard initialization delivered all characters. This does not establish
+physical-device/autofill behavior under thermal pressure. No provider payment or
+customer account was used. Temporary entry/package/native files were restored.
+
+![Simulator component check after twenty redraws](simulator-component-check.jpg)
+
+No iOS release has been published and no Sentry issue has been marked resolved. A representative physical iOS 16.7 device and a hosted
+provider test session are still needed to verify the original OS/WebKit hangs.

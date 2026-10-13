@@ -16,7 +16,7 @@ complete_checks=''
 timestamp='2026-10-13T10:00:00Z'
 run_id=1
 for check in "${required_checks[@]}"; do
-  complete_checks+="${check}"$'\t'"${timestamp}"$'\t'"${run_id}"$'\tsuccess\n'
+  complete_checks+="${check}"$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t'"${run_id}"$'\tsuccess\n'
   run_id=$(( run_id + 1 ))
 done
 
@@ -27,9 +27,9 @@ fi
 
 for missing_check in "${required_checks[@]}"; do
   incomplete_checks=''
-  while IFS=$'\t' read -r check run_timestamp check_run_id conclusion; do
+  while IFS=$'\t' read -r check started_at created_at completed_at check_run_id conclusion; do
     if [[ "${check}" != "${missing_check}" ]]; then
-      incomplete_checks+="${check}"$'\t'"${run_timestamp}"$'\t'"${check_run_id}"$'\t'"${conclusion}"$'\n'
+      incomplete_checks+="${check}"$'\t'"${started_at}"$'\t'"${created_at}"$'\t'"${completed_at}"$'\t'"${check_run_id}"$'\t'"${conclusion}"$'\n'
     fi
   done <<<"${complete_checks}"
   if printf '%s' "${incomplete_checks}" | bash "${checker}" >/dev/null 2>&1; then
@@ -42,9 +42,9 @@ done
 prefixed_checks=''
 for check in "${required_checks[@]}"; do
   if [[ "${check}" == 'Selftest (hard-2)' ]]; then
-    prefixed_checks+='Selftest (hard-20)'$'\t'"${timestamp}"$'\t999\tsuccess\n'
+    prefixed_checks+='Selftest (hard-20)'$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t999\tsuccess\n'
   else
-    prefixed_checks+="${check}"$'\t'"${timestamp}"$'\t'"${run_id}"$'\tsuccess\n'
+    prefixed_checks+="${check}"$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t'"${timestamp}"$'\t'"${run_id}"$'\tsuccess\n'
   fi
   run_id=$(( run_id + 1 ))
 done
@@ -54,22 +54,36 @@ if printf '%s\n' "${prefixed_checks}" | bash "${checker}" >/dev/null 2>&1; then
 fi
 
 for failed_conclusion in cancelled timed_out stale failure action_required skipped; do
-  incomplete_checks="${complete_checks/$(printf '%s\t%s\t%s\tsuccess' 'Selftest (hard-2)' "${timestamp}" 4)/$(printf '%s\t%s\t%s\t%s' 'Selftest (hard-2)' "${timestamp}" 4 "${failed_conclusion}")}"
+  incomplete_checks="${complete_checks/$(printf '%s\t%s\t%s\t%s\t%s\tsuccess' 'Selftest (hard-2)' "${timestamp}" "${timestamp}" "${timestamp}" 4)/$(printf '%s\t%s\t%s\t%s\t%s\t%s' 'Selftest (hard-2)' "${timestamp}" "${timestamp}" "${timestamp}" 4 "${failed_conclusion}")}"
   if printf '%s' "${incomplete_checks}" | bash "${checker}" >/dev/null 2>&1; then
     echo "FAIL accepted incomplete self-test conclusion: ${failed_conclusion}" >&2
     exit 1
   fi
 done
 
-older_success_then_latest_failure="${complete_checks}Selftest (hard-2)\t2026-10-13T09:00:00Z\t100\tsuccess\nSelftest (hard-2)\t2026-10-13T11:00:00Z\t101\tcancelled\n"
+older_success_then_latest_failure="${complete_checks}Selftest (hard-2)\t2026-10-13T12:00:00Z\t2026-10-13T08:00:00Z\t2026-10-13T13:00:00Z\t100\tsuccess\nSelftest (hard-2)\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:01:00Z\t101\tcancelled\n"
 if printf '%b' "${older_success_then_latest_failure}" | bash "${checker}" >/dev/null 2>&1; then
   echo 'FAIL accepted an older success over a newer canceled self-test.' >&2
   exit 1
 fi
 
-older_failure_then_latest_success="${complete_checks}Selftest (hard-2)\t2026-10-13T09:00:00Z\t100\tcancelled\nSelftest (hard-2)\t2026-10-13T11:00:00Z\t101\tsuccess\n"
+older_failure_then_latest_success="${complete_checks}Selftest (hard-2)\t2026-10-13T12:00:00Z\t2026-10-13T08:00:00Z\t2026-10-13T13:00:00Z\t100\tcancelled\nSelftest (hard-2)\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:30:00Z\t101\tsuccess\n"
 if ! printf '%b' "${older_failure_then_latest_success}" | bash "${checker}"; then
   echo 'FAIL rejected a successful latest self-test after an older canceled run.' >&2
+  exit 1
+fi
+
+for failed_conclusion in cancelled timed_out stale; do
+  quality_gate_runs="Quality Gate\t2026-10-13T12:00:00Z\t2026-10-13T08:00:00Z\t2026-10-13T13:00:00Z\t200\tsuccess\nQuality Gate\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:01:00Z\t201\t${failed_conclusion}\n"
+  if printf '%b' "${quality_gate_runs}" | bash "${checker}" 'Quality Gate' >/dev/null 2>&1; then
+    echo "FAIL accepted an older Quality Gate success before ${failed_conclusion}." >&2
+    exit 1
+  fi
+done
+
+quality_gate_recovered='Quality Gate\t2026-10-13T12:00:00Z\t2026-10-13T08:00:00Z\t2026-10-13T13:00:00Z\t200\tcancelled\nQuality Gate\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:30:00Z\t201\tsuccess\n'
+if ! printf '%b' "${quality_gate_recovered}" | bash "${checker}" 'Quality Gate'; then
+  echo 'FAIL rejected a latest successful Quality Gate run.' >&2
   exit 1
 fi
 

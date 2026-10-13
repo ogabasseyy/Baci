@@ -118,8 +118,24 @@ export async function POST(request: NextRequest) {
             { status: 200 }
           );
         }
-        // Accepted oracle (low): the minimum message stays distinct
-        // (public catalog info, actionable, rate-limit bounded).
+        // Currency gate first (a mismatched code can never validate).
+        // Fixed codes keep issuance currency (wrapper enforces).
+        if (
+          (loyaltyCode.reward_type !== 'discount_percentage' ||
+            Number(loyaltyCode.minimum_order_amount) > 0) &&
+          loyaltyCode.issuance_currency &&
+          !(await isLoyaltyCodeCurrencyCurrent(
+            supabase,
+            merchant_id,
+            loyaltyCode.issuance_currency
+          ))
+        ) {
+          return NextResponse.json(
+            { valid: false, error: 'Invalid discount code' },
+            { status: 200 }
+          );
+        }
+        // Accepted oracle (low): the minimum message stays distinct.
         if (
           loyaltyCode.minimum_order_amount != null &&
           cart_total < Number(loyaltyCode.minimum_order_amount)
@@ -146,22 +162,6 @@ export async function POST(request: NextRequest) {
               valid: false,
               error: `Minimum purchase of ${minimumLabel} required`,
             },
-            { status: 200 }
-          );
-        }
-        // Fixed codes keep issuance currency (wrapper enforces).
-        if (
-          (loyaltyCode.reward_type !== 'discount_percentage' ||
-            Number(loyaltyCode.minimum_order_amount) > 0) &&
-          loyaltyCode.issuance_currency &&
-          !(await isLoyaltyCodeCurrencyCurrent(
-            supabase,
-            merchant_id,
-            loyaltyCode.issuance_currency
-          ))
-        ) {
-          return NextResponse.json(
-            { valid: false, error: 'Invalid discount code' },
             { status: 200 }
           );
         }

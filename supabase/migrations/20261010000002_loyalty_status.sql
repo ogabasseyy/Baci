@@ -191,12 +191,13 @@ BEGIN
         OR points_cost >= v_settings.minimum_redemption_points
       )
       -- Hide types with no fulfillment path (same allowlist as the
-      -- redemption RPC; keep the two in sync): checkout only honors
-      -- discount-typed codes, so the rest would advertise unspendable
-      -- rewards that redeem always rejects.
+      -- redemption RPC; keep the two in sync). Manual-fulfillment
+      -- types stay listed: they mint a present-the-code redemption
+      -- even though checkout never honors them online.
       AND reward_type IN (
         'discount', 'discount_fixed', 'discount_percentage',
-        'store_credit'
+        'store_credit', 'free_shipping', 'free_product',
+        'exclusive_access'
       )
       -- Hide valued rewards without a positive value (same predicate as
       -- the redemption RPC's valued guard; keep the two in sync): a

@@ -204,23 +204,16 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
 DELETE FROM public.reward_redemptions
 WHERE id = '01aa0000-0000-4000-8000-00000000015c';
 
--- 15d. Types with no fulfillment path are unredeemable and hidden
--- (checkout honors discount-typed codes only).
-SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'false'
-     AND result ->> 'error' = 'reward_unavailable'
-   FROM public.redeem_loyalty_reward(
-     '01aa0000-0000-4000-8000-000000000001',
-     '01aa0000-0000-4000-8000-000000000011',
-     (SELECT id FROM public.loyalty_rewards
-      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-        AND name = 'Ship perk')
-   ) AS result),
-  'fulfillment-less reward type redeemed'
-);
+-- 15d. Manual-fulfillment types stay in the catalog: they mint a
+-- present-the-code redemption even though checkout never honors them
+-- (the spend itself is asserted in the guards suite). The cost is
+-- lifted over the program minimum first so only the type rule bites.
+UPDATE public.loyalty_rewards SET points_cost = 150
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Ship perk';
 
 SELECT pg_temp.assert_true(
-  NOT EXISTS (
+  EXISTS (
     SELECT 1
     FROM public.get_loyalty_status(
       '01aa0000-0000-4000-8000-000000000001',
@@ -229,8 +222,12 @@ SELECT pg_temp.assert_true(
     LATERAL jsonb_array_elements(result -> 'rewards') AS value
     WHERE value ->> 'name' = 'Ship perk'
   ),
-  'fulfillment-less reward type reached the catalog'
+  'manual-fulfillment reward type left the catalog'
 );
+
+UPDATE public.loyalty_rewards SET points_cost = 50
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Ship perk';
 
 -- 15e. Store credit is NGN-only (wallet cannot spend it off-NGN).
 INSERT INTO public.loyalty_rewards (

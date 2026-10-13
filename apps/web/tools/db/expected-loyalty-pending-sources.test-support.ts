@@ -6,7 +6,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   },
   {
     repositoryPath: 'supabase/migrations/20261010000002_loyalty_status.sql',
-    sha256: '0a8cb84fab8c6940252f8791a3d72c885cb1008f4796791bf79e315a99c38907',
+    sha256: '57a6d098a23fc3a252e102a950db28c97fce4e17313bc6d68bd8b9f6fd1b00a5',
   },
   {
     repositoryPath:
@@ -21,7 +21,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000005_redeem_loyalty_reward.sql',
-    sha256: '2b1bd9949ab76e8dcc05f8aca7956327f74523fe2de95f25217cb1cd9bfc58c6',
+    sha256: '9b30c777bcfd8db9833b31d8f1d3b2393d5f1d80f6d4d2b822c3b9be010e1731',
   },
   {
     repositoryPath:

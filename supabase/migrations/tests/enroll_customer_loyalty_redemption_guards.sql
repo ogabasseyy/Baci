@@ -94,3 +94,43 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
   'fractional fixed redemption spent points on a zero discount'
 );
+
+-- Manual-fulfillment types redeem end to end: points are spent and a
+-- presentable code is minted (checkout still never honors it online).
+-- Cost lifted to the 100 program minimum so only the type rule bites.
+UPDATE public.loyalty_rewards SET points_cost = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Ship perk';
+
+UPDATE public.customer_loyalty SET points_balance = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND result ->> 'redemption_code' LIKE 'RDM-%'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Ship perk')
+   ) AS result),
+  'manual-fulfillment redemption did not mint a presentable code'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT points_balance = 0
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
+  'manual-fulfillment redemption spent the wrong points'
+);
+
+UPDATE public.loyalty_rewards SET points_cost = 50
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Ship perk';
+
+UPDATE public.customer_loyalty SET points_balance = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';

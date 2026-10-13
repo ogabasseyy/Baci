@@ -98,7 +98,6 @@ BEGIN
       AND expired IS DISTINCT FROM true
       AND expires_at IS NOT NULL
       AND expires_at < pg_catalog.now();
-
     v_balance := GREATEST(0, v_balance - v_expired_points);
     UPDATE public.customer_loyalty
     SET points_balance = v_balance,
@@ -127,11 +126,12 @@ BEGIN
     -- Non-positive costs would mint points: fail closed (mirrored in status).
     AND points_cost > 0
     -- Reject types with no fulfillment path before any mutation (same
-    -- allowlist as status; keep in sync): unspendable codes would burn
-    -- stock and points, as only the bridge honors discount-typed codes.
+    -- allowlist as status; keep in sync). Manual-fulfillment types
+    -- mint a present-the-code redemption; checkout never honors them.
     AND reward_type IN (
       'discount', 'discount_fixed', 'discount_percentage',
-      'store_credit'
+      'store_credit', 'free_shipping', 'free_product',
+      'exclusive_access'
     )
   FOR UPDATE;
 
@@ -245,7 +245,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Stock decrements only after the insert (RETURN rolls nothing back).
+  -- Stock decrements only after the insert.
   IF v_reward.stock_quantity IS NOT NULL THEN
     UPDATE public.loyalty_rewards
     SET stock_quantity = stock_quantity - 1,

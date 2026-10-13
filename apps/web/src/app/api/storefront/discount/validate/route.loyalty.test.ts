@@ -69,7 +69,12 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code'
         ? []
-        : [loyaltyRow({ minimum_order_amount: 50000 })]
+        : [
+            loyaltyRow({
+              minimum_order_amount: 50000,
+              issuance_currency: 'USD',
+            }),
+          ]
     );
 
     const body = await (
@@ -138,7 +143,12 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code'
         ? []
-        : [loyaltyRow({ minimum_order_amount: 50000 })]
+        : [
+            loyaltyRow({
+              minimum_order_amount: 50000,
+              issuance_currency: 'USD',
+            }),
+          ]
     );
 
     const body = await (
@@ -155,7 +165,12 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
       (fn) =>
         fn === 'get_storefront_discount_code'
           ? []
-          : [loyaltyRow({ minimum_order_amount: 50000 })],
+          : [
+              loyaltyRow({
+                minimum_order_amount: 50000,
+                issuance_currency: 'USD',
+              }),
+            ],
       { merchant: { message: 'db down' } }
     );
 
@@ -218,6 +233,19 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
 
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
+  it('reports invalid, not the minimum, for a currency-dead code below its minimum', async () => {
+    setMerchantRow({ country: 'US', payout_currency: 'USD' });
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ minimum_order_amount: 50000 })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
   it('collapses a fixed code to invalid after a merchant currency change', async () => {
     setMerchantRow({ country: 'US', payout_currency: 'USD' });
     mockRpc((fn) =>

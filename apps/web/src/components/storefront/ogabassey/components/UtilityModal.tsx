@@ -11,6 +11,7 @@ import { useUtilityModalFormSeeding } from './use-utility-modal-seeding';
 import { useUtilityFundingPanel } from './use-utility-funding-panel';
 import { useUtilityPendingIntent } from './use-utility-pending-intent';
 import { useUtilityPurchase } from './use-utility-purchase';
+import { useUtilityRetainedSettlement } from './use-utility-retained-settlement';
 import { AirtimeDataForm } from './utility/AirtimeDataForm';
 import { BillPaymentForm } from './utility/BillPaymentForm';
 import { UtilityPaymentMethodSelector } from './UtilityPaymentMethodSelector';
@@ -110,6 +111,15 @@ export const UtilityModal = ({
   // `customerEpoch`, which both forms key on so neither carries the previous
   // customer's local draft. A keystroke does NOT change `customer.id`, so
   // reseeds never remount mid-typing (which would drop input focus).
+  // Settle retained idempotency entries whose rows reached terminality
+  // after the backfill stopped polling, before the customer can repeat
+  // (Codex R57 6rseWu). No-op without retained references.
+  useUtilityRetainedSettlement({
+    enabled: isOpen,
+    merchantSlug: merchant?.slug,
+    userId: user?.id,
+  });
+
   const customerId = customer?.id;
   const { customerChanged, customerEpoch } = useCustomerFormReset(customerId);
   const { appliedIntentKey } = useUtilityModalFormSeeding({

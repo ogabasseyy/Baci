@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { forgetPendingVtuByReference } from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -138,6 +139,25 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
       const parsed = VTUHistoryResponseSchema.safeParse(data);
       if (!parsed.success) {
         throw new Error('Invalid utility history response from server.');
+      }
+
+      // Background terminal update (Codex R57 6rseWu): the voucher
+      // backfill stops polling after ~36 minutes, but reconciliation
+      // pages are unbounded — a row settling later would leave its
+      // retained entry replaying the old vend as a new purchase.
+      // History is the other observation surface: a shown success
+      // settles the entry, so a later identical buy mints fresh.
+      // Same guards as the backfill: the polling account must still
+      // match (a switch mid-fetch must not mutate for an unshown
+      // result). Successes only — this projection carries no refund
+      // proof, so failed rows keep backfill-era behavior.
+      const currentUserId = useAuthStore.getState().user?.id ?? null;
+      if (currentUserId !== null && currentUserId === user.id) {
+        for (const transaction of parsed.data.transactions) {
+          if (transaction.status === 'successful') {
+            forgetPendingVtuByReference(transaction.request_reference);
+          }
+        }
       }
 
       return parsed.data.transactions;

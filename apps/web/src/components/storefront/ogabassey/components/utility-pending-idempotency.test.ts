@@ -7,6 +7,7 @@ import {
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
+  listNotedPendingVtuReferences,
   markPendingVtuCompleted,
   notePendingVtuReference,
   PENDING_VTU_STALE_AFTER_MS,
@@ -316,5 +317,18 @@ describe('utility-pending-idempotency', () => {
         Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
       )
     ).toBe(false);
+  });
+
+  it('lists noted references deduped, excluding unanswered entries', () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"l1":true}', 'key-l1');
+    notePendingVtuReference('{"l1":true}', 'REF-SHARED');
+    rememberPendingVtuPurchase('{"l2":true}', 'key-l2');
+    notePendingVtuReference('{"l2":true}', 'REF-SHARED');
+    rememberPendingVtuPurchase('{"l3":true}', 'key-l3');
+
+    // One read per reference; the unanswered entry has nothing to
+    // look up (Codex R57 6rseWu).
+    expect(listNotedPendingVtuReferences()).toEqual(['REF-SHARED']);
   });
 });

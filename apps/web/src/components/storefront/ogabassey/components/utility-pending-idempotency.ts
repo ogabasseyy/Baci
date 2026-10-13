@@ -266,6 +266,28 @@ export function getPendingVtuKey(payloadSignature: string): string {
   return minted;
 }
 
+/**
+ * Noted server references across live entries (cross-tab synced).
+ * The retained-settlement hook reads history for these when the
+ * purchase modal opens, so rows that settled after the backfill
+ * stopped still complete their entries (Codex R57 6rseWu).
+ * Unanswered (reference-less) entries are excluded — with no
+ * reference there is nothing to look up.
+ */
+export function listNotedPendingVtuReferences(): string[] {
+  syncPendingVtuPurchasesFromSnapshot();
+  // Deduped: several descriptors can note the same reference (and
+  // unscoped test keys twin with their migrated digests after a
+  // sync) — one history read per reference is enough.
+  const references = new Set<string>();
+  for (const entry of pendingVtuPurchases.values()) {
+    if (entry.reference !== null) {
+      references.add(entry.reference);
+    }
+  }
+  return [...references];
+}
+
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingVtuPurchases.clear();

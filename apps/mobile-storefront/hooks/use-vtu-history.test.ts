@@ -4,6 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { createElement, type PropsWithChildren } from 'react';
 import { useVTUHistory } from '@/hooks/use-vtu-history';
+import {
+  clearPendingVtuKeys,
+  notePendingVtuReference,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
 
 type MockFetchResponse = {
   ok: boolean;
@@ -24,6 +30,7 @@ const mockFetchWithTimeout =
   jest.fn<(...args: unknown[]) => Promise<MockFetchResponse>>();
 const mockGetUser = jest.fn<() => Promise<MockUserResult>>();
 const mockGetSession = jest.fn<() => Promise<MockSessionResult>>();
+const mockAuthUserId = jest.fn<() => string | null>();
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
   SHORT_TIMEOUT: 10000,
@@ -39,12 +46,20 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: jest.fn(
-    (selector: (state: { user: { id: string } | null }) => unknown) =>
-      selector({ user: { id: 'auth-user-1' } })
-  ),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const state = () => {
+    const id = mockAuthUserId();
+    return { user: id ? { id } : null };
+  };
+  return {
+    useAuthStore: Object.assign(
+      jest.fn((selector: (state: { user: { id: string } | null }) => unknown) =>
+        selector(state() as { user: { id: string } | null })
+      ),
+      { getState: state }
+    ),
+  };
+});
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
@@ -80,6 +95,7 @@ afterAll(() => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAuthUserId.mockReturnValue('auth-user-1');
   mockGetUser.mockResolvedValue({
     data: { user: { id: 'auth-user-1' } },
     error: null,
@@ -167,6 +183,101 @@ describe('useVTUHistory', () => {
     expect(mockFetchWithTimeout.mock.calls[0]?.[0]).toContain(
       'type=electricity'
     );
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('forgets retained entries for shown successes only', async () => {
+    // Background terminal update (Codex R57 6rseWu): a row that
+    // settles after the backfill stops must still settle its entry
+    // when history shows it — otherwise a later identical buy
+    // replays the old vend as new.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('hist-success', 'key-success');
+    notePendingVtuReference('hist-success', 'VTU-123');
+    rememberPendingVtuPurchase('hist-pending', 'key-pending');
+    notePendingVtuReference('hist-pending', 'VTU-124');
+    rememberPendingVtuPurchase('hist-failed', 'key-failed');
+    notePendingVtuReference('hist-failed', 'VTU-125');
+    const queryClient = createTestClient();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        transactions: [
+          {
+            id: 'tx-1',
+            created_at: '2026-04-08T12:00:00.000Z',
+            type: 'electricity',
+            status: 'successful',
+            amount: 2500,
+            request_reference: 'VTU-123',
+          },
+          {
+            id: 'tx-2',
+            created_at: '2026-04-08T12:01:00.000Z',
+            type: 'airtime',
+            status: 'pending',
+            amount: 500,
+            request_reference: 'VTU-124',
+          },
+          {
+            id: 'tx-3',
+            created_at: '2026-04-08T12:02:00.000Z',
+            type: 'data',
+            status: 'failed',
+            amount: 1500,
+            request_reference: 'VTU-125',
+          },
+        ],
+      }),
+    });
+
+    const { result, unmount } = renderHook(() => useVTUHistory('all'), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // Shown success settles; pending is untouched; failed keeps
+    // backfill-era behavior (no refund proof in this projection).
+    expect(recallPendingVtuKey('hist-success')).toBeNull();
+    expect(recallPendingVtuKey('hist-pending')).toBe('key-pending');
+    expect(recallPendingVtuKey('hist-failed')).toBe('key-failed');
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('skips settling when the account switches mid-fetch', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('hist-switch', 'key-switch');
+    notePendingVtuReference('hist-switch', 'VTU-123');
+    // getUser (fetch identity) still reports user-1, but the store
+    // has moved on — the rows were never shown to the submitter.
+    mockAuthUserId.mockReturnValue('auth-user-2');
+    const queryClient = createTestClient();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        transactions: [
+          {
+            id: 'tx-1',
+            created_at: '2026-04-08T12:00:00.000Z',
+            type: 'electricity',
+            status: 'successful',
+            amount: 2500,
+            request_reference: 'VTU-123',
+          },
+        ],
+      }),
+    });
+
+    const { result, unmount } = renderHook(() => useVTUHistory('all'), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(recallPendingVtuKey('hist-switch')).toBe('key-switch');
 
     unmount();
     queryClient.clear();

@@ -178,6 +178,26 @@ export async function PATCH(
       );
     }
 
+    // A payment-cancelled order (e.g. abandoned) is terminal for manual
+    // payment updates: its loyalty claim is released for reuse once the
+    // payment is cancelled, so resurrecting it as paid here would let
+    // two orders keep the same redeemed discount. Record late payments
+    // on a new order instead.
+    if (
+      (existingOrder.payment_status === 'cancelled' ||
+        existingOrder.payment_status === 'canceled') &&
+      isPaidStatusUpdate(payment_status)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'This order was cancelled for non-payment and cannot be marked paid. Create a new order for the late payment.',
+          code: 'PAYMENT_CANCELLED_TERMINAL',
+        },
+        { status: 409 }
+      );
+    }
+
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
     if (
       shipping_status === 'processing' &&

@@ -48,19 +48,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    const access = toUserAccess(merchantContext);
-    if (!hasPermission(access, 'marketing', 'edit')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
+    // Validate the payload before any merchant/staff database lookup:
+    // malformed input is rejected without touching the database.
     let rawBody: unknown;
     try {
       rawBody = await request.json();
@@ -76,6 +65,19 @@ export async function POST(request: NextRequest) {
         { error: 'A redemption code is required' },
         { status: 400 }
       );
+    }
+
+    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+    if (!merchantContext) {
+      return NextResponse.json(
+        { error: 'Merchant not found' },
+        { status: 404 }
+      );
+    }
+
+    const access = toUserAccess(merchantContext);
+    if (!hasPermission(access, 'marketing', 'edit')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { data, error } = await supabase.rpc('consume_loyalty_redemption', {

@@ -1,18 +1,5 @@
--- REGRESSION TEST: first-purchase award vs enrollment creation race.
---
--- enroll_customer_loyalty and award_purchase_points share one advisory
--- creation lock (hashtext merchant:customer). This test proves the
--- interleave serializes instead of double-inserting or losing the award:
--- session A enrolls (uncommitted, holding the lock) while session B's
--- award must block, then proceed once A commits. Final state asserts
--- both credits landed in one row plus the ledger.
---
--- REGRESSION TEST (in-gate): first-purchase award vs enrollment race via
--- two live dblink sessions. Auth uses the documented supabase-local
--- default (postgres/postgres; the runner never sets --password):
--- scratch-DB-only, no real secret. Manual runs work unchanged:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
---     -f supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
+-- REGRESSION TESTS (in-gate) via two live dblink sessions.
+-- Auth: documented supabase-local default (scratch-DB-only).
 
 \set ON_ERROR_STOP on
 
@@ -39,8 +26,7 @@ SELECT dblink_connect(
   )
 );
 
--- Committed fixtures (own namespace; deleted at the end): the dblink
--- sessions only see committed rows.
+-- Committed fixtures (own namespace; deleted at the end).
 INSERT INTO auth.users (
   id, instance_id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
@@ -52,8 +38,7 @@ INSERT INTO auth.users (
   now(), now(), now(), '{}', '{}'
 );
 
--- merchants row before customers (FK), as service_role like the suite
--- setup (merchants audit trigger reads the JWT role claim).
+-- merchants row before customers (FK), as service_role.
 SET ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', false);
 INSERT INTO public.merchants (id, email, business_name, slug)
@@ -109,10 +94,7 @@ BEGIN
 END;
 $race$;
 
--- Session B: the same member's first purchase starts while A holds the
--- lock; without serialization it would double-insert or lose the award.
--- No explicit BEGIN: the async award autocommits on completion, so no
--- COMMIT round-trip is needed on this connection afterwards.
+-- Session B: first purchase while A holds the lock (autocommits).
 SELECT dblink_send_query(
   'loyalty_award_race',
   $$SELECT public.award_purchase_points('01bb0000-0000-4000-8000-000000000011', '01bb0000-0000-4000-8000-000000000001', '01bb0000-0000-4000-8000-000000000201', 5000)$$
@@ -134,7 +116,7 @@ BEGIN
 END;
 $$;
 
--- Release A: B must now proceed onto the enrolled row.
+-- Release A: B proceeds onto the enrolled row.
 SELECT dblink_exec('loyalty_enroll_race', 'COMMIT');
 
 DO $$
@@ -157,10 +139,7 @@ BEGIN
 END;
 $$;
 
--- A cancellation never waits on a claim row held by an in-flight retry
--- (SKIP LOCKED): the retry owns redemption->order, so waiting here would
--- invert to order->redemption and deadlock. Session A holds the claim
--- lock; the main-session cancel below must complete, skipping the row.
+-- A cancellation never waits on a retry-held claim row (SKIP LOCKED).
 SET ROLE service_role;
 INSERT INTO public.orders (id, merchant_id, order_number, customer_name, total)
 VALUES ('01bb0000-0000-4000-8000-000000000009', '01bb0000-0000-4000-8000-000000000001', 'RACE-CANCEL-1', 'Race Cancel', 5000);
@@ -189,11 +168,68 @@ SELECT dblink_exec('loyalty_enroll_race', 'ROLLBACK');
 DELETE FROM public.reward_redemptions WHERE discount_code = 'RDM-RACE1';
 DELETE FROM public.orders WHERE id = '01bb0000-0000-4000-8000-000000000009';
 
+-- Currency race: the mint stamp follows the payout-flip winner.
+INSERT INTO public.loyalty_rewards (merchant_id, name, points_cost, reward_type, reward_value, enabled)
+VALUES ('01bb0000-0000-4000-8000-000000000001', 'Currency race fixed', 10, 'discount_fixed', 500, true);
+UPDATE public.loyalty_settings SET minimum_redemption_points = 0
+WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001';
+SELECT dblink_connect(
+  'loyalty_currency_race',
+  format(
+    'host=%s port=%s dbname=%s user=%s password=postgres',
+    inet_server_addr(),
+    inet_server_port(),
+    current_database(),
+    current_user
+  )
+);
+SELECT dblink_exec('loyalty_currency_race', $jwt$DO $$
+BEGIN
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '01bb0000-0000-4000-8000-000000000101', false);
+  PERFORM pg_catalog.set_config('request.jwt.claims', '{"sub":"01bb0000-0000-4000-8000-000000000101","role":"authenticated"}', false);
+END;
+$$;$jwt$);
+SELECT dblink_exec('loyalty_enroll_race', 'BEGIN');
+SELECT dblink_exec('loyalty_enroll_race', $$UPDATE public.merchants SET payout_currency = 'USD' WHERE id = '01bb0000-0000-4000-8000-000000000001'$$);
+SELECT dblink_send_query('loyalty_currency_race', $$SELECT public.redeem_loyalty_reward('01bb0000-0000-4000-8000-000000000001', '01bb0000-0000-4000-8000-000000000011', (SELECT id FROM public.loyalty_rewards WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND name = 'Currency race fixed'))$$);
+DO $$
+DECLARE v_spins integer := 0;
+BEGIN
+  WHILE dblink_is_busy('loyalty_currency_race') = 0 AND v_spins < 6 LOOP
+    PERFORM pg_sleep(0.05); v_spins := v_spins + 1;
+  END LOOP;
+  IF dblink_is_busy('loyalty_currency_race') = 0 THEN
+    RAISE EXCEPTION 'redeem did not block on the merchant currency lock';
+  END IF;
+END;
+$$;
+SELECT dblink_exec('loyalty_enroll_race', 'COMMIT');
+DO $$
+DECLARE v_spins integer := 0; v_result jsonb;
+BEGIN
+  WHILE dblink_is_busy('loyalty_currency_race') = 1 AND v_spins < 200 LOOP
+    PERFORM pg_sleep(0.05); v_spins := v_spins + 1;
+  END LOOP;
+  SELECT r INTO v_result FROM dblink_get_result('loyalty_currency_race') AS result(r jsonb);
+  IF v_result ->> 'success' IS DISTINCT FROM 'true' THEN
+    RAISE EXCEPTION 'currency race redeem failed: %', v_result;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.reward_redemptions WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND issuance_currency = 'USD') THEN
+    RAISE EXCEPTION 'mint did not stamp the post-flip currency';
+  END IF;
+END;
+$$;
+DELETE FROM public.reward_redemptions WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001';
+DELETE FROM public.loyalty_rewards WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND name = 'Currency race fixed';
+DELETE FROM public.points_transactions WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND customer_id = '01bb0000-0000-4000-8000-000000000011' AND source = 'redemption';
+UPDATE public.customer_loyalty SET points_balance = 100 WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND customer_id = '01bb0000-0000-4000-8000-000000000011';
+SELECT dblink_disconnect('loyalty_currency_race');
+
 SELECT dblink_disconnect('loyalty_enroll_race');
 SELECT dblink_disconnect('loyalty_award_race');
 
--- Both credits landed exactly once: signup 50 + purchase 50, one row,
--- ledger holds the enrollment bonus plus the purchase earn.
+-- Both credits landed exactly once (signup 50 + purchase 50).
 DO $$
 DECLARE
   v_rows integer;
@@ -223,63 +259,37 @@ END;
 $$;
 
 -- Committed cleanup (mirror of setup, reverse dependency order).
-DELETE FROM public.points_transactions
-WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001'
-  AND customer_id = '01bb0000-0000-4000-8000-000000000011';
-DELETE FROM public.customer_loyalty
-WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001'
-  AND customer_id = '01bb0000-0000-4000-8000-000000000011';
-DELETE FROM public.loyalty_settings
-WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001';
-DELETE FROM public.customers
-WHERE id = '01bb0000-0000-4000-8000-000000000011';
-DELETE FROM public.merchants
-WHERE id = '01bb0000-0000-4000-8000-000000000001';
-DELETE FROM auth.users
-WHERE id = '01bb0000-0000-4000-8000-000000000101';
+DELETE FROM public.points_transactions WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND customer_id = '01bb0000-0000-4000-8000-000000000011';
+DELETE FROM public.customer_loyalty WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001' AND customer_id = '01bb0000-0000-4000-8000-000000000011';
+DELETE FROM public.loyalty_settings WHERE merchant_id = '01bb0000-0000-4000-8000-000000000001';
+DELETE FROM public.customers WHERE id = '01bb0000-0000-4000-8000-000000000011';
+DELETE FROM public.merchants WHERE id = '01bb0000-0000-4000-8000-000000000001';
+DELETE FROM auth.users WHERE id = '01bb0000-0000-4000-8000-000000000101';
 
--- Restore the pre-test extension set (no migration installs dblink, so an
--- unconditional drop restores the baseline; autocommit: nothing rolls back).
+-- Restore the pre-test extension set.
 DROP EXTENSION IF EXISTS dblink;
 
--- NOTE: server-side auth alternatives were exhausted first (empty
--- connstr reads server env, not the client session; socket peers still
--- need SCRAM; the replay role cannot CREATE ROLE): the documented
--- local default is the only credential-free path.
-
--- Currency is locked and gated before the mint (store_credit only): the
--- held lock stays valid through settlement, and a pre-write RETURN cannot
--- strand a phantom redemption. The window sits inside one RPC call, so no
--- live interleave can stage it; pin the mechanism and position here.
+-- Currency locked/gated pre-mint for currency-bound rewards: pin it.
 DO $$
 DECLARE
   v_def text;
 BEGIN
-  SELECT pg_catalog.pg_get_functiondef(
-    'public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure
-  ) INTO v_def;
+  SELECT pg_catalog.pg_get_functiondef('public.redeem_loyalty_reward(uuid,uuid,uuid,uuid)'::pg_catalog.regprocedure) INTO v_def;
   IF v_def NOT LIKE '%FROM public.merchants WHERE id = p_merchant_id FOR UPDATE%'
      OR (SELECT count(*) FROM regexp_matches(v_def, 'merchant_resolves_to_ngn', 'g')) <> 1
-     OR strpos(v_def, 'FROM public.merchants WHERE id = p_merchant_id FOR UPDATE')
-       >= strpos(v_def, 'INSERT INTO public.reward_redemptions') THEN
+     OR strpos(v_def, 'FROM public.merchants WHERE id = p_merchant_id FOR UPDATE') >= strpos(v_def, 'INSERT INTO public.reward_redemptions') THEN
     RAISE EXCEPTION 'redeem does not gate currency under lock before minting';
   END IF;
 END;
 $$;
 
--- The wrapper reuses claims stamped to cancelled orders (the release
--- trigger skips locked rows, and cancelled is terminal): pin the
--- cancelled read and the extended claim predicate on the definition —
--- the stub suite cannot model full orders for a live claim.
+-- The wrapper reuses claims stamped to cancelled orders: pin it.
 DO $$
 DECLARE
   v_def text;
 BEGIN
-  SELECT pg_catalog.pg_get_functiondef(
-    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
-  ) INTO v_def;
-  IF v_def NOT LIKE '%rr.used_on_order_id,%'
-     OR v_def NOT LIKE '%IS DISTINCT FROM ''cancelled''%'
+  SELECT pg_catalog.pg_get_functiondef('public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure) INTO v_def;
+  IF v_def NOT LIKE '%rr.used_on_order_id,%' OR v_def NOT LIKE '%IS DISTINCT FROM ''cancelled''%'
      OR v_def NOT LIKE '%OR rr.used_on_order_id = v_redemption.used_on_order_id%' THEN
     RAISE EXCEPTION 'wrapper does not release claims stamped to cancelled orders';
   END IF;

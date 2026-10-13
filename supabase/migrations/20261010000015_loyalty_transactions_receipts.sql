@@ -63,7 +63,15 @@ AS $$
       ON pt.source = 'redemption' AND pt.source_id = rr.id::text
     WHERE pt.merchant_id = p_merchant_id
       AND pt.customer_id = p_customer_id
-      AND COALESCE(rr.used, false) = false
+      -- Effective-used mirrors the checkout resolver: a claim whose
+      -- order was cancelled (release skipped under lock) is reusable
+      -- and its receipt must stay recoverable here.
+      AND (COALESCE(rr.used, false) = false
+        OR EXISTS (
+          SELECT 1 FROM public.orders AS o
+          WHERE o.id = rr.used_on_order_id
+            AND o.shipping_status = 'cancelled'
+        ))
       AND (rr.expires_at IS NULL OR rr.expires_at > pg_catalog.now())
       AND NOT EXISTS (
         SELECT 1 FROM recent WHERE recent.id = pt.id

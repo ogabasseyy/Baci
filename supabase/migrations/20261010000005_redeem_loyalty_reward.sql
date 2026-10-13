@@ -1,6 +1,5 @@
 -- Atomic customer-authorized reward redemption (issue #3165).
--- SECURITY DEFINER: expiry, availability, caps, minimums, valued/NGN guards,
--- fulfillment, mint, deduction, ledger; caller owns the row; no 3-arg arity.
+-- SECURITY DEFINER; caller owns the row; no 3-arg arity.
 DROP FUNCTION IF EXISTS public.redeem_loyalty_reward(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
@@ -42,11 +41,9 @@ BEGIN
     AND merchant_id = p_merchant_id
     AND deleted_at IS NULL
     AND user_id = auth.uid();
-
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'customer_not_found');
   END IF;
-
   -- Idempotency replay runs before the program gate.
   IF p_idempotency_key IS NOT NULL THEN
     PERFORM pg_catalog.pg_advisory_xact_lock(
@@ -61,23 +58,21 @@ BEGIN
   END IF;
 
   -- FOR UPDATE pins program state through settlement.
+
   SELECT enabled, minimum_redemption_points, maximum_redemption_percentage
   INTO v_enabled, v_minimum, v_max_redemption_pct
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id
   FOR UPDATE;
-
   IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
-
   -- A non-positive/over-100 cap mints a worthless code: refuse.
   IF v_max_redemption_pct IS NOT NULL
      AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100) THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
-
-  -- Lock the member row: redemptions serialize on the balance check.
+  -- Lock the member row (redemptions serialize on balance).
   SELECT id, COALESCE(points_balance, 0)
   INTO v_loyalty_id, v_balance
   FROM public.customer_loyalty
@@ -144,8 +139,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Per-customer usage cap counts purchases, not checkout uses: points
-  -- deduct at redeem time with no refund-on-expiry flow.
+  -- Usage cap counts purchases, not checkout uses.
   IF v_reward.usage_limit_per_customer IS NOT NULL THEN
     SELECT COUNT(*) INTO v_redemption_count
     FROM public.reward_redemptions
@@ -157,8 +151,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- Program minimum compares the requested cost, not the balance
-  -- (matches the sibling redeem contracts).
+  -- Program minimum compares the requested cost, not the balance.
   IF v_minimum IS NOT NULL AND v_minimum > 0
      AND v_reward.points_cost < v_minimum THEN
     RETURN jsonb_build_object(
@@ -170,8 +163,7 @@ BEGIN
     );
   END IF;
 
-  -- Valued rewards must carry positive value (percentages at most 100),
-  -- failed closed before any write; valueless 'discount' stays redeemable.
+  -- Valued rewards need positive value (percentages at most 100).
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
      )
@@ -180,11 +172,16 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Minimum-gated store credit fails closed (no order context here);
-  -- currency is locked and gated pre-mint below.
+  -- Minimum-gated store credit fails closed (no order context here).
   IF v_reward.reward_type = 'store_credit'
      AND v_reward.minimum_order_amount IS NOT NULL
      AND v_reward.minimum_order_amount > 0 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+  END IF;
+  -- Fixed values rounding to zero units: reject before deduction.
+  IF v_reward.reward_type IN ('discount', 'discount_fixed')
+     AND v_reward.reward_value IS NOT NULL
+     AND pg_catalog.round(v_reward.reward_value, 0) <= 0 THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
@@ -200,16 +197,19 @@ BEGIN
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
 
-  -- Lock merchant currency before minting (store_credit only).
-  IF v_reward.reward_type = 'store_credit' THEN
+  -- Lock the merchant row before resolving currency for every
+  -- currency-bound reward: a concurrent payout update must not
+  -- commit between snapshot and settlement (born-mismatched code).
+  IF v_reward.reward_type IN ('discount', 'discount_fixed', 'store_credit')
+     OR COALESCE(v_reward.minimum_order_amount, 0) > 0 THEN
     PERFORM 1 FROM public.merchants WHERE id = p_merchant_id FOR UPDATE;
-    IF NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
-      RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
-    END IF;
+  END IF;
+  IF v_reward.reward_type = 'store_credit'
+     AND NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
 
-  -- Mint a merchant-unique code (probe + insert-retry), excluding
-  -- merchant discount_codes; stamp issuance currency + cap snapshot.
+  -- Mint a merchant-unique code; stamp currency + cap snapshot.
   v_currency := public.merchant_resolved_currency(p_merchant_id);
   LOOP
     v_attempt := v_attempt + 1;

@@ -26,3 +26,40 @@ SELECT pg_temp.assert_true(
    ) AS row),
   'claim on a cancelled order did not resolve as reusable'
 );
+
+-- 34b. The reusable claim also stays recoverable from history after
+-- newer transactions push its receipt out of the recent window: the
+-- receipts union applies the same cancelled-order effective-used rule.
+INSERT INTO public.points_transactions (
+  merchant_id, customer_id, points, type, description, source,
+  source_id, balance_after, created_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012', -50, 'redemption',
+  'Redeemed: Reuse perk', 'redemption',
+  (SELECT id::text FROM public.reward_redemptions
+   WHERE discount_code = 'RDM-REUSE34'), 0,
+  pg_catalog.now() - interval '1 hour'
+);
+
+INSERT INTO public.points_transactions (
+  merchant_id, customer_id, points, type, description, balance_after,
+  source
+)
+SELECT '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012', 1, 'earn', 'Filler', 0,
+  'purchase'
+FROM pg_catalog.generate_series(1, 11);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
+SELECT pg_temp.assert_true(
+  (SELECT count(*) = 1
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'transactions') AS value
+   WHERE value ->> 'redemption_code' = 'RDM-REUSE34'),
+  'cancelled-claim receipt fell out of history recovery'
+);

@@ -68,3 +68,29 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET maximum_redemption_percentage = 50
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- A fixed value below half a unit rounds to a zero checkout discount:
+-- reject before deduction so points are never spent on a dead code.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Fractional fixed', 100,
+  'discount_fixed', 0.4, true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Fractional fixed')
+   ) AS result)
+  AND (SELECT points_balance = 100
+   FROM public.customer_loyalty
+   WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+     AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
+  'fractional fixed redemption spent points on a zero discount'
+);

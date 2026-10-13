@@ -13,7 +13,9 @@
 --  20261010000012_wallet_credit_loyalty_redemption,
 --  20261010000013_loyalty_ngn_merchant_guard,
 --  20261010000014_release_loyalty_claim_on_cancel,
---  20261010000015_loyalty_transactions_receipts).
+--  20261010000015_loyalty_transactions_receipts,
+--  20261010000016_loyalty_redemption_currency,
+--  20261010000017_loyalty_redemption_max_percentage).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --

@@ -88,31 +88,11 @@ export function createBillFormPurchaseHandler({
         Alert.alert('Invalid Amount', amountError);
         return;
       }
-      if (
-        !ensureUtilityWalletReady({
-          amount: numericAmount,
-          payment,
-          returnToHref,
-        })
-      ) {
-        return;
-      }
-
-      // Only enter the submitting state after validation and the wallet
-      // readiness gate pass — matches the airtime/data handlers and avoids
-      // flashing submitting UI on every validation rejection. Everything
-      // above is synchronous, so the getIsSubmitting reentrancy guard at
-      // the top still holds.
-      setIsSubmitting(true);
-
       const { customerName, customerAddress } = resolveBillCustomerOfRecord({
         customer,
         verifiedCustomerName,
         verifiedCustomerAddress,
       });
-      // Attach the verified meter address to every success result (API omits it).
-      const emitSuccess: typeof onSuccess = (r) =>
-        onSuccess(customerAddress ? { ...r, address: customerAddress } : r);
       // Kuda-display + Monnify-fulfillment routing (folded items vend via Monnify).
       const {
         provider: selectedProvider,
@@ -142,6 +122,31 @@ export function createBillFormPurchaseHandler({
         ...(validationReference ? { validationReference } : {}),
         walletAmount: numericAmount,
       };
+      // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
+      // submit signs with — a charged-but-unanswered retry must bypass
+      // the balance gate instead of stranding behind top-up.
+      const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+      if (
+        !ensureUtilityWalletReady({
+          amount: numericAmount,
+          isRetainedReplay,
+          payment,
+          returnToHref,
+        })
+      ) {
+        return;
+      }
+
+      // Only enter the submitting state after validation and the wallet
+      // readiness gate pass — matches the airtime/data handlers and avoids
+      // flashing submitting UI on every validation rejection. Everything
+      // above is synchronous, so the getIsSubmitting reentrancy guard at
+      // the top still holds.
+      setIsSubmitting(true);
+
+      // Attach the verified meter address to every success result (API omits it).
+      const emitSuccess: typeof onSuccess = (r) =>
+        onSuccess(customerAddress ? { ...r, address: customerAddress } : r);
       // Descriptor-keyed recall: a remount (Back to Home, reopen) after
       // a 202 processing or a timeout retries with the SAME key, so the
       // route dedupes instead of debiting a second transaction.

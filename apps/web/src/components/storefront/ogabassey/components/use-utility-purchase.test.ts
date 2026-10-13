@@ -9,6 +9,11 @@ import {
   markPendingVtuCompleted,
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
+import type { UtilityCheckoutPayload } from './utility-checkout';
+import {
+  buildUtilityCheckoutWalletPayload,
+  buildVtuWalletPayloadSignature,
+} from './utility-vtu-payload-signature';
 import { useUtilityPurchase } from './use-utility-purchase';
 
 const mockSubmit = vi.hoisted(() => vi.fn());
@@ -217,6 +222,64 @@ describe('useUtilityPurchase', () => {
     expect(onInsufficientWalletBalance).toHaveBeenCalledTimes(1);
     expect(result.current.step).toBe('details');
     expect(result.current.loading).toBe(false);
+  });
+
+  it('lets a retained retry resubmit when the wallet later reads short', async () => {
+    // Codex R65 6ru4mK: the wallet covered the bill at submit time;
+    // the debit landed server-side but the response was lost. The
+    // retry must replay (same key), not stall behind top-up. The
+    // mock signs with the REAL builder chain so the pre-readiness
+    // peek and the capture agree exactly like production.
+    const seenKeys: string[] = [];
+    mockSubmit.mockImplementation(
+      async (request: {
+        payload: UtilityCheckoutPayload;
+        merchantSlug: string;
+        customerName: string;
+        customerPhone: string | null | undefined;
+        expectedUserId: string | null | undefined;
+        getWalletIdempotencyKey: (signature: string) => string;
+      }) => {
+        seenKeys.push(
+          request.getWalletIdempotencyKey(
+            buildVtuWalletPayloadSignature(
+              buildUtilityCheckoutWalletPayload({
+                merchantSlug: request.merchantSlug,
+                customerName: request.customerName,
+                customerPhone: request.customerPhone,
+                expectedUserId: request.expectedUserId,
+                payload: request.payload,
+              })
+            )
+          )
+        );
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-PROC',
+          amount: 1000,
+          processing: true,
+        };
+      }
+    );
+    const { result, rerender } = renderHook(
+      (props: ReturnType<typeof baseParams>) => useUtilityPurchase(props),
+      { initialProps: baseParams({}) }
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+
+    // Post-debit the wallet reads empty; the retry must still replay.
+    rerender(baseParams({ walletBalance: 0 }));
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).toHaveBeenCalledTimes(2);
+    expect(seenKeys).toHaveLength(2);
+    expect(seenKeys[0]).toBe(seenKeys[1]);
   });
 
   it('waits (does not submit) while the wallet balance is still loading', async () => {

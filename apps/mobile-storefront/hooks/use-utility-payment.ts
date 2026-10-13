@@ -3,7 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useRef } from 'react';
 import { CONFIG } from '@/lib/config';
-import { scopePendingVtuKey } from '@/lib/pending-vtu-descriptor';
+import {
+  buildVtuPurchaseDescriptor,
+  scopePendingVtuKey,
+} from '@/lib/pending-vtu-descriptor';
 import {
   forgetPendingVtuPurchase,
   recallPendingVtuKey,
@@ -139,6 +142,18 @@ export function useUtilityPayment() {
       const scopeTag = buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID);
       rememberPendingVtuPurchase(descriptor, minted, scopeTag);
       return minted;
+    },
+    /**
+     * Retained-replay peek (Codex R65 6ru4mK): recall WITHOUT
+     * minting, so the balance gate can let a retained retry
+     * through. A minting peek would strand never-submitted keys
+     * under eternal uncompleted retention (R63).
+     */
+    hasRetainedVtuAttempt: (request: Record<string, unknown>) => {
+      const descriptor = scopePendingVtuDescriptor(
+        buildVtuPurchaseDescriptor(request)
+      );
+      return recallPendingVtuKey(descriptor) !== null;
     },
     /**
      * Forgets the descriptor's key after a definitive response (success

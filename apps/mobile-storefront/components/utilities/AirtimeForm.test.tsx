@@ -126,6 +126,7 @@ describe('AirtimeForm', () => {
       captureSubmittingUserId: () => 'test-user',
       isSubmittingOwnerCurrent: () => true,
       resetWalletIdempotencyKey: jest.fn(),
+      hasRetainedVtuAttempt: jest.fn(() => false),
     });
     mockChargeWalletForVtu.mockResolvedValue({
       amount: 1000,
@@ -370,6 +371,7 @@ describe('AirtimeForm', () => {
     await waitFor(() => {
       expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
         amount: 1000,
+        isRetainedReplay: false,
         payment: expect.objectContaining({ walletBalance: 5000 }),
         returnToHref: expect.any(String),
       });

@@ -96,6 +96,7 @@ describe('airtime stale success replay', () => {
             overrides.isSubmittingOwnerCurrent ?? (() => true),
           resetWalletIdempotencyKey:
             overrides.resetWalletIdempotencyKey ?? jest.fn(),
+          hasRetainedVtuAttempt: jest.fn(() => false),
         } as PaymentState,
         customer: null,
         onSuccess: overrides.onSuccess ?? jest.fn(),

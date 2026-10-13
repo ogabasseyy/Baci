@@ -28,10 +28,19 @@ interface UtilityWalletReadinessPayment {
  */
 export function ensureUtilityWalletReady({
   amount,
+  isRetainedReplay = false,
   payment,
   returnToHref,
 }: {
   amount: number;
+  /**
+   * Retained replays bypass the balance gate (Codex R65 6ru4mK):
+   * the wallet was already debited for this exact intent — the
+   * server replays the original outcome without charging again,
+   * so a post-debit balance dip must not strand recovery behind
+   * top-up. Auth/loading/error gates still apply.
+   */
+  isRetainedReplay?: boolean;
   payment: UtilityWalletReadinessPayment;
   returnToHref?: WalletReturnHref | null;
 }): boolean {
@@ -66,7 +75,7 @@ export function ensureUtilityWalletReady({
     ]);
     return false;
   }
-  if (payment.walletBalance < amount) {
+  if (!isRetainedReplay && payment.walletBalance < amount) {
     promptUtilityWalletFunding({
       amount,
       balance: payment.walletBalance,

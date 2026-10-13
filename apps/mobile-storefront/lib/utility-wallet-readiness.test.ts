@@ -50,6 +50,31 @@ describe('ensureUtilityWalletReady', () => {
     expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 
+  it('lets retained replays bypass the balance gate', () => {
+    // Codex R65 6ru4mK: the wallet was already debited for this
+    // exact intent — a post-debit balance dip must not strand
+    // recovery behind top-up.
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      isRetainedReplay: true,
+      payment: paymentState({ walletBalance: 0 }),
+    });
+
+    expect(ready).toBe(true);
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+  });
+
+  it('still gates fresh purchases on balance', () => {
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      payment: paymentState({ walletBalance: 0 }),
+    });
+
+    expect(ready).toBe(false);
+    expect(mockPromptUtilityWalletFunding).toHaveBeenCalledTimes(1);
+  });
+
   it('sends signed-out customers to sign in instead of the funding prompt', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,

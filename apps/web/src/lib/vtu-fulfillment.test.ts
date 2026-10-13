@@ -76,8 +76,14 @@ interface PendingTransactionMockOptions {
   completedGatewayTransactions?: Array<{ status: string }>;
   emailClaimData?: { id: string } | null;
   notificationClaimData?: { id: string } | null;
-  purchaseUpdateData?: { id: string } | null;
+  purchaseUpdateData?: { id: string; updated_at?: string } | null;
   purchaseUpdateErrors?: Array<{ message: string } | null>;
+  /**
+   * When set, pre-vend restore updates resolve as a CAS match ONLY
+   * when the captured `updated_at` token equals this (Codex R65
+   * 6ru4mQ) — otherwise they zero-match like a raced row.
+   */
+  expectedRestoreToken?: string;
   updateErrors?: {
     finalMetadata?: { message: string };
     purchase?: { message: string };
@@ -183,6 +189,7 @@ function createPendingTransactionSupabaseMock({
   notificationClaimData = { id: 'vtu-1' },
   purchaseUpdateData = { id: 'vtu-1' },
   purchaseUpdateErrors,
+  expectedRestoreToken,
   updateErrors = {},
   updatePayloads = [],
 }: PendingTransactionMockOptions): SupabaseStub {
@@ -308,6 +315,36 @@ function createPendingTransactionSupabaseMock({
             }
 
             if (!isClaimOrErrorUpdate(payloadRecord)) {
+              if (
+                expectedRestoreToken !== undefined &&
+                payloadRecord.status === 'pending' &&
+                typeof metadataPayload?.preVendInterruptedAt === 'string'
+              ) {
+                // Token-gated pre-vend restore: captures the CAS
+                // token from the eq chain and matches only on the
+                // expected value (Codex R65 6ru4mQ).
+                let capturedToken: unknown;
+                const restoreChain = createAwaitableUpdateChain(
+                  { data: null, error: null },
+                  vi.fn()
+                );
+                restoreChain.eq = vi.fn((column: string, value: unknown) => {
+                  if (column === 'updated_at') {
+                    capturedToken = value;
+                  }
+                  return restoreChain;
+                });
+                restoreChain.maybeSingle = vi.fn().mockImplementation(() =>
+                  Promise.resolve({
+                    data:
+                      capturedToken === expectedRestoreToken
+                        ? { id: 'vtu-1' }
+                        : null,
+                    error: null,
+                  })
+                );
+                return restoreChain;
+              }
               let updateError = selectUpdateError(
                 payloadRecord,
                 transactionRow,
@@ -5024,6 +5061,72 @@ describe('fulfillPendingVtuTransaction', () => {
         expect(JSON.stringify(payload)).not.toContain('marker write failed');
       }
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    });
+
+    it('restores marker failures with the refreshed CAS token from the debit persist', async () => {
+      // Codex R65 6ru4mQ: the debit metadata write advances updated_at
+      // via trigger — the marker-failure restore must CAS with the NEW
+      // token or it zero-matches and strands the charged row until the
+      // 5-minute stale path. The token gate matches ONLY on the
+      // refreshed token, so this fails against code that restores
+      // with the stale claim token.
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const updatePayloads: unknown[] = [];
+        const supabase = createPendingTransactionSupabaseMock({
+          updatePayloads,
+          updateErrors: {
+            submissionMarker: { message: 'marker write failed' },
+          },
+          purchaseUpdateData: {
+            id: 'vtu-cas-refresh',
+            updated_at: '2026-10-12T00:00:02.000Z',
+          },
+          expectedRestoreToken: '2026-10-12T00:00:02.000Z',
+          claimData: {
+            id: 'vtu-cas-refresh',
+            updated_at: '2026-10-12T00:00:01.000Z',
+          },
+          transactionRow: {
+            id: 'vtu-cas-refresh',
+            merchant_id: 'merchant-1',
+            customer_id: 'customer-1',
+            type: 'airtime',
+            network_provider: 'MTN',
+            phone_number: '08012345678',
+            amount: 1000,
+            request_reference: 'VTU-CASREFRESH',
+            transaction_id: null,
+            status: 'pending',
+            metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+            error_message: null,
+            updated_at: '2026-10-12T00:00:00.000Z',
+            merchant_commission: 10,
+            customer_cashback: 0,
+            biller_name: null,
+            biller_item_code: null,
+            customer_identifier: null,
+            source: 'checkout',
+          },
+        });
+
+        await expect(
+          fulfillPendingVtuTransaction({
+            supabase,
+            transactionId: 'vtu-cas-refresh',
+          })
+        ).rejects.toThrow(/Failed to persist provider-submission marker/);
+        // Restore attempted AND matched (no lost-race skip).
+        expect(updatePayloads).toContainEqual(
+          expect.objectContaining({ status: 'pending' })
+        );
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          'VTU pre-vend restore skipped: row changed after snapshot:',
+          expect.anything()
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('skips redeem RPC when walletDebited is already true and proceeds to vend', async () => {

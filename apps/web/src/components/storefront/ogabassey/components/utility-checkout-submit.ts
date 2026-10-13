@@ -7,7 +7,10 @@ import {
   type UtilityCheckoutCashback,
   type UtilityCheckoutPayload,
 } from './utility-checkout';
-import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
+import {
+  buildUtilityCheckoutWalletPayload,
+  buildVtuWalletPayloadSignature,
+} from './utility-vtu-payload-signature';
 
 export interface UtilityCheckoutRequest {
   payload: UtilityCheckoutPayload;
@@ -52,14 +55,13 @@ export const submitUtilityCheckout = async ({
   getWalletIdempotencyKey,
 }: UtilityCheckoutRequest): Promise<UtilityCheckoutResult> => {
   try {
-    const walletPayload = {
+    const walletPayload = buildUtilityCheckoutWalletPayload({
       merchantSlug,
       customerName,
-      ...(customerPhone ? { customerPhone } : {}),
-      ...(expectedUserId ? { expectedUserId } : {}),
-      ...payload,
-      walletAmount: payload.amount,
-    };
+      customerPhone,
+      expectedUserId,
+      payload,
+    });
     const response = await fetchWithCsrf('/api/vtu/checkout/wallet-only', {
       method: 'POST',
       headers: {

@@ -38,6 +38,8 @@ interface UseUtilityIdempotencyKeyResult {
     payloadSignature: string
   ) => UtilityIdempotencyAttempt;
   forgetScopedKey: (scoped: string) => void;
+  /** Non-minting retained check: recall only, never creates an entry. */
+  isAttemptRetained: (payloadSignature: string) => boolean;
   isResultViewActive: () => boolean;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
@@ -168,6 +170,24 @@ export function useUtilityIdempotencyKey({
     return { key: getPendingVtuKey(scoped, scopeTag), scoped, recalled };
   };
 
+  const isAttemptRetained = (payloadSignature: string) => {
+    // Same scope captureAttemptKey uses (user-first, merchant ID),
+    // recalled WITHOUT minting: a minting peek would permanently
+    // mark every abandoned form retained and let later fresh
+    // purchases dodge the insufficient-funds gate. Fail-closed:
+    // nothing is ever captured under an '' merchant, so the
+    // pre-hydration peek below just returns false.
+    return (
+      recallPendingVtuKey(
+        scopePendingVtuSignature(
+          userId ?? customerId,
+          merchantId,
+          payloadSignature
+        )
+      ) !== undefined
+    );
+  };
+
   const forgetScopedKey = (scoped: string) => {
     forgetPendingVtuPurchase(scoped);
   };
@@ -201,6 +221,7 @@ export function useUtilityIdempotencyKey({
   return {
     captureAttemptKey,
     forgetScopedKey,
+    isAttemptRetained,
     isResultViewActive,
     isScopedReplay,
     isScopedStale,

@@ -14,6 +14,10 @@ import {
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
+import {
+  buildUtilityCheckoutWalletPayload,
+  buildVtuWalletPayloadSignature,
+} from './utility-vtu-payload-signature';
 import type { UtilityTabId } from './UtilityTabs';
 
 interface UseUtilityPurchaseParams {
@@ -108,6 +112,7 @@ export function useUtilityPurchase({
   const {
     captureAttemptKey,
     forgetScopedKey,
+    isAttemptRetained,
     isResultViewActive,
     isScopedReplay,
     isScopedStale,
@@ -121,12 +126,30 @@ export function useUtilityPurchase({
   });
 
   const handlePurchase = async (payload: UtilityCheckoutPayload) => {
+    // Hoisted above readiness: the retained peek must sign the same
+    // wallet payload the submit signs (shared builder, no drift).
+    const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
+    const names = [customer?.first_name, customer?.last_name].filter(Boolean);
+    const customerName =
+      names.join(' ').trim() || customer?.email || user?.email || 'Customer';
+    const isRetainedReplay = isAttemptRetained(
+      buildVtuWalletPayloadSignature(
+        buildUtilityCheckoutWalletPayload({
+          merchantSlug: merchantSlug || 'ogabassey',
+          customerName,
+          customerPhone: customer?.phone,
+          expectedUserId: submittingUserId,
+          payload,
+        })
+      )
+    );
     if (
       !checkUtilityPurchaseReadiness({
         amount: payload.amount,
         canFundByBankTransfer,
         isAuthLoading,
         isAuthenticated,
+        isRetainedReplay,
         merchantId,
         onInsufficientWalletBalance,
         refreshWallet,
@@ -142,10 +165,6 @@ export function useUtilityPurchase({
 
     setLoading(true);
     const submittingIdentity = user?.id ?? customer?.id ?? null;
-    const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
-    const names = [customer?.first_name, customer?.last_name].filter(Boolean);
-    const customerName =
-      names.join(' ').trim() || customer?.email || user?.email || 'Customer';
     // Per-execution capture: concurrent submits can't redirect completion.
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,

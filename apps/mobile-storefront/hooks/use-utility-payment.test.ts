@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { walletKeys } from '@/hooks/wallet-query';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 
 const mockUseMerchantPaymentSettings = jest.fn();
 let mockWalletQuery: {
@@ -190,6 +191,28 @@ describe('useUtilityPayment', () => {
     expect(
       secondMount.result.current.getWalletIdempotencyKey('remount-descriptor')
     ).toBe(key);
+  });
+
+  it('peeks retained attempts without minting keys', () => {
+    // Codex R65 6ru4mK: readiness needs the registry WITHOUT
+    // creating fresh intent; a minting peek would permanently
+    // mark every abandoned form as "retained" and let later
+    // fresh purchases dodge the insufficient-funds gate. Uses the
+    // handlers' real flow: scope-once, then capture by scoped key.
+    const { result } = renderHook(() => useUtilityPayment());
+    const submitted = { phoneNumber: '08010000001', amount: 1000 };
+    const untouched = { phoneNumber: '08010000002', amount: 1000 };
+
+    expect(result.current.hasRetainedVtuAttempt(submitted)).toBe(false);
+    result.current.getWalletIdempotencyKey(
+      result.current.scopePendingVtuDescriptor(
+        buildVtuPurchaseDescriptor(submitted)
+      )
+    );
+    expect(result.current.hasRetainedVtuAttempt(submitted)).toBe(true);
+    expect(result.current.hasRetainedVtuAttempt(untouched)).toBe(false);
+    // Second peek still false: the first peek minted nothing.
+    expect(result.current.hasRetainedVtuAttempt(untouched)).toBe(false);
   });
 
   it('mints distinct keys for distinct purchases', () => {

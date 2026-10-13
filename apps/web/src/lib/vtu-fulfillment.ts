@@ -2632,10 +2632,13 @@ export async function fulfillPendingVtuTransaction({
     // future retry sees the flag and skips the RPC (RPC is idempotent
     // anyway, but the metadata flag avoids an extra round-trip).
     const debitedMetadata = { ...preDebitMetadata, walletDebited: true };
-    const { error: walletDebitedPersistError } = await supabase
-      .from('vtu_transactions')
-      .update({ metadata: debitedMetadata })
-      .eq('id', row.id);
+    const { data: debitedRow, error: walletDebitedPersistError } =
+      await supabase
+        .from('vtu_transactions')
+        .update({ metadata: debitedMetadata })
+        .eq('id', row.id)
+        .select('updated_at')
+        .maybeSingle();
     if (walletDebitedPersistError) {
       // Fail closed: the wallet was debited via the (idempotent) RPC
       // but the row still says walletDebited=false. Restore to marked
@@ -2659,6 +2662,13 @@ export async function fulfillPendingVtuTransaction({
       throwVtuPersistenceError(
         `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`
       );
+    }
+    // Refresh the CAS token (Codex R65 6ru4mQ): this write advanced
+    // updated_at via trigger — the marker-failure restore below CASes
+    // on row.updated_at and would zero-match with the stale token,
+    // stranding the charged row until the 5-minute stale path.
+    if (typeof debitedRow?.updated_at === 'string') {
+      row.updated_at = debitedRow.updated_at;
     }
     // Mutate the row's metadata so downstream code (refund-on-Kuda-fail
     // branch) sees walletDebited=true.

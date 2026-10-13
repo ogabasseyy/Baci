@@ -54,6 +54,7 @@ function createPaymentState(
     invalidateWallets: jest.fn(),
     isSubmittingOwnerCurrent: () => true,
     resetWalletIdempotencyKey: jest.fn(),
+    hasRetainedVtuAttempt: jest.fn(() => false),
     ...overrides,
   };
 }
@@ -167,6 +168,7 @@ describe('createBillFormPurchaseHandler', () => {
 
     expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
       amount: 1000,
+      isRetainedReplay: false,
       payment,
       returnToHref: '/utilities/power?repeatAmount=1000',
     });

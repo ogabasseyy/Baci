@@ -98,6 +98,7 @@ describe('bill stale success replay', () => {
           overrides.isSubmittingOwnerCurrent ?? (() => true),
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
+        hasRetainedVtuAttempt: jest.fn(() => false),
       } as PaymentState,
       selectedBiller: {
         billerId: 'ekedc',

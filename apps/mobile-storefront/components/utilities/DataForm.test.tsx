@@ -138,6 +138,7 @@ describe('DataForm', () => {
       captureSubmittingUserId: () => 'test-user',
       isSubmittingOwnerCurrent: () => true,
       resetWalletIdempotencyKey: jest.fn(),
+      hasRetainedVtuAttempt: jest.fn(() => false),
     });
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
@@ -485,6 +486,7 @@ describe('DataForm', () => {
     await waitFor(() => {
       expect(mockEnsureUtilityWalletReady).toHaveBeenCalledWith({
         amount: 1000,
+        isRetainedReplay: false,
         payment: expect.objectContaining({ walletBalance: 5000 }),
         returnToHref: expect.any(String),
       });

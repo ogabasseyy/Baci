@@ -88,9 +88,29 @@ export function createDataFormPurchaseHandler({
       );
       return;
     }
+    const customerName =
+      [customer?.first_name, customer?.last_name].filter(Boolean).join(' ') ||
+      customer?.email ||
+      undefined;
+
+    const request = {
+      amount: planAmount,
+      customerName,
+      customerPhone: customer?.phone || undefined,
+      dataPlanCode: selectedPlan,
+      networkProvider: selectedProvider,
+      phoneNumber,
+      type: 'data' as const,
+      walletAmount: planAmount,
+    };
+    // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
+    // submit signs with — a charged-but-unanswered retry must bypass
+    // the balance gate instead of stranding behind top-up.
+    const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({
         amount: planAmount,
+        isRetainedReplay,
         payment,
         returnToHref,
       })
@@ -100,21 +120,6 @@ export function createDataFormPurchaseHandler({
 
     setIsSubmitting(true);
     try {
-      const customerName =
-        [customer?.first_name, customer?.last_name].filter(Boolean).join(' ') ||
-        customer?.email ||
-        undefined;
-
-      const request = {
-        amount: planAmount,
-        customerName,
-        customerPhone: customer?.phone || undefined,
-        dataPlanCode: selectedPlan,
-        networkProvider: selectedProvider,
-        phoneNumber,
-        type: 'data' as const,
-        walletAmount: planAmount,
-      };
       // Descriptor-keyed recall: a remount (Back to Home, reopen) after
       // a 202 processing or a timeout retries with the SAME key, so the
       // route dedupes instead of debiting a second transaction.

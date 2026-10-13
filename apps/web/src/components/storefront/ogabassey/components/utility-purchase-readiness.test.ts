@@ -35,6 +35,28 @@ describe('checkUtilityPurchaseReadiness', () => {
     expect(mockToast).not.toHaveBeenCalled();
   });
 
+  it('lets a retained replay bypass the balance gate', () => {
+    // Codex R65 6ru4mK: the wallet was already debited for this
+    // exact purchase — a post-debit dip must not strand recovery
+    // behind top-up.
+    expect(
+      checkUtilityPurchaseReadiness(
+        baseInput({ isRetainedReplay: true, walletBalance: 0 })
+      )
+    ).toBe(true);
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('still gates fresh purchases on balance', () => {
+    const onInsufficientWalletBalance = vi.fn();
+    expect(
+      checkUtilityPurchaseReadiness(
+        baseInput({ onInsufficientWalletBalance, walletBalance: 500 })
+      )
+    ).toBe(false);
+    expect(onInsufficientWalletBalance).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks while a wallet refresh is pending even when loading is false', () => {
     // Commit/effect race: refreshWallet() ran but the fetch effect
     // has not flipped walletLoading yet — the balance is stale.

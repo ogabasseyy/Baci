@@ -93,6 +93,7 @@ describe('data stale success replay', () => {
           overrides.isSubmittingOwnerCurrent ?? (() => true),
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
+        hasRetainedVtuAttempt: jest.fn(() => false),
       } as PaymentState,
       phoneNumber: '08031234567',
       planAmount: 1000,

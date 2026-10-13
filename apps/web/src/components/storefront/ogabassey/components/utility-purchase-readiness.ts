@@ -6,6 +6,8 @@ interface CheckUtilityPurchaseReadinessInput {
   canFundByBankTransfer: boolean;
   isAuthLoading: boolean;
   isAuthenticated: boolean;
+  /** True when this exact purchase already has a retained attempt. */
+  isRetainedReplay?: boolean;
   merchantId: string | undefined;
   onInsufficientWalletBalance?: () => void;
   refreshWallet: () => void;
@@ -28,6 +30,7 @@ export function checkUtilityPurchaseReadiness({
   canFundByBankTransfer,
   isAuthLoading,
   isAuthenticated,
+  isRetainedReplay = false,
   merchantId,
   onInsufficientWalletBalance,
   refreshWallet,
@@ -98,8 +101,11 @@ export function checkUtilityPurchaseReadiness({
   // Wallet-only checkout: the wallet must cover the full bill — there is
   // no card fallback. Stop here (before any network call) and let the
   // caller open the funding panel so the customer can top up. Report only
-  // the remaining shortfall so partial balances don't overfund.
-  if (walletBalance < amount) {
+  // the remaining shortfall so partial balances don't overfund. A RETAINED
+  // replay skips this gate only: the wallet was already debited for this
+  // exact purchase, so a post-debit dip must not strand recovery behind
+  // top-up. Auth/loading/error gates above still apply.
+  if (!isRetainedReplay && walletBalance < amount) {
     const shortfall = amount - walletBalance;
     if (!canFundByBankTransfer) {
       // No funding rail on web for this store (DVAs disabled, no card

@@ -157,6 +157,7 @@ describe('BillForm', () => {
       captureSubmittingUserId: () => 'test-user',
       isSubmittingOwnerCurrent: () => true,
       resetWalletIdempotencyKey: jest.fn(),
+      hasRetainedVtuAttempt: jest.fn(() => false),
     });
     mockChargeWalletForVtu.mockResolvedValue({
       amount: 2500,

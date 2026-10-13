@@ -45,14 +45,25 @@ interface UseAirtimePurchaseHandlerProps {
 }
 
 interface ExecuteAirtimePurchaseInput {
-  customer: Customer | null;
   getIsActive?: () => boolean;
   numericAmount: number;
   onSettled: () => void;
   onSuccess: AirtimeFormProps['onSuccess'];
   payment: ReturnType<typeof useUtilityPayment>;
   phoneNumber: string;
-  selectedProvider: string | null;
+  /**
+   * Prebuilt by the caller (same record the retained-replay peek
+   * signed) — never rebuilt here, so peek and submit cannot drift.
+   */
+  request: {
+    amount: number;
+    customerName: string;
+    customerPhone: string | undefined;
+    networkProvider: string | undefined;
+    phoneNumber: string;
+    type: 'airtime';
+    walletAmount: number;
+  };
 }
 
 /**
@@ -60,26 +71,15 @@ interface ExecuteAirtimePurchaseInput {
  * there is no card or gateway fallback.
  */
 async function executeAirtimePurchase({
-  customer,
   getIsActive,
   numericAmount,
   onSettled,
   onSuccess,
   payment,
   phoneNumber,
-  selectedProvider,
+  request,
 }: ExecuteAirtimePurchaseInput): Promise<void> {
   try {
-    const customerName = getAirtimeCustomerName(customer);
-    const request = {
-      amount: numericAmount,
-      customerName,
-      customerPhone: customer?.phone,
-      networkProvider: selectedProvider ?? undefined,
-      phoneNumber,
-      type: 'airtime' as const,
-      walletAmount: numericAmount,
-    };
     // Descriptor-keyed recall: a remount (Back to Home, reopen) after
     // a 202 processing or a timeout retries with the SAME key, so the
     // route dedupes instead of debiting a second transaction.
@@ -247,9 +247,23 @@ export function useAirtimePurchaseHandler({
       return;
     }
 
+    const request = {
+      amount: numericAmount,
+      customerName: getAirtimeCustomerName(customer),
+      customerPhone: customer?.phone,
+      networkProvider: selectedProvider ?? undefined,
+      phoneNumber,
+      type: 'airtime' as const,
+      walletAmount: numericAmount,
+    };
+    // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
+    // submit signs with — a charged-but-unanswered retry must bypass
+    // the balance gate instead of stranding behind top-up.
+    const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({
         amount: numericAmount,
+        isRetainedReplay,
         payment,
         returnToHref,
       })
@@ -260,7 +274,6 @@ export function useAirtimePurchaseHandler({
 
     setIsSubmitting(true);
     await executeAirtimePurchase({
-      customer,
       getIsActive,
       numericAmount,
       onSettled: () => {
@@ -270,7 +283,7 @@ export function useAirtimePurchaseHandler({
       onSuccess,
       payment,
       phoneNumber,
-      selectedProvider,
+      request,
     });
   };
 

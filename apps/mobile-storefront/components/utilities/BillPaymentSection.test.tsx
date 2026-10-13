@@ -33,6 +33,7 @@ function createPaymentState(): PaymentState {
     invalidateWallets: jest.fn(),
     isSubmittingOwnerCurrent: () => true,
     resetWalletIdempotencyKey: jest.fn(),
+    hasRetainedVtuAttempt: jest.fn(() => false),
   };
 }
 

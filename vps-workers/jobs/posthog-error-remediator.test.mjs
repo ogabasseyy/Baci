@@ -49,6 +49,9 @@ describe('PostHog error remediator', () => {
     });
 
     assert.equal(first.candidates.length, 1);
+    assert.equal(first.candidates[0].source, 'posthog');
+    assert.equal(first.candidates[0].category, 'posthog_issue');
+    assert.match(first.candidates[0].caseKey, /^posthog:posthog_issue:/);
     assert.equal(first.actions[0].type, 'prompt_written');
     assert.equal(second.candidates.length, 0);
     assert.deepEqual(

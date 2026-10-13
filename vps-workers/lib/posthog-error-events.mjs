@@ -36,17 +36,50 @@ const activeIssue = (issue) =>
     boundedString(issue?.status, 40).toLowerCase()
   );
 
+// Well-known runtime exception types. Only these pass through verbatim;
+// any other leading token falls back to fixed buckets below, since issue
+// names are provider-controlled and can contain personal data.
+const KNOWN_EXCEPTION_TYPES = new Set([
+  'AbortError',
+  'AggregateError',
+  'AssertionError',
+  'AttributeError',
+  'AxiosError',
+  'ChunkLoadError',
+  'DOMException',
+  'Error',
+  'EvalError',
+  'FirebaseError',
+  'IOError',
+  'IllegalArgumentException',
+  'IllegalStateException',
+  'ImportError',
+  'IndexError',
+  'KeyError',
+  'NetworkError',
+  'NotFoundError',
+  'NullPointerException',
+  'RangeError',
+  'ReferenceError',
+  'RuntimeError',
+  'SQLException',
+  'SyntaxError',
+  'TimeoutError',
+  'TypeError',
+  'URIError',
+  'ValidationError',
+  'ValueError',
+  'ZodError',
+]);
+
 // Derives a bounded triage label from the provider issue name without
-// copying provider text: either an identifier-shaped exception type or a
-// fixed keyword bucket. Raw names can contain personal data.
+// copying provider text: either an allowlisted exception type or a fixed
+// keyword bucket.
 const classifyPostHogIssueName = (value) => {
   const name = boundedString(value, 240);
   const leadingToken = name.split(/[\s:({\[]/, 1)[0] ?? '';
-  if (
-    /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(leadingToken) &&
-    /(Error|Exception|Failure|Panic|Reject|Abort)$/.test(leadingToken)
-  ) {
-    return leadingToken.slice(0, 80);
+  if (KNOWN_EXCEPTION_TYPES.has(leadingToken)) {
+    return leadingToken;
   }
   if (/\bcrash\b|fatal|application not responding|\banr\b/i.test(name)) {
     return 'Native crash';

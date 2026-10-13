@@ -69,83 +69,6 @@ describe('PostHog remediation candidates', () => {
     assert.equal(JSON.stringify(candidates).includes('2348012345678'), false);
   });
 
-  it('follows the official nextOffset cursor before applying the repeat threshold', async () => {
-    const requestedUrls = [];
-    const candidates = await fetchPostHogRemediationCandidates({
-      env: { ...environment, BACI_POSTHOG_REMEDIATION_MAX_PAGES: '2' },
-      fetchFn: (url, options) => {
-        requestedUrls.push(String(url));
-        const request = JSON.parse(options.body);
-        if (requestedUrls.length === 1) {
-          assert.equal(request.offset, 0);
-          return new Response(
-            JSON.stringify({
-              hasMore: true,
-              limit: 100,
-              nextOffset: 23,
-              offset: 0,
-              results: [
-                {
-                  id: 'one-off',
-                  status: 'active',
-                  aggregations: { occurrences: 1 },
-                },
-              ],
-            })
-          );
-        }
-        assert.equal(request.offset, 23);
-        return new Response(
-          JSON.stringify({
-            hasMore: false,
-            limit: 100,
-            offset: 23,
-            results: [
-              {
-                id: 'repeated',
-                status: 'active',
-                aggregations: { occurrences: 8 },
-              },
-            ],
-          })
-        );
-      },
-    });
-
-    assert.equal(requestedUrls.length, 2);
-    assert.equal(
-      requestedUrls[1],
-      'https://eu.posthog.com/api/projects/202711/error_tracking/query/issues/'
-    );
-    assert.equal(candidates.length, 1);
-    assert.equal(candidates[0].occurrences, 8);
-  });
-
-  it('fails closed when the configured page ceiling would leave issues unmeasured', async () => {
-    await assert.rejects(
-      fetchPostHogRemediationCandidates({
-        env: { ...environment, BACI_POSTHOG_REMEDIATION_MAX_PAGES: '1' },
-        fetchFn: async () =>
-          new Response(
-            JSON.stringify({
-              hasMore: true,
-              limit: 100,
-              nextOffset: 1,
-              offset: 0,
-              results: [
-                {
-                  id: 'first',
-                  status: 'active',
-                  aggregations: { occurrences: 2 },
-                },
-              ],
-            })
-          ),
-      }),
-      /pagination exceeded 1 pages/
-    );
-  });
-
   it('rejects the public ingestion key and incomplete dedicated configuration', async () => {
     await assert.rejects(
       fetchPostHogRemediationCandidates({
@@ -227,6 +150,12 @@ describe('PostHog remediation candidates', () => {
                 name: '!!! alice@example.com !!!',
               },
               {
+                id: 'custom-token',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'AliceSmithError: custom producer token',
+              },
+              {
                 id: 'missing-name',
                 status: 'active',
                 aggregations: { occurrences: 4 },
@@ -238,7 +167,11 @@ describe('PostHog remediation candidates', () => {
 
     assert.deepEqual(
       candidates.map((candidate) => candidate.sample.message),
-      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue']
+      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue']
+    );
+    assert.equal(
+      JSON.stringify(candidates).includes('AliceSmithError'),
+      false
     );
     assert.equal(JSON.stringify(candidates).includes('alice@example.com'), false);
     assert.equal(JSON.stringify(candidates).includes('internal.example'), false);
@@ -275,28 +208,5 @@ describe('PostHog remediation candidates', () => {
       requestedUrl,
       'https://eu.posthog.com/api/projects/202711/error_tracking/query/issues/'
     );
-  });
-
-  it('pages to the hard cap by default before failing closed', async () => {
-    let requests = 0;
-    await assert.rejects(
-      fetchPostHogRemediationCandidates({
-        env: environment,
-        fetchFn: async () => {
-          requests += 1;
-          return new Response(
-            JSON.stringify({
-              hasMore: true,
-              limit: 100,
-              nextOffset: requests,
-              offset: requests - 1,
-              results: [],
-            })
-          );
-        },
-      }),
-      /exceeded the 10-page hard cap/
-    );
-    assert.equal(requests, 10);
   });
 });

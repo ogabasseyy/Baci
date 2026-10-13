@@ -97,14 +97,23 @@ rm -rf "${linkdir}"
 # --- capture-jsonl.jq ---
 capture_fixture="$(mktemp)"
 cat > "${capture_fixture}" <<'JSONL'
-{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-wonder-1.0","usage":{"secret":"omit"}}}
-{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-wonder-1.0"}}
-{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}
-{"payload_type":"session.tokenUsage","payload":{"modelId":"bad model\n::error::secret"}}
 {"payload_type":"run.terminal.completed","payload":{"text":"review result"}}
 JSONL
 captured="$(jq -cS -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}")"
-assert_eq "capture-answer-and-models" '{"model_ids":["muse-wonder-1.0","muse-spark-1.3"],"text":"review result"}' "${captured}"
+assert_eq "capture-answer" '{"text":"review result"}' "${captured}"
+cat > "${capture_fixture}" <<'EXPORT'
+{"events":[
+  {"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}},
+  {"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}},
+  {"payload_type":"session.tokenUsage","payload":{"modelId":"bad model\n::error::secret"}},
+  {"payload_type":"model_completed","payload":{"modelId":"not-the-session-usage-source"}}
+]}
+EXPORT
+captured_models="$(jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" | paste -sd ',' -)"
+assert_eq "capture-model-ids-from-export" "muse-spark-1.3" "${captured_models}"
+printf '%s\n' '{"events":[]}' > "${capture_fixture}"
+if jq -e -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" >/dev/null 2>&1; then capture_missing_model="no"; else capture_missing_model="yes"; fi
+assert_eq "capture-model-ids-empty" "yes" "${capture_missing_model}"
 printf '%s\n' '{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-wonder-1.0"}}' > "${capture_fixture}"
 if jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}" >/dev/null 2>&1; then capture_missing_answer="no"; else capture_missing_answer="yes"; fi
 assert_eq "capture-requires-answer" "yes" "${capture_missing_answer}"

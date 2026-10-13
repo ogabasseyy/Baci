@@ -1,7 +1,9 @@
-"""Agent-invocation guards: the single muse call in run.sh
-must carry standalone containment flags (values can never
-masquerade as flags), scrub both GitHub tokens exactly, and
-build model_args from --model pairs only.
+"""Agent-invocation guards for run.sh.
+
+The exec call must carry standalone containment flags (values can
+never masquerade as flags) and scrub both GitHub tokens. A second
+call may export only the redacted last-session record to a temporary
+file, also with both GitHub tokens scrubbed.
 """
 import re
 from semgrep_sarif_varcollect import CARRY_VARS
@@ -204,9 +206,15 @@ def audit_agent_runner(drift):
                     found.append((piece, rest))
             return found
 
-        calls = []
+        exec_calls, export_calls, other_calls = [], [], []
         for line in expanded:
-            calls.extend(calls_in(line))
+            for piece, rest in calls_in(line):
+                if rest and _dequote(rest[0]) == "exec":
+                    exec_calls.append((piece, rest))
+                elif rest and _dequote(rest[0]) == "export":
+                    export_calls.append((piece, rest))
+                else:
+                    other_calls.append((piece, rest))
         # Whatever still expands at command position is unresolvable
         # statically (conditional assigns, read, $()): fail closed.
         for line in expanded:
@@ -220,16 +228,30 @@ def audit_agent_runner(drift):
                 if "$" in bare or "`" in bare:
                     if "agent-indirect-unresolved" not in drift:
                         drift.append("agent-indirect-unresolved")
-        if not calls:
+        if not exec_calls:
             drift.append("agent-invocation-missing")
-        elif len(calls) != 1:
-            drift.append(f"agent-invocation-count={len(calls)}")
+        elif len(exec_calls) != 1 or other_calls:
+            drift.append(f"agent-invocation-count={len(exec_calls) + len(export_calls) + len(other_calls)}")
+        if len(export_calls) != 1:
+            drift.append("agent-session-export-count")
         else:
+            piece, rest = export_calls[0]
+            argv = [_dequote(w) for w in rest
+                    if not re.match(r"^\d*(>>|>|<<|<<<|<|>&|<&)",
+                                    _dequote(w))]
+            if argv != ["export", "--last", "--out",
+                        "${RUNNER_TEMP}/muse-session-export.json",
+                        "--redacted"]:
+                drift.append("agent-session-export-args")
+            scrub = _parse_env_scrub(piece)
+            if "GITHUB_TOKEN" not in scrub or "GH_TOKEN" not in scrub:
+                drift.append("agent-token-isolation")
+        if len(exec_calls) == 1 and not other_calls:
             # Scope checks to the simple command containing muse
             # (split_commands2 already bounded it: flags on a later
             # chained command cannot satisfy them). Containment is
             # positional (values never count); the scrub is exact.
-            piece, rest = calls[0]
+            piece, rest = exec_calls[0]
             seen, problem = _parse_muse_argv(
                 [_dequote(w) for w in rest])
             if problem == "agent-subcommand":

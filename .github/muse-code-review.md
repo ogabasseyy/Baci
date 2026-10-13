@@ -32,9 +32,10 @@ review body before posting (defense in depth, since web access widens
 prompt-injection exfil options).
 
 The review leaves model selection to Muse's default. The Actions log records
-the effective model IDs Muse reports with usage events. If Muse completes
-without reporting a model ID, the log says that the exact model is unavailable;
-raw provider traces and session logs are not kept.
+the effective model IDs from Muse's retained session usage events. Muse's
+session and redacted export are temporary and deleted after model extraction;
+the review does not upload or print their contents. If no model ID is present,
+the log says the exact model is unavailable.
 
 ## Quota safety
 

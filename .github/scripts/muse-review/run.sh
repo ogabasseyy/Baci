@@ -7,7 +7,8 @@
 #
 # Env in: META_API_KEY, PROMPT_FILE, MUSE_EFFORT, RUNNER_TEMP,
 #   GITHUB_WORKSPACE, GITHUB_OUTPUT, SCRIPT_DIR.
-# Output: review_file plus a model-ID notice from usage events. Exits nonzero
+# Output: review_file plus a model-ID notice from the retained Muse session.
+# Exits nonzero
 # when the agent or structured-output capture fails so the step outcome stays
 # truthful (the step uses continue-on-error; Post renders a fallback).
 set -euo pipefail
@@ -18,8 +19,17 @@ set -euo pipefail
 review_file="${RUNNER_TEMP}/muse-review-body.md"
 model_file="${RUNNER_TEMP}/muse-model-ids.txt"
 capture_file="${RUNNER_TEMP}/muse-jsonl-summary.json"
+session_export="${RUNNER_TEMP}/muse-session-export.json"
+stderr_file="${RUNNER_TEMP}/muse-stderr.log"
+export XDG_DATA_HOME="${RUNNER_TEMP}/muse-data"
 : > "${review_file}"
 : > "${model_file}"
+
+cleanup() {
+  rm -rf "${XDG_DATA_HOME}"
+  rm -f "${session_export}" "${stderr_file}"
+}
+trap cleanup EXIT
 
 # Materialize a symlink-free workspace BEFORE the key is exposed: the agent
 # inherits META_API_KEY and reads changed files, so any PR-added symlink
@@ -48,9 +58,8 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --disable-approval \
   --disable-write \
   --disable-shell \
-  --no-session-log \
   --output-schema "${SCRIPT_DIR}/schema.json" \
-  </dev/null 2>"${RUNNER_TEMP}/muse-stderr.log" \
+  </dev/null 2>"${stderr_file}" \
   | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
 run_rc=$?
 set -e
@@ -64,7 +73,18 @@ if (( run_rc == 0 )); then
     capture_rc=1
   else
     jq -r '.text' "${capture_file}" > "${review_file}"
-    jq -r '.model_ids[]?' "${capture_file}" > "${model_file}"
+    set +e
+    env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" export --last --out "${session_export}" --redacted >/dev/null 2>"${stderr_file}"
+    export_rc=$?
+    set -e
+    if (( export_rc == 0 )); then
+      if ! jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${session_export}" > "${model_file}"; then
+        : > "${model_file}"
+        echo "::notice::Muse session export could not be parsed; exact model ID is unavailable."
+      fi
+    else
+      echo "::notice::Muse completed, but its temporary session export was unavailable; exact model ID is unavailable."
+    fi
   fi
 fi
 
@@ -83,6 +103,6 @@ if (( run_rc != 0 || capture_rc != 0 )); then
   echo "::warning::Muse exec or JSONL capture failed (pipeline=${run_rc}, capture=${capture_rc}); stderr tail follows"
   # Redact-then-truncate like review bodies: the raw tail could carry
   # secrets a misbehaving model echoed to stderr.
-  redact "$(cat "${RUNNER_TEMP}/muse-stderr.log" 2>/dev/null || true)" | tail -c 4000
+  redact "$(cat "${stderr_file}" 2>/dev/null || true)" | tail -c 4000
   exit 1
 fi

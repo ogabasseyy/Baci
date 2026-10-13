@@ -17,6 +17,7 @@ set -euo pipefail
 
 review_file="${RUNNER_TEMP}/muse-review-body.md"
 model_file="${RUNNER_TEMP}/muse-model-ids.txt"
+capture_file="${RUNNER_TEMP}/muse-jsonl-summary.json"
 : > "${review_file}"
 : > "${model_file}"
 
@@ -55,13 +56,22 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --no-session-log \
   --output-schema "${SCRIPT_DIR}/schema.json" \
   "${model_args[@]}" </dev/null 2>"${RUNNER_TEMP}/muse-stderr.log" \
-  | python3 "${SCRIPT_DIR}/capture-jsonl.py" --review-file "${review_file}" --model-file "${model_file}"
-run_status=("${PIPESTATUS[@]}")
-muse_rc="${run_status[0]}"
-capture_rc="${run_status[1]}"
+  | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
+run_rc=$?
 set -e
 
 echo "review_file=${review_file}" >> "${GITHUB_OUTPUT}"
+
+capture_rc=0
+if (( run_rc == 0 )); then
+  if ! jq -e '.text | type == "string"' "${capture_file}" >/dev/null; then
+    echo "::warning::Muse JSONL capture did not contain a completed answer."
+    capture_rc=1
+  else
+    jq -r '.text' "${capture_file}" > "${review_file}"
+    jq -r '.model_ids[]?' "${capture_file}" > "${model_file}"
+  fi
+fi
 
 if (( capture_rc == 0 )); then
   if [[ -s "${model_file}" ]]; then
@@ -74,8 +84,8 @@ else
   echo "::warning::Could not extract Muse's structured output or model ID."
 fi
 
-if (( muse_rc != 0 || capture_rc != 0 )); then
-  echo "::warning::Muse exec or JSONL capture failed (muse=${muse_rc}, capture=${capture_rc}); stderr tail follows"
+if (( run_rc != 0 || capture_rc != 0 )); then
+  echo "::warning::Muse exec or JSONL capture failed (pipeline=${run_rc}, capture=${capture_rc}); stderr tail follows"
   # Redact-then-truncate like review bodies: the raw tail could carry
   # secrets a misbehaving model echoed to stderr.
   redact "$(cat "${RUNNER_TEMP}/muse-stderr.log" 2>/dev/null || true)" | tail -c 4000

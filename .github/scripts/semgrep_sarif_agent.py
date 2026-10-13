@@ -17,7 +17,7 @@ MUSE_VALUE_FLAGS = {"--prompt-file", "--workspace",
                     "--reasoning-effort", "--max-model-steps",
                     "--output-schema", "--model"}
 MUSE_BOOL_FLAGS = {"--disable-approval", "--disable-write",
-                   "--disable-shell", "--no-session-log"}
+                   "--disable-shell", "--no-session-log", "--json"}
 
 
 def _parse_muse_argv(rest):

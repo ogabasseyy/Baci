@@ -3,8 +3,8 @@
 # Uses t/FS/RS/S/H/I/R/O/PR from the lib.
 # shellcheck shell=bash disable=SC2154,SC2007 # SC2007: deprecated $[] is an intentional attack payload
 # --- assign-prefix peel (self-found: a[0]=x prefixes commands) ---
-t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}a[0]=x muse --version"
-t runner-peel-pluseq 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}v+=x muse --version"
+t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}a[0]=x muse --version"
+t runner-peel-pluseq 1 "agent-invocation-count" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}v+=x muse --version"
 
 # --- YAML escape decode (Codex P1: "\u0075ses" checkout evades count) ---
 t yaml-encoded-checkout 1 "pr-controlled-checkout-count" happy.sarif "$S${FS}      - name: Checkout trusted review scripts${FS}b${FS}      - name: Encoded extra checkout${RS}$S${FS}      - name: Encoded extra checkout${FS}a${FS}        \"\\u0075ses\": actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

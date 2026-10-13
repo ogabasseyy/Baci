@@ -45,8 +45,8 @@ t helper-ifs-bare 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${F
 t helper-ifs-read-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}IFS=\$'\\t' read -r a b < /dev/null"
 
 # --- indirect agent invocation (resolve or prohibit) ---
-t muse-bin 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}MUSE_BIN=\"\${HOME}/.local/bin/\"muse${RS}$R${FS}MUSE_BIN=\"\${HOME}${FS}a${FS}\"\${MUSE_BIN}\" exec --prompt-file x"
-t muse-unresolved 1 "agent-indirect-unresolved" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}\"\${MUSE_BIN}\" exec --prompt-file x"
+t muse-bin 1 "agent-invocation-count" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}MUSE_BIN=\"\${HOME}/.local/bin/\"muse${RS}$R${FS}MUSE_BIN=\"\${HOME}${FS}a${FS}\"\${MUSE_BIN}\" exec --prompt-file x"
+t muse-unresolved 1 "agent-indirect-unresolved" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}\"\${MUSE_BIN}\" exec --prompt-file x"
 
 # --- data-program content (perl/jq run with tokens) ---
 t pl-begin 1 "helper-perl-danger" happy.sarif "$P${FS}print \"[\"${FS}b${FS}BEGIN { system(\"id\") }"

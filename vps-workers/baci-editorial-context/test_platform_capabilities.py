@@ -100,12 +100,16 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertIn("Register unavailable, invalid or stale", result)
 
     def test_duplicate_json_keys_fail_closed(self):
+        # Built from a valid, pinned register with one key duplicated while
+        # preserving the parsed value, so only the duplicate-key guard can
+        # reject it (removing the guard would render the claim).
+        text = json.dumps(_register([_row()]))
+        duplicated = text.replace('"schema_version": 1,', '"schema_version": 1, "schema_version": 1,', 1)
+        self.assertNotEqual(duplicated, text)
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"
-            now = dt.datetime.now(dt.timezone.utc).isoformat()
-            row = '{"id": "domains", "title": "Domains", "claim": "one", "claim": "two", "limitations": "none", "status": "code_evidenced", "source_refs": ["x"]}'
-            path.write_text('{"schema_version": 1, "reviewed_at": "%s", "source_revision": "%s", "capabilities": [%s]}' % (now, "a" * 40, row))
-            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path)}):
+            path.write_text(duplicated)
+            with patch.dict(os.environ, {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": "e" * 64}):
                 result = capability_context()
             self.assertIn("Register unavailable, invalid or stale", result)
 

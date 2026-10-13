@@ -122,9 +122,21 @@ export function createBillFormPurchaseHandler({
         ...(validationReference ? { validationReference } : {}),
         walletAmount: numericAmount,
       };
-      // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
-      // submit signs with — a charged-but-unanswered retry must bypass
-      // the balance gate instead of stranding behind top-up.
+      // Enter submitting BEFORE the settle await: the ref flips
+      // synchronously, so a second tap during the wait still hits the
+      // guard. Validation rejections above never reach this (no
+      // flash); a readiness rejection returns through finally, which
+      // resets. Await BEFORE the peek (R66 6rvh_M): peeking first
+      // would bypass the balance gate on an entry the pass then
+      // proves terminal and forgets, minting fresh underfunded.
+      setIsSubmitting(true);
+      const settlementPass = getPendingVtuSettlementPass();
+      if (settlementPass) {
+        await settlementPass;
+      }
+      // Retained-replay peek (R65 6ru4mK): the SAME request the submit
+      // signs with — a charged-but-unanswered retry must bypass the
+      // balance gate instead of stranding behind top-up.
       const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
       if (
         !ensureUtilityWalletReady({
@@ -137,13 +149,6 @@ export function createBillFormPurchaseHandler({
         return;
       }
 
-      // Only enter the submitting state after validation and the wallet
-      // readiness gate pass — matches the airtime/data handlers and avoids
-      // flashing submitting UI on every validation rejection. Everything
-      // above is synchronous, so the getIsSubmitting reentrancy guard at
-      // the top still holds.
-      setIsSubmitting(true);
-
       // Attach the verified meter address to every success result (API omits it).
       const emitSuccess: typeof onSuccess = (r) =>
         onSuccess(customerAddress ? { ...r, address: customerAddress } : r);
@@ -153,14 +158,8 @@ export function createBillFormPurchaseHandler({
       const descriptor = payment.scopePendingVtuDescriptor(
         buildVtuPurchaseDescriptor(request)
       );
-      // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing
-      // the screen-open settlement pass must not recall a key the
-      // pass is about to forget. Branch-on-null keeps the idle submit
-      // synchronously dispatched.
-      const settlementPass = getPendingVtuSettlementPass();
-      if (settlementPass) {
-        await settlementPass;
-      }
+      // The pass was already awaited above the peek; the capture below
+      // recalls the same post-settle state.
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       const submittingOwner = payment.captureSubmittingOwner();
       const submittingUserId = payment.captureSubmittingUserId();

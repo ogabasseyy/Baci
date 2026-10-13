@@ -264,65 +264,107 @@ describe('useUtilityVoucherBackfill', () => {
   });
 
   it('bounds each poll with a per-request timeout', async () => {
-    // Codex R62 6rtokb: a hung history read must consume one
-    // attempt, not stall every later poll. The mock honors the
-    // abort signal, like a real fetch. AbortSignal.timeout runs on
-    // real timers (unfakable), so the test fires the bound manually
-    // and asserts the module combined + valued it correctly.
-    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
-    const timeoutController = new AbortController();
-    timeoutSpy.mockReturnValue(timeoutController.signal);
-    try {
-      let calls = 0;
-      const fetchMock = vi.fn(
-        async (_url: string, init?: { signal?: AbortSignal }) => {
-          calls += 1;
-          if (calls === 1) {
-            await new Promise<never>((_resolve, reject) => {
-              init?.signal?.addEventListener('abort', () => {
-                reject(new DOMException('timed out', 'TimeoutError'));
-              });
+    // Codex R62 6rtokb + R66 6rvh_R: a hung history read must
+    // consume one attempt, not stall every later poll. The shared
+    // fetchWithTimeout composes AbortController + setTimeout (no
+    // AbortSignal.any/.timeout — missing below the safari 15.4
+    // floor), and its timer runs on fake timers, so this drives a
+    // REAL timeout instead of the old manual-abort spy. The mock
+    // honors the abort signal, like a real fetch.
+    let calls = 0;
+    const fetchMock = vi.fn(
+      async (_url: string, init?: { signal?: AbortSignal }) => {
+        calls += 1;
+        if (calls === 1) {
+          await new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(
+                new DOMException(
+                  'The operation was aborted.',
+                  'AbortError'
+                )
+              );
             });
-          }
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              transactions: [
-                {
-                  request_reference: 'VTU-1',
-                  status: 'successful',
-                  voucher_pin: 'PIN-1',
-                  refund_pending: false,
-                },
-              ],
-            }),
-          };
+          });
         }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            transactions: [
+              {
+                request_reference: 'VTU-1',
+                status: 'successful',
+                voucher_pin: 'PIN-1',
+                refund_pending: false,
+              },
+            ],
+          }),
+        };
+      }
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The 10s request bound fires: attempt 1 fails, the loop sleeps
+    // one poll interval, attempt 2 resolves the pin.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS +
+          UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
       );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current).toMatchObject({
+      pin: 'PIN-1',
+      successful: true,
+    });
+  });
+
+  it('polls without AbortSignal.any/.timeout (safari 15.4 floor)', async () => {
+    // Codex R66 6rvh_R: with the unsupported APIs removed, a normal
+    // poll still resolves — any regression to AbortSignal.any throws
+    // before fetch runs, so no fetch happens and the pin never lands.
+    const abortSignalStatics = AbortSignal as unknown as Record<
+      string,
+      unknown
+    >;
+    const realAny = abortSignalStatics.any;
+    const realTimeout = abortSignalStatics.timeout;
+    abortSignalStatics.any = undefined;
+    abortSignalStatics.timeout = undefined;
+    try {
+      const fetchMock = mockHistory(() => ({
+        transactions: [
+          {
+            request_reference: 'VTU-1',
+            status: 'successful',
+            voucher_pin: 'PIN-1',
+            refund_pending: false,
+          },
+        ],
+      }));
       vi.stubGlobal('fetch', fetchMock);
 
       const { result } = renderHook(() => useUtilityVoucherBackfill(input));
-      await act(async () => {});
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(timeoutSpy).toHaveBeenCalledWith(
-        UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS
-      );
-
       await act(async () => {
-        timeoutController.abort();
         await vi.advanceTimersByTimeAsync(
           UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
         );
       });
 
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalled();
       expect(result.current).toMatchObject({
         pin: 'PIN-1',
         successful: true,
       });
     } finally {
-      timeoutSpy.mockRestore();
+      abortSignalStatics.any = realAny;
+      abortSignalStatics.timeout = realTimeout;
     }
   });
 

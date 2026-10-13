@@ -86,14 +86,8 @@ async function executeAirtimePurchase({
     const descriptor = payment.scopePendingVtuDescriptor(
       buildVtuPurchaseDescriptor(request)
     );
-    // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing
-    // the screen-open settlement pass must not recall a key the
-    // pass is about to forget. Branch-on-null keeps the idle submit
-    // synchronously dispatched.
-    const settlementPass = getPendingVtuSettlementPass();
-    if (settlementPass) {
-      await settlementPass;
-    }
+    // The pass was already awaited above the retained peek in
+    // handlePurchase; the capture below recalls post-settle state.
     const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
     const submittingOwner = payment.captureSubmittingOwner();
     const submittingUserId = payment.captureSubmittingUserId();
@@ -256,9 +250,18 @@ export function useAirtimePurchaseHandler({
       type: 'airtime' as const,
       walletAmount: numericAmount,
     };
-    // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
-    // submit signs with — a charged-but-unanswered retry must bypass
-    // the balance gate instead of stranding behind top-up.
+    // Settle-then-submit gate (R60), awaited BEFORE the retained
+    // peek (R66 6rvh_M): peeking first would bypass the balance gate
+    // on an entry the pass then proves terminal and forgets, minting
+    // fresh underfunded. The ref guard above was set synchronously at
+    // entry, so this await admits no second submit.
+    const settlementPass = getPendingVtuSettlementPass();
+    if (settlementPass) {
+      await settlementPass;
+    }
+    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
+    // signs with — a charged-but-unanswered retry must bypass the
+    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({

@@ -61,6 +61,42 @@ describe('useUtilityRetainedSettlement', () => {
     expect(recallPendingVtuKey('{"settle":true}')).toBeUndefined();
   });
 
+  it('settles without AbortSignal.any/.timeout (safari 15.4 floor)', async () => {
+    // Codex R66 6rvh_R: same guarantee as the backfill — the pass
+    // must never touch the unsupported APIs.
+    const abortSignalStatics = AbortSignal as unknown as Record<
+      string,
+      unknown
+    >;
+    const realAny = abortSignalStatics.any;
+    const realTimeout = abortSignalStatics.timeout;
+    abortSignalStatics.any = undefined;
+    abortSignalStatics.timeout = undefined;
+    try {
+      rememberPendingVtuPurchase('{"compat":true}', 'key-compat');
+      notePendingVtuReference('{"compat":true}', 'VTU-COMPAT');
+      const fetchMock = mockHistory(() => ({
+        transactions: [
+          {
+            request_reference: 'VTU-COMPAT',
+            status: 'successful',
+            refund_pending: false,
+          },
+        ],
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      renderHook(() => useUtilityRetainedSettlement(input));
+      await act(async () => {});
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(recallPendingVtuKey('{"compat":true}')).toBeUndefined();
+    } finally {
+      abortSignalStatics.any = realAny;
+      abortSignalStatics.timeout = realTimeout;
+    }
+  });
+
   it('forgets refund-confirmed failures but retains pending ones', async () => {
     rememberPendingVtuPurchase('{"fail-done":true}', 'key-fail-done');
     notePendingVtuReference('{"fail-done":true}', 'VTU-FAIL-DONE');

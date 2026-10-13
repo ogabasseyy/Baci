@@ -10,10 +10,8 @@ import {
   scopePendingVtuSignature,
 } from './utility-pending-idempotency';
 import type { UtilityCheckoutPayload } from './utility-checkout';
-import {
-  buildUtilityCheckoutWalletPayload,
-  buildVtuWalletPayloadSignature,
-} from './utility-vtu-payload-signature';
+import { buildUtilityCheckoutWalletPayload } from './utility-checkout-wallet-payload';
+import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
 import { useUtilityPurchase } from './use-utility-purchase';
 
 const mockSubmit = vi.hoisted(() => vi.fn());
@@ -68,6 +66,46 @@ const airtime = {
   networkProvider: 'MTN',
   phoneNumber: '08012345678',
 };
+
+interface RealSignatureSubmitRequest {
+  payload: UtilityCheckoutPayload;
+  merchantSlug: string;
+  customerName: string;
+  customerPhone: string | null | undefined;
+  expectedUserId: string | null | undefined;
+  getWalletIdempotencyKey: (signature: string) => string;
+}
+
+/**
+ * Mirrors production submitUtilityCheckout: signs with the REAL
+ * builder chain so the pre-readiness peek and the capture agree
+ * exactly like production, and answers processing (retained).
+ */
+function mockRealSignatureSubmit(seenKeys: string[]) {
+  mockSubmit.mockImplementation(
+    async (request: RealSignatureSubmitRequest) => {
+      seenKeys.push(
+        request.getWalletIdempotencyKey(
+          buildVtuWalletPayloadSignature(
+            buildUtilityCheckoutWalletPayload({
+              merchantSlug: request.merchantSlug,
+              customerName: request.customerName,
+              customerPhone: request.customerPhone,
+              expectedUserId: request.expectedUserId,
+              payload: request.payload,
+            })
+          )
+        )
+      );
+      return {
+        kind: 'wallet-success',
+        reference: 'REF-PROC',
+        amount: 1000,
+        processing: true,
+      };
+    }
+  );
+}
 
 describe('useUtilityPurchase', () => {
   beforeEach(() => {
@@ -227,40 +265,9 @@ describe('useUtilityPurchase', () => {
   it('lets a retained retry resubmit when the wallet later reads short', async () => {
     // Codex R65 6ru4mK: the wallet covered the bill at submit time;
     // the debit landed server-side but the response was lost. The
-    // retry must replay (same key), not stall behind top-up. The
-    // mock signs with the REAL builder chain so the pre-readiness
-    // peek and the capture agree exactly like production.
+    // retry must replay (same key), not stall behind top-up.
     const seenKeys: string[] = [];
-    mockSubmit.mockImplementation(
-      async (request: {
-        payload: UtilityCheckoutPayload;
-        merchantSlug: string;
-        customerName: string;
-        customerPhone: string | null | undefined;
-        expectedUserId: string | null | undefined;
-        getWalletIdempotencyKey: (signature: string) => string;
-      }) => {
-        seenKeys.push(
-          request.getWalletIdempotencyKey(
-            buildVtuWalletPayloadSignature(
-              buildUtilityCheckoutWalletPayload({
-                merchantSlug: request.merchantSlug,
-                customerName: request.customerName,
-                customerPhone: request.customerPhone,
-                expectedUserId: request.expectedUserId,
-                payload: request.payload,
-              })
-            )
-          )
-        );
-        return {
-          kind: 'wallet-success',
-          reference: 'REF-PROC',
-          amount: 1000,
-          processing: true,
-        };
-      }
-    );
+    mockRealSignatureSubmit(seenKeys);
     const { result, rerender } = renderHook(
       (props: ReturnType<typeof baseParams>) => useUtilityPurchase(props),
       { initialProps: baseParams({}) }
@@ -280,6 +287,44 @@ describe('useUtilityPurchase', () => {
     expect(mockSubmit).toHaveBeenCalledTimes(2);
     expect(seenKeys).toHaveLength(2);
     expect(seenKeys[0]).toBe(seenKeys[1]);
+  });
+
+  it('re-checks retention after the settlement pass forgets the retained key', async () => {
+    // Codex R66 6rvh_M: the modal-open pass proves the old
+    // transaction terminal and forgets its key. Readiness must see
+    // the POST-settle registry: bypassing on the stale peek would
+    // mint fresh and die server-side instead of opening funding.
+    const seenKeys: string[] = [];
+    mockRealSignatureSubmit(seenKeys);
+    const { result, rerender } = renderHook(
+      (props: ReturnType<typeof baseParams>) => useUtilityPurchase(props),
+      { initialProps: baseParams({}) }
+    );
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+
+    // The pass settles (forgets) the retained entry while the
+    // retry's wallet reads short: the retry must block, not bypass.
+    mockGetSettlementPass.mockReturnValueOnce(
+      Promise.resolve().then(() => {
+        clearPendingVtuKeys();
+      })
+    );
+    rerender(baseParams({ walletBalance: 0 }));
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+    expect(seenKeys).toHaveLength(1);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Insufficient wallet balance' })
+    );
+    // The blocked retry leaves the shown pending view untouched.
+    expect(result.current.step).toBe('processing');
   });
 
   it('waits (does not submit) while the wallet balance is still loading', async () => {

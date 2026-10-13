@@ -61,6 +61,7 @@ describe('bill stale success replay', () => {
       invalidateWallets?: jest.Mock;
       isSubmittingOwnerCurrent?: () => boolean;
       getIsActive?: () => boolean;
+      hasRetainedVtuAttempt?: jest.Mock;
     } = {}
   ) {
     const handlePurchase = createBillFormPurchaseHandler({
@@ -98,7 +99,8 @@ describe('bill stale success replay', () => {
           overrides.isSubmittingOwnerCurrent ?? (() => true),
         resetWalletIdempotencyKey:
           overrides.resetWalletIdempotencyKey ?? jest.fn(),
-        hasRetainedVtuAttempt: jest.fn(() => false),
+        hasRetainedVtuAttempt:
+          overrides.hasRetainedVtuAttempt ?? jest.fn(() => false),
       } as PaymentState,
       selectedBiller: {
         billerId: 'ekedc',
@@ -439,5 +441,31 @@ describe('bill stale success replay', () => {
     await pending;
     expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
     expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
+  });
+
+  it('awaits the settlement pass before the retained peek', async () => {
+    // Codex R66 6rvh_M: peeking first would bypass the balance gate
+    // on an entry the pass then proves terminal and forgets, so the
+    // capture mints fresh and the underfunded submit dies
+    // server-side instead of opening the funding flow.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const mockPeek = jest.fn(() => false);
+    mockGetSettlementPass.mockReturnValueOnce(gate);
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      status: 'successful',
+      amount: 2500,
+      reference: 'WAL-PEEK-ORDER-BILL',
+    });
+    const pending = runPurchase({ hasRetainedVtuAttempt: mockPeek });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockPeek).not.toHaveBeenCalled();
+    release();
+    await pending;
+    expect(mockPeek).toHaveBeenCalledTimes(1);
+    expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
   });
 });

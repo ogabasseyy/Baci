@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchWithTimeout } from '@baci/shared/lib';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
@@ -217,14 +218,16 @@ export function useUtilityVoucherBackfill({
       ) {
         let parsed: UtilityVoucherBackfill | null = null;
         try {
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `/api/vtu/history?${params.toString()}`,
             {
-              // Per-request bound: a hung read must not stall later attempts.
-              signal: AbortSignal.any([
-                controller.signal,
-                AbortSignal.timeout(UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS),
-              ]),
+              // Per-request bound: a hung read must not stall later
+              // attempts. Compatible composition (Codex R66 6rvh_R):
+              // AbortSignal.any/.timeout don't exist below the safari
+              // 15.4 floor — the shared helper composes a plain
+              // AbortController + setTimeout instead.
+              signal: controller.signal,
+              timeoutMs: UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
             }
           );
           if (!response.ok) {

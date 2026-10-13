@@ -103,9 +103,19 @@ export function createDataFormPurchaseHandler({
       type: 'data' as const,
       walletAmount: planAmount,
     };
-    // Retained-replay peek (Codex R65 6ru4mK): the SAME request the
-    // submit signs with — a charged-but-unanswered retry must bypass
-    // the balance gate instead of stranding behind top-up.
+    // Enter submitting BEFORE the settle await: the ref flips
+    // synchronously, so a second tap during the wait still hits the
+    // guard. Await BEFORE the peek (R66 6rvh_M): peeking first would
+    // bypass the balance gate on an entry the pass then proves
+    // terminal and forgets, minting fresh underfunded.
+    setIsSubmitting(true);
+    const settlementPass = getPendingVtuSettlementPass();
+    if (settlementPass) {
+      await settlementPass;
+    }
+    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
+    // signs with — a charged-but-unanswered retry must bypass the
+    // balance gate instead of stranding behind top-up.
     const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
     if (
       !ensureUtilityWalletReady({
@@ -115,10 +125,11 @@ export function createDataFormPurchaseHandler({
         returnToHref,
       })
     ) {
+      // Outside the try below: reset explicitly (finally can't).
+      setIsSubmitting(false);
       return;
     }
 
-    setIsSubmitting(true);
     try {
       // Descriptor-keyed recall: a remount (Back to Home, reopen) after
       // a 202 processing or a timeout retries with the SAME key, so the
@@ -126,14 +137,8 @@ export function createDataFormPurchaseHandler({
       const descriptor = payment.scopePendingVtuDescriptor(
         buildVtuPurchaseDescriptor(request)
       );
-      // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing
-      // the screen-open settlement pass must not recall a key the
-      // pass is about to forget. Branch-on-null keeps the idle submit
-      // synchronously dispatched.
-      const settlementPass = getPendingVtuSettlementPass();
-      if (settlementPass) {
-        await settlementPass;
-      }
+      // The pass was already awaited above the peek; the capture below
+      // recalls the same post-settle state.
       const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
       const submittingOwner = payment.captureSubmittingOwner();
       const submittingUserId = payment.captureSubmittingUserId();

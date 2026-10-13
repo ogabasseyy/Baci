@@ -14,10 +14,8 @@ import {
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
-import {
-  buildUtilityCheckoutWalletPayload,
-  buildVtuWalletPayloadSignature,
-} from './utility-vtu-payload-signature';
+import { buildUtilityCheckoutWalletPayload } from './utility-checkout-wallet-payload';
+import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
 import type { UtilityTabId } from './UtilityTabs';
 
 interface UseUtilityPurchaseParams {
@@ -126,6 +124,16 @@ export function useUtilityPurchase({
   });
 
   const handlePurchase = async (payload: UtilityCheckoutPayload) => {
+    // Settle-then-submit gate (R60), awaited BEFORE the retained peek
+    // (R66 6rvh_M): peeking first would bypass the balance gate on an
+    // entry the pass then proves terminal and forgets, so the capture
+    // mints fresh and the underfunded submit dies server-side instead
+    // of opening the funding flow. Branch-on-null keeps idle submits
+    // synchronously dispatched.
+    const settlementPass = getPendingVtuSettlementPass();
+    if (settlementPass) {
+      await settlementPass;
+    }
     // Hoisted above readiness: the retained peek must sign the same
     // wallet payload the submit signs (shared builder, no drift).
     const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
@@ -169,14 +177,8 @@ export function useUtilityPurchase({
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
     };
-    // Settle-then-submit gate (Codex R60 6rs7PV): a submit racing the
-    // modal-open settlement pass must not recall a key the pass is
-    // about to forget. Branch-on-null keeps the idle submit
-    // synchronously dispatched.
-    const settlementPass = getPendingVtuSettlementPass();
-    if (settlementPass) {
-      await settlementPass;
-    }
+    // The settlement pass was already awaited above the retained
+    // peek; the capture below recalls the same post-settle state.
     const result = await submitUtilityCheckout({
       payload,
       merchantSlug: merchantSlug || 'ogabassey',

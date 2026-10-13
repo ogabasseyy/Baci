@@ -1,6 +1,7 @@
 'use client';
 
 import { buildPendingVtuScopeTag } from '@baci/shared';
+import { fetchWithTimeout } from '@baci/shared/lib';
 import { useEffect } from 'react';
 import {
   forgetPendingVtuByReference,
@@ -79,16 +80,16 @@ export function useUtilityRetainedSettlement({
               limit: '1',
               reference,
             });
-            const response = await fetch(
+            const response = await fetchWithTimeout(
               `/api/vtu/history?${params.toString()}`,
               {
                 // Bounded so a hung history endpoint cannot stall a
                 // gated submit forever (fail-open on timeout, as on
-                // any other read error).
-                signal: AbortSignal.any([
-                  controller.signal,
-                  AbortSignal.timeout(10_000),
-                ]),
+                // any other read error). Compatible composition (Codex
+                // R66 6rvh_R): no AbortSignal.any/.timeout (missing
+                // below the safari 15.4 floor).
+                signal: controller.signal,
+                timeoutMs: 10_000,
               }
             );
             if (!response.ok) {

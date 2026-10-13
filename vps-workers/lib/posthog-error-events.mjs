@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 
 const PAGE_SIZE = 100;
 const HARD_MAXIMUM_PAGES = 10;
+// Occurrence counts are measured over this trailing window so the repeat
+// threshold does not depend on the server's default date_from.
+const OCCURRENCE_WINDOW = '-7d';
 
 const boundedString = (value, length) =>
   typeof value === 'string' ? value.trim().slice(0, length) : '';
@@ -33,6 +36,36 @@ const activeIssue = (issue) =>
     boundedString(issue?.status, 40).toLowerCase()
   );
 
+// Derives a bounded triage label from the provider issue name without
+// copying provider text: either an identifier-shaped exception type or a
+// fixed keyword bucket. Raw names can contain personal data.
+const classifyPostHogIssueName = (value) => {
+  const name = boundedString(value, 240);
+  const leadingToken = name.split(/[\s:({\[]/, 1)[0] ?? '';
+  if (
+    /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(leadingToken) &&
+    /(Error|Exception|Failure|Panic|Reject|Abort)$/.test(leadingToken)
+  ) {
+    return leadingToken.slice(0, 80);
+  }
+  if (/\bcrash\b|fatal|application not responding|\banr\b/i.test(name)) {
+    return 'Native crash';
+  }
+  if (/out of memory|heap|allocation failure/i.test(name)) {
+    return 'Out of memory';
+  }
+  if (/timed? ?out|deadline exceeded|ETIMEDOUT/i.test(name)) {
+    return 'Timeout';
+  }
+  if (/network|fetch failed|ECONN|ENOTFOUND|socket hang up/i.test(name)) {
+    return 'Network failure';
+  }
+  if (/\bnull\b|\bundefined\b|cannot read propert/i.test(name)) {
+    return 'Null reference';
+  }
+  return 'PostHog error tracking issue';
+};
+
 function requiredConfiguration(env) {
   const host = boundedString(env.POSTHOG_REMEDIATION_HOST, 500);
   const token = boundedString(env.POSTHOG_REMEDIATION_PERSONAL_API_KEY, 2_000);
@@ -57,6 +90,13 @@ function requiredConfiguration(env) {
   if (baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password) {
     throw new Error('POSTHOG_REMEDIATION_HOST must be an HTTPS URL');
   }
+  // The issues endpoint is built from an absolute path, so a host with a
+  // subpath would silently query the origin root instead.
+  if (baseUrl.pathname !== '/' && baseUrl.pathname !== '') {
+    throw new Error('POSTHOG_REMEDIATION_HOST must not include a path');
+  }
+  baseUrl.search = '';
+  baseUrl.hash = '';
 
   return { baseUrl, projectId, token };
 }
@@ -82,7 +122,7 @@ function selectCandidates(issues, env, projectId) {
         occurrences,
         sample: {
           issueId,
-          message: 'PostHog error tracking issue',
+          message: classifyPostHogIssueName(issue?.name),
           route: '(redacted PostHog location)',
           source: 'posthog',
         },
@@ -97,7 +137,7 @@ export async function fetchPostHogRemediationCandidates({
 } = {}) {
   const { baseUrl, projectId, token } = requiredConfiguration(env);
   const maximumPages = Math.min(
-    positiveInteger(env.BACI_POSTHOG_REMEDIATION_MAX_PAGES, 1),
+    positiveInteger(env.BACI_POSTHOG_REMEDIATION_MAX_PAGES, 10),
     HARD_MAXIMUM_PAGES
   );
   const issues = [];
@@ -109,6 +149,7 @@ export async function fetchPostHogRemediationCandidates({
     );
     const response = await fetchFn(endpoint, {
       body: JSON.stringify({
+        dateRange: { date_from: OCCURRENCE_WINDOW },
         filterTestAccounts: true,
         limit: PAGE_SIZE,
         offset,
@@ -163,6 +204,8 @@ export async function fetchPostHogRemediationCandidates({
   }
 
   throw new Error(
-    `PostHog error-tracking issue pagination exceeded ${maximumPages} pages; raise BACI_POSTHOG_REMEDIATION_MAX_PAGES to avoid a measurement gap`
+    maximumPages >= HARD_MAXIMUM_PAGES
+      ? `PostHog error-tracking issue pagination exceeded the ${HARD_MAXIMUM_PAGES}-page hard cap; narrow the query window or raise the cap`
+      : `PostHog error-tracking issue pagination exceeded ${maximumPages} pages; raise BACI_POSTHOG_REMEDIATION_MAX_PAGES to avoid a measurement gap`
   );
 }

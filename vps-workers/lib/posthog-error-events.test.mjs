@@ -24,6 +24,7 @@ describe('PostHog remediation candidates', () => {
         );
         assert.equal(options.headers['Content-Type'], 'application/json');
         assert.deepEqual(JSON.parse(options.body), {
+          dateRange: { date_from: '-7d' },
           filterTestAccounts: true,
           limit: 100,
           offset: 0,
@@ -56,7 +57,7 @@ describe('PostHog remediation candidates', () => {
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].sample.source, 'posthog');
     assert.equal(candidates[0].category, 'posthog_issue');
-    assert.equal(candidates[0].sample.message, 'PostHog error tracking issue');
+    assert.equal(candidates[0].sample.message, 'Native crash');
     assert.equal(candidates[0].sample.route, '(redacted PostHog location)');
     assert.equal(candidates[0].firstSeen, '2026-08-04T15:45:25Z');
     assert.equal(candidates[0].lastSeen, '2026-08-04T15:46:50Z');
@@ -195,5 +196,107 @@ describe('PostHog remediation candidates', () => {
       }),
       /HTTP 403; POSTHOG_REMEDIATION_PERSONAL_API_KEY requires error_tracking:read/
     );
+  });
+
+  it('derives a bounded exception class without copying provider issue text', async () => {
+    const candidates = await fetchPostHogRemediationCandidates({
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            hasMore: false,
+            limit: 100,
+            offset: 0,
+            results: [
+              {
+                id: 'typed',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: "TypeError: Cannot read properties of undefined (reading 'token')",
+              },
+              {
+                id: 'bucketed',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'request to https://internal.example timed out after 30s',
+              },
+              {
+                id: 'unshaped',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: '!!! alice@example.com !!!',
+              },
+              {
+                id: 'missing-name',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+              },
+            ],
+          })
+        ),
+    });
+
+    assert.deepEqual(
+      candidates.map((candidate) => candidate.sample.message),
+      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue']
+    );
+    assert.equal(JSON.stringify(candidates).includes('alice@example.com'), false);
+    assert.equal(JSON.stringify(candidates).includes('internal.example'), false);
+  });
+
+  it('rejects a remediation host with a path and strips query strings', async () => {
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: {
+          ...environment,
+          POSTHOG_REMEDIATION_HOST: 'https://eu.posthog.com/some/app',
+        },
+        fetchFn: () => {
+          throw new Error('fetch must not run with a pathed host');
+        },
+      }),
+      /must not include a path/
+    );
+
+    let requestedUrl = '';
+    await fetchPostHogRemediationCandidates({
+      env: {
+        ...environment,
+        POSTHOG_REMEDIATION_HOST: 'https://eu.posthog.com/?debug=1#frag',
+      },
+      fetchFn: (url) => {
+        requestedUrl = String(url);
+        return new Response(
+          JSON.stringify({ hasMore: false, results: [] })
+        );
+      },
+    });
+    assert.equal(
+      requestedUrl,
+      'https://eu.posthog.com/api/projects/202711/error_tracking/query/issues/'
+    );
+  });
+
+  it('pages to the hard cap by default before failing closed', async () => {
+    let requests = 0;
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: environment,
+        fetchFn: async () => {
+          requests += 1;
+          return new Response(
+            JSON.stringify({
+              hasMore: true,
+              limit: 100,
+              nextOffset: requests,
+              offset: requests - 1,
+              results: [],
+            })
+          );
+        },
+      }),
+      /exceeded the 10-page hard cap/
+    );
+    assert.equal(requests, 10);
   });
 });

@@ -130,7 +130,7 @@ SENTRY_URL=https://sentry.io/
 POSTHOG_REMEDIATION_HOST=https://eu.posthog.com
 POSTHOG_REMEDIATION_PROJECT_ID=...
 POSTHOG_REMEDIATION_PERSONAL_API_KEY=...
-BACI_POSTHOG_REMEDIATION_MAX_PAGES=1
+BACI_POSTHOG_REMEDIATION_MAX_PAGES=10
 VERCEL_LOG_DRAIN_SECRET=...
 VERCEL_LOG_DRAIN_RECEIVER_PORT=8787
 VERCEL_ERROR_LOG_MAX_BYTES=33554432
@@ -197,7 +197,7 @@ Variable purposes:
 - `SENTRY_REMEDIATION_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`: Server-only Sentry issue API configuration used by the mobile remediator. Use a dedicated token with `event:read`; release/source-map upload credentials are not sufficient. These values are deliberately removed from the Codex and test subprocess environments.
 - `BACI_SENTRY_REMEDIATION_MAX_PAGES`: Maximum Sentry issue pages inspected before failing closed. Each page requests Sentry's maximum 100 issues; default is `10` and the hard cap is `50`.
 - `POSTHOG_REMEDIATION_HOST`, `POSTHOG_REMEDIATION_PROJECT_ID`, `POSTHOG_REMEDIATION_PERSONAL_API_KEY`: Server-only PostHog Error Tracking API configuration. Create a separate personal API key limited to `error_tracking:read`; do not reuse a `phc_` project ingestion key, a source-map upload key, or a general automation credential. The worker rejects ingestion-key-shaped values before any network request and never passes this key to Codex or test subprocesses.
-- `BACI_POSTHOG_REMEDIATION_MAX_PAGES`: Maximum offset pages inspected before failing closed. The worker requests at most 100 issue summaries per page, defaults to `1`, and has a hard cap of `10` pages.
+- `BACI_POSTHOG_REMEDIATION_MAX_PAGES`: Maximum offset pages inspected before failing closed. The worker requests at most 100 issue summaries per page, defaults to `10`, and has a hard cap of `10` pages. Occurrence counts are measured over the trailing 7 days.
 - `VERCEL_LOG_DRAIN_SECRET`: Shared secret used to verify Vercel Drain HMAC signatures before appending log events.
 - `VERCEL_LOG_DRAIN_RECEIVER_PORT`: Local receiver port proxied by nginx. Default is `8787`.
 - `VERCEL_ERROR_LOG_MAX_BYTES`: Maximum active Vercel drain size before rotation. Defaults to 32 MiB; one accepted request may temporarily exceed the bound by its payload size.

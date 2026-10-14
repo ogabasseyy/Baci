@@ -8,14 +8,12 @@ import { validateCartCommand } from '@baci/shared/cart';
 import { fetch as expoFetch } from 'expo/fetch';
 import { nativeCartReplySchema } from '@/schemas/cart';
 import type { NativeCheckoutSnapshot } from '@/schemas/cart-checkout-snapshot';
-import { bootstrapNativeCart } from './bootstrap-native-cart';
 import { previewNativeHandoff } from './handoff-preview';
 import { createNativeAccountCheckout } from './native-account-checkout';
 import { NativeCartError } from './native-cart-error';
 import { readOwnedCartProof } from './owned-session';
-import { flushRetiredCartDevice } from './retire-device';
-import { readNativeCartContext } from './session-context';
 import { type CartSessionStorage, cartSessionStorage } from './session-storage';
+import { createNativeCartSession } from './shared-cart-session';
 
 export interface NativeCartConfig {
   merchantId: string;
@@ -176,6 +174,17 @@ export function createNativeCartClient(
     send: (route, method, body, expectedCartId) =>
       send(route, method, body, expectedCartId),
   });
+  const session = createNativeCartSession({
+    assertCurrent,
+    config,
+    fetcher,
+    keepProof: (reply, indeterminate) => keepProof(reply, indeterminate),
+    merchant,
+    origin,
+    read: (route, method, body, expectedCartId) =>
+      send(route as Route, method, body, expectedCartId),
+    storage,
+  });
   return {
     config: { ...config, apiOrigin: origin },
     previewHandoff: (handoffId: string) =>
@@ -184,116 +193,7 @@ export function createNativeCartClient(
         handoffId,
         fetcher
       ),
-    async context(): Promise<{ actor: string; cartId: string | null } | null> {
-      assertCurrent();
-      const proof = await readOwnedCartProof(
-        storage,
-        merchant,
-        config.ownerSubject
-      );
-      assertCurrent();
-      if (!proof) return null;
-      try {
-        return readNativeCartContext(proof, merchant);
-      } catch {
-        throw new NativeCartError('invalid_proof');
-      }
-    },
-    async read(expectedCartId?: string): Promise<NativeCartReply> {
-      const result = await send('', 'GET', undefined, expectedCartId);
-      if (!result.cart) throw new NativeCartError('temporarily_unavailable');
-      return result;
-    },
-    async retireDevice(): Promise<void> {
-      if (
-        !storage.retire ||
-        !storage.getRetiredProof ||
-        !storage.acknowledgeRetirement
-      )
-        throw new NativeCartError('storage_unavailable');
-      await storage.retire(merchant);
-      await flushRetiredCartDevice(
-        { ...config, merchantId: merchant },
-        storage,
-        fetcher
-      );
-    },
-    bootstrap: async () => {
-      await flushRetiredCartDevice(
-        { ...config, merchantId: merchant },
-        storage,
-        fetcher
-      );
-      assertCurrent();
-      return bootstrapNativeCart(
-        { ...config, merchantId: merchant, apiOrigin: origin },
-        storage,
-        fetcher,
-        () => assertCurrent(),
-        (reply) => keepProof(reply, false)
-      );
-    },
-    async restartSession(): Promise<NativeCartReply> {
-      // A completed/expired generation keeps its finished proof only until
-      // the shopper explicitly starts shopping again; then a fresh
-      // bootstrap principal replaces it. No server cart is mutated here.
-      // Flush any pending device retirement before discarding the record.
-      await flushRetiredCartDevice(
-        { ...config, merchantId: merchant },
-        storage,
-        fetcher
-      );
-      assertCurrent();
-      await storage.remove(merchant);
-      assertCurrent();
-      return bootstrapNativeCart(
-        { ...config, merchantId: merchant, apiOrigin: origin },
-        storage,
-        fetcher,
-        () => assertCurrent(),
-        (reply) => keepProof(reply, false)
-      );
-    },
-    async recoverCreation(
-      operationId: string
-    ): Promise<NativeCartReply | null> {
-      assertCurrent();
-      const receipt = await storage.getPromotionReceipt?.(merchant);
-      assertCurrent();
-      if (receipt?.kind !== 'create' || receipt.operationId !== operationId)
-        return null;
-      const proof = await readOwnedCartProof(
-        storage,
-        merchant,
-        config.ownerSubject
-      );
-      assertCurrent();
-      if (
-        !proof ||
-        readNativeCartContext(proof, merchant).cartId !== receipt.cartId
-      )
-        throw new NativeCartError('session_changed');
-      return send('', 'GET', undefined, receipt.cartId);
-    },
-    async recoverHandoff(attemptId: string): Promise<NativeCartReply | null> {
-      assertCurrent();
-      const receipt = await storage.getPromotionReceipt?.(merchant);
-      assertCurrent();
-      if (receipt?.kind !== 'handoff' || receipt.operationId !== attemptId)
-        return null;
-      const proof = await readOwnedCartProof(
-        storage,
-        merchant,
-        config.ownerSubject
-      );
-      assertCurrent();
-      if (
-        !proof ||
-        readNativeCartContext(proof, merchant).cartId !== receipt.cartId
-      )
-        throw new NativeCartError('session_changed');
-      return send('', 'GET', undefined, receipt.cartId);
-    },
+    ...session,
     async create(input: {
       operationId: string;
       lines?: CartInputLine[];

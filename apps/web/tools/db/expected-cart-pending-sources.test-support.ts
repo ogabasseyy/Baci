@@ -27,7 +27,7 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261012050500_commerce_cart_handoff.sql',
-    sha256: '8bba3362902c657bcfd339071645b466a28efd7944f91b1a6450e61aa0352c63',
+    sha256: 'b08cfe548eb5cd2a5e18d1f8fe0b5a35fc268204eb9289b9749521d7ccc42c12',
   },
   {
     repositoryPath:
@@ -37,7 +37,7 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261013195818_commerce_cart_review_binding_guards.sql',
-    sha256: '02c28a1ea976f11b0759f23a5e18be3fbec0f79853cf4193234c637a21e4bc84',
+    sha256: '4bd0940cd16e661d3c551a64a01802f6d6272098307fc10cd5276eb2af4b4578',
   },
   {
     repositoryPath:
@@ -82,6 +82,6 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261014141000_commerce_cart_checkout_lifetime.sql',
-    sha256: '4cf1c7c21181f6b32475de80ca4d6f80edca4f545dc53c934eb46d0033de848f',
+    sha256: '89f2e5651a603ba93e90e67fee1ba0dfd4aaa9815edfad55b64ca554e4331336',
   },
 ] as const;

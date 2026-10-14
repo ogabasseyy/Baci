@@ -133,6 +133,18 @@ export async function GET(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
+    // Bound the expensive preview assembly before it runs: this endpoint
+    // is unauthenticated, so a per-client budget applies first and the
+    // merchant-scoped budget still applies once the merchant is known.
+    const preQuota = await checkCartQuota({
+      merchantId: 'handoff-preview',
+      operation: 'handoff_preview',
+      subject: getClientIdentifier(request),
+    });
+    if (!preQuota.allowed) {
+      return cartErrorResponse('quota_exceeded');
+    }
+
     const preview = await rpcPreviewHandoff(createAnonClient(), handoffId);
     if (!preview.ok) {
       return cartErrorResponse(preview.code);

@@ -212,6 +212,12 @@ BEGIN
   IF jsonb_array_length(v_result -> 'snapshot' -> 'lines') <> 2 THEN
     RAISE EXCEPTION 'preview must carry incoming lines, got %', v_result;
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(v_result -> 'snapshot' -> 'lines') AS line
+    WHERE line ? 'voucherToken'
+  ) THEN
+    RAISE EXCEPTION 'unauthenticated preview must never carry voucher tokens';
+  END IF;
 END
 $$;
 RESET ROLE;

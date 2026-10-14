@@ -49,6 +49,35 @@ describe('rpcPreviewHandoff', () => {
     return { rpc: vi.fn(async () => ({ data: payload, error })) };
   }
 
+  it('never returns quiz voucher tokens in a preview', async () => {
+    const result = await rpcPreviewHandoff(
+      clientReturning({
+        code: null,
+        expiresAt: '2026-10-12T06:05:00.000Z',
+        merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+        ok: true,
+        snapshot: rawState({
+          lines: [
+            rawLine({
+              voucherAwardId: 'award-1',
+              voucherToken: ['quiz', 'credential', '123'].join('-'),
+            }),
+          ],
+        }),
+        status: 'pending',
+      }) as never,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.snapshot?.lines[0].voucherToken).toBeUndefined();
+      expect(JSON.stringify(result.snapshot)).not.toContain(
+        ['quiz', 'credential', '123'].join('-')
+      );
+    }
+  });
+
   it('parses pending previews with priced snapshots', async () => {
     const result = await rpcPreviewHandoff(
       clientReturning({

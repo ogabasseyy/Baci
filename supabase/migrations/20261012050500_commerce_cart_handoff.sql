@@ -183,6 +183,12 @@ BEGIN
   IF v_snapshot IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
+  -- The preview is unauthenticated: quiz voucher tokens are bearer
+  -- credentials and never leave with the public handoff id.
+  v_snapshot := v_snapshot || jsonb_build_object('lines', COALESCE((
+    SELECT jsonb_agg(line - 'voucherToken' ORDER BY ord)
+    FROM jsonb_array_elements(COALESCE(v_snapshot -> 'lines', '[]'::jsonb)) WITH ORDINALITY AS t(line, ord)
+  ), '[]'::jsonb));
   RETURN jsonb_build_object('ok', true, 'code', null, 'status', 'pending',
     'merchant', jsonb_build_object('id', v_row.merchant_id, 'slug', v_merchant_slug),
     'snapshot', v_snapshot,

@@ -5,6 +5,21 @@ import { buildCartSnapshot } from './pricing';
 import { CartRepositoryError, parseRawMutationResult } from './repository';
 import { ERROR_CODES } from './repository-envelope';
 
+/**
+ * The preview is unauthenticated, so credential-bearing line fields
+ * never leave with it — even if the preview RPC regresses, the route
+ * response cannot carry a quiz voucher token.
+ */
+export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
+  return {
+    ...snapshot,
+    lines: snapshot.lines.map((line) => ({
+      ...line,
+      voucherToken: undefined,
+    })),
+  };
+}
+
 export type PreviewHandoffResult =
   | {
       ok: true;
@@ -93,7 +108,7 @@ export async function rpcPreviewHandoff(
           }
         : null,
     ok: true,
-    snapshot: priced.snapshot,
+    snapshot: redactPreviewSnapshot(priced.snapshot),
     status,
     warnings: priced.warnings,
   };

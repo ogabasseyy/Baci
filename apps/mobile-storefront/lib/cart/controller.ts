@@ -6,12 +6,24 @@ import type {
 import type { CartItem } from '@/stores/cart-store.types';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
+import type {
+  NativeCartControllerOptions,
+  NativeCartStatus,
+  NativeSharedCartRef,
+} from './controller-options';
+import { createNativeCartWrite } from './controller-write';
+
+export type {
+  NativeCartControllerOptions,
+  NativeCartStatus,
+  NativeSharedCartRef,
+};
+
 import {
   type CartProductShell,
   hydrateNativeCart,
   nativeCartInput,
 } from './display';
-import { planNativeLegacyMerge } from './legacy-merge';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
 import { pendingCartRequest } from './pending-request';
@@ -20,56 +32,11 @@ import {
   type NativeCartClient,
   NativeCartError,
 } from './shared-cart-client';
-import { nativeWriteCommand } from './write-command';
 
-export interface NativeSharedCartRef {
-  merchantId: string;
-  cartId: string;
-}
-export type NativeCartStatus =
-  | 'loading'
-  | 'pending'
-  | 'ready'
-  | 'error'
-  | 'choice_required';
-interface Options {
-  merchantId: string;
-  getOwnerSubject?(): string | null;
-  client: Pick<
-    NativeCartClient,
-    'context' | 'bootstrap' | 'read' | 'create' | 'command' | 'recoverCreation'
-  > &
-    Partial<
-      Pick<
-        NativeCartClient,
-        | 'redeem'
-        | 'recoverHandoff'
-        | 'previewHandoff'
-        | 'restartSession'
-        | 'recoverAccountLink'
-        | 'linkAccount'
-        | 'savedAccountCart'
-        | 'prepareCheckout'
-      >
-    >;
-  receipts?: typeof pendingCartRequest;
-  newOperationId(): string;
-  getLegacy(): { items: CartItem[]; sharedCartRef?: NativeSharedCartRef };
-  loadProduct(
-    merchantId: string,
-    productId: string
-  ): Promise<CartProductShell | null>;
-  publish(
-    snapshot: CartSnapshot,
-    display: { items: CartItem[]; metadataReady: boolean }
-  ): void;
-  status(status: NativeCartStatus, code?: string): void;
-  isCurrent(): boolean;
-  onHandoffCommitted?(handoffId: string): void;
-  onMergeConflicts?(items: CartItemIdentity[], reason?: string): void;
-}
 const TERMINAL_STATES = new Set(['completed', 'expired', 'canceled']);
-export function createNativeCartController(options: Options) {
+export function createNativeCartController(
+  options: NativeCartControllerOptions
+) {
   let snapshot: CartSnapshot | null = null;
   let terminal = false;
   let incoming: CartSnapshot | null = null;
@@ -227,71 +194,28 @@ export function createNativeCartController(options: Options) {
     await accept(created);
     return created;
   }
+  const operations = createNativeCartWrite({
+    accept,
+    assurance,
+    coordinator,
+    ensureCart,
+    getIncoming: () => incoming,
+    setIncoming: (next) => {
+      incoming = next;
+    },
+    getLegacy: options.getLegacy,
+    newOperationId: options.newOperationId,
+    onMergeConflicts: options.onMergeConflicts,
+    refresh,
+    status: options.status,
+  });
   return {
     refresh: () => serial(refresh),
     prepare: () =>
       serial(async () => {
         await ensureCart();
       }),
-    write: (action: SharedCartWrite) =>
-      serial(async () => {
-        if (
-          action.type === 'legacy_restore' ||
-          action.type === 'legacy_generation'
-        )
-          return;
-        if (action.type === 'legacy_reprice') {
-          await refresh();
-          return;
-        }
-        const current = await ensureCart();
-        options.status('pending');
-        if (action.type === 'assurance') {
-          const line = options
-            .getLegacy()
-            .items.find((item) => item.id === action.id);
-          if (line) assurance.set(action.id, !line.hasAssurance);
-          await accept(current);
-          return;
-        }
-        const command = nativeWriteCommand(action, current);
-        if (!command) {
-          options.status('ready');
-          return;
-        }
-        if (action.type === 'clear') {
-          try {
-            await accept(
-              await coordinator.command(current.cartId, {
-                operationId: options.newOperationId(),
-                expectedVersion: current.version,
-                command,
-              })
-            );
-          } catch (error) {
-            // A bound order already completed this cart server-side, so
-            // clearing it is rejected as locked. Retire the finished
-            // generation locally instead of failing the checkout that
-            // just succeeded; the next write starts a fresh session.
-            if (
-              error instanceof NativeCartError &&
-              error.code === 'cart_locked'
-            ) {
-              await refresh();
-              return;
-            }
-            throw error;
-          }
-          return;
-        }
-        await accept(
-          await coordinator.command(current.cartId, {
-            operationId: options.newOperationId(),
-            expectedVersion: current.version,
-            command,
-          })
-        );
-      }),
+    write: (action: SharedCartWrite) => serial(() => operations.write(action)),
     pair: (
       link: CartPairingLink,
       choice: 'connect' | 'merge' | 'keep_existing',
@@ -349,38 +273,6 @@ export function createNativeCartController(options: Options) {
     chooseLegacy: (
       choice: 'keep_server' | 'merge',
       resolutions: CartMergeResolution[] = []
-    ) =>
-      serial(async () => {
-        if (!incoming) throw new NativeCartError('refresh_required');
-        if (choice === 'keep_server') {
-          const selected = incoming;
-          incoming = null;
-          await accept(selected);
-          options.onMergeConflicts?.([], undefined);
-          return;
-        }
-        const plan = planNativeLegacyMerge(
-          incoming,
-          options.getLegacy().items,
-          resolutions
-        );
-        if (!plan.ok) {
-          if (plan.code === 'merge_conflict')
-            options.onMergeConflicts?.(
-              plan.conflicts.map((conflict) => conflict.item),
-              plan.reason
-            );
-          throw new NativeCartError(plan.code);
-        }
-        const lines = plan.lines;
-        const result = await coordinator.command(incoming.cartId, {
-          operationId: options.newOperationId(),
-          expectedVersion: incoming.version,
-          command: { type: 'replace', lines },
-        });
-        incoming = null;
-        await accept(result);
-        options.onMergeConflicts?.([], undefined);
-      }),
+    ) => serial(() => operations.chooseLegacy(choice, resolutions)),
   };
 }

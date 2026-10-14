@@ -1,8 +1,12 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import {
+  __resetCartQuotaStoreForTesting,
+  checkCartQuota,
+} from '@/lib/cart/request-context';
 import { issueCartSessionProof } from '@/lib/cart/session-proof';
+import { getClientIdentifier } from '@/lib/rate-limit';
 import { GET, POST } from './route';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
@@ -18,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   cartRpcCalls: [] as { args: unknown; name: string }[],
   merchantError: null as unknown,
   merchantRows: [] as unknown[],
+  previewCalls: 0,
   previewError: null as unknown,
   previewPayload: null as unknown,
 }));
@@ -26,6 +31,7 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({
     rpc: vi.fn(async (name: string) => {
       if (name === 'commerce_cart_preview_handoff') {
+        mocks.previewCalls += 1;
         return { data: mocks.previewPayload, error: mocks.previewError };
       }
       return { data: mocks.merchantRows, error: mocks.merchantError };
@@ -115,6 +121,7 @@ beforeEach(() => {
   mocks.cartRpcCalls = [];
   mocks.merchantError = null;
   mocks.merchantRows = [merchantRow()];
+  mocks.previewCalls = 0;
   mocks.previewError = null;
   mocks.previewPayload = null;
   process.env.CART_SESSION_SECRET = TEST_SECRET;
@@ -325,5 +332,35 @@ describe('GET /api/storefront/cart/handoff', () => {
   it('rejects missing and malformed preview ids', async () => {
     expect((await getPreview(null)).status).toBe(400);
     expect((await getPreview('not-a-uuid')).status).toBe(400);
+  });
+
+  it('applies the per-client quota before running the preview RPC', async () => {
+    mocks.previewPayload = {
+      code: null,
+      expiresAt: '2026-10-12T06:05:00.000Z',
+      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+      ok: true,
+      snapshot: rawState(),
+      status: 'pending',
+    };
+    const probe = new NextRequest(
+      `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+      { method: 'GET' }
+    );
+    const subject = getClientIdentifier(probe);
+    for (let index = 0; index < 120; index += 1) {
+      await checkCartQuota({
+        merchantId: 'handoff-preview',
+        operation: 'handoff_preview',
+        subject,
+      });
+    }
+    const previewCallsBefore = mocks.previewCalls;
+
+    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+
+    expect(response.status).toBe(429);
+    expect((await response.json()).code).toBe('quota_exceeded');
+    expect(mocks.previewCalls).toBe(previewCallsBefore);
   });
 });

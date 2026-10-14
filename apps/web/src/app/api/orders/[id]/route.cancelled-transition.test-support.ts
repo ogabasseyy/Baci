@@ -3,6 +3,7 @@
 // invocation helpers live here so the focused test file (which owns
 // the vi.mock factories) stays below the 300-line limit.
 
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 

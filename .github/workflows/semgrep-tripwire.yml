@@ -1,0 +1,37 @@
+# Trusted-change tripwire: advisory red X when trusted files change.
+#
+# NEVER add this workflow's job to required status checks. It exists
+# to turn red (and block nothing) when a trusted-tree edit runs it;
+# a deletion/rename of this file removes the run itself, so an
+# absent tripwire proves nothing — the required Semgrep SAST job in
+# security.yml still fails on real findings and on hardening drift,
+# and CODEOWNERS review remains the backstop (#3622 tracks a
+# base-owned gate). Rationale and threat model live in
+# .github/sarif-filter-notes.md. This file is itself in the
+# trusted set (paths below + security.yml filter).
+
+name: "Semgrep Tripwire"
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.github/scripts/muse-review/**'
+      - '.github/scripts/semgrep-sarif*'
+      - '.github/scripts/semgrep_sarif_*'
+      - '.github/workflows/security.yml'
+      - '.github/workflows/semgrep-tripwire.yml'
+      - '.github/workflows/muse-code-review.yml'
+      - '.github/workflows/muse-review-selftest.yml'
+      - '.github/CODEOWNERS'
+
+jobs:
+  tripwire:
+    name: Trusted-change tripwire
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Flag trusted-tree change for human review
+        run: |
+          echo "::error::Trusted files changed; a human must review this diff before merge (see .github/sarif-filter-notes.md)."
+          exit 1

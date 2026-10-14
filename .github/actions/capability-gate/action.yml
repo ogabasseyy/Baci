@@ -1,0 +1,19 @@
+name: Capability register binding gate
+description: >-
+  Runs the capability-register binding suite with the PR/push/dispatch
+  freshness policy. Merge-queue runs validate integration, not register
+  freshness: staleness gates PRs, direct pushes, and manual dispatches that
+  touch the register or cited sources, plus the scheduled freshness
+  workflow — never unrelated queued changes.
+
+runs:
+  using: composite
+  steps:
+    - name: Test capability register binding
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || github.sha }}
+        # Unaffected runs skip via the gate's change filter (an empty diff
+        # against github.sha) before freshness matters.
+        BACI_REGISTER_REQUIRE_FRESH: ${{ (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch') && '1' || '' }}
+      run: python3 vps-workers/baci-editorial-context/capability_gate.py

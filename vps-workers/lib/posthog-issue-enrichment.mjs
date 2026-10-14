@@ -26,6 +26,7 @@ const safeTechnicalValue = (value, length) =>
 const framePath = (source) => {
   const text = String(source || '');
   let path = text;
+  let reduceToBasename = false;
   if (text.includes('://')) {
     // Absolute URLs may carry userinfo credentials: keep only the path so
     // neither credentials nor host flow into prompts and reports.
@@ -34,9 +35,11 @@ const framePath = (source) => {
     } catch {
       return '';
     }
+    // Deployment URL paths are not repository structure: basename only.
+    reduceToBasename = true;
   }
   // Decode before stripping delimiters so encoded query/fragment markers
-  // cannot smuggle metadata into the basename; decode before redaction so
+  // cannot smuggle metadata into the path; decode before redaction so
   // encoded assignments cannot hide from secret patterns. Malformed
   // sequences fail closed.
   try {
@@ -44,10 +47,18 @@ const framePath = (source) => {
   } catch {
     return '';
   }
-  // Absolute local paths may embed usernames and customer directories:
-  // keep only the basename for every path shape.
-  const segments = path.split(/[?#]/, 1)[0].split(/[\\/]/).filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : '';
+  path = path.split(/[?#]/, 1)[0];
+  // Absolute local paths may embed usernames and customer directories.
+  if (/^([A-Za-z]:[\\/]|\\\\|\/)/.test(path)) reduceToBasename = true;
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  // Traversal segments fail closed to the basename.
+  if (segments.includes('..')) reduceToBasename = true;
+  if (reduceToBasename) {
+    return segments.length > 0 ? segments[segments.length - 1] : '';
+  }
+  // Repository-relative paths are preserved so the prompt identifies the
+  // failing file; cosmetic single-dot segments are dropped.
+  return segments.filter((segment) => segment !== '.').join('/');
 };
 
 const frameCoordinate = (frame) => {

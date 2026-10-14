@@ -58,7 +58,7 @@ describe('PostHog remediation candidate enrichment', () => {
       },
     });
 
-    assert.equal(enriched.sample.route, 'checkout.py:42');
+    assert.equal(enriched.sample.route, 'apps/web/checkout.py:42');
     assert.equal(enriched.sample.release, '2026.10.1');
     assert.equal(enriched.sample.message, 'TypeError');
     assert.equal(enriched.fingerprint, 'posthog-abc123');
@@ -135,6 +135,26 @@ describe('PostHog remediation candidate enrichment', () => {
       });
       assert.equal(dropped.sample.release, undefined, version);
     }
+  });
+
+  it('normalizes relative frame paths and fails traversal closed', async () => {
+    const backslash = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        line: 3,
+        source: 'src\\app\\route.ts',
+      },
+    });
+    assert.equal(backslash.sample.route, 'src/app/route.ts:3');
+
+    const traversal = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        line: 3,
+        source: 'src/../../etc/route.ts',
+      },
+    });
+    assert.equal(traversal.sample.route, 'route.ts:3');
   });
 
   it('keeps only the basename of absolute local frame paths', async () => {

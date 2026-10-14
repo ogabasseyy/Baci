@@ -400,6 +400,10 @@ patchedDependencies:
   # fix for the EventEmitter.swift data-race error under Xcode 26 complete
   # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
   "expo-modules-core@57.0.21": "patches/expo-modules-core@57.0.21.patch"
+  # SDK 57 scene-aware native presentation backports (Expo #48319, #50368).
+  'expo-web-browser@57.0.2': patches/expo-web-browser@57.0.2.patch
+  'expo-apple-authentication@57.0.1': patches/expo-apple-authentication@57.0.1.patch
+  'expo-print@57.0.1': patches/expo-print@57.0.1.patch
   image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.8": "patches/next@16.3.8.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch

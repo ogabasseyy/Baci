@@ -100,6 +100,9 @@ jobs:
       - name: Verify Swift RuntimeScheduler compatibility
         run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
 
+      - name: Verify native gradient composition
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
       - name: Verify Expo JSI symbol regression fixtures
         run: node --test .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
 

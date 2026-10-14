@@ -1,0 +1,24 @@
+diff --git a/ios/ExpoPrinterSelector.swift b/ios/ExpoPrinterSelector.swift
+--- a/ios/ExpoPrinterSelector.swift
++++ b/ios/ExpoPrinterSelector.swift
+@@ -10,7 +10,7 @@
+   }
+ 
+   func selectPrinter(promise: Promise) {
+-    guard let rootController = UIApplication.shared.keyWindow?.rootViewController else {
++    guard let rootController = SceneGeometry.keyWindow()?.rootViewController else {
+       promise.reject(ViewControllerNotFoundException())
+       return
+     }
+diff --git a/ios/ExpoPrintWithPrinter.swift b/ios/ExpoPrintWithPrinter.swift
+--- a/ios/ExpoPrintWithPrinter.swift
++++ b/ios/ExpoPrintWithPrinter.swift
+@@ -76,7 +76,7 @@
+     let printerUrl = options.printerUrl ?? ""
+     let candidateUrl = URL(string: printerUrl) ?? URL(fileURLWithPath: printerUrl)
+ 
+-    guard let rootController = UIApplication.shared.keyWindow?.rootViewController else {
++    guard let rootController = SceneGeometry.keyWindow()?.rootViewController else {
+       promise.reject(ViewControllerNotFoundException())
+       return
+     }

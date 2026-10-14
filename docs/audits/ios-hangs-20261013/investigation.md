@@ -194,3 +194,33 @@ factory-provider conformance without a custom scene delegate.
 A native release is required. The PR, exact-head CI/review, App Store Connect
 upload and Apple approval are separate delivery stages; this section records
 local evidence before those stages.
+
+Review follow-up: gradient integrity now runs in the storefront Node test suite,
+and the actual native composition probe runs in the macOS PR and release gates.
+Direct hook tests cover raw draft retention, external resets, stale draft removal
+and blur settlement. Admin dependencies are aligned, but its scene migration is
+outside this storefront release: `.github/workflows/ios-release.yml` remains
+pinned to Xcode 26.2; admin launch on the iOS 27 SDK is not claimed supported.
+
+Codex identified the SDK 57 presentation backport gap documented in Expo #50363.
+The installed core, WebBrowser, Apple Authentication and Print sources still
+read the deprecated application key window after opting into scenes. Seven
+new source regressions failed before the fix. Minimal native patches now use
+the existing SceneGeometry lookup (Expo #48319 and #50368), including both
+browser/auth anchors and both printer presenters. The shared core helper also
+preserves macOS behavior. ImagePicker receives the fix through its existing
+currentViewController consumer.
+
+The complete local monorepo run finished: admin 913 files / 4,494 tests,
+storefront 1,440 suites / 8,577 tests, shared 227 files / 1,553 tests,
+TikTok 3 files / 9 tests and the qualification worker 10 tests passed.
+Web passed 7,668 files / 49,058 tests with one failure: its private isolation
+fixture requires a clean Git checkout and ran while native files were changing.
+That exact file passed after the files were committed. The aggregate command
+therefore exited nonzero; this is reported separately from the successful rerun.
+After the presentation patches, all 10 lint/typecheck tasks passed again,
+32 input tests and 59 native/config contracts passed, and frozen installation
+succeeded. The patched native app rebuilt, installed and launched on the iOS 27
+simulator without compiler errors. Current-head GitHub checks/review and the
+production archive remain release gates; successful sheet authentication or
+provider payment is not claimed by compilation and launch alone.

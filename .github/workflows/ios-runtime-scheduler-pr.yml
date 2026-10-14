@@ -8,6 +8,9 @@ on:
   pull_request:
     paths:
       - 'patches/expo-modules-jsi@*'
+      - 'patches/expo-linear-gradient@*'
+      - 'apps/mobile-storefront/scripts/native-regressions/**'
+      - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
       - '.github/scripts/ios-runtime-scheduler.test.mjs'
       - '.github/workflows/ios-runtime-scheduler-pr.yml'
       - 'pnpm-lock.yaml'
@@ -41,3 +44,6 @@ jobs:
 
       - name: Verify Swift RuntimeScheduler compatibility
         run: pnpm exec node --test .github/scripts/ios-runtime-scheduler.test.mjs
+
+      - name: Verify native gradient composition
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh

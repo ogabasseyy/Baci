@@ -129,9 +129,16 @@ export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
       ok: false,
     };
   }
-  if (artifact.browserName.toLowerCase().includes('headless-shell')) {
+  // Exact product match, not a shell denylist: MicrosoftEdge reports
+  // a matching major with an ordinary UA embedding the Chrome token,
+  // so headless-shell-only rejection would certify Edge evidence.
+  // ChromeDriver reports exactly `chrome` for full Chrome; anything
+  // else refuses here. (The HAR check passing Edge is correct — the
+  // HAR UA is emulated configuration, not executable identity, which
+  // is proven here and by the Lighthouse host UA.)
+  if (artifact.browserName.toLowerCase() !== 'chrome') {
     return {
-      error: `browser-provenance launch is ${artifact.browserName}, not full Chrome (headless-shell evidence cannot certify the measurement)`,
+      error: `browser-provenance launch is ${artifact.browserName}, not full Chrome (only full-Chrome evidence can certify the measurement)`,
       ok: false,
     };
   }

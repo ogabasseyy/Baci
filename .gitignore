@@ -217,11 +217,16 @@ tools/**/.work/
 /infra/cdn-transformer/.pilot-input/
 /infra/cdn-transformer/.pilot-output/
 /apps/web/public/__pilot/*
-# ...except the frozen lab filler bytes (synthetic, hash-pinned in tests).
-# The parent itself stays unexcluded (only its children match `/*`), so
-# re-including the fillers directory keeps new files under it trackable
-# too: `*` never crosses `/`, so the contents were never excluded.
+# ...except the three frozen lab filler bytes (synthetic, hash-pinned
+# in tests). The directory is re-included so git can reach the files,
+# its contents are re-excluded, and only the three exact names are
+# re-included: a merchant file miscopied into fillers/ stays ignored
+# instead of showing up committable next to the staged tree.
 !/apps/web/public/__pilot/fillers/
+/apps/web/public/__pilot/fillers/*
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-a.png
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-b.png
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-c.png
 
 # Generated Python bytecode (never commit; produced by local test runs).
 __pycache__/

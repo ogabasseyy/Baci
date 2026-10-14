@@ -45,6 +45,18 @@ describe('merchant-image-pilot-settings browser provenance', () => {
     ).toMatch(/records no browserName/);
   });
 
+  it('refuses non-Chrome session products with a matching major', () => {
+    // msedgedriver reports MicrosoftEdge with an ordinary UA embedding
+    // the Chrome token: major matches, HAR check passes, but the
+    // executable is not full Chrome. Any non-`chrome` product refuses.
+    for (const browserName of ['MicrosoftEdge', 'firefox', 'chrome-headless']) {
+      const text = JSON.stringify({ ...JSON.parse(valid), browserName });
+      expect(verifyBrowserProvenance(text, pages, '154').error).toMatch(
+        /not full Chrome/
+      );
+    }
+  });
+
   it('refuses a launch with first navigation explicitly unverified', () => {
     // A markerless bind flags itself at bind time; the gate must refuse
     // it, not certify cold on unattested evidence.

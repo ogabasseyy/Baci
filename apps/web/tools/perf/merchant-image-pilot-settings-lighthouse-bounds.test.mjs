@@ -184,6 +184,22 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     expect(shell.error).not.toBe(null);
     expect(shell.stdout).toMatch(/lighthouse\.browser/);
     expect(shell.stdout).toMatch(/chrome-headless-shell/);
+    // Alternate Chromium products embed the Chrome token in their
+    // ordinary UAs: Edge and Opera at the expected major must refuse
+    // as non-Chrome, not pass the substring check.
+    for (const alternate of [
+      `${HOST_UA} Edg/154.0.0.0`,
+      `${HOST_UA} OPR/110.0.0.0`,
+    ]) {
+      const run = await runWithReport({
+        harPages,
+        pngBytes,
+        report: lhReport(urls, alternate),
+      });
+      expect(run.error).not.toBe(null);
+      expect(run.stdout).toMatch(/lighthouse\.browser/);
+      expect(run.stdout).toMatch(/not full Chrome/);
+    }
   });
 
   it('rejects a structurally valid screenshot whose pixels do not decode', async () => {

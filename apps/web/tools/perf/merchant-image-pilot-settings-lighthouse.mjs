@@ -92,6 +92,19 @@ export async function checkLighthouse(args, pass, fail, recorded) {
       `host browser is chrome-headless-shell, not full Chrome ${args['expect-chrome-major']} (${hostUserAgent})`
     );
   } else if (
+    hostUserAgent?.includes('Edg/') ||
+    hostUserAgent?.includes('OPR/')
+  ) {
+    // Alternate Chromium products embed the Chrome token in their
+    // ordinary documented UAs (Edge: `Chrome/<major>... Edg/<major>`;
+    // Opera: `... OPR/<major>`), so the Chrome substring below would
+    // certify a different browser's metrics as the required
+    // full-Chrome run. Genuine Chrome UAs never carry these tokens.
+    fail(
+      'lighthouse.browser',
+      `host browser is not full Chrome ${args['expect-chrome-major']} (alternate Chromium product UA: ${hostUserAgent})`
+    );
+  } else if (
     !hostUserAgent?.includes(`Chrome/${args['expect-chrome-major']}.`)
   ) {
     fail(

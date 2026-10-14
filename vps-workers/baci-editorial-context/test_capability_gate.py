@@ -105,6 +105,36 @@ class CapabilityGateTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
+    def test_base_union_keeps_deleted_citation_relevant(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/agent-access-map.md").write_text("See `same.ts` for shared state.")
+            (repo / "apps/a").mkdir(parents=True)
+            (repo / "apps/b").mkdir(parents=True)
+            (repo / "apps/a/same.ts").write_text("export {};\n")
+            (repo / "apps/b/same.ts").write_text("export {};\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            git("rm", "-q", "apps/b/same.ts")
+            git("commit", "-q", "-m", "drop duplicate")
+            # From outside the checkout: the map must still resolve via cwd.
+            citing = {"capabilities": []}
+            changed = gate.changed_paths(base, cwd=repo)
+            self.assertIn("apps/b/same.ts", changed)
+            self.assertFalse(gate.should_run(base, citing, changed),
+                             "map lookup from the process cwd must not see the fixture map")
+            self.assertTrue(gate.should_run(base, citing, changed, cwd=str(repo)),
+                            "base-tree union must keep the deleted citation relevant")
+            self.assertFalse(gate.should_run(None, citing, changed, cwd=str(repo)),
+                             "head-only resolution must not see the deleted path")
+
     def test_freshness_scoping(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         fresh = {"reviewed_at": now, "capabilities": [

@@ -150,6 +150,22 @@ describe('CartSidebarLineItem', () => {
     expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
   });
 
+  it('shows the fee and opt-out control for an untouched default-on line', () => {
+    // hasAssurance: true as materialized by the Ogabassey default (the
+    // shopper never touched the toggle): the fee must be visible and the
+    // toggle must offer removal before checkout.
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey' }
+    );
+
+    expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
+    expect(screen.getByText(/\+₦[\d,]+/)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onToggleAssurance).toHaveBeenCalledWith('line-1');
+  });
+
   it('hides assurance when the merchant context does not match', () => {
     setup(makeItem(), { cartMerchantContextMatches: false });
 

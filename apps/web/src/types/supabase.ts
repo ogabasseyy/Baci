@@ -5492,6 +5492,93 @@ export type Database = {
           },
         ];
       };
+      loyalty_redemption_idempotency_keys: {
+        Row: {
+          created_at: string;
+          customer_id: string;
+          key: string;
+          merchant_id: string;
+          requested_reward_id: string;
+          response: Json;
+          reward_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          customer_id: string;
+          key: string;
+          merchant_id: string;
+          requested_reward_id: string;
+          response: Json;
+          reward_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          customer_id?: string;
+          key?: string;
+          merchant_id?: string;
+          requested_reward_id?: string;
+          response?: Json;
+          reward_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customer_insights';
+            referencedColumns: ['customer_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'priority_winback_customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'secure_customer_insights';
+            referencedColumns: ['customer_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_reward_id_fkey';
+            columns: ['reward_id'];
+            isOneToOne: false;
+            referencedRelation: 'loyalty_rewards';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       manual_payment_side_effects: {
         Row: {
           attempts: number;
@@ -13731,9 +13818,14 @@ export type Database = {
           discount_code: string | null;
           expires_at: string | null;
           id: string;
+          issuance_currency: string | null;
+          max_redemption_percentage: number | null;
           merchant_id: string;
+          minimum_order_amount: number | null;
           points_spent: number;
           reward_id: string | null;
+          reward_name: string | null;
+          reward_product_id: string | null;
           reward_type: string;
           reward_value: number | null;
           used: boolean | null;
@@ -13746,9 +13838,14 @@ export type Database = {
           discount_code?: string | null;
           expires_at?: string | null;
           id?: string;
+          issuance_currency?: string | null;
+          max_redemption_percentage?: number | null;
           merchant_id: string;
+          minimum_order_amount?: number | null;
           points_spent: number;
           reward_id?: string | null;
+          reward_name?: string | null;
+          reward_product_id?: string | null;
           reward_type: string;
           reward_value?: number | null;
           used?: boolean | null;
@@ -13761,9 +13858,14 @@ export type Database = {
           discount_code?: string | null;
           expires_at?: string | null;
           id?: string;
+          issuance_currency?: string | null;
+          max_redemption_percentage?: number | null;
           merchant_id?: string;
+          minimum_order_amount?: number | null;
           points_spent?: number;
           reward_id?: string | null;
+          reward_name?: string | null;
+          reward_product_id?: string | null;
           reward_type?: string;
           reward_value?: number | null;
           used?: boolean | null;
@@ -16149,6 +16251,79 @@ export type Database = {
           tombstone_claimed: boolean;
           tombstone_path: string;
         }[];
+      };
+      consume_loyalty_redemption: {
+        Args: { p_code: string; p_merchant_id: string };
+        Returns: Json;
+      };
+      create_storefront_order_with_loyalty_code: {
+        Args: {
+          p_ad_tracking?: Json;
+          p_checkout_idempotency_key?: string;
+          p_checkout_request_hash?: string;
+          p_customer_email: string;
+          p_customer_name: string;
+          p_customer_phone?: string;
+          p_discount_amount?: number;
+          p_expected_total?: number;
+          p_gift_wrapping_fee?: number;
+          p_items: Json;
+          p_loyalty_redemption_id?: string;
+          p_merchant_id: string;
+          p_notes?: string;
+          p_payment_method?: string;
+          p_payment_status?: string;
+          p_selected_quote_id?: string;
+          p_shipping_address?: Json;
+          p_shipping_fee?: number;
+          p_shipping_provider?: string;
+          p_shipping_status?: string;
+          p_source?: string;
+          p_tax_amount?: number;
+          p_tax_basis?: string;
+          p_tracking_number?: string;
+          p_user_id?: string;
+        };
+        Returns: {
+          customer_email: string;
+          customer_id: string;
+          customer_name: string;
+          customer_phone: string;
+          discount_amount: number;
+          gift_wrapping_fee: number;
+          id: string;
+          idempotency_replayed: boolean;
+          merchant_id: string;
+          order_number: string;
+          payment_method: string;
+          payment_status: string;
+          shipping_address: Json;
+          shipping_fee: number;
+          shipping_status: string;
+          subtotal: number;
+          tax_amount: number;
+          tax_basis: string;
+          total: number;
+          tracking_token: string;
+        }[];
+      };
+      get_loyalty_redemption_for_checkout: {
+        Args: { p_code: string; p_merchant_id: string };
+        Returns: {
+          expires_at: string;
+          issuance_currency: string;
+          max_redemption_percentage: number;
+          minimum_order_amount: number;
+          redemption_id: string;
+          reward_name: string;
+          reward_type: string;
+          reward_value: number;
+          used: boolean;
+        }[];
+      };
+      loyalty_consume_is_authorized: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
       };
       register_blog_media_references_v1: {
         Args: { p_paths: string[] };

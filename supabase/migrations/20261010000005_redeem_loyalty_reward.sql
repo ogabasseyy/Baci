@@ -152,11 +152,14 @@ BEGIN
     );
   END IF;
   -- A non-positive/over-100 cap mints a worthless CHECKOUT code:
-  -- refuse for discount types only (manual/wallet rewards never read
-  -- the cap, and the settings schema now prevents new invalid caps).
+  -- refuse for checkout-bound discounts only. Manual/wallet rewards
+  -- never read the cap, and a valueless plain discount is manual
+  -- fulfillment (present-the-code), not a checkout discount.
   IF v_max_redemption_pct IS NOT NULL
      AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100)
-     AND v_reward.reward_type IN ('discount', 'discount_fixed', 'discount_percentage') THEN
+     AND (v_reward.reward_type IN ('discount_fixed', 'discount_percentage')
+       OR (v_reward.reward_type = 'discount'
+         AND COALESCE(v_reward.reward_value, 0) > 0)) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
   -- Valued rewards need positive value (<=100%).
@@ -193,7 +196,6 @@ BEGIN
   END IF;
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
-
   -- Lock the merchant row before resolving currency for every
   -- currency-bound reward (no born-mismatched code).
   IF v_reward.reward_type IN ('discount', 'discount_fixed', 'store_credit')
@@ -204,7 +206,6 @@ BEGIN
      AND NOT public.merchant_resolves_to_ngn(p_merchant_id) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
-
   -- Mint a merchant-unique code; stamp currency + cap.
   v_currency := public.merchant_resolved_currency(p_merchant_id);
   LOOP
@@ -241,7 +242,6 @@ BEGIN
       RETURN jsonb_build_object('success', false, 'error', 'redemption_code_collision');
     END IF;
   END LOOP;
-
   -- Stock decrements only after the insert.
   IF v_reward.stock_quantity IS NOT NULL THEN
     UPDATE public.loyalty_rewards

@@ -94,6 +94,31 @@ SELECT pg_temp.assert_true(
   'mint skipped the identity snapshot'
 );
 
+-- A valueless plain discount is manual fulfillment too: the cap
+-- gate must not block it under the same invalid cap.
+UPDATE public.customer_loyalty SET points_balance = 200
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';
+
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Zero-cap plain', 100,
+  'discount', NULL, true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'success')::boolean
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Zero-cap plain')
+   ) AS result),
+  'zero cap blocked a valueless manual discount'
+);
+
 -- Restore the balance the later fractional-fixed case expects.
 UPDATE public.customer_loyalty SET points_balance = 100
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'

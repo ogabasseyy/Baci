@@ -21,7 +21,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000005_redeem_loyalty_reward.sql',
-    sha256: '4ae451943dd632d9485a75714bcb90a4d3cfc6cbb8ba30d9f5594d72ed0237a8',
+    sha256: '18681f95493e808fd9e7f1382c980f2e27611427c00898d6892f69032ab20e26',
   },
   {
     repositoryPath:

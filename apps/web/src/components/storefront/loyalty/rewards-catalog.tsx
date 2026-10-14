@@ -111,12 +111,15 @@ export function RewardsCatalog({
         setRedeeming(null);
       });
   };
-
   const canRedeem = (reward: Reward): boolean =>
     pointsBalance >= reward.points_required;
-
   const getRewardLabel = (reward: Reward): string => {
     if (reward.reward_type === 'discount') {
+      // Valueless plain discounts are manual, present-the-code
+      // benefits: never render them as a ₦0 fixed amount.
+      if (reward.discount_value == null || reward.discount_value <= 0) {
+        return 'In-Store Discount';
+      }
       if (reward.discount_type === 'percentage') {
         // A program cap below the face value binds at checkout:
         // advertise the effective percentage, not the nominal one.
@@ -153,7 +156,6 @@ export function RewardsCatalog({
     }
     return 'Exclusive Access';
   };
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -174,7 +176,6 @@ export function RewardsCatalog({
       </div>
     );
   }
-
   if (!enrolled) {
     return (
       <Card>
@@ -188,7 +189,6 @@ export function RewardsCatalog({
       </Card>
     );
   }
-
   if (availableRewards.length === 0) {
     return (
       <Card>
@@ -202,7 +202,6 @@ export function RewardsCatalog({
       </Card>
     );
   }
-
   return (
     <>
       <div className="space-y-4">
@@ -250,7 +249,8 @@ export function RewardsCatalog({
                   {maxRedemptionPercentage != null &&
                     maxRedemptionPercentage > 0 &&
                     maxRedemptionPercentage < 100 &&
-                    reward.reward_type === 'discount' && (
+                    reward.reward_type === 'discount' &&
+                    (reward.discount_value ?? 0) > 0 && (
                       <p className="text-xs text-muted-foreground mb-3">
                         Discount capped at {maxRedemptionPercentage}% of the
                         order subtotal

@@ -28,6 +28,7 @@
 \ir enroll_customer_loyalty_overflow_users.sql
 \ir enroll_customer_loyalty_enrollment.sql
 \ir enroll_customer_loyalty_award.sql
+\ir enroll_customer_loyalty_award_ladder.sql
 \ir enroll_customer_loyalty_referrals.sql
 \ir enroll_customer_loyalty_status.sql
 \ir enroll_customer_loyalty_status_ngn.sql

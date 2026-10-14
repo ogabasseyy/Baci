@@ -127,6 +127,15 @@ if ! grep -q '^ *exit 1 *$' "$TRIP"; then
   echo "::error::tripwire job no longer fails; the loud signal is neutered"
   fail=1
 fi
+# `if:` or `continue-on-error:` anywhere in the tripwire would let it
+# report skipped/success while every pin above stays green. This file
+# is ~30 lines whose only job is to fail; neither key has a
+# legitimate use here, so both are banned outright.
+if grep -Eq '^[[:space:]]*if:' "$TRIP" \
+  || grep -Eq '^[[:space:]]*continue-on-error:' "$TRIP"; then
+  echo "::error::tripwire must not carry if:/continue-on-error; the loud signal must fire unconditionally"
+  fail=1
+fi
 if ! grep -q '^  pull_request:$' "$TRIP" \
   || ! grep -q '^    branches: \[main, develop\]$' "$TRIP"; then
   echo "::error::tripwire lost its pull_request trigger on main/develop"
@@ -144,8 +153,13 @@ if [[ "$(grep -c 'semgrep scan --error' "$SEC")" -ne 2 ]]; then
   fail=1
 fi
 fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"
-if [[ "$fail_if" != *"steps.semgrep_pr.outcome == 'failure'"* ]] \
-  || [[ "$fail_if" == *"sarif_exists"* ]]; then
+for scan in semgrep_pr semgrep_push semgrep_full; do
+  if [[ "$fail_if" != *"steps.${scan}.outcome == 'failure'"* ]]; then
+    echo "::error::final gate lost the ${scan} outcome disjunct"
+    fail=1
+  fi
+done
+if [[ "$fail_if" == *"sarif_exists"* ]]; then
   echo "::error::final gate must key on scan outcomes without a SARIF guard"
   fail=1
 fi

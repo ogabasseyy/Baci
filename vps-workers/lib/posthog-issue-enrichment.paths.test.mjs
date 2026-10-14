@@ -110,6 +110,7 @@ describe('PostHog enrichment frame paths', () => {
       'webpack://app/./home/deploy/app/route.ts',
       'webpack:///C%3A/Users/AliceSmith/Client/app.js',
       'webpack:///%55sers/AliceSmith/Client/app.js',
+      'webpack:////server/share/AliceSmith/Client/app.js',
     ]) {
       const enriched = await enrichDetail({
         top_in_app_frame: {

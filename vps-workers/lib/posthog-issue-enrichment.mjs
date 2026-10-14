@@ -58,6 +58,8 @@ const ABSOLUTE_URL_PATH_ROOTS = new Set([
 ]);
 
 const isAbsoluteLocalUrlPath = (pathname) => {
+  // A leading double slash is a UNC marker, not namespace structure.
+  if (pathname.startsWith('//')) return true;
   const segments = pathname
     .split('/')
     .filter((segment) => segment && segment !== '.');

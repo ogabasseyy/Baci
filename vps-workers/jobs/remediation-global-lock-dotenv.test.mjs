@@ -83,7 +83,7 @@ describe('remediation job global lock configuration', () => {
       writeDotenvFixture(nodeModulesDirectory);
       writeFileSync(
         join(fixtureRoot, '.env'),
-        `BACI_REMEDIATION_GLOBAL_LOCK_PATH=${customLockPath}\n`
+        `BACI_REMEDIATION_GLOBAL_LOCK_PATH=${customLockPath}\nBACI_POSTHOG_REMEDIATION_ENABLED=1\n`
       );
       const flockPath = join(fakeBinDirectory, 'flock');
       writeFileSync(

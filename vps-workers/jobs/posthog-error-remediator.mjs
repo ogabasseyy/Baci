@@ -70,6 +70,12 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   config({ path: new URL('../.env', import.meta.url) });
+  if (process.env.BACI_POSTHOG_REMEDIATION_ENABLED !== '1') {
+    // Disabled by default: exit before the global lock so a dormant tick
+    // neither contends with sibling remediators nor logs busy failures.
+    // The in-function guard below stays for library callers.
+    process.exit(0);
+  }
   const exitCode = await runRemediationJobWithGlobalLock({
     main,
     scriptPath: process.argv[1],

@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -95,6 +103,34 @@ describe('PostHog error remediator', () => {
     assert.equal(result.mode, 'disabled');
     assert.deepEqual(result.actions, []);
     assert.deepEqual(result.candidates, []);
+  });
+
+  it('exits silently before the global lock when disabled at the entry point', (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'posthog-entry-'));
+    t.after(() => rmSync(directory, { force: true, recursive: true }));
+    const flockMarker = join(directory, 'flock-called');
+    const fakeBinDirectory = join(directory, 'bin');
+    mkdirSync(fakeBinDirectory);
+    writeFileSync(
+      join(fakeBinDirectory, 'flock'),
+      `#!/bin/sh\ntouch '${flockMarker}'\nexit 0\n`
+    );
+    chmodSync(join(fakeBinDirectory, 'flock'), 0o755);
+    const env = {
+      ...process.env,
+      PATH: `${fakeBinDirectory}:${process.env.PATH}`,
+    };
+    delete env.BACI_POSTHOG_REMEDIATION_ENABLED;
+    const result = spawnSync(
+      process.execPath,
+      [join(import.meta.dirname, 'posthog-error-remediator.mjs')],
+      { encoding: 'utf8', env }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, '');
+    assert.equal(existsSync(flockMarker), false);
   });
 
   it('rejects a public PostHog ingestion key before making a request', async () => {

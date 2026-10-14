@@ -18,7 +18,7 @@ describe('markVtuProviderSubmissionStarted', () => {
     const rereadEq = vi.fn(() => ({ maybeSingle: rereadMaybeSingle }));
     const select = vi.fn(() => ({ eq: rereadEq }));
     const supabase = { from: vi.fn(() => ({ select, update })) };
-    return { eq, rereadEq, select, supabase, update };
+    return { eq, rereadEq, rereadMaybeSingle, select, supabase, update };
   }
 
   it('persists the marker and reflects it on the row', async () => {
@@ -179,6 +179,138 @@ describe('markVtuProviderSubmissionStarted', () => {
       });
 
       expect(result).toEqual({ message: 'timeout' });
+      expect(row.metadata).toEqual({ walletDebited: true });
+    }
+  });
+
+  it('retries the idempotent write after a genuinely-failed attempt and proceeds', async () => {
+    // Codex R79 6sO3vb: the first write truly failed (re-read shows
+    // no marker on a still-processing row) — the retry lands, the
+    // ack proves presence, and the worker proceeds to the vend
+    // instead of stranding the row behind a no-op restore.
+    const { eq, supabase, update } = createSupabase(
+      { message: 'timeout' },
+      {
+        data: {
+          metadata: { walletDebited: true },
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      }
+    );
+    eq.mockResolvedValueOnce({ error: { message: 'timeout' } });
+    eq.mockResolvedValueOnce({ error: null });
+    const row: { id: string; metadata: Record<string, unknown> } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toEqual(
+      expect.any(String)
+    );
+  });
+
+  it('adopts when a retried re-read finds the committed marker', async () => {
+    // Codex R79 6sO3vb: write response lost AND the first re-read
+    // errored (the exact reported hole) — the second re-read finds
+    // the committed marker with no response reference, so adopt it
+    // and proceed instead of restoring with a dead token.
+    const markerAt = new Date().toISOString();
+    const { rereadMaybeSingle, supabase } = createSupabase({
+      message: 'timeout',
+    });
+    rereadMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: { message: 'db down' } })
+      .mockResolvedValueOnce({
+        data: {
+          metadata: {
+            walletDebited: true,
+            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: markerAt,
+          },
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const row: { id: string; metadata: Record<string, unknown> } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(markerAt);
+  });
+
+  it('fails closed after exhausting write and re-read retries', async () => {
+    // Sustained outage: every write and every re-read fails across
+    // all attempts — return the last write error with the row
+    // untouched, exactly like the pre-retry behavior.
+    const { supabase, update } = createSupabase(
+      { message: 'timeout' },
+      { data: null, error: { message: 'db down' } }
+    );
+    const row = { id: 'vtu-1', metadata: { walletDebited: true } };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toEqual({ message: 'timeout' });
+    expect(update).toHaveBeenCalledTimes(3);
+    expect(row.metadata).toEqual({ walletDebited: true });
+  });
+
+  it('does not retry states that resolved against us', async () => {
+    // A moved status, a vanished row, or another worker's response
+    // reference is definitive — fail closed on the first attempt
+    // without burning retries that cannot adopt.
+    const cases: Array<Record<string, unknown> | null> = [
+      {
+        metadata: {
+          walletDebited: true,
+          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
+        },
+        status: 'successful',
+        transaction_id: null,
+      },
+      {
+        metadata: {
+          walletDebited: true,
+          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
+        },
+        status: 'processing',
+        transaction_id: 'kuda-ref-1',
+      },
+      null,
+    ];
+    for (const data of cases) {
+      const { supabase, update } = createSupabase(
+        { message: 'timeout' },
+        { data, error: null }
+      );
+      const row = { id: 'vtu-1', metadata: { walletDebited: true } };
+
+      const result = await markVtuProviderSubmissionStarted({
+        row,
+        supabase: supabase as never,
+      });
+
+      expect(result).toEqual({ message: 'timeout' });
+      expect(update).toHaveBeenCalledTimes(1);
       expect(row.metadata).toEqual({ walletDebited: true });
     }
   });

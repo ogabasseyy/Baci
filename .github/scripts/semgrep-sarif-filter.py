@@ -7,7 +7,10 @@ GitHub code scanning ignores that flag -- the finding stays open as a
 phantom alert. This filter repairs the transport for exactly one
 audited finding (the reviewed pull_request_target checkout) after a
 fail-closed drift audit of the hardening the exemption rests on.
-Any drift keeps the SARIF unfiltered and fails the job.
+Any drift keeps the SARIF unfiltered and fails the job, except that
+TRUSTED_CHANGE_ADVISORY=true downgrades a trusted-tree-only signal
+to a warning (exit 0, still filtered); the separate never-required
+tripwire job carries the loud human-review signal for that case.
 """
 import json
 import os
@@ -36,6 +39,55 @@ from semgrep_sarif_steps import audit_step_commands
 
 def main():
     drift = []
+    # TRUSTED_CHANGE_ADVISORY detaches the change signal from the
+    # exit code: a trusted-tree edit with no other drift warns
+    # (human eyes arrive via the advisory tripwire job) while real
+    # hardening drift still fails. Absent/false preserves the
+    # fail-closed default. The workflow runs the base-tree copy of
+    # this audit logic, so a PR cannot soften the checks
+    # themselves; the TRUSTED_CHANGED signal and this env flag come
+    # from the PR-controlled workflow, whose backstop is the
+    # CODEOWNERS review required on .github/** (see
+    # .github/sarif-filter-notes.md).
+    advisory = os.environ.get("TRUSTED_CHANGE_ADVISORY") == "true"
+
+    def fatal():
+        return [d for d in drift
+                if not (advisory and d == "trusted-tree-changed")]
+
+    def run_hardening_audits(no_checkout=False):
+        # The no-checkout advisory path skips the ref-count assertion
+        # (a zero count there is the benign removal) but the hygiene
+        # uses-count still applies with removal semantics: only full
+        # removal (at most the trusted step left) downgrades, since a
+        # still-present step without a resolvable ref cannot be
+        # guard/credential/shape-checked. Everything else runs, so
+        # helper/runner weakening cannot smuggle past.
+        if not no_checkout:
+            audit_pr_checkout(ctx, drift)
+        audit_trusted_checkout(ctx, drift)
+        audit_resolver(ctx, drift)
+        audit_path_literals(ctx, drift)
+        audit_checkout_order(ctx, drift)
+        audit_container_image(ctx, drift)
+        audit_invocations(ctx, drift)
+        audit_script_dir(ctx, drift)
+        audit_run_hygiene(ctx, drift, expect_checkout_uses=not no_checkout)
+        audit_reviewer_env_block(ctx.workflow_lines, drift)
+        audit_step_commands(ctx, drift)
+        audit_agent_env(ctx, drift)
+        audit_agent_runner(drift)
+        audit_installer(drift)
+        audit_helpers(ctx, drift)
+
+    def run_file_audits():
+        # Workflow-independent audits: safe when the audited
+        # workflow itself is gone, so a deletion bundled with
+        # helper/runner weakening still fails.
+        audit_agent_runner(drift)
+        audit_installer(drift)
+        audit_helpers(ctx, drift)
+
     # Resolve all file reads against the workspace root, not the
     # process CWD: a future working-directory default would
     # otherwise make the audit read the wrong tree (or report an
@@ -65,33 +117,45 @@ def main():
         # was recorded (trusted-tree change, hidden flow/alias ref),
         # which always needs review. Labels print (like the main
         # drift exit) so the message names the actual cause.
-        if drift:
+        if fatal():
             print("::error::No PR-controlled checkout left in "
                   + AUDITED_PATH + " but drift was recorded ("
                   + ", ".join(drift) + "); needs human review.")
             return 1
+        if drift:
+            # Advisory early return: a checkout removal must not
+            # smuggle helper/runner weakening past, so the
+            # hardening audits still run before downgrading. When
+            # the workflow itself is gone, only the
+            # workflow-independent file audits run (a deletion
+            # bundled with helper weakening must still fail).
+            if ctx.workflow_lines:
+                run_hardening_audits(no_checkout=True)
+            else:
+                run_file_audits()
+            if fatal():
+                print("::error::No PR-controlled checkout left in "
+                      + AUDITED_PATH + " but hardening drift was "
+                      + "recorded (" + ", ".join(drift) + "); needs "
+                      + "human review.")
+                return 1
+            print("::warning::No PR-controlled checkout left in "
+                  + AUDITED_PATH + " but trusted-tree-changed "
+                  + "recorded (advisory mode); human review "
+                  + "recommended.")
+            return 0
         print("::notice::No PR-controlled checkout in " + AUDITED_PATH
               + "; exemption inactive.")
         return 0
-    audit_pr_checkout(ctx, drift)
-    audit_trusted_checkout(ctx, drift)
-    audit_resolver(ctx, drift)
-    audit_path_literals(ctx, drift)
-    audit_checkout_order(ctx, drift)
-    audit_container_image(ctx, drift)
-    audit_invocations(ctx, drift)
-    audit_script_dir(ctx, drift)
-    audit_run_hygiene(ctx, drift)
-    audit_reviewer_env_block(ctx.workflow_lines, drift)
-    audit_step_commands(ctx, drift)
-    audit_agent_env(ctx, drift)
-    audit_agent_runner(drift)
-    audit_installer(drift)
-    audit_helpers(ctx, drift)
-    if drift:
+    run_hardening_audits()
+    if fatal():
         print(f"::error::muse-code-review.yml hardening drifted "
               f"({', '.join(drift)}); keeping SARIF unfiltered.")
         return 1
+    if drift:
+        print(f"::warning::muse-code-review.yml change signal "
+              f"({', '.join(drift)}) recorded in advisory mode; "
+              f"human review recommended, SARIF filtered as usual.")
 
     def is_audited_checkout(result):
         suppressions = result.get("suppressions") or []

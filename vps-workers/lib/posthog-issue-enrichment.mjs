@@ -38,6 +38,35 @@ const VIRTUAL_SOURCE_SCHEMES = new Set([
   'webpack-internal',
 ]);
 
+// Filesystem roots proving a URL pathname is an absolute local path rather
+// than namespace-relative structure: virtual schemes around these still
+// expose usernames and customer directories.
+const ABSOLUTE_URL_PATH_ROOTS = new Set([
+  'etc',
+  'home',
+  'library',
+  'mnt',
+  'opt',
+  'private',
+  'root',
+  'srv',
+  'system',
+  'tmp',
+  'usr',
+  'users',
+  'var',
+]);
+
+const isAbsoluteLocalUrlPath = (pathname) => {
+  const segments = pathname
+    .split('/')
+    .filter((segment) => segment && segment !== '.');
+  if (segments.length === 0) return false;
+  const [root] = segments;
+  if (/^[A-Za-z]:$/.test(root)) return true;
+  return ABSOLUTE_URL_PATH_ROOTS.has(root.toLowerCase());
+};
+
 const framePath = (source) => {
   const text = String(source || '');
   let path = text;
@@ -56,8 +85,10 @@ const framePath = (source) => {
       return '';
     }
     // Deployment URL paths are not repository structure: basename only.
-    // Virtual sourcemap schemes fall through to relative handling below.
-    reduceToBasename = !virtualScheme;
+    // Virtual sourcemap schemes fall through to relative handling below,
+    // unless the pathname is recognizably an absolute local path.
+    reduceToBasename = !virtualScheme || isAbsoluteLocalUrlPath(path);
+    if (reduceToBasename) virtualScheme = false;
   }
   // Decode to a bounded fixed point so double-encoded delimiters cannot
   // smuggle metadata past the redactor: single and double encoding

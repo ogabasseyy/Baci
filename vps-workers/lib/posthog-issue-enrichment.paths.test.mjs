@@ -104,6 +104,25 @@ describe('PostHog enrichment frame paths', () => {
     assert.equal(fileUrl.sample.route, 'route.ts:7');
   });
 
+  it('reduces virtual schemes around absolute local paths to basenames', async () => {
+    for (const source of [
+      'webpack:///Users/AliceSmith/ClientA/app.js',
+      'webpack://app/./home/deploy/app/route.ts',
+    ]) {
+      const enriched = await enrichDetail({
+        top_in_app_frame: {
+          function: 'handleCheckout',
+          line: 5,
+          source,
+        },
+      });
+      assert.equal(enriched.sample.route.includes('AliceSmith'), false, source);
+      assert.equal(enriched.sample.route.includes('ClientA'), false, source);
+      assert.equal(enriched.sample.route.includes('deploy'), false, source);
+      assert.match(enriched.sample.route, /\.js:5$|\.ts:5$/);
+    }
+  });
+
   it('resolves double-encoded delimiters before redaction', async () => {
     const query = await enrichDetail({
       top_in_app_frame: {

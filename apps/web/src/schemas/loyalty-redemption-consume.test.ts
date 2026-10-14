@@ -13,6 +13,15 @@ describe('loyaltyRedemptionConsumeSchema', () => {
     }
   });
 
+  it('accepts an optional attempt idempotency key', () => {
+    const parsed = loyaltyRedemptionConsumeSchema.safeParse({
+      code: 'RDM-ABC123',
+      idempotency_key: 'attempt-9',
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   it('rejects empty, missing, and non-string codes', () => {
     for (const body of [{ code: '' }, { code: '   ' }, {}, { code: 42 }]) {
       expect(loyaltyRedemptionConsumeSchema.safeParse(body).success).toBe(

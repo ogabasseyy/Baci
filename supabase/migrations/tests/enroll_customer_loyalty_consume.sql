@@ -53,16 +53,19 @@ SELECT pg_temp.assert_true(
   'consume did not mark the manual code used'
 );
 
--- Lost-response retry: a second consume of a manually consumed code
--- replays the receipt (same identity) instead of erroring, so staff
--- can still fulfill after a dropped response.
+-- The first consume above carried no attempt key, so nothing can
+-- prove a later presentation is the same attempt: it reports
+-- already_consumed with the original receipt instead of replaying
+-- success (a repeat fulfillment must never look like a fresh one).
 SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'true'
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'already_consumed'
      AND result ->> 'discount_code' = 'RDM-CONSUME1'
+     AND result ->> 'used_at' IS NOT NULL
    FROM public.consume_loyalty_redemption(
      '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME1'
    ) AS result),
-  'manual consume retry did not replay the receipt'
+  'keyless re-presentation replayed a success receipt'
 );
 
 -- A suspended staff session has no merchant access.
@@ -175,4 +178,46 @@ SELECT pg_temp.assert_true(
    FROM public.consume_loyalty_redemption(
      '01aa0000-0000-4000-8000-000000000001', 'RDM-CASE9') AS result),
   'deleted-reward consume lost the issuance snapshot'
+);
+
+-- Attempt-key binding: the first consume stamps its key, a retry
+-- with the same key replays the success receipt (lost response), and
+-- any other presentation reports already_consumed.
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, reward_id, points_spent, reward_type,
+  discount_code, used, expires_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012',
+  NULL, 50, 'free_product',
+  'RDM-CONSUME6', false, pg_catalog.now() + interval '30 days'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'success')::boolean
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
+     'attempt-key-1'
+   ) AS result)
+  AND (SELECT (result ->> 'success')::boolean
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
+     'attempt-key-1'
+   ) AS result),
+  'same-key retry did not replay the success receipt'
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'already_consumed'
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
+     'attempt-key-2'
+   ) AS result)
+  AND (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'already_consumed'
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6'
+   ) AS result),
+  'different-key or keyless presentation replayed success'
 );

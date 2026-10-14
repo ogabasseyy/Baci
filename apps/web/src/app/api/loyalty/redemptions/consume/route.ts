@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.rpc('consume_loyalty_redemption', {
       p_merchant_id: merchantContext.merchantId,
       p_code: parsed.data.code,
+      p_idempotency_key: parsed.data.idempotency_key ?? null,
     });
 
     if (error) {
@@ -97,6 +98,26 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       if (result.error === 'forbidden') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (result.error === 'already_consumed') {
+        // Explicit reuse signal with the original receipt: staff see
+        // when (and what) was fulfilled instead of a fresh success.
+        return NextResponse.json(
+          {
+            error: 'Redemption already consumed',
+            data: {
+              id: result.redemption_id,
+              discount_code: result.discount_code,
+              reward_type: result.reward_type,
+              reward_id: result.reward_id ?? null,
+              reward_name: result.reward_name ?? null,
+              reward_product_id: result.reward_product_id ?? null,
+              customer_id: result.customer_id,
+              used_at: result.used_at,
+            },
+          },
+          { status: 409 }
+        );
       }
       return NextResponse.json(
         { error: 'Redemption not found or already consumed' },

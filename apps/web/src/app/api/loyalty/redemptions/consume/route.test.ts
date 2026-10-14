@@ -169,6 +169,36 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     expect(rpc).toHaveBeenCalledWith('consume_loyalty_redemption', {
       p_merchant_id: 'merchant-1',
       p_code: 'rdm-abc123',
+      p_idempotency_key: null,
+    });
+  });
+
+  it('forwards the attempt key and returns 409 with the original receipt on reuse', async () => {
+    rpcResult = {
+      success: false,
+      error: 'already_consumed',
+      redemption_id: 'redemption-1',
+      discount_code: 'RDM-ABC123',
+      reward_type: 'free_product',
+      reward_id: 'reward-1',
+      reward_name: 'Free mug',
+      reward_product_id: 'product-1',
+      customer_id: 'customer-1',
+      used_at: '2026-10-13T00:00:00.000Z',
+    };
+
+    const response = await POST(
+      makeRequest({ code: 'RDM-ABC123', idempotency_key: 'attempt-9' })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.error).toBe('Redemption already consumed');
+    expect(json.data.used_at).toBe('2026-10-13T00:00:00.000Z');
+    expect(rpc).toHaveBeenCalledWith('consume_loyalty_redemption', {
+      p_merchant_id: 'merchant-1',
+      p_code: 'RDM-ABC123',
+      p_idempotency_key: 'attempt-9',
     });
   });
 

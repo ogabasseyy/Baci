@@ -16253,7 +16253,11 @@ export type Database = {
         }[];
       };
       consume_loyalty_redemption: {
-        Args: { p_code: string; p_merchant_id: string };
+        Args: {
+          p_code: string;
+          p_idempotency_key?: string;
+          p_merchant_id: string;
+        };
         Returns: Json;
       };
       create_storefront_order_with_loyalty_code: {

@@ -21,6 +21,11 @@ BEGIN
   IF strpos(lower(v_unchecked_def), 'offer_id') = 0 THEN
     RAISE EXCEPTION 'unchecked order entry point lost its offer_id staging';
   END IF;
+  -- The line-integrity patch stages the live offer condition beside the id;
+  -- without it, lines would store a stale submitted condition on live rows.
+  IF strpos(v_unchecked_def, 'offer_condition TEXT') = 0 THEN
+    RAISE EXCEPTION 'unchecked order entry point lost its offer_condition staging';
+  END IF;
 
   SELECT pg_catalog.pg_get_functiondef(p.oid) INTO v_checked_def
   FROM pg_catalog.pg_proc p

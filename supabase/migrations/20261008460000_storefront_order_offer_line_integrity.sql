@@ -69,7 +69,11 @@ BEGIN
   END IF;
 
   -- Reruns and already-patched branches converge without duplicating edits.
-  IF strpos(lower(v_definition), 'offer_condition') > 0 THEN
+  -- The guard matches the exact staging marker this migration introduces,
+  -- not any mention of offer_condition: a replay-variant definition that
+  -- names the column in an unrelated context must still run the patch
+  -- (missing anchors fail closed below) instead of skipping it silently.
+  IF strpos(v_definition, 'offer_condition TEXT') > 0 THEN
     RETURN;
   END IF;
 

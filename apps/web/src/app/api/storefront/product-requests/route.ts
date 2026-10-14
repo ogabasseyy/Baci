@@ -11,7 +11,7 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 // deliberately without host binding: native clients POST to the API host
 // with a body slug, so strict host matching would break them, and a host
 // check cannot stop direct POSTs to the victim host anyway. The RPC admits
-// published merchants only; abuse is bounded by fail-closed budgets
+// published or platform-admin merchants; abuse is bounded by fail-closed budgets
 // (50/merchant/hour, 3/contact/hour, 10/IP/hour). Distributed budget
 // exhaustion and stronger caller signals (CAPTCHA/accounts) are an
 // accepted residual pending owner sign-off, not a per-request control.

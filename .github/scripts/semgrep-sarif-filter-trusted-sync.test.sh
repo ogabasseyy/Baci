@@ -8,7 +8,12 @@ SEC="$ROOT/.github/workflows/security.yml"
 TRIP="$ROOT/.github/workflows/semgrep-tripwire.yml"
 
 # Canonical trusted set. Editing the set requires editing this pin
-# (intended friction: a lockstep shrink of both workflows must fail).
+# (intended friction: an accidental edit to one list but not the
+# others fails). This runs from the PR head, so a deliberate
+# same-diff shrink of both workflows AND this pin would pass —
+# that forgery is PR-controlled like the rest of the signal, with
+# CODEOWNERS review on .github/** as the backstop; a base-owned
+# gate is tracked in #3622.
 CANONICAL=(
   '.github/scripts/muse-review/**'
   '.github/scripts/semgrep-sarif*'

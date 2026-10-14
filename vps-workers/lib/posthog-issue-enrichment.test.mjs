@@ -1,0 +1,109 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { enrichPostHogRemediationCandidate } from './posthog-issue-enrichment.mjs';
+
+const environment = {
+  POSTHOG_REMEDIATION_HOST: 'https://eu.posthog.com',
+  POSTHOG_REMEDIATION_PERSONAL_API_KEY: 'phx_read_only_personal_key',
+  POSTHOG_REMEDIATION_PROJECT_ID: '202711',
+};
+
+const candidate = {
+  category: 'posthog_issue',
+  fingerprint: 'posthog-abc123',
+  occurrences: 4,
+  sample: {
+    issueId: 'posthog-issue-1',
+    message: 'TypeError',
+    route: '(redacted PostHog location)',
+    source: 'posthog',
+  },
+};
+
+describe('PostHog remediation candidate enrichment', () => {
+  it('adds a sanitized frame coordinate and release to the sample', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: (url, options) => {
+        assert.equal(
+          String(url),
+          'https://eu.posthog.com/api/projects/202711/error_tracking/query/issue/'
+        );
+        assert.deepEqual(JSON.parse(options.body), {
+          dateRange: { date_from: '-7d' },
+          filterTestAccounts: true,
+          issueId: 'posthog-issue-1',
+          volumeResolution: 0,
+        });
+        return new Response(
+          JSON.stringify({
+            function: 'handleCheckout',
+            latest_release: { version: '2026.10.1' },
+            top_in_app_frame: {
+              function: 'handleCheckout',
+              in_app: true,
+              line: 42,
+              source: 'apps/web/checkout.py',
+            },
+          })
+        );
+      },
+    });
+
+    assert.equal(
+      enriched.sample.route,
+      'apps/web/checkout.py :: handleCheckout:42'
+    );
+    assert.equal(enriched.sample.release, '2026.10.1');
+    assert.equal(enriched.sample.message, 'TypeError');
+    assert.equal(enriched.fingerprint, 'posthog-abc123');
+  });
+
+  it('keeps the redacted route when the detail has no usable frame', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(JSON.stringify({ latest_release: {} })),
+    });
+
+    assert.equal(enriched.sample.route, '(redacted PostHog location)');
+    assert.equal(enriched.sample.release, undefined);
+  });
+
+  it('rejects an unsafe issue ID before any network request', async () => {
+    await assert.rejects(
+      enrichPostHogRemediationCandidate({
+        candidate: {
+          ...candidate,
+          sample: { ...candidate.sample, issueId: 'alice@example.com' },
+        },
+        env: environment,
+        fetchFn: () => {
+          throw new Error('fetch must not run with an unsafe issue ID');
+        },
+      }),
+      /requires a safe issue ID/
+    );
+  });
+
+  it('reports provider failures without leaking response bodies', async () => {
+    await assert.rejects(
+      enrichPostHogRemediationCandidate({
+        candidate,
+        env: environment,
+        fetchFn: async () => new Response('provider-secret', { status: 403 }),
+      }),
+      /HTTP 403; POSTHOG_REMEDIATION_PERSONAL_API_KEY requires error_tracking:read/
+    );
+    await assert.rejects(
+      enrichPostHogRemediationCandidate({
+        candidate,
+        env: environment,
+        fetchFn: async () => new Response('<html>proxy error</html>'),
+      }),
+      /PostHog error-tracking issue response was invalid JSON/
+    );
+  });
+});

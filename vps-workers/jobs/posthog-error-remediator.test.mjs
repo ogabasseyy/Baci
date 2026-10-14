@@ -21,8 +21,20 @@ describe('PostHog error remediator', () => {
       POSTHOG_REMEDIATION_PROJECT_ID: '202711',
       BACI_POSTHOG_REMEDIATION_ENABLED: '1',
     };
-    const fetchFn = async () =>
-      new Response(
+    const fetchFn = async (url) => {
+      if (String(url).endsWith('/error_tracking/query/issue/')) {
+        return new Response(
+          JSON.stringify({
+            latest_release: { version: '2026.10.1' },
+            top_in_app_frame: {
+              function: 'handleCheckout',
+              line: 42,
+              source: 'apps/web/checkout.py',
+            },
+          })
+        );
+      }
+      return new Response(
         JSON.stringify({
           hasMore: false,
           limit: 100,
@@ -36,6 +48,7 @@ describe('PostHog error remediator', () => {
           ],
         })
       );
+    };
 
     const first = await runPostHogErrorRemediator({
       env,
@@ -52,6 +65,11 @@ describe('PostHog error remediator', () => {
     assert.equal(first.candidates[0].source, 'posthog');
     assert.equal(first.candidates[0].category, 'posthog_issue');
     assert.match(first.candidates[0].caseKey, /^posthog:posthog_issue:/);
+    assert.equal(
+      first.candidates[0].sample.route,
+      'apps/web/checkout.py :: handleCheckout:42'
+    );
+    assert.equal(first.candidates[0].sample.release, '2026.10.1');
     assert.equal(first.actions[0].type, 'prompt_written');
     assert.equal(second.candidates.length, 0);
     assert.deepEqual(

@@ -123,6 +123,46 @@ describe('PostHog remediation candidates', () => {
     assert.equal(candidates[1].lastSeen, '');
   });
 
+  it('judges fractional occurrence aggregates against the repeat threshold', async () => {
+    const candidates = await fetchPostHogRemediationCandidates({
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            hasMore: false,
+            limit: 100,
+            offset: 0,
+            results: [
+              {
+                id: 'fractional',
+                status: 'active',
+                aggregations: { occurrences: 4.5 },
+              },
+              {
+                id: 'below-threshold',
+                status: 'active',
+                aggregations: { occurrences: 1.9 },
+              },
+            ],
+          })
+        ),
+    });
+
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0].sample.issueId, 'fractional');
+    assert.equal(candidates[0].occurrences, 4);
+  });
+
+  it('reports a provider response that is not JSON', async () => {
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: environment,
+        fetchFn: async () => new Response('<html>proxy error</html>'),
+      }),
+      /PostHog error-tracking issues response was invalid JSON/
+    );
+  });
+
   it('does not promote a provider issue identifier that could contain personal data', async () => {
     const candidates = await fetchPostHogRemediationCandidates({
       env: environment,

@@ -4,7 +4,7 @@ const PAGE_SIZE = 100;
 const HARD_MAXIMUM_PAGES = 10;
 // Occurrence counts are measured over this trailing window so the repeat
 // threshold does not depend on the server's default date_from.
-const OCCURRENCE_WINDOW = '-7d';
+export const OCCURRENCE_WINDOW = '-7d';
 
 const boundedString = (value, length) =>
   typeof value === 'string' ? value.trim().slice(0, length) : '';
@@ -19,7 +19,7 @@ const safeProjectId = (value) => {
   return /^[1-9]\d{0,28}$/.test(projectId) ? projectId : '';
 };
 
-const safeIssueId = (value) => {
+export const safeIssueId = (value) => {
   const issueId = boundedString(value, 120);
   return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
 };
@@ -105,7 +105,7 @@ const classifyPostHogIssueName = (value) => {
   return 'PostHog error tracking issue';
 };
 
-function requiredConfiguration(env) {
+export function requiredConfiguration(env) {
   const host = boundedString(env.POSTHOG_REMEDIATION_HOST, 500);
   const token = boundedString(env.POSTHOG_REMEDIATION_PERSONAL_API_KEY, 2_000);
   const projectId = safeProjectId(env.POSTHOG_REMEDIATION_PROJECT_ID);
@@ -144,8 +144,15 @@ function selectCandidates(issues, env, projectId) {
   const minimum = positiveInteger(env.BACI_REMEDIATION_MIN_OCCURRENCES, 2);
   return issues.flatMap((issue) => {
     const issueId = safeIssueId(issue?.id);
-    const occurrences = positiveInteger(issue?.aggregations?.occurrences, 0);
-    if (!issueId || !activeIssue(issue) || occurrences < minimum) {
+    // The provider types occurrences as a float: judge eligibility on the
+    // raw finite count, then floor for integer-only downstream storage.
+    const observedOccurrences = Number(issue?.aggregations?.occurrences);
+    if (
+      !issueId ||
+      !activeIssue(issue) ||
+      !Number.isFinite(observedOccurrences) ||
+      observedOccurrences < minimum
+    ) {
       return [];
     }
 
@@ -158,7 +165,7 @@ function selectCandidates(issues, env, projectId) {
           .slice(0, 16),
         firstSeen: safeTimestamp(issue?.first_seen ?? issue?.firstSeen),
         lastSeen: safeTimestamp(issue?.last_seen ?? issue?.lastSeen),
-        occurrences,
+        occurrences: Math.floor(observedOccurrences),
         sample: {
           issueId,
           message: classifyPostHogIssueName(issue?.name),
@@ -214,7 +221,14 @@ export async function fetchPostHogRemediationCandidates({
       );
     }
 
-    const payload = await response.json();
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error(
+        'PostHog error-tracking issues response was invalid JSON'
+      );
+    }
     if (
       !payload ||
       typeof payload !== 'object' ||

@@ -12,8 +12,10 @@ from the dedicated Sentry project every five minutes. `jobs/posthog-error-remedi
 polls active PostHog Error Tracking issue summaries on a bounded 15-minute
 schedule. The API source copies only a fixed category, stable issue identity,
 timestamps, occurrence count, and an allowlisted exception class or fixed
-keyword bucket; it never copies free-form error text, stack frames,
-event properties, sessions, or users. All workers reserve and persist last-seen
+keyword bucket; each selected candidate is then enriched with a sanitized
+top-frame coordinate and release from the issue-detail action. It never
+copies free-form error text, stack frames, event properties, sessions, or
+users. All workers reserve and persist last-seen
 observations so concurrent cron ticks do not wake Codex twice for the same
 incident.
 

@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
 import { fetchPostHogRemediationCandidates } from '../lib/posthog-error-events.mjs';
+import { enrichPostHogRemediationCandidate } from '../lib/posthog-issue-enrichment.mjs';
 import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.mjs';
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
 
@@ -27,6 +28,7 @@ export function runPostHogErrorRemediator({
 
   return runRemediationWorker({
     autofixRunner,
+    candidateEnricher: enrichPostHogRemediationCandidate,
     candidateLoader,
     env: remediatorEnvironment,
     fetchFn,

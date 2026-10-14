@@ -172,4 +172,25 @@ describe('remediation case candidate normalizer', () => {
     assert.equal(normalized.sample.message, 'TypeError');
     assert.equal(normalized.sample.issueId, 'posthog-issue-1');
   });
+
+  it('drops a non-allowlisted PostHog issueId instead of persisting it', () => {
+    const normalized = createRemediationCaseCandidateNormalizer().normalize({
+      category: 'posthog_issue',
+      fingerprint: 'posthog-hostile',
+      occurrences: 4,
+      sample: {
+        issueId: '../../etc/passwd alice@example.com',
+        message: 'TypeError',
+        source: 'posthog',
+      },
+      source: 'posthog',
+    });
+
+    assert.equal(normalized.source, 'posthog');
+    assert.equal(normalized.sample.issueId, undefined);
+    assert.equal(
+      JSON.stringify(normalized).includes('alice@example.com'),
+      false
+    );
+  });
 });

@@ -4,10 +4,12 @@ import { checkCsrfProtection } from '@/lib/csrf';
 
 const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
+  hashNet: vi.fn((identifier: string) => `net-hash:${identifier}`),
   warn: vi.fn(),
 }));
 vi.mock('@/lib/storefront/server-intake-client', () => ({
   submitStorefrontProductRequest: mocks.submit,
+  hashIntakeCallerNet: mocks.hashNet,
 }));
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -37,6 +39,9 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 }
 beforeEach(() => {
   mocks.submit.mockReset().mockResolvedValue({ error: null });
+  mocks.hashNet
+    .mockReset()
+    .mockImplementation((identifier: string) => `net-hash:${identifier}`);
   mocks.warn.mockReset();
   vi.mocked(checkCsrfProtection).mockReset().mockResolvedValue({ valid: true });
 });
@@ -66,7 +71,74 @@ describe('product request intake', () => {
       p_contact: 'shopper@example.com',
       p_merchant_slug: 'ogabassey',
       p_request_id: input.requestId,
+      p_caller_net_hash: 'net-hash:unknown',
     });
+  });
+  it('binds the durable network budget to the proxy network signal', async () => {
+    const response = await POST(request(input, { 'x-real-ip': '192.0.2.10' }));
+
+    expect(response.status).toBe(200);
+    // The route must hash the same identifier the proxy buckets on, so a
+    // caller cannot spend the proxy budget as one identity and the durable
+    // budget as another. (That the hash leaks no raw IP is covered by the
+    // intake-client HMAC tests with the real implementation.)
+    expect(mocks.hashNet).toHaveBeenCalledWith('192.0.2.10');
+    expect(mocks.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_caller_net_hash: 'net-hash:192.0.2.10',
+      })
+    );
+  });
+  it('derives the same network key for CSRF-verified web callers', async () => {
+    const response = await POST(
+      request(input, {
+        cookie: 'csrf-token=ok',
+        'x-real-ip': '192.0.2.44',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(checkCsrfProtection).toHaveBeenCalledTimes(1);
+    expect(mocks.hashNet).toHaveBeenCalledWith('192.0.2.44');
+    expect(mocks.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_caller_net_hash: 'net-hash:192.0.2.44',
+      })
+    );
+  });
+  it('accepts API-host posts with a body slug regardless of Host (native shape)', async () => {
+    // Native clients POST to the API host with a body slug and no cookies.
+    // There is deliberately no host binding (it cannot stop direct POSTs
+    // to the victim host), so a mismatched Host must not reject.
+    const req = new NextRequest(
+      'https://api.ogabassey.com/api/storefront/product-requests',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: 'api.ogabassey.com',
+        },
+        body: JSON.stringify(input),
+      }
+    );
+
+    const response = await POST(req);
+
+    expect(response.status).toBe(200);
+    expect(mocks.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ p_merchant_slug: 'ogabassey' })
+    );
+  });
+  it('fails closed with 503 when the network-hash helper throws', async () => {
+    mocks.hashNet.mockImplementationOnce(() => {
+      throw new Error('intake key missing');
+    });
+
+    const response = await POST(request(input));
+
+    expect(response.status).toBe(503);
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain('intake key missing');
   });
   it('rejects invalid payloads without touching the database', async () => {
     expect((await POST(request({ ...input, contact: '---' }))).status).toBe(

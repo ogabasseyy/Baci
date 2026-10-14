@@ -435,6 +435,7 @@ jobs:
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/migrations/tests/storefront_product_request_canonical_idempotency.sql
           --sql-check supabase/tests/storefront_product_request_intake.sql
+          --sql-check supabase/migrations/tests/storefront_product_request_net_budget.sql
           --sql-check supabase/migrations/tests/storefront_order_replay_line_identity.sql
           --sql-check supabase/migrations/tests/storefront_order_offer_both_entrypoints.sql
           --sql-check supabase/migrations/tests/storefront_offer_resolution_authority.sql

@@ -2,19 +2,45 @@ import { productRequestSchema } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
+import { getClientIdentifier } from '@/lib/rate-limit';
+import {
+  hashIntakeCallerNet,
+  submitStorefrontProductRequest,
+} from '@/lib/storefront/server-intake-client';
 
-// Public intake uses a restricted NOINHERIT/NOBYPASSRLS role with one RPC
-// grant. The proxy adds the IP gate; the RPC enforces durable contact and
-// merchant budgets. No session authority or service client is used.
-// The body slug selects the recipient merchant (contact-form equivalent),
-// deliberately without host binding: native clients POST to the API host
-// with a body slug, so strict host matching would break them, and a host
-// check cannot stop direct POSTs to the victim host anyway. The RPC admits
-// published or platform-admin merchants; abuse is bounded by fail-closed budgets
-// (50/merchant/hour, 3/contact/hour, 10/IP/hour). Distributed budget
-// exhaustion and stronger caller signals (CAPTCHA/accounts) are an
-// accepted residual pending owner sign-off, not a per-request control.
+// Public intake threat model. This route exercises no session authority: it
+// forwards Zod-validated input to the restricted storefront_intake RPC, so
+// there is no login, cookie, or device signal to bind abuse budgets to —
+// the network origin is the only server-verifiable caller signal, and it
+// is trustworthy only behind an overwriting edge (see getClientIdentifier).
+// Deliberately rejected controls, with bypass reasons:
+// - Host binding (Host merchant must equal body slug): an attacker POSTs
+//   directly to the victim host with the victim slug and passes; a native
+//   fallback path would exempt the attacker too. Theater either way.
+// - Signed storefront context tokens: the issuance endpoint would itself
+//   be public and unauthenticated, so the attacker mints victim-scoped
+//   tokens at will; a token only proves "called issuance first". Binding
+//   issuance to the CSRF cookie fails the same way (double-submit pairs
+//   are self-mintable by fetching any page). Meaningful only under a
+//   scarce issuance signal, which is the actual control, not the token.
+// - Cookie-split sub-budgets ("verified web" vs anon): same self-mintable
+//   issuance flaw; bypassed by the exact target while throttling honest
+//   native users. Previously shipped and reverted for this reason.
+// - CAPTCHA / proof-of-work: the only options that bound DISTRIBUTED
+//   abuse without accounts, but CAPTCHA needs a vendor, UX, and native
+//   SDK work, while enforced PoW breaks currently shipped native clients
+//   (any version-gated grace lets the attacker claim the old version).
+//   Both need owner sign-off; they are not unilateral per-request fixes.
+// What IS enforced, in binding order: the proxy's per-IP sliding window
+// (10/hour across all merchants) binds first while Redis is healthy; the
+// RPC's durable per-(merchant, network-origin) fixed window (10/hour)
+// backstops it across Redis outages and per-instance memory fallbacks,
+// when one IP could otherwise spend the whole merchant budget; the
+// merchant (50/hour) and contact (3/hour) budgets bound total harm.
+// Budgets fail closed (503/429, never silent allow). Residual: callers
+// with many real network origins can still pool the merchant budget
+// (inbox volume plus legit-shopper 429s) — this needs the owner-gated
+// scarce signal above, not another header or cookie check.
 export async function POST(request: NextRequest) {
   // Double-submit CSRF only when the request carries cookies: this route
   // exercises no session or ambient authority (it only forwards Zod-validated
@@ -47,6 +73,10 @@ export async function POST(request: NextRequest) {
       p_contact: parsed.data.contact,
       p_merchant_slug: parsed.data.merchantSlug,
       p_request_id: parsed.data.requestId,
+      // Same network signal the proxy buckets on, HMAC-hashed so raw IPs
+      // never reach the database. The RPC enforces the durable
+      // per-(merchant, origin) budget on this value.
+      p_caller_net_hash: hashIntakeCallerNet(getClientIdentifier(request)),
     });
   } catch {
     // Fail closed (e.g. narrow intake key unprovisioned): never serve

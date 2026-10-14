@@ -3,6 +3,20 @@ import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
 
 describe('createExpoPlugins', () => {
+  it('opts into the UIKit scene lifecycle required by iOS 27 builds', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    expect(plugins).toContainEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ enableSceneSupport: true }),
+      }),
+    ]);
+  });
+
   it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,

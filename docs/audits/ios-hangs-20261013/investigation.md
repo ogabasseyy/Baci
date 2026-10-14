@@ -134,3 +134,63 @@ customer account was used. Temporary entry/package/native files were restored.
 
 No iOS release has been published and no Sentry issue has been marked resolved. A representative physical iOS 16.7 device and a hosted
 provider test session are still needed to verify the original OS/WebKit hangs.
+
+## iOS 27 launch follow-up — 14 October 2026
+
+The follow-up fixes the separate scene-lifecycle launch failure above using
+[Expo's supported SDK 57 opt-in](https://github.com/expo/expo/issues/46664).
+Expo 57.0.23 and expo-build-properties 57.0.20 supply the scene runtime and
+`ios.enableSceneSupport`. The checked-in AppDelegate now provides its React
+factory without creating the window; the scene manifest points at
+`EXExpoAppSceneDelegate`. Existing URL/universal-link callbacks are preserved.
+Expo and its dev client remain aligned across linked mobile packages.
+
+The new ExpoModulesJSI 57.1.2 has upstream retained factories, replacing the old
+constructor patch. The existing EventEmitter concurrency patch is carried onto
+ExpoModulesCore 57.0.21 for the Xcode 26 release runner. The Swift probe always
+compiles both real factories; its negative ownership probe applies only to
+Swift 6.4 and newer, which introduced that diagnostic. CodeRabbit identified
+and verified correction of this toolchain distinction; final review of all
+20 staged files completed with 0 issues.
+
+Exact dependency exceptions preserve the workspace's trust policy. Release
+identity was checked against expo/expo, and available source files were checked
+against those Git blob hashes. Compiled-only CLI packages have release-identity
+verification, not a claim that their compiled output was independently rebuilt.
+[Dependency evidence](expo-scene-dependencies.json) records the scope. Frozen
+pnpm installation passed. Native prebuild generated the scene manifest and
+factory-provider conformance without a custom scene delegate.
+
+- Xcode 27 built and launched the real Debug storefront on iPhone 18 Pro /
+  iOS 27.0. The first build exceeded the tool's 300-second response window while
+  compilation continued. An early retry encountered its database lock; after
+  the original build completed, the incremental build/install/launch passed.
+- The ordinary storefront rendered its real catalog after loading its own Metro
+  server. No LLDB overlay removal or temporary scene adapter was used.
+- A warm `ogabassey://auth/login` link displayed the login screen. Cold native
+  startup succeeded, but a cold ordinary app link in the development client
+  opened its server picker; this is not verification of a bundled Release
+  build's cold authentication link.
+- Simulator input automation inconsistently opened Expo developer tools instead
+  of typing into the selected field. Permission prompts and the developer-menu
+  intro were dismissed through normal UI actions. This follow-up does not claim
+  a passing end-to-end keyboard/autofill test; the earlier component checks and
+  deterministic input regressions remain the relevant keyboard evidence.
+- Updated config/native-peer/JSI regressions passed: 3 suites / 11 tests.
+  Checkout/phone regressions passed again: 3 suites / 29 tests. Scene contracts,
+  retained-factory compilation and EventEmitter contracts passed: 7 tests.
+  The installed gradient composition probe also passed again.
+- The initial parallel monorepo run was interrupted after the admin package
+  failed. Its outdated JSI version guard was updated to the upstream factory
+  release; all three failed admin files then passed (12 tests). The storefront
+  savings timeout passed on rerun. Local prebuild removed the checked-in Facebook
+  build phase; unrelated generated project changes were restored and all ten
+  native ad-config checks passed. Full package checks continue before shipment.
+- Metro-generated route declarations exposed seven existing type errors in hero
+  fixtures and wallet return-link plumbing. Those source files are unchanged by
+  this fix; generated-route checking is distinct from the standard clean-checkout
+  repository typecheck. This task does not claim those declarations are clean.
+
+A native release is required. The PR, exact-head CI/review, App Store Connect
+upload and Apple approval are separate delivery stages; this section records
+local evidence before those stages.

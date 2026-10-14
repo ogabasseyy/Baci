@@ -49,7 +49,7 @@ mobile_storefront:
   - '.github/scripts/verify-ios-expo-jsi-symbols.test.mjs'
   - '.github/scripts/ios-runtime-scheduler.test.mjs'
   - '.github/scripts/verify-ios-expo-core-patch.test.mjs'
-  - 'patches/expo-modules-core@57.0.12.patch'
+  - 'patches/expo-modules-core@57.0.21.patch'
   - '.github/actions/verify-ios-native-patch-contracts/**'
   - '.github/workflows/ios-runtime-scheduler-pr.yml'
   - '.github/workflows/android-storefront-release.yml'

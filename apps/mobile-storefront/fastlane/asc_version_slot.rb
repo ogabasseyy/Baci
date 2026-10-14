@@ -21,6 +21,10 @@ EDITABLE_VERSION_POLL_INTERVAL_SECONDS = 15
 # a usable replacement for a review we are about to withdraw.
 SUBMITTABLE_BUILD_PROCESSING_STATE = "VALID"
 
+# A public version has released the editable slot; set_changelog can create
+# its successor. Keep pending/processing releases blocked.
+PUBLISHED_APP_STORE_VERSION_STATES = %w[READY_FOR_DISTRIBUTION READY_FOR_SALE].freeze
+
 def review_cancellation_allowed?
   %w[1 true yes].include?(ENV["IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT"].to_s.strip.downcase)
 end
@@ -198,6 +202,9 @@ def app_store_version_slot_ready?(app_version:, build_number:)
     end
 
     return true if app.get_edit_app_store_version(platform: platform)
+
+    latest_version = app.get_latest_app_store_version(platform: platform)
+    return true if latest_version && PUBLISHED_APP_STORE_VERSION_STATES.include?(latest_version.app_version_state)
 
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe

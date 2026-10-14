@@ -26,7 +26,9 @@ jobs:
       - name: Probe register evidence window
         id: window
         run: |
-          echo "status=$(python3 vps-workers/baci-editorial-context/register_status.py)" >> "$GITHUB_OUTPUT"
+          # Inner fallback: if the probe itself errors, report broken rather
+          # than an empty status that files no issue at all.
+          echo "status=$(python3 vps-workers/baci-editorial-context/register_status.py || echo broken)" >> "$GITHUB_OUTPUT"
       - name: Assert capability register is inside its evidence window
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'

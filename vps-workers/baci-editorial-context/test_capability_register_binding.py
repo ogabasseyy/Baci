@@ -203,6 +203,18 @@ class CapabilityBindingTests(unittest.TestCase):
             "gate invocation must stay unconditional",
         )
 
+    def test_freshness_probe_falls_back_to_broken(self):
+        # If register_status.py itself errors, the probe must still emit a
+        # routable status instead of an empty one that files no issue.
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-register-freshness.yml"
+        if not workflow.exists():
+            self.skipTest("freshness workflow unavailable")
+        text = workflow.read_text()
+        probe = [line for line in text.splitlines() if "register_status.py" in line]
+        self.assertEqual(len(probe), 1, "probe must invoke register_status.py exactly once")
+        self.assertIn("|| echo broken", probe[0])
+
     def test_register_status_classifies_fresh_stale_broken(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         row = {"id": "x", "title": "X", "claim": "c", "limitations": "l", "status": "code_evidenced", "source_refs": ["cited.txt"]}

@@ -19,6 +19,14 @@
 //   (erased at runtime; typecheck covers them). Mixed imports stay.
 //   Bare side-effect imports (`import './x.css'`) count: stylesheets
 //   change rendering with no `from` edge.
+// - CSS files are traversed for `@import "..."` edges (quote form
+//   only — `url(...)` also matches font/image references, which are
+//   not stylesheets and must not land in the shared set). The edges
+//   are depth-transparent: an `@import` is textual inclusion, so the
+//   imported rules ARE the importer's cascade and inherit its depth
+//   instead of consuming a level. Without this, a depth-2 sheet's
+//   imports would fall outside the bound while still changing
+//   lab-visible layout.
 // - Test/spec files are never seeds and never traversed into: test
 //   changes must not force the smoke suites.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -41,7 +49,7 @@ const PILOT_OWNED_PREFIXES = [
   'apps/web/next.config',
 ];
 
-const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.css'];
 const PROBE_EXTENSIONS = [...SOURCE_EXTENSIONS, '.css', '.json'];
 const TYPE_ONLY_LINE = /^\s*(import|export)\s+type[\s{]/;
 const SPECIFIER =
@@ -142,7 +150,9 @@ export function labSharedClosure({ maxDepth = 2 } = {}) {
     )) {
       const resolved = resolveSpecifier(file, specifier);
       if (resolved && !depth.has(resolved)) {
-        depth.set(resolved, fileDepth + 1);
+        // Depth-transparent CSS edges (see Bounds above): an
+        // `@import` child shares its importer's depth.
+        depth.set(resolved, file.endsWith('.css') ? fileDepth : fileDepth + 1);
         queue.push(resolved);
       }
     }

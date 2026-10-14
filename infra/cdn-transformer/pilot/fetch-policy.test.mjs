@@ -54,6 +54,10 @@ test('denies loopback, private, and link-local fetch destinations', () => {
     '0x7f.0.0.1',
     '0x7f000001',
     '[::ffff:7f00:1]',
+    '[2002:7f00:1::]',
+    '[2002:a00:1::]',
+    '[2002:c0a8:101::]',
+    '[2002:a9fe:a9fe::]',
   ]) {
     assert.throws(
       () => assertPublicFetchUrl(`http://user@${host}:8080/a.png?x=1`),
@@ -76,6 +80,7 @@ test('allows public literals and operator-trusted hostnames', () => {
     '[2001:4860:4860::8888]',
     '[::ffff:8.8.8.8]',
     '[0:0:0:0:0:ffff:808:808]',
+    '[2002:808:808::]',
     '134744072',
     '0xpress.example',
   ]) {

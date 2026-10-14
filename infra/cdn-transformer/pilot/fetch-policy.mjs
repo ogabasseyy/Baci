@@ -118,6 +118,15 @@ export function isDeniedIpLiteral(host) {
       `${(h[6] >>> 8) & 0xff}.${h[6] & 0xff}.${(h[7] >>> 8) & 0xff}.${h[7] & 0xff}`
     );
   }
+  // 6to4 2002::/16: hextets two and three embed the relayed IPv4
+  // address, so judge it with the v4 rules — over a 6to4 route,
+  // 2002:7f00:1:: reaches 127.0.0.1 while matching no prefix below.
+  // Same decode-and-judge shape as the mapped forms above.
+  if (h[0] === 0x2002) {
+    return isDeniedIpLiteral(
+      `${(h[1] >>> 8) & 0xff}.${h[1] & 0xff}.${(h[2] >>> 8) & 0xff}.${h[2] & 0xff}`
+    );
+  }
   const [first, second, third, fourth, fifth, sixth] = h;
   return (
     first === 0 || // 0000::/8 reserved (::, ::1, compat)

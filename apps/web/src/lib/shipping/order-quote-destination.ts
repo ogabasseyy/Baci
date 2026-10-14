@@ -53,30 +53,6 @@ async function lookupCheckoutQuote(
   return { error, quote: quote ?? null };
 }
 
-/**
- * Returns the merchant-scoped quote's carrier when it is a known provider
- * code, else null. Lets order creation persist the quote-derived provider
- * when a quoted checkout omits the redundant `shipping_provider`, so the
- * stored hash and RPC payload carry the carrier fulfillment requires.
- */
-export async function lookupCheckoutQuoteProvider(
-  supabase: SupabaseClient,
-  selectedQuoteId: string,
-  merchantId: string | undefined
-): Promise<string | null> {
-  const { error, quote } = await lookupCheckoutQuote(
-    supabase,
-    selectedQuoteId,
-    merchantId
-  );
-  // A lookup outage must fail closed at the call site: falling back to a
-  // null provider would persist a carrier-less quoted order.
-  if (error) throw error;
-  return quote && isShippingProviderCode(quote.provider)
-    ? quote.provider
-    : null;
-}
-
 export async function enrichShippingAddressWithQuoteDestination(
   supabase: SupabaseClient,
   selectedQuoteId: string | null | undefined,
@@ -84,6 +60,7 @@ export async function enrichShippingAddressWithQuoteDestination(
   context: QuoteCheckoutContext = {}
 ): Promise<OrderShippingAddressForQuote | undefined> {
   if (!selectedQuoteId) {
+    context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
   }
 
@@ -106,15 +83,18 @@ export async function enrichShippingAddressWithQuoteDestination(
     // the order RPC's hash comparison stays authoritative for
     // replay-vs-conflict.
     if (context.isConfirmedReplay) {
+      context.onValidatedQuoteProvider?.(null);
       return shippingAddress;
     }
     if (context.shippingProvider || context.shippingFee !== undefined) {
       throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
     }
+    context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
   }
 
   if (!isShippingProviderCode(quote.provider)) {
+    context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
   }
 
@@ -202,6 +182,7 @@ export async function enrichShippingAddressWithQuoteDestination(
     throw new OrderQuoteDestinationMismatchError();
   }
 
+  context.onValidatedQuoteProvider?.(quote.provider);
   return {
     ...shippingAddress,
     ...(!orderHasPin && quoteHasPin ? quotePin.data : {}),

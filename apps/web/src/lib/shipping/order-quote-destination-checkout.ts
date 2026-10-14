@@ -38,6 +38,12 @@ export type QuoteCheckoutContext = {
   merchantId?: string;
   shippingFee?: number;
   shippingProvider?: ShippingProviderCode | string | null;
+  /**
+   * Receives the validated merchant-scoped quote's carrier (or null when no
+   * usable quote row exists). Lets order creation persist the quote-derived
+   * provider without a second quote lookup.
+   */
+  onValidatedQuoteProvider?: (provider: string | null) => void;
 };
 
 function throwQuoteMismatch(code: string, status = 400): never {

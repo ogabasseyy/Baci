@@ -128,6 +128,30 @@ export async function prepareCheckoutIdempotencyReplay({
       checkoutRequestHash = alternateHash;
       break;
     }
+    // A retry can also add delivery metadata the original lacked: probe the
+    // legacy (metadata-stripped) form of each alternate so a
+    // derived-provider/no-metadata original still replays. Like the base
+    // legacy probe, adoption requires a stored match, so a new request can
+    // never opt itself into the pre-metadata form.
+    const legacyAlternateHash = hashOrderIdempotencyPayload(
+      buildLegacyOrderIdempotencyPayload(alternatePayload)
+    );
+    if (
+      legacyAlternateHash === alternateHash ||
+      legacyAlternateHash === checkoutRequestHash
+    )
+      continue;
+    const legacyAlternateStored = await isStoredCheckoutRequestHash({
+      failureMessage: 'Legacy alternate checkout request hash probe failed',
+      merchantId,
+      requestHash: legacyAlternateHash,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (legacyAlternateStored) {
+      checkoutRequestHash = legacyAlternateHash;
+      break;
+    }
   }
 
   // Delivery metadata was added after the first storefront idempotency hash.

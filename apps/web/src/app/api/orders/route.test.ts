@@ -4348,6 +4348,14 @@ describe('POST /api/orders — selected shipping quote validation', () => {
         p_shipping_provider: 'TOPSHIP',
       })
     );
+    // The validated quote's carrier is reused from enrichment: deriving it
+    // must not cost another quote lookup. Two remain: enrichment itself and
+    // the airport-delivery classification probe.
+    expect(
+      supabase.rpc.mock.calls.filter(
+        ([name]) => name === 'get_checkout_shipping_quote'
+      )
+    ).toHaveLength(2);
   });
 
   it('rejects selected GIGL international quotes with stale product shipping metadata', async () => {

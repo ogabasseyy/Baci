@@ -33,6 +33,7 @@ import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { resolveEffectiveCheckoutShippingProvider } from '@/lib/checkout/resolve-effective-checkout-shipping-provider';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -86,10 +87,8 @@ import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-or
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
 import {
   enrichShippingAddressWithQuoteDestination,
-  lookupCheckoutQuoteProvider,
   OrderQuoteDestinationMismatchError,
 } from '@/lib/shipping/order-quote-destination';
-import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
@@ -1396,6 +1395,10 @@ export async function POST(request: NextRequest) {
           })
         : false;
     let shippingAddressForOrder: OrderCreateInput['shipping_address'];
+    // A quoted checkout may omit the redundant provider: capture the
+    // merchant-scoped quote's validated carrier here so the hash and RPC
+    // payload below carry it with a single quote lookup.
+    let validatedQuoteProvider: string | null = null;
     try {
       shippingAddressForOrder = await enrichShippingAddressWithQuoteDestination(
         supabase,
@@ -1406,6 +1409,9 @@ export async function POST(request: NextRequest) {
           isNewOrder: !isIdempotentOrderReplay || isConfirmedQuoteReplay,
           items: quoteValidationItems,
           merchantId: body.merchant_id,
+          onValidatedQuoteProvider: (provider) => {
+            validatedQuoteProvider = provider;
+          },
           shippingFee:
             (isIdempotentLocalAirportReplay || isIdempotentOrderReplay) &&
             !isConfirmedQuoteReplay
@@ -1426,37 +1432,6 @@ export async function POST(request: NextRequest) {
         );
       }
       throw error;
-    }
-    // A quoted checkout may omit the redundant provider: validation already
-    // accepted the merchant-scoped quote as authoritative, so carry its
-    // carrier into the hash and RPC payload. Otherwise the stored order has
-    // a quote but no carrier and fulfillment rejects it. A lookup failure
-    // fails closed: persisting a null provider would poison fulfillment.
-    let effectiveShippingProvider = resolvedShippingProvider;
-    let omittedProviderUnresolved = false;
-    if (
-      !isMerchantRateOrder &&
-      !body.shipping_provider &&
-      resolvedSelectedQuoteId
-    ) {
-      let quoteProvider: string | null;
-      try {
-        quoteProvider = await lookupCheckoutQuoteProvider(
-          supabase,
-          resolvedSelectedQuoteId,
-          body.merchant_id
-        );
-      } catch {
-        return NextResponse.json(
-          {
-            error:
-              'Unable to verify the selected shipping quote. Please try again.',
-          },
-          { status: 500 }
-        );
-      }
-      if (quoteProvider) effectiveShippingProvider = quoteProvider;
-      else omittedProviderUnresolved = true;
     }
     // Capture the post-enrichment destination before Nigerian state repair so
     // the idempotency hash below stays byte-compatible with orders created
@@ -2031,24 +2006,34 @@ export async function POST(request: NextRequest) {
             // classify this quote-less order as quoted and drop its pin
             // from the hash, replaying the first destination on retry.
             selected_quote_id: resolvedSelectedQuoteId,
-            shipping_provider: effectiveShippingProvider,
+            // Patched to the effective provider below: a quoted checkout
+            // may omit the redundant provider, in which case the validated
+            // carrier captured during enrichment is authoritative. Without
+            // it the stored order has a quote but no carrier and
+            // fulfillment rejects it.
+            shipping_provider: null,
             shipping_rate_id: body.shipping_rate_id,
             tax_amount: orderTaxAmount,
           }
         : null;
-    // The quote row may be cleaned up between the first attempt (hashed
-    // with the derived provider) and a same-key retry (derivation now
-    // unresolvable). Probe each provider hash so the retry replays the
-    // original order instead of conflicting.
+    // When the quote row was cleaned up before a confirmed retry, the
+    // provider is unresolvable here; per-provider alternates let the
+    // replay probe the original hash instead of conflicting.
+    const { alternatePayloads, effectiveShippingProvider } =
+      resolveEffectiveCheckoutShippingProvider({
+        idempotencyPayload,
+        isMerchantRateOrder,
+        requestedShippingProvider: body.shipping_provider,
+        resolvedSelectedQuoteId,
+        resolvedShippingProvider,
+        validatedQuoteProvider,
+      });
+    if (idempotencyPayload) {
+      idempotencyPayload.shipping_provider = effectiveShippingProvider;
+    }
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({
-        alternatePayloads:
-          omittedProviderUnresolved && idempotencyPayload
-            ? SHIPPING_PROVIDER_CODES.map((code) => ({
-                ...idempotencyPayload,
-                shipping_provider: code,
-              }))
-            : undefined,
+        alternatePayloads,
         canonicalAirportType,
         canonicalDeliveryMethod,
         merchantId: merchant_id,

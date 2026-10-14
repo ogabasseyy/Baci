@@ -80,7 +80,7 @@ const classifyPostHogIssueName = (value) => {
   if (/\bcrash\b|\bfatal\b|application not responding|\banr\b/i.test(name)) {
     return 'Native crash';
   }
-  if (/out of memory|\bheap\b|allocation failure/i.test(name)) {
+  if (/out of memory|javascript heap|allocation failure/i.test(name)) {
     return 'Out of memory';
   }
   if (/timed? ?out|deadline exceeded|ETIMEDOUT/i.test(name)) {
@@ -195,6 +195,11 @@ export async function fetchPostHogRemediationCandidates({
     }
     if (typeof payload.hasMore !== 'boolean') {
       throw new Error('PostHog error-tracking issues response omitted hasMore');
+    }
+    if (payload.results.length > PAGE_SIZE) {
+      throw new Error(
+        `PostHog error-tracking issues response exceeded the ${PAGE_SIZE}-issue page size`
+      );
     }
     issues.push(...payload.results);
 

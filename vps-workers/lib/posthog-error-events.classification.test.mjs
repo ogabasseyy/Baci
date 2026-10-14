@@ -60,6 +60,18 @@ describe('PostHog issue-name classification', () => {
                 aggregations: { occurrences: 4 },
                 name: 'HeapifyError: sort failed',
               },
+              {
+                id: 'heap-warning',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'Failure in heap snapshot upload',
+              },
+              {
+                id: 'real-oom',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'JavaScript heap out of memory',
+              },
             ],
           })
         ),
@@ -67,7 +79,7 @@ describe('PostHog issue-name classification', () => {
 
     assert.deepEqual(
       candidates.map((candidate) => candidate.sample.message),
-      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue']
+      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'Out of memory']
     );
     assert.equal(
       JSON.stringify(candidates).includes('AliceSmithError'),

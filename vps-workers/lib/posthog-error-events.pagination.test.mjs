@@ -108,4 +108,26 @@ describe('PostHog remediation candidate pagination', () => {
     );
     assert.equal(requests, 10);
   });
+
+  it('fails closed when a page exceeds the requested page size', async () => {
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: environment,
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              hasMore: false,
+              limit: 100,
+              offset: 0,
+              results: Array.from({ length: 101 }, (_, index) => ({
+                id: `issue-${index}`,
+                status: 'active',
+                aggregations: { occurrences: 2 },
+              })),
+            })
+          ),
+      }),
+      /exceeded the 100-issue page size/
+    );
+  });
 });

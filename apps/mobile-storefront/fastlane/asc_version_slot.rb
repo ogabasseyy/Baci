@@ -211,7 +211,14 @@ def app_store_version_slot_ready?(app_version:, build_number:)
 
     return true if app.get_edit_app_store_version(platform: platform)
 
-    return true if latest_app_store_version_published?(app, platform)
+    if latest_app_store_version_published?(app, platform)
+      # set_changelog cannot infer a successor when there is no editable version.
+      if app_version.to_s.strip.empty?
+        UI.important("No editable App Store version exists; specify app_version and build_number to create its successor. Skipping submission.")
+        return false
+      end
+      return true
+    end
 
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe

@@ -100,18 +100,27 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # tree (the boot gate trusts the stash — unset or correct the
 # preset). Empty leftover dirs pass silently and unrelated strays
 # (.DS_Store, renamed leftovers) warn. RUNTIME boots split by
-# finding: filler drift still refuses (a same-tree build already
-# passed these bytes, so drift means post-build tamper — restore
+# finding: fillers/ NEVER quarantines — any finding there (hash
+# drift, staged shape, confinement break, stray merchant file)
+# refuses WITHOUT moving, because the directory holds COMMITTED
+# fixtures and quarantining the entry would delete tracked files
+# from the deployment and break later lab boots. A same-tree build
+# already passed these bytes, so a finding means post-build tamper
+# (the lab never stages into fillers/): restore
 # public/__pilot/fillers from version control or re-pin the
-# fixture), while staged-content and confinement findings move the
-# offending entry to __pilot-quarantine/ beside public/ (timestamped,
-# same filesystem — symlinked entries move as links, un-traversed)
-# and continue with the tree clean, so a leftover stage neither
-# bricks the production boot nor stays served. To restore a
-# quarantined entry after investigating: move it back under
-# public/__pilot/ (lab on) or re-run pilot:stage; remove the vault
-# when done. Three runtime cases stay fatal: a failed quarantine
-# (read-only tree — serving unverified bytes is not an option), an
+# fixture, then restart. Staged-content and confinement findings
+# elsewhere move the offending entry to __pilot-quarantine/ beside
+# public/ (timestamped, same filesystem — symlinked entries move
+# as links, un-traversed) and continue with the tree clean, so a
+# leftover stage neither bricks the production boot nor stays
+# served. To restore a quarantined entry after investigating: move
+# it back under public/__pilot/ (lab on) or re-run pilot:stage;
+# remove the vault when done. Three runtime cases stay fatal: a
+# failed quarantine (read-only/immutable tree — the bytes cannot
+# move AND must not serve, so warn-and-continue is not an option;
+# a staged tree on a read-only mount means the image baked staged
+# content past the build gate: rebuild the image without
+# public/__pilot content, or mount a writable tree), an
 # unverifiable tree (symlinked or unreadable __pilot root), and an
 # unchecked boot under pilot intent ('refusing an unchecked boot':
 # no checkable app tree at all while pilot env was configured).

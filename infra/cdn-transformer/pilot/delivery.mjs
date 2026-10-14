@@ -102,6 +102,18 @@ export function decideTierDelivery({ rung, source }) {
       width: source.orientedWidth,
     };
   }
+  if (rung.quality === null) {
+    // Fail closed: the rescue marker is only legitimate on a
+    // compatible source (the encoder gates the rescue on
+    // compatibility). An incompatible null-quality rung would
+    // otherwise fall through to 'generated' or
+    // 'generated-over-source' with no encode quality, violating
+    // the manifest contract the schema enforces downstream.
+    throw new PilotDeliveryError(
+      'bad-request',
+      'null-quality rungs must dispose as original-passthrough'
+    );
+  }
   if (rung.bytes <= source.bytes) {
     return { ...rung, delivery: 'generated' };
   }

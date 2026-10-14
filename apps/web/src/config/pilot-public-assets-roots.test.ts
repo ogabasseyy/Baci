@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  assertNoUnboundStagedContent,
   resolvePilotPublicDir,
   resolveRoutePublicDir,
 } from './pilot-public-assets-roots';
@@ -129,6 +130,41 @@ describe('resolveRoutePublicDir', () => {
     } finally {
       rmSync(logical, { force: true, recursive: true });
       rmSync(physical, { force: true, recursive: true });
+    }
+  });
+});
+
+describe('assertNoUnboundStagedContent', () => {
+  it('passes an absent, empty, or fillers-only tree', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-public-unbound-'));
+    try {
+      expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
+      mkdirSync(join(dir, '__pilot'), { recursive: true });
+      expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
+      mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
+      expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+  it.each([
+    'originals',
+    'b'.repeat(64),
+    'notes.txt',
+  ])('refuses boot with unbound %s present', (entry) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-public-unbound-'));
+    try {
+      mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
+      if (entry.includes('.')) {
+        writeFileSync(join(dir, '__pilot', entry), 'stray');
+      } else {
+        mkdirSync(join(dir, '__pilot', entry), { recursive: true });
+      }
+      expect(() => assertNoUnboundStagedContent(dir)).toThrow(
+        /failed to initialize with 1 unbound entry/
+      );
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
     }
   });
 });

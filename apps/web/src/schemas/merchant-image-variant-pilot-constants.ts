@@ -4,7 +4,7 @@
 // imports here: pure constants only.
 export const PILOT_SCHEMA_VERSION = 1;
 export const PILOT_POLICY_VERSION = 1;
-export const PILOT_RECIPE_ID = 'pilot-r2-a1323f0dc00f1ecb';
+export const PILOT_RECIPE_ID = 'pilot-r2-7d207bbbac68d8ba';
 export const PILOT_MAX_JOBS = 20;
 // Mirror of MAX_DECODED_PIXELS in
 // infra/cdn-transformer/pilot/constants.mjs. Pinned by the shared

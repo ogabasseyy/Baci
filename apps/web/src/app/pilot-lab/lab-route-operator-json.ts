@@ -24,9 +24,19 @@ export async function readBoundedOperatorJson(path: string): Promise<string> {
   }
   const handle = await open(
     path,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
   );
   try {
+    // Verify the opened handle itself: a FIFO swapped in after the
+    // lstat would otherwise block the read loop below indefinitely,
+    // and O_NOFOLLOW permits FIFOs. O_NONBLOCK keeps the open from
+    // hanging; the fstat rejects the swap before any byte is read.
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new Error(
+        `merchant image pilot: ${basename(path)} is not a regular file`
+      );
+    }
     // Chunked loop instead of one budget-sized alloc: frozen operator
     // JSON is KBs, so every read pays for what it consumes (plus one
     // 64 KiB scratch chunk) rather than 8 MiB upfront — while a huge

@@ -165,7 +165,11 @@ export async function buildQualitySheet({
     if (!parsed.ok) {
       throw new PilotSheetError('stored manifest is invalid');
     }
-    await assertSnapshotSource(snapshot.bytes, manifest.source, record.assetId);
+    const snapshotSize = await assertSnapshotSource(
+      snapshot.bytes,
+      manifest.source,
+      record.assetId
+    );
     for (const tier of manifest.tiers) {
       await assertTierDecodedDimensions(tier, files, record.assetId);
     }
@@ -197,6 +201,7 @@ export async function buildQualitySheet({
         record,
         requestedWidth,
         snapshotBytes: snapshot.bytes,
+        snapshotWidth: snapshotSize.width,
         tiers,
       });
       embeddedBytes += rung.embeddedBytes;

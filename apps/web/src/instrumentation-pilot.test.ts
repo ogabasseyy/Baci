@@ -14,7 +14,9 @@ vi.mock('@/config/pilot-public-assets', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/config/pilot-public-assets')>()),
   assertPilotPublicAssets: assertPilotPublicAssetsMock,
 }));
+const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
 vi.mock('@/config/pilot-public-assets-roots', () => ({
+  assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
   resolvePilotPublicDir: resolvePilotPublicDirMock,
 }));
 vi.mock('@/app/pilot-lab/lab-route', () => ({
@@ -23,10 +25,6 @@ vi.mock('@/app/pilot-lab/lab-route', () => ({
 const assertNoUnexpectedStagedFilesMock = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
   assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
-}));
-const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
-vi.mock('@/config/pilot-public-assets-triage', () => ({
-  assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
 }));
 const assertUnanchoredPublicTreesMock = vi.hoisted(() => vi.fn());
 vi.mock('@/config/pilot-public-assets-unanchored', () => ({

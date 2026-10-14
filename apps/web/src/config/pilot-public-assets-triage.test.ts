@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  linkSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -11,7 +13,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNonLabFillers,
-  assertNoUnboundStagedContent,
+  readGuardedFillerBytes,
 } from './pilot-public-assets-triage';
 
 const PINNED_NAMES = [
@@ -136,29 +138,40 @@ describe('assertNonLabFillers', () => {
   });
 });
 
-describe('assertNoUnboundStagedContent', () => {
-  it('passes an absent, empty, or fillers-only tree', () => {
+describe('readGuardedFillerBytes', () => {
+  it('reads a regular single-link file', () => {
     const dir = root();
-    expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
-    mkdirSync(join(dir, '__pilot'), { recursive: true });
-    expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
-    mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
-    expect(() => assertNoUnboundStagedContent(dir)).not.toThrow();
+    writeFileSync(join(dir, 'a.png'), 'bytes');
+    expect(
+      readGuardedFillerBytes(join(dir, 'a.png'), 'non-lab public pilot tree')
+    ).toEqual(Buffer.from('bytes'));
   });
-  it.each([
-    'originals',
-    'b'.repeat(64),
-    'notes.txt',
-  ])('refuses boot with unbound %s present', (entry) => {
+  it('refuses a symlink without following it', () => {
     const dir = root();
-    mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
-    if (entry.includes('.')) {
-      writeFileSync(join(dir, '__pilot', entry), 'stray');
-    } else {
-      mkdirSync(join(dir, '__pilot', entry), { recursive: true });
+    writeFileSync(join(dir, 'outside.txt'), 'not yours');
+    symlinkSync(join(dir, 'outside.txt'), join(dir, 'a.png'));
+    expect(() =>
+      readGuardedFillerBytes(join(dir, 'a.png'), 'non-lab public pilot tree')
+    ).toThrow(/contains an unapproved filler/);
+  });
+  it('refuses a FIFO without hanging', () => {
+    // O_NONBLOCK keeps the open from blocking; fstat then rejects the
+    // non-file. mkfifo exists only on POSIX.
+    if (process.platform === 'win32') {
+      return;
     }
-    expect(() => assertNoUnboundStagedContent(dir)).toThrow(
-      /failed to initialize with 1 unbound entry/
-    );
+    const dir = root();
+    execFileSync('mkfifo', [join(dir, 'a.png')]);
+    expect(() =>
+      readGuardedFillerBytes(join(dir, 'a.png'), 'non-lab public pilot tree')
+    ).toThrow(/contains an unapproved filler/);
+  });
+  it('refuses a multi-linked file', () => {
+    const dir = root();
+    writeFileSync(join(dir, 'a.png'), 'bytes');
+    linkSync(join(dir, 'a.png'), join(dir, 'mirror.png'));
+    expect(() =>
+      readGuardedFillerBytes(join(dir, 'a.png'), 'non-lab public pilot tree')
+    ).toThrow(/contains a hardlinked filler/);
   });
 });

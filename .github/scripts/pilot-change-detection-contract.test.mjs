@@ -49,6 +49,38 @@ test('gate-only changes set pilot=true', async () => {
   }
 });
 
+test('shared lab-rendered modules set pilot=true', async () => {
+  // The lab renders through these production modules (layout,
+  // hero/mobile, url helpers): a shared-only PR changes lab
+  // rendering/hydration exactly as a pilot-tree PR does, so the
+  // codec/transformer suites must run. Optimized-image/seo-utils are
+  // comment mentions only, not lab imports, and stay excluded.
+  const pattern = await pilotPattern();
+  const shared = [
+    'apps/web/src/app/(storefront)/storefront-eager-full-css-layout.tsx',
+    'apps/web/src/app/(storefront)/storefront-eager-full-css-layout.test.tsx',
+    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-image-config.ts',
+    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-carousel.tsx',
+    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-geometry.ts',
+    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-controls-skeleton.tsx',
+    'apps/web/src/components/storefront/ogabassey/components/LaunchCarousel.tsx',
+    'apps/web/src/lib/product-url.ts',
+    'apps/web/src/lib/product-url.test.ts',
+    'apps/web/src/lib/products.ts',
+    'apps/web/src/lib/ogabassey-image-fallback-loader.ts',
+  ];
+  for (const name of shared) {
+    assert.equal(detected(pattern, [name]), true, name);
+  }
+  assert.equal(
+    detected(pattern, [
+      'apps/web/src/components/storefront/ogabassey/components/hero-mobile-carousel-autoplay.test.tsx',
+      'apps/web/src/lib/products-server.ts',
+    ]),
+    false
+  );
+});
+
 test('core pilot paths still set pilot=true', async () => {
   const pattern = await pilotPattern();
   const core = [

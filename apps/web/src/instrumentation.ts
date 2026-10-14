@@ -142,7 +142,7 @@ export async function register() {
           throw error;
         }
         const { assertNoUnboundStagedContent } = await import(
-          '@/config/pilot-public-assets-triage'
+          '@/config/pilot-public-assets-roots'
         );
         assertNoUnboundStagedContent(pilotPublicDir);
       }

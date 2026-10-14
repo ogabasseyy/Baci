@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 // Runtime public-dir resolution, shared by the build gate (next.config.ts)
@@ -107,4 +107,27 @@ export function resolvePilotPublicDir(): string {
     throw error;
   }
   return anchored;
+}
+
+// Init-failure twin of the inventory binding check: lab runtime
+// initialization failed, so no stagedPaths exist to bind against — but
+// Next still serves public/__pilot statically. Any entry other than
+// the synthetic fillers is unbound servable content and refuses boot;
+// a fillers-only (or absent/empty) tree keeps the fail-loud behavior,
+// since nothing merchant is served. The shape gate already ran before
+// init, so this is a coarse content check, not a re-validation.
+export function assertNoUnboundStagedContent(publicDir: string): void {
+  const root = join(publicDir, '__pilot');
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return;
+  }
+  const unbound = entries.filter((entry) => entry !== 'fillers');
+  if (unbound.length > 0) {
+    throw new Error(
+      `merchant image pilot: lab runtime failed to initialize with ${unbound.length} unbound ${unbound.length === 1 ? 'entry' : 'entries'} under __pilot; refusing to serve unverified bytes — fix the initialization error above, re-run pnpm pilot:stage, or remove the staged tree`
+    );
+  }
 }

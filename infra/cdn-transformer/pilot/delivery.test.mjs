@@ -62,6 +62,24 @@ test('null-quality rescue marker disposes as passthrough at equal bytes', () => 
   assert.equal(decided.quality, null);
 });
 
+test('null-quality rung on an incompatible source fails closed', () => {
+  // No legitimate producer emits this shape (the encoder gates
+  // the rescue on compatibility): without the guard the
+  // smaller-bytes case would classify as 'generated' and the
+  // larger-bytes case as 'generated-over-source', both carrying
+  // null quality in violation of the manifest contract.
+  for (const bytes of [PNG_SOURCE.bytes - 1, PNG_SOURCE.bytes + 1]) {
+    assert.throws(
+      () =>
+        decideTierDelivery({
+          rung: rung({ bytes, quality: null }),
+          source: PNG_SOURCE,
+        }),
+      /must dispose as original-passthrough/
+    );
+  }
+});
+
 test('beneficial PNG rung keeps the generated derivative', () => {
   const decided = decideTierDelivery({
     rung: rung({

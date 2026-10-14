@@ -5,13 +5,57 @@
 // modes or in degraded lab boot.
 import { createHash } from 'node:crypto';
 import {
+  closeSync,
+  existsSync,
+  constants as fsConstants,
+  fstatSync,
   lstatSync,
+  openSync,
   readdirSync,
-  readFileSync,
+  readSync,
   realpathSync,
   type Stats,
 } from 'node:fs';
 import { extname, join, sep } from 'node:path';
+
+// Reads one filler through a no-follow descriptor: O_NOFOLLOW refuses
+// links at open, O_NONBLOCK keeps a FIFO open from hanging, fstat
+// rejects non-files and multi-linked inodes, and the read is bounded
+// by the verified size. Failures surface curated messages, never raw
+// errnos. Shared by lab pinning and the non-lab drift read.
+export function readGuardedFillerBytes(path: string, tree: string): Buffer {
+  let fd: number;
+  try {
+    fd = openSync(
+      path,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
+    );
+  } catch {
+    throw new Error(`${tree} contains an unapproved filler`);
+  }
+  try {
+    const stat = fstatSync(fd);
+    // Multi-linked inodes let an outside writer mutate served bytes.
+    if (stat.nlink > 1) {
+      throw new Error(`${tree} contains a hardlinked filler`);
+    }
+    if (!stat.isFile() || stat.size > 2_000_000) {
+      throw new Error(`${tree} contains an unapproved filler`);
+    }
+    const bytes = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < stat.size) {
+      const read = readSync(fd, bytes, offset, stat.size - offset, null);
+      if (read === 0) {
+        break;
+      }
+      offset += read;
+    }
+    return offset === stat.size ? bytes : bytes.subarray(0, offset);
+  } finally {
+    closeSync(fd);
+  }
+}
 
 export function assertConfinedEntry(
   root: string,
@@ -217,17 +261,16 @@ export function assertNonLabFillers(
       strays += 1;
     }
   }
-  // Plain read (not the pinned-fd reader): a TOCTOU here only skews a
-  // warning, never a safety decision — and warn-only is the point.
+  // Guarded descriptor read: a plain read would follow a swap-in
+  // after the confinement walk (FIFO block, out-of-tree hash).
+  // Missing fixtures skip (partial sets pass); present-but-unopenable
+  // refuses — the walk already cleared this directory.
   for (const [file, expected] of Object.entries(pinnedFillers)) {
-    let digest: string;
-    try {
-      digest = createHash('sha256')
-        .update(readFileSync(join(dir, file)))
-        .digest('hex');
-    } catch {
-      continue;
-    }
+    const full = join(dir, file);
+    if (!existsSync(full)) continue;
+    const digest = createHash('sha256')
+      .update(readGuardedFillerBytes(full, 'non-lab public pilot tree'))
+      .digest('hex');
     if (digest !== expected) {
       const message =
         `non-lab public pilot tree filler "${file}" does not match the pinned hash; ` +
@@ -248,29 +291,6 @@ export function assertNonLabFillers(
   if (strays > 0) {
     console.warn(
       `non-lab public pilot tree holds ${strays} stray file(s) under "${name}" (no staged-merchant shapes); continuing — remove them or ignore`
-    );
-  }
-}
-
-// Init-failure twin of the inventory binding check: lab runtime
-// initialization failed, so no stagedPaths exist to bind against — but
-// Next still serves public/__pilot statically. Any entry other than
-// the synthetic fillers is unbound servable content and refuses boot;
-// a fillers-only (or absent/empty) tree keeps the fail-loud behavior,
-// since nothing merchant is served. The shape gate already ran before
-// init, so this is a coarse content check, not a re-validation.
-export function assertNoUnboundStagedContent(publicDir: string): void {
-  const root = join(publicDir, '__pilot');
-  let entries: string[];
-  try {
-    entries = readdirSync(root);
-  } catch {
-    return;
-  }
-  const unbound = entries.filter((entry) => entry !== 'fillers');
-  if (unbound.length > 0) {
-    throw new Error(
-      `merchant image pilot: lab runtime failed to initialize with ${unbound.length} unbound ${unbound.length === 1 ? 'entry' : 'entries'} under __pilot; refusing to serve unverified bytes — fix the initialization error above, re-run pnpm pilot:stage, or remove the staged tree`
     );
   }
 }

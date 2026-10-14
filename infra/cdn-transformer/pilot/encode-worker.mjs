@@ -13,6 +13,7 @@ import {
   MAX_AXIS_PIXELS,
   MAX_DECODED_PIXELS,
   MAX_ENCODED_BYTES,
+  RESAMPLE_PIPELINE,
 } from './constants.mjs';
 import {
   normalizeFormat,
@@ -165,10 +166,19 @@ export async function handleEncodeOp(op, io = {}) {
   }
   const accepted = assertAcceptedMetadata(meta);
   const oriented = { height: accepted.orientedHeight, width: accepted.orientedWidth };
-  const pipeline = sharpBuffer(inputBytes)
-    .rotate()
-    .resize({ kernel: sharp.kernel.lanczos3, withoutEnlargement: true, width: op.width })
-    .toColorspace('srgb');
+  // Resample decisions come from the shared recipe constant (and its
+  // canonical identity): changing the pipeline retires the recipe.
+  const pipeline = sharpBuffer(inputBytes);
+  if (RESAMPLE_PIPELINE.orient === 'auto') {
+    pipeline.rotate();
+  }
+  pipeline
+    .resize({
+      kernel: sharp.kernel[RESAMPLE_PIPELINE.kernel],
+      withoutEnlargement: RESAMPLE_PIPELINE.withoutEnlargement,
+      width: op.width,
+    })
+    .toColorspace(RESAMPLE_PIPELINE.colorspace);
   if (op.format === 'avif') {
     pipeline.avif({ effort: ENCODER_OPTIONS.avif.effort, quality: op.quality });
   } else {

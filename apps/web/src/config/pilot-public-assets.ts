@@ -1,21 +1,12 @@
 import { createHash } from 'node:crypto';
-import {
-  closeSync,
-  constants as fsConstants,
-  fstatSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readSync,
-  renameSync,
-} from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
 import {
   assertConfinedEntry,
   assertNonLabEntry,
   assertNonLabFillers,
+  readGuardedFillerBytes,
 } from './pilot-public-assets-triage';
 
 // Only these committed synthetic fixtures may exist in a non-lab public
@@ -63,53 +54,6 @@ function quarantinePilotEntry(
   return target;
 }
 
-// Reads one filler through a no-follow descriptor: lstat-then-readFile
-// would follow a same-dir replacement (large file, symlink, FIFO)
-// swapped in after the check — exhausting memory, hashing
-// out-of-tree bytes, or blocking the boot. Every validation reads the
-// descriptor whose identity was verified: O_NOFOLLOW refuses links at
-// open (ELOOP), O_NONBLOCK keeps a FIFO open from hanging, fstat
-// rejects non-files and multi-linked inodes before any read, and the
-// read itself is bounded by the verified size. Mid-read growth cannot
-// overflow (bounded) and mid-read shrink fails the hash below. Open
-// failures surface as the curated unapproved message, never a raw
-// path-leaking errno.
-function readPinnedFillerBytes(path: string): Buffer {
-  let fd: number;
-  try {
-    fd = openSync(
-      path,
-      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
-    );
-  } catch {
-    throw new Error('lab public pilot tree contains an unapproved filler');
-  }
-  try {
-    const stat = fstatSync(fd);
-    // A hardlink lets an outside writer mutate the served bytes after
-    // the check: same nlink>1 multi-link rejection as the
-    // generation/original guard.
-    if (stat.nlink > 1) {
-      throw new Error('lab public pilot tree contains a hardlinked filler');
-    }
-    if (!stat.isFile() || stat.size > 2_000_000) {
-      throw new Error('lab public pilot tree contains an unapproved filler');
-    }
-    const bytes = Buffer.alloc(stat.size);
-    let offset = 0;
-    while (offset < stat.size) {
-      const read = readSync(fd, bytes, offset, stat.size - offset, null);
-      if (read === 0) {
-        break;
-      }
-      offset += read;
-    }
-    return offset === stat.size ? bytes : bytes.subarray(0, offset);
-  } finally {
-    closeSync(fd);
-  }
-}
-
 // Pinned filler entries for request-time re-verification: the lab
 // renders these sibling-card images on every page, so a mid-measurement
 // edit (landing between control and pilot captures) would corrupt the
@@ -140,7 +84,9 @@ function assertFillers(fillersDir: string): void {
       throw new Error('lab public pilot tree contains an unapproved filler');
     }
     const digest = createHash('sha256')
-      .update(readPinnedFillerBytes(join(fillersDir, file)))
+      .update(
+        readGuardedFillerBytes(join(fillersDir, file), 'lab public pilot tree')
+      )
       .digest('hex');
     if (digest !== expected) {
       throw new Error('lab public pilot tree contains an unapproved filler');
@@ -216,12 +162,17 @@ export function assertPilotPublicAssets(
       try {
         target = quarantinePilotEntry(publicDir, root, name);
       } catch (quarantineError) {
+        // Fail-closed and LOUD: the bytes cannot move (read-only or
+        // immutable tree) and must not serve, so the boot refuses
+        // with recovery guidance instead of warn-and-serving. A stale
+        // tree on a read-only mount means the image baked staged
+        // content past the build gate — rebuild it clean.
         throw new Error(
           `${message}; automatic quarantine failed (${
             quarantineError instanceof Error
               ? quarantineError.message
               : String(quarantineError)
-          }) — refusing to serve unverified bytes`
+          }) — refusing to serve unverified bytes; rebuild the image without public/__pilot content or mount a writable tree`
         );
       }
       console.warn(
@@ -233,17 +184,19 @@ export function assertPilotPublicAssets(
   for (const name of readdirSync(root)) {
     // Fillers triage runs in both modes: full hash pinning in lab;
     // non-lab confines plus merchant-shape scans, with the pinned
-    // fixture names passing only when their bytes still match (drift
-    // refuses in both build and runtime boots). Content findings
-    // quarantine-and-continue at runtime so a recompressed fixture or
-    // leftover file can never take down an unrelated production boot.
+    // fixture names passing only when their bytes still match. Unlike
+    // every other entry, fillers/ NEVER downgrades: it holds COMMITTED
+    // fixtures, so any finding here (staged shape, confinement break,
+    // drift) refuses without moving anything — quarantining the entry
+    // would delete tracked fixtures from the deployment. The lab never
+    // stages into fillers/, so a finding is a drift-equivalent tamper
+    // signal, not operator-state hygiene (which is what quarantine is
+    // for). Strays and partial sets still pass — only findings refuse.
     if (name === 'fillers') {
       if (labEnabled) {
         assertFillers(join(root, name));
       } else {
-        downgrade(name, () =>
-          assertNonLabFillers(root, name, FILLERS, fillerDrift)
-        );
+        assertNonLabFillers(root, name, FILLERS, fillerDrift);
       }
       sawFillers = true;
       continue;

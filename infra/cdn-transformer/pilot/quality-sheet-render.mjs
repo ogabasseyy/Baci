@@ -2,6 +2,7 @@
 // tier cells. Orchestration (generation lookup, sheet assembly, CLI)
 // stays in quality-sheet.mjs, which re-exports PilotSheetError.
 import sharp from 'sharp';
+import { RESAMPLE_PIPELINE } from './constants.mjs';
 import {
   normalizeFormat,
   orientedDimensions,
@@ -64,6 +65,10 @@ export async function assertSnapshotSource(snapshotBytes, source, assetId) {
       `snapshot for asset "${assetId}" decodes as ${oriented.width}x${oriented.height} but the manifest claims ${source.orientedWidth}x${source.orientedHeight}`
     );
   }
+  // Return the verified oriented size: callers must cap arithmetic by
+  // THIS, never by the record's width/height labels (unvalidated
+  // inventory metadata — only safe escaped into captions).
+  return { height: oriented.height, width: oriented.width };
 }
 
 // Bind each tier's claimed geometry to its verified bytes before
@@ -106,8 +111,12 @@ export function tierCells(tier, display, crop, boxWidth) {
   // display carries the inspection raster bytes plus their MIME (PNG
   // resamples, not the raw tier bytes): the caption keeps the tier's
   // ENCODED facts (format, width, quality, bytes, hash) as provenance
-  // while the image shows what each DPR screen samples.
+  // while the image shows what each DPR screen samples, and the
+  // raster width records this candidate's own pixel density (each
+  // candidate caps independently by its physical width — never by a
+  // narrower sibling rung-mate).
   const dataUri = `data:${display.contentType};base64,${display.bytes.toString('base64')}`;
+  const rasterNote = ` · ${display.width}px raster${display.capped ? ' · encoded-pixel ceiling' : ''}`;
   // height:auto keeps the aspect ratio at the row width: without it the
   // browser stretches the tier to height=. Every tier renders at the
   // slot CSS width like the original — DPR changes the raster's pixel
@@ -126,7 +135,7 @@ export function tierCells(tier, display, crop, boxWidth) {
     crop === null
       ? `width:${boxWidth}px;height:auto`
       : `width:${boxWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
-  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · ${qualityNote} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · ${qualityNote} · ${tier.bytes} B${rasterNote}${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
 }
 
 // Explicit DPR rows per rung: the design spec requires inspection at
@@ -138,13 +147,26 @@ const DPR_LEVELS = [1, 2, 3];
 
 const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
 
-// Inspection raster: the verified bytes resampled to the DPR width as
-// lossless PNG (no second lossy encode to judge — the tier's own
-// codec artifacts are baked into its pixels and survive the
-// downsample). Inputs are already hash-bound verified buffers, so no
+// Inspection raster: the verified bytes auto-oriented (EXIF 5-8
+// sources would otherwise resize the stored axes and emit a PNG that
+// no longer carries the correction — a differently rotated review
+// than the browser shows) and resampled to the DPR width as lossless
+// PNG (no second lossy encode to judge — the tier's own codec
+// artifacts are baked into its pixels and survive the downsample).
+// Inputs are already hash-bound verified buffers, so no
 // re-verification here; the caller charges the raster bytes.
 async function resampleForInspection(bytes, rasterWidth) {
-  return sharp(bytes).resize({ width: rasterWidth }).png().toBuffer();
+  // Kernel+orient shared with the generation pipeline (recipe
+  // identity): review pixels match browser orientation. No upscale
+  // clamp — raster widths are capped at the physical width upstream.
+  const pipeline = sharp(bytes);
+  if (RESAMPLE_PIPELINE.orient === 'auto') {
+    pipeline.rotate();
+  }
+  return pipeline
+    .resize({ kernel: sharp.kernel[RESAMPLE_PIPELINE.kernel], width: rasterWidth })
+    .png()
+    .toBuffer();
 }
 
 // One rung's DPR rows plus their exact embed cost, so the caller can
@@ -159,38 +181,43 @@ export async function buildRungRows({
   record,
   requestedWidth,
   snapshotBytes,
+  snapshotWidth,
   tiers,
 }) {
-  const encodedFloor = Math.min(...tiers.map((tier) => tier.width));
   let embeddedBytes = 0;
   const rows = [];
   for (const dpr of DPR_LEVELS) {
-    const rasterWidth = Math.min(geometry.cssWidth * dpr, encodedFloor);
-    const capped = rasterWidth < geometry.cssWidth * dpr;
+    // Per-candidate caps: the original caps by the VERIFIED oriented
+    // snapshot width (never the record label) and each tier by its
+    // verified width, so a narrow sibling never thins a wide
+    // candidate's inspection — and nothing ever upscales.
+    const dprWidth = geometry.cssWidth * dpr;
+    const originalWidth = Math.min(dprWidth, snapshotWidth);
     const originalRaster = await resampleForInspection(
       snapshotBytes,
-      rasterWidth
+      originalWidth
     );
     const originalUri = `data:image/png;base64,${originalRaster.toString('base64')}`;
     embeddedBytes += 'data:image/png;base64,'.length + base64Length(originalRaster.length);
     const tierCellsHtml = [];
     for (const tier of tiers) {
+      const tierWidth = Math.min(dprWidth, tier.width);
       const raster = await resampleForInspection(
         files.get(tier.path),
-        rasterWidth
+        tierWidth
       );
       embeddedBytes += 'data:image/png;base64,'.length + base64Length(raster.length);
       tierCellsHtml.push(
-        `<td>${tierCells(tier, { bytes: raster, contentType: 'image/png' }, crop, geometry.cssWidth)}</td>`
+        `<td>${tierCells(tier, { bytes: raster, capped: tierWidth < dprWidth, contentType: 'image/png', width: tierWidth }, crop, geometry.cssWidth)}</td>`
       );
     }
-    const ceilingNote = capped ? ' · encoded-pixel ceiling' : '';
+    const ceilingNote = originalWidth < dprWidth ? ' · encoded-pixel ceiling' : '';
     const originalStyle =
       crop === null
         ? `width:${geometry.cssWidth}px`
         : `width:${geometry.cssWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
     rows.push(`<tr><td>${requestedWidth}px tier · DPR ${dpr}</td>
-<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original resampled to ${rasterWidth}px, shown at ${geometry.cssWidth}px"/><figcaption>original · ${snapshotBytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${geometry.cssWidth}px CSS · DPR ${dpr} (${rasterWidth}px inspection raster${ceilingNote})${mountNote}</figcaption></figure></td>
+<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original resampled to ${originalWidth}px, shown at ${geometry.cssWidth}px"/><figcaption>original · ${snapshotBytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${geometry.cssWidth}px CSS · DPR ${dpr} (${originalWidth}px inspection raster${ceilingNote})${mountNote}</figcaption></figure></td>
 ${tierCellsHtml.join('\n')}</tr>`);
   }
   return { embeddedBytes, html: rows.join('\n') };

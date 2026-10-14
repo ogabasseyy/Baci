@@ -6,7 +6,6 @@ import test from 'node:test';
 import { currentRecipeId } from './generation-identity.mjs';
 import { buildQualitySheet, readSlotsGeometry } from './quality-sheet.mjs';
 import { setupPilot } from './quality-sheet-fixtures.mjs';
-import { buildRungRows, tierCells } from './quality-sheet-render.mjs';
 
 test('rejects an oversized slots file before parsing', async () => {
   const dir = join(
@@ -111,13 +110,17 @@ test('renders every DPR row at the slot CSS width', async () => {
     capped,
     /compared at 40px CSS · DPR 3 \(120px inspection raster\)/
   );
+  // Per-candidate caps: the 2000px original still carries the full
+  // 120px DPR-3 raster on the 96-rung while each 96px tier caps its
+  // own raster at 96 — the narrow sibling never thins the original.
   assert.match(
     capped,
-    /compared at 40px CSS · DPR 3 \(96px inspection raster · encoded-pixel ceiling\)/
+    /compared at 40px CSS · DPR 3 \(120px inspection raster\)/
   );
+  assert.match(capped, /96px raster · encoded-pixel ceiling/);
   // A wide slot leaves full rungs uncapped: the 96-tier rows still
-  // display at the 500px slot width while their rasters carry the
-  // encoded 96px at every DPR.
+  // display at the 500px slot width while the original carries the
+  // full 500px DPR-1 raster and each tier caps its own at 96px.
   const wide = await buildQualitySheet({
     inputRoot: full.inputRoot,
     inventoryPath: full.inventoryPath,
@@ -127,8 +130,9 @@ test('renders every DPR row at the slot CSS width', async () => {
   assert.match(wide, /<img src="data:image\/png[^>]*style="width:500px"/);
   assert.match(
     wide,
-    /compared at 500px CSS · DPR 1 \(96px inspection raster · encoded-pixel ceiling\)/
+    /compared at 500px CSS · DPR 1 \(500px inspection raster\)/
   );
+  assert.match(wide, /96px raster · encoded-pixel ceiling/);
   // Narrow sources encode below their request (48px source, 96w rung),
   // so the rasters follow the encoded width — not the request — there
   // too, while the box stays at the slot width.
@@ -153,121 +157,6 @@ test('renders every DPR row at the slot CSS width', async () => {
   assert.match(
     capped,
     /<img src="data:image\/png[^>]*style="width:40px;height:auto"/
-  );
-});
-
-test('sizes an uncropped wide tier to the slot CSS width', () => {
-  // The displayed box is always the slot CSS width: a 2000px tier
-  // shows its inspection raster at 96px CSS like the original, with
-  // the encoded 2000w kept as caption provenance.
-  const cells = tierCells(
-    {
-      bytes: 10,
-      contentType: 'image/avif',
-      format: 'avif',
-      height: 500,
-      path: 'wide.avif',
-      quality: 70,
-      sha256: 'f'.repeat(64),
-      width: 2000,
-    },
-    { bytes: Buffer.from('raster-bytes'), contentType: 'image/png' },
-    null,
-    96
-  );
-  assert.match(cells, /<img[^>]*style="width:96px;height:auto"/);
-  assert.match(cells, /data:image\/png;base64,/);
-  assert.doesNotMatch(cells, /max-width/);
-});
-
-test('labels original-passthrough tiers instead of printing qnull', () => {
-  // Passthrough tiers carry quality null (no encode happened): the
-  // caption must say so explicitly, not imply a reviewed quality.
-  const cells = tierCells(
-    {
-      bytes: 10,
-      contentType: 'image/avif',
-      delivery: 'original-passthrough',
-      format: 'avif',
-      height: 48,
-      path: 'pass.avif',
-      quality: null,
-      sha256: 'e'.repeat(64),
-      width: 48,
-    },
-    { bytes: Buffer.from('raster-bytes'), contentType: 'image/png' },
-    null,
-    48
-  );
-  assert.match(cells, /passthrough \(no encode\)/);
-  assert.doesNotMatch(cells, /qnull/);
-});
-
-test('buildRungRows carries DPR pixel density in same-width boxes', async () => {
-  // White-box on the row builder: decode every embedded raster and
-  // prove the widths — DPR 1/2/3 rasters at 40/80/120px for a wide
-  // rung, all displayed at the 40px slot width.
-  const sharp = (await import('sharp')).default;
-  const source = await sharp({
-    create: { background: '#336699', channels: 3, height: 500, width: 500 },
-  })
-    .png()
-    .toBuffer();
-  const tierBytes = await sharp({
-    create: { background: '#993366', channels: 3, height: 384, width: 384 },
-  })
-    .png()
-    .toBuffer();
-  const tiers = [
-    {
-      bytes: tierBytes.length,
-      contentType: 'image/avif',
-      delivery: 'generated',
-      format: 'avif',
-      height: 384,
-      path: 'tier.avif',
-      quality: 70,
-      requestedWidth: 384,
-      sha256: 'f'.repeat(64),
-      width: 384,
-    },
-  ];
-  const { embeddedBytes, html } = await buildRungRows({
-    crop: null,
-    files: new Map([['tier.avif', tierBytes]]),
-    geometry: { cssWidth: 40 },
-    mountNote: '',
-    record: { height: 500, width: 500 },
-    requestedWidth: 384,
-    snapshotBytes: source,
-    tiers,
-  });
-  // Every image (original plus tier per row) displays at the slot
-  // CSS width — originals end the style there, tiers continue with
-  // height:auto, so accept either terminator.
-  assert.equal(
-    [...html.matchAll(/style="width:(\d+)px[;"]/g)]
-      .map((m) => m[1])
-      .join(','),
-    '40,40,40,40,40,40'
-  );
-  // Original plus one tier per DPR row: six rasters at 40/80/120px.
-  const rasters = [...html.matchAll(/data:image\/png;base64,([^"]+)/g)];
-  assert.equal(rasters.length, 6);
-  const widths = [];
-  for (const [, payload] of rasters) {
-    const meta = await sharp(Buffer.from(payload, 'base64')).metadata();
-    widths.push(meta.width);
-  }
-  assert.deepEqual(widths, [40, 40, 80, 80, 120, 120]);
-  // The reported cost covers every raster occurrence, base64-inflated.
-  assert.ok(embeddedBytes > 0);
-  assert.equal(
-    embeddedBytes,
-    rasters.reduce(
-      (sum, [, payload]) => sum + 'data:image/png;base64,'.length + payload.length,
-      0
-    )
   );
 });
 

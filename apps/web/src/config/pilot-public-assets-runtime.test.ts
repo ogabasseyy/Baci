@@ -115,7 +115,10 @@ describe('non-lab runtime severities and quarantine', () => {
       existsSync(join(dir, '__pilot', 'fillers', 'grid-filler-600x400-a.png'))
     ).toBe(true);
   });
-  it('refuses a staged merchant file hiding under fillers at build, quarantines at runtime', () => {
+  it('refuses a staged merchant file hiding under fillers at build and runtime', () => {
+    // fillers/ never downgrades: it holds COMMITTED fixtures, so the
+    // runtime refuses without moving anything (quarantining the entry
+    // would delete tracked fixtures from the deployment).
     const dir = root();
     cpSync(
       join(process.cwd(), 'public/__pilot/fillers'),
@@ -129,16 +132,19 @@ describe('non-lab runtime severities and quarantine', () => {
     expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
       /staged merchant pilot assets/
     );
-    const text = withWarnings(() => {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    });
-    expect(text).toMatch(/staged merchant pilot assets/);
-    // Per-entry granularity: the whole fillers entry moves (operator
-    // restores the committed fixtures from version control).
-    expect(existsSync(join(dir, '__pilot', 'fillers'))).toBe(false);
-    expect(quarantined(dir, 'fillers')).toBe(true);
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /staged merchant pilot assets/
+    );
+    // Nothing moved: committed fixtures stay in place for the
+    // operator to inspect and restore from version control.
+    expect(
+      existsSync(join(dir, '__pilot', 'fillers', 'grid-filler-600x400-a.png'))
+    ).toBe(true);
+    expect(existsSync(join(dir, '__pilot', 'fillers', 'merchant.png'))).toBe(
+      true
+    );
   });
-  it('refuses a symlinked fillers entry at build, quarantines at runtime', () => {
+  it('refuses a symlinked fillers entry at build and runtime', () => {
     const dir = root();
     mkdirSync(join(dir, '__pilot'), { recursive: true });
     mkdirSync(join(dir, 'outside'), { recursive: true });
@@ -146,18 +152,15 @@ describe('non-lab runtime severities and quarantine', () => {
     expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
       /not a confined directory/
     );
-    const text = withWarnings(() => {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    });
-    expect(text).toMatch(/not a confined directory/);
-    expect(existsSync(join(dir, '__pilot', 'fillers'))).toBe(false);
-    expect(quarantined(dir, 'fillers')).toBe(true);
-    // rename moves the link itself: the vault holds a symlink (still
-    // pointing outside) and the target is untouched.
-    const link = quarantineTarget(dir, 'fillers');
-    expect(lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(link)).toBe(join(dir, 'outside'));
-    expect(existsSync(join(dir, 'outside'))).toBe(true);
+    expect(() => assertPilotPublicAssets(dir, false)).toThrow(
+      /not a confined directory/
+    );
+    expect(lstatSync(join(dir, '__pilot', 'fillers')).isSymbolicLink()).toBe(
+      true
+    );
+    expect(readlinkSync(join(dir, '__pilot', 'fillers'))).toBe(
+      join(dir, 'outside')
+    );
   });
 
   it('refuses renamed and nested staging at build, quarantines at runtime', () => {
@@ -214,6 +217,11 @@ describe('non-lab runtime severities and quarantine', () => {
     });
     expect(text).toMatch(/is a symlink/);
     expect(quarantined(dir, 'evil')).toBe(true);
+    // The quarantined entry is the link itself, un-traversed: moving
+    // it must not resolve or copy the outside target into the vault.
+    const target = quarantineTarget(dir, 'evil');
+    expect(lstatSync(target).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(target)).toBe(join(dir, 'outside.txt'));
     expect(existsSync(join(dir, '__pilot', 'evil'))).toBe(false);
     // The link target is outside the tree: quarantining the link
     // leaves it alone.

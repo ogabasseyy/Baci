@@ -128,7 +128,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
     });
     it('cascades recovery previews with the owning order and merchant', () => {
       const output = asActor(
-        `SELECT count(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'private.customer_checkout_shipping_recovery_previews'::pg_catalog.regclass AND confupdtype = 'c';`
+        `SELECT count(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'private.customer_checkout_shipping_recovery_previews'::pg_catalog.regclass AND confdeltype = 'c';`
       );
       expect(output.trim().split('\n').at(-1)?.trim()).toBe('2');
     });

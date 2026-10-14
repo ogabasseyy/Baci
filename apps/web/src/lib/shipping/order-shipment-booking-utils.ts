@@ -212,6 +212,7 @@ export function toQuoteComparableOrderItems(
       name?: string | null;
       quantity?: number | null;
       price?: number | string | null;
+      fulfillment_data?: unknown;
       length?: number | string | null;
       width?: number | string | null;
       height?: number | string | null;
@@ -235,10 +236,19 @@ export function toQuoteComparableOrderItems(
         width: record.width,
         height: record.height,
       });
+    // Compare the units booking will actually send: after a partial refund
+    // finishes reconciliation, only surviving units remain shippable, so the
+    // saved quote must cover those — not refunded units. Fully refunded lines
+    // resolve to zero and are dropped here, mirroring the send path.
+    const quantity = survivingShipmentQuantity({
+      fulfillment_data: record.fulfillment_data,
+      quantity: record.quantity ?? null,
+    });
+    if (quantity <= 0) return [];
     return [
       {
         name: record.name ?? null,
-        quantity: record.quantity ?? null,
+        quantity,
         price: record.price,
         weight: quotedShipmentItemWeight(record) ?? options.defaultWeight,
         ...(dimensions ?? {}),

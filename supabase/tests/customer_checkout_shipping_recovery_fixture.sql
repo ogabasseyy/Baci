@@ -9,7 +9,7 @@ CREATE TABLE public.products (
 CREATE TABLE public.order_items (
   id uuid PRIMARY KEY, order_id uuid REFERENCES public.orders(id),
   product_id uuid REFERENCES public.products(id), name text,
-  quantity integer, price numeric
+  quantity integer, price numeric, fulfillment_data jsonb
 );
 UPDATE public.orders SET shipping_provider='GIGL', shipping_fee=110,
   payment_method='card', customer_name='Test Customer', customer_phone='08000000000',

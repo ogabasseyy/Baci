@@ -13,15 +13,13 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
-import { checkoutRecoveryStreetAddress } from '@/lib/shipping/checkout-recovery-street-address';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
 import { prepareCheckoutShippingRecovery } from '@/lib/shipping/prepare-checkout-shipping-recovery';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
+import { resolveRecoveryQuoteReceiver } from '@/lib/shipping/resolve-recovery-quote-receiver';
 import type { ShippingQuote } from '@/lib/shipping/types';
-import {
-  shippingCheckoutRecoverySchema,
-  shippingRecoveryContextSchema,
-} from '@/schemas/shipping-checkout-recovery';
+import { shippingCheckoutRecoverySchema } from '@/schemas/shipping-checkout-recovery';
+import { shippingRecoveryContextSchema } from '@/schemas/shipping-checkout-recovery-context';
 
 function failure(error: { message?: string; code?: string } | null) {
   const message = error?.message ?? '';
@@ -114,16 +112,8 @@ export async function POST(
     !hasPermission(access, 'orders', 'edit')
   )
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  if (parsed.data.action === 'preview') {
-    const recoveryCountry = parsed.data.receiver.countryCode
-      ?.trim()
-      .toUpperCase();
-    if (recoveryCountry && recoveryCountry !== 'NG')
-      return NextResponse.json(
-        { error: 'This recovery supports Nigerian destinations only.' },
-        { status: 400 }
-      );
-  }
+  // Nigeria scope and legacy postal normalization run after access: auth
+  // failures stay 403 even for foreign destinations.
   const supabase = auth.supabase;
   if (parsed.data.action === 'confirm') {
     const { data, error } = await supabase.rpc(
@@ -148,13 +138,27 @@ export async function POST(
   );
   if (error) return failure(error);
   const context = shippingRecoveryContextSchema.safeParse(data);
+  if (!context.success) return failure(null);
+  // A context row for another order or merchant means the caller is probing
+  // outside its access scope: fail closed with 403, not a generic error.
   if (
-    !context.success ||
     context.data.order.id !== id ||
     context.data.order.merchant_id !== access.merchantId
   )
-    return failure(null);
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { order, fingerprint, quote_preference: preference } = context.data;
+  const resolvedReceiver =
+    parsed.data.action === 'preview'
+      ? resolveRecoveryQuoteReceiver(
+          parsed.data.receiver,
+          order.shipping_address
+        )
+      : null;
+  if (resolvedReceiver && 'error' in resolvedReceiver)
+    return NextResponse.json(
+      { error: resolvedReceiver.error },
+      { status: 400 }
+    );
   if (preference?.is_station_pickup)
     return NextResponse.json(
       {
@@ -190,14 +194,9 @@ export async function POST(
     { ...order, order_items: mapAdminOrderGiglQuoteItems(shippableItems) },
     sender.sender,
     async () => productLookup,
-    {
-      ...parsed.data.receiver,
-      address: checkoutRecoveryStreetAddress(
-        parsed.data.receiver.address,
-        parsed.data.receiver.city,
-        parsed.data.receiver.state
-      ),
-    }
+    resolvedReceiver && 'override' in resolvedReceiver
+      ? resolvedReceiver.override
+      : { ...parsed.data.receiver }
   );
   if (!built.ok)
     return NextResponse.json(

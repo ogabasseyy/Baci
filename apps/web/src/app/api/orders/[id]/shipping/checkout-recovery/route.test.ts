@@ -2,6 +2,16 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertQuoteReceiverMatchesOrder } from '@/lib/shipping/international-quote-order-guard';
 import { POST } from './route';
+import {
+  recoveryContext as context,
+  recoveryMerchantId as merchantId,
+  recoveryOrderId as orderId,
+  primeRecoveryMocks,
+  recoveryQuote as quote,
+  recoveryQuoteId as quoteId,
+  recoveryReceiver as receiver,
+  postRecovery as request,
+} from './route.test-support';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -28,107 +38,10 @@ vi.mock('@/lib/shipping', () => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getSupabaseServiceRoleKey: () => 's'.repeat(32) }));
-const orderId = '40000000-0000-4000-8000-000000000001';
-const merchantId = '10000000-0000-4000-8000-000000000001';
-const quoteId = '70000000-0000-4000-8000-000000000001';
-const receiver = {
-  address: '12 Test Street',
-  city: 'Ikeja',
-  state: 'Lagos',
-  phone: '08000000000',
-  latitude: 6.6018,
-  longitude: 3.3515,
-};
-const context = {
-  fingerprint: 'a'.repeat(64),
-  quote_preference: {
-    service_tier: 'standard',
-    carrier_name: 'GIG Logistics',
-    provider_rate_id: 'gigl:1',
-    is_station_pickup: false,
-  },
-  order: {
-    id: orderId,
-    merchant_id: merchantId,
-    customer_name: 'Test Customer',
-    customer_email: null,
-    customer_phone: '08000000000',
-    shipping_address: {
-      address: '12 Test Street',
-      city: 'Ikeja',
-      state: 'Lagos',
-    },
-    shipping_fee: 110,
-    order_items: [
-      {
-        name: 'Phone',
-        quantity: 1,
-        fulfillment_quantity: 1,
-        price: 1000,
-        product_id: '50000000-0000-4000-8000-000000000001',
-        product: {
-          weight_value: 1,
-          weight_unit: 'kg',
-          dimensions: null,
-          commodity_code: null,
-        },
-      },
-    ],
-  },
-};
-const quote = {
-  id: quoteId,
-  provider: 'GIGL',
-  serviceTier: 'standard',
-  carrierName: 'GIG Logistics',
-  displayName: 'GIG standard',
-  price: 110,
-  currency: 'NGN',
-  estimatedDays: 2,
-  pickupIncluded: true,
-  insuranceIncluded: true,
-  expiresAt: new Date(Date.now() + 3600000),
-  providerRateId: 'gigl:1',
-  providerCost: 100,
-  platformMargin: 10,
-  marginBasisPoints: 1000,
-  pricingVersion: 'gigl_platform_margin_v1',
-  rawResponse: { credential: 'private-provider-body' },
-};
-function request(body: unknown = { action: 'preview', receiver }) {
-  return POST(
-    new NextRequest(
-      `https://usebaci.com/api/orders/${orderId}/shipping/checkout-recovery`,
-      { method: 'POST', body: JSON.stringify(body) }
-    ),
-    { params: Promise.resolve({ id: orderId }) }
-  );
-}
 describe('paid checkout shipping recovery route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.auth.mockResolvedValue({
-      user: { id: 'owner' },
-      supabase: { rpc: mocks.rpc },
-    });
-    mocks.csrf.mockResolvedValue({ valid: true });
-    mocks.access.mockResolvedValue({ isOwner: true, merchantId });
-    mocks.permission.mockReturnValue(true);
-    mocks.sender.mockResolvedValue({
-      ok: true,
-      sender: {
-        ...receiver,
-        name: 'Merchant',
-        country: 'Nigeria',
-        countryCode: 'NG',
-      },
-    });
-    mocks.quotes.mockResolvedValue([quote]);
-    mocks.rpc.mockImplementation(async (name: string) =>
-      name === 'get_customer_checkout_shipping_recovery_context'
-        ? { data: context, error: null }
-        : { data: quoteId, error: null }
-    );
+    primeRecoveryMocks(mocks);
   });
   it('requires authentication before quoting', async () => {
     mocks.auth.mockResolvedValue({ user: null });
@@ -194,68 +107,6 @@ describe('paid checkout shipping recovery route', () => {
     );
     expect(response.status).toBe(400);
     expect(mocks.access).not.toHaveBeenCalled();
-  });
-  it('quotes only surviving units after partial refunds', async () => {
-    mocks.rpc.mockResolvedValueOnce({
-      data: {
-        ...context,
-        order: {
-          ...context.order,
-          order_items: [
-            {
-              ...context.order.order_items[0],
-              quantity: 2,
-              fulfillment_quantity: 0,
-            },
-            {
-              ...context.order.order_items[0],
-              quantity: 3,
-              fulfillment_quantity: 1,
-            },
-          ],
-        },
-      },
-      error: null,
-    });
-    const response = await request();
-    expect(response.status).toBe(200);
-    expect(mocks.quotes).toHaveBeenCalledTimes(1);
-    const quoted = mocks.quotes.mock.calls[0][1] as {
-      items: { quantity: number }[];
-    };
-    expect(quoted.items.map((item) => item.quantity)).toEqual([1]);
-  });
-  it('maps staging rejections to a structured JSON error', async () => {
-    mocks.rpc.mockImplementation(async (name: string) => {
-      if (name === 'get_customer_checkout_shipping_recovery_context')
-        return { data: context, error: null };
-      throw new Error('rate rpc failed');
-    });
-    const response = await request();
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Unable to recover this shipping quote. Please try again.',
-    });
-  });
-  it('rejects recovery when no shippable units remain', async () => {
-    mocks.rpc.mockResolvedValueOnce({
-      data: {
-        ...context,
-        order: {
-          ...context.order,
-          order_items: [
-            { ...context.order.order_items[0], fulfillment_quantity: 0 },
-          ],
-        },
-      },
-      error: null,
-    });
-    const response = await request();
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'No shippable units remain on this order.',
-    });
-    expect(mocks.quotes).not.toHaveBeenCalled();
   });
   it('requires CSRF protection', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
@@ -331,54 +182,49 @@ describe('paid checkout shipping recovery route', () => {
       },
       error: null,
     });
-    expect((await request()).status).toBe(500);
+    const response = await request();
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Forbidden',
+    });
     expect(mocks.quotes).not.toHaveBeenCalled();
   });
-  it('requires separate explicit confirmation, with no carrier call', async () => {
-    mocks.rpc.mockResolvedValue({
-      data: { quoteId, confirmed: true },
-      error: null,
-    });
+  it('rejects manual pins outside Nigeria without a country code', async () => {
     const response = await request({
-      action: 'confirm',
-      previewId: quoteId,
-      confirmDestination: true,
+      action: 'preview',
+      receiver: { ...receiver, latitude: 40.7128, longitude: -74.006 },
     });
-    expect(await response.json()).toEqual({ quoteId, confirmed: true });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error:
+        'Manual pins must fall within Nigeria. Search for the address to attach its country.',
+    });
     expect(mocks.quotes).not.toHaveBeenCalled();
-    expect(mocks.rpc).toHaveBeenCalledWith(
-      'confirm_customer_checkout_shipping_recovery',
-      {
-        p_order_id: orderId,
-        p_preview_id: quoteId,
-        p_confirm_destination: true,
-      }
+  });
+  it('carries a legacy snake_case postal code into the quote receiver', async () => {
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'get_customer_checkout_shipping_recovery_context'
+        ? {
+            data: {
+              ...context,
+              order: {
+                ...context.order,
+                shipping_address: {
+                  ...context.order.shipping_address,
+                  postal_code: '100001',
+                },
+              },
+            },
+            error: null,
+          }
+        : { data: quoteId, error: null }
     );
-  });
-  it('refuses missing confirmation', async () => {
-    expect(
-      (
-        await request({
-          action: 'confirm',
-          previewId: quoteId,
-          confirmDestination: false,
-        })
-      ).status
-    ).toBe(400);
-    expect(mocks.rpc).not.toHaveBeenCalled();
-  });
-  it('maps concurrent changes to a retryable conflict', async () => {
-    mocks.rpc.mockResolvedValue({
-      data: null,
-      error: { code: '40001', message: 'shipping_recovery_stale' },
-    });
-    const response = await request({
-      action: 'confirm',
-      previewId: quoteId,
-      confirmDestination: true,
-    });
-    expect(response.status).toBe(409);
-    expect((await response.json()).code).toBe('SHIPPING_RECOVERY_STALE');
+    const response = await request();
+    expect(response.status).toBe(200);
+    const quoted = mocks.quotes.mock.calls[0][1] as {
+      receiver: { postalCode?: string };
+    };
+    expect(quoted.receiver.postalCode).toBe('100001');
   });
   it('fails closed on provider failure', async () => {
     mocks.quotes.mockRejectedValue(new Error('provider unavailable'));

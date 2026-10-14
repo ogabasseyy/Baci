@@ -53,6 +53,27 @@ async function lookupCheckoutQuote(
   return { error, quote: quote ?? null };
 }
 
+/**
+ * Returns the merchant-scoped quote's carrier when it is a known provider
+ * code, else null. Lets order creation persist the quote-derived provider
+ * when a quoted checkout omits the redundant `shipping_provider`, so the
+ * stored hash and RPC payload carry the carrier fulfillment requires.
+ */
+export async function lookupCheckoutQuoteProvider(
+  supabase: SupabaseClient,
+  selectedQuoteId: string,
+  merchantId: string | undefined
+): Promise<string | null> {
+  const { quote } = await lookupCheckoutQuote(
+    supabase,
+    selectedQuoteId,
+    merchantId
+  );
+  return quote && isShippingProviderCode(quote.provider)
+    ? quote.provider
+    : null;
+}
+
 export async function enrichShippingAddressWithQuoteDestination(
   supabase: SupabaseClient,
   selectedQuoteId: string | null | undefined,

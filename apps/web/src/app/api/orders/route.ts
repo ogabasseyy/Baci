@@ -85,6 +85,7 @@ import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-or
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
 import {
   enrichShippingAddressWithQuoteDestination,
+  lookupCheckoutQuoteProvider,
   OrderQuoteDestinationMismatchError,
 } from '@/lib/shipping/order-quote-destination';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -1424,6 +1425,23 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
+    // A quoted checkout may omit the redundant provider: validation already
+    // accepted the merchant-scoped quote as authoritative, so carry its
+    // carrier into the hash and RPC payload. Otherwise the stored order has
+    // a quote but no carrier and fulfillment rejects it.
+    let effectiveShippingProvider = resolvedShippingProvider;
+    if (
+      !isMerchantRateOrder &&
+      !body.shipping_provider &&
+      resolvedSelectedQuoteId
+    ) {
+      const quoteProvider = await lookupCheckoutQuoteProvider(
+        supabase,
+        resolvedSelectedQuoteId,
+        body.merchant_id
+      );
+      if (quoteProvider) effectiveShippingProvider = quoteProvider;
+    }
     // Capture the post-enrichment destination before Nigerian state repair so
     // the idempotency hash below stays byte-compatible with orders created
     // before this deploy (postal-code states like "100001"). Persistence and
@@ -2001,7 +2019,7 @@ export async function POST(request: NextRequest) {
               // classify this quote-less order as quoted and drop its pin
               // from the hash, replaying the first destination on retry.
               selected_quote_id: resolvedSelectedQuoteId,
-              shipping_provider: resolvedShippingProvider,
+              shipping_provider: effectiveShippingProvider,
               shipping_rate_id: body.shipping_rate_id,
               tax_amount: orderTaxAmount,
             }
@@ -2057,7 +2075,7 @@ export async function POST(request: NextRequest) {
       p_notes: notes || null,
       p_ad_tracking: orderAdTrackingPayload,
       p_selected_quote_id: resolvedSelectedQuoteId,
-      p_shipping_provider: resolvedShippingProvider,
+      p_shipping_provider: effectiveShippingProvider,
       p_tracking_number: resolvedTrackingNumber || null,
       p_user_id: resolvedUserId,
       // Server-computed tax — replaces the client-supplied value

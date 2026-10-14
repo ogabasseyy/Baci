@@ -4312,6 +4312,44 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
+  it('persists the quote-derived provider when shipping_provider is omitted', async () => {
+    // Arrange — same omitted-provider checkout: validation accepts the
+    // merchant-scoped quote as authoritative, so the stored hash and order
+    // RPC must carry its carrier instead of null (fulfillment rejects a
+    // quote without a carrier).
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
+        shippingQuote: topshipQuote(
+          new Date(Date.now() + 3_600_000).toISOString()
+        ),
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(topshipOrderBody({ omitProvider: true })),
+      })
+    );
+
+    // Assert
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_selected_quote_id: '22222222-2222-4222-8222-222222222222',
+        p_shipping_provider: 'TOPSHIP',
+      })
+    );
+  });
+
   it('rejects selected GIGL international quotes with stale product shipping metadata', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(

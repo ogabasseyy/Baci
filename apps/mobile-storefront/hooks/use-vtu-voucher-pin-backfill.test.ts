@@ -19,6 +19,7 @@ import {
   SLOW_POLL_ATTEMPTS,
   useVtuVoucherPinBackfill,
 } from './use-vtu-voucher-pin-backfill';
+import * as backfillFetchModule from './use-vtu-voucher-pin-backfill-fetch';
 
 const mockGetSession =
   jest.fn<
@@ -404,53 +405,59 @@ describe('useVtuVoucherPinBackfill', () => {
     expect(recallPendingVtuKey('hook-failpend')).toBe('key-hook-failpend');
   });
 
-  it('skips registry cleanup when the account switches mid-flight', async () => {
+  it('publishes no observation and skips registry cleanup when the account switches mid-flight', async () => {
+    // Codex R96 P1: a switch after dispatch suppresses BOTH the
+    // registry mutation and the returned observation — user-1's
+    // cache entry must never carry the switched-away success.
+    // (gcTime 0 reaps the unobserved entry, so the queryFn's
+    // resolved value — not the cache entry — is the deterministic
+    // assertion.)
     rememberPendingVtuPurchase('hook-switch', 'key-hook-switch');
     notePendingVtuReference('hook-switch', 'REF-001');
-    let resolveFetch: (response: Response) => void = () => undefined;
-    fetchSpy.mockImplementationOnce(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch = resolve;
+    const queryFnSpy = jest.spyOn(backfillFetchModule, 'fetchVoucherPin');
+    try {
+      let resolveFetch: (response: Response) => void = () => undefined;
+      fetchSpy.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          })
+      );
+
+      renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+        wrapper,
+      });
+
+      // user-1's terminal response is in flight; the account switches
+      // before it lands.
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      mockUseAuthStore.mockReturnValue('user-2');
+      resolveFetch(
+        makeResponse({
+          transactions: [
+            {
+              request_reference: 'REF-001',
+              voucher_pin: null,
+              status: 'successful',
+              refund_pending: null,
+            },
+          ],
         })
-    );
+      );
 
-    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
-      wrapper,
-    });
-
-    // user-1's terminal response is in flight; the account switches
-    // before it lands. The landed rerender resubscribes to user-2's
-    // query, so the observation is asserted in user-1's cache entry.
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    mockUseAuthStore.mockReturnValue('user-2');
-    resolveFetch(
-      makeResponse({
-        transactions: [
-          {
-            request_reference: 'REF-001',
-            voucher_pin: null,
-            status: 'successful',
-            refund_pending: null,
-          },
-        ],
-      })
-    );
-
-    // The observation still lands (proving the continuation ran) but
-    // the superseded account must not mutate the global registry.
-    await waitFor(() =>
-      expect(
-        queryClient.getQueryData([
-          'vtu',
-          'voucher-pin-backfill',
-          'user-1',
-          'electricity',
-          'REF-001',
-        ])
-      ).toEqual({ pin: null, status: 'successful', refundPending: null })
-    );
-    expect(recallPendingVtuKey('hook-switch')).toBe('key-hook-switch');
+      // The continuation ran (user-2's query mounted) but published a
+      // blank, and the superseded account left the registry alone.
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      const [firstCall] = queryFnSpy.mock.results;
+      await expect(firstCall?.value).resolves.toEqual({
+        pin: null,
+        status: null,
+        refundPending: null,
+      });
+      expect(recallPendingVtuKey('hook-switch')).toBe('key-hook-switch');
+    } finally {
+      queryFnSpy.mockRestore();
+    }
   });
 
   it('keeps hunting a token for pin-less bill successes', async () => {

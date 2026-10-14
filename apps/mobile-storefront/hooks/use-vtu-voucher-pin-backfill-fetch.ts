@@ -134,18 +134,28 @@ export async function fetchVoucherPin({
   // registry for a result never shown) and still-mounted.
   const failedTerminal = status === 'failed' && refundPending === false;
   const currentUserId = useAuthStore.getState().user?.id ?? null;
+  // Session-current: the polling account still matches the live user
+  // and the view is still mounted. A switch (or unmount) after
+  // dispatch must suppress BOTH the registry mutation and the
+  // returned observation — publishing the old customer's PIN would
+  // hand it to the replacement session (Codex R96 P1).
+  const sessionCurrent =
+    capturedUserId !== null &&
+    capturedUserId === currentUserId &&
+    isViewActive();
   if (
     reference &&
     (status === 'successful' || failedTerminal) &&
-    capturedUserId !== null &&
-    capturedUserId === currentUserId &&
-    isViewActive()
+    sessionCurrent
   ) {
     if (backgroundSettle && status === 'successful') {
       markSettledPendingVtuByReference(reference);
     } else {
       forgetPendingVtuByReference(reference);
     }
+  }
+  if (!sessionCurrent) {
+    return BLANK;
   }
   return { pin: pin || null, status, refundPending };
 }

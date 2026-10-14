@@ -6,6 +6,11 @@ import { applyPurchaseRequirements, purchaseSchemaBase } from './vtu';
  * from vtu.ts per the Boy Scout rule (that module is over the 300-line
  * budget): wallet-only checkout is the only surviving utility payment
  * path, so its schema lives here.
+ *
+ * `orderId` is omitted (Codex R96 P1): it is a server-owned linkage
+ * field, and prepare persists it as `order_id` without an ownership
+ * check — a body-supplied UUID from another storefront would create
+ * a cross-tenant association. Neither wallet-only client sends it.
  */
 export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
   .extend({
@@ -20,6 +25,7 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     // part of the fingerprint.
     expectedUserId: z.uuid().optional(),
   })
+  .omit({ orderId: true })
   .superRefine(applyPurchaseRequirements);
 
 export type VtuWalletOnlyChargeInput = z.infer<

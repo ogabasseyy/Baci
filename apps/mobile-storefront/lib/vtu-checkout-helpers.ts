@@ -1,4 +1,5 @@
-import { HttpError } from '@/lib/fetch-with-timeout';
+import { withTimeout } from '@baci/shared';
+import { DEFAULT_TIMEOUT, HttpError } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import { supabase } from '@/lib/supabase';
 
@@ -47,7 +48,23 @@ export function normalizeVtuCheckoutPayload<T extends object>(payload: T): T {
   };
 }
 
-export async function getAccessToken(
+export function getAccessToken(
+  expectedUserId?: string | null,
+  options?: { requireSubmitterBinding?: boolean }
+): Promise<string> {
+  // Bounded (Codex R96 P2): a stalled Supabase auth call used to hang
+  // the module-wide checkout guard forever — callers create their
+  // POST deadline only after the token resolves, so the stall bricked
+  // every utility purchase until restart. Same 30s budget as the
+  // POST; the timeout error releases the guard via handler finally.
+  return withTimeout(
+    getAccessTokenInner(expectedUserId, options),
+    DEFAULT_TIMEOUT,
+    'Authentication timed out. Please try again.'
+  );
+}
+
+async function getAccessTokenInner(
   expectedUserId?: string | null,
   options?: { requireSubmitterBinding?: boolean }
 ) {

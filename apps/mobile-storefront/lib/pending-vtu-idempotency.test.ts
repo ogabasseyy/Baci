@@ -24,6 +24,7 @@ import {
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
 } from './pending-vtu-idempotency-codec';
+import * as vtuStore from './pending-vtu-idempotency-store';
 import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
 
 describe('pending-vtu-idempotency', () => {
@@ -510,6 +511,28 @@ describe('pending-vtu-idempotency', () => {
     >('./pending-vtu-idempotency');
     fresh.hydratePendingVtuPurchases(rememberSnapshot);
     expect(fresh.recallPendingVtuKey(scoped)).toBe('new-key');
+  });
+
+  it('drops a remembered entry the store cannot durably persist', () => {
+    // Codex R96 P1 (web mirror): a failed MMKV write must not hand
+    // out a memory-only key — a restart would lose it and the retry
+    // mint fresh and double-debit on ambiguous results. remember()
+    // reports false and drops the entry so the retry re-mints.
+    clearPendingVtuKeys();
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    try {
+      expect(rememberPendingVtuPurchase('mob-nopersist', 'key-nopersist')).toBe(
+        false
+      );
+      expect(recallPendingVtuKey('mob-nopersist')).toBeNull();
+    } finally {
+      persistSpy.mockRestore();
+    }
+    // Storage works again: the retry remembers normally.
+    expect(rememberPendingVtuPurchase('mob-nopersist', 'key-ok')).toBe(true);
+    expect(recallPendingVtuKey('mob-nopersist')).toBe('key-ok');
   });
 
   it('lists noted references deduped, excluding unanswered entries', () => {

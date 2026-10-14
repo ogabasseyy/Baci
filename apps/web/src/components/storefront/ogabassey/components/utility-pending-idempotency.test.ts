@@ -30,6 +30,36 @@ describe('utility-pending-idempotency', () => {
     expect(getPendingVtuKey('{"amount":100}')).toBe(first);
   });
 
+  it('refuses to hand out a key localStorage cannot durably store', () => {
+    // Codex R96 P1: quota/private-mode setItem throws → the minted
+    // key would be memory-only; a reload would lose it and the retry
+    // mint fresh and double-debit on ambiguous results. Refuse
+    // (throw pre-POST) and drop the memory entry so the retry
+    // re-mints once storage works — nothing was submitted, so no
+    // server state dangles.
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+    try {
+      expect(() => getPendingVtuKey('{"amount":100}')).toThrow(
+        'Could not save this purchase for retry'
+      );
+      expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
+      expect(rememberPendingVtuPurchase('{"amount":100}', 'key-x')).toBe(
+        false
+      );
+      expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
+    } finally {
+      setItem.mockRestore();
+    }
+    // Storage works again: the retry mints and persists normally.
+    const retry = getPendingVtuKey('{"amount":100}');
+    expect(retry).toBeTruthy();
+    expect(recallPendingVtuKey('{"amount":100}')).toBe(retry);
+  });
+
   it('mints distinct keys for distinct purchases', () => {
     const airtime = getPendingVtuKey('{"type":"airtime"}');
     const data = getPendingVtuKey('{"type":"data"}');

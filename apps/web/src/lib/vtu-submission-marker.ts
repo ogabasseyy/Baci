@@ -43,11 +43,13 @@ const MARKER_WRITE_BACKOFF_MS = [100, 250] as const;
  * RTT). Without a re-read that row sits processing with the marker
  * and no provider reference — the reconciler can neither re-drive
  * it (marker presence fails the unsubmitted proof) nor settle it
- * (nothing to requery). A re-read marker with no response
- * reference is provably OURS — this worker never dispatched a
- * provider call on the linear path here, and every other vend
- * entry needs a stale-or-pending row — so adopt it and proceed to
- * the vend.
+ * (nothing to requery). A re-read marker EQUAL TO this
+ * invocation's generated value, with no response reference, is
+ * provably OURS — this worker never dispatched a provider call on
+ * the linear path here, and every other vend entry needs a
+ * stale-or-pending row — so adopt it and proceed to the vend. A
+ * DIFFERENT marker value is another worker's (it reclaimed the row
+ * during our pause): fail closed without adopting (Codex R96 P1).
  *
  * Ambiguous-write retry (Codex R79 6sO3vb): when the write errors
  * AND the re-read errors, returning failure leaves the caller to
@@ -94,6 +96,9 @@ export async function markVtuProviderSubmissionStarted({
     ...(row.metadata ?? {}),
     [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: new Date().toISOString(),
   };
+  // This invocation's marker value: adoption binds to it (Codex R96
+  // P1) — a merely-present marker may be another worker's.
+  const ownMarker = metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY];
   let lastMessage = 'Failed to persist provider-submission marker';
   for (let attempt = 1; attempt <= MARKER_WRITE_MAX_ATTEMPTS; attempt += 1) {
     const updateQuery = supabase
@@ -105,7 +110,7 @@ export async function markVtuProviderSubmissionStarted({
       ? updateQuery.eq('updated_at', row.updated_at)
       : updateQuery
     )
-      .select('id')
+      .select('id, updated_at')
       .maybeSingle();
     if (!error) {
       if (!markedRow) {
@@ -114,13 +119,19 @@ export async function markVtuProviderSubmissionStarted({
             'VTU provider-submission marker lost race: row moved or settled',
         };
       }
+      // Refresh the CAS token (Codex R96 P1): this write advanced
+      // updated_at — downstream CAS writes (Kuda fallback marker)
+      // would zero-match on the pre-marker token and wrongly refuse.
+      if (typeof markedRow.updated_at === 'string') {
+        row.updated_at = markedRow.updated_at;
+      }
       row.metadata = metadata;
       return null;
     }
     lastMessage = error.message;
     const { data: current, error: rereadError } = await supabase
       .from('vtu_transactions')
-      .select('metadata, status, transaction_id')
+      .select('metadata, status, transaction_id, updated_at')
       .eq('id', row.id)
       .maybeSingle();
     if (!rereadError) {
@@ -137,16 +148,24 @@ export async function markVtuProviderSubmissionStarted({
       const markerPresent =
         currentMetadata !== null &&
         VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in currentMetadata;
+      // Ownership (Codex R96 P1): after a long pause another worker
+      // may have reclaimed the row and written ITS marker — adopting
+      // any present marker would let both workers vend. Only our own
+      // value proves our write landed (same-ms collision across
+      // workers is impossible here: reclaims need a 5-minute-stale
+      // row, so rival markers are minutes apart).
+      const markerOurs =
+        currentMetadata !== null &&
+        currentMetadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY] === ownMarker;
       const responsePersisted =
         (typeof current.transaction_id === 'string' &&
           current.transaction_id.trim() !== '') ||
         (typeof currentMetadata?.monnifyVendReference === 'string' &&
           currentMetadata.monnifyVendReference.trim() !== '');
-      if (
-        markerPresent &&
-        !responsePersisted &&
-        current.status === 'processing'
-      ) {
+      if (markerOurs && !responsePersisted && current.status === 'processing') {
+        if (typeof current.updated_at === 'string') {
+          row.updated_at = current.updated_at;
+        }
         row.metadata = currentMetadata;
         return null;
       }

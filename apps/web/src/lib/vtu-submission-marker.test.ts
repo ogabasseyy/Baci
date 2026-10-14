@@ -11,19 +11,23 @@ describe('markVtuProviderSubmissionStarted', () => {
       data: Record<string, unknown> | null;
       error: { message: string } | null;
     } = { data: null, error: null },
-    updatedRow: { id: string } | null = updateError ? null : { id: 'vtu-1' }
+    updatedRow: { id: string; updated_at?: string } | null = updateError
+      ? null
+      : { id: 'vtu-1' }
   ) {
     // Chainable eq: the CAS write filters id + status (+ updated_at)
     // then selects the matched row id (Codex R94 P1).
     const eq: ReturnType<typeof vi.fn> = vi.fn(() => ({ eq, select }));
-    const update = vi.fn(() => ({ eq }));
+    const update: ReturnType<typeof vi.fn> = vi.fn(() => ({ eq }));
     const updateMaybeSingle = vi.fn(() =>
       Promise.resolve({ data: updatedRow, error: updateError })
     );
     const rereadMaybeSingle = vi.fn(() => Promise.resolve(reread));
     const rereadEq = vi.fn(() => ({ maybeSingle: rereadMaybeSingle }));
     const select = vi.fn((columns: string) =>
-      columns === 'id' ? { maybeSingle: updateMaybeSingle } : { eq: rereadEq }
+      columns === 'id, updated_at'
+        ? { maybeSingle: updateMaybeSingle }
+        : { eq: rereadEq }
     );
     const supabase = { from: vi.fn(() => ({ select, update })) };
     return {
@@ -107,7 +111,7 @@ describe('markVtuProviderSubmissionStarted', () => {
     });
     expect(row.metadata).toEqual({ walletDebited: true });
     expect(update).toHaveBeenCalledTimes(1);
-    expect(select).toHaveBeenCalledWith('id');
+    expect(select).toHaveBeenCalledWith('id, updated_at');
   });
 
   it('keeps the status-only gate for rows without a CAS token', async () => {
@@ -143,17 +147,77 @@ describe('markVtuProviderSubmissionStarted', () => {
 
   it('adopts a marker the update committed but failed to report', async () => {
     // Response lost during the marker RTT (Codex R54 6rrFRC): the
-    // re-read marker with no response reference is provably this
-    // worker's — no provider call ran on the linear path here — so
-    // adopt it and proceed to the vend instead of stranding the row.
-    const markerAt = new Date().toISOString();
-    const { rereadEq, select, supabase } = createSupabase(
+    // re-read marker EQUALS this invocation's generated value, so
+    // with no response reference it is provably this worker's — no
+    // provider call ran on the linear path here — adopt it and
+    // proceed to the vend instead of stranding the row. The re-read
+    // resolves dynamically from the attempted write's own marker
+    // (Codex R96 P1 ownership).
+    const { rereadEq, rereadMaybeSingle, select, supabase, update } =
+      createSupabase({ message: 'timeout' });
+    rereadMaybeSingle.mockImplementation(() => {
+      const sent = update.mock.calls[0]?.[0] as unknown as {
+        metadata: Record<string, unknown>;
+      };
+      return Promise.resolve({
+        data: {
+          metadata: {
+            walletDebited: true,
+            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]:
+              sent.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY],
+          },
+          status: 'processing',
+          transaction_id: null,
+          updated_at: 'tok-2',
+        },
+        error: null,
+      });
+    });
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: string;
+    } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: 'tok-1',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(select).toHaveBeenCalledWith(
+      'metadata, status, transaction_id, updated_at'
+    );
+    expect(rereadEq).toHaveBeenCalledWith('id', 'vtu-1');
+    const sentMarker = (
+      update.mock.calls[0]?.[0] as unknown as {
+        metadata: Record<string, unknown>;
+      }
+    ).metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY];
+    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(
+      sentMarker
+    );
+    expect(row.updated_at).toBe('tok-2');
+  });
+
+  it('rejects a re-read marker written by another worker', async () => {
+    // Codex R96 P1: our write failed after a long pause; meanwhile
+    // stale recovery restored the row and a replay reclaimed it and
+    // wrote ITS marker. The value differs from ours — adopting would
+    // let both workers vend. Fail closed without retrying (our token
+    // is stale, so a retry CAS could not match anyway).
+    const { supabase, update } = createSupabase(
       { message: 'timeout' },
       {
         data: {
           metadata: {
             walletDebited: true,
-            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: markerAt,
+            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]:
+              '2020-01-01T00:00:00.000Z',
           },
           status: 'processing',
           transaction_id: null,
@@ -171,10 +235,36 @@ describe('markVtuProviderSubmissionStarted', () => {
       supabase: supabase as never,
     });
 
+    expect(result).toEqual({ message: 'timeout' });
+    expect(row.metadata).toEqual({ walletDebited: true });
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the CAS token when the marker write lands', async () => {
+    // Codex R96 P1: the marker write advances updated_at — downstream
+    // CAS writes (Kuda fallback marker) need the fresh token.
+    const { supabase, updateMaybeSingle } = createSupabase(null);
+    updateMaybeSingle.mockResolvedValueOnce({
+      data: { id: 'vtu-1', updated_at: 'tok-2' },
+      error: null,
+    });
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: string;
+    } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: 'tok-1',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
     expect(result).toBeNull();
-    expect(select).toHaveBeenCalledWith('metadata, status, transaction_id');
-    expect(rereadEq).toHaveBeenCalledWith('id', 'vtu-1');
-    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(markerAt);
+    expect(row.updated_at).toBe('tok-2');
   });
 
   it('keeps the error when the re-read refutes the commit', async () => {
@@ -309,23 +399,29 @@ describe('markVtuProviderSubmissionStarted', () => {
     // Codex R79 6sO3vb: write response lost AND the first re-read
     // errored (the exact reported hole) — the second re-read finds
     // the committed marker with no response reference, so adopt it
-    // and proceed instead of restoring with a dead token.
-    const markerAt = new Date().toISOString();
-    const { rereadMaybeSingle, supabase } = createSupabase({
+    // and proceed instead of restoring with a dead token. The marker
+    // resolves from the attempted write's own value (R96 ownership).
+    const { rereadMaybeSingle, supabase, update } = createSupabase({
       message: 'timeout',
     });
     rereadMaybeSingle
       .mockResolvedValueOnce({ data: null, error: { message: 'db down' } })
-      .mockResolvedValueOnce({
-        data: {
-          metadata: {
-            walletDebited: true,
-            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: markerAt,
+      .mockImplementationOnce(() => {
+        const sent = update.mock.calls[0]?.[0] as unknown as {
+          metadata: Record<string, unknown>;
+        };
+        return Promise.resolve({
+          data: {
+            metadata: {
+              walletDebited: true,
+              [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]:
+                sent.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY],
+            },
+            status: 'processing',
+            transaction_id: null,
           },
-          status: 'processing',
-          transaction_id: null,
-        },
-        error: null,
+          error: null,
+        });
       });
     const row: { id: string; metadata: Record<string, unknown> } = {
       id: 'vtu-1',
@@ -338,7 +434,14 @@ describe('markVtuProviderSubmissionStarted', () => {
     });
 
     expect(result).toBeNull();
-    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(markerAt);
+    const sentMarker = (
+      update.mock.calls[0]?.[0] as unknown as {
+        metadata: Record<string, unknown>;
+      }
+    ).metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY];
+    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(
+      sentMarker
+    );
   });
 
   it('fails closed after exhausting write and re-read retries', async () => {

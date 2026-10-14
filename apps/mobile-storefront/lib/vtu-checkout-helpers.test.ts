@@ -1,7 +1,9 @@
+import { supabase } from '@/lib/supabase';
 import { HttpError } from './fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from './network-utils';
 import {
   creditedVtuCashback,
+  getAccessToken,
   normalizeConfirmCheckoutStatus,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
@@ -15,6 +17,9 @@ jest.mock('@/lib/supabase', () => ({
     },
   },
 }));
+
+const mockGetUser = supabase.auth.getUser as jest.Mock;
+const mockGetSession = supabase.auth.getSession as jest.Mock;
 
 describe('vtu checkout helpers', () => {
   it('normalizes legacy provider casing and checkout statuses', () => {
@@ -43,6 +48,29 @@ describe('vtu checkout helpers', () => {
       expect(
         shouldRotateWalletIdempotencyKeyForError(new HttpError(status, 'x'))
       ).toBe(false);
+    }
+  });
+
+  it('times out a stalled auth call instead of hanging the checkout guard', async () => {
+    // Codex R96 P2: callers create their POST deadline only after the
+    // token resolves, so an unbounded stall bricked every utility
+    // purchase until restart. The timeout error releases the guard
+    // via the handler finally.
+    jest.useFakeTimers();
+    try {
+      mockGetUser.mockImplementation(() => new Promise(() => {}));
+      const pending = getAccessToken('user-1', {
+        requireSubmitterBinding: true,
+      });
+      const assertion = expect(pending).rejects.toThrow(
+        'Authentication timed out. Please try again.'
+      );
+      await jest.advanceTimersByTimeAsync(30_000);
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+      mockGetUser.mockReset();
+      mockGetSession.mockReset();
     }
   });
 

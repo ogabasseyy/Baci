@@ -73,4 +73,21 @@ describe('vtuWalletOnlyChargeSchema', () => {
     });
     expect(invalidId.success).toBe(false);
   });
+
+  it('strips a body-supplied orderId instead of persisting it', () => {
+    // Codex R96 P1: orderId is server-owned linkage — prepare
+    // persists it as order_id without an ownership check, so a UUID
+    // from another storefront would create a cross-tenant
+    // association. The parse succeeds (unknown-key tolerance) but
+    // the parsed input carries no orderId.
+    const result = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      orderId: '22222222-3333-4444-8555-666666666666',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect('orderId' in result.data).toBe(false);
+    }
+  });
 });

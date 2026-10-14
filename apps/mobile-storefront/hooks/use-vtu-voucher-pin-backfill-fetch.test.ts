@@ -310,14 +310,17 @@ describe('fetchVoucherPin', () => {
     }
   });
 
-  it('never forgets across an account switch or after unmount', async () => {
+  it('returns blank and never forgets across an account switch or after unmount', async () => {
+    // Codex R96 P1: a switch (or unmount) after dispatch suppresses
+    // BOTH the registry mutation and the returned observation —
+    // publishing the old PIN would hand it to the new session.
     rememberPendingVtuPurchase('fetch-switched', 'key-switched');
     notePendingVtuReference('fetch-switched', 'REF-1');
     fetchSpy.mockResolvedValue(makeResponse(successBody()));
 
     mockCurrentUserId.value = 'user-2';
     const switched = await fetchVoucherPin(input);
-    expect(switched?.status).toBe('successful');
+    expect(switched).toEqual({ pin: null, status: null, refundPending: null });
     expect(recallPendingVtuKey('fetch-switched')).toBe('key-switched');
 
     mockCurrentUserId.value = 'user-1';
@@ -325,7 +328,11 @@ describe('fetchVoucherPin', () => {
       ...input,
       isViewActive: () => false,
     });
-    expect(unmounted?.status).toBe('successful');
+    expect(unmounted).toEqual({
+      pin: null,
+      status: null,
+      refundPending: null,
+    });
     expect(recallPendingVtuKey('fetch-switched')).toBe('key-switched');
   });
 

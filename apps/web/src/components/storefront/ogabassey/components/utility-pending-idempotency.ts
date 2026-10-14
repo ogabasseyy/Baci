@@ -82,11 +82,19 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   }
 }
 
+/**
+ * Records the key a purchase was submitted with (cap-enforced).
+ * Returns false when the entry is memory-only (Codex R96 P1): if
+ * localStorage.setItem throws (quota/private mode), the in-memory
+ * entry is dropped again so a retry re-mints AND re-persists —
+ * keeping it would let the retry submit a key a reload cannot
+ * recover, minting fresh and double-debiting on ambiguous results.
+ */
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
   key: string,
   scopeTag?: string
-): void {
+): boolean {
   if (
     !pendingVtuPurchases.has(payloadSignature) &&
     pendingVtuPurchases.size >= MAX_PENDING_PURCHASES
@@ -102,7 +110,11 @@ export function rememberPendingVtuPurchase(
     completedAt: null,
   });
   forgottenScopedKeys.delete(payloadSignature);
-  persistPendingVtuPurchases();
+  if (!persistPendingVtuPurchases()) {
+    pendingVtuPurchases.delete(payloadSignature);
+    return false;
+  }
+  return true;
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */
@@ -248,7 +260,13 @@ export function forgetPendingVtuPurchase(payloadSignature: string): void {
 /**
  * Returns the recalled key for this purchase, minting and remembering a
  * fresh one on first submit. Mirrors mobile's
- * `getWalletIdempotencyKey(descriptor)`.
+ * `getWalletIdempotencyKey(descriptor)`. Throws when the minted key
+ * cannot be durably stored (Codex R96 P1): submitting a memory-only
+ * key risks a reload losing it and the retry double-debiting. The
+ * throw aborts before the POST (user-safe message) and the retry
+ * re-mints once storage works — nothing was submitted, so no server
+ * state dangles. Recalled keys are already durable (persisted at
+ * mint or hydrated from the snapshot).
  */
 export function getPendingVtuKey(
   payloadSignature: string,
@@ -259,7 +277,11 @@ export function getPendingVtuKey(
     return recalled;
   }
   const minted = createWalletIdempotencyKey();
-  rememberPendingVtuPurchase(payloadSignature, minted, scopeTag);
+  if (!rememberPendingVtuPurchase(payloadSignature, minted, scopeTag)) {
+    throw new Error(
+      'Could not save this purchase for retry. Please check your browser storage and try again.'
+    );
+  }
   return minted;
 }
 

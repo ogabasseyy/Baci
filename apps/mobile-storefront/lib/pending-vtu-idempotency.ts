@@ -29,10 +29,9 @@ import {
 const MAX_PENDING_PURCHASES = 32;
 
 /**
- * Recall window for a remembered key. Genuine resolutions land within
- * seconds of the submit; a success replay older than this is a NEW
- * purchase intent reusing a completed transaction's key, and applying
- * it would present the earlier vend as the new purchase.
+ * Recall window: resolutions land within seconds; an older replay
+ * is a NEW intent reusing a completed key — applying it would
+ * present the earlier vend as the new purchase.
  */
 export const PENDING_VTU_STALE_AFTER_MS = 5 * 60 * 1000;
 
@@ -84,8 +83,8 @@ export function hydratePendingVtuPurchases(
   }
 }
 
-function persistPendingVtuPurchases(): void {
-  persistPendingVtuEntries(pendingPurchases);
+function persistPendingVtuPurchases(): boolean {
+  return persistPendingVtuEntries(pendingPurchases);
 }
 
 // Restart recovery: rehydrate before any submit runs in this launch.
@@ -135,17 +134,15 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 }
 
 /**
- * Records the key a purchase was submitted with (cap-enforced). A new
- * generation supersedes the scope's tombstone (Codex R94 P2): a
- * tombstone retained by a failed forget-persist would otherwise
- * suppress a same-millisecond re-remember on restart, and the retry
- * would mint a fresh UUID and risk a second debit/vend.
+ * Records the key (cap-enforced). New generations supersede the
+ * scope tombstone (R94 P2); false when memory-only — dropped so a
+ * retry re-mints AND re-persists (R96 P1, web mirror).
  */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string,
   scopeTag?: string
-): void {
+): boolean {
   if (
     !pendingPurchases.has(descriptor) &&
     pendingPurchases.size >= MAX_PENDING_PURCHASES
@@ -161,7 +158,11 @@ export function rememberPendingVtuPurchase(
     rememberedAt: Date.now(),
     completedAt: null,
   });
-  persistPendingVtuPurchases();
+  if (!persistPendingVtuPurchases()) {
+    pendingPurchases.delete(descriptor);
+    return false;
+  }
+  return true;
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */

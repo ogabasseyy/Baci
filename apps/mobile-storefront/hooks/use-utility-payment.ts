@@ -151,7 +151,10 @@ export function useUtilityPayment() {
      * descriptor, recalling a still-pending key across form remounts
      * and minting + remembering a fresh one otherwise. The same
      * descriptor MUST receive the same key until reset — that's the
-     * entire dedupe contract with the wallet-only route.
+     * entire dedupe contract with the wallet-only route. Throws when
+     * the minted key cannot be durably stored (Codex R96 P1, web
+     * mirror): the throw aborts before the POST and the handler's
+     * finally releases the checkout guard.
      */
     getWalletIdempotencyKey: (descriptor: string) => {
       const recalled = recallPendingVtuKey(descriptor);
@@ -160,7 +163,11 @@ export function useUtilityPayment() {
       // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
       // the settle filter recomputes this for the active account.
       const scopeTag = buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID);
-      rememberPendingVtuPurchase(descriptor, minted, scopeTag);
+      if (!rememberPendingVtuPurchase(descriptor, minted, scopeTag)) {
+        throw new Error(
+          'Could not save this purchase for retry. Please try again.'
+        );
+      }
       return minted;
     },
     /**

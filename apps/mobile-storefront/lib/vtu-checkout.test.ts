@@ -278,7 +278,12 @@ describe('vtu-checkout service', () => {
       await jest.runOnlyPendingTimersAsync();
 
       await confirmation;
-      expect(setTimeoutSpy).not.toHaveBeenCalled();
+      // Only the 30s auth-acquisition bound (Codex R96 P2) may arm a
+      // timer — no inter-attempt poll delay after the final attempt.
+      const pollDelays = setTimeoutSpy.mock.calls.filter(
+        ([, timeoutMs]) => timeoutMs !== 30_000
+      );
+      expect(pollDelays).toEqual([]);
     } finally {
       setTimeoutSpy.mockRestore();
     }

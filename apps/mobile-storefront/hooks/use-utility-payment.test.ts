@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { walletKeys } from '@/hooks/wallet-query';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
+import * as vtuStore from '@/lib/pending-vtu-idempotency-store';
 
 const mockUseMerchantPaymentSettings = jest.fn();
 let mockWalletQuery: {
@@ -208,6 +209,24 @@ describe('useUtilityPayment', () => {
     expect(
       result.current.getWalletIdempotencyKey('stable-descriptor')
     ).not.toBe(first);
+  });
+
+  it('refuses to mint a key the store cannot durably persist', () => {
+    // Codex R96 P1 (web mirror): a failed MMKV write must abort
+    // before the POST — the throw surfaces through the handler
+    // (whose finally releases the checkout guard) and the retry
+    // re-mints once storage works.
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    try {
+      const { result } = renderHook(() => useUtilityPayment());
+      expect(() =>
+        result.current.getWalletIdempotencyKey('nopersist-descriptor')
+      ).toThrow('Could not save this purchase for retry');
+    } finally {
+      persistSpy.mockRestore();
+    }
   });
 
   it('recalls the pending key across hook instances for the same purchase', () => {

@@ -104,7 +104,7 @@ describe('PostHog remediation candidate pagination', () => {
           );
         },
       }),
-      /exceeded the 10-page hard cap/
+      /exceeded the fixed 10-page hard cap/
     );
     assert.equal(requests, 10);
   });

@@ -26,9 +26,15 @@ const safeIssueId = (value) => {
 
 const safeTimestamp = (value) => {
   const timestamp = boundedString(value, 80);
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(timestamp)
-    ? timestamp
-    : '';
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(
+      timestamp
+    )
+  ) {
+    return '';
+  }
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
 };
 
 const activeIssue = (issue) =>
@@ -238,7 +244,7 @@ export async function fetchPostHogRemediationCandidates({
 
   throw new Error(
     maximumPages >= HARD_MAXIMUM_PAGES
-      ? `PostHog error-tracking issue pagination exceeded the ${HARD_MAXIMUM_PAGES}-page hard cap; narrow the query window or raise the cap`
+      ? `PostHog error-tracking issue pagination exceeded the fixed ${HARD_MAXIMUM_PAGES}-page hard cap; resolve or mute active issues to fit the cap, or raise the cap in code`
       : `PostHog error-tracking issue pagination exceeded ${maximumPages} pages; raise BACI_POSTHOG_REMEDIATION_MAX_PAGES to avoid a measurement gap`
   );
 }

@@ -59,8 +59,8 @@ describe('PostHog remediation candidates', () => {
     assert.equal(candidates[0].category, 'posthog_issue');
     assert.equal(candidates[0].sample.message, 'Native crash');
     assert.equal(candidates[0].sample.route, '(redacted PostHog location)');
-    assert.equal(candidates[0].firstSeen, '2026-08-04T15:45:25Z');
-    assert.equal(candidates[0].lastSeen, '2026-08-04T15:46:50Z');
+    assert.equal(candidates[0].firstSeen, '2026-08-04T15:45:25.000Z');
+    assert.equal(candidates[0].lastSeen, '2026-08-04T15:46:50.000Z');
     assert.equal(
       JSON.stringify(candidates).includes('alice@example.com'),
       false
@@ -86,6 +86,41 @@ describe('PostHog remediation candidates', () => {
       fetchPostHogRemediationCandidates({ env: {} }),
       /POSTHOG_REMEDIATION_HOST/
     );
+  });
+
+  it('normalizes offset-form provider timestamps instead of dropping them', async () => {
+    const candidates = await fetchPostHogRemediationCandidates({
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            hasMore: false,
+            limit: 100,
+            offset: 0,
+            results: [
+              {
+                id: 'offset-issue',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                first_seen: '2026-08-04T15:45:25+00:00',
+                last_seen: '2026-08-04T17:46:50+02:00',
+              },
+              {
+                id: 'bare-issue',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                first_seen: '2026-08-04T15:45:25',
+                last_seen: 'not-a-timestamp',
+              },
+            ],
+          })
+        ),
+    });
+
+    assert.equal(candidates[0].firstSeen, '2026-08-04T15:45:25.000Z');
+    assert.equal(candidates[0].lastSeen, '2026-08-04T15:46:50.000Z');
+    assert.equal(candidates[1].firstSeen, '');
+    assert.equal(candidates[1].lastSeen, '');
   });
 
   it('does not promote a provider issue identifier that could contain personal data', async () => {

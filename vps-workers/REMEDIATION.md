@@ -11,7 +11,8 @@ service. Expose only an HTTPS reverse proxy path to this local listener.
 from the dedicated Sentry project every five minutes. `jobs/posthog-error-remediator.mjs`
 polls active PostHog Error Tracking issue summaries on a bounded 15-minute
 schedule. The API source copies only a fixed category, stable issue identity,
-timestamps, and occurrence count; it never copies error text, stack frames,
+timestamps, occurrence count, and an allowlisted exception class or fixed
+keyword bucket; it never copies free-form error text, stack frames,
 event properties, sessions, or users. All workers reserve and persist last-seen
 observations so concurrent cron ticks do not wake Codex twice for the same
 incident.
@@ -47,7 +48,7 @@ only the narrowly scoped DAC and identity capabilities needed for the parent
 Codex process to read auth and drops generated shells to the worker UID. The
 deploy script builds the pinned
 `Dockerfile.codex-remediator` image and injects its immutable commit tag into
-both remediation cron entries. The worker then inspects changed files, runs
+all remediation cron entries. The worker then inspects changed files, runs
 the immutable lint, typecheck, and test gates without provider secrets in the
 same dependency-mounted remediator image, pushes a `codex/<source>-remediation-*`
 branch, and opens a draft pull request. Each tick handles a bounded candidate

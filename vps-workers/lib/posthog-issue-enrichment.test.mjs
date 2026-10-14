@@ -122,23 +122,18 @@ describe('PostHog remediation candidate enrichment', () => {
     }
   });
 
-  it('accepts only full-length SHAs as commit-identifier releases', async () => {
+  it('drops hexadecimal commit identifiers even at full SHA length', async () => {
     for (const version of [
       'abc1234def5678',
       'd34db33fd34db33fd34db33fd34db33f',
+      'a'.repeat(40),
+      'b'.repeat(64),
     ]) {
       const dropped = await enrichDetail({
         latest_release: { version },
         top_in_app_frame: { function: 'f', source: 'a.js' },
       });
       assert.equal(dropped.sample.release, undefined, version);
-    }
-    for (const version of ['a'.repeat(40), 'b'.repeat(64)]) {
-      const kept = await enrichDetail({
-        latest_release: { version },
-        top_in_app_frame: { function: 'f', source: 'a.js' },
-      });
-      assert.equal(kept.sample.release, version, version);
     }
   });
 

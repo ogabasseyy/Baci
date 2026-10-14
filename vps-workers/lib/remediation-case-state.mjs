@@ -5,6 +5,7 @@ import {
   contextForCandidate,
 } from './remediation-case-context.mjs';
 import { createStoredDraftPrReconciler } from './remediation-case-draft-pr-reconciliation.mjs';
+import { compareRemediationCasesByOutcomeRecency } from './remediation-case-rotation.mjs';
 import { quietStaleRemediationCases } from './remediation-case-state-quiet.mjs';
 import { createRemediationCaseStateStorage } from './remediation-case-state-storage.mjs';
 import { createRemediationCaseStateValidator } from './remediation-case-state-validation.mjs';
@@ -207,20 +208,9 @@ export function createRemediationCaseState({
         groups.set(candidate.category, group);
       }
       // Rotate within each category so a recurring hot case cannot hold
-      // the single per-run slot forever: unseen cases go first, then the
-      // case whose last recorded outcome is oldest. Outcomes are only
-      // appended after a selection, so the trailing timestamp doubles as
-      // selection history with no ledger schema change. Recency is used
-      // instead of the outcome count because the history is capped at
-      // MAX_OUTCOMES and saturated cases would tie forever. The sort is
-      // stable, so ties keep the loader (highest-volume-first) order.
+      // the single per-run slot forever (see remediation-case-rotation).
       for (const group of groups.values()) {
-        group.sort((left, right) => {
-          const leftAt = state.cases[left.caseKey]?.outcomes?.at(-1)?.at || '';
-          const rightAt =
-            state.cases[right.caseKey]?.outcomes?.at(-1)?.at || '';
-          return leftAt < rightAt ? -1 : leftAt > rightAt ? 1 : 0;
-        });
+        group.sort(compareRemediationCasesByOutcomeRecency(state.cases));
       }
       const categories = [...groups.keys()].sort();
       const cursor = categories.indexOf(state.fairness.lastCategory);

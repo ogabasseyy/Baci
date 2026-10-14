@@ -76,13 +76,10 @@ const safeReleaseVersion = (value) => {
     const digits = core[1].replace(/\D/g, '');
     return digits.length >= 10 && digits.length <= 19 ? '' : core[1];
   }
-  // Only full-length SHAs are accepted as commit identifiers. PostHog
-  // documents the release as a version or git commit ID, and short or
-  // truncated hex is indistinguishable from key material here, so
-  // anything that is not a 40- or 64-character SHA is dropped.
-  if (/^[0-9a-fA-F]{40}$/.test(version) || /^[0-9a-fA-F]{64}$/.test(version)) {
-    return version;
-  }
+  // Hexadecimal commit identifiers are never accepted: PostHog sends the
+  // release as a free-form string, so even full-length SHAs are
+  // indistinguishable from key material and cannot be verified against
+  // the repository here. Only canonical semver cores are exported.
   return '';
 };
 

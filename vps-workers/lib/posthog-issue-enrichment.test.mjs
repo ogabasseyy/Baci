@@ -189,6 +189,26 @@ describe('PostHog remediation candidate enrichment', () => {
     }
   });
 
+  it('decodes percent-escapes before redacting frame paths', async () => {
+    const enriched = await enrichDetail({
+      top_in_app_frame: {
+        function: 'load',
+        source: 'https://cdn.example/token%3Dsecret-value.js',
+      },
+    });
+
+    assert.equal(enriched.sample.route.includes('secret-value'), false);
+    assert.match(enriched.sample.route, /token/);
+  });
+
+  it('drops frame paths with malformed escapes', async () => {
+    const enriched = await enrichDetail({
+      top_in_app_frame: { function: 'load', source: 'https://x/%E0%A4%A.js' },
+    });
+
+    assert.equal(enriched.sample.route, '(redacted PostHog location)');
+  });
+
   it('keeps the redacted route when the detail has no usable frame', async () => {
     const enriched = await enrichDetail({ latest_release: {} });
 

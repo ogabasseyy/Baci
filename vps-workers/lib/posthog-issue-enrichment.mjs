@@ -33,6 +33,13 @@ const framePath = (source) => {
       return '';
     }
   }
+  // Decode escapes before redaction so encoded assignments cannot hide
+  // from secret patterns; malformed sequences fail closed.
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    return '';
+  }
   // Absolute local paths may embed usernames and customer directories:
   // keep only the basename for every path shape.
   const segments = path.split(/[\\/]/).filter(Boolean);

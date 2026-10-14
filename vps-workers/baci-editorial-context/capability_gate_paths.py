@@ -17,6 +17,7 @@ ACTION_PATH = ".github/actions/capability-gate/action.yml"
 FRESHNESS_WORKFLOW = ".github/workflows/capability-register-freshness.yml"
 CONTRACT_WORKFLOW = ".github/workflows/capability-gate-contract.yml"
 CONTRACT_CHECK = ".github/scripts/capability_gate_contract_check.py"
+CONTRACT_TEXT_CHECKS = ".github/scripts/capability_gate_contract_text_checks.py"
 
 def map_cited_paths(text):
     paths = set()
@@ -227,7 +228,7 @@ def relevant_paths(register, cwd=".", base=None):
     # The enforcement layer itself (suite code, the composite action that
     # invokes it, and the scheduled workflow that asserts it) is always
     # relevant: a change confined to those files must still run the suite.
-    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW, CONTRACT_WORKFLOW, CONTRACT_CHECK}
+    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW, CONTRACT_WORKFLOW, CONTRACT_CHECK, CONTRACT_TEXT_CHECKS}
     try:
         paths |= {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
     except (KeyError, TypeError, AttributeError):

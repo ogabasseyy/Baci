@@ -4704,6 +4704,134 @@ describe('fulfillPendingVtuTransaction', () => {
       );
     });
 
+    it('wallet-only race restores to pending when the failed persist exhausts (no refund issued, safe to re-drive)', async () => {
+      // Codex R91 P2: card<=0 issues NO refund RPC, so restoring
+      // cannot double-run compensation. Without the restore the row
+      // strands on processing forever (never-debited strands match
+      // no recovery predicate by design, R39).
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'insufficient_wallet_balance', code: 'P0001' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-race-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-RACE-1',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          updated_at: '2026-10-14T20:00:00.000Z',
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+        updateErrors: {
+          purchase: { message: 'purchase write failed' },
+        },
+        updatePayloads,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-race-1',
+        })
+      ).rejects.toThrow('Failed to persist wallet-race VTU result');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+      expect(updatePayloads).toContainEqual({
+        error_message:
+          'VTU wallet balance changed during checkout; the purchase will resume automatically.',
+        metadata: expect.objectContaining({
+          customerSafeErrorMessage: true,
+          preVendInterruptedAt: expect.any(String),
+        }),
+        status: 'pending',
+      });
+    });
+
+    it('hybrid race does NOT restore to pending when the failed persist exhausts (card refund may have issued)', async () => {
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'insufficient_wallet_balance', code: 'P0001' },
+          });
+        }
+        if (name === 'refund_customer_wallet_for_vtu') {
+          return Promise.resolve({
+            data: [
+              { success: true, new_balance: 1700, transaction_id: 'refund-tx' },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-race-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-RACE-1',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+        updateErrors: {
+          purchase: { message: 'purchase write failed' },
+        },
+        updatePayloads,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-race-1',
+        })
+      ).rejects.toThrow('Failed to persist wallet-race VTU result');
+      expect(
+        updatePayloads.filter(
+          (payload) =>
+            typeof payload === 'object' &&
+            payload !== null &&
+            (payload as Record<string, unknown>).status === 'pending'
+        )
+      ).toEqual([]);
+    });
+
     it('hybrid replay (post-fact) self-heals when the ledger has a refund row and metadata.refundIssued was lost', async () => {
       // Crash-between-RPC-and-metadata-write specific to the wallet-race
       // path: the card portion was refunded (ledger has the row), but the

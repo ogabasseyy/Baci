@@ -2617,7 +2617,25 @@ export async function fulfillPendingVtuTransaction({
           // sites below): the card-leg refund above may have issued,
           // and re-driving would run it again with no record of the
           // first — a double refund. Pre-existing crash window,
-          // unchanged by the pre-vend restore.
+          // unchanged by the pre-vend restore. EXCEPTION (Codex R91
+          // P2): the zero-amount wallet-only result proves the
+          // card<=0 branch ran, which issues NO refund RPC — nothing
+          // can double-run, so restore to marked pending and let the
+          // next replay/cron re-drive (balance re-checked; vends or
+          // fails cleanly) instead of stranding the retained key on
+          // processing forever (never-debited strands match no
+          // recovery predicate by design, R39).
+          if (raceRefund.refundIssued && raceRefund.refundedAmount <= 0) {
+            await restoreInterruptedPreVendVtuRow({
+              // Fixed user-safe template (flagged safe inside the
+              // restore) — the raw persist error stays in the server
+              // log above.
+              userSafeMessage:
+                'VTU wallet balance changed during checkout; the purchase will resume automatically.',
+              row,
+              supabase,
+            });
+          }
           throwVtuPersistenceError('Failed to persist wallet-race VTU result');
         }
         return {

@@ -101,4 +101,34 @@ describe.each([
     // comparison stays authoritative for replay-vs-conflict.
     expect(destination).toEqual(parsed.shipping_address ?? address);
   });
+
+  it('skips mutable item checks for a confirmed replay after catalog drift', async () => {
+    // Arrange — the merchant changed product shipping metadata after the
+    // order was created; the retry rebuilds validation items from the
+    // current catalog rows.
+    const parsed = orderCreateSchema.parse({
+      ...orderInput,
+      shipping_address: address,
+    });
+
+    // Act
+    const destination = await enrichShippingAddressWithQuoteDestination(
+      createSupabaseRpcMock({
+        provider,
+        price: 2500,
+        quote_request: request,
+      }) as unknown as SupabaseClient,
+      'quote-1',
+      parsed.shipping_address ?? address,
+      {
+        ...context,
+        isConfirmedReplay: true,
+        items: [{ ...orderInput.items[0], weight: 2 }],
+      }
+    );
+
+    // Assert — physical metadata is not hash-significant, so the retry
+    // still reproduces the first attempt's adopted pin for the RPC replay.
+    expect(destination).toMatchObject(coordinates);
+  });
 });

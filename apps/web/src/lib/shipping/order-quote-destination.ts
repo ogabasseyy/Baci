@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
+import { readCoordinate } from './international-quote-order-guard';
 import {
   matchesQuoteDestination,
   type OrderShippingAddressForQuote,
@@ -127,9 +128,33 @@ export async function enrichShippingAddressWithQuoteDestination(
   });
 
   const orderPin = shippingCoordinatePairSchema.safeParse(shippingAddress);
-  const quotePin = shippingCoordinatePairSchema.safeParse(
-    quoteRequest.receiver
+  // Stored quote receivers are database JSON: pins may be null or numeric
+  // strings. Read them with the booking guard's reader so checkout accepts
+  // what fulfillment accepts; garbage pins still fail closed below.
+  const receiverLatitude = readCoordinate(
+    quoteRequest.receiver.latitude,
+    -90,
+    90
   );
+  const receiverLongitude = readCoordinate(
+    quoteRequest.receiver.longitude,
+    -180,
+    180
+  );
+  if (
+    receiverLatitude.status === 'invalid' ||
+    receiverLongitude.status === 'invalid'
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  const quotePin = shippingCoordinatePairSchema.safeParse({
+    ...(receiverLatitude.status === 'valid'
+      ? { latitude: receiverLatitude.value }
+      : {}),
+    ...(receiverLongitude.status === 'valid'
+      ? { longitude: receiverLongitude.value }
+      : {}),
+  });
   if (!orderPin.success || !quotePin.success) {
     throw new OrderQuoteDestinationMismatchError();
   }

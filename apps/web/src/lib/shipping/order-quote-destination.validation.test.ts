@@ -110,6 +110,52 @@ describe('enrichShippingAddressWithQuoteDestination validation', () => {
     ).resolves.toMatchObject(shippingAddress);
   });
 
+  it.each([
+    { latitude: null, longitude: null },
+    { latitude: '6.5', longitude: '3.35' },
+  ])('accepts stored quote pins the booking guard accepts: %j', async (pin) => {
+    // Stored quote receivers are database JSON: null pins read as absent
+    // and numeric strings coerce, exactly like fulfillment matching.
+    const destination = await enrichShippingAddressWithQuoteDestination(
+      createSupabase({
+        quote: {
+          ...internationalQuote,
+          quote_request: {
+            ...internationalQuote.quote_request,
+            receiver: { ...receiver, ...pin },
+          },
+        },
+      }) as unknown as SupabaseClient,
+      'quote-1',
+      shippingAddress,
+      { ...checkoutContext, isNewOrder: true }
+    );
+    expect(destination).toMatchObject({
+      address: receiver.address,
+      city: receiver.city,
+      state: receiver.state,
+    });
+  });
+
+  it('still rejects garbage stored quote pins', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabase({
+          quote: {
+            ...internationalQuote,
+            quote_request: {
+              ...internationalQuote.quote_request,
+              receiver: { ...receiver, latitude: 'far', longitude: 3.35 },
+            },
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        shippingAddress,
+        checkoutContext
+      )
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   it('rejects saved international quotes when checkout omits the address', async () => {
     await expect(
       enrichShippingAddressWithQuoteDestination(

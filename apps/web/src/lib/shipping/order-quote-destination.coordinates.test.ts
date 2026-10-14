@@ -186,11 +186,20 @@ describe.each([
   it.each([
     { latitude: 6.6, longitude: undefined },
     { latitude: 91, longitude: 3.3 },
-    { latitude: '6.6', longitude: '3.3' },
+    { latitude: 'far', longitude: 3.3 },
   ])('rejects malformed saved quote coordinates %j', async (pair) => {
     await expect(
       enrich(address, { ...request.receiver, ...pair })
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('coerces numeric-string saved quote coordinates like the booking guard', async () => {
+    const destination = await enrich(address, {
+      ...request.receiver,
+      latitude: '6.6',
+      longitude: '3.3',
+    });
+    expect(destination).toMatchObject({ latitude: 6.6, longitude: 3.3 });
   });
 
   it('rejects a pinned order with a quote lacking its pin', async () => {

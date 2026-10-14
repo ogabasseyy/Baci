@@ -151,7 +151,12 @@ export function validateQuoteCheckoutContext(
     throwQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
   }
 
-  if (!context.items) return;
+  // Item physical metadata is rebuilt from the mutable product catalog, so a
+  // confirmed retry must not re-judge it: a merchant edit between creation
+  // and retry would 400 a checkout the order RPC would replay. Skipping is
+  // safe because hash-significant item fields stay enforced by the RPC's own
+  // hash comparison; provider, merchant, and fee checks above still run.
+  if (!context.items || context.isConfirmedReplay) return;
   if (context.items.length !== quoteRequest.items.length) {
     throwQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
   }

@@ -37,6 +37,13 @@ describe('applyPilotPublicGate', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     delete process.env.BACI_PILOT_PUBLIC_DIR;
+    // The auto-stash marker is process-global (Symbol.for survives
+    // module resets by design), so clear it like the runtime
+    // registry tests do — or later cases inherit a set marker.
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.public-dir-auto-stashed')
+    );
   });
 
   it('stashes the config-anchored public dir for the dev/start boot gate', () => {
@@ -239,6 +246,10 @@ describe('stash origin vs pilot intent', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     delete process.env.BACI_PILOT_PUBLIC_DIR;
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.public-dir-auto-stashed')
+    );
   });
 
   it('excludes the automatic stash from pilot intent', async () => {
@@ -246,9 +257,7 @@ describe('stash origin vs pilot intent', () => {
     // preset; that automatic value must not count as intent, or
     // every boot shows intent and the warn paths never trigger (a
     // recompressed filler would pass the non-lab build as a warning
-    // and then fail every boot as fatal). Fresh modules per case:
-    // the origin marker is process state, and real processes
-    // evaluate the gate once.
+    // and then fail every boot as fatal).
     vi.resetModules();
     const { applyPilotPublicGate: gate } = await import('./pilot-next-gate');
     const { hasPilotIntent } = await import('./pilot-public-assets-unanchored');
@@ -268,5 +277,23 @@ describe('stash origin vs pilot intent', () => {
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', join(configDir, 'public'));
     gate(configDir, PHASE_DEVELOPMENT_SERVER);
     expect(hasPilotIntent()).toBe(true);
+  });
+
+  it('shares the marker across split module registries', async () => {
+    // Production hazard: the config bundle (next.config.compiled.js)
+    // and the instrumentation graph evaluate the roots module
+    // separately, so a module-level let set by record would read
+    // false in hasPilotIntent's copy and turn every warn path fatal.
+    // The Symbol.for global survives the split: record via one
+    // registry, read via a fresh one after resetModules.
+    vi.resetModules();
+    const { applyPilotPublicGate: gate } = await import('./pilot-next-gate');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    gate(configDir, PHASE_DEVELOPMENT_SERVER);
+    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
+    vi.resetModules();
+    const { hasPilotIntent } = await import('./pilot-public-assets-unanchored');
+    expect(hasPilotIntent()).toBe(false);
   });
 });

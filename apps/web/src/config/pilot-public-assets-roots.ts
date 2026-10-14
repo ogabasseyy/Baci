@@ -15,19 +15,27 @@ import { dirname, join, resolve } from 'node:path';
 // Stash origin: the gate auto-stashes its resolved root when the
 // operator set no preset, and that automatic value must NOT count as
 // pilot intent — otherwise every dev/start boot shows intent and the
-// intent-gated warn paths never trigger. Module state (not a second
-// env var) so the marker cannot leak into spawned child tooling the
-// way the stash itself could. Set exactly when the gate introduces
-// the variable, so repeat gate calls in one process (tests only)
-// keep the first answer; tests reset modules between cases.
-let publicDirAutoStashed = false;
+// intent-gated warn paths never trigger. A process-global Symbol.for
+// marker (not a second env var) so it cannot leak into spawned child
+// tooling the way the stash itself could — and NOT module state: the
+// config bundle (next.config.compiled.js) and the instrumentation
+// graph evaluate this module separately, so a module-level let set by
+// record would read false in hasPilotIntent's copy and turn every
+// warn path fatal. Same precedent as the lab runtime registry. Set
+// exactly when the gate introduces the variable; repeat sets in one
+// process are idempotent. Tests clear the key between cases (module
+// resets do NOT clear process globals).
+const autoStashKey = Symbol.for(
+  'baci.merchant-image-pilot.public-dir-auto-stashed'
+);
+type AutoStashRegistry = typeof globalThis & { [autoStashKey]?: true };
 
 export function recordPublicDirAutoStash(): void {
-  publicDirAutoStashed = true;
+  (globalThis as AutoStashRegistry)[autoStashKey] = true;
 }
 
 export function isPublicDirAutoStashed(): boolean {
-  return publicDirAutoStashed;
+  return (globalThis as AutoStashRegistry)[autoStashKey] === true;
 }
 export function resolveRoutePublicDir(): string {
   // Request-path twin of resolvePilotPublicDir below: the build/boot

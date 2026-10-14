@@ -6,7 +6,7 @@ diff --git a/ios/WebBrowserSession.swift b/ios/WebBrowserSession.swift
  
    func open() {
 -    var currentViewController = UIApplication.shared.keyWindow?.rootViewController
-+    var currentViewController = SceneGeometry.keyWindow()?.rootViewController
++    var currentViewController = Utilities.keyWindow()?.rootViewController
      while currentViewController?.presentedViewController != nil {
        currentViewController = currentViewController?.presentedViewController
      }
@@ -18,7 +18,7 @@ diff --git a/ios/WebAuthSession.swift b/ios/WebAuthSession.swift
    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
      #if os(iOS)
 -    return UIApplication.shared.keyWindow ?? ASPresentationAnchor()
-+    return SceneGeometry.keyWindow() ?? ASPresentationAnchor()
++    return Utilities.keyWindow() ?? ASPresentationAnchor()
      #else
      return NSApp.mainWindow ?? ASPresentationAnchor()
      #endif

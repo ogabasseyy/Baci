@@ -231,6 +231,8 @@ PODS:
     - ExpoModulesCore
   - ExpoCameraBarcodeScanning (57.0.4):
     - ExpoCamera
+    - ZXingObjC/OneD
+    - ZXingObjC/PDF417
   - ExpoClipboard (57.0.1):
     - ExpoModulesCore
   - ExpoCrypto (57.0.1):
@@ -2803,6 +2805,11 @@ PODS:
   - SwiftUIIntrospect (1.3.0)
   - TikTokBusinessSDK (1.6.1)
   - Yoga (0.0.0)
+  - ZXingObjC/Core (3.6.9)
+  - ZXingObjC/OneD (3.6.9):
+    - ZXingObjC/Core
+  - ZXingObjC/PDF417 (3.6.9):
+    - ZXingObjC/Core
 
 DEPENDENCIES:
   - "AsyncStorage (from `../../../node_modules/@react-native-async-storage/async-storage`)"
@@ -2820,15 +2827,15 @@ DEPENDENCIES:
   - "ExpoAdapterGoogleSignIn (from `../../../node_modules/@react-native-google-signin/google-signin/expo/ios`)"
   - ExpoAppleAuthentication (from `../../../node_modules/expo-apple-authentication/ios`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
-  - ExpoCamera (from `../../../node_modules/expo-camera/ios/ExpoCamera.podspec`)
-  - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec`)
+  - ExpoCamera (from `../../../node_modules/expo-camera/ios`)
+  - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios`)
   - ExpoClipboard (from `../../../node_modules/expo-clipboard/ios`)
   - ExpoCrypto (from `../../../node_modules/expo-crypto/ios`)
   - ExpoDevice (from `../../../node_modules/expo-device/ios`)
   - ExpoDocumentPicker (from `../../../node_modules/expo-document-picker/ios`)
   - "ExpoDomWebView (from `../../../node_modules/@expo/dom-webview/ios`)"
-  - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios/ExpoFileSystem.podspec`)
-  - ExpoFont (from `../../../node_modules/expo-font/ios/ExpoFont.podspec`)
+  - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios`)
+  - ExpoFont (from `../../../node_modules/expo-font/ios`)
   - ExpoGlassEffect (from `../../../node_modules/expo-glass-effect/ios`)
   - ExpoHaptics (from `../../../node_modules/expo-haptics/ios`)
   - ExpoImagePicker (from `../../../node_modules/expo-image-picker/ios`)
@@ -2837,12 +2844,12 @@ DEPENDENCIES:
   - ExpoLinking (from `../../../node_modules/expo-linking/ios`)
   - ExpoLocalization (from `../../../node_modules/expo-localization/ios`)
   - "ExpoLogBox (from `../../../node_modules/@expo/log-box`)"
-  - ExpoModulesCore (from `../../../node_modules/expo-modules-core/ExpoModulesCore.podspec`)
+  - ExpoModulesCore (from `../../../node_modules/expo-modules-core`)
   - ExpoModulesJSI (from `../../../node_modules/expo-modules-jsi/apple`)
-  - ExpoModulesWorklets (from `../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec`)
+  - ExpoModulesWorklets (from `../../../node_modules/expo-modules-core`)
   - ExpoModulesWorkletsAdapter (from `../../../node_modules/expo-modules-core`)
   - ExpoNotifications (from `../../../node_modules/expo-notifications/ios`)
-  - ExpoPrint (from `../../../node_modules/expo-print/ios/ExpoPrint.podspec`)
+  - ExpoPrint (from `../../../node_modules/expo-print/ios`)
   - ExpoRouter (from `../../../node_modules/expo-router/ios`)
   - ExpoSecureStore (from `../../../node_modules/expo-secure-store/ios`)
   - ExpoSharing (from `../../../node_modules/expo-sharing/ios`)
@@ -2971,6 +2978,7 @@ SPEC REPOS:
     - RevenueCat
     - SwiftUIIntrospect
     - TikTokBusinessSDK
+    - ZXingObjC
 
 EXTERNAL SOURCES:
   AsyncStorage:
@@ -3004,9 +3012,9 @@ EXTERNAL SOURCES:
   ExpoAsset:
     :path: "../../../node_modules/expo-asset/ios"
   ExpoCamera:
-    :podspec: "../../../node_modules/expo-camera/ios/ExpoCamera.podspec"
+    :path: "../../../node_modules/expo-camera/ios"
   ExpoCameraBarcodeScanning:
-    :podspec: "../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec"
+    :path: "../../../node_modules/expo-camera/ios"
   ExpoClipboard:
     :path: "../../../node_modules/expo-clipboard/ios"
   ExpoCrypto:
@@ -3018,9 +3026,9 @@ EXTERNAL SOURCES:
   ExpoDomWebView:
     :path: "../../../node_modules/@expo/dom-webview/ios"
   ExpoFileSystem:
-    :podspec: "../../../node_modules/expo-file-system/ios/ExpoFileSystem.podspec"
+    :path: "../../../node_modules/expo-file-system/ios"
   ExpoFont:
-    :podspec: "../../../node_modules/expo-font/ios/ExpoFont.podspec"
+    :path: "../../../node_modules/expo-font/ios"
   ExpoGlassEffect:
     :path: "../../../node_modules/expo-glass-effect/ios"
   ExpoHaptics:
@@ -3038,17 +3046,17 @@ EXTERNAL SOURCES:
   ExpoLogBox:
     :path: "../../../node_modules/@expo/log-box"
   ExpoModulesCore:
-    :podspec: "../../../node_modules/expo-modules-core/ExpoModulesCore.podspec"
+    :path: "../../../node_modules/expo-modules-core"
   ExpoModulesJSI:
     :path: "../../../node_modules/expo-modules-jsi/apple"
   ExpoModulesWorklets:
-    :podspec: "../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec"
+    :path: "../../../node_modules/expo-modules-core"
   ExpoModulesWorkletsAdapter:
     :path: "../../../node_modules/expo-modules-core"
   ExpoNotifications:
     :path: "../../../node_modules/expo-notifications/ios"
   ExpoPrint:
-    :podspec: "../../../node_modules/expo-print/ios/ExpoPrint.podspec"
+    :path: "../../../node_modules/expo-print/ios"
   ExpoRouter:
     :path: "../../../node_modules/expo-router/ios"
   ExpoSecureStore:
@@ -3298,7 +3306,7 @@ SPEC CHECKSUMS:
   ExpoLinking: 2e9ead00fcb0d3e623a8d4935fadae3cdb6d4d97
   ExpoLocalization: 659243b03b3a3e9589793cee2f728a899e181329
   ExpoLogBox: 80957303325cd4439137765c90a87d7f22aaf2ff
-  ExpoModulesCore: e23abf94a3e2ea9209e60effe05d31e5024a0a91
+  ExpoModulesCore: c2c6f982ef0319d83a0ffe89cc606dc60255aa32
   ExpoModulesJSI: b767422763350d2b248fb218f71bbb286fd2ee77
   ExpoModulesWorklets: 1916bfde983876e6caf849398b91a0b492b73869
   ExpoModulesWorkletsAdapter: ab86680ef9ebf375a9775ce8ea8562bd24030856
@@ -3424,6 +3432,7 @@ SPEC CHECKSUMS:
   SwiftUIIntrospect: fee9aa07293ee280373a591e1824e8ddc869ba5d
   TikTokBusinessSDK: 349bb1dea1f90d01f9b39418ebe7c8eb981c04af
   Yoga: 9891cfb1c680f64de9c41b09e7453dea33454d2b
+  ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
 PODFILE CHECKSUM: f58f22828ba5928d621e9fd4c11d26e717bc7b33
 

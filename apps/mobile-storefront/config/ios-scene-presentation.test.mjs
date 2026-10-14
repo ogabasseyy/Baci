@@ -14,28 +14,16 @@ const cases = [
   [
     'expo-web-browser',
     'ios/WebBrowserSession.swift',
-    /SceneGeometry\.keyWindow\(\)/,
+    /Utilities\.keyWindow\(\)/,
   ],
-  [
-    'expo-web-browser',
-    'ios/WebAuthSession.swift',
-    /SceneGeometry\.keyWindow\(\)/,
-  ],
+  ['expo-web-browser', 'ios/WebAuthSession.swift', /Utilities\.keyWindow\(\)/],
   [
     'expo-apple-authentication',
     'ios/AppleAuthenticationRequest.swift',
     /Utilities\.keyWindow\(\)/,
   ],
-  [
-    'expo-print',
-    'ios/ExpoPrinterSelector.swift',
-    /SceneGeometry\.keyWindow\(\)/,
-  ],
-  [
-    'expo-print',
-    'ios/ExpoPrintWithPrinter.swift',
-    /SceneGeometry\.keyWindow\(\)/,
-  ],
+  ['expo-print', 'ios/ExpoPrinterSelector.swift', /Utilities\.keyWindow\(\)/],
+  ['expo-print', 'ios/ExpoPrintWithPrinter.swift', /Utilities\.keyWindow\(\)/],
 ];
 
 for (const [name, path, sceneLookup] of cases) {
@@ -59,7 +47,25 @@ test('the shared presentation helper resolves the scene window on iOS and preser
   );
   assert.match(
     source,
-    /public static func keyWindow\(\)[\s\S]*?return SceneGeometry\.keyWindow\(\)/
+    /public static func keyWindow\(\)[\s\S]*?SceneGeometry\.keyWindow\(\)/
   );
   assert.match(source, /return NSApplication\.shared\.keyWindow/);
+});
+
+test('both mobile consumers compile the patched core instead of a prebuilt API', () => {
+  const root = resolve(import.meta.dirname, '../../..');
+  const adminConfig = readFileSync(
+    resolve(root, 'apps/mobile-admin/app.config.ts'),
+    'utf8'
+  );
+  assert.match(adminConfig, /usePrecompiledModules: false/);
+  for (const app of ['mobile-admin', 'mobile-storefront']) {
+    const properties = JSON.parse(
+      readFileSync(
+        resolve(root, `apps/${app}/ios/Podfile.properties.json`),
+        'utf8'
+      )
+    );
+    assert.equal(properties.EXPO_USE_PRECOMPILED_MODULES, 'false');
+  }
 });

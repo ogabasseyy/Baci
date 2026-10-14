@@ -8,6 +8,14 @@ on:
   pull_request:
     paths:
       - 'patches/expo-modules-jsi@*'
+      - 'patches/expo-modules-core@*'
+      - 'patches/expo-web-browser@*'
+      - 'patches/expo-apple-authentication@*'
+      - 'patches/expo-print@*'
+      - 'apps/mobile-storefront/config/ios-scene-*.test.mjs'
+      - 'apps/mobile-storefront/ios/Ogabassey/AppDelegate.swift'
+      - 'apps/mobile-storefront/ios/Ogabassey/Info.plist'
+      - '.github/scripts/ios-scene-presentation.test.mjs'
       - 'patches/expo-linear-gradient@*'
       - 'apps/mobile-storefront/scripts/native-regressions/**'
       - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
@@ -47,3 +55,6 @@ jobs:
 
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
+      - name: Verify scene presentation Swift and legacy window fallback
+        run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs

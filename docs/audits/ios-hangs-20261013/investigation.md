@@ -224,3 +224,14 @@ succeeded. The patched native app rebuilt, installed and launched on the iOS 27
 simulator without compiler errors. Current-head GitHub checks/review and the
 production archive remain release gates; successful sheet authentication or
 provider payment is not claimed by compilation and launch alone.
+
+The advisory follow-up preserves legacy admin presentation: the shared helper
+prefers SceneGeometry, then permits the legacy key window only when there are
+no connected scenes. Browser, Apple sign-in and Print share that helper.
+Admin now disables precompiled Expo modules in config and native properties,
+so its native consumers see the patched core API. A Swift regression executes
+the installed helper with scene/legacy/missing-window fixtures, and another
+typechecks the installed SceneGeometry/helper/auth anchors against the real iOS
+SDK. Both run in the macOS PR/release gates. The dependency evidence JSON now
+has one consistent package/version record per package, including JSI's 88
+verified source files.

@@ -1,4 +1,4 @@
-import { cpSync, linkSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, linkSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,12 +40,12 @@ describe('hardlinked filler rejection', () => {
     );
   });
 
-  it('refuses a multi-linked filler at build, warns at runtime', () => {
+  it('refuses a multi-linked filler at build, quarantines at runtime', () => {
     // Confinement (symlink, hardlink, special-file) applies in both
     // modes, since Next serves fillers/ statically with no gate
-    // noticing — but the non-lab runtime severity warns instead of
-    // bricking the boot. A multi-linked filler lets an outside
-    // writer mutate served bytes after the check.
+    // noticing — but the non-lab runtime severity quarantines
+    // instead of bricking the boot. A multi-linked filler lets an
+    // outside writer mutate served bytes after the check.
     const dir = root();
     withFillers(dir);
     linkSync(
@@ -55,15 +55,23 @@ describe('hardlinked filler rejection', () => {
     expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
       /contains a hardlinked file/
     );
+    const warnings: unknown[][] = [];
     const warnSpy = vi
       .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
+      .mockImplementation((...args: unknown[]) => {
+        warnings.push(args);
+      });
     try {
       expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-      expect(warnSpy).toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
     }
+    expect(warnings.join('\n')).toMatch(/contains a hardlinked file/);
+    expect(warnings.join('\n')).toMatch(/moved "fillers" to /);
+    expect(existsSync(join(dir, '__pilot', 'fillers'))).toBe(false);
+    // The outside hardlink is not in the tree: quarantining the
+    // entry leaves the operator's other name alone.
+    expect(existsSync(join(dir, 'outside-mirror.png'))).toBe(true);
   });
 
   it('accepts single-linked fillers in both modes', () => {

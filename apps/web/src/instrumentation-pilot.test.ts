@@ -132,6 +132,24 @@ describe('instrumentation pilot boot gate', () => {
     expect(registerOTelMock).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
+  it('refuses a degraded boot when ALLOW_PROD is set, even with no staged content', async () => {
+    // Production exposure acknowledged means direct /__pilot fetches
+    // serve with NO re-check until restart after a failed init — so
+    // the degraded boot is fatal here instead of fail-loud, and the
+    // original init error propagates (most informative). Lab-dev
+    // without the flag keeps the degrade above.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_ALLOW_PROD', '1');
+    initializeLabRuntimeMock.mockRejectedValueOnce(
+      new Error('invalid staged inputs')
+    );
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(register()).rejects.toThrow(/invalid staged inputs/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
+    expect(assertNoUnboundStagedContentMock).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
 
   it('initializes the enabled pilot before completing registration', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');

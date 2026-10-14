@@ -26,12 +26,20 @@ export class WorkerInputError extends Error {
 // open descriptor cannot be redirected, and the post-write identity
 // check below refuses to certify when the path no longer names it.
 async function assertParentConfined(stagingRoot, output) {
-  // The staging dir itself is the confinement root: a contender that
-  // renames it away and plants a link (the run token is predictable
-  // from the shared claim) would otherwise have 'wx' create the
-  // encoded file outside the tree, and the dev/ino check below would
-  // follow the same substituted parent and see the same inode. Both
-  // sides canonicalize, so a symlinked staging root still matches.
+  // The staging dir itself is the confinement root: realpathing both
+  // sides would let a contender that renames it away and plants a
+  // link (the run token is predictable from the shared claim) pass
+  // the comparison — both sides resolve to the substituted target —
+  // and then have 'wx' create the encoded file outside the tree.
+  // lstat binds the root itself first: a symlinked staging root
+  // refuses before any canonicalization can equate it.
+  const rootLink = await lstat(stagingRoot).catch(() => null);
+  if (rootLink?.isSymbolicLink()) {
+    throw new WorkerInputError(
+      'output-unsafe',
+      'encode staging root is a symlink; refusing to confine against it'
+    );
+  }
   const realRoot = await realpath(stagingRoot).catch(() => {
     throw new WorkerInputError(
       'output-unsafe',

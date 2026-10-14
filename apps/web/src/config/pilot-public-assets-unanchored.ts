@@ -114,11 +114,14 @@ export function assertUnanchoredPublicTrees(): void {
     );
   }
   for (const candidate of candidates) {
-    // Default (runtime) severities: drift refuses, content findings
-    // warn — a dirty candidate tree warns-and-continues rather than
-    // bricking a migration or worker that merely runs near an app
-    // dir. The zero-candidate refusal above is unchanged: checking
-    // nothing under pilot intent stays fatal.
-    assertPilotPublicAssets(candidate);
+    // Runtime severities without quarantine: drift refuses, content
+    // findings warn — a dirty candidate tree warns-and-continues
+    // rather than bricking a migration or worker that merely runs
+    // near an app dir. No quarantine here: a candidate is a FOREIGN
+    // tree that may belong to a live lab session elsewhere on the
+    // box, and this process must not mutate it. The zero-candidate
+    // refusal above is unchanged: checking nothing under pilot
+    // intent stays fatal.
+    assertPilotPublicAssets(candidate, undefined, 'throw', 'warn', false);
   }
 }

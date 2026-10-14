@@ -21,18 +21,13 @@ import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import {
   assertSnapshotSource,
   assertTierDecodedDimensions,
+  buildRungRows,
   escapeHtml,
-  originalContentType,
   PilotSheetError,
   parseMountCrop,
-  tierCells,
 } from './quality-sheet-render.mjs';
 
 export { PilotSheetError };
-
-// Explicit DPR rows per rung (spec: inspect at actual CSS slot size
-// for DPR 1/2/3); shared with the embed budget row count.
-const DPR_LEVELS = [1, 2, 3];
 
 async function findGenerationFor(outputRoot, record) {
   // Bind the sheet to the generation the current recipe+encoder would
@@ -177,35 +172,6 @@ export async function buildQualitySheet({
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
-    // Charge every rendered data-URI occurrence, not each unique file:
-    // the original embeds once per DPR row (three per rung,
-    // base64-inflated) and each tier embeds once per DPR row too, so
-    // unique-byte accounting would let the constructed HTML exceed the
-    // ceiling it claims to enforce.
-    const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
-    const rungRows = new Set(manifest.tiers.map((tier) => tier.requestedWidth))
-      .size;
-    const originalPrefix =
-      `data:${originalContentType(manifest.source.format, record.assetId)};base64,`
-        .length;
-    let recordBytes =
-      (originalPrefix + base64Length(snapshot.bytes.length)) *
-      rungRows *
-      DPR_LEVELS.length;
-    for (const tier of manifest.tiers) {
-      const file = files.get(tier.path);
-      recordBytes +=
-        (`data:${tier.contentType};base64,`.length +
-          base64Length(file?.length ?? 0)) *
-        DPR_LEVELS.length;
-    }
-    embeddedBytes += recordBytes;
-    if (embeddedBytes > maxEmbeddedBytes) {
-      throw new PilotSheetError(
-        `quality sheet exceeds the ${maxEmbeddedBytes}-byte embed budget at asset "${record.assetId}"; split the inventory instead of rendering a partial sheet`
-      );
-    }
-    const originalUri = `data:${originalContentType(manifest.source.format, record.assetId)};base64,${snapshot.bytes.toString('base64')}`;
     const seenTiers = new Map();
     for (const tier of manifest.tiers) {
       if (!seenTiers.has(tier.requestedWidth)) {
@@ -213,36 +179,37 @@ export async function buildQualitySheet({
       }
       seenTiers.get(tier.requestedWidth).push(tier);
     }
-    // Size-matched per DPR: each rung renders one row per DPR level —
-    // DPR 1 at exactly the slot CSS width, DPR 2/3 at its multiples —
-    // each capped by the narrowest encoded tier. The caption states
-    // the DPR and which ceiling bound it: the multiple, or the
-    // encoded-pixel width.
+    // Per-rung rows plus exact charging: the row builder resamples the
+    // verified bytes to each DPR width and reports the byte cost, so
+    // the budget trips BEFORE the rung that would cross the ceiling is
+    // appended — never a partial sheet a reviewer might trust.
     const mountNote =
       crop === null
         ? ''
         : ` · mount ${escapeHtml(crop.aspectRatio)} ${escapeHtml(crop.fit)} ${escapeHtml(crop.position)}`;
-    const rows = [...seenTiers.entries()]
-      .flatMap(([requestedWidth, tiers]) => {
-        const encodedFloor = Math.min(...tiers.map((tier) => tier.width));
-        return DPR_LEVELS.map((dpr) => {
-          const dprWidth = geometry.cssWidth * dpr;
-          const compareWidth = Math.min(dprWidth, encodedFloor);
-          const capped =
-            compareWidth < dprWidth ? ' · encoded-pixel ceiling' : '';
-          const originalStyle =
-            crop === null
-              ? `width:${compareWidth}px`
-              : `width:${compareWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
-          return `<tr><td>${requestedWidth}px tier · DPR ${dpr}</td>
-<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (DPR ${dpr}${capped})${mountNote}</figcaption></figure></td>
-${tiers.map((tier) => `<td>${tierCells(tier, files, crop, compareWidth)}</td>`).join('\n')}</tr>`;
-        });
-      })
-      .join('\n');
+    const rows = [];
+    for (const [requestedWidth, tiers] of seenTiers.entries()) {
+      const rung = await buildRungRows({
+        crop,
+        files,
+        geometry,
+        mountNote,
+        record,
+        requestedWidth,
+        snapshotBytes: snapshot.bytes,
+        tiers,
+      });
+      embeddedBytes += rung.embeddedBytes;
+      if (embeddedBytes > maxEmbeddedBytes) {
+        throw new PilotSheetError(
+          `quality sheet exceeds the ${maxEmbeddedBytes}-byte embed budget at asset "${record.assetId}"; split the inventory instead of rendering a partial sheet`
+        );
+      }
+      rows.push(rung.html);
+    }
     sections.push(`<section><h2>${escapeHtml(record.assetId)} · ${escapeHtml(record.role)} · slot ${escapeHtml(record.slot)}</h2>
 <p>merchant <code>${escapeHtml(record.merchantId)}</code> · source <code>${escapeHtml(record.sha256.slice(0, 16))}…</code> · generation <code>${escapeHtml(generationId.slice(0, 16))}…</code> · recipe <code>${escapeHtml(manifest.recipeId)}</code> · slot CSS width ${geometry.cssWidth}px${mountNote}</p>
-<table><thead><tr><th>tier</th><th>original (browser-scaled)</th><th>AVIF (actual pixels)</th><th>WebP (actual pixels)</th></tr></thead><tbody>${rows}</tbody></table></section>`);
+<table><thead><tr><th>tier</th><th>original (inspection raster)</th><th>AVIF (inspection raster)</th><th>WebP (inspection raster)</th></tr></thead><tbody>${rows.join('\n')}</tbody></table></section>`);
   }
   const overSourceNote =
     overSourceTiers > 0
@@ -251,7 +218,7 @@ ${tiers.map((tier) => `<td>${tierCells(tier, files, crop, compareWidth)}</td>`).
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pilot quality sheet</title>
 <style>body{font-family:system-ui,sans-serif;margin:24px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:8px;vertical-align:top}img{background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/16px 16px}code{font-size:12px}</style></head><body>
 <h1>Merchant image pilot — quality sheet</h1>
-<p><strong>Inspection aid only.</strong> This sheet renders verified generation bytes for human review; it is not visual acceptance and does not bypass the acceptance requirement.</p>
+<p><strong>Inspection aid only.</strong> Rows show Sharp-resampled PNG inspection rasters of the verified bytes at each DPR's pixel width, displayed at the slot CSS width; it is not visual acceptance and does not bypass the acceptance requirement.</p>
 ${overSourceNote}${sections.join('\n')}</body></html>\n`;
 }
 

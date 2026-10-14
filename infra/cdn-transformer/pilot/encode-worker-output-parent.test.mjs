@@ -128,3 +128,22 @@ test('encode verify rejects a parent swapped between claim and verify', async ()
     /parent changed during the write/
   );
 });
+
+test('encode refuses a symlinked staging root before the claim', async () => {
+  // Both-sides canonicalization would equate a swapped root with its
+  // own substituted target, so the root itself binds by lstat: a link
+  // at the staging path refuses instead of confining the encode
+  // against the attacker's directory.
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-enc-rootlink-'));
+  const staging = join(dir, 'staging-abc123');
+  await mkdir(staging, { recursive: true });
+  const outside = join(dir, 'outside');
+  await mkdir(outside, { recursive: true });
+  await rename(staging, join(dir, 'staging-moved'));
+  await symlink(outside, staging);
+  await assert.rejects(
+    () => claimEncodeOutput(join(staging, 'stem-w96-q70.webp'), staging),
+    /staging root is a symlink/
+  );
+  assert.deepEqual(await readdir(outside), []);
+});

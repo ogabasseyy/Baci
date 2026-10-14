@@ -33,7 +33,7 @@ test('keeps tier aspect ratio in DPR rows and warns on over-source', async () =>
 test('renders cropped mounts in the real CSS box on both sides', async () => {
   // A square source on a 16:9 cover mount: intrinsic-aspect rendering
   // would hide the clip, so original and tiers must share the mount box
-  // at the row's size-matched width — and the sheet must record it.
+  // at the slot CSS width — and the sheet must record it.
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const mount = { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' };
   const html = await buildQualitySheet({
@@ -42,13 +42,14 @@ test('renders cropped mounts in the real CSS box on both sides', async () => {
     outputRoot,
     slots: { 'header-logo': { cssWidth: 40, mount } },
   });
-  assert.match(
-    html,
-    /<img src="data:image\/png[^>]*style="width:48px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/
-  );
-  assert.match(
-    html,
-    /<img src="data:image\/avif[^>]*style="width:48px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/
+  // Original and tiers share the mount box: more than one PNG raster
+  // carries the aspect style.
+  assert.ok(
+    [
+      ...html.matchAll(
+        /<img src="data:image\/png[^>]*style="width:40px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/g
+      ),
+    ].length > 1
   );
   assert.match(html, /mount 16 \/ 9 cover 50% 50%/);
   // No mount on a fixed-geometry cropped slot: the canonical header-logo
@@ -63,7 +64,7 @@ test('renders cropped mounts in the real CSS box on both sides', async () => {
   });
   assert.match(
     canonical,
-    /<img src="data:image\/png[^>]*style="width:48px;aspect-ratio:1 \/ 1;object-fit:cover;object-position:50% 50%"/
+    /<img src="data:image\/png[^>]*style="width:40px;aspect-ratio:1 \/ 1;object-fit:cover;object-position:50% 50%"/
   );
   assert.match(canonical, /mount 1 \/ 1 cover 50% 50%/);
 });

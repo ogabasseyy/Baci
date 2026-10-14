@@ -4,9 +4,11 @@ import {
   constants as fsConstants,
   fstatSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readdirSync,
   readSync,
+  renameSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
@@ -37,6 +39,28 @@ function directoryExists(path: string): boolean {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
+}
+
+// Non-lab runtime quarantine: a staged-merchant or confinement finding
+// in the anchored served tree moves beside public/ (never statically
+// served) instead of warn-and-serve (exposes merchant bytes) or fatal
+// (bricks unrelated boots on a leftover stage). renameSync never
+// follows the entry itself, so symlinked entries move as links and
+// nested links move un-traversed. Same-filesystem move (beside
+// public/, not tmpdir) so EXDEV cannot fail it; a rename failure
+// (read-only tree) stays fatal. Only the anchored boot quarantines —
+// unanchored candidates pass quarantine=false, since a foreign tree
+// may belong to a live lab session elsewhere on the box.
+function quarantinePilotEntry(
+  publicDir: string,
+  root: string,
+  name: string
+): string {
+  const vault = join(publicDir, '..', '__pilot-quarantine');
+  mkdirSync(vault, { recursive: true });
+  const target = join(vault, `${Date.now()}-${process.pid}-${name}`);
+  renameSync(join(root, name), target);
+  return target;
 }
 
 // Reads one filler through a no-follow descriptor: lstat-then-readFile
@@ -147,7 +171,13 @@ export function assertPilotPublicAssets(
   // at runtime boots, so a leftover staged tree from a lab session on
   // the same box can never brick the production storefront's boot.
   // Only content findings downgrade; drift stays fatal (see above).
-  runtimeFindings: 'throw' | 'warn' = labEnabled ? 'throw' : 'warn'
+  runtimeFindings: 'throw' | 'warn' = labEnabled ? 'throw' : 'warn',
+  // Quarantine the offending entry on a runtime content finding
+  // (warn mode only): warn-and-continue alone would serve the bytes,
+  // so the entry moves beside public/ before boot continues. Drift
+  // never quarantines (fatal tamper signal); callers checking trees
+  // they must not mutate pass false.
+  quarantine = true
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {
@@ -161,10 +191,10 @@ export function assertPilotPublicAssets(
     }
     return;
   }
-  // Non-lab runtime downgrade: content findings warn-and-continue (the
-  // build gate is the enforcement point). Lab mode and explicit 'throw'
-  // callers run the check directly — identical behavior to before.
-  const downgrade = (check: () => void): void => {
+  // Non-lab runtime downgrade: content findings quarantine-and-continue
+  // (the build gate is the enforcement point). Lab mode and explicit
+  // 'throw' callers run the check directly — identical to before.
+  const downgrade = (name: string, check: () => void): void => {
     if (runtimeFindings === 'throw') {
       check();
       return;
@@ -175,8 +205,27 @@ export function assertPilotPublicAssets(
       if ((error as NodeJS.ErrnoException).code === 'PILOT_FILLER_DRIFT') {
         throw error;
       }
+      const message = (error as Error).message;
+      if (!quarantine) {
+        console.warn(
+          `merchant image pilot: ${message}; continuing without quarantine (foreign tree) — the build gate refuses this pre-deploy`
+        );
+        return;
+      }
+      let target: string;
+      try {
+        target = quarantinePilotEntry(publicDir, root, name);
+      } catch (quarantineError) {
+        throw new Error(
+          `${message}; automatic quarantine failed (${
+            quarantineError instanceof Error
+              ? quarantineError.message
+              : String(quarantineError)
+          }) — refusing to serve unverified bytes`
+        );
+      }
       console.warn(
-        `merchant image pilot: ${(error as Error).message}; continuing — the build gate refuses this pre-deploy, runtime only warns`
+        `merchant image pilot: ${message}; moved "${name}" to ${target} — continuing with the tree clean; remove the quarantine after investigating or re-stage`
       );
     }
   };
@@ -185,14 +234,16 @@ export function assertPilotPublicAssets(
     // Fillers triage runs in both modes: full hash pinning in lab;
     // non-lab confines plus merchant-shape scans, with the pinned
     // fixture names passing only when their bytes still match (drift
-    // refuses in both build and runtime boots). Content findings warn
-    // at runtime so a recompressed fixture or leftover file can never
-    // take down an unrelated production boot.
+    // refuses in both build and runtime boots). Content findings
+    // quarantine-and-continue at runtime so a recompressed fixture or
+    // leftover file can never take down an unrelated production boot.
     if (name === 'fillers') {
       if (labEnabled) {
         assertFillers(join(root, name));
       } else {
-        downgrade(() => assertNonLabFillers(root, name, FILLERS, fillerDrift));
+        downgrade(name, () =>
+          assertNonLabFillers(root, name, FILLERS, fillerDrift)
+        );
       }
       sawFillers = true;
       continue;
@@ -213,11 +264,12 @@ export function assertPilotPublicAssets(
       );
     }
     // Non-lab from here: staged-merchant shapes and symlink
-    // escapes refuse at build/deploy ('throw') and warn at runtime —
-    // a lab-only concern must never brick the production
-    // storefront's boot. Empty leftover dirs pass silently (nothing
-    // to serve); unrelated strays warn in every mode.
-    downgrade(() => assertNonLabEntry(root, name));
+    // escapes refuse at build/deploy ('throw') and quarantine at
+    // runtime — a lab-only concern must never brick the production
+    // storefront's boot, nor serve merchant bytes. Empty leftover
+    // dirs pass silently (nothing to serve); unrelated strays warn
+    // in every mode.
+    downgrade(name, () => assertNonLabEntry(root, name));
   }
   // Lab mode additionally requires the fillers directory itself: the
   // grid renders all three sibling-card images, so an absent directory

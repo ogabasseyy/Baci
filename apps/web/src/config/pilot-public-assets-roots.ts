@@ -49,8 +49,10 @@ export function resolveRoutePublicDir(): string {
 // Canonical spelling for tree-identity comparison: lexical resolve()
 // treats a symlinked ancestor (/var/...) and its physical spelling
 // (/private/var/...) as different trees. Missing paths fall back to
-// lexical (nothing to canonicalize yet).
-function canonicalDir(path: string): string {
+// lexical (nothing to canonicalize yet). Shared with the build gate,
+// which must refuse a preset naming a different tree than the
+// config-anchored one it just verified.
+export function canonicalDir(path: string): string {
   try {
     return realpathSync(path);
   } catch {

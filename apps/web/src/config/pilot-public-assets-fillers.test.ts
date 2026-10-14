@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
+  existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
@@ -72,6 +73,8 @@ describe('lab filler validation', () => {
     } finally {
       warnSpy.mockRestore();
     }
+    // Strays and partial sets never quarantine in either severity.
+    expect(existsSync(join(dir, '__pilot', 'fillers', '.DS_Store'))).toBe(true);
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /unapproved filler/
     );
@@ -178,5 +181,49 @@ describe('lab filler validation', () => {
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /unapproved filler/
     );
+  });
+  it('refuses pinned-filler drift at runtime when lab is disabled', () => {
+    // The runtime content downgrade never covers drift: a same-tree
+    // build already passed these bytes, so drift at boot means
+    // post-build tamper — fatal, never quarantined (a tamper signal
+    // wants human eyes, not auto-remediation).
+    const dir = root();
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
+    writeFileSync(
+      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
+      'tampered bytes'
+    );
+    const error = (() => {
+      try {
+        assertPilotPublicAssets(dir, false);
+      } catch (caught) {
+        return caught as Error & { code?: string };
+      }
+      throw new Error('expected drift to refuse');
+    })();
+    expect(error.message).toMatch(/does not match the pinned hash/);
+    expect(error.code).toBe('PILOT_FILLER_DRIFT');
+    // Fatal before any move: the tampered bytes stay in place for
+    // the operator to inspect.
+    expect(
+      existsSync(join(dir, '__pilot', 'fillers', 'grid-filler-600x400-a.png'))
+    ).toBe(true);
+    // Explicit warn drift keeps a probe-style caller booting: the
+    // triage warns and nothing throws.
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        assertPilotPublicAssets(dir, false, 'warn', 'warn')
+      ).not.toThrow();
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

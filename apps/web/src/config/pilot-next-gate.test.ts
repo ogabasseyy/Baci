@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +37,12 @@ describe('applyPilotPublicGate', () => {
     expect(() => applyPilotPublicGate(configDir)).toThrow(
       /staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1/
     );
+    // The build refuses without mutating: quarantine is runtime-only.
+    expect(
+      existsSync(
+        join(configDir, 'public', '__pilot', 'originals', 'staged.png')
+      )
+    ).toBe(true);
   });
   it('refuses a merchant image renamed to a pinned filler name', () => {
     // Strict build-gate drift: warn-only at runtime would let a
@@ -48,15 +60,45 @@ describe('applyPilotPublicGate', () => {
     );
   });
 
-  it('preserves an explicit operator BACI_PILOT_PUBLIC_DIR preset', () => {
-    // Set-if-unset: an operator/CI preset names a different tree on
-    // purpose, so the config-time stash must not overwrite it. The
-    // gate still checks (and returns) the config-anchored tree.
+  it('keeps an agreeing operator BACI_PILOT_PUBLIC_DIR preset', () => {
+    // An agreeing preset stays (same tree, operator spelling): the
+    // comparison is canonical, so a symlinked-ancestor spelling of
+    // the same tree agrees instead of refusing.
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    mkdirSync(join(configDir, 'public'), { recursive: true });
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv(
+      'BACI_PILOT_PUBLIC_DIR',
+      realpathSync(join(configDir, 'public'))
+    );
+    const publicDir = applyPilotPublicGate(configDir);
+    expect(publicDir).toBe(join(configDir, 'public'));
+    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(
+      realpathSync(join(configDir, 'public'))
+    );
+  });
+
+  it('refuses a preset that disagrees with the served config tree', () => {
+    // The boot gate and request resolver trust the stash: a stale
+    // preset would validate and bind a tree Next never serves, so
+    // the build refuses instead of stashing either spelling.
     const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/operator/tree/public');
+    expect(() => applyPilotPublicGate(configDir)).toThrow(
+      /preset .* disagrees with the served config tree/
+    );
+  });
+
+  it('stashes the config tree when the preset is empty', () => {
+    // Empty counts as unset (downstream treats it as unset too), so
+    // the config anchor fills it rather than leaving the boot
+    // unanchored.
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
     const publicDir = applyPilotPublicGate(configDir);
     expect(publicDir).toBe(join(configDir, 'public'));
-    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe('/operator/tree/public');
+    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
   });
 });

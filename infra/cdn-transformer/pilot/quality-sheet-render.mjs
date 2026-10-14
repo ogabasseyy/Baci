@@ -22,32 +22,6 @@ export function escapeHtml(value) {
     .replaceAll('"', '&quot;');
 }
 
-// Source MIME derivation from the VERIFIED manifest source format —
-// never from the inventory record's contentType label, which is
-// unvalidated metadata. A stale-but-allowlisted label (PNG bytes
-// marked image/jpeg) or a missing one (defaulting to PNG) would embed
-// the baseline under the wrong MIME and show a broken or
-// browser-sniffed original next to normally rendering derivatives.
-// The format comes from the schema-validated manifest source whose
-// sha256 the sheet already rebound to the verified snapshot bytes, so
-// the map is total; unknown values still fail closed.
-const MIME_FOR_SOURCE_FORMAT = {
-  avif: 'image/avif',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-};
-
-export function originalContentType(sourceFormat, assetId) {
-  const contentType = MIME_FOR_SOURCE_FORMAT[sourceFormat];
-  if (!contentType) {
-    throw new PilotSheetError(
-      `unsupported original source format for asset "${assetId}"`
-    );
-  }
-  return escapeHtml(contentType);
-}
-
 // Bind the schema-blind source claims to the verified snapshot bytes:
 // the generation id covers the source hash but not its format, byte
 // count, or dimensions, so a schema-valid stored manifest mislabeling
@@ -128,22 +102,98 @@ export async function assertTierDecodedDimensions(tier, files, assetId) {
   }
 }
 
-export function tierCells(tier, files, crop, boxWidth) {
-  const file = files.get(tier.path);
-  const dataUri = `data:${tier.contentType};base64,${file.toString('base64')}`;
+export function tierCells(tier, display, crop, boxWidth) {
+  // display carries the inspection raster bytes plus their MIME (PNG
+  // resamples, not the raw tier bytes): the caption keeps the tier's
+  // ENCODED facts (format, width, quality, bytes, hash) as provenance
+  // while the image shows what each DPR screen samples.
+  const dataUri = `data:${display.contentType};base64,${display.bytes.toString('base64')}`;
   // height:auto keeps the aspect ratio at the row width: without it the
-  // browser stretches the tier to height=. Uncropped tiers render at the
-  // row's comparison width like the original — never at intrinsic width
-  // up to the DPR cap, which would overshoot compareWidth whenever the
-  // encoded-pixel ceiling binds below it (a wide passthrough beside a
-  // narrow sibling) and defeat the size-matched comparison.
+  // browser stretches the tier to height=. Every tier renders at the
+  // slot CSS width like the original — DPR changes the raster's pixel
+  // density, never the displayed box.
   const overSource =
     tier.delivery === 'generated-over-source' ? ' · over-source' : '';
+  // Original-passthrough tiers carry no encode (quality null by
+  // contract): label them explicitly instead of printing 'qnull',
+  // which would imply a reviewed encode quality for exactly the
+  // rungs whose never-larger claim rests on source-byte reuse.
+  const qualityNote =
+    tier.delivery === 'original-passthrough'
+      ? 'passthrough (no encode)'
+      : `q${tier.quality}`;
   const style =
     crop === null
       ? `width:${boxWidth}px;height:auto`
       : `width:${boxWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
-  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · ${qualityNote} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+}
+
+// Explicit DPR rows per rung: the design spec requires inspection at
+// the actual CSS slot size for DPR 1/2/3 — the displayed box stays at
+// the slot CSS width on every row while the inspection raster carries
+// that DPR's pixel density (device pixels per CSS pixel), capped by
+// the narrowest encoded tier (never upscaled).
+const DPR_LEVELS = [1, 2, 3];
+
+const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
+
+// Inspection raster: the verified bytes resampled to the DPR width as
+// lossless PNG (no second lossy encode to judge — the tier's own
+// codec artifacts are baked into its pixels and survive the
+// downsample). Inputs are already hash-bound verified buffers, so no
+// re-verification here; the caller charges the raster bytes.
+async function resampleForInspection(bytes, rasterWidth) {
+  return sharp(bytes).resize({ width: rasterWidth }).png().toBuffer();
+}
+
+// One rung's DPR rows plus their exact embed cost, so the caller can
+// fail the aggregate budget BEFORE appending the HTML. Returns html
+// for all three DPR rows and the base64-inflated byte count the rows
+// add (prefixes plus rasters, original and tiers alike).
+export async function buildRungRows({
+  crop,
+  files,
+  geometry,
+  mountNote,
+  record,
+  requestedWidth,
+  snapshotBytes,
+  tiers,
+}) {
+  const encodedFloor = Math.min(...tiers.map((tier) => tier.width));
+  let embeddedBytes = 0;
+  const rows = [];
+  for (const dpr of DPR_LEVELS) {
+    const rasterWidth = Math.min(geometry.cssWidth * dpr, encodedFloor);
+    const capped = rasterWidth < geometry.cssWidth * dpr;
+    const originalRaster = await resampleForInspection(
+      snapshotBytes,
+      rasterWidth
+    );
+    const originalUri = `data:image/png;base64,${originalRaster.toString('base64')}`;
+    embeddedBytes += 'data:image/png;base64,'.length + base64Length(originalRaster.length);
+    const tierCellsHtml = [];
+    for (const tier of tiers) {
+      const raster = await resampleForInspection(
+        files.get(tier.path),
+        rasterWidth
+      );
+      embeddedBytes += 'data:image/png;base64,'.length + base64Length(raster.length);
+      tierCellsHtml.push(
+        `<td>${tierCells(tier, { bytes: raster, contentType: 'image/png' }, crop, geometry.cssWidth)}</td>`
+      );
+    }
+    const ceilingNote = capped ? ' · encoded-pixel ceiling' : '';
+    const originalStyle =
+      crop === null
+        ? `width:${geometry.cssWidth}px`
+        : `width:${geometry.cssWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
+    rows.push(`<tr><td>${requestedWidth}px tier · DPR ${dpr}</td>
+<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original resampled to ${rasterWidth}px, shown at ${geometry.cssWidth}px"/><figcaption>original · ${snapshotBytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${geometry.cssWidth}px CSS · DPR ${dpr} (${rasterWidth}px inspection raster${ceilingNote})${mountNote}</figcaption></figure></td>
+${tierCellsHtml.join('\n')}</tr>`);
+  }
+  return { embeddedBytes, html: rows.join('\n') };
 }
 
 // Mounted-crop contract: cropped consumers (product card 16:9 cover,

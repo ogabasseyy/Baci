@@ -38,8 +38,9 @@ test('requires recorded slot geometry and verified bytes', async () => {
   );
 });
 
-test('embeds the validated tier bytes, never a later reread', async () => {
+test('resamples rasters from the validated read, never a reread', async () => {
   const { syncBuiltinESMExports } = await import('node:module');
+  const { default: sharp } = await import('sharp');
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const [generationId] = await fs.readdir(join(outputRoot, 'generations'));
   const manifest = JSON.parse(
@@ -60,8 +61,10 @@ test('embeds the validated tier bytes, never a later reread', async () => {
   );
   // Controlled read seam: tier bytes flow through the bounded
   // open/read path (readUpToBytes), so the seam counts opens of the tier
-  // instead of readFile calls. Exactly one open plus genuine embedded
-  // bytes proves the sheet renders the validated read, never a reread.
+  // instead of readFile calls. Exactly one open plus an embedded raster
+  // resampled from the genuine bytes proves the sheet renders the
+  // validated read, never a reread — and raw tier bytes are never
+  // embedded at all.
   const realOpen = fs.open;
   let opens = 0;
   fs.open = (...args) => {
@@ -79,12 +82,12 @@ test('embeds the validated tier bytes, never a later reread', async () => {
       slots: { 'header-logo': { cssWidth: 40 } },
     });
     assert.equal(opens, 1);
+    const expected = await sharp(genuine).resize({ width: 40 }).png().toBuffer();
     assert.equal(
-      html.includes(
-        `data:${tier.contentType};base64,${genuine.toString('base64')}`
-      ),
+      html.includes(`data:image/png;base64,${expected.toString('base64')}`),
       true
     );
+    assert.equal(html.includes(genuine.toString('base64')), false);
     assert.equal(html.includes(replacement.toString('base64')), false);
   } finally {
     fs.open = realOpen;
@@ -128,12 +131,13 @@ test('rejects oversized and malformed inventories before rendering', async () =>
   );
 });
 
-test('derives the original MIME from verified bytes, not the inventory label', async () => {
+test('embeds uniform PNG rasters regardless of inventory labels', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));
   // The record label is unvalidated metadata: a stale-but-allowlisted
   // value (PNG bytes marked JPEG), a missing one, and a markup-breaking
-  // one must all render the verified PNG MIME instead of the label.
+  // one must all render uniform PNG inspection rasters — the label can
+  // never leak into a data-URI MIME or the markup.
   for (const contentType of [
     'image/jpeg',
     undefined,
@@ -157,6 +161,7 @@ test('derives the original MIME from verified bytes, not the inventory label', a
       slots: { 'header-logo': { cssWidth: 40 } },
     });
     assert.match(html, /data:image\/png;base64,/);
+    assert.doesNotMatch(html, /data:image\/jpeg;base64,/);
     assert.doesNotMatch(html, /onerror/);
   }
 });

@@ -129,6 +129,18 @@ export async function register() {
           'merchant image pilot: lab runtime initialization failed during boot; lab routes will fail closed',
           error
         );
+        // ALLOW_PROD escalates the degraded boot to fatal: with
+        // production exposure acknowledged, continuing runtime-less
+        // leaves direct /__pilot fetches served with NO re-check
+        // until restart (static serving never invokes a lab
+        // handler). Lab-dev keeps fail-loud degrade on its
+        // network-isolated box.
+        const { PILOT_LAB_ALLOW_PROD_FLAG } = await import(
+          '@/config/pilot-lab-enabled'
+        );
+        if (process.env[PILOT_LAB_ALLOW_PROD_FLAG] === '1') {
+          throw error;
+        }
         const { assertNoUnboundStagedContent } = await import(
           '@/config/pilot-public-assets-triage'
         );

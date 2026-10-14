@@ -79,37 +79,52 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # and refuses loudly. BUT direct static-asset requests (GET
 # /__pilot/...) never invoke a lab handler, so a plant fetched only
 # that way is served with NO re-check until restart: page renders
-# fail loud, raw asset fetches do not. This is why the lab (and
-# especially ALLOW_PROD) must run on a network-isolated host —
-# loopback-only or firewalled to the operator — never on a box where
-# an untrusted party can fetch URLs. Never live-edit the staged tree;
-# unexpected content means re-stage and restart.
+# fail loud, raw asset fetches do not. Two hard rules follow. (1)
+# Network isolation is a HARD prerequisite, not advice: the lab (and
+# especially ALLOW_PROD) runs on a loopback-only or operator-
+# firewalled host — never on a box where an untrusted party can fetch
+# URLs. (2) A failed lab init is FATAL when ALLOW_PROD is set (the
+# original init error propagates and boot refuses): with production
+# exposure acknowledged, continuing runtime-less is never acceptable.
+# Without ALLOW_PROD the degraded boot stays fail-loud (lab routes
+# fail closed) on the isolated dev box. Never live-edit the staged
+# tree; unexpected content means re-stage and restart.
 #
 # Recovery when a non-lab build/boot reports a staged tree. BUILD is
 # the enforcement point and refuses: staged-merchant shapes (image
 # files under originals/, generation dirs, fillers/, or the __pilot
 # root), confinement breaks (symlinks, hardlinked or special files —
-# Next would serve or block on them), and pinned-filler drift (a
-# merchant image renamed to a filler name must never ship silently).
-# Empty leftover dirs pass silently and unrelated strays (.DS_Store,
-# renamed leftovers) warn. RUNTIME boots split by finding: filler
-# drift still refuses (a same-tree build already passed these bytes,
-# so drift means post-build tamper — restore public/__pilot/fillers
-# from version control or re-pin the fixture), while staged-content
-# and confinement findings warn-and-continue so a leftover stage never
-# bricks the production boot. Two runtime cases stay fatal: an
-# unverifiable tree (symlinked or unreadable __pilot root — warn would
-# serve an unchecked tree) and an unchecked boot under pilot intent
-# ('refusing an unchecked boot': no checkable app tree at all while
-# pilot env was configured). Boots with zero pilot configuration
-# (serverless functions, migrations) warn instead of refusing.
-# BACI_PILOT_PUBLIC_DIR names the served tree for the boot gate when
-# the config anchor is unavailable (standalone/VPS, custom servers):
-# the config-time stash is set-if-unset, so an explicit operator/CI
-# preset always wins. To clear a dirty tree: re-run pilot:stage with
-# the intended inventory (reconcile removes unreferenced generations),
-# or delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
-# that should never have staged. The build refusal is intentional
+# Next would serve or block on them), pinned-filler drift (a merchant
+# image renamed to a filler name must never ship silently), and a
+# BACI_PILOT_PUBLIC_DIR preset that disagrees with the served config
+# tree (the boot gate trusts the stash — unset or correct the
+# preset). Empty leftover dirs pass silently and unrelated strays
+# (.DS_Store, renamed leftovers) warn. RUNTIME boots split by
+# finding: filler drift still refuses (a same-tree build already
+# passed these bytes, so drift means post-build tamper — restore
+# public/__pilot/fillers from version control or re-pin the
+# fixture), while staged-content and confinement findings move the
+# offending entry to __pilot-quarantine/ beside public/ (timestamped,
+# same filesystem — symlinked entries move as links, un-traversed)
+# and continue with the tree clean, so a leftover stage neither
+# bricks the production boot nor stays served. To restore a
+# quarantined entry after investigating: move it back under
+# public/__pilot/ (lab on) or re-run pilot:stage; remove the vault
+# when done. Three runtime cases stay fatal: a failed quarantine
+# (read-only tree — serving unverified bytes is not an option), an
+# unverifiable tree (symlinked or unreadable __pilot root), and an
+# unchecked boot under pilot intent ('refusing an unchecked boot':
+# no checkable app tree at all while pilot env was configured).
+# Unanchored candidate trees warn WITHOUT quarantine (a foreign tree
+# may belong to a live lab session — this process must not mutate
+# it); boots with zero pilot configuration (serverless functions,
+# migrations) warn instead of refusing. BACI_PILOT_PUBLIC_DIR names
+# the served tree for the boot gate when the config anchor is
+# unavailable (standalone/VPS, custom servers). To clear a dirty
+# tree: re-run pilot:stage with the intended inventory (reconcile
+# removes unreferenced generations), or delete
+# public/__pilot/{originals,<64-hex-dirs>} outright on a box that
+# should never have staged. The build refusal is intentional
 # fail-closed (staging is gitignored operator state, yet a leftover
 # stage must never silently ship merchant bytes): confirmed by
 # pilot-next-gate.test.ts 'refuses staged data in non-lab mode like

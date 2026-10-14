@@ -1,5 +1,6 @@
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -39,89 +40,9 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
   });
-  it.each([
-    'originals',
-    'c'.repeat(64),
-  ])('refuses %s at build, warns at runtime, when lab is disabled', (entry) => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', entry), { recursive: true });
-    writeFileSync(
-      join(dir, '__pilot', entry, 'merchant.avif'),
-      'private fixture'
-    );
-    // Build/deploy severity refuses staged merchant content ...
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /staged merchant pilot assets/
-    );
-    // ... while the default runtime severity warns and continues, so
-    // a leftover staged tree never bricks the production boot.
-    const warnings: unknown[][] = [];
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation((...args: unknown[]) => {
-        warnings.push(args);
-      });
-    try {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    } finally {
-      warnSpy.mockRestore();
-    }
-    expect(warnings.join('\n')).toMatch(/staged merchant pilot assets/);
-    expect(warnings.join('\n')).toMatch(/runtime only warns/);
-    // Lab mode permits the staged entry once the required filler set is
-    // complete; without fillers the grid would render broken images.
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    expect(() => assertPilotPublicAssets(dir, true)).not.toThrow();
-  });
-  it('refuses a staged merchant file hiding under fillers at build, warns at runtime', () => {
-    const dir = root();
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    writeFileSync(
-      join(dir, '__pilot', 'fillers', 'merchant.png'),
-      'private fixture'
-    );
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /staged merchant pilot assets/
-    );
-    const warnings: unknown[][] = [];
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation((...args: unknown[]) => {
-        warnings.push(args);
-      });
-    try {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    } finally {
-      warnSpy.mockRestore();
-    }
-    expect(warnings.join('\n')).toMatch(/staged merchant pilot assets/);
-  });
-  it('refuses a symlinked fillers entry at build, warns at runtime', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot'), { recursive: true });
-    mkdirSync(join(dir, 'outside'), { recursive: true });
-    symlinkSync(join(dir, 'outside'), join(dir, '__pilot', 'fillers'));
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /not a confined directory/
-    );
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-      expect(warnSpy).toHaveBeenCalled();
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
+  // Build-vs-runtime severity splits, drift, and quarantine live in
+  // the sibling pilot-public-assets-runtime.test.ts suite (line
+  // ceiling); this file keeps the shape triage (lab, strays, empty).
   it.each([
     'originals',
     'c'.repeat(64),
@@ -164,6 +85,12 @@ describe('non-lab public assets gate', () => {
     }
     expect(warnings.join('\n')).toMatch(/stray file\(s\) under "originals"/);
     expect(warnings.join('\n')).toMatch(/stray file ".DS_Store"/);
+    // Strays warn without quarantine: only staged-merchant and
+    // confinement findings move.
+    expect(existsSync(join(dir, '__pilot', '.DS_Store'))).toBe(true);
+    expect(existsSync(join(dir, '__pilot', 'originals', '.DS_Store'))).toBe(
+      true
+    );
   });
 
   it('passes empty leftover dirs silently when lab is disabled', () => {
@@ -179,137 +106,6 @@ describe('non-lab public assets gate', () => {
     } finally {
       warnSpy.mockRestore();
     }
-  });
-
-  it('refuses renamed and nested staging at build, warns at runtime', () => {
-    // Moving the tree aside does not evade the merchant-shape scan,
-    // at any depth or top-level name — at build severity. Runtime
-    // boots warn and continue.
-    for (const setup of ['junk-dir', 'top-file', 'nested'] as const) {
-      const dir = root();
-      if (setup === 'junk-dir') {
-        mkdirSync(join(dir, '__pilot', 'backup'), { recursive: true });
-        writeFileSync(
-          join(dir, '__pilot', 'backup', 'merchant.png'),
-          'private fixture'
-        );
-      } else if (setup === 'top-file') {
-        mkdirSync(join(dir, '__pilot'), { recursive: true });
-        writeFileSync(join(dir, '__pilot', 'merchant.png'), 'private fixture');
-      } else {
-        mkdirSync(join(dir, '__pilot', 'originals', 'sub'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(dir, '__pilot', 'originals', 'sub', 'merchant.webp'),
-          'private fixture'
-        );
-      }
-      expect(() =>
-        assertPilotPublicAssets(dir, false, 'throw', 'throw')
-      ).toThrow(/staged merchant pilot assets/);
-      const warnings: unknown[][] = [];
-      const warnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation((...args: unknown[]) => {
-          warnings.push(args);
-        });
-      try {
-        expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-      } finally {
-        warnSpy.mockRestore();
-      }
-      expect(warnings.join('\n')).toMatch(/staged merchant pilot assets/);
-    }
-  });
-
-  it('refuses symlink escapes at build, warns at runtime', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot'), { recursive: true });
-    symlinkSync(join(dir, 'outside.txt'), join(dir, '__pilot', 'evil'));
-    writeFileSync(join(dir, 'outside.txt'), 'not yours');
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /is a symlink/
-    );
-    const warnings: unknown[][] = [];
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation((...args: unknown[]) => {
-        warnings.push(args);
-      });
-    try {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    } finally {
-      warnSpy.mockRestore();
-    }
-    expect(warnings.join('\n')).toMatch(/is a symlink/);
-  });
-
-  it('refuses staged merchant trees at build, warns at runtime', () => {
-    // The filler tolerance above must not weaken the actual non-lab
-    // safety goal: generation/originals staging refuses at build and
-    // warns loudly at runtime.
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
-    writeFileSync(
-      join(dir, '__pilot', 'originals', 'merchant.avif'),
-      'private fixture'
-    );
-    mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
-    writeFileSync(join(dir, '__pilot', 'fillers', '.DS_Store'), 'junk');
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /staged merchant pilot assets/
-    );
-    const warnings: unknown[][] = [];
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation((...args: unknown[]) => {
-        warnings.push(args);
-      });
-    try {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    } finally {
-      warnSpy.mockRestore();
-    }
-    expect(warnings.join('\n')).toMatch(/staged merchant pilot assets/);
-  });
-
-  it('refuses pinned-filler drift at runtime when lab is disabled', () => {
-    // The runtime content downgrade above never covers drift: a
-    // same-tree build already passed these bytes, so drift at boot
-    // means post-build tamper and refuses past the warn downgrade.
-    const dir = root();
-    cpSync(
-      join(process.cwd(), 'public/__pilot/fillers'),
-      join(dir, '__pilot/fillers'),
-      { recursive: true }
-    );
-    writeFileSync(
-      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
-      'tampered bytes'
-    );
-    const error = (() => {
-      try {
-        assertPilotPublicAssets(dir, false);
-      } catch (caught) {
-        return caught as Error & { code?: string };
-      }
-      throw new Error('expected drift to refuse');
-    })();
-    expect(error.message).toMatch(/does not match the pinned hash/);
-    expect(error.code).toBe('PILOT_FILLER_DRIFT');
-    // Explicit warn drift keeps a probe-style caller booting: the
-    // triage warns and nothing throws.
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      expect(() =>
-        assertPilotPublicAssets(dir, false, 'warn', 'warn')
-      ).not.toThrow();
-      expect(warnSpy).toHaveBeenCalled();
-    } finally {
-      warnSpy.mockRestore();
-    }
+    expect(existsSync(join(dir, '__pilot', 'originals'))).toBe(true);
   });
 });

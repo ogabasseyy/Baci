@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -162,9 +163,11 @@ describe('assertUnanchoredPublicTrees', () => {
   });
   it('warns on staged content found in a candidate tree', () => {
     // Lab-off: the helper only runs when the lab flag is down (lab-on
-    // unanchored boots stay fatal in the resolver). Runtime severity:
-    // a dirty candidate warns-and-continues rather than bricking a
-    // migration or worker that merely runs near an app dir.
+    // unanchored boots stay fatal in the resolver). Foreign-tree
+    // severity: a dirty candidate warns-and-continues WITHOUT
+    // quarantine rather than bricking a migration or worker that
+    // merely runs near an app dir — the candidate may belong to a
+    // live lab session elsewhere, so this process must not mutate it.
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     const dir = root();
     const originals = join(dir, 'public', '__pilot', 'originals');
@@ -178,10 +181,13 @@ describe('assertUnanchoredPublicTrees', () => {
       expect(warn).toHaveBeenCalledTimes(2);
       expect(warn.mock.calls[0][0]).toMatch(/checked 1 candidate tree/);
       expect(warn.mock.calls[1][0]).toMatch(/staged merchant pilot assets/);
-      expect(warn.mock.calls[1][0]).toMatch(/runtime only warns/);
+      expect(warn.mock.calls[1][0]).toMatch(
+        /without quarantine \(foreign tree\)/
+      );
     } finally {
       warn.mockRestore();
       process.chdir(previousCwd);
     }
+    expect(existsSync(join(originals, 'm1-a1.png'))).toBe(true);
   });
 });

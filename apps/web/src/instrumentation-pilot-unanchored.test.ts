@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,9 +17,11 @@ import { register } from './instrumentation';
 
 // Unanchored-boot tests against the REAL public-assets resolver (the
 // mocked suite cannot exercise the anchor throw path): with the lab
-// off, a boot whose public tree cannot be anchored must check every
-// candidate tree it can find and refuse on DETECTED staged content —
-// only a found-nothing boot degrades to a loud warning, never a brick.
+// off, a boot whose public tree cannot be anchored checks every
+// candidate tree it can find, warns on DETECTED staged content
+// WITHOUT quarantine (a foreign tree may belong to a live lab
+// session), and only a found-nothing boot under pilot intent refuses
+// — never a brick on unconfigured workers.
 const registerOTelMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
@@ -151,8 +159,10 @@ describe('instrumentation unanchored boot', () => {
   });
 
   it('warns on staged content in the cwd candidate with lab off', async () => {
-    // Runtime severity: a dirty candidate warns-and-continues — a
-    // migration or worker running near a staged tree must not brick.
+    // Foreign-tree severity: a dirty candidate warns-and-continues
+    // WITHOUT quarantine — a migration or worker running near a
+    // staged tree must not brick, nor mutate a tree that may belong
+    // to a live lab session.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-staged-'));
     withStagedTree(join(sandbox, 'public'));
     const previousCwd = process.cwd();
@@ -162,13 +172,18 @@ describe('instrumentation unanchored boot', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         await expect(register()).resolves.toBe(undefined);
-        expect(
-          warnSpy.mock.calls.map((call) => String(call[0])).join('\n')
-        ).toMatch(/staged merchant pilot assets/);
+        const text = warnSpy.mock.calls
+          .map((call) => String(call[0]))
+          .join('\n');
+        expect(text).toMatch(/staged merchant pilot assets/);
+        expect(text).toMatch(/without quarantine \(foreign tree\)/);
       } finally {
         warnSpy.mockRestore();
       }
       expect(registerOTelMock).toHaveBeenCalledOnce();
+      expect(
+        existsSync(join(sandbox, 'public', '__pilot', 'originals', 'm1-a1.png'))
+      ).toBe(true);
     } finally {
       process.chdir(previousCwd);
       rmSync(sandbox, { force: true, recursive: true });
@@ -178,7 +193,7 @@ describe('instrumentation unanchored boot', () => {
   it('warns on staged content beside the server entry script', async () => {
     // Bare cwd, but argv[1] sits next to a staged app tree (the custom
     // `node /app/server.js` shape): the server-adjacent candidate is
-    // checked, warns, and boot completes.
+    // checked, warns without quarantine, and boot completes.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
     const appRoot = mkdtempSync(join(tmpdir(), 'pilot-unanchored-app-'));
     withStagedTree(join(appRoot, 'public'));
@@ -193,11 +208,14 @@ describe('instrumentation unanchored boot', () => {
         await expect(register()).resolves.toBe(undefined);
         expect(
           warnSpy.mock.calls.map((call) => String(call[0])).join('\n')
-        ).toMatch(/staged merchant pilot assets/);
+        ).toMatch(/without quarantine \(foreign tree\)/);
       } finally {
         warnSpy.mockRestore();
       }
       expect(registerOTelMock).toHaveBeenCalledOnce();
+      expect(
+        existsSync(join(appRoot, 'public', '__pilot', 'originals', 'm1-a1.png'))
+      ).toBe(true);
     } finally {
       process.argv[1] = previousArgv1;
       process.chdir(previousCwd);

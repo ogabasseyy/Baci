@@ -74,6 +74,7 @@ jobs:
               # changes must run the job that executes the audit.
               - '.github/scripts/semgrep-sarif*'
               - '.github/scripts/semgrep_sarif_*'
+              - '.github/CODEOWNERS'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
@@ -85,15 +86,14 @@ jobs:
             # (warning, still filtered) and fails only on real
             # findings or hardening drift; the separate
             # semgrep-tripwire.yml workflow (never required) turns
-            # red so the change cannot slip past merger eyes.
-            # Threat model: the paths signal, tripwire, and advisory
-            # env come from the PR-controlled workflow copy; the
-            # load-bearing backstop is CODEOWNERS review on
-            # .github/**. Only the audit LOGIC is base-pinned (see
-            # .github/sarif-filter-notes.md).
-            # Invariant: every trusted_changed path also matches
-            # semgrep_relevant above — otherwise the SAST job is
-            # skipped and the audit never runs.
+            # red when it runs — but a deletion/rename removes the
+            # run itself, so absence proves nothing (see notes).
+            # Threat model: paths signal, tripwire, and advisory env
+            # are PR-controlled; backstop is CODEOWNERS review on
+            # .github/** (itself in this set). Only the audit LOGIC
+            # is base-pinned (see .github/sarif-filter-notes.md).
+            # Invariant: every trusted_changed path also matches semgrep_relevant
+            # above — otherwise the SAST job is skipped, audit never runs.
             trusted_changed:
               - '.github/scripts/muse-review/**'
               - '.github/scripts/semgrep-sarif*'
@@ -102,6 +102,7 @@ jobs:
               - '.github/workflows/semgrep-tripwire.yml'
               - '.github/workflows/muse-code-review.yml'
               - '.github/workflows/muse-review-selftest.yml'
+              - '.github/CODEOWNERS'
 
       - name: Resolve Semgrep scope output
         id: scope

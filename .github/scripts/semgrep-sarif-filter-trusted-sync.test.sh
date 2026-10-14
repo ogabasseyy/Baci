@@ -22,15 +22,31 @@ CANONICAL=(
   '.github/workflows/semgrep-tripwire.yml'
   '.github/workflows/muse-code-review.yml'
   '.github/workflows/muse-review-selftest.yml'
+  '.github/CODEOWNERS'
 )
 
-extract() { # file key -> quoted list items, one per line
-  python3 - "$1" "$2" <<'EOF'
+extract() { # file key [parent] -> quoted list items, one per line
+  python3 - "$1" "$2" "${3-}" <<'EOF'
 import re, sys
-path, key = sys.argv[1], sys.argv[2]
+path, key, parent = sys.argv[1], sys.argv[2], sys.argv[3] or None
 lines = open(path).read().splitlines()
 items, inside = [], False
+parent_indent = None
 for line in lines:
+    if parent and parent_indent is None:
+        m_parent = re.match(rf"^(\s*){re.escape(parent)}:\s*$", line)
+        if not m_parent:
+            continue
+        parent_indent = len(m_parent.group(1))
+        continue
+    if parent:
+        stripped_line = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped_line and not stripped_line.startswith("#") \
+                and indent <= parent_indent:
+            parent_indent = None
+            inside = False
+            continue
     if re.match(rf"^\s*{re.escape(key)}:\s*$", line):
         inside = True
         continue
@@ -59,7 +75,10 @@ EOF
 fail=0
 trusted="$(extract "$SEC" trusted_changed)"
 relevant="$(extract "$SEC" semgrep_relevant)"
-trippaths="$(extract "$TRIP" paths)"
+# Scoped to on.pull_request.paths: an unscoped first-`paths:` match
+# would accept the canonical list under a push event while PRs use
+# a narrower list and never fire the tripwire.
+trippaths="$(extract "$TRIP" paths pull_request)"
 canonical="$(printf '%s\n' "${CANONICAL[@]}")"
 
 for name in trusted trippaths; do

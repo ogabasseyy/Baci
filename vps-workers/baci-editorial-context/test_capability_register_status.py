@@ -94,6 +94,14 @@ class RegisterStatusTests(unittest.TestCase):
             path.write_text(json.dumps(register(capabilities=[dict(big_row, id="r%d" % i) for i in range(50)])))
             self.assertGreater(len(path.read_text()), 50_000)
             self.assertEqual(_status.classify(path), "broken")
+            # The 50k bound measures the rendered payload, not the file:
+            # long source refs stay on disk only, so full JSON past 50k
+            # with a small projection is fresh, like the runtime.
+            ref_row = dict(row, claim="c", limitations="l",
+                           source_refs=["s" * 150 + "%d" % i for i in range(20)])
+            path.write_text(json.dumps(register(capabilities=[dict(ref_row, id="s%d" % i) for i in range(50)])))
+            self.assertGreater(len(path.read_text()), 50_000)
+            self.assertEqual(_status.classify(path), "fresh")
 
 
 if __name__ == "__main__":

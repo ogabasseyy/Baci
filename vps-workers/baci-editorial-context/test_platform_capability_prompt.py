@@ -2,6 +2,9 @@ import datetime as dt
 import hashlib
 import json
 import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +13,15 @@ from unittest.mock import patch
 import importlib.util
 
 if importlib.util.find_spec("codex_content_agent") is None:
-    # In-repo checkout without the VPS writer package: skip, do not fail.
+    # In-repo checkout without the VPS writer package: fall back to the
+    # checked-in fixture stub (tests/fixtures/writer_stub), whose
+    # prompt_builder replicates the writer interface with prompt-builder.patch
+    # applied and whose platform_capabilities re-exports the real runtime.
+    _fixture = Path(__file__).parent / "tests" / "fixtures" / "writer_stub"
+    if (_fixture / "codex_content_agent").is_dir():
+        sys.path.insert(0, str(_fixture))
+if importlib.util.find_spec("codex_content_agent") is None:
+    # No writer package and no fixture: skip, do not fail.
     build_prompt = None
     capability_context = None
 else:
@@ -35,6 +46,24 @@ def _seal(value):
 
 @unittest.skipUnless(build_prompt is not None, "requires the VPS writer checkout (codex_content_agent)")
 class CapabilityPromptTests(unittest.TestCase):
+    def test_prompt_builder_patch_matches_stub_interface(self):
+        # The patch must reverse-apply to the fixture stub: if the stub
+        # interface drifts from the patched writer, an incompatible patch
+        # can no longer merge silently.
+        stub = Path(__file__).parent / "tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py"
+        patch_file = Path(__file__).parent / "prompt-builder.patch"
+        if not stub.exists() or not patch_file.exists():
+            self.skipTest("stub or patch unavailable")
+        with tempfile.TemporaryDirectory() as root:
+            pkg = Path(root, "codex_content_agent")
+            pkg.mkdir()
+            shutil.copy(stub, pkg / "prompt_builder.py")
+            proc = subprocess.run(
+                ["git", "apply", "--check", "--reverse", str(patch_file)],
+                cwd=root, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, f"patch does not match stub: {proc.stderr.strip()}")
+
     def test_empty_source_references_are_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "capabilities.json"

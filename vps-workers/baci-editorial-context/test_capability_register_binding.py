@@ -192,16 +192,22 @@ class CapabilityBindingTests(unittest.TestCase):
         lines = workflow.read_text().splitlines()
         starts = [i for i, line in enumerate(lines) if line.strip() == "- name: Test capability register binding"]
         self.assertEqual(len(starts), 1, "ci.yml must invoke the capability gate exactly once")
+        self.assertEqual(lines[starts[0]], "      - name: Test capability register binding")
+        headers = [i for i, line in enumerate(lines) if re.match(r"^  [A-Za-z0-9_.\-]+:", line)]
+        job_start = max(i for i in headers if i < starts[0])
+        later = [i for i in headers if i > starts[0]]
+        job = lines[job_start : later[0] if later else len(lines)]
+        self.assertFalse(
+            any(re.match(r"^    (if|needs):", line) for line in job),
+            "gate job must stay unconditional (no job-level if:/needs:)",
+        )
         step = []
         for line in lines[starts[0] + 1:]:
             if re.match(r"^      - ", line):
                 break
-            step.append(line)
-        self.assertIn("uses: ./.github/actions/capability-gate", "\n".join(step))
-        self.assertFalse(
-            any(re.match(r"^\s+if:", line) for line in step),
-            "gate invocation must stay unconditional",
-        )
+            if line.strip() and not line.strip().startswith("#"):
+                step.append(line)
+        self.assertEqual(step, ["        uses: ./.github/actions/capability-gate"])
 
     def test_freshness_probe_falls_back_to_broken(self):
         # If register_status.py itself errors, the probe must still emit a
@@ -244,6 +250,33 @@ class CapabilityBindingTests(unittest.TestCase):
             current = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
             register["source_revision"] = current
             self.assertEqual(gate._changed_refs_unbound(register, {"cited.txt"}, cwd=repo), [])
+
+    def test_directory_citation_binds_descendant_blob(self):
+        def git(repo, *args):
+            subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True,
+            )
+
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            git(repo, "init", "-q", ".")
+            (repo / "app").mkdir()
+            (repo / "app" / "foo.ts").write_text("v1\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "one")
+            intermediate = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            (repo / "app" / "foo.ts").write_text("v2\n")
+            register = {"source_revision": intermediate, "capabilities": [{"status": "unverified", "source_refs": ["app"]}]}
+            # Exact-set intersection would miss the descendant entirely.
+            self.assertEqual(
+                gate._changed_refs_unbound(register, {"app/foo.ts"}, cwd=repo),
+                ["cited change not bound at source_revision: app/foo.ts"],
+            )
+            git(repo, "commit", "-q", "-am", "two")
+            current = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            register["source_revision"] = current
+            self.assertEqual(gate._changed_refs_unbound(register, {"app/foo.ts"}, cwd=repo), [])
 
 
 

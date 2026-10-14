@@ -15,6 +15,8 @@ MAP_PATH = "docs/product/agent-access-map.md"
 SUITE_DIR = "vps-workers/baci-editorial-context"
 ACTION_PATH = ".github/actions/capability-gate/action.yml"
 FRESHNESS_WORKFLOW = ".github/workflows/capability-register-freshness.yml"
+CONTRACT_WORKFLOW = ".github/workflows/capability-gate-contract.yml"
+CONTRACT_CHECK = ".github/scripts/capability_gate_contract_check.py"
 
 def map_cited_paths(text):
     paths = set()
@@ -193,13 +195,17 @@ def _changed_refs_unbound(register, changed, cwd="."):
         refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
     except (KeyError, TypeError, AttributeError):
         return ["register references unavailable"]
-    if not (refs & set(changed or ())):
+    # Directory citations cover their descendants: expand through the same
+    # matcher the touch detection uses, or a changed file under a cited
+    # directory binds nothing while the metadata still advances.
+    touched = {p for p in (_canon(p) for p in (changed or ())) if _matches(p, refs)}
+    if not touched:
         return []
     revision = register.get("source_revision")
     if not isinstance(revision, str):
         return ["source_revision missing"]
     failures = []
-    for path in sorted(refs & set(changed)):
+    for path in sorted(touched):
         probe = subprocess.run(
             ["git", "-C", str(cwd), "show", f"{revision}:{path}"],
             capture_output=True,
@@ -221,7 +227,7 @@ def relevant_paths(register, cwd=".", base=None):
     # The enforcement layer itself (suite code, the composite action that
     # invokes it, and the scheduled workflow that asserts it) is always
     # relevant: a change confined to those files must still run the suite.
-    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW}
+    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW, CONTRACT_WORKFLOW, CONTRACT_CHECK}
     try:
         paths |= {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
     except (KeyError, TypeError, AttributeError):

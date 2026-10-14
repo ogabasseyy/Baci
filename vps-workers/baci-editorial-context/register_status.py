@@ -98,9 +98,37 @@ def classify(register_path):
         # Same duplicate-key decoder as the runtime: a repeated key must not
         # silently keep the last value and classify fresh.
         data = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
-        # Mirror the runtime 50k serialized-payload bound: structurally valid
-        # rows that serialize past it are broken, not fresh.
-        if len(json.dumps(data, sort_keys=True)) > 50_000:
+        # Mirror the runtime 50k bound on the payload it actually renders:
+        # the projected safe rows omit source-ref strings and most evidence
+        # text, so measuring the complete parsed register would route a valid
+        # register to the broken-issue path. Missing keys raise into the
+        # broken fallback below; structurally invalid is broken regardless.
+        safe_rows = []
+        for row in data["capabilities"]:
+            safe = {key: row[key] for key in ("id", "title", "claim", "limitations", "status")}
+            safe["source_ref_count"] = len(row["source_refs"])
+            evidence = row.get("production_evidence")
+            if row["status"] == "production_verified" and isinstance(evidence, dict):
+                safe["production_evidence"] = {
+                    key: evidence[key] for key in ("deployed_revision", "verified_at") if key in evidence
+                }
+            safe_rows.append(safe)
+        projected = {
+            "schema_version": data["schema_version"],
+            "source_revision": data["source_revision"],
+            "evidence_digest": data["evidence_digest"],
+            "reviewed_at": data["reviewed_at"],
+            "capabilities": safe_rows,
+        }
+        if "review_scope" in data:
+            projected["review_scope"] = data["review_scope"]
+        serialized = (
+            json.dumps(projected, sort_keys=True)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+        )
+        if len(serialized) > 50_000:
             return "broken"
         if (
             not isinstance(data, dict)

@@ -216,6 +216,15 @@ class CapabilityBindingTests(unittest.TestCase):
             path.write_text("{invalid json")
             self.assertEqual(_status.classify(path), "broken")
             self.assertEqual(_status.classify(Path(root) / "missing.json"), "broken")
+            # Current-dated rows the runtime rejects are broken, not fresh.
+            prod = dict(row, status="production_verified")
+            path.write_text(json.dumps(register(capabilities=[prod])))
+            self.assertEqual(_status.classify(path), "broken")
+            path.write_text(json.dumps(register(capabilities=[dict(row), dict(row)])))
+            self.assertEqual(_status.classify(path), "broken")
+            dup_refs = dict(row, source_refs=["cited.txt", "cited.txt"])
+            path.write_text(json.dumps(register(capabilities=[dup_refs])))
+            self.assertEqual(_status.classify(path), "broken")
 
 if __name__ == "__main__":
     unittest.main()

@@ -117,4 +117,35 @@ describe('runtime quarantine-and-continue', () => {
     expect(existsSync(join(dir, '__pilot', 'fillers', '.DS_Store'))).toBe(true);
     expect(quarantined(dir, 'fillers')).toBe(false);
   });
+
+  it('continues when a concurrent boot quarantines first', () => {
+    // Two instances booting against the same tree can both observe one
+    // offending entry; the loser's rename hits ENOENT on the moved
+    // source. The bytes are unserved either way, so the boot warns
+    // and continues instead of bricking a healthy instance. The
+    // injected rename replays the loser's kernel view exactly: the
+    // source is gone (the winner moved it) and the rename raises.
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
+    writeFileSync(
+      join(dir, '__pilot', 'originals', 'merchant.avif'),
+      'private fixture'
+    );
+    const text = withWarnings(() => {
+      expect(() =>
+        assertPilotPublicAssets(dir, false, 'throw', 'warn', true, {
+          renameEntry: (source: string) => {
+            rmSync(source, { force: true, recursive: true });
+            const error = new Error(
+              `ENOENT: no such file or directory, rename '${source}'`
+            ) as NodeJS.ErrnoException;
+            error.code = 'ENOENT';
+            throw error;
+          },
+        })
+      ).not.toThrow();
+    });
+    expect(text).toMatch(/already quarantined by a concurrent boot/);
+    expect(existsSync(join(dir, '__pilot', 'originals'))).toBe(false);
+  });
 });

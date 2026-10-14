@@ -93,9 +93,9 @@ describe('assertNonLabFillers', () => {
       warn.mockRestore();
     }
   });
-  it('throws on hash drift in strict (build-gate) mode', () => {
-    // Builds fail where boots only warn: a merchant image renamed to a
-    // pinned filler name must never ship silently, and failing
+  it('throws on hash drift in strict (lab build-gate) mode', () => {
+    // Lab builds fail where non-lab builds and boots only warn:
+    // fixture exactness is a measurement requirement, and failing
     // pre-deploy is cheap with a clear re-pin fix.
     const dir = root();
     const fillers = join(dir, '__pilot', 'fillers');

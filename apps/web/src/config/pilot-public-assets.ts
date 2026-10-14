@@ -48,10 +48,22 @@ function directoryExists(path: string): boolean {
 // (read-only tree) stays fatal. Only the anchored boot quarantines —
 // unanchored candidates pass quarantine=false, since a foreign tree
 // may belong to a live lab session elsewhere on the box.
+// True only when the entry is genuinely gone: any other lstat failure
+// (permissions, I/O) keeps the fail-closed refusal below.
+function entryGone(root: string, name: string): boolean {
+  try {
+    lstatSync(join(root, name));
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
+}
+
 function quarantinePilotEntry(
   publicDir: string,
   root: string,
-  name: string
+  name: string,
+  renameEntry: (source: string, target: string) => void
 ): string {
   const vault = join(publicDir, '..', '__pilot-quarantine');
   mkdirSync(vault, { recursive: true });
@@ -74,7 +86,7 @@ function quarantinePilotEntry(
     );
   }
   const target = join(vault, `${Date.now()}-${process.pid}-${name}`);
-  renameSync(join(root, name), target);
+  renameEntry(join(root, name), target);
   return target;
 }
 
@@ -130,11 +142,14 @@ function assertFillers(fillersDir: string): void {
 export function assertPilotPublicAssets(
   publicDir: string,
   labEnabled = isPilotLabEnabled(),
-  // Pinned-filler drift severity in non-lab mode: the build gate refuses
-  // (cheap, pre-deploy — a merchant image renamed to a filler name must
-  // never ship silently) and runtime boots refuse too, since a
-  // same-tree build already passed these bytes — runtime drift means
-  // post-build tamper. Drift rethrows past the warn downgrade below.
+  // Pinned-filler drift severity in non-lab mode, lab-scoped by the
+  // caller (default strict): lab builds refuse (measurement exactness),
+  // non-lab builds warn — synthetic fixtures nothing outside the lab
+  // references must not brick storefront deploys, and lab boots
+  // re-assert exact fillers, so drift never enters a lab run. Runtime
+  // boots with pilot intent refuse too (a same-tree build already
+  // passed these bytes, so drift means post-build tamper). Drift
+  // rethrows past the warn downgrade below.
   fillerDrift: 'throw' | 'warn' = 'throw',
   // Non-lab CONTENT findings (staged-merchant shapes, symlink escapes,
   // stray structure) severity: refused at build/deploy checks,
@@ -144,15 +159,20 @@ export function assertPilotPublicAssets(
   // explicit operator decision, not an accident: staged content on
   // an un-movable tree means the image baked bytes past the build
   // gate, and serving unverified merchant bytes is worse than
-  // refusing the boot. Only content findings downgrade; drift stays
-  // fatal (see above).
+  // refusing the boot. Content findings downgrade; drift follows its
+  // own lab-scoped severity (see above).
   runtimeFindings: 'throw' | 'warn' = labEnabled ? 'throw' : 'warn',
   // Quarantine the offending entry on a runtime content finding
   // (warn mode only): warn-and-continue alone would serve the bytes,
   // so the entry moves beside public/ before boot continues. Drift
   // never quarantines (fatal tamper signal); callers checking trees
   // they must not mutate pass false.
-  quarantine = true
+  quarantine = true,
+  // Fault-injection seam for the concurrent-boot race test (same
+  // options-bag precedent as publishQualitySheet's fsyncDir):
+  // replaces the quarantine rename so the test can fail the move
+  // after the winner removed the source. Production callers omit it.
+  io?: { renameEntry?: (source: string, target: string) => void }
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {
@@ -189,8 +209,25 @@ export function assertPilotPublicAssets(
       }
       let target: string;
       try {
-        target = quarantinePilotEntry(publicDir, root, name);
+        target = quarantinePilotEntry(
+          publicDir,
+          root,
+          name,
+          io?.renameEntry ?? renameSync
+        );
       } catch (quarantineError) {
+        // Concurrent-boot race: two instances booting against the same
+        // tree can both observe one offending entry; the loser fails
+        // its rename on the already-moved source. The bytes are
+        // unserved either way, so a missing source warns and continues
+        // instead of bricking a healthy instance — anything still
+        // present refuses below.
+        if (entryGone(root, name)) {
+          console.warn(
+            `merchant image pilot: ${message}; entry "${name}" was already quarantined by a concurrent boot — continuing with the tree clean`
+          );
+          return;
+        }
         // Fail-closed and LOUD: the bytes cannot move (read-only or
         // immutable tree) and must not serve, so the boot refuses
         // with recovery guidance instead of warn-and-serving. A stale

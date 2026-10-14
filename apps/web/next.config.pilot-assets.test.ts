@@ -9,14 +9,30 @@ vi.mock('./src/config/pilot-public-assets', () => ({
 afterEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('Next build public pilot gate', () => {
   it('checks the app public tree while loading build configuration', async () => {
+    // Lab-scoped drift (stubbed: the lab flag decides the severity):
+    // non-lab builds warn on fixture drift — synthetic fixtures must
+    // not brick storefront deploys — while staged content refuses
+    // every build.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     const config = (await import('./next.config')).default;
     config(PHASE_PRODUCTION_BUILD);
-    // Build is the enforcement point: both drift and content findings
-    // refuse here (runtime boots downgrade content findings to warn).
+    expect(guard).toHaveBeenCalledWith(
+      expect.stringMatching(/apps\/web\/public$/),
+      undefined,
+      'warn',
+      'throw'
+    );
+  });
+  it('refuses fixture drift for lab builds', async () => {
+    // Lab builds need exact fixtures (measurement exactness).
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const config = (await import('./next.config')).default;
+    config(PHASE_PRODUCTION_BUILD);
     expect(guard).toHaveBeenCalledWith(
       expect.stringMatching(/apps\/web\/public$/),
       undefined,

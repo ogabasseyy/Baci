@@ -217,7 +217,9 @@ def should_run(base, register, changed, cwd="."):
 
 def main(cwd="."):
     """Run the gate against the checkout at cwd (default: process cwd)."""
-    root = str(cwd)
+    # Resolve once: a relative checkout would otherwise prefix both the
+    # suite path and the child cwd, doubling the path during discovery.
+    root = os.path.abspath(str(cwd))
     base = os.environ.get("BASE_SHA", "")
     env = dict(os.environ)
     if base and set(base) != {"0"}:

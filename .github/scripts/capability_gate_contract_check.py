@@ -49,7 +49,8 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # The workflow itself is asserted structurally (workflow_failures), not
     # pinned: it carries PINNED_CHECKER_SHA256, so a hash pin here would
-    # deadlock against checker edits the same way a self-pin would.    "vps-workers/baci-editorial-context/capability_gate.py": "7f69987ba95c8a276e2479320e6fcbd1e75cfd9db45cfb2c380709a2fc09e0a6",
+    # deadlock against checker edits the same way a self-pin would.
+    "vps-workers/baci-editorial-context/capability_gate.py": "0f3a9a31e3cf0514e4fbf88d50d4dcdc0b27572d2ce796645334e5e8a75a332f",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "6bca40bea2577c7b3ec336e26aca2494e9cdee3409af797cd5c2d944baa48fd2",
     "vps-workers/baci-editorial-context/register_digests.py": "aae14e6e045e67fd2331e8ca5afd15926b96291bcb5408a2c2d2e41e07ce8767",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
@@ -57,8 +58,8 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "39d62daac22dadf8efd04eb815dea0f32237cee3ba689397205f68546e560e18",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "3271933a560f99f09566e01250065b3727f3e7e4c350d970cc3d16226ce3c8ac",
-    "vps-workers/baci-editorial-context/test_capability_gate_main.py": "d027897f13d9011139aab5c0ad8f59ea2937ef02fd6751107d117f969db93124",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "0422bbfed8f705adbb778aa47b6b1506798d3e0fb7e7e20cba00c1f2539860bd",
+    "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
     "vps-workers/baci-editorial-context/test_platform_capabilities.py": "7e05d5b4c325ffe55aa36a3812e1ed67d3d8646bdaa0b425c511dab2115bc987",
@@ -69,8 +70,9 @@ BASE_PINS = {
 }
 
 _JOB_HEADER = re.compile(r"^  [A-Za-z0-9_.\-]+:")
-_JOB_CONDITION = re.compile(r"^    (if|needs):")
+_JOB_CONDITION = re.compile(r"^    (if|needs|continue-on-error):")
 _NEXT_STEP = re.compile(r"^      - ")
+_TRIGGER_KEY = re.compile(r"^\s+([A-Za-z_]+):")
 
 
 def sha256_of(path):
@@ -96,23 +98,49 @@ def declared_pins(checker_path):
     raise ValueError("pin declaration missing")
 
 
+def trigger_failures(ci_text):
+    """The gate must stay wired to the events that need it.
+
+    Keeping the step bytes identical while dropping the ``pull_request`` (or
+    ``push``) trigger silences the gate without touching the asserted block.
+    Commented trigger lines never fire, so they cannot satisfy the check.
+    """
+    lines = ci_text.splitlines()
+    try:
+        on = next(i for i, line in enumerate(lines) if line == "on:")
+    except StopIteration:
+        return ["ci.yml must declare workflow triggers"]
+    keys = set()
+    for line in lines[on + 1 :]:
+        if line and not line[0].isspace() and not line.startswith("#"):
+            break
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            match = _TRIGGER_KEY.match(line)
+            if match:
+                keys.add(match.group(1))
+    missing = {"push", "pull_request"} - keys
+    return [f"ci.yml must keep the {name} trigger" for name in sorted(missing)]
+
+
 def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = ci_text.splitlines()
+    failures = trigger_failures(ci_text)
     starts = [i for i, line in enumerate(lines) if line.strip() == STEP_NAME_LINE.strip()]
     if len(starts) != 1:
-        return ["ci.yml must invoke the capability gate exactly once"]
+        return failures + ["ci.yml must invoke the capability gate exactly once"]
     start = starts[0]
     if lines[start] != STEP_NAME_LINE:
-        return ["capability gate step must use the pinned indentation"]
+        return failures + ["capability gate step must use the pinned indentation"]
     headers = [i for i, line in enumerate(lines) if _JOB_HEADER.match(line)]
     job_start = max([i for i in headers if i < start], default=None)
     if job_start is None:
-        return ["capability gate step is not inside a workflow job"]
+        return failures + ["capability gate step is not inside a workflow job"]
     later = [i for i in headers if i > start]
     job = lines[job_start : (later[0] if later else len(lines))]
     if any(_JOB_CONDITION.match(line) for line in job):
-        return ["capability gate job must stay unconditional (no job-level if:/needs:)"]
+        return failures + ["capability gate job must stay unconditional (no job-level if:/needs:/continue-on-error:)"]
     code = []
     for line in lines[start + 1 :]:
         if _NEXT_STEP.match(line):
@@ -120,12 +148,17 @@ def ci_failures(ci_text):
         if line.strip() and not line.strip().startswith("#"):
             code.append(line)
     if code != [STEP_USES_LINE]:
-        return ["capability gate invocation must be exactly the pinned block"]
-    return []
+        return failures + ["capability gate invocation must be exactly the pinned block"]
+    return failures
 
 
 def pin_failures(repo_root, base_pins, declared):
-    """Undeclared enforcement changes fail; declared ones pass with a notice."""
+    """Undeclared enforcement changes fail; declared ones pass with a notice.
+
+    Declarations must track the files: advancing a pin before its file
+    changes (a precomputed hash for a future weakening) fails, so the
+    two-PR sequence of declare-early then weaken-silently cannot pass.
+    """
     failures, notices = [], []
     for rel in base_pins:
         try:
@@ -134,6 +167,11 @@ def pin_failures(repo_root, base_pins, declared):
             failures.append(f"enforcement file missing: {rel}")
             continue
         if actual == base_pins[rel]:
+            if declared.get(rel, base_pins[rel]) != base_pins[rel]:
+                failures.append(
+                    f"pin advanced without a file change: {rel} "
+                    f"(declare the new hash only in the change that makes it)"
+                )
             continue
         if declared.get(rel) == actual:
             notices.append(f"declared enforcement change (needs review): {rel}")
@@ -156,13 +194,18 @@ def workflow_failures(workflow_text):
     keeping a direct script run would silently switch the guard to
     executing head code.
     """
+    # Comment lines never execute: keeping the markers only as comments while
+    # switching to head-owned execution must still fail.
+    code = "\n".join(
+        line for line in workflow_text.splitlines() if not line.strip().startswith("#")
+    )
     missing = [
         marker
         for marker in (
             "git show FETCH_HEAD:.github/scripts/capability_gate_contract_check.py",
             "python3 /tmp/contract_check.py",
         )
-        if marker not in workflow_text
+        if marker not in code
     ]
     return [f"contract workflow must keep base-owned execution ({m})" for m in missing]
 
@@ -186,7 +229,11 @@ def checker_file_failures(repo_root, base_pin, declared_pin):
         actual = sha256_of(Path(repo_root, CHECKER))
     except OSError:
         return ["checker script missing"], []
-    if base_pin is not None and actual == base_pin:
+    if base_pin is None:
+        return [], []
+    if actual == base_pin:
+        if declared_pin is not None and declared_pin != base_pin:
+            return ["checker pin advanced without a checker change (declare it only in the change that makes it)"], []
         return [], []
     if declared_pin is not None and actual == declared_pin:
         return [], ["declared checker change (needs review)"]

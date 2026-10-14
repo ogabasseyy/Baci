@@ -22,6 +22,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # Baseline hash of the checker script itself. The checker cannot pin
+  # itself, so the base-owned workflow carries the baseline and passes it as
+  # argv[1]; a same-PR checker change declares its new hash here.
+  PINNED_CHECKER_SHA256: 83ce3f135b6d62772b27da7a82fbc1fe26ef19082009ba41aa6515361cb9f022
+
 jobs:
   gate-contract:
     name: Capability Gate Contract
@@ -43,4 +49,4 @@ jobs:
           else
             cp .github/scripts/capability_gate_contract_check.py /tmp/contract_check.py
           fi
-          python3 /tmp/contract_check.py
+          python3 /tmp/contract_check.py "$PINNED_CHECKER_SHA256"

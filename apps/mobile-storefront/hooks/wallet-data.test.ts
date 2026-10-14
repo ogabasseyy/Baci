@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import {
-  fetchWalletData,
-  fetchWalletDataWithDeadline,
-  WALLET_LOAD_TIMEOUT_MS,
-} from './wallet-data';
+import { fetchWalletData } from './wallet-data';
 
 type QueryResult = {
   data: unknown;
@@ -627,81 +623,5 @@ describe('fetchWalletData', () => {
     } finally {
       jest.useRealTimers();
     }
-  });
-});
-
-describe('fetchWalletDataWithDeadline', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockReadPrimary.mockResolvedValue({ status: 'unavailable' });
-  });
-
-  it('rejects a stalled load at the deadline instead of hanging forever', async () => {
-    // Codex R93 P2: a stalled Supabase request left useWallet
-    // loading indefinitely and the mandatory purchase gate rejects
-    // every attempt while loading. The deadline converts the stall
-    // into a retryable error the gate surfaces with Try Again.
-    expect(WALLET_LOAD_TIMEOUT_MS).toBe(30_000);
-    jest.useFakeTimers();
-    try {
-      mockFrom.mockImplementation(() => {
-        const query = {
-          eq: jest.fn(() => query),
-          limit: () => new Promise(() => {}),
-          select: jest.fn(() => query),
-        };
-        return query;
-      });
-      const pending = fetchWalletDataWithDeadline(
-        'customer-1',
-        'merchant-1',
-        'user-1'
-      );
-      const assertion = expect(pending).rejects.toThrow(
-        'Wallet load timed out'
-      );
-      await jest.advanceTimersByTimeAsync(WALLET_LOAD_TIMEOUT_MS);
-      await assertion;
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('honors TanStack cancellation promptly', async () => {
-    jest.useFakeTimers();
-    try {
-      mockFrom.mockImplementation(() => {
-        const query = {
-          eq: jest.fn(() => query),
-          limit: () => new Promise(() => {}),
-          select: jest.fn(() => query),
-        };
-        return query;
-      });
-      const controller = new AbortController();
-      const pending = fetchWalletDataWithDeadline(
-        'customer-1',
-        'merchant-1',
-        'user-1',
-        controller.signal
-      );
-      const assertion = expect(pending).rejects.toThrow();
-      controller.abort();
-      await assertion;
-      expect(jest.getTimerCount()).toBe(0);
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('passes healthy loads through before the deadline', async () => {
-    setupSupabaseTables();
-    const result = await fetchWalletDataWithDeadline(
-      'customer-1',
-      'merchant-1',
-      'user-1'
-    );
-    expect(result.wallet.balance).toBe(5000);
-    expect(result.transactions).toEqual([]);
   });
 });

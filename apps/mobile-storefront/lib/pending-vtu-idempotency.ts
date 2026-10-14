@@ -134,7 +134,13 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   }
 }
 
-/** Records the key a purchase was submitted with (cap-enforced). */
+/**
+ * Records the key a purchase was submitted with (cap-enforced). A new
+ * generation supersedes the scope's tombstone (Codex R94 P2): a
+ * tombstone retained by a failed forget-persist would otherwise
+ * suppress a same-millisecond re-remember on restart, and the retry
+ * would mint a fresh UUID and risk a second debit/vend.
+ */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string,
@@ -147,6 +153,7 @@ export function rememberPendingVtuPurchase(
     enforcePendingVtuCap();
   }
   pendingPurchases.delete(descriptor);
+  forgottenVtuScopes.delete(descriptor);
   pendingPurchases.set(descriptor, {
     key,
     reference: null,

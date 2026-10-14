@@ -42,10 +42,13 @@ const mockAuthState: {
   user: { id: 'user-a' },
 };
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: typeof mockAuthState) => unknown) =>
-    selector(mockAuthState),
-}));
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = (selector: (state: typeof mockAuthState) => unknown) =>
+    selector(mockAuthState);
+  (useAuthStore as unknown as Record<string, unknown>).getState = () =>
+    mockAuthState;
+  return { useAuthStore };
+});
 
 let mockNextUuid = 0;
 jest.mock('expo-crypto', () => ({
@@ -388,6 +391,23 @@ describe('useUtilityPayment', () => {
     mockAuthState.user = null;
     mockAuthState.customer = null;
     rerender(() => useUtilityPayment());
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
+  });
+
+  it('detects an account switch even before React commits the rerender', () => {
+    // Codex R94 P1: a render-backed ref still holds the submitting
+    // owner when the switch lands after dispatch but before the
+    // next commit — the previous session's reference/voucher would
+    // render in the new session. The live-store read discards it.
+    const { result } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(true);
+
+    mockAuthState.user = { id: 'user-b' };
+    mockAuthState.customer = { id: 'customer-b' };
 
     expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
       false

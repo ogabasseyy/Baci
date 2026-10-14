@@ -1,7 +1,6 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
-import { useRef } from 'react';
 import { CONFIG } from '@/lib/config';
 import {
   buildVtuPurchaseDescriptor,
@@ -46,12 +45,10 @@ export function useUtilityPayment() {
   // back to the customer row, but the checkout token belongs to the
   // auth user, so the binding capture must not use the fallback.
   const submittingUserId = useAuthStore((state) => state.user?.id);
-  // Latest signed-in owner, refreshed every render. Compared against
-  // the submitter when a checkout settles so an account switch (or
-  // sign-out) mid-flight discards the stale result instead of writing
-  // one customer's success screen into another's session.
-  const latestOwnerRef = useRef<string | undefined>(undefined);
-  latestOwnerRef.current = ownerId;
+  // No render-backed owner ref: settlement checks must read the LIVE
+  // auth owner (see isSubmittingOwnerCurrent) — a ref updated only
+  // during render still holds the submitting owner when the account
+  // switches after dispatch but before React commits the rerender.
   const scopePendingVtuDescriptor = (descriptor: string): string =>
     scopePendingVtuKey(ownerId, CONFIG.MERCHANT_ID, descriptor);
   // Wallet-only Idempotency-Key. Recalled from the cross-mount pending
@@ -91,9 +88,17 @@ export function useUtilityPayment() {
      * True while the capture from `captureSubmittingOwner` still
      * matches the signed-in owner. False after an account switch or
      * sign-out mid-flight — the caller must discard the result.
+     * Reads the LIVE store (Codex R94 P1), not a render-backed ref:
+     * a switch landing after dispatch but before the next commit
+     * must still discard the stale result.
      */
-    isSubmittingOwnerCurrent: (submittingOwner: string | undefined) =>
-      latestOwnerRef.current === submittingOwner,
+    isSubmittingOwnerCurrent: (submittingOwner: string | undefined) => {
+      const live = useAuthStore.getState();
+      return (
+        resolveIdempotencyScopeOwnerId(live.user?.id, live.customer?.id) ===
+        submittingOwner
+      );
+    },
     /**
      * Marks every cached wallet query stale (all owners + merchants —
      * the query keys are owner-scoped and the submitter's identity is

@@ -19,6 +19,7 @@ import {
   rememberPendingVtuPurchase,
   serializePendingVtuPurchases,
 } from './pending-vtu-idempotency';
+import * as vtuCodec from './pending-vtu-idempotency-codec';
 import {
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
@@ -461,6 +462,54 @@ describe('pending-vtu-idempotency', () => {
     expect(snapshot.entries).toEqual([]);
     expect(snapshot.forgotten).toHaveLength(1);
     expect(recallPendingVtuKey(scoped)).toBeNull();
+  });
+
+  it('clears a retained tombstone when a new generation is remembered', () => {
+    // Codex R94 P2: the forget's MMKV write failed, so its tombstone
+    // stayed in memory (re-noted here — writes trivially succeed
+    // under jest); the gated submit then remembered a new key in the
+    // same millisecond (forgottenAt >= rememberedAt). Without the
+    // clear-on-remember, the restart parse suppresses the new entry
+    // and the retry mints another UUID — a second debit/vend risk.
+    clearPendingVtuKeys();
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', 'SIG-REBORN-MS');
+    rememberPendingVtuPurchase(scoped, 'old-key');
+    // Capture the exact bytes each persist writes: the remember's own
+    // persist clears the in-memory tombstones on success, so the
+    // written snapshot is the only observable difference. Spy via the
+    // top-level namespace (the same instance our registry imports —
+    // requireActual would miss after an earlier resetModules).
+    const serializeSpy = jest.spyOn(vtuCodec, 'serializePendingVtuEntries');
+    // Pin the clock: the forget and the re-remember land in the SAME
+    // millisecond (forgottenAt >= rememberedAt), the collision the
+    // verdict describes.
+    const now = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      forgetPendingVtuPurchase(scoped, now);
+      // Simulate the failed MMKV write: tombstone retained in memory.
+      noteForgottenVtuScopes([scoped], now);
+      rememberPendingVtuPurchase(scoped, 'new-key');
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(recallPendingVtuKey(scoped)).toBe('new-key');
+
+    // The remember's snapshot carries the new entry with NO tombstone
+    // (without clear-on-remember it carries both, same-millisecond).
+    const rememberSnapshot = serializeSpy.mock.results.at(-1)?.value as string;
+    serializeSpy.mockRestore();
+    const written = parsePendingVtuSnapshot(rememberSnapshot);
+    expect(written.forgotten).toEqual([]);
+    expect(written.entries).toHaveLength(1);
+
+    // And a restart restores the new key instead of suppressing it.
+    jest.resetModules();
+    const fresh = jest.requireActual<
+      typeof import('./pending-vtu-idempotency')
+    >('./pending-vtu-idempotency');
+    fresh.hydratePendingVtuPurchases(rememberSnapshot);
+    expect(fresh.recallPendingVtuKey(scoped)).toBe('new-key');
   });
 
   it('lists noted references deduped, excluding unanswered entries', () => {

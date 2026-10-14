@@ -10,15 +10,31 @@ describe('markVtuProviderSubmissionStarted', () => {
     reread: {
       data: Record<string, unknown> | null;
       error: { message: string } | null;
-    } = { data: null, error: null }
+    } = { data: null, error: null },
+    updatedRow: { id: string } | null = updateError ? null : { id: 'vtu-1' }
   ) {
-    const eq = vi.fn(() => Promise.resolve({ error: updateError }));
+    // Chainable eq: the CAS write filters id + status (+ updated_at)
+    // then selects the matched row id (Codex R94 P1).
+    const eq: ReturnType<typeof vi.fn> = vi.fn(() => ({ eq, select }));
     const update = vi.fn(() => ({ eq }));
+    const updateMaybeSingle = vi.fn(() =>
+      Promise.resolve({ data: updatedRow, error: updateError })
+    );
     const rereadMaybeSingle = vi.fn(() => Promise.resolve(reread));
     const rereadEq = vi.fn(() => ({ maybeSingle: rereadMaybeSingle }));
-    const select = vi.fn(() => ({ eq: rereadEq }));
+    const select = vi.fn((columns: string) =>
+      columns === 'id' ? { maybeSingle: updateMaybeSingle } : { eq: rereadEq }
+    );
     const supabase = { from: vi.fn(() => ({ select, update })) };
-    return { eq, rereadEq, rereadMaybeSingle, select, supabase, update };
+    return {
+      eq,
+      rereadEq,
+      rereadMaybeSingle,
+      select,
+      supabase,
+      update,
+      updateMaybeSingle,
+    };
   }
 
   it('persists the marker and reflects it on the row', async () => {
@@ -42,9 +58,74 @@ describe('markVtuProviderSubmissionStarted', () => {
       }),
     });
     expect(eq).toHaveBeenCalledWith('id', 'vtu-1');
+    expect(eq).toHaveBeenCalledWith('status', 'processing');
     expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toEqual(
       expect.any(String)
     );
+  });
+
+  it('claims the updated_at generation token when the row carries one', async () => {
+    const { eq, supabase } = createSupabase(null);
+    const row = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: '2026-10-14T21:00:00.000Z',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(eq).toHaveBeenCalledWith('updated_at', '2026-10-14T21:00:00.000Z');
+  });
+
+  it('fails closed on a zero-match lost race without retrying', async () => {
+    // Codex R94 P1: this worker paused past the stale window after
+    // the debit; a replay reclaimed and settled the row. The CAS
+    // write matches nothing — report the lost race so the caller
+    // restores instead of submitting a second provider purchase.
+    const { select, supabase, update } = createSupabase(null, undefined, null);
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: string;
+    } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: '2026-10-14T21:00:00.000Z',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toEqual({
+      message: 'VTU provider-submission marker lost race: row moved or settled',
+    });
+    expect(row.metadata).toEqual({ walletDebited: true });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(select).toHaveBeenCalledWith('id');
+  });
+
+  it('keeps the status-only gate for rows without a CAS token', async () => {
+    const { eq, supabase } = createSupabase(null);
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: null;
+    } = { id: 'vtu-1', metadata: { walletDebited: true }, updated_at: null };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(eq).toHaveBeenCalledWith('status', 'processing');
+    expect(eq).not.toHaveBeenCalledWith('updated_at', expect.anything());
   });
 
   it('reports the persist error without touching the row', async () => {
@@ -188,7 +269,7 @@ describe('markVtuProviderSubmissionStarted', () => {
     // no marker on a still-processing row) — the retry lands, the
     // ack proves presence, and the worker proceeds to the vend
     // instead of stranding the row behind a no-op restore.
-    const { eq, supabase, update } = createSupabase(
+    const { supabase, update, updateMaybeSingle } = createSupabase(
       { message: 'timeout' },
       {
         data: {
@@ -199,8 +280,14 @@ describe('markVtuProviderSubmissionStarted', () => {
         error: null,
       }
     );
-    eq.mockResolvedValueOnce({ error: { message: 'timeout' } });
-    eq.mockResolvedValueOnce({ error: null });
+    updateMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'timeout' },
+    });
+    updateMaybeSingle.mockResolvedValueOnce({
+      data: { id: 'vtu-1' },
+      error: null,
+    });
     const row: { id: string; metadata: Record<string, unknown> } = {
       id: 'vtu-1',
       metadata: { walletDebited: true },

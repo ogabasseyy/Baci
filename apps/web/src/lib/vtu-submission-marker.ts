@@ -65,12 +65,29 @@ const MARKER_WRITE_BACKOFF_MS = [100, 250] as const;
  * stays visibly processing for support, and no automatic action is
  * safe without Kuda dedupe/definitive-unknown evidence (the
  * flagged-recovery module records it as missing).
+ *
+ * Lost-race CAS (Codex R94 P1): the write gates on
+ * status=processing AND the claimed updated_at token (refreshed in
+ * place by the walletDebited persist immediately upstream), with
+ * `.select('id').maybeSingle()` as the matched-row signal. A worker
+ * paused past the 5-minute stale window after the debit but before
+ * this update would otherwise land the marker on a row a replay
+ * already reclaimed and settled — the unfiltered UPDATE still
+ * succeeds on the terminal row and the resumed worker submits a
+ * second provider purchase. Zero-match means another worker moved
+ * the row: fail closed without vending. Rows without a token
+ * (updated_at null) keep the status-only gate: a settled row still
+ * rejects, an untouched processing row still matches.
  */
 export async function markVtuProviderSubmissionStarted({
   row,
   supabase,
 }: {
-  row: { id: string; metadata?: Record<string, unknown> | null };
+  row: {
+    id: string;
+    metadata?: Record<string, unknown> | null;
+    updated_at?: string | null;
+  };
   supabase: SupabaseClient;
 }): Promise<{ message: string } | null> {
   const metadata = {
@@ -79,11 +96,24 @@ export async function markVtuProviderSubmissionStarted({
   };
   let lastMessage = 'Failed to persist provider-submission marker';
   for (let attempt = 1; attempt <= MARKER_WRITE_MAX_ATTEMPTS; attempt += 1) {
-    const { error } = await supabase
+    const updateQuery = supabase
       .from('vtu_transactions')
       .update({ metadata })
-      .eq('id', row.id);
+      .eq('id', row.id)
+      .eq('status', 'processing');
+    const { data: markedRow, error } = await (typeof row.updated_at === 'string'
+      ? updateQuery.eq('updated_at', row.updated_at)
+      : updateQuery
+    )
+      .select('id')
+      .maybeSingle();
     if (!error) {
+      if (!markedRow) {
+        return {
+          message:
+            'VTU provider-submission marker lost race: row moved or settled',
+        };
+      }
       row.metadata = metadata;
       return null;
     }

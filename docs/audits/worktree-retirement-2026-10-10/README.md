@@ -17,8 +17,8 @@ this documentation PR does not cherry-pick code or prove runtime correctness.
 | Classification | Count |
 | --- | ---: |
 | Code-redundant retirement candidates | 20 |
-| Dirty/local work to preserve | 80 |
-| Potential improvement/preservation candidates | 53 |
+| Dirty/local work to preserve | 81 |
+| Potential improvement/preservation candidates | 52 |
 | Active or uncertain | 36 |
 | Missing checkouts | 4 |
 | Total audited | 193 |

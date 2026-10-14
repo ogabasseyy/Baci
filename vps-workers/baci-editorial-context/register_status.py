@@ -42,6 +42,11 @@ def _valid_row(row):
             return False
         if any(not isinstance(evidence.get(key), str) or not evidence[key].strip() for key in ("workflow", "entitlement", "observation")):
             return False
+        deployed = evidence.get("deployed_revision", "")
+        if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
+            return False
+        if not isinstance(evidence.get("verified_at"), str):
+            return False
     return True
 
 

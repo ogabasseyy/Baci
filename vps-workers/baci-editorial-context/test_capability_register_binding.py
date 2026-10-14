@@ -225,6 +225,13 @@ class CapabilityBindingTests(unittest.TestCase):
             dup_refs = dict(row, source_refs=["cited.txt", "cited.txt"])
             path.write_text(json.dumps(register(capabilities=[dup_refs])))
             self.assertEqual(_status.classify(path), "broken")
+            # Evidence without revision or timestamp: broken, not fresh.
+            thin = {"workflow": "w", "entitlement": "e", "observation": "o"}
+            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=thin)])))
+            self.assertEqual(_status.classify(path), "broken")
+            full = dict(thin, deployed_revision="b" * 40, verified_at=now)
+            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=full)])))
+            self.assertEqual(_status.classify(path), "fresh")
 
 if __name__ == "__main__":
     unittest.main()

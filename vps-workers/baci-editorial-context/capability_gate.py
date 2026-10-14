@@ -30,6 +30,7 @@ _paths = _load_paths_module()
 REGISTER_PATH = _paths.REGISTER_PATH
 MAP_PATH = _paths.MAP_PATH
 SUITE_DIR = _paths.SUITE_DIR
+ACTION_PATH = _paths.ACTION_PATH
 map_cited_paths = _paths.map_cited_paths
 map_cited_filenames = _paths.map_cited_filenames
 map_link_targets = _paths.map_link_targets
@@ -79,13 +80,27 @@ def _touches_unverified_refs(register, changed):
     return any(_matches(p, refs) for p in changed)
 
 
+def _touches_cited_refs(register, changed):
+    """Any cited source_refs, regardless of row status.
+
+    Content-bound rows are digest-enforced, but a redigest alone (new
+    source_revision, same reviewed_at) must still count as pending re-review:
+    the digest proves the content was seen, not that the claims were reviewed.
+    """
+    try:
+        refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        return True
+    return any(_matches(p, refs) for p in changed)
+
+
 def _register_stale(register):
     try:
         reviewed = dt.datetime.fromisoformat(str(register["reviewed_at"]).replace("Z", "+00:00"))
     except (KeyError, TypeError, ValueError):
         return True
     if reviewed.tzinfo is None:
-        reviewed = reviewed.replace(tzinfo=dt.timezone.utc)
+        return True  # Mirror the runtime and status probe: naive dates are invalid.
     # Mirror the runtime window: future-dated registers are rejected, not fresh.
     age = dt.datetime.now(dt.timezone.utc) - reviewed
     return not dt.timedelta() <= age <= dt.timedelta(days=14)
@@ -121,7 +136,7 @@ def _base_register(base, cwd="."):
 
 
 def requires_register_update(register, changed, base_register=None):
-    """A fresh register whose unverified sources changed needs re-review.
+    """A fresh register whose cited sources changed needs re-review.
 
     Freshness alone cannot catch this: the register is still inside its
     evidence window, the content digest excludes unverified refs by design,
@@ -138,11 +153,13 @@ def requires_register_update(register, changed, base_register=None):
         return False
     if _register_stale(register):
         return False
-    # Union of head and base unverified refs: editing an unverified cited
+    # Union of head and base cited refs across all statuses: editing a cited
     # file while replacing or removing its reference (reviewed_at unchanged)
-    # must not slip through just because the head register no longer cites it.
+    # must not slip through just because the head register no longer cites
+    # it, and a redigest of a content-bound change without a date advance is
+    # still pending re-review.
     registers = [register] if base_register is None else [register, base_register]
-    if not any(_touches_unverified_refs(item, changed) for item in registers):
+    if not any(_touches_cited_refs(item, changed) for item in registers):
         return False
     if REGISTER_PATH not in changed:
         return True

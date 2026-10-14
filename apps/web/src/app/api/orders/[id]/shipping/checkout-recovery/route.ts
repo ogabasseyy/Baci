@@ -95,14 +95,6 @@ export async function POST(
       csrf.response ??
       NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
     );
-  const access = await getUserAccess(auth.supabase);
-  if (
-    !access?.isOwner ||
-    !access.merchantId ||
-    !hasPermission(access, 'orders', 'fulfill') ||
-    !hasPermission(access, 'orders', 'edit')
-  )
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const parsed = shippingCheckoutRecoverySchema.safeParse(
     await request.json().catch(() => null)
   );
@@ -114,6 +106,14 @@ export async function POST(
       },
       { status: 400 }
     );
+  const access = await getUserAccess(auth.supabase);
+  if (
+    !access?.isOwner ||
+    !access.merchantId ||
+    !hasPermission(access, 'orders', 'fulfill') ||
+    !hasPermission(access, 'orders', 'edit')
+  )
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   if (parsed.data.action === 'preview') {
     const recoveryCountry = parsed.data.receiver.countryCode
       ?.trim()
@@ -172,9 +172,22 @@ export async function POST(
       { error: sender.error },
       { status: sender.status }
     );
-  const productLookup = buildAdminOrderGiglProductLookup(order.order_items);
+  // Quote only surviving units: after a partial refund finishes reconciliation,
+  // fully refunded lines resolve to zero and are dropped so the carrier prices
+  // the shipment booking will actually send.
+  const shippableItems = order.order_items.flatMap((item) =>
+    item.fulfillment_quantity > 0
+      ? [{ ...item, quantity: item.fulfillment_quantity }]
+      : []
+  );
+  if (!shippableItems.length)
+    return NextResponse.json(
+      { error: 'No shippable units remain on this order.' },
+      { status: 400 }
+    );
+  const productLookup = buildAdminOrderGiglProductLookup(shippableItems);
   const built = await buildOrderGiglQuoteRequest(
-    { ...order, order_items: mapAdminOrderGiglQuoteItems(order.order_items) },
+    { ...order, order_items: mapAdminOrderGiglQuoteItems(shippableItems) },
     sender.sender,
     async () => productLookup,
     {

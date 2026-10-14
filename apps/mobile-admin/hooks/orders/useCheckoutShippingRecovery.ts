@@ -35,6 +35,10 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
   const generation = useRef(0);
   const active = useRef(false);
   const identity = useRef(orderId);
+  // A retained preview after an ambiguous confirmation failure may still reach
+  // the idempotent server RPC even past its local expiry: the server checks
+  // confirmed_at before expiry, so this exact retry can return success.
+  const ambiguousConfirmRetry = useRef(false);
   useEffect(() => {
     identity.current = orderId;
     return () => {
@@ -47,6 +51,7 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
     setPreview(null);
     setConfirmed(false);
     setError(null);
+    ambiguousConfirmRetry.current = false;
   };
   const requestPreview = async () => {
     if (active.current) return;
@@ -74,6 +79,7 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
     setError(null);
     setPreview(null);
     setConfirmed(false);
+    ambiguousConfirmRetry.current = false;
     try {
       const result = await requestCheckoutShippingRecovery(orderId, {
         action: 'preview',
@@ -98,16 +104,19 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
       Math.round(preview.paidShippingFee * 100)
     ) {
       setPreview(null);
+      ambiguousConfirmRetry.current = false;
       setError(
         'This quote differs from the paid shipping amount. It cannot be saved here. Contact support to review this order.'
       );
       return;
     }
     if (
-      !Number.isFinite(Date.parse(preview.quote.expiresAt)) ||
-      Date.parse(preview.quote.expiresAt) <= Date.now()
+      (!Number.isFinite(Date.parse(preview.quote.expiresAt)) ||
+        Date.parse(preview.quote.expiresAt) <= Date.now()) &&
+      !ambiguousConfirmRetry.current
     ) {
       setPreview(null);
+      ambiguousConfirmRetry.current = false;
       setError('Quote expired. Preview a new quote.');
       return;
     }
@@ -126,6 +135,7 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
       if (token === generation.current) {
         setConfirmed(true);
         setPreview(null);
+        ambiguousConfirmRetry.current = false;
       }
     } catch (cause) {
       if (token === generation.current) {
@@ -136,7 +146,12 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
         // Confirmation is idempotent for the same preview: a lost or failed
         // response may follow a committed server update, so keep the preview
         // for retry and clear it only for definitive rejections.
-        if (isDefinitiveRecoveryFailure(message)) setPreview(null);
+        if (isDefinitiveRecoveryFailure(message)) {
+          setPreview(null);
+          ambiguousConfirmRetry.current = false;
+        } else {
+          ambiguousConfirmRetry.current = true;
+        }
         setError(message);
       }
     } finally {

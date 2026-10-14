@@ -64,8 +64,15 @@ each invocation. No service-role client fallback was introduced.
 
 ## Delivery and verification
 
-Apply the two new migrations and deploy the web API before releasing the mobile
-UI. No native dependency changed. The repository has production EAS Update
+Apply every recovery migration before deploying the web API, then release the
+mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
+`20261013213522_customer_checkout_shipping_recovery_confirmation.sql`,
+`20261014080000_customer_checkout_shipping_recovery_scalar_address.sql` and
+`20261014120000_customer_checkout_shipping_recovery_review_followups.sql`.
+The automated migration runner applies the whole directory; a manual rollout
+must include every recovery migration or legacy scalar destinations stay
+unbookable and the context schema check fails closed. No native dependency
+changed. The repository has production EAS Update
 support: a compatible installed runtime can receive a JavaScript update; an
 incompatible runtime needs the normal new app binary. No deployment, OTA publish,
 production database write or live carrier call was performed during development.

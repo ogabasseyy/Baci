@@ -163,6 +163,41 @@ describe('useCheckoutShippingRecovery', () => {
     expect(result.current.confirmed).toBe(true);
     expect(result.current.preview).toBeNull();
   });
+  it('retries an ambiguous confirmation past local expiry through the idempotent RPC', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-14T08:00:00Z'));
+      const expiringPreview = {
+        ...preview,
+        quote: { ...preview.quote, expiresAt: '2026-10-14T08:04:00Z' },
+      };
+      api
+        .mockResolvedValueOnce(expiringPreview)
+        .mockRejectedValueOnce(new Error('Network timeout. Please try again.'))
+        .mockResolvedValueOnce({ confirmed: true, quoteId: 'q' });
+      const { result } = renderHook(
+        () => useCheckoutShippingRecovery('o', draft),
+        { wrapper }
+      );
+      await act(() => result.current.requestPreview());
+      await act(() => result.current.confirm());
+      expect(result.current.preview).toEqual(expiringPreview);
+      // The first confirmation reached the server just before expiry but its
+      // response was lost; retrying after local expiry must still reach the
+      // idempotent RPC instead of clearing the preview client-side.
+      vi.setSystemTime(new Date('2026-10-14T08:05:00Z'));
+      await act(() => result.current.confirm());
+      expect(api).toHaveBeenLastCalledWith('o', {
+        action: 'confirm',
+        previewId: 'p',
+        confirmDestination: true,
+      });
+      expect(result.current.confirmed).toBe(true);
+      expect(result.current.preview).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('rejects an expired preview and a mismatched paid amount even if confirmation is advertised', async () => {
     api.mockResolvedValueOnce({
       ...preview,

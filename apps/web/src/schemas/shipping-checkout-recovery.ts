@@ -34,6 +34,7 @@ export const shippingRecoveryContextSchema = z.object({
       z.object({
         name: z.string().nullable(),
         quantity: z.number().nullable(),
+        fulfillment_quantity: z.number().int().min(0),
         price: z.number().nullable(),
         product_id: z.string().nullable(),
         product: z.object({

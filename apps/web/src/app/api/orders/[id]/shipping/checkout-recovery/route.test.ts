@@ -63,6 +63,7 @@ const context = {
       {
         name: 'Phone',
         quantity: 1,
+        fulfillment_quantity: 1,
         price: 1000,
         product_id: '50000000-0000-4000-8000-000000000001',
         product: {
@@ -181,6 +182,68 @@ describe('paid checkout shipping recovery route', () => {
       receiver: { ...receiver, countryCode: 'NG' },
     });
     expect(response.status).toBe(200);
+  });
+  it('validates the recovery body before querying merchant access', async () => {
+    mocks.access.mockResolvedValue({ isOwner: false, merchantId: null });
+    const response = await POST(
+      new NextRequest(
+        `https://usebaci.com/api/orders/${orderId}/shipping/checkout-recovery`,
+        { method: 'POST', body: 'not-json{' }
+      ),
+      { params: Promise.resolve({ id: orderId }) }
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.access).not.toHaveBeenCalled();
+  });
+  it('quotes only surviving units after partial refunds', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ...context,
+        order: {
+          ...context.order,
+          order_items: [
+            {
+              ...context.order.order_items[0],
+              quantity: 2,
+              fulfillment_quantity: 0,
+            },
+            {
+              ...context.order.order_items[0],
+              quantity: 3,
+              fulfillment_quantity: 1,
+            },
+          ],
+        },
+      },
+      error: null,
+    });
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(mocks.quotes).toHaveBeenCalledTimes(1);
+    const quoted = mocks.quotes.mock.calls[0][1] as {
+      items: { quantity: number }[];
+    };
+    expect(quoted.items.map((item) => item.quantity)).toEqual([1]);
+  });
+  it('rejects recovery when no shippable units remain', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ...context,
+        order: {
+          ...context.order,
+          order_items: [
+            { ...context.order.order_items[0], fulfillment_quantity: 0 },
+          ],
+        },
+      },
+      error: null,
+    });
+    const response = await request();
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'No shippable units remain on this order.',
+    });
+    expect(mocks.quotes).not.toHaveBeenCalled();
   });
   it('requires CSRF protection', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });

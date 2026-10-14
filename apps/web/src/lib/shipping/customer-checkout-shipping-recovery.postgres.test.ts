@@ -114,6 +114,24 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
       expect(output).toContain('object|6.6018|Ikeja');
     });
+    it('projects surviving fulfillment quantities in the recovery context', () => {
+      const output = asActor(
+        `UPDATE public.order_items SET fulfillment_data = '{"fulfillmentQuantity": 0}'::jsonb WHERE order_id='${orderId}';
+      SELECT (item->>'quantity') || '|' || (item->>'fulfillment_quantity') FROM pg_catalog.jsonb_array_elements((public.get_customer_checkout_shipping_recovery_context('${orderId}') -> 'order' -> 'order_items')) AS item;`
+      );
+      const rows = output
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => /^\d+\|\d+$/.test(line));
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(row).toMatch(/\|0$/);
+    });
+    it('cascades recovery previews with the owning order and merchant', () => {
+      const output = asActor(
+        `SELECT count(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'private.customer_checkout_shipping_recovery_previews'::pg_catalog.regclass AND confupdtype = 'c';`
+      );
+      expect(output.trim().split('\n').at(-1)?.trim()).toBe('2');
+    });
     it('rejects altered proofs and quote payloads', () => {
       const value = quote();
       const hash = fingerprint();

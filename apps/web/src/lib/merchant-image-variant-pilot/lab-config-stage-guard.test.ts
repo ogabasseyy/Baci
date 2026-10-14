@@ -103,6 +103,25 @@ describe('assertNoUnexpectedStagedFiles', () => {
     );
   });
 
+  it('refuses a fourth file planted under fillers when bound', async () => {
+    // The byte verifier hashes only the pinned filler paths, so the
+    // binding check must enumerate the directory: an extra file would
+    // otherwise stay publicly reachable while every render passes.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    const pinned = join(pilotStage, 'fillers', 'grid-filler-600x400-a.png');
+    await writeFile(pinned, 'filler');
+    await writeFile(join(pilotStage, 'fillers', 'planted.png'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage), pilotStage, [pinned])
+    ).rejects.toThrow(/has no inventory binding/);
+    // Pinned-only fillers pass: the planted file was the refusal.
+    await rm(join(pilotStage, 'fillers', 'planted.png'));
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage), pilotStage, [pinned])
+    ).resolves.toBe(undefined);
+  });
+
   it('re-scans the same tree after drift but skips when clean', async () => {
     // The drift gate skips repeat walks while the tree is unchanged
     // (per-request verification stays on stats, not listings), but a

@@ -60,7 +60,7 @@ test('encodeRoleLadder rescues a branch-compatible source smaller than the floor
   });
   assert.equal(floor.status, 'ok');
   // Test assumption, measured not hard-coded: the rescue applies only
-  // when the source is strictly smaller than the cheapest encode.
+  // when the source is no larger than the cheapest encode.
   assert.ok(
     sourceBytes < floor.output.bytes,
     `expected source ${sourceBytes}B < floor ${floor.output.bytes}B`
@@ -119,6 +119,74 @@ test('encodeRoleLadder rescues a branch-compatible source smaller than the floor
     ),
     'budget-floor-exceeded'
   );
+});
+
+test('encodeRoleLadder rescues an equal-sized branch-compatible source', async () => {
+  // Equality boundary: a branch-compatible source at exactly the
+  // floor's byte count satisfies the never-larger contract, so the
+  // rung rescues instead of throwing budget-floor-exceeded. Exact
+  // equality is arranged by reporting the measured floor size as the
+  // verified source size — the comparison under test sees only that
+  // integer, and the delivery guard then takes the equal rung as
+  // generated (rung.bytes <= source.bytes).
+  const input = join(await staging(), 'tiny-source.webp');
+  await writeFile(
+    input,
+    await sharp(fixture('photo-1254x1254.jpg'))
+      .resize(256, 256)
+      .webp({ quality: 1 })
+      .toBuffer()
+  );
+  const expectedSha256 = await shaOf(input);
+  const floor = await encodeVariant({
+    budgetBytes: 5_000_000,
+    deadlineMs: Date.now() + 60_000,
+    expectedSha256,
+    fileStem: 'tiny-floor-eq',
+    format: 'webp',
+    quality: 55,
+    snapshotPath: input,
+    stagingBudget: createStagingBudget(),
+    stagingDir: await staging(),
+    width: 256,
+  });
+  assert.equal(floor.status, 'ok');
+  const budgets = {
+    logo: {
+      96: { avif: 50_000, webp: 50_000 },
+      192: { avif: 100_000, webp: 100_000 },
+      384: { avif: 100_000, webp: 10 },
+    },
+  };
+  const ladder = await encodeRoleLadder({
+    budgets,
+    deadlineMs: Date.now() + 120_000,
+    expectedSha256,
+    role: 'logo',
+    snapshotPath: input,
+    sourceBytes: floor.output.bytes,
+    stagingBudget: createStagingBudget(),
+    stagingDir: await staging(),
+  });
+  const rescued = ladder.tiers.find(
+    (tier) => tier.requestedWidth === 384 && tier.format === 'webp'
+  );
+  assert.equal(rescued.bytes, floor.output.bytes);
+  const decided = applyDeliveryGuard({
+    source: {
+      bytes: floor.output.bytes,
+      format: 'webp',
+      orientedHeight: 256,
+      orientedWidth: 256,
+      sha256: expectedSha256,
+    },
+    tiers: ladder.tiers,
+  });
+  const routed = decided.find(
+    (tier) => tier.requestedWidth === 384 && tier.format === 'webp'
+  );
+  assert.equal(routed.delivery, 'generated');
+  assert.equal(routed.bytes, floor.output.bytes);
 });
 
 test('encodeRoleLadder keeps the fatal for branch-incompatible rungs', async () => {

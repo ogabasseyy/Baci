@@ -187,9 +187,11 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   const config = getFrozenLabRuntime();
   // Frozen config, live bytes: re-verify on the request path (not just
   // startup) so mid-measurement drift fails closed instead of skewing
-  // the comparison. Steady-state cost is N+3 lstats per GET with no
+  // the comparison. Steady-state cost is N+4 lstats per GET with no
   // hashes (stat fingerprints, pinned by the fast-path tests); the
-  // known stage root covers the empty-allowlist branch.
+  // known stage root covers the empty-allowlist branch. Filler
+  // paths ride along so the binding check enumerates fillers/ too:
+  // the byte verifier hashes pinned paths but never lists the dir.
   const publicDir = resolveRoutePublicDir();
   await verifyStagedBytesAndFillers(
     config.stagedPaths,
@@ -197,7 +199,8 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   );
   await assertNoUnexpectedStagedFiles(
     config.stagedPaths,
-    join(publicDir, '__pilot')
+    join(publicDir, '__pilot'),
+    pinnedFillerEntries(publicDir).map((entry) => entry.path)
   );
   return config;
 }
@@ -249,7 +252,11 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
       cachedConfig.config.stagedPaths,
       pinnedFillerEntries(publicDir)
     );
-    await assertNoUnexpectedStagedFiles(cachedConfig.config.stagedPaths);
+    await assertNoUnexpectedStagedFiles(
+      cachedConfig.config.stagedPaths,
+      undefined,
+      pinnedFillerEntries(publicDir).map((entry) => entry.path)
+    );
     return cachedConfig.config;
   }
   const inflight = inflightLoads.get(key);
@@ -276,7 +283,11 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
           config.stagedPaths,
           pinnedFillerEntries(publicDir)
         );
-        await assertNoUnexpectedStagedFiles(config.stagedPaths);
+        await assertNoUnexpectedStagedFiles(
+          config.stagedPaths,
+          undefined,
+          pinnedFillerEntries(publicDir).map((entry) => entry.path)
+        );
         cachedConfig = { config, key };
         return config;
       } finally {

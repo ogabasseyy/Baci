@@ -100,13 +100,21 @@ export async function collectSurface(page, url, surface, options = {}) {
     const contentType = response.headers()['content-type'] ?? '';
     if (contentType.startsWith('image/')) {
       imageUrls.push(responseUrl);
-    } else if (response.status() === 200 && isImageRequest(response)) {
-      // An <img> request answered 200 with a non-image body (HTML
-      // fallback page, error document) renders a broken card but is
-      // neither a failed request nor an image URL above — flag it so a
-      // missing filler or sibling image cannot pass hygiene silently.
-      // 200 only: redirects and 304s legitimately carry no image body.
-      failedRequests.push(`non-image 200 ${responseUrl.slice(-80)}`);
+    } else if (
+      response.status() >= 200 &&
+      response.status() < 300 &&
+      isImageRequest(response)
+    ) {
+      // An <img> request answered 2xx with a non-image body (HTML
+      // fallback page, error document, empty 204) renders a broken card
+      // but is neither a failed request nor an image URL above — flag
+      // it so a missing filler or sibling image cannot pass hygiene
+      // silently. 2xx only: redirects and 304s legitimately carry no
+      // image body. Every lab <img> must render, so no 2xx carve-out:
+      // a 204 tracking pixel has no place on a measurement page.
+      failedRequests.push(
+        `non-image ${response.status()} ${responseUrl.slice(-80)}`
+      );
     }
   });
   // Network-level failures (DNS, reset, aborted) never produce a response.

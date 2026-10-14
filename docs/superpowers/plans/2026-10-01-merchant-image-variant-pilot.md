@@ -21,11 +21,11 @@ worker, VPS change, or live-upload switch (see handoff §Goal).
   `?? docs/superpowers/handoffs/`; no runtime edits yet.
 - Toolchain: Node v24.11.1; repo pnpm pinned `11.7.0` via `packageManager`
   (use `corepack pnpm`; bare `pnpm` on PATH is 10.28.1 and must not resolve).
-- `infra/cdn-transformer/package.json` is standalone (Sharp 0.35.4, Zod
+- `infra/cdn-transformer/package.json` is standalone (Sharp 0.35.5, Zod
   ^3.25.76), no lockfile, outside root workspace. Root policy to mirror:
   `minimumReleaseAge: 1440`, `trustPolicy: no-downgrade`, `trustLockfile: true`,
   `strictDepBuilds: true`, `allowBuilds: { sharp: true, ... }`,
-  `overrides: { sharp: 0.35.4, ... }`.
+  `overrides: { sharp: 0.35.5, ... }`.
 - Investigation evidence exists at
   `/Users/mac/.codex/cwv-lab-builds/20261001-merchant-sample/IMAGE-PIPELINE-INVESTIGATION.md`
   (observations only, not fixtures).
@@ -110,7 +110,7 @@ Generator (all new, each ≤300 lines; `.mjs` + colocated `.test.mjs`):
 - `infra/cdn-transformer/pnpm-workspace.yaml` — nested `packages: ['.']`
   with mirrored safeguards (release-age + trust + strictDepBuilds +
   reviewed `allowBuilds: { sharp: true }` + security overrides for the actual
-  standalone graph incl. `sharp: 0.35.4`). Root membership unchanged.
+  standalone graph incl. `sharp: 0.35.5`). Root membership unchanged.
 - `infra/cdn-transformer/pnpm-lock.yaml` — via
   `pnpm --dir infra/cdn-transformer install --lockfile-only`, then
   `--frozen-lockfile`. Never `--ignore-workspace`.

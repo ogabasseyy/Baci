@@ -162,6 +162,26 @@ export async function finishRun({
     throw new Error(`run handle has no profile-reset record: ${resetSource}`);
   });
   const reset = JSON.parse(resetRead.bytes.toString('utf8'));
+  // Bind the reset to THIS run: the record sits beside run.json, so a
+  // sibling file from a different prepare invocation must not certify
+  // this handle's lower time bound. The settings gate rejects the
+  // cross-run bundle later, which would strand a "successful" capture.
+  if (reset?.event !== 'profile-reset' || reset?.freshProfile !== true) {
+    throw new Error(
+      `profile-reset record is not a fresh-profile reset event: ${resetSource}`
+    );
+  }
+  for (const [field, expected, actual] of [
+    ['runId', handle.runId, reset?.runId],
+    ['profileDir', handle.profileDir, reset?.profileDir],
+    ['tool', handle.tool, reset?.tool],
+  ]) {
+    if (actual !== expected) {
+      throw new Error(
+        `profile-reset record belongs to a different run (${field} mismatch); re-run prepare inside this run instead of binding foreign evidence: ${resetSource}`
+      );
+    }
+  }
   const resetMs = Date.parse(reset?.resetAt ?? '');
   if (!Number.isFinite(resetMs)) {
     throw new Error(

@@ -76,3 +76,16 @@ test('unrelated changes set pilot=false', async () => {
     false
   );
 });
+
+test('truncated file lists fail closed to pilot=true', async () => {
+  // The list-files endpoint caps at 3,000 entries: the workflow must
+  // compare the received count against the PR's changed_files count
+  // and force both suites on when truncated, so a pilot path outside
+  // the window cannot silently skip them.
+  const workflow = await readFile(
+    new URL('../workflows/pilot-codec-compatibility.yml', import.meta.url),
+    'utf8'
+  );
+  assert.match(workflow, /\.changed_files/);
+  assert.match(workflow, /received.*-ge.*changed/);
+});

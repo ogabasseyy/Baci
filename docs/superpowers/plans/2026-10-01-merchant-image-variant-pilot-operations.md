@@ -91,7 +91,7 @@ coderabbit review --agent -t uncommitted
 
 ## 7. Risks, deviations, and decision log
 
-- Sharp reports AVIF bytes as `heif` (verified 2026-10-01, Sharp 0.35.4):
+- Sharp reports AVIF bytes as `heif` (verified 2026-10-01, Sharp 0.35.5):
   worker normalizes `heif`→`avif` on input accept and output verify paths.
   No design change; decoder-label mapping only, covered by fixture tests.
 - Disk at plan time (9.3 GiB) is below the 10 GiB browser-batch start

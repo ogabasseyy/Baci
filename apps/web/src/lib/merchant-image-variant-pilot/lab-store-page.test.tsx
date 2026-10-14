@@ -1,10 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { PilotLabConfig } from './lab-config';
-import {
-  PilotLabStorePage,
-  pilotLabFixtureProductSlugs,
-} from './lab-store-page';
+import { pilotLabFixtureProductSlugs } from './lab-fixture-product-slugs';
+import { PilotLabStorePage } from './lab-store-page';
 import { pilotLabStoreBySlug } from './lab-store-registry';
 
 const MERCHANT = 'de968340-de02-4aa8-95f9-9d5f7d2b1f20';

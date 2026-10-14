@@ -88,13 +88,29 @@ export async function resolveAllowlist(
 
 export async function assertNoUnexpectedStagedFiles(
   stagedPaths: readonly { path: string }[],
-  stageRoot?: string
+  stageRoot?: string,
+  // Pinned filler paths (no hashes needed — membership only): the
+  // byte verifier hashes the three pinned paths but never lists the
+  // directory, so without this a fourth file planted under fillers/
+  // stays publicly reachable through Next's static namespace while
+  // every lab render still passes.
+  fillerPaths: readonly string[] = []
 ): Promise<void> {
   const resolved = await resolveAllowlist(stagedPaths, stageRoot);
   if (!resolved) {
     return;
   }
-  const { expected, realStage } = resolved;
+  const { expected: cached, realStage } = resolved;
+  // Copy: the cached set is shared across calls, and different call
+  // sites bind different filler lists — mutating it would leak one
+  // caller's allowlist into another's.
+  const expected = new Set(cached);
+  for (const filler of fillerPaths) {
+    const real = await realpath(filler).catch(() => null);
+    if (real) {
+      expected.add(real);
+    }
+  }
   const currentGenDirs = new Set<string>();
   for (const file of expected) {
     const [top] = relative(realStage, file).split(sep);
@@ -148,6 +164,12 @@ export async function assertNoUnexpectedStagedFiles(
   for (const dir of currentGenDirs) {
     await checkDir(dir, 'a current generation');
   }
+  // Fillers only when the caller binds them: without pinned entries
+  // there is no allowlist for this directory, and the boot shape
+  // guard owns the unbound case.
+  if (fillerPaths.length > 0) {
+    await checkDir(join(realStage, 'fillers'), 'fillers');
+  }
   // Unreferenced generation dirs: current generations are the only
   // ones with inventory bindings, so any other 64-hex directory —
   // restored after staging, planted outright, or stale from a crashed
@@ -188,6 +210,7 @@ async function stageFingerprint(
   for (const dir of [
     realStage,
     join(realStage, 'originals'),
+    join(realStage, 'fillers'),
     ...currentGenDirs,
   ]) {
     const stat = await lstat(dir).catch(() => null);

@@ -84,6 +84,27 @@ async function expectNoPublishDebris(dir) {
 }
 
 describe('merchant-image-pilot-runner finish restore', () => {
+  it('refuses a profile-reset record from a different prepare run', async () => {
+    // The reset sits beside run.json, so a sibling file from another
+    // invocation must not certify this handle's lower time bound —
+    // even with a usable resetAt, the runId/profileDir/tool binding
+    // refuses before anything publishes.
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-reset-'));
+    const { base, capture, writeHar } = await prepareAndBind(dir);
+    const resetPath = join(dir, 'run', 'profile-reset.json');
+    const reset = JSON.parse(await readFile(resetPath, 'utf8'));
+    await writeFile(
+      resetPath,
+      JSON.stringify({ ...reset, runId: 'another-run' })
+    );
+    const har = join(dir, 'foreign.har');
+    await writeHar(har);
+    await capture();
+    await expect(finishRun({ ...base, har })).rejects.toThrow(
+      /belongs to a different run \(runId mismatch\)/
+    );
+  });
+
   it('a failed swap restores the previous bound set byte-identical', async () => {
     // ENOSPC-style mid-publish failure after the backup move: the old
     // set is restored live, the partial staging is cleaned, and no

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { isPilotLabEnabled } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { pilotLabFixtureProductSlugs } from '@/lib/merchant-image-variant-pilot/lab-fixture-product-slugs';
 import {
-  pilotLabFixtureProductSlugs,
   pilotLabStoreBasePath,
   pilotLabStoreBySlug,
 } from '@/lib/merchant-image-variant-pilot/lab-store-page';

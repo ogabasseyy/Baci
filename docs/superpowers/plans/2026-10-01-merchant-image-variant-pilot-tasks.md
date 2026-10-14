@@ -8,9 +8,9 @@
 
 - [x] `infra/cdn-transformer/pnpm-workspace.yaml` (`packages: ['.']`,
   release-age 1440, trust no-downgrade + lockfile, strict builds, sharp-only
-  allowlist, sharp 0.35.4 override). Root membership untouched.
+  allowlist, sharp 0.35.5 override). Root membership untouched.
 - [x] `pnpm-lock.yaml` via `--lockfile-only`, then `--frozen-lockfile`
-  install (corepack pnpm 11.7.0). Locked: sharp 0.35.4, zod 3.25.76.
+  install (corepack pnpm 11.7.0). Locked: sharp 0.35.5, zod 3.25.76.
 - [x] Verified nested scope (`list` shows only baci-cdn-transformer) and
   effective policy (1440 / no-downgrade / strict true).
 - [x] Existing `check` green (30 node + 12 python tests).
